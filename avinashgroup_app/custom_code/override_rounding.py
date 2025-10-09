@@ -43,12 +43,12 @@ def set_custom_rounding_adjustment(doc, method=None):
             doc.grand_total = doc.base_grand_total
         
         # Update rounded totals
-        doc.base_rounded_total = round(doc.base_grand_total)
-        doc.rounded_total = round(doc.grand_total)
+        doc.base_rounded_total = flt(doc.base_grand_total + doc.base_rounding_adjustment)
+        doc.rounded_total = flt(doc.base_grand_total + doc.base_rounding_adjustment)
         
         # Recalculate outstanding amount
         doc.outstanding_amount = flt(
-            doc.grand_total - doc.total_advance,
+            doc.base_rounded_total - doc.total_advance,
             doc.precision("outstanding_amount")
         )
         
@@ -64,35 +64,6 @@ def set_custom_rounding_adjustment(doc, method=None):
         # This ensures standard ERPNext rounding logic takes over
         doc.base_rounding_adjustment = 0
         doc.rounding_adjustment = 0
-
-
-# def validate_custom_difference_adjustment(doc, method=None):
-#     """
-#     Additional validation for custom_difference_adjustment field
-#     Use this if you want to add any business logic validation
-#     """
-    
-#     if hasattr(doc, 'custom_difference_adjustment') and doc.custom_difference_adjustment:
-        
-#         # Example: Validate that adjustment is within acceptable range
-#         max_adjustment = flt(doc.base_grand_total * 0.10)  # 10% of grand total
-        
-#         if abs(doc.custom_difference_adjustment) > max_adjustment:
-#             frappe.msgprint(
-#                 _("Warning: Custom Difference Adjustment ({0}) exceeds 10% of Grand Total").format(
-#                     doc.custom_difference_adjustment
-#                 ),
-#                 indicator='orange',
-#                 alert=True
-#             )
-        
-#         # Example: Check if adjustment is reasonable
-#         if doc.custom_difference_adjustment < 0:
-#             frappe.msgprint(
-#                 _("Note: Negative adjustment will reduce the Grand Total"),
-#                 indicator='blue',
-#                 alert=True
-#             )
 
 
 
