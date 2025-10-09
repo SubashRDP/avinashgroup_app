@@ -26,7 +26,9 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
-# app_include_js = "/assets/avinashgroup_app/js/avinashgroup_app.js"
+app_include_js = [
+    "/assets/avinashgroup_app/js/sales_invoice.js",
+]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
@@ -43,7 +45,7 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -144,7 +146,13 @@ app_license = "mit"
 # 		"on_trash": "method"
 # 	}
 # }
-
+# In your custom_app/hooks.py
+doc_events = {
+    "Sales Invoice": {
+        "before_submit": "avinashgroup_app.custom_code.override_rounding.set_custom_rounding_adjustment",
+        "validate": "avinashgroup_app.custom_code.override_rounding.set_custom_rounding_adjustment"
+    }
+}
 # Scheduled Tasks
 # ---------------
 
