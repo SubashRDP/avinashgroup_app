@@ -13,9 +13,19 @@ frappe.ui.form.on("Sales Invoice", {
     selling_price_list: function(frm) {
         refresh_all_calculation_prices(frm);
     },
-    
     // Recalculate when base_total changes
     base_total: function(frm) {
+        calculate_total(frm);
+    },
+    base_total_taxes_and_charges: function(frm) {
+        calculate_total(frm);
+    },
+    base_grand_total: function(frm) {
+        console.log("Base Grand Total changed");
+        calculate_total(frm);
+    },
+    taxes_and_charges: function(frm) {
+        console.log("Taxes and Charges changed");
         calculate_total(frm);
     }
 });
@@ -291,7 +301,7 @@ function calculate_total(frm) {
     custom_total_amount = flt(custom_total_amount, 2);
     
     // Calculate difference: base_total - custom_total_amount
-    let difference = flt(base_grand_total - custom_total_amount, 2);
+    let difference = flt(custom_total_amount - base_grand_total, 2);
     
     console.log(`Totals - Custom: ${custom_total_amount}, Base: ${base_total}, Difference: ${difference}`);
     
@@ -302,4 +312,43 @@ function calculate_total(frm) {
     // Refresh fields
     frm.refresh_field('custom_total_amount');
     frm.refresh_field('custom_difference_adjustment');
+    
+    // Convert rounded total to words via server call
+    convert_rounded_total_to_words(frm);
+}
+
+/**
+ * Convert rounded total (base_grand_total + base_rounding_adjustment) to words
+ */
+function convert_rounded_total_to_words(frm) {
+    if (!frm || !frm.doc) {
+        return;
+    }
+    
+    // Calculate rounded total
+    let base_grand_total = flt(frm.doc.base_grand_total) || 0;
+    let base_rounding_adjustment = flt(frm.doc.custom_difference_adjustment) || 0;
+    let rounded_total = base_grand_total + base_rounding_adjustment;
+    
+    // Get currency from the document
+    let currency = frm.doc.currency || frappe.defaults.get_default("currency");
+    
+    // Call server method to convert to words
+    frappe.call({
+        method: 'avinashgroup_app.custom_code.override_rounding.convert_amount_to_words',
+        args: {
+            amount: rounded_total,
+            currency: currency
+        },
+        callback: function(r) {
+            if (r.message) {
+                frm.set_value('base_in_words', r.message);
+                frm.refresh_field('base_in_words');
+                console.log(`Converted ${rounded_total} to words: ${r.message}`);
+            }
+        },
+        error: function(r) {
+            console.log("Error converting amount to words");
+        }
+    });
 }

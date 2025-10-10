@@ -1,7 +1,6 @@
-
 import frappe
 from frappe import _
-from frappe.utils import flt, cint
+from frappe.utils import flt, cint, money_in_words
 
 
 def set_custom_rounding_adjustment(doc, method=None):
@@ -20,17 +19,24 @@ def set_custom_rounding_adjustment(doc, method=None):
             doc.precision("base_rounding_adjustment")
         )
         
-        # Also set rounding_adjustment for company currency
-        doc.rounding_adjustment = flt(
-            doc.custom_difference_adjustment, 
-            doc.precision("rounding_adjustment")
-        )
+        # # Also set rounding_adjustment for company currency
+        # doc.rounding_adjustment = flt(
+        #     doc.custom_difference_adjustment, 
+        #     doc.precision("rounding_adjustment")
+        # )
         
         # Recalculate base_grand_total with the custom adjustment
         # Formula: Base Grand Total = Base Net Total + Base Total Taxes + Custom Adjustment
         doc.base_grand_total = flt(
-            doc.base_net_total + doc.base_total_taxes_and_charges ,
+            doc.base_net_total + doc.base_total_taxes_and_charges,
             doc.precision("base_grand_total")
+        )
+        doc.custom_difference_adjustment = flt(doc.custom_total_amount - doc.base_grand_total, 2)
+
+        # Also set rounding_adjustment for company currency
+        doc.rounding_adjustment = flt(
+            doc.custom_difference_adjustment, 
+            doc.precision("rounding_adjustment")
         )
         
         # Calculate grand total in transaction currency
@@ -44,9 +50,12 @@ def set_custom_rounding_adjustment(doc, method=None):
         
         # Update rounded totals
         doc.base_rounded_total = flt(doc.base_grand_total + doc.base_rounding_adjustment)
-        doc.rounded_total = flt(doc.base_grand_total + doc.base_rounding_adjustment)
+        doc.rounded_total = flt(doc.grand_total + doc.rounding_adjustment)
         
-        # Recalculate outstanding amount
+        # Convert rounded total to words
+        doc.base_in_words = money_in_words(doc.base_rounded_total, doc.currency)
+        doc.in_words = money_in_words(doc.rounded_total, doc.currency)
+        
         doc.outstanding_amount = flt(
             doc.base_rounded_total - doc.total_advance,
             doc.precision("outstanding_amount")
@@ -56,7 +65,8 @@ def set_custom_rounding_adjustment(doc, method=None):
         frappe.logger().debug(
             f"Sales Invoice {doc.name}: Custom Difference Adjustment = {doc.custom_difference_adjustment}, "
             f"Base Rounding Adjustment = {doc.base_rounding_adjustment}, "
-            f"Grand Total = {doc.grand_total}"
+            f"Grand Total = {doc.grand_total}, "
+            f"Base In Words = {doc.base_in_words}"
         )
         
     else:
@@ -66,13 +76,22 @@ def set_custom_rounding_adjustment(doc, method=None):
         doc.rounding_adjustment = 0
 
 
+@frappe.whitelist()
+def convert_amount_to_words(amount, currency):
+   
+    try:
+        amount = flt(amount)
+        amount_in_words = money_in_words(amount, currency)
+        return amount_in_words
+    except Exception as e:
+        frappe.log_error(
+            message=frappe.get_traceback(),
+            title=f"Error converting amount to words: {amount}"
+        )
+        return ""
+
 
 ###ITEM Price 
-
-import frappe
-from frappe import _
-from frappe.utils import flt
-
 
 @frappe.whitelist()
 def get_custom_amount(customer, price_list, item_code, qty, uom=''):
