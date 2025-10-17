@@ -27,7 +27,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=2",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=5.4",
 ]
 
 # include js, css files in header of web template
@@ -146,11 +146,35 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # 		"on_trash": "method"
 # 	}
 # }
-# In your custom_app/hooks.py
+
+# hooks.py
+
+# Document Events
+# ---------------
+# Hook on document methods and events
+
+
 doc_events = {
     "Sales Invoice": {
-        "before_submit": "avinashgroup_app.custom_code.override_rounding.set_custom_rounding_adjustment",
-        "validate": "avinashgroup_app.custom_code.override_rounding.set_custom_rounding_adjustment"
+        # Calculate excise duty and override base_total before ERPNext validation
+        "before_validate": "avinashgroup_app.custom_code.override_rounding.override_totals_before_validate",
+        
+        #  Re-override after ERPNext recalculates
+        "validate": "avinashgroup_app.custom_code.override_rounding.override_totals_validate",
+        
+        #  Final calcul  ation before saving (ensures everything persists)
+        "before_save": "avinashgroup_app.custom_code.override_rounding.override_totals_before_save",
+        
+        #  Before submitting - finalize all calculations
+        "before_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_before_submit",
+        
+        #   On submit (last change before GL entries)
+        "on_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_submit",
+        
+        #  Handle updates after submission
+        # "on_update_after_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_update_after_submit"
+      
+    
     }
 }
 # Scheduled Tasks
@@ -217,6 +241,7 @@ doc_events = {
 
 # user_data_fields = [
 # 	{
+
 # 		"doctype": "{doctype_1}",
 # 		"filter_by": "{filter_by}",
 # 		"redact_fields": ["{field_1}", "{field_2}"],
