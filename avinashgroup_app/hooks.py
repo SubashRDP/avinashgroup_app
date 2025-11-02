@@ -27,7 +27,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=5.4",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=7.4",
 ]
 
 # include js, css files in header of web template
@@ -49,6 +49,12 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
+
+
+###Naming Series
+# override_doctype_class = {
+#     "Customer": "avinashgroup_app.custom_code.custom_customer.CustomCustomer"
+# }
 
 # Svg Icons
 # ------------------
@@ -153,30 +159,39 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # ---------------
 # Hook on document methods and events
 
+#ROUNDING
+# doc_events = {
+#     "Sales Invoice": {
+#         # Calculate excise duty and override base_total before ERPNext validation
+#         #ROUNDING
+#         # "before_validate": "avinashgroup_app.custom_code.override_rounding.override_totals_before_validate",
+        
+#         #  Re-override after ERPNext recalculates
+#         #ROUNDING
+#         # "validate": "avinashgroup_app.custom_code.override_rounding.override_totals_validate",
+        
+#         #  Final calcul  ation before saving (ensures everything persists)
+#         #ROUNDING
+#         # "before_save": "avinashgroup_app.custom_code.override_rounding.override_totals_before_save",
+        
+#         #  Before submitting - finalize all calculations
+#         #ROUNDING
+#         # "before_submit": [
+#         #     "avinashgroup_app.custom_code.override_rounding.override_totals_before_submit",
+#         #     # "avinashgroup_app.custom_code.excise_ledger.before_submit"
 
-doc_events = {
-    "Sales Invoice": {
-        # Calculate excise duty and override base_total before ERPNext validation
-        "before_validate": "avinashgroup_app.custom_code.override_rounding.override_totals_before_validate",
+#         # ],
         
-        #  Re-override after ERPNext recalculates
-        "validate": "avinashgroup_app.custom_code.override_rounding.override_totals_validate",
+#         #   On submit (last change before GL entries)
+#         #ROUNDING
+#         # "on_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_submit",
         
-        #  Final calcul  ation before saving (ensures everything persists)
-        "before_save": "avinashgroup_app.custom_code.override_rounding.override_totals_before_save",
-        
-        #  Before submitting - finalize all calculations
-        "before_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_before_submit",
-        
-        #   On submit (last change before GL entries)
-        "on_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_submit",
-        
-        #  Handle updates after submission
-        # "on_update_after_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_update_after_submit"
+#         #  Handle updates after submission
+#         # "on_update_after_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_update_after_submit"
       
     
-    }
-}
+#     }
+# }
 # Scheduled Tasks
 # ---------------
 

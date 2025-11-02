@@ -35,6 +35,8 @@ def recalculate_taxes_on_custom_total(doc):
             cumulative_tax += tax_amount
             cumulative_total += tax_amount
             tax.base_total = flt(cumulative_total, doc.precision("base_total", tax))
+            if tax.account_head == "VAT - GLMI":
+                doc.custom_vat = tax_amount
             
             # Update transaction currency values
             if doc.conversion_rate:
@@ -348,8 +350,11 @@ def override_totals_before_save(doc, method=None):
     THIRD HOOK: Final override before saving
     Calculate rounding adjustment from custom_difference_calculation_table
     """
+
+    # frappe.msgprint(f"override_totals_before_save method triggered for {doc.doctype} {doc.name}", title="Debug")
     if not doc.items:
         return
+    
     
     # Recalculate custom totals one more time
     sum_custom_total = sum(flt(item.custom_total) for item in doc.items)

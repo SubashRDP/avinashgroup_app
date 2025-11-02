@@ -1381,55 +1381,58 @@ frappe.ui.form.on("Sales Invoice", {
             console.log("IS RETURN")
             set_naming_series_based_on_return(frm);
         }
-        
+        //ROUNDING
         // Add custom button to manually resync calculation table
-        if (frm.doc.docstatus === 0) {
-            frm.add_custom_button(__('Resync Calculation Table'), function() {
-                frappe.show_alert({
-                    message: __('Resyncing calculation table...'),
-                    indicator: 'blue'
-                });
-                sync_calculation_rows(frm);
-            });
-        }
-                
+        // if (frm.doc.docstatus === 0) {
+        //     frm.add_custom_button(__('Resync Calculation Table'), function() {
+        //         frappe.show_alert({
+        //             message: __('Resyncing calculation table...'),
+        //             indicator: 'blue'
+        //         });
+        //         sync_calculation_rows(frm);
+        //     });
+        // }
+        //ROUNDING    
         // When form loads with is_return=1, sync after delay
-        if (frm.doc.is_return === 1 && !frm._return_synced) {
-            console.log("Return invoice detected, syncing after delay...");
-            frm._return_synced = true;
-            setTimeout(() => {
-                sync_calculation_rows(frm);
-            }, 500);
-        }
+        // if (frm.doc.is_return === 1 && !frm._return_synced) {
+        //     console.log("Return invoice detected, syncing after delay...");
+        //     frm._return_synced = true;
+        //     setTimeout(() => {
+        //         sync_calculation_rows(frm);
+        //     }, 500);
+        // }
     },
     
     onload: function(frm) {
+        //ROUNDING
         // When new return invoice is created via button, sync after longer delay
-        if (frm.doc.is_return === 1 && frm.is_new() && !frm._return_synced) {
-            console.log("New return invoice, waiting for negative qty to be set...");
-            frm._return_synced = true;
-            setTimeout(() => {
-                sync_calculation_rows(frm);
-            }, 1000);
-        }
+        // if (frm.doc.is_return === 1 && frm.is_new() && !frm._return_synced) {
+        //     console.log("New return invoice, waiting for negative qty to be set...");
+        //     frm._return_synced = true;
+        //     setTimeout(() => {
+        //         sync_calculation_rows(frm);
+        //     }, 1000);
+        // }
     },
-    
-    items_on_form_rendered: function(frm) {
-        // Only sync if not already synced for return invoices
-        if (frm.doc.is_return === 1) {
-            if (!frm._items_rendered_synced) {
-                frm._items_rendered_synced = true;
-                setTimeout(() => sync_calculation_rows(frm), 500);
-            }
-        } else {
-            sync_calculation_rows(frm);
-        }
-    },
+    //ROUNFING
+    // items_on_form_rendered: function(frm) {
+    //     // Only sync if not already synced for return invoices
+    //     if (frm.doc.is_return === 1) {
+    //         if (!frm._items_rendered_synced) {
+    //             frm._items_rendered_synced = true;
+    //             setTimeout(() => sync_calculation_rows(frm), 500);
+    //         }
+    //     } else {
+    //         sync_calculation_rows(frm);
+    //     }
+    // },
     
     // Trigger when price list changes
-    selling_price_list: function(frm) {
-        refresh_all_calculation_prices(frm);
-    },
+
+    //ROUNDING
+    // selling_price_list: function(frm) {
+    //     refresh_all_calculation_prices(frm);
+    // },
     
     // Recalculate when totals change
     base_total_taxes_and_charges: function(frm) {
@@ -1440,11 +1443,22 @@ frappe.ui.form.on("Sales Invoice", {
         console.log("Base Grand Total changed");
         calculate_total(frm);
     },
-    
     taxes_and_charges: function(frm) {
-        console.log("Taxes and Charges changed");
-        calculate_total(frm);
+        console.log("Taxes and Charges template changed");
+        setTimeout(() => {
+            calculate_vat_total(frm);
+            calculate_total(frm);
+        }, 500);
     },
+    
+    // taxes_and_charges: function(frm) {
+    //     console.log("Taxes and Charges changed");
+    //     calculate_total(frm);
+    //     calculate_vat_total(frm);
+        
+    // },
+    //taxes
+    
     
     total_advance: function(frm) {
         console.log("Total Advance changed");
@@ -1453,7 +1467,9 @@ frappe.ui.form.on("Sales Invoice", {
     
     outstanding_amount: function(frm) {
         console.log("Outstanding Amount changed");
-        update_payment_schedule(frm);
+
+        //ROUNDING
+        // update_payment_schedule(frm);
     }
 });
 
@@ -1491,12 +1507,37 @@ frappe.ui.form.on("Sales Invoice Item", {
                     console.error("Error fetching excise duty:", e);
                 }
 
+                let custom_vat=0;
+                try{
+                    const item_doc= await frappe.call({
+                        method: "frappe.client.get",
+                        args: {
+                            doctype: "Item",
+                            name: row.item_code
+                        }
+                    });
+                    console.log("Fetched item doc for VAT:", item_doc);
+
+                    if(item_doc.message && item_doc.message.taxes && item_doc.message.taxes.length >0){
+
+
+                        custom_vat = flt(item_doc.message.taxes[0].maximum_net_rate || 0);
+                        console.log(`VAT for ${row.item_code}: ${custom_vat}`);
+                    }
+                }catch(e){
+                    console.error("Error fetching VAT:", e);
+                }
+
                 await frappe.model.set_value(cdt, cdn, 'custom_excise_duty', custom_excise_duty);
-                
+                await frappe.model.set_value(cdt, cdn, 'custom_vat', custom_vat);
+
                 // Wait for ERPNext to finish processing
                 setTimeout(() => {
                     update_item_values(frm, cdt, cdn);
-                    sync_calculation_rows(frm);
+                    calculate_vat_amount(frm, cdt, cdn);
+
+                    //ROUNDING
+                    // sync_calculation_rows(frm);
                 }, 800);
                 
             } catch(e) {
@@ -1508,52 +1549,265 @@ frappe.ui.form.on("Sales Invoice Item", {
     qty: function(frm, cdt, cdn) {
         setTimeout(() => {
             update_item_values(frm, cdt, cdn);
-            sync_calculation_rows(frm);
+            calculate_vat_amount(frm, cdt, cdn);
+
+            //ROUNDING
+            // sync_calculation_rows(frm);
         }, 300);
     },
     
     amount: function(frm, cdt, cdn) {
         setTimeout(() => {
             update_item_values(frm, cdt, cdn);
+            calculate_vat_amount(frm, cdt, cdn);
         }, 300);
     },
     
     rate: function(frm, cdt, cdn) {
         setTimeout(() => {
             update_item_values(frm, cdt, cdn);
+            calculate_vat_amount(frm, cdt, cdn);
         }, 300);
     },
     
     custom_excise_duty: function(frm, cdt, cdn) {
         setTimeout(() => {
             update_item_values(frm, cdt, cdn);
+            calculate_vat_amount(frm, cdt, cdn);
+        }, 300);
+    },
+
+    custom_vat: function(frm, cdt, cdn) {
+        setTimeout(() => {
+            update_item_values(frm, cdt, cdn);
+            calculate_vat_amount(frm, cdt, cdn);
+        }, 300);
+    },
+
+    custom_total: function(frm, cdt, cdn) {
+        setTimeout(() => {
+            calculate_vat_amount(frm, cdt, cdn);
         }, 300);
     },
     
     uom: function(frm, cdt, cdn) {
         setTimeout(() => {
-            sync_calculation_rows(frm);
+            //ROUNDING
+            // sync_calculation_rows(frm);
         }, 300);
     },
 
     items_remove: function(frm) {
         console.log("Item Removed");
-        sync_calculation_rows_remove(frm);
+        //ROUNDING
+        // sync_calculation_rows_remove(frm);
     },
     
     items_add: function(frm) {
         console.log("Item Added");
         setTimeout(() => {
-            sync_calculation_rows(frm);
+            //ROUNDING
+            // sync_calculation_rows(frm);
         }, 300);
     }
 });
 
+
+
+// Function to calculate VAT amount = (VAT * custom_total_including_excise) /100
+function calculate_vat_amount(frm, cdt, cdn) {
+    let row = locals[cdt][cdn];
+    
+    if (row) {
+        let custom_total = flt(row.custom_total || 0);
+        let custom_vat = flt(row.custom_vat || 0);
+        
+        // Calculate custom_vat_amount = custom_total * custom_vat / 100
+        // Assuming custom_vat is a percentage (e.g., 13 for 13%)
+        let custom_vat_amount = (custom_total * custom_vat) / 100;
+        
+        // Set the calculated value
+        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', custom_vat_amount);
+        
+        console.log(`VAT Amount calculated for row ${cdn}: ${custom_vat_amount} (Total: ${custom_total}, VAT: ${custom_vat}%)`);
+        setTimeout(() => {
+            calculate_total_vat_amount(frm);
+        }, 100);
+    }
+}
+
+
+//Function to calculate VAT amount into the total VAT Amount field
+function calculate_total_vat_amount(frm){
+    let total_vat_amount =0;
+    if(frm.doc.items && frm.doc.items.length >0){
+        frm.doc.items.forEach(function(row){
+            let vat_amount = flt(row.custom_vat_amount || 0);
+            total_vat_amount += vat_amount;
+          
+        });
+    }
+    frm.set_value('custom_total_vat_amount', total_vat_amount);
+    // frm.set_value('custom_excise_value',total_excise_amount);
+    setTimeout(() => {
+       update_vat_in_taxes(frm, total_vat_amount);
+       calculate_total(frm);
+    }, 100);
+
+   
+}
+
+//Function to update VAT in taxes table
+
+// function update_vat_in_taxes(frm, total_vat_amount){
+//     if(frm.doc.company !== "Nepal Gas Udhyog (Karnali) Pvt. Ltd."){
+//         return;
+//     }
+//     let vat_row_found = false;
+//     let vat_row=null;
+
+//     if(frm.doc.taxes && frm.doc.taxes.length >0){
+
+//         frm.doc.taxes.forEach((tax_row,idx)=> {
+//             if(tax_row.charge_type === "Actual" && tax_row.account_head && tax_row.account_head === "VAT - NGK"){
+//                 vat_row= tax_row
+//                 vat_row_found = true;
+
+//     }
+// });
+//     }
+//      if (vat_row_found && vat_row) {
+//         // Update existing VAT row
+//         frappe.model.set_value(vat_row.doctype, vat_row.name, 'tax_amount', total_vat_amount);
+//         console.log(`Updated existing VAT row with amount: ${total_vat_amount}`);
+//     } else {
+//         // Create new VAT row
+//         let new_row = frm.add_child('taxes');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'charge_type', 'Actual');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'account_head', 'VAT - NGK');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'description', 'VAT - NGK');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'tax_amount', total_vat_amount);
+//         console.log(`Created new VAT row with amount: ${total_vat_amount}`);
+//     }
+    
+//     // Refresh the taxes table display
+//     frm.refresh_field('taxes');
+// }
+
+function update_vat_in_taxes(frm, total_vat_amount){
+    if(frm.doc.company !== "Nepal Gas Udhyog (Karnali) Pvt. Ltd."){
+        return;
+    }
+    
+    let vat_row_found = false;
+    let vat_row = null;
+    let vat_row_index = -1;
+
+    if(frm.doc.taxes && frm.doc.taxes.length > 0){
+        frm.doc.taxes.forEach((tax_row, idx) => {
+            if(tax_row.charge_type === "Actual" && 
+               tax_row.account_head && 
+               tax_row.account_head === "VAT - GLMI"){
+                vat_row = tax_row;
+                vat_row_found = true;
+                vat_row_index = idx;
+            }
+        });
+    }
+    
+    if (vat_row_found && vat_row) {
+        // Update existing VAT row
+        frappe.model.set_value(vat_row.doctype, vat_row.name, 'tax_amount', total_vat_amount);
+        console.log(`Updated existing VAT row at index ${vat_row_index} with amount: ${total_vat_amount}`);
+        
+        // Ensure it's at index 1 (second position, after excise)
+        if (vat_row_index !== 1) {
+            move_tax_row_to_position(frm, vat_row_index, 1);
+        }
+    } else {
+        // Create new VAT row
+        let new_row = frm.add_child('taxes', {
+            charge_type: 'Actual',
+            account_head: 'VAT - GLMI',
+            description: 'VAT - GLMI',
+            tax_amount: total_vat_amount
+        });
+        
+        console.log(`Created new VAT row with amount: ${total_vat_amount}`);
+        
+        // Move to second position (index 1)
+        let new_row_index = frm.doc.taxes.length - 1;
+        if (new_row_index !== 1) {
+            move_tax_row_to_position(frm, new_row_index, 1);
+        }
+    }
+    
+    frm.refresh_field('taxes');
+}
+
+// Helper function to move a tax row to a specific position
+function move_tax_row_to_position(frm, from_index, to_index) {
+    if (!frm.doc.taxes || from_index === to_index) {
+        return;
+    }
+    
+    // Remove the row from its current position
+    let row = frm.doc.taxes.splice(from_index, 1)[0];
+    
+    // Insert it at the new position
+    frm.doc.taxes.splice(to_index, 0, row);
+    
+    // Update idx for all rows
+    frm.doc.taxes.forEach((tax_row, idx) => {
+        tax_row.idx = idx + 1;
+    });
+    
+    console.log(`Moved tax row from position ${from_index} to ${to_index}`);
+}
+
+// Modified update_item_values to call excise first
+function update_item_values(frm, cdt, cdn) {
+    let row = locals[cdt][cdn];
+    
+    if (!row) {
+        console.log("Row not found in update_item_values");
+        return;
+    }
+    
+    let qty = flt(row.qty) || 0;
+    let amount = flt(row.amount) || 0;
+    const custom_excise_duty = flt(row.custom_excise_duty) || 0;
+
+    let custom_excise_value = flt(custom_excise_duty * qty, 2);
+    let custom_total = flt(amount + custom_excise_value, 2);
+
+    console.log(`Calculating for ${row.item_code}: qty=${qty}, amount=${amount}, excise_duty=${custom_excise_duty}`);
+    console.log(`Results: excise_value=${custom_excise_value}, total=${custom_total}`);
+
+    frappe.model.set_value(cdt, cdn, 'custom_excise_value', custom_excise_value)
+        .then(() => {
+            return frappe.model.set_value(cdt, cdn, 'custom_total', custom_total);
+        })
+        .then(() => {
+            console.log(`Updated ${row.item_code}: Excise=${custom_excise_value}, Total=${custom_total}`);
+            frm.refresh_field('items');
+        })
+        .catch((err) => {
+            console.error("Error setting values:", err);
+        });
+    
+    // Calculate excise total first
+    setTimeout(() => {
+        calculate_total_excise_value(frm);
+    }, 200);
+}
 /**
  * Update excise values for a single item row
  * This function ONLY updates custom_excise_value and custom_total
  * It does NOT override base_total (Python hooks do that)
  */
+//Exercise value calculation
+
 function update_item_values(frm, cdt, cdn) {
     let row = locals[cdt][cdn];
     
@@ -1584,34 +1838,202 @@ function update_item_values(frm, cdt, cdn) {
         .catch((err) => {
             console.error("Error setting values:", err);
         });
+    setTimeout(() => {
+        calculate_total_excise_value(frm);
+    }, 200);
 }
 
-frappe.ui.form.on("Amount Calculation for sales invoice", {
-    item_code: function(frm, cdt, cdn) {
-        fetch_custom_item_price(frm, cdt, cdn);
+function calculate_total_excise_value(frm){
+    let total_excise_amount = 0;
+    if(frm.doc.items && frm.doc.items.length > 0){
+        frm.doc.items.forEach(function(row){
+            total_excise_amount += flt(row.custom_excise_value || 0);
+            // let custom_excise_value = flt(row.custom_excise_value || 0);
+            // total_excise_amount += custom_excise_value;
+            // let total_amount = flt(row.total || 0);
+        });
+    }
+    frm.set_value('custom_total_excise_amount', total_excise_amount);
+    // frm.set_value('custom_excise_value',total_excise_amount);
+    setTimeout(() => {
+       update_excise_in_taxes(frm, total_excise_amount);
+       calculate_total(frm);
+    }, 100);
+
+}
+function update_excise_in_taxes(frm, total_excise_amount){
+    if(frm.doc.company !== "Grihalaxmi Metal Industries Pvt. Ltd."){
+
+        return;
+    }
+    
+    let excise_row_found = false;
+    let excise_row = null;
+    let excise_row_index = -1;
+
+    if(frm.doc.taxes && frm.doc.taxes.length > 0){
+        frm.doc.taxes.forEach((tax_row, idx) => {
+            if(tax_row.charge_type === "Actual" && 
+               tax_row.account_head && 
+               tax_row.account_head === "347714 - Excise Duty - GLMI"){
+                excise_row = tax_row;
+                excise_row_found = true;
+                excise_row_index = idx;
+            }
+        });
+    }
+    
+    if (excise_row_found && excise_row) {
+        // Update existing Excise row
+        frappe.model.set_value(excise_row.doctype, excise_row.name, 'tax_amount', total_excise_amount);
+        console.log(`Updated existing Excise Duty row at index ${excise_row_index} with amount: ${total_excise_amount}`);
+        
+        // Ensure it's at index 0 (first position)
+        if (excise_row_index !== 0) {
+            move_tax_row_to_position(frm, excise_row_index, 0);
+        }
+    } else {
+        // Create new Excise row AT THE BEGINNING
+        let new_row = frm.add_child('taxes', {
+            charge_type: 'Actual',
+            account_head: '347714 - Excise Duty - GLMI',
+            description: 'Excise Duty - GLMI',
+            tax_amount: total_excise_amount
+        });
+        
+        console.log(`Created new Excise Duty row with amount: ${total_excise_amount}`);
+        
+        // Move to first position
+        let new_row_index = frm.doc.taxes.length - 1;
+        if (new_row_index > 0) {
+            move_tax_row_to_position(frm, new_row_index, 0);
+        }
+    }
+    
+    frm.refresh_field('taxes');
+}
+
+// function update_excise_in_taxes(frm, total_excise_amount){
+//     if(frm.doc.company !== "Nepal Gas Udhyog (Karnali) Pvt. Ltd."){
+//         return;
+//     }
+//     let vat_row_found = false;
+//     let vat_row=null;
+
+//     if(frm.doc.taxes && frm.doc.taxes.length >0){
+
+//         frm.doc.taxes.forEach((tax_row,idx)=> {
+//             if(tax_row.charge_type === "Actual" && tax_row.account_head && tax_row.account_head === "347714 - Excise Duty - NGK"){
+
+//                 vat_row= tax_row
+//                 vat_row_found = true;
+
+//     }
+// });
+//     }
+//      if (vat_row_found && vat_row) {
+//         // Update existing VAT row
+//         frappe.model.set_value(vat_row.doctype, vat_row.name, 'tax_amount', total_excise_amount);
+//         console.log(`Updated existing VAT row with amount: ${total_excise_amount}`);
+//     } else {
+//         // Create new VAT row
+//         let new_row = frm.add_child('taxes');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'charge_type', 'Actual');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'account_head', '347714 - Excise Duty - NGK');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'description', 'Excise Duty - NGK');
+//         frappe.model.set_value(new_row.doctype, new_row.name, 'tax_amount', total_excise_amount);
+//         console.log(`Created new Excise Duty row with amount: ${total_excise_amount}`);
+//     }
+    
+//     // Refresh the taxes table display
+//     frm.refresh_field('taxes');
+// }
+// //ROUNDING
+
+// frappe.ui.form.on("Amount Calculation for sales invoice", {
+//     item_code: function(frm, cdt, cdn) {
+//         fetch_custom_item_price(frm, cdt, cdn);
+//     },
+    
+//     uom: function(frm, cdt, cdn) {
+//         fetch_custom_item_price(frm, cdt, cdn);
+//     },
+    
+//     qty: function(frm, cdt, cdn) {
+//         calculate_amount(cdt, cdn);
+//     },
+    
+//     custom_total_vat_inclusive: function(frm, cdt, cdn) {
+//         calculate_amount(cdt, cdn);
+//     },
+    
+//     custom_difference_calculation_table_add: function(frm, cdt, cdn) {
+//         console.log("Manual row added");
+//     },
+    
+//     custom_difference_calculation_table_remove: function(frm) {
+//         console.log("Removed Rows!!!");
+//         calculate_total(frm);
+//     }
+// });
+
+frappe.ui.form.on("Sales Taxes and Charges", {
+    account_head: function(frm, cdt, cdn) {
+        console.log("TTax account head changed");
+         setTimeout(() => {
+            calculate_vat_total(frm);
+            calculate_total(frm);
+        }, 500);
+        // calculate_vat_total(frm);
+
     },
     
-    uom: function(frm, cdt, cdn) {
-        fetch_custom_item_price(frm, cdt, cdn);
+    tax_amount: function(frm, cdt, cdn) {
+        calculate_vat_total(frm);
     },
     
-    qty: function(frm, cdt, cdn) {
-        calculate_amount(cdt, cdn);
+    taxes_add: function(frm) {
+        calculate_vat_total(frm);
     },
     
-    custom_total_vat_inclusive: function(frm, cdt, cdn) {
-        calculate_amount(cdt, cdn);
-    },
-    
-    custom_difference_calculation_table_add: function(frm, cdt, cdn) {
-        console.log("Manual row added");
-    },
-    
-    custom_difference_calculation_table_remove: function(frm) {
-        console.log("Removed Rows!!!");
-        calculate_total(frm);
+    taxes_remove: function(frm) {
+        calculate_vat_total(frm);
     }
 });
+/**
+ * Calculate total VAT from taxes table
+ * Sums all tax amounts where account_head starts with "VAT -"
+ */
+function calculate_vat_total(frm) {
+    if (!frm || !frm.doc) {
+        console.log("Form not available");
+        return;
+    }
+    
+    let vat_total = 0;
+    
+    // Loop through all tax rows
+    if (frm.doc.taxes && frm.doc.taxes.length > 0) {
+        frm.doc.taxes.forEach(function(tax_row) {
+            let account_head = tax_row.account_head || '';
+            let tax_amount = flt(tax_row.tax_amount) || 0;
+            
+            // Check if account_head starts with "VAT -"
+            if (account_head.startsWith('VAT -')) {
+                vat_total += tax_amount;
+                console.log(`VAT Row: ${account_head} = ${tax_amount}`);
+            }
+        });
+    }
+    
+    vat_total = flt(vat_total, 2);
+    
+    console.log(`Total VAT: ${vat_total}`);
+    
+    // Set the custom_vat field
+    frm.set_value('custom_vat', vat_total);
+    frm.refresh_field('custom_vat');
+}
 
 /**
  * Sync calculation rows with Sales Invoice Items
@@ -1802,6 +2224,7 @@ function fetch_all_calculation_prices(frm) {
     });
 }
 
+
 function refresh_all_calculation_prices(frm) {
     const calculation_rows = frm.doc.custom_difference_calculation_table || [];
     
@@ -1844,10 +2267,8 @@ function calculate_amount(cdt, cdn) {
     }, 100);
 }
 
-/**
- * Calculate totals and rounding adjustment
- * This displays the values - actual saving is done by Python hooks
- */
+
+
 function calculate_total(frm) {
     if (!frm || !frm.doc) {
         console.log("Form not available");
@@ -1857,43 +2278,80 @@ function calculate_total(frm) {
     let custom_total_amount = 0;
     let base_grand_total = flt(frm.doc.base_grand_total) || 0;
     let total_advance = flt(frm.doc.total_advance) || 0;
+    let custom_total_excluding_excise = 0;  // Reset to 0
+    let total_excise = 0;  // Track total excise separately
 
-    // Sum calculation table totals
-    if (frm.doc.custom_difference_calculation_table) {
-        frm.doc.custom_difference_calculation_table.forEach(function(row) {
-            let row_total = parseFloat(row.total_amount) || 0;
-            custom_total_amount += row_total;
+
+     
+
+
+    //Rounding
+
+    // // Sum calculation table totals
+    // if (frm.doc.custom_difference_calculation_table) {
+    //     frm.doc.custom_difference_calculation_table.forEach(function(row) {
+    //         let row_total = parseFloat(row.total_amount) || 0;
+    //         custom_total_amount += row_total;
+    //     });
+    // }
+
+    // Calculate total excluding excise (sum of all item amounts which is qty * rate)
+    if (frm.doc.items && frm.doc.items.length > 0) {
+        frm.doc.items.forEach(function(item) {
+            let amount = flt(item.amount) || 0;  // This is qty * rate
+            let excise_value = flt(item.custom_excise_value) || 0;
+            
+            custom_total_excluding_excise += amount;
+            total_excise += excise_value;
         });
+        
+        // Set the calculated values
+        frm.doc.custom_total_amount = flt(custom_total_excluding_excise, 2);
+        frm.doc.custom_excise = flt(total_excise, 2);
+
+        frm.refresh_field('custom_total_amount');
+        frm.refresh_field('custom_excise');
+        
+        console.log(`Total Excluding Excise: ${custom_total_excluding_excise}, Total Excise: ${total_excise}`);
     }
     
     custom_total_amount = flt(custom_total_amount, 2);
+
+
+    //ROUNDING
     
     // Calculate difference
-    let difference = flt(custom_total_amount - base_grand_total, 2);
+    // let difference = flt(custom_total_amount - base_grand_total, 2);
     
     // Calculate rounded total
-    let rounded_total = flt(base_grand_total + difference, 2);
+    // let rounded_total = flt(base_grand_total + difference, 2);
     
     // Calculate outstanding
-    let outstanding = flt(rounded_total - total_advance, 2);
+    // let outstanding = flt(rounded_total - total_advance, 2);
     
-    console.log(`Totals - Custom: ${custom_total_amount}, Difference: ${difference}, Rounded: ${rounded_total}, Outstanding: ${outstanding}`);
+    // console.log(`Totals - Custom: ${custom_total_amount}, Difference: ${difference}, Rounded: ${rounded_total}, Outstanding: ${outstanding}`);
     
-    // Set values (Python hooks will finalize these on save)
-    frm.doc.custom_total_amount = custom_total_amount;
-    frm.doc.custom_difference_adjustment = difference;
-    frm.doc.rounded_total = rounded_total;
-    frm.doc.outstanding_amount = outstanding;
+    // // Set values (Python hooks will finalize these on save)
+    // frm.doc.custom_total_amount = custom_total_amount;
+    // frm.doc.custom_difference_adjustment = difference;
+    // frm.doc.rounded_total = rounded_total;
+    // frm.doc.outstanding_amount = outstanding;
     
     frm.refresh_field('custom_total_amount');
-    frm.refresh_field('custom_difference_adjustment');
-    frm.refresh_field('rounded_total');
-    frm.refresh_field('outstanding_amount');
-    
-    update_payment_schedule(frm);
-    convert_rounded_total_to_words(frm);
-}
 
+    //ROUNDING
+
+    // frm.refresh_field('custom_difference_adjustment');
+    // frm.refresh_field('rounded_total');
+    // frm.refresh_field('outstanding_amount');
+
+      // Calculate VAT total
+    calculate_vat_total(frm);
+    
+    //ROUNDING
+    // update_payment_schedule(frm);
+    // convert_rounded_total_to_words(frm);
+}
 function update_payment_schedule(frm) {
     if (!frm || !frm.doc || !frm.doc.payment_schedule || frm.doc.payment_schedule.length === 0) {
         return;
