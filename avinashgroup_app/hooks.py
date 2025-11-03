@@ -27,7 +27,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=7.4",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=8",
 ]
 
 # include js, css files in header of web template
@@ -55,6 +55,15 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # override_doctype_class = {
 #     "Customer": "avinashgroup_app.custom_code.custom_customer.CustomCustomer"
 # }
+
+doc_events = {
+    # "Customer": {
+    #     "override_doctype_class": "your_app_name.overrides.customer.CustomCustomer"
+    # },
+    "Item": {
+        "override_doctype_class": "avinashgroup_app.custom_code.custom_itemname.CustomItem"
+    }
+}
 
 # Svg Icons
 # ------------------

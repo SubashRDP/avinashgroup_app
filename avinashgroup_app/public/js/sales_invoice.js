@@ -1024,8 +1024,12 @@ function convert_rounded_total_to_words(frm) {
 
 function set_naming_series_based_on_return(frm) {
     if (frm.doc.is_return == 1) {
-        frm.set_value('naming_series', 'ACC-SINV-RET-.{custom_company_abbr}.-.YYYY.-');
+        frm.set_value('naming_series', '{custom_abbr}.-RET-SB-.####');
     } else {
-        frm.set_value('naming_series', 'ACC-SINV-.{custom_company_abbr}.-.YYYY.-');
+        frm.set_value('naming_series', '{custom_abbr}.-SB-.####');
     }
 }
+
+
+
+
