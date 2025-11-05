@@ -27,7 +27,8 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=8",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=8.2",
+    # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
 ]
 
 # include js, css files in header of web template
@@ -50,20 +51,28 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
+# doc_events = {
+#     "Purchase Invoice": {
+#         "autoname": "avinashgroup_app.custom_code.api.autoname_purchase_invoice"
+#     }
+# }
 
+override_doctype_class = {
+    "Purchase Invoice": "avinashgroup_app.custom_code.api.CustomPurchaseInvoice"
+}
 ###Naming Series
 # override_doctype_class = {
 #     "Customer": "avinashgroup_app.custom_code.custom_customer.CustomCustomer"
 # }
 
-doc_events = {
-    # "Customer": {
-    #     "override_doctype_class": "your_app_name.overrides.customer.CustomCustomer"
-    # },
-    "Item": {
-        "override_doctype_class": "avinashgroup_app.custom_code.custom_itemname.CustomItem"
-    }
-}
+# doc_events = {
+#     # "Customer": {
+#     #     "override_doctype_class": "your_app_name.overrides.customer.CustomCustomer"
+#     # },
+#     "Item": {
+#         "override_doctype_class": "avinashgroup_app.custom_code.custom_itemname.CustomItem"
+#     }
+# }
 
 # Svg Icons
 # ------------------

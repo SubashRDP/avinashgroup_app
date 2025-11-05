@@ -1,11 +1,11 @@
 
-frappe.ui.form.on("Sales Invoice", {
+frappe.ui.form.on("Purchase Invoice", {
     is_return: function(frm) {
         set_naming_series_based_on_return(frm);
     },
     
     refresh: function(frm) {
-        console.log("Sales Invoice Form Refreshed!");
+        console.log("Purchase Invoice Form Refreshed!");
         if (frm.doc.is_return) {
             console.log("IS RETURN")
             set_naming_series_based_on_return(frm);
@@ -102,7 +102,7 @@ frappe.ui.form.on("Sales Invoice", {
     }
 });
 
-frappe.ui.form.on("Purchase Invoice Item", {
+frappe.ui.form.on("Sales Invoice Item", {
     item_code: async function(frm, cdt, cdn) {
         let row = locals[cdt][cdn];
         if (row && row.item_code) {
@@ -151,7 +151,7 @@ frappe.ui.form.on("Purchase Invoice Item", {
 
 
                         custom_vat = flt(item_doc.message.taxes[0].maximum_net_rate || 0);
-                        console.log(`VAT for ${row.item_code}: ${custom_vat}`);
+                        console.log(`THE VAT for the ${row.item_code}: ${custom_vat}`);
                     }
                 }catch(e){
                     console.error("Error fetching VAT:", e);
@@ -160,6 +160,7 @@ frappe.ui.form.on("Purchase Invoice Item", {
                 await frappe.model.set_value(cdt, cdn, 'custom_excise_duty', custom_excise_duty);
                 await frappe.model.set_value(cdt, cdn, 'custom_vat', custom_vat);
 
+                // Wait for ERPNext to finish processing
                 setTimeout(() => {
                     update_item_values(frm, cdt, cdn);
                     calculate_vat_amount(frm, cdt, cdn);
@@ -323,7 +324,7 @@ function calculate_total_vat_amount(frm){
 // }
 
 function update_vat_in_taxes(frm, total_vat_amount){
-    if(frm.doc.company !== "Nepal Gas Udhyog (Karnali) Pvt. Ltd."){
+    if(frm.doc.company !== "Grihalaxmi Metal Industries Pvt. Ltd."){
         return;
     }
     
@@ -350,7 +351,7 @@ function update_vat_in_taxes(frm, total_vat_amount){
         
         // Ensure it's at index 1 (second position, after excise)
         if (vat_row_index !== 1) {
-            move_tax_row_to_position(frm, vat_row_index, 1);
+             move_tax_row_to_position(frm, vat_row_index, 1);
         }
     } else {
         // Create new VAT row
@@ -518,7 +519,7 @@ function update_excise_in_taxes(frm, total_excise_amount){
         
         // Ensure it's at index 0 (first position)
         if (excise_row_index !== 0) {
-            move_tax_row_to_position(frm, excise_row_index, 0);
+             move_tax_row_to_position(frm, excise_row_index, 0);
         }
     } else {
         // Create new Excise row AT THE BEGINNING
@@ -656,9 +657,10 @@ function calculate_vat_total(frm) {
     
     vat_total = flt(vat_total, 2);
     
-    console.log(`Total VAT: ${vat_total}`);
+    console.log(`THE Total VAT: ${vat_total}`);
     
     // Set the custom_vat field
+    // frm.set_value('custom_vat', vat_total);
     frm.set_value('custom_total_vat_amount', vat_total);
     frm.refresh_field('custom_total_vat_amount');
 }
@@ -1032,3 +1034,4 @@ function set_naming_series_based_on_return(frm) {
 
 
 
+1
