@@ -27,7 +27,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=8.2",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
     # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
 ]
 

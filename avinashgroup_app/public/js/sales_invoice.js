@@ -102,7 +102,7 @@ frappe.ui.form.on("Sales Invoice", {
     }
 });
 
-frappe.ui.form.on("Purchase Invoice Item", {
+frappe.ui.form.on("Sales Invoice Item", {
     item_code: async function(frm, cdt, cdn) {
         let row = locals[cdt][cdn];
         if (row && row.item_code) {
