@@ -1,0 +1,226 @@
+$(document).on('app_ready', function() {
+    // doctypes that have company field and need supplier/customer/item filtering
+    const relevantDocTypes = [
+        "Sales Invoice", 
+        "Sales Order", 
+        "Delivery Note",
+        "Purchase Invoice", 
+        "Purchase Order", 
+        "Purchase Receipt",
+        "Payment Entry",
+        "Journal Entry",
+        "Quotation",
+        "Supplier Quotation",
+       
+    ];
+    $.each(relevantDocTypes, function(i, doctype) {
+        frappe.ui.form.on(doctype, {
+            company: function(frm) {
+                setupCompanyBasedFilters(frm);
+                
+                // Clear supplier/customer if they don't match new company
+                validateAndClearFields(frm);
+            },  
+            supplier: function(frm){
+                  validateAndClearFields(frm);
+            },
+            customer: function(frm){
+                    validateAndClearFields(frm);
+                }
+        });
+    });
+});
+
+function setupCompanyBasedFilters(frm) {
+    if (!frm.fields_dict.company) {
+        return;
+    }
+    let company = frm.doc.company;    
+    if (frm.fields_dict.supplier) {
+        frm.set_query('supplier', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0 
+                    }
+                };
+            }
+            return {
+                filters: {
+                    'disabled': 0
+                }
+            };
+        });
+    }
+    if (frm.fields_dict.customer) {
+        frm.set_query('customer', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0  // Only show active customers
+                    }
+                };
+            }
+            return {
+                filters: {
+                    'disabled': 0
+                }
+            };
+        });
+    }
+    
+    if (frm.fields_dict.supplier_name) {
+        frm.set_query('supplier_name', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0
+                    }
+                };
+            }
+            return {};
+        });
+    }
+
+    if (frm.fields_dict.customer_name) {
+        frm.set_query('customer_name', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0
+                    }
+                };
+            }
+            return {};
+        });
+    }
+    setupItemCodeFilter(frm, company);
+}
+function setupItemCodeFilter(frm, company) {
+    if(frm.fields_dict.items) {
+        frm.set_query('item_code', 'items', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0
+                    }
+                };
+            }
+            return {
+                filters: {
+                    'disabled': 0
+                }
+            };
+        });
+    }
+}
+function validateAndClearFields(frm) {
+    let company = frm.doc.company;
+    
+    if (!company) {
+        return;
+    }
+    
+    if (frm.doc.supplier) {
+        frappe.db.get_value('Supplier', frm.doc.supplier, 'custom_company', function(r) {
+            if (r && r.custom_company && r.custom_company !== company) {
+                frappe.msgprint({
+                    title: __('Company Mismatch'),
+                    message: __('Supplier {0} does not belong to company {1}. Clearing supplier field.', 
+                        [frm.doc.supplier, company]),
+                    indicator: 'orange'
+                });
+                frm.set_value('supplier', '');
+            }
+        });
+    }
+    
+    // Validate and clear customer
+    if (frm.doc.customer) {
+        frappe.db.get_value('Customer', frm.doc.customer, 'custom_company', function(r) {
+            if (r && r.custom_company && r.custom_company !== company) {
+                frappe.msgprint({
+                    title: __('Company Mismatch'),
+                    message: __('Customer {0} does not belong to company {1}. Clearing customer field.', 
+                        [frm.doc.customer, company]),
+                    indicator: 'orange'
+                });
+                frm.set_value('customer', '');
+            }
+        });
+    }
+    
+    //Validate and clear items in batch
+    if (frm.doc.items && frm.doc.items.length > 0) {
+        let itemCodes = frm.doc.items
+            .filter(item => item.item_code)
+            .map(item => item.item_code);
+        
+        if (itemCodes.length > 0) {
+            frappe.call({
+                method: 'frappe.client.get_list',
+                args: {
+                    doctype: 'Item',
+                    filters: {
+                        name: ['in', itemCodes]
+                    },
+                    fields: ['name', 'custom_company']
+                },
+                callback: function(r) {
+                    if (r && r.message && r.message.length > 0) {
+                        let mismatchedItems = [];
+                        
+                        // Check each item's custom_company
+                        r.message.forEach(function(item) {
+                            // Item doesn't match if custom_company exists and is different
+                            if (item.custom_company && item.custom_company !== company) {
+                                mismatchedItems.push(item.name);
+                            }
+                        });
+                        
+                        if (mismatchedItems.length > 0) {
+                            // Remove entire rows for mismatched items
+                            let removedCount = 0;
+                            let itemsToRemove = [];
+                            
+                            // Collect rows to remove
+                            frm.doc.items.forEach(function(row) {
+                                if (mismatchedItems.includes(row.item_code)) {
+                                    itemsToRemove.push(row);
+                                    removedCount++;
+                                }
+                            });
+                            
+                            // Remove the rows
+                            itemsToRemove.forEach(function(row) {
+                                frappe.model.clear_doc(row.doctype, row.name);
+                            });
+                            
+                            // Update the items array
+                            frm.doc.items = frm.doc.items.filter(function(row) {
+                                return !mismatchedItems.includes(row.item_code);
+                            });
+                            
+                            // Show message and refresh
+                            if (removedCount > 0) {
+                                frappe.msgprint({
+                                    title: __('Company Mismatch'),
+                                    message: __('Removed {0} item row(s) that do not belong to company {1}', 
+                                        [removedCount, company]),
+                                    indicator: 'orange'
+                                });
+                                frm.refresh_field('items');
+                                frm.dirty();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+}

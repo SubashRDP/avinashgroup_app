@@ -13,3 +13,7 @@ class CustomPurchaseInvoice(PurchaseInvoice):
             self.name = f"{company_code}-RTN-{doc_no}-{fiscal_year}"
         else:
             self.name = f"{company_code}-{purchase_type}-{doc_no}-{fiscal_year}"
+
+
+
+

@@ -29,7 +29,11 @@ app_license = "mit"
 app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
     # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
+     "/assets/avinashgroup_app/js/global_filter.js?v=1.2"
 ]
+# my_custom_app/hooks.py
+
+
 
 # include js, css files in header of web template
 # web_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"

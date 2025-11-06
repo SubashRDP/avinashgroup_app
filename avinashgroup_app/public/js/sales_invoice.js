@@ -5,7 +5,7 @@ frappe.ui.form.on("Sales Invoice", {
     },
     
     refresh: function(frm) {
-        console.log("Sales Invoice Form Refreshed!");
+        // console.log("Sales Invoice Form Refreshed!");
         if (frm.doc.is_return) {
             console.log("IS RETURN")
             set_naming_series_based_on_return(frm);
