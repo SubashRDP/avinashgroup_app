@@ -32,3 +32,23 @@ def set_custom_name_field(doc, method):
     fiscal_year = doc.custom_fiscal_year or ""
     
     doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+
+
+
+
+
+def set_custom_name_jv(doc, method):
+    company_code = doc.custom_abbr or ""
+    
+    p_type = ""
+    if doc.custom_p_type:
+        p_type = frappe.db.get_value(
+            "JV Type", 
+            doc.custom_p_type, 
+            "jv_type_code"
+        ) or ""
+    
+    doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
+    fiscal_year = doc.custom_fiscal_year or ""
+    
+    doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"

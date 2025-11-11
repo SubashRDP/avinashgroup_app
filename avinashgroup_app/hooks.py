@@ -65,6 +65,9 @@ doc_events = {
     "Payment Entry": {
         "before_save": "avinashgroup_app.custom_code.api.set_custom_name_field",
         # or use "validate" instead of "before_save"
+    },
+    "Journal Entry": {
+        "before_save": "avinashgroup_app.custom_code.api.set_custom_name_jv",
     }
 }
 
