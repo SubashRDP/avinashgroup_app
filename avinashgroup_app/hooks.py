@@ -29,7 +29,7 @@ app_license = "mit"
 app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
     # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
-     "/assets/avinashgroup_app/js/global_filter.js?v=1.2"
+     "/assets/avinashgroup_app/js/global_filter.js?v=1.3"
 ]
 # my_custom_app/hooks.py
 
@@ -61,9 +61,16 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 #     }
 # }
 
-override_doctype_class = {
-    "Purchase Invoice": "avinashgroup_app.custom_code.api.CustomPurchaseInvoice"
+doc_events = {
+    "Payment Entry": {
+        "before_save": "avinashgroup_app.custom_code.api.set_custom_name_field",
+        # or use "validate" instead of "before_save"
+    }
 }
+
+# override_doctype_class = {
+#     "Purchase Invoice": "avinashgroup_app.custom_code.api.CustomPurchaseInvoice"
+# }
 ###Naming Series
 # override_doctype_class = {
 #     "Customer": "avinashgroup_app.custom_code.custom_customer.CustomCustomer"
