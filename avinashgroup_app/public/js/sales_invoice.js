@@ -323,7 +323,7 @@ function calculate_total_vat_amount(frm){
 // }
 
 function update_vat_in_taxes(frm, total_vat_amount){
-    if(frm.doc.company !== "Nepal Gas Udhyog (Karnali) Pvt. Ltd."){
+    if(frm.doc.company !== "Grihalaxmi Metal Industries Pvt. Ltd"){
         return;
     }
     

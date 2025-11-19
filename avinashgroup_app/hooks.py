@@ -27,9 +27,12 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
+    # "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
     # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
-     "/assets/avinashgroup_app/js/global_filter.js?v=1.3"
+     "/assets/avinashgroup_app/js/global_filter.js?v=1.3",
+    # "/assets/avinashgroup_app/js/pi.js?v=2.1",
+    # "/assets/avinashgroup_app/js/journal_entry.js?v=1.2"
+    #  "/assets/avinashgroup_app/js/journal_entry"
 ]
 # my_custom_app/hooks.py
 
@@ -50,7 +53,11 @@ app_include_js = [
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
+doctype_js = {
+            "Sales Invoice" : "public/js/sales_invoice.js",
+            "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
+}
+
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -61,15 +68,48 @@ doctype_js = {"Sales Invoice" : "public/js/sales_invoice.js"}
 #     }
 # }
 
-doc_events = {
-    "Payment Entry": {
-        "before_save": "avinashgroup_app.custom_code.api.set_custom_name_field",
-        # or use "validate" instead of "before_save"
-    },
-    "Journal Entry": {
-        "before_save": "avinashgroup_app.custom_code.api.set_custom_name_jv",
-    }
+# doc_events = {
+#     "Payment Entry": {
+#         "before_save": "avinashgroup_app.custom_code.api.set_custom_name_field",
+#         # or use "validate" instead of "before_save"
+#     },
+#     "Journal Entry": {
+#         "before_save": "avinashgroup_app.custom_code.api.set_custom_name_jv",
+#     },
+#     "Purchase Invoice": {
+#         "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+#     }
+# }
+
+# Common event handler for auto-naming
+common_naming_events = {
+    "before_save": "avinashgroup_app.custom_code.api.set_custom_name_field",
 }
+
+# Define your list of DocTypes that use common naming
+naming_doctypes = [
+    "Payment Entry",
+    "Journal Entry",
+    "Purchase Invoice"
+]
+
+# Build doc_events dictionary with common naming events
+doc_events = {
+    doctype: common_naming_events.copy() for doctype in naming_doctypes
+}
+
+# (different event)
+# doc_events["Purchase Invoice"] = {
+#     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+# }
+
+
+# If Journal Entry needs a different API than Payment Entry, override it
+# doc_events["Journal Entry"] = {
+#     "before_save": "avinashgroup_app.custom_code.api.set_custom_name_jv",
+# }
+
+
 
 # override_doctype_class = {
 #     "Purchase Invoice": "avinashgroup_app.custom_code.api.CustomPurchaseInvoice"

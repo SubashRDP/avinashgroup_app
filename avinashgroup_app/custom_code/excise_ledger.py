@@ -603,237 +603,6 @@ def before_submit(doc, method):
 
 
 
-
-# def before_submit(doc, method):
-#     """
-#     Generate or reverse GL entries for excise value and VAT in Sales Invoice or Sales Return.
-#     This overrides ERPNext's standard VAT handling by clearing VAT from taxes table
-#     and creating custom GL entries using custom_excise and custom_vat fields.
-    
-#     For Sales Invoice:
-#         - Debit: Sales Account (for excise value - reduces revenue)
-#         - Credit: Excise Duty Account (for excise value - creates liability)
-#         - Debit: Sales Account (for VAT - reduces revenue)
-#         - Credit: VAT Account (for VAT - creates liability)
-    
-#     For Sales Return:
-#         - Debit: Excise Duty Account (removes liability)
-#         - Credit: Sales Account (restores revenue)
-#         - Debit: VAT Account (removes liability)
-#         - Credit: Sales Account (restores revenue)
-#     """
-#     frappe.msgprint(f"before_submit method triggered for {doc.doctype} {doc.name}", title="Debug")
-
-#     total_excise_value = flt(doc.custom_excise)
-#     vat_value = flt(doc.custom_vat)
-#     total_excluding_excise = flt(doc.custom_total_excluding_excise)
-    
-#     # Log the values for reference
-#     frappe.logger().info(
-#         f"Invoice {doc.name} - Total excl. excise: {total_excluding_excise}, "
-#         f"Excise: {total_excise_value}, VAT: {vat_value}"
-#     )
-    
-#     if total_excise_value == 0 and vat_value == 0:
-#         frappe.logger().info(f"Skipping custom GL entries for {doc.name} as excise and VAT are both 0")
-#         frappe.msgprint(f"Skipping custom GL entries for {doc.name} as excise and VAT are both 0", title="Debug")
-#         return
-
-#     excise_account = "347714 - Excise Duty - GLMI"
-#     vat_account = "VAT - GLMI"
-#     sales_account = doc.get("items")[0].income_account   # Sales/Revenue account
-
-#     # Verify accounts exist
-#     for account in [excise_account, sales_account, vat_account]:
-#         if not frappe.db.exists("Account", account):
-#             frappe.throw(_("Account {0} does not exist").format(account))
-    
-#     cost_center = (
-#         doc.get("cost_center")
-#         or doc.get("items")[0].get("cost_center")
-#         or frappe.db.get_value("Company", doc.company, "cost_center")
-#     )
-
-#     if not cost_center:
-#         frappe.throw("Cost Center is required but not set on the document or company.")
-
-#     gl_entries = []
-#     is_return = doc.is_return
-
-#     if not is_return:
-#         # Sales Invoice: Create custom Excise and VAT entries
-        
-#         # 1. Excise Duty entries
-#         if total_excise_value > 0:
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": sales_account,
-#                     "debit": abs(total_excise_value),
-#                     "credit": 0,
-#                     "debit_in_account_currency": abs(total_excise_value),
-#                     "credit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": excise_account,
-#                     "remarks": "Excise Duty adjustment"
-#                 }, get_account_currency(sales_account))
-#             )
-
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": excise_account,
-#                     "credit": abs(total_excise_value),
-#                     "debit": 0,
-#                     "credit_in_account_currency": abs(total_excise_value),
-#                     "debit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": doc.customer,
-#                     "remarks": "Excise Duty liability"
-#                 }, get_account_currency(excise_account))
-#             )
-        
-#         # 2. VAT entries (using custom_vat instead of system VAT)
-#         if vat_value > 0:
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": sales_account,
-#                     "debit": abs(vat_value),
-#                     "credit": 0,
-#                     "debit_in_account_currency": abs(vat_value),
-#                     "credit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": vat_account,
-#                     "remarks": "Custom VAT adjustment"
-#                 }, get_account_currency(sales_account))
-#             )
-
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": vat_account,
-#                     "credit": abs(vat_value),
-#                     "debit": 0,
-#                     "credit_in_account_currency": abs(vat_value),
-#                     "debit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": doc.customer,
-#                     "remarks": "Custom VAT liability"
-#                 }, get_account_currency(vat_account))
-#             )
-            
-#     else:
-#         # Sales Return: Reverse custom Excise and VAT entries
-        
-#         # 1. Reverse Excise Duty entries
-#         if total_excise_value > 0:
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": excise_account,
-#                     "debit": abs(total_excise_value),
-#                     "credit": 0,
-#                     "debit_in_account_currency": abs(total_excise_value),
-#                     "credit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": doc.customer,
-#                     "remarks": "Excise Duty reversal"
-#                 }, get_account_currency(excise_account))
-#             )
-
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": sales_account,
-#                     "credit": abs(total_excise_value),
-#                     "debit": 0,
-#                     "credit_in_account_currency": abs(total_excise_value),
-#                     "debit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": excise_account,
-#                     "remarks": "Excise Duty reversal adjustment"
-#                 }, get_account_currency(sales_account))
-#             )
-        
-#         # 2. Reverse VAT entries
-#         if vat_value > 0:
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": vat_account,
-#                     "debit": abs(vat_value),
-#                     "credit": 0,
-#                     "debit_in_account_currency": abs(vat_value),
-#                     "debit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": doc.customer,
-#                     "remarks": "Custom VAT reversal"
-#                 }, get_account_currency(vat_account))
-#             )
-
-#             gl_entries.append(
-#                 doc.get_gl_dict({
-#                     "account": sales_account,
-#                     "credit": abs(vat_value),
-#                     "debit": 0,
-#                     "credit_in_account_currency": abs(vat_value),
-#                     "debit_in_account_currency": 0,
-#                     "posting_date": doc.posting_date,
-#                     "company": doc.company,
-#                     "voucher_type": doc.doctype,
-#                     "voucher_no": doc.name,
-#                     "cost_center": cost_center,
-#                     "against": vat_account,
-#                     "remarks": "Custom VAT reversal adjustment"
-#                 }, get_account_currency(sales_account))
-#             )
- 
-#     # Log all GL entries for debugging
-#     frappe.logger().info(f"Creating {len(gl_entries)} custom GL entries for {doc.name}")
-#     for gle in gl_entries:
-#         frappe.msgprint(
-#             f"GL Entry - Account: {gle.account}, Debit: {gle.debit}, Credit: {gle.credit}, Remarks: {gle.get('remarks', 'N/A')}", 
-#             title="Debug"
-#         )
-
-#     if gl_entries:
-#         try:
-#             make_gl_entries(gl_entries, cancel=False)
-#             frappe.msgprint(
-#                 f"Successfully created {len(gl_entries)} custom GL entries for {doc.doctype} {doc.name}<br>" +
-#                 f"Excise: {total_excise_value}<br>" +
-#                 f"Custom VAT: {vat_value}", 
-#                 title="GL Entries Created"
-#             )
-#             frappe.logger().info(f"Created {len(gl_entries)} custom GL entries: Excise={total_excise_value}, VAT={vat_value}")
-#         except Exception:
-#             frappe.log_error(frappe.get_traceback(), f"Error creating GL entries for {doc.doctype} {doc.name}")
-#             frappe.msgprint(f"Error creating GL entries for {doc.doctype} {doc.name}. Check error log.", title="Error")
-#             raise
-
-
 def on_submit_clear_system_vat(doc, method):
     """
     Clear VAT entries from the taxes table to prevent ERPNext from creating
@@ -852,3 +621,34 @@ def on_submit_clear_system_vat(doc, method):
             f"Removed system VAT entries. Using custom_vat={doc.custom_vat} instead.", 
             title="Info"
         )
+
+
+def modify_gl_entries(doc, method):
+    """
+    Modify GL entries after they are generated but before they are saved
+    """
+    if not hasattr(doc, 'get_gl_entries'):
+        return
+    
+    # Store original method
+    original_get_gl_entries = doc.get_gl_entries
+    
+    def custom_get_gl_entries(*args, **kwargs):
+        # Get original GL entries
+        gl_entries = original_get_gl_entries(*args, **kwargs)
+        
+        # Modify entries for payable accounts starting with 11123
+        if doc.supplier and gl_entries:
+            for entry in gl_entries:
+                if entry.get('account') and entry['account'].startswith('11123'):
+                    account = frappe.get_cached_doc('Account', entry['account'])
+                    
+                    if account.account_type == 'Payable':
+                        entry['party_type'] = 'Supplier'
+                        entry['party'] = doc.supplier
+        
+        return gl_entries
+    
+    # Replace method
+    doc.get_gl_entries = custom_get_gl_entries
+

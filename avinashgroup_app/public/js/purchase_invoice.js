@@ -102,7 +102,7 @@ frappe.ui.form.on("Purchase Invoice", {
     }
 });
 
-frappe.ui.form.on("Sales Invoice Item", {
+frappe.ui.form.on("Purchase Invoice Item", {
     item_code: async function(frm, cdt, cdn) {
         let row = locals[cdt][cdn];
         if (row && row.item_code) {
@@ -1034,4 +1034,186 @@ function set_naming_series_based_on_return(frm) {
 
 
 
-1
+// Purchase Invoice
+
+frappe.ui.form.on('Purchase Invoice', {
+    refresh: function(frm) {
+        account_subtype_cache = {};
+        // update_fiscal_year(frm);
+        prefetch_account_subtypes(frm);
+    },
+    
+    posting_date: function(frm) {
+        update_fiscal_year(frm);
+    },
+    
+    items_add: function(frm, cdt, cdn) {
+        // Set initial empty filter
+        let grid_row = frm.fields_dict['items'].grid.grid_rows_by_docname[cdn];
+        if (grid_row) {
+            grid_row.get_field('custom_subtype').get_query = function() {
+                return {
+                    filters: {
+                        'name': ['in', ['__no_match__']]
+                    }
+                };
+            };
+        }
+    }
+});
+
+frappe.ui.form.on('Purchase Invoice Item', {
+    expense_account: function(frm, cdt, cdn) {
+        let row = locals[cdt][cdn];
+        
+        // Clear the custom_subtype field when expense_account changes
+        frappe.model.set_value(cdt, cdn, 'custom_subtype', '');
+        
+        if (row.expense_account) {
+            // Use cached data or fetch if not available
+            get_account_subtypes(row.expense_account).then(sub_ledger_categories => {
+                apply_subtype_filter(frm, cdn, sub_ledger_categories);
+            });
+        } else {
+            // If no expense_account selected, reset the filter
+            apply_subtype_filter(frm, cdn, []);
+        }
+    }
+});
+
+// Pre-fetch all account subtypes in a single batch call
+function prefetch_account_subtypes(frm) {
+    if (!frm.doc.items || frm.doc.items.length === 0) {
+        return;
+    }
+    
+    // Get unique expense account names
+    let unique_accounts = [...new Set(
+        frm.doc.items
+            .map(row => row.expense_account)
+            .filter(account => account)
+    )];
+    
+    if (unique_accounts.length === 0) {
+        return;
+    }
+    
+    // Batch fetch all accounts at once using frappe.call
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Account',
+            filters: {
+                'name': ['in', unique_accounts]
+            },
+            fields: ['name', 'custom_sub_type_list']
+        },
+        callback: function(r) {
+            if (r.message) {
+                // For each account, fetch the child table data
+                let promises = r.message.map(account => {
+                    return frappe.db.get_doc('Account', account.name)
+                        .then(account_doc => {
+                            if (account_doc.custom_sub_type_list && account_doc.custom_sub_type_list.length > 0) {
+                                account_subtype_cache[account.name] = account_doc.custom_sub_type_list.map(
+                                    item => item.sub_type_list
+                                );
+                            } else {
+                                account_subtype_cache[account.name] = [];
+                            }
+                        });
+                });
+                
+                // Once all accounts are cached, apply filters
+                Promise.all(promises).then(() => {
+                    frm.doc.items.forEach(row => {
+                        if (row.expense_account && account_subtype_cache[row.expense_account]) {
+                            apply_subtype_filter(frm, row.name, account_subtype_cache[row.expense_account]);
+                        }
+                    });
+                });
+            }
+        }
+    });
+}
+
+// Get account subtypes with caching
+function get_account_subtypes(account) {
+    return new Promise((resolve, reject) => {
+        // Check cache first
+        if (account_subtype_cache[account] !== undefined) {
+            resolve(account_subtype_cache[account]);
+            return;
+        }
+        
+        // Fetch from database if not in cache
+        frappe.db.get_doc('Account', account)
+            .then(account_doc => {
+                let sub_ledger_categories = [];
+                
+                if (account_doc.custom_sub_type_list && account_doc.custom_sub_type_list.length > 0) {
+                    sub_ledger_categories = account_doc.custom_sub_type_list.map(
+                        item => item.sub_type_list
+                    );
+                }
+                
+                // Store in cache
+                account_subtype_cache[account] = sub_ledger_categories;
+                resolve(sub_ledger_categories);
+            })
+            .catch(err => {
+                console.error('Error fetching account details:', err);
+                reject(err);
+            });
+    });
+}
+
+// Apply filter to a specific row
+function apply_subtype_filter(frm, row_name, sub_ledger_categories) {
+    let grid_row = frm.fields_dict['items'].grid.grid_rows_by_docname[row_name];
+    
+    if (grid_row) {
+        grid_row.get_field('custom_subtype').get_query = function() {
+            if (sub_ledger_categories.length > 0) {
+                return {
+                    filters: {
+                        'name': ['in', sub_ledger_categories]
+                    }
+                };
+            } else {
+                return {
+                    filters: {
+                        'name': ['in', ['__no_match__']]
+                    }
+                };
+            }
+        };
+        
+        grid_row.refresh_field('custom_subtype');
+    }
+}
+
+function update_fiscal_year(frm) {
+    if (frm.doc.posting_date) {
+        console.log("Posting date!");
+        frappe.call({
+            method: 'frappe.client.get_value',
+            args: {
+                doctype: "Fiscal Year",
+                filters: {
+                    year_start_date: ["<=", frm.doc.posting_date],
+                    year_end_date: [">=", frm.doc.posting_date]
+                },
+                fieldname: "name"
+            },
+            callback: function(r) {
+                if (r.message) {
+                    frm.set_value("custom_fiscal_year", r.message.name);
+                } else {
+                    frm.set_value("custom_fiscal_year", "Not Found");
+                }
+            }
+        });
+    }
+}
+
