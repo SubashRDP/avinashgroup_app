@@ -1,14 +1,14 @@
 
 frappe.ui.form.on("Purchase Invoice", {
     is_return: function(frm) {
-        set_naming_series_based_on_return(frm);
+        // set_naming_series_based_on_return(frm);
     },
     
     refresh: function(frm) {
         console.log("Purchase Invoice Form Refreshed!");
         if (frm.doc.is_return) {
             console.log("IS RETURN")
-            set_naming_series_based_on_return(frm);
+            // set_naming_series_based_on_return(frm);
         }
         //ROUNDING
         // Add custom button to manually resync calculation table
@@ -101,7 +101,6 @@ frappe.ui.form.on("Purchase Invoice", {
         // update_payment_schedule(frm);
     }
 });
-
 frappe.ui.form.on("Purchase Invoice Item", {
     item_code: async function(frm, cdt, cdn) {
         let row = locals[cdt][cdn];

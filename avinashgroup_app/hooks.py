@@ -54,8 +54,8 @@ app_include_js = [
 
 # include js in doctype views
 doctype_js = {
-            "Sales Invoice" : "public/js/sales_invoice.js",
-            "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
+            # "Sales Invoice" : "public/js/sales_invoice.js",
+            # "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
@@ -99,9 +99,9 @@ doc_events = {
 }
 
 # (different event)
-# doc_events["Purchase Invoice"] = {
-#     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
-# }
+doc_events["Purchase Invoice"] = {
+    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+}
 
 
 # If Journal Entry needs a different API than Payment Entry, override it

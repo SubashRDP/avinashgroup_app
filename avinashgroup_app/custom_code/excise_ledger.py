@@ -623,26 +623,67 @@ def on_submit_clear_system_vat(doc, method):
         )
 
 
+# def modify_gl_entries(doc, method):
+#     """
+#     Modify GL entries after they are generated but before they are saved
+#     """
+#     if not hasattr(doc, 'get_gl_entries'):
+#         return
+    
+#     # Store original method
+#     original_get_gl_entries = doc.get_gl_entries
+    
+#     def custom_get_gl_entries(*args, **kwargs):
+#         # Get original GL entries
+#         gl_entries = original_get_gl_entries(*args, **kwargs)
+        
+#         # Modify entries for payable accounts starting with 11123
+#         if doc.supplier and gl_entries:
+#             for entry in gl_entries:
+#                 if entry.get('account') and entry['account'].startswith('34810'):
+#                     account = frappe.get_cached_doc('Account', entry['account'])
+                    
+#                     if account.account_type == 'Payable':
+#                         entry['party_type'] = 'Supplier'
+#                         entry['party'] = doc.supplier
+        
+#         return gl_entries
+    
+#     # Replace method
+#     doc.get_gl_entries = custom_get_gl_entries
+
+
 def modify_gl_entries(doc, method):
-    """
-    Modify GL entries after they are generated but before they are saved
-    """
+  
     if not hasattr(doc, 'get_gl_entries'):
         return
     
-    # Store original method
     original_get_gl_entries = doc.get_gl_entries
-    
     def custom_get_gl_entries(*args, **kwargs):
-        # Get original GL entries
         gl_entries = original_get_gl_entries(*args, **kwargs)
         
-        # Modify entries for payable accounts starting with 11123
+        company_suffix = ""
+        if doc.company:
+            company_doc = frappe.get_cached_doc('Company', doc.company)
+            company_suffix = company_doc.abbr if company_doc.abbr else ""
+        
+        tds_parent_account = f"348100 - TDS Payable - {company_suffix}" if company_suffix else "348100 - TDS Payable"
+        
+        tds_child_accounts = frappe.get_all(
+            'Account',
+            filters={
+                'parent_account': tds_parent_account,
+                'company': doc.company
+            },
+            fields=['name', 'account_type']
+        )
+        
+        tds_child_account_names = {acc.name for acc in tds_child_accounts}
+        
         if doc.supplier and gl_entries:
             for entry in gl_entries:
-                if entry.get('account') and entry['account'].startswith('11123'):
+                if entry.get('account') and entry['account'] in tds_child_account_names:
                     account = frappe.get_cached_doc('Account', entry['account'])
-                    
                     if account.account_type == 'Payable':
                         entry['party_type'] = 'Supplier'
                         entry['party'] = doc.supplier
@@ -651,4 +692,3 @@ def modify_gl_entries(doc, method):
     
     # Replace method
     doc.get_gl_entries = custom_get_gl_entries
-
