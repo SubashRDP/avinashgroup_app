@@ -22,7 +22,7 @@ def set_custom_name_field(doc, method):
     p_type = doc.custom_p_type_code or ""
     
     doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
-    fiscal_year = doc.custom_fiscal_year or ""
+    fiscal_year = doc.custom_fiscal_year or "82/83"
     
     doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
 

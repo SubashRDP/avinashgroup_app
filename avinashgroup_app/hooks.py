@@ -30,6 +30,7 @@ app_include_js = [
     # "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
     # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
      "/assets/avinashgroup_app/js/global_filter.js?v=1.3",
+     "/assets/avinashgroup_app/js/si.js?v=1.0" ,
     # "/assets/avinashgroup_app/js/pi.js?v=2.1",
     # "/assets/avinashgroup_app/js/journal_entry.js?v=1.2"
     #  "/assets/avinashgroup_app/js/journal_entry"
@@ -100,9 +101,12 @@ doc_events = {
 
 # (different event)
 doc_events["Purchase Invoice"] = {
-    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
+    "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
 }
-
+doc_events["Sales Invoice"]={
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_customer.validate",
+}
 
 # If Journal Entry needs a different API than Payment Entry, override it
 # doc_events["Journal Entry"] = {
