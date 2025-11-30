@@ -83,30 +83,47 @@ doctype_js = {
 # }
 
 # Common event handler for auto-naming
-common_naming_events = {
-    "before_save": "avinashgroup_app.custom_code.api.set_custom_name_field",
+# common_naming_events = {
+#     "before_save":"avinashgroup_app.custom_code.api.handle_custom_naming"    
+# }
+
+# # Define your list of DocTypes that use common naming
+# naming_doctypes = [
+#     "Payment Entry",
+#     "Journal Entry",
+#     "Purchase Invoice",
+#     "Sales Invoice"
+# ]
+
+# # Build doc_events dictionary with common naming events
+# doc_events = {
+#     doctype: common_naming_events.copy() for doctype in naming_doctypes
+# }
+
+# # (different event)
+# doc_events["Purchase Invoice"] = {
+#     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
+#     # "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
+# }
+
+
+
+common_fiscal_naming_events = {
+    "autoname": "avinashgroup_app.custom_code.api.handle_naming_and_fiscal_year"
 }
 
-# Define your list of DocTypes that use common naming
-naming_doctypes = [
-    "Payment Entry",
+fiscal_naming_doctypes = [
+    "Sales Invoice",
+    "Purchase Invoice",
     "Journal Entry",
-    "Purchase Invoice"
+    "Payment Entry",
+    "Material Request",
 ]
 
-# Build doc_events dictionary with common naming events
 doc_events = {
-    doctype: common_naming_events.copy() for doctype in naming_doctypes
+    doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
 }
 
-# (different event)
-doc_events["Purchase Invoice"] = {
-    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
-    "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
-}
-# doc_events["Sales Invoice"]={
-#     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_customer.validate",
-# }
 
 # If Journal Entry needs a different API than Payment Entry, override it
 # doc_events["Journal Entry"] = {
@@ -373,17 +390,6 @@ fixtures = [
         "filters": [
             [
                 "fieldname", "like", "custom_%"
-            ]
-        ]
-    },
-    {
-        "dt": "Property Setter",
-        "filters": [
-            [
-                "property", "=", "options"
-            ],
-            [
-                "field_name", "=", "naming_series"
             ]
         ]
     }

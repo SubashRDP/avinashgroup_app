@@ -1,52 +1,117 @@
 import frappe
-from erpnext.accounts.doctype.purchase_invoice.purchase_invoice import PurchaseInvoice
 
-class CustomPurchaseInvoice(PurchaseInvoice):
-    def autoname(self):
-        company_code = self.custom_abbr 
-        purchase_type = self.custom_purchase_type_code 
-        doc_no = str(self.custom_document_no).zfill(5) if self.custom_document_no else "00000"
-        fiscal_year = self.custom_fiscal_year
-        # self.name = f"{company_code}-{purchase_type}-{doc_no}-{fiscal_year}"
+# def set_custom_name_field(doc, method):
+#     company_code = doc.custom_abbr or ""
+#     p_type = doc.custom_p_type_code or ""
+    
+#     doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
+#     fiscal_year = doc.custom_fiscal_year or "82/83"
+    
+#     doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+
+
+# def set_custom_name_field(doc, method=None):
+#     try:
+#         if not hasattr(doc, 'custom_name'):
+#             return
         
-        if self.is_return:
-            self.name = f"{company_code}-RTN-{doc_no}-{fiscal_year}"
-        else:
-            self.name = f"{company_code}-{purchase_type}-{doc_no}-{fiscal_year}"
+#         company_code = getattr(doc, 'custom_abbr', '') or ""
+#         p_type = getattr(doc, 'custom_p_type_code', '') or ""
+        
+#         doc_no = "00000"
+#         if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
+#             doc_no = str(doc.custom_document_no).zfill(5)
+        
+#         fiscal_year = getattr(doc, 'custom_fiscal_year', '82/83') or "82/83"
+        
+#         doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+        
+#     except Exception as e:
+#         frappe.log_error(f"Error in set_custom_name_field for {doc.doctype}: {str(e)}")
 
 
-import frappe
 
-def set_custom_name_field(doc, method):
-    company_code = doc.custom_abbr or ""
-    p_type = doc.custom_p_type_code or ""
+def handle_naming_and_fiscal_year(doc, method=None):
+
+    update_fiscal_year(doc)
     
-    doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
-    fiscal_year = doc.custom_fiscal_year or "82/83"
+    set_naming_series_based_on_return(doc)
+    
+    set_custom_name_field(doc)
+
+
+
+def update_fiscal_year(doc):
+
+    if not hasattr(doc, 'custom_fiscal_year'):
+        return
+    
+    date_to_use = None
+    
+    if hasattr(doc, 'posting_date') and doc.posting_date:
+        date_to_use = doc.posting_date
+    elif hasattr(doc, 'transaction_date') and doc.transaction_date:
+        date_to_use = doc.transaction_date
+    
+    if not date_to_use:
+        return
+    
+    fiscal_year = frappe.db.get_value(
+        "Fiscal Year",
+        filters={
+            "year_start_date": ["<=", date_to_use],
+            "year_end_date": [">=", date_to_use]
+        },
+        fieldname="name"
+    )    
+    doc.custom_fiscal_year = fiscal_year if fiscal_year else "Not Found"
+
+
+def set_custom_name_field(doc):
+
+    if not hasattr(doc, 'custom_name'):
+        return
+    
+    company_code = doc.custom_abbr if hasattr(doc, 'custom_abbr') and doc.custom_abbr else ""
+    p_type = doc.custom_p_type_code if hasattr(doc, 'custom_p_type_code') and doc.custom_p_type_code else ""
+    
+    doc_no = "00000"
+    if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
+        doc_no = str(doc.custom_document_no).zfill(5)
+    
+    fiscal_year = doc.custom_fiscal_year if hasattr(doc, 'custom_fiscal_year') and doc.custom_fiscal_year else "82/83"
     
     doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
 
 
-
-
-
-def set_custom_name_jv(doc, method):
-    company_code = doc.custom_abbr or ""
+def set_naming_series_based_on_return(doc):
+    if not hasattr(doc, 'naming_series') or not hasattr(doc, 'custom_fiscal_year'):
+        return
     
-    p_type = ""
-    if doc.custom_p_type:
-        p_type = frappe.db.get_value(
-            "JV Type", 
-            doc.custom_p_type, 
-            "jv_type_code"
-        ) or ""
+    naming_patterns = {
+        "Sales Invoice": {
+            "normal": ".{custom_abbr}.-SB-.######.-.{custom_fiscal_year}",
+            "return": ".{custom_abbr}.-SB-RTN-.######.-.{custom_fiscal_year}"
+        },
+        "Purchase Invoice": {
+            "normal": ".{custom_abbr}.-PUR-.######.-.{custom_fiscal_year}",
+            "return": ".{custom_abbr}.-PUR-RTN-.######.-.{custom_fiscal_year}"
+        },
+    }
+
+    patterns = naming_patterns.get(doc.doctype)
     
-    doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
-    fiscal_year = doc.custom_fiscal_year or ""
+    if not patterns:
+        doc.naming_series = ".{custom_abbr}.######.-.{custom_fiscal_year}"
+        return
     
-    doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+    if hasattr(doc, 'is_return') and doc.is_return == 1:
+        doc.naming_series = patterns.get("return", patterns.get("normal"))
+    else:
+        doc.naming_series = patterns.get("normal")
 
 
+####For backend update script to update fiscal year in existing Sales Invoices
 import frappe
 from frappe.utils import getdate
 
@@ -146,8 +211,6 @@ def update_sales_invoice_fiscal_year():
     }
 
 
-
-import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 def create_created_by_and_created_on_fields():
@@ -272,9 +335,9 @@ def populate_created_by_and_created_on():
     print(f"{'='*60}\n")
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
     # Step 1: Create the custom fields
-    create_created_by_and_created_on_fields()
+    # create_created_by_and_created_on_fields()
     
     # Step 2: Populate existing records
     # Uncomment the line below after fields are created

@@ -11,6 +11,8 @@ $(document).on('app_ready', function() {
         "Journal Entry",
         "Quotation",
         "Supplier Quotation",
+        "Material Request",
+        "Stock Entry",
        
     ];
     $.each(relevantDocTypes, function(i, doctype) {
@@ -25,6 +27,9 @@ $(document).on('app_ready', function() {
                   validateAndClearFields(frm);
             },
             customer: function(frm){
+                    validateAndClearFields(frm);
+                },
+            employee: function(frm){
                     validateAndClearFields(frm);
                 }
         });
@@ -70,9 +75,27 @@ function setupCompanyBasedFilters(frm) {
             };
         });
     }
+    if (frm.fields_dict.employee) {
+        frm.set_query('employee', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0  // Only show active customers
+                    }
+                };
+            }
+            return {
+                filters: {
+                    'disabled': 0
+                }
+            };
+        });
+    }
     
-    if (frm.fields_dict.supplier_name) {
-        frm.set_query('supplier_name', function() {
+    
+    if (frm.fields_dict.custom_suppliers) {
+        frm.set_query('custom_suppliers', function() {
             if (company) {
                 return {
                     filters: {
@@ -151,6 +174,19 @@ function validateAndClearFields(frm) {
                     indicator: 'orange'
                 });
                 frm.set_value('customer', '');
+            }
+        });
+    }
+     if (frm.doc.employee) {
+        frappe.db.get_value('Employee', frm.doc.employee, 'custom_company', function(r) {
+            if (r && r.custom_company && r.custom_company !== company) {
+                frappe.msgprint({
+                    title: __('Company Mismatch'),
+                    message: __('Employee {0} does not belong to company {1}. Clearing employee field.', 
+                        [frm.doc.employee, company]),
+                    indicator: 'orange'
+                });
+                frm.set_value('employee', '');
             }
         });
     }
