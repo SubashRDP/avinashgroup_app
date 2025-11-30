@@ -373,6 +373,14 @@ def prepare_filter_values(filters):
         )
         if department_coa:
             filter_values["department_coa"] = department_coa
+        else:
+            frappe.throw(
+                _("No accounts found for the selected department: {0}").format(
+                    frappe.bold(filters.get("department"))
+                ),
+                title=_("Department Configuration Error")
+            )
+
     
     # Handle fiscal year filter
     if filters.get("fiscal_year"):
@@ -385,6 +393,13 @@ def prepare_filter_values(filters):
         if fiscal_data:
             filter_values["fiscal_start"] = fiscal_data["year_start_date"]
             filter_values["fiscal_end"] = fiscal_data["year_end_date"]
+        else:
+                   frappe.throw(
+                _("Fiscal Year {0} not found or is invalid. Please select a valid fiscal year.").format(
+                    frappe.bold(filters.get("fiscal_year"))
+                ),
+                title=_("Invalid Fiscal Year")
+            )
     
     return filter_values
 
