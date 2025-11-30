@@ -394,6 +394,17 @@ fixtures = [
         ]
     },
     {
+        "dt": "DocType",
+        "filters": [
+            [
+                "module", "=", "Avinash Group App"
+            ],
+            [
+                "custom", "=", 1
+            ]
+        ]
+    },
+    {
         "dt": "Property Setter",
         "filters": [
             [
