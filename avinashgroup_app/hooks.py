@@ -375,6 +375,17 @@ fixtures = [
                 "fieldname", "like", "custom_%"
             ]
         ]
+    },
+    {
+        "dt": "Property Setter",
+        "filters": [
+            [
+                "property", "=", "options"
+            ],
+            [
+                "field_name", "=", "naming_series"
+            ]
+        ]
     }
 ]
 
