@@ -101,6 +101,7 @@ doctype_js = {
 # }
 
 # # (different event)
+
 # doc_events["Purchase Invoice"] = {
 #     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
 #     # "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
