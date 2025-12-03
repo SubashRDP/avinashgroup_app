@@ -122,7 +122,7 @@ doctype_js = {
 #     "Material Request",
 # ]
 
-doc_events = AuditEventMapper.get_doc_events()
+
 
 # doc_events = {
 #     doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
@@ -178,32 +178,32 @@ company_validation_doctypes = [
 
 # STEP 3: Build doc_events Dictionary
 
-doc_events = {
-    doctype: common_fiscal_naming_events.copy() 
-    for doctype in fiscal_naming_doctypes
-}
+# 1. Start with audit hooks
+doc_events = AuditEventMapper.get_doc_events()
 
-# Add company validation to specific doctypes
+# 2. Merge fiscal naming events
+for doctype in fiscal_naming_doctypes:
+    if doctype not in doc_events:
+        doc_events[doctype] = {}
+    doc_events[doctype].update(common_fiscal_naming_events)
+
+# 3. Merge company validation events
 for doctype in company_validation_doctypes:
-    if doctype in doc_events:
-        doc_events[doctype].update(company_validation_events)
-    else:
-        doc_events[doctype] = company_validation_events.copy()
+    if doctype not in doc_events:
+        doc_events[doctype] = {}
+    doc_events[doctype].update(company_validation_events)
+
+# 4. Merge Purchase Invoice specific events
+if "Purchase Invoice" not in doc_events:
+    doc_events["Purchase Invoice"] = {}
+doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
 
 
-if "Purchase Invoice" in doc_events:
-    doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
-else:
-    doc_events["Purchase Invoice"] = purchase_invoice_specific_events.copy()
 
 
-
-doc_events = {
-    "*": {
-        "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
-    }
-}
-
+doc_events.setdefault("*", {}).update({
+    "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
+})
 
 
 # If Journal Entry needs a different API than Payment Entry, override it

@@ -124,12 +124,16 @@ class AuditEventMapper(AuditBase):
         Returns a dict with string paths (not function objects) for Frappe hooks
         """
         handler_path = "avinashgroup_app.utils.audit_file_manager.set_audit_fields"
+        
         events = {}
 
         for dt in AuditEventMapper.doctypes:
+
+
             events[dt] = {
                 "before_insert": handler_path,
                 "before_save": handler_path,
+            
             }
 
         return events
@@ -137,10 +141,6 @@ class AuditEventMapper(AuditBase):
 
 # Standalone function for hooks to call
 def set_audit_fields(doc, method=None):
-    """
-    Set audit fields on document insert/save
-    Only set them if coming from the UI (not from Data Import / Excel)
-    """
     # Default to UI
     from_ui = False
 
@@ -158,3 +158,11 @@ def set_audit_fields(doc, method=None):
             doc.custom_created_by = frappe.session.user
             doc.custom_created_on = frappe.utils.now_datetime()
         doc.custom_modified_by = frappe.session.user
+
+  
+
+    
+
+
+
+
