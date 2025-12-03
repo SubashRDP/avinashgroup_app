@@ -19,6 +19,7 @@ def get_fiscal_year_from_date(date_field):
     return fiscal_year
 
 def get_company_abbr(doc):
+    
     company_name = None
 
     if hasattr(doc, "company") and doc.company:
@@ -46,7 +47,6 @@ def make_name_simple(prefix, doc, sequence_length=5):
         naming_pattern = f'{prefix}-.{sequence}'
     
     return make_autoname(naming_pattern)
-
 
 def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     company_abbr = get_company_abbr(doc)
