@@ -1,3 +1,5 @@
+from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
+
 app_name = "avinashgroup_app"
 app_title = "Avinash Group App"
 app_publisher = "Raindrop"
@@ -106,7 +108,7 @@ doctype_js = {
 #     # "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
 # }
 
-
+doc_events = AuditEventMapper.get_doc_events()
 
 common_fiscal_naming_events = {
     "autoname": "avinashgroup_app.custom_code.api.handle_naming_and_fiscal_year"
@@ -120,9 +122,14 @@ fiscal_naming_doctypes = [
     "Material Request",
 ]
 
-doc_events = {
-    doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
-}
+# doc_events = {
+#     doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
+    
+# }
+
+# doc_events = AuditEventMapper.get_doc_events()
+
+# Audit fields - doc_events configuration
 
 
 # If Journal Entry needs a different API than Payment Entry, override it
