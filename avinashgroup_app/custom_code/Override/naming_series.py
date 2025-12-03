@@ -35,9 +35,7 @@ def get_company_abbr(doc):
 
 
 def make_name_simple(prefix, doc, sequence_length=5):
-    """
-    Generate simple name with company abbreviation (no fiscal year) for Masters 
-    """
+
     company_abbr = get_company_abbr(doc)
     sequence = "#" * sequence_length
     
@@ -47,6 +45,7 @@ def make_name_simple(prefix, doc, sequence_length=5):
         naming_pattern = f'{prefix}-.{sequence}'
     
     return make_autoname(naming_pattern)
+
 
 def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     company_abbr = get_company_abbr(doc)
@@ -74,6 +73,45 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     return make_autoname(naming_pattern)
 
 
+def set_custom_name_field(doc):
+
+    if not hasattr(doc, 'custom_name'):
+        return
+    
+    # Get company abbreviation
+    company_code = get_company_abbr(doc) or ""
+    
+    # Get p_type_code
+    p_type = ""
+    if hasattr(doc, 'custom_p_type_code') and doc.custom_p_type_code:
+        p_type = doc.custom_p_type_code
+    
+    # Get document number
+    doc_no = "00000"
+    if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
+        doc_no = str(doc.custom_document_no).zfill(5)
+    
+    # Get fiscal year
+    fiscal_year = "82/83"  # Default fallback
+    if hasattr(doc, 'custom_fiscal_year') and doc.custom_fiscal_year:
+        fiscal_year = doc.custom_fiscal_year
+    else:
+
+        date_field = None
+        if hasattr(doc, 'posting_date') and doc.posting_date:
+            date_field = doc.posting_date
+        elif hasattr(doc, 'transaction_date') and doc.transaction_date:
+            date_field = doc.transaction_date
+        
+        if date_field:
+            calculated_fy = get_fiscal_year_from_date(date_field)
+            if calculated_fy:
+                fiscal_year = calculated_fy
+    
+ 
+    # Build custom_name
+    doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+
 def autoname(self, method):
     
     doctype = self.doctype
@@ -86,17 +124,25 @@ def autoname(self, method):
             self.name = make_name_with_fiscal_year("SINV-RET", self, sequence_length=7)
         else:
             self.name = make_name_with_fiscal_year("SINV", self, sequence_length=7)
+        set_custom_name_field(self)
+
     elif  doctype == "Purchase Invoice":
             if hasattr(self, "is_return") and self.is_return == 1:
-                self.name = make_name_with_fiscal_year("PUR-RET", self, sequence_length=7)
+                self.name = make_name_with_fiscal_year("PURRR-RET", self, sequence_length=7)
             else:    
-                self.name = make_name_with_fiscal_year("PUR", self, sequence_length=7)
+                self.name = make_name_with_fiscal_year("PURRR", self, sequence_length=7)
+            set_custom_name_field(self)
+
     elif doctype == "Purchase Receipt":
             if hasattr(self, "is_return") and self.is_return == 1:
                 self.name = make_name_simple("PR-RET", self, sequence_length=5)
             else:
                 self.name = make_name_simple("PR", self, sequence_length=5)
+            set_custom_name_field(self)
 
+    elif doctype == "Journal Entry":
+         self.name = make_name_with_fiscal_year("JV", self, sequence_length=5)
+         set_custom_name_field(self)
 
     elif doctype == "Customer":
             self.name = make_name_simple("CUS", self, sequence_length=5)
@@ -107,7 +153,8 @@ def autoname(self, method):
     elif doctype == "Stock Reconciliation":
             self.name = make_name_simple("MAT-RECO", self, sequence_length=5)
     elif doctype == "Payment Entry":
-            self.name = make_name_simple("PAY", self, sequence_length=5)
+            self.name = make_name_with_fiscal_year("PAY", self, sequence_length=5)
+            set_custom_name_field(self)
     elif doctype == "Delivery Note":
             self.name = make_name_simple("MAT-DN", self, sequence_length=5)
     elif doctype == "Sales Order":
@@ -115,30 +162,6 @@ def autoname(self, method):
 
     
  
-        #   # Switch-like condition structure for different DocTypes
-        # if doctype == "Customer":
-        #     self.name = make_autoname('CUST-.####')
-            
-        # elif doctype == "Supplier":
-        #     self.name = make_autoname('SUPP-.####')
-            
-        # elif doctype == "Sales Invoice":
-        #     # Get company abbreviation from company field
-        #     if hasattr(self, 'company') and self.company:
-        #         company_abbr = frappe.get_cached_value('Company', self.company, 'abbr')
-        #         self.name = make_autoname(f'{company_abbr}-INV-.YYYY.-.#####')
-        #     else:
-        #         self.name = make_autoname('INV-.YYYY.-.#####')
-            
-        # elif doctype == "Purchase Order":
-        #     self.name = make_autoname('PO-.YY.MM.-.####')
-
-        # elif doctype == "Purchase Invoice":
-        #     self.name = make_name_with_fiscal_year("PUR", self, sequence_length=7)
-
-        # else: 
-        #     pass
-
 
 
 

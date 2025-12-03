@@ -21,7 +21,9 @@ class AuditBase:
         "Journal Entry",
         "Purchase Invoice",
         "Material Request",
-        "Sales Invoice"
+        "Sales Invoice",
+        "Address",
+        "Contact",
     ]
 
 

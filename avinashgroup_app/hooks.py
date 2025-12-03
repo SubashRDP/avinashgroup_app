@@ -139,7 +139,7 @@ doctype_js = {
 #### Event Templates
  
 common_fiscal_naming_events = {
-    "autoname": "avinashgroup_app.custom_code.api.handle_naming_and_fiscal_year"
+    "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
 }
 
 company_validation_events = {
@@ -158,7 +158,14 @@ fiscal_naming_doctypes = [
     "Journal Entry",
     "Payment Entry",
     "Material Request",
-    "Address", "Contact", "Customer Group", "Supplier Group", "Item Group"
+    "Address",
+    "Contact",
+    "Customer",
+    "Supplier",
+    "Employee",
+    "Customer Group", 
+    "Supplier Group", 
+    "Item Group",
 ]
 
 company_validation_doctypes = [
@@ -201,9 +208,9 @@ doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
 
 
 
-doc_events.setdefault("*", {}).update({
-    "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
-})
+# doc_events.setdefault("*", {}).update({
+#     "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
+# })
 
 
 # If Journal Entry needs a different API than Payment Entry, override it
