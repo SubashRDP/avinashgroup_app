@@ -131,6 +131,12 @@ fiscal_naming_doctypes = [
 
 # Audit fields - doc_events configuration
 
+purchase_invoice_events = {
+    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+}
+
+doc_events["Purchase Invoice"].update(purchase_invoice_events)
+
 
 # If Journal Entry needs a different API than Payment Entry, override it
 # doc_events["Journal Entry"] = {
