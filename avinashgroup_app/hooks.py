@@ -108,34 +108,102 @@ doctype_js = {
 #     # "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
 # }
 
+
+
+# common_fiscal_naming_events = {
+#     "autoname": "avinashgroup_app.custom_code.api.handle_naming_and_fiscal_year"
+# }
+
+# fiscal_naming_doctypes = [
+#     "Sales Invoice",
+#     "Purchase Invoice",
+#     "Journal Entry",
+#     "Payment Entry",
+#     "Material Request",
+# ]
+
 doc_events = AuditEventMapper.get_doc_events()
 
+# doc_events = {
+#     doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
+# }
+
+# purchase_invoice_events = {
+#     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+# }
+
+# doc_events["Purchase Invoice"].update(purchase_invoice_events)
+
+
+
+#### Event Templates
+ 
 common_fiscal_naming_events = {
     "autoname": "avinashgroup_app.custom_code.api.handle_naming_and_fiscal_year"
 }
 
+company_validation_events = {
+    "validate": "avinashgroup_app.custom_code.globalfilter.global.validate_company_matching"
+}
+
+purchase_invoice_specific_events = {
+    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+    }
+
+
+# STEP 2: Define Doctype Groups (Which doctypes need which events)
 fiscal_naming_doctypes = [
     "Sales Invoice",
     "Purchase Invoice",
     "Journal Entry",
     "Payment Entry",
     "Material Request",
+    "Address", "Contact", "Customer Group", "Supplier Group", "Item Group"
 ]
 
-# doc_events = {
-#     doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
-    
-# }
+company_validation_doctypes = [
+    "Sales Invoice",
+    "Sales Order",
+    "Delivery Note",
+    "Purchase Invoice",
+    "Purchase Order",
+    "Purchase Receipt",
+    "Payment Entry",
+    "Journal Entry",
+    "Quotation",
+    "Supplier Quotation",
+    "Material Request",
+    "Stock Entry",
+]
 
-# doc_events = AuditEventMapper.get_doc_events()
+# STEP 3: Build doc_events Dictionary
 
-# Audit fields - doc_events configuration
-
-purchase_invoice_events = {
-    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+doc_events = {
+    doctype: common_fiscal_naming_events.copy() 
+    for doctype in fiscal_naming_doctypes
 }
 
-doc_events["Purchase Invoice"].update(purchase_invoice_events)
+# Add company validation to specific doctypes
+for doctype in company_validation_doctypes:
+    if doctype in doc_events:
+        doc_events[doctype].update(company_validation_events)
+    else:
+        doc_events[doctype] = company_validation_events.copy()
+
+
+if "Purchase Invoice" in doc_events:
+    doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
+else:
+    doc_events["Purchase Invoice"] = purchase_invoice_specific_events.copy()
+
+
+
+doc_events = {
+    "*": {
+        "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
+    }
+}
+
 
 
 # If Journal Entry needs a different API than Payment Entry, override it
@@ -403,17 +471,6 @@ fixtures = [
         "filters": [
             [
                 "fieldname", "like", "custom_%"
-            ]
-        ]
-    },
-    {
-        "dt": "DocType",
-        "filters": [
-            [
-                "module", "=", "Avinash Group App"
-            ],
-            [
-                "custom", "=", 1
             ]
         ]
     },

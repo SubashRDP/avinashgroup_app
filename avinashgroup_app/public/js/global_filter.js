@@ -93,7 +93,6 @@ function setupCompanyBasedFilters(frm) {
         });
     }
     
-    
     if (frm.fields_dict.custom_suppliers) {
         frm.set_query('custom_suppliers', function() {
             if (company) {
