@@ -1,0 +1,37 @@
+{
+ "add_total_row": 0,
+ "add_translate_data": 0,
+ "columns": [],
+ "creation": "2016-07-21 08:31:05.890362",
+ "disabled": 0,
+ "docstatus": 0,
+ "doctype": "Report",
+ "filters": [],
+ "idx": 2,
+ "is_standard": "Yes",
+ "letterhead": null,
+ "modified": "2025-12-04 17:55:34.830350",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Custom Supplier Quotation Comparison",
+ "owner": "Administrator",
+ "prepared_report": 0,
+ "ref_doctype": "Supplier Quotation",
+ "report_name": "Custom Supplier Quotation Comparison",
+ "report_type": "Script Report",
+ "roles": [
+  {
+   "role": "Manufacturing Manager"
+  },
+  {
+   "role": "Purchase Manager"
+  },
+  {
+   "role": "Purchase User"
+  },
+  {
+   "role": "Stock User"
+  }
+ ],
+ "timeout": 0
+}
