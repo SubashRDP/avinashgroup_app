@@ -35,6 +35,14 @@ def validate_filters(filters):
 def get_data(filters):
 	sq = frappe.qb.DocType("Supplier Quotation")
 	sq_item = frappe.qb.DocType("Supplier Quotation Item")
+	po_sq = frappe.qb.DocType("Purchase Order")
+	po_sq_item = frappe.qb.DocType("Purchase Order Item")
+
+
+	po_query = (frappe.qb.from_(po_sq_item)
+			.from_(po_sq).select(
+				po_sq_item.supplier_quotation.as_("supplier_quotation"),
+			) )
 
 	query = (
 		frappe.qb.from_(sq_item)
@@ -76,6 +84,16 @@ def get_data(filters):
 
 	if filters.get("supplier"):
 		query = query.where(sq.supplier.isin(filters.get("supplier")))
+
+
+	if filters.get("purchase_order"):
+		po_query = po_query.where(po_sq.name == filters.get("purchase_order"))
+		po_query.run(as_dict=True)
+		query.where(sq.name.isin(po_query))
+
+	if filters.get("preferred_quotation"):
+		query = query.where(sq.custom_preferred_quotation == 1)
+
 
 	if not filters.get("include_expired"):
 		query = query.where(sq.status != "Expired")
