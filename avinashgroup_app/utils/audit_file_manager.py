@@ -52,7 +52,7 @@ class AuditBase:
     "Purchase Receipt",
     "Quotation",
     "Request for Quotation",
-    "Sales Invoice",
+   # "Sales Invoice",
     "Sales Order",
     "Sales Partner",
     "Salary Slip",
@@ -103,29 +103,42 @@ class AuditFieldsManager(AuditBase):
         super().__init__()
         self.custom_fields = {}
         self.doctypes = doctypes or self.doctypes
-    
-    def doctype_has_company_field(self, doctype):
+
+    def get_last_tab_break(self, doctype):
         """
-        Check if doctype already has 'company' or 'custom_company' field.
+        Get the fieldname of the last Tab Break in a doctype.
         
         Args:
-            doctype (str): Name of the doctype to check
+            doctype (str): Name of the doctype
             
         Returns:
-            bool: True if company field exists, False otherwise
+            str: Fieldname of the last tab break, or None if no tabs exist
         """
         try:
             meta = frappe.get_meta(doctype)
+            last_tab = None
             
-            # Check if 'company' field exists
-            if meta.has_field('company'):
-                return True
+            for field in meta.fields:
+                if field.fieldtype == "Tab Break":
+                    last_tab = field.fieldname
             
-            # Check if 'custom_company' field exists
-            if meta.has_field('custom_company'):
-                return True
+            return last_tab
+        except Exception as e:
+            frappe.log_error(f"Error finding last tab for {doctype}: {str(e)}")
+            return None
+    
+    def doctype_has_company_field(self, doctype):
+        try:
+            meta = frappe.get_meta(doctype)
+    
+            # Check for custom_company field
+            custom_company = frappe.db.exists(
+                "Custom Field",
+                {"dt": doctype, "fieldname": "custom_company"}
+            )
             
-            return False
+            return meta.has_field("company") or bool(custom_company)
+
         except Exception as e:
             frappe.log_error(f"Error checking company field for {doctype}: {str(e)}")
             return False
@@ -134,16 +147,44 @@ class AuditFieldsManager(AuditBase):
         """
         Returns the field definitions for audit fields including a custom tab.
         
+        Args:
+            doctype (str): Name of the doctype
+            
         Returns:
             list: List of field definitions with tab and fields
         """
+        has_company = self.doctype_has_company_field(doctype)
+        last_tab = self.get_last_tab_break(doctype)
+        
         fields = [
             {
                 "fieldname": "audit_tab",
                 "label": "Audit",
                 "fieldtype": "Tab Break",
-                "insert_after": None,
-            },
+                "insert_after": last_tab,
+            }
+        ]
+        
+        # Add company field if doctype doesn't have one
+        if not has_company:
+            fields.extend([{
+                "fieldname": "custom_company",
+                "label": "Company",
+                "fieldtype": "Link",
+                "options": "Company",
+                "mandatory": 1,
+                "in_standard_filter": 1,
+                "in_list_view": 0,
+                "in_global_search": 0,
+                "bold": 0,
+                "allow_on_submit": 0,
+                "insert_after": "",
+            }])
+            
+         
+        
+        # Add audit fields
+        fields.extend([
             {
                 "fieldname": "custom_created_by",
                 "label": "Created By",
@@ -175,21 +216,16 @@ class AuditFieldsManager(AuditBase):
                 "no_copy": 1,
                 "print_hide": 1,
                 "is_standard_filter": 1,
-            },
-            
-        ]
-    # Only add custom_company field if doctype doesn't already have company field
-        if not self.doctype_has_company_field(doctype):
-            fields.append({
-                "fieldname": "custom_company",
-                "label": "Company",
-                "fieldtype": "Link",
-                "options": "Company",
-                "insert_after": "",
-                "mandatory": 1,
-                "is_standard_filter": 1,
-            })
+            }
+        ])
+        
         return fields
+    
+
+        
+
+
+
     
     def prepare_custom_fields(self):
         """
@@ -211,38 +247,47 @@ class AuditFieldsManager(AuditBase):
         Returns:
             dict: Success status and message with details
         """
-        try:
-            self.prepare_custom_fields()
-            
-            # Track which doctypes got company field
-            with_company = []
-            without_company = []
-            
-            for doctype in self.doctypes:
-                if self.doctype_has_company_field(doctype):
-                    without_company.append(doctype)
-                else:
-                    with_company.append(doctype)
-            
-            create_custom_fields(self.custom_fields, update=True)
-            frappe.db.commit()
-            
-            message = f"Custom fields added to {len(self.doctypes)} doctypes!\n"
-            if with_company:
-                message += f"\n✅ Created 'custom_company' field for {len(with_company)} doctypes"
-            if without_company:
-                message += f"\n⚠️  Skipped 'custom_company' field for {len(without_company)} doctypes (already have company field)"
-            
+        failed_doctypes = []
+        success_count = 0
+        
+        for doctype in self.doctypes:
+            try:
+                field_definitions = self.get_field_definitions(doctype)
+                create_custom_fields({doctype: field_definitions}, update=True)
+                success_count += 1
+            except Exception as e:
+                failed_doctypes.append(f"{doctype}: {str(e)}")
+                frappe.log_error(f"Error creating fields for {doctype}: {str(e)}")
+        
+        frappe.db.commit()
+        
+        if failed_doctypes:
             return {
-                "success": True,
-                "message": message,
-                "with_company_field": with_company,
-                "without_company_field": without_company
+                "success": False,
+                "message": f"Added fields to {success_count} doctypes. Failed for: {', '.join(failed_doctypes)}"
             }
-        except Exception as e:
-            frappe.db.rollback()
-            frappe.log_error(f"Error creating custom fields: {str(e)}")
-            return {"success": False, "message": str(e)}
+        
+        return {
+            "success": True,
+            "message": f"Custom fields added to {success_count} doctypes!"
+        }
+    
+
+    # def create_fields(self):
+    #     """
+    #     Creates custom fields in the database.
+        
+    #     Returns:
+    #         dict: Success status and message with details
+    #     """
+    #     try:
+    #         self.prepare_custom_fields()
+    #         create_custom_fields(self.custom_fields, update=True)
+    #         frappe.db.commit()
+    #     except Exception as e:
+    #         frappe.db.rollback()
+    #         frappe.log_error(f"Error creating custom fields: {str(e)}")
+    #         return {"success": False, "message": str(e)}
     
     def remove_fields(self):
         """
@@ -299,70 +344,8 @@ class AuditFieldsManager(AuditBase):
                 fields_status[field] = "✓ Exists" if exists else "✗ Missing"
             report[doctype] = fields_status
         return report
+    
 
-    def __init__(self):
-        self.custom_fields = {}
-
-    def get_field_definitions(self, doctype):
-        return [
-            {
-                "fieldname": "custom_created_by",
-                "label": "Created By",
-                "fieldtype": "Link",
-                "options": "User",
-                "insert_after": None,
-                "read_only": 1,
-                "no_copy": 1,
-                "print_hide": 1,
-                "is_standard_filter":1,
-            },
-            {
-                "fieldname": "custom_created_on",
-                "label": "Created On",
-                "fieldtype": "Datetime",
-                "insert_after": "custom_created_by",
-                "read_only": 1,
-                "no_copy": 1,
-                "print_hide": 1,
-                "is_standard_filter":1,
-            },
-            {
-                "fieldname": "custom_modified_by",
-                "label": "Modified By",
-                "fieldtype": "Link",
-                "options": "User",
-                "insert_after": "custom_created_on",
-                "read_only": 1,
-                "no_copy": 1,
-                "print_hide": 1,
-                "is_standard_filter":1,
-            }, 
-            {
-                "fieldname": "custom_company",
-                "label": "Company",
-                "fieldtype": "Link",  
-                "options": "Company",
-                "insert_after":None,
-                "mandatory":1,
-                "is_standard_filter":1,
-            }
-        ]
-
-    def prepare_custom_fields(self):
-        field_definitions = self.get_field_definitions()
-        for doctype in self.doctypes:
-            self.custom_fields[doctype] = field_definitions
-        return self.custom_fields
-
-    def create_fields(self):
-        try:
-            self.prepare_custom_fields()
-            create_custom_fields(self.custom_fields, update=True)
-            frappe.db.commit()
-            return {"success": True, "message": f"Custom fields added to {len(self.doctypes)} doctypes!"}
-        except Exception as e:
-            frappe.db.rollback()
-            return {"success": False, "message": str(e)}
 
     def remove_fields(self):
         try:
@@ -377,15 +360,6 @@ class AuditFieldsManager(AuditBase):
             frappe.db.rollback()
             return {"success": False, "message": str(e)}
 
-    def verify_fields(self):
-        report = {}
-        for doctype in self.doctypes:
-            fields_status = {}
-            for field in ["custom_created_by", "custom_created_on", "custom_modified_by","custom_company"]:
-                exists = frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": field})
-                fields_status[field] = "✓ Exists" if exists else "✗ Missing"
-            report[doctype] = fields_status
-        return report
 
 
 
