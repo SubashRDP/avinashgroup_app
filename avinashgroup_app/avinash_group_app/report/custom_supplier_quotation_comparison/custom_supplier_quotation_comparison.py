@@ -343,8 +343,8 @@ def get_rfq_from_purchase_order(purchase_order):
         FROM `tabPurchase Order Item` poi
         JOIN `tabSupplier Quotation Item` sqi
             ON poi.supplier_quotation = sqi.parent
-        WHERE poi.parent = %s
+        WHERE poi.parent = %s and sqi.request_for_quotation IS NOT NULL
     """, purchase_order)
 
-    return rfq if rfq else None
+    return rfq[0][0] if rfq else None
 

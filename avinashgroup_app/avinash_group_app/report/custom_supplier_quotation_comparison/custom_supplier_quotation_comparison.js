@@ -89,6 +89,12 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: 0,
 		},
 		{
+			fieldtype: "Check",
+			label: __("Preferred Quotation"),
+			fieldname: "preferred_quotation",
+			default: 1,
+		},
+		{
 		fieldtype: "Link",
 		label: __("Purchase Order"),
 		options: "Purchase Order",
