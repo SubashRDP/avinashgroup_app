@@ -1,6 +1,365 @@
+
+
 import frappe
 from frappe.model.naming import make_autoname
 from frappe.model.document import Document
+
+## "Item", "Salary Structure", "Contact"
+NAMING_CONFIG = {
+    #MASTERS DATA
+    "Customer":{
+        "prefix": "CUST",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+     "Customer Group":{
+        "prefix": "CUSG",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Supplier":{
+        "prefix": "SUPP",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Employee":{
+        "prefix": "HR-EMP",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Item":{
+        "prefix": "ITM",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Address":{
+        "prefix": "ADD",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Contact":{
+        "prefix": "CON",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Salary Structure":{
+        "prefix": "SAL-STR",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Sales Order": {
+        "prefix": "SO",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Sales Invoice": {
+        "prefix": "SB",
+        "return_prefix": "SRTN",
+        "use_fiscal_year": True,
+        "sequence_length": 5,
+        "has_custom_name": True
+    },
+    "Delivery Note": {
+        "prefix": "DN",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Quotation": {
+        "prefix": "QTN",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+
+    "Purchase Order": {
+        "prefix": "PO",
+        "use_fiscal_year": True,
+        "sequence_length": 5,
+        "has_custom_name": True
+    },
+    "Purchase Receipt": {
+        "prefix": "GRN",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    # "Purchase Receipt Return": {
+    #     "prefix": "PRRET",
+    #     "use_fiscal_year": True,
+    #     "sequence_length": 5
+    # },
+    "Purchase Invoice": {
+        "prefix": "PI",
+        "return_prefix": "PRTN",
+        "use_fiscal_year": True,
+        "sequence_length": 5,
+        "has_custom_name": True
+    },
+    # "Purchase Invoice Return": {
+    #     "prefix": "PIR",
+    #     "use_fiscal_year": True,
+    #     "sequence_length": 5
+    # },
+    "Purchase Invoice Advance Entry": {
+        "prefix": "PIA",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+
+    "Material Request": {
+        "prefix": "MR",
+        "use_fiscal_year": True,
+        "sequence_length": 5,
+        "has_custom_name": True
+    },
+    "Material Transfer": {
+        "prefix": "STE-MT",
+        "use_fiscal_year": True,
+        "sequence_length": 3
+    },
+    "Material Issue": {
+        "prefix": "STE-MI",
+        "use_fiscal_year": True,
+        "sequence_length": 3
+    },
+    "Material Receipt": {
+        "prefix": "STE-MR",
+        "use_fiscal_year": True,
+        "sequence_length": 3
+    },
+    "Stock Entry": {
+        "prefix": "STE",
+        "use_fiscal_year": True,
+        "sequence_length": 3
+    },
+    "Stock Reconciliation": {
+        "prefix": "SR",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Stock Reservation Entry": {
+        "prefix": "SRE",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Pick List": {
+        "prefix": "PICK",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Packing Slip": {
+        "prefix": "PACK",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+
+    "Payment Entry": {
+        "prefix": "PAY.REC",
+        "use_fiscal_year": True,
+        "sequence_length": 5,
+        "has_custom_name": True
+    },
+    "Payment Term":{
+        "prefix": "PT",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Payment Request": {
+        "prefix": "PREQ",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Payment Order": {
+        "prefix": "PORDER",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Bank Transaction": {
+        "prefix": "BTN",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Journal Entry": {
+        "prefix": "JE",
+        "use_fiscal_year": True,
+        "sequence_length": 5,
+        "has_custom_name": True
+    },
+    "Landed Cost Voucher": {
+        "prefix": "LCV",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Expense Claim": {
+        "prefix": "EXP",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Employee Advance": {
+        "prefix": "EADV",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Work Order"  : {
+        "prefix": "WO",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Job Card"  : {
+        "prefix": "JC",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Manufacturing Entry"  : {
+        "prefix": "MFG",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Leave Application": {
+        "prefix": "LEAVE",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Attendance": {
+        "prefix": "ATT",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Payroll Entry": {
+        "prefix": "PAYR",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Asset Movement": {
+        "prefix": "AM",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Asset Repair": {
+        "prefix": "AR",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Asset Capitalization": {
+        "prefix": "ACAP",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Project Update": {
+        "prefix": "PRJUPD",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Maintenance Visit": {
+        "prefix": "MV",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Warranty Claim": {
+        "prefix": "WAR",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Job Applicant": {
+        "prefix": "JOBAPP",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Job Offer": {
+        "prefix": "JO",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Appointment Letter": {
+        "prefix": "AL",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Issue": {
+        "prefix": "TKT",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Timesheet": {
+        "prefix": "TS",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "BOM Update Tool":{
+        "prefix": "BUPD",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Salary Slip":{
+        "prefix": "SAL",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Subscription": {
+        "prefix": "SUB",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "POS Profile": {
+        "prefix": "POSP",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Sales Partner": {
+        "prefix": "SP",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "POS Opening Entry": {
+        "prefix": "POSE",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "POS Closing Entry": {
+        "prefix": "POSC",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Subscription Invoice": {
+        "prefix": "SUBINV",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "POS Invoice": {
+        "prefix": "POSINV",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Interview":{
+        "prefix": "INT",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Interview Feedback":{
+        "prefix": "IF",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Training Event":{
+        "prefix": "TREVT",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Opportunity":{
+        "prefix": "OPPTY",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Lead":{
+        "prefix": "LEAD",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Communication":{
+        "prefix": "COM",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+}
+
 
 
 def get_fiscal_year_from_date(date_field):
@@ -18,13 +377,12 @@ def get_fiscal_year_from_date(date_field):
     
     return fiscal_year
 
+
 def get_company_abbr(doc):
-    
     company_name = None
 
     if hasattr(doc, "company") and doc.company:
         company_name = doc.company
-
     elif hasattr(doc, "custom_company") and doc.custom_company:
         company_name = doc.custom_company
 
@@ -34,8 +392,29 @@ def get_company_abbr(doc):
     return frappe.get_cached_value("Company", company_name, "abbr")
 
 
-def make_name_simple(prefix, doc, sequence_length=5):
+def get_amendment_suffix(doc):
+    """
+    Get amendment suffix from the standard name field
+    Returns: "-1", "-2", etc., or empty string if not amended
+    """
+    if not hasattr(doc, 'name') or not doc.name:
+        return ""
+    
+    if not hasattr(doc, 'amended_from') or not doc.amended_from:
+        return ""
+    
+    name = str(doc.name)
+    
+    import re
+    match = re.search(r'-(\d+)$', name)
+    
+    if match:
+        return f"-{match.group(1)}"
+    
+    return ""
 
+
+def make_name_simple(prefix, doc, sequence_length=5):
     company_abbr = get_company_abbr(doc)
     sequence = "#" * sequence_length
     
@@ -60,7 +439,6 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     if date_field:
         fiscal_year = get_fiscal_year_from_date(date_field)
 
-    # Build naming pattern
     sequence = "#" * sequence_length
 
     if company_abbr and fiscal_year:
@@ -74,29 +452,23 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
 
 
 def set_custom_name_field(doc):
-
     if not hasattr(doc, 'custom_name'):
         return
     
-    # Get company abbreviation
     company_code = get_company_abbr(doc) or ""
     
-    # Get p_type_code
     p_type = ""
     if hasattr(doc, 'custom_p_type_code') and doc.custom_p_type_code:
         p_type = doc.custom_p_type_code
     
-    # Get document number
     doc_no = "00000"
     if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
         doc_no = str(doc.custom_document_no).zfill(5)
     
-    # Get fiscal year
-    fiscal_year = "82/83"  # Default fallback
+    fiscal_year = "82/83"
     if hasattr(doc, 'custom_fiscal_year') and doc.custom_fiscal_year:
         fiscal_year = doc.custom_fiscal_year
     else:
-
         date_field = None
         if hasattr(doc, 'posting_date') and doc.posting_date:
             date_field = doc.posting_date
@@ -108,176 +480,43 @@ def set_custom_name_field(doc):
             if calculated_fy:
                 fiscal_year = calculated_fy
     
- 
-    # Build custom_name
-    doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+    base_custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+    amendment_suffix = get_amendment_suffix(doc)
+    doc.custom_name = f"{base_custom_name}{amendment_suffix}"
 
-def autoname(self, method):
-    
+
+def handle_validate(doc, method=None):
+    set_custom_name_field(doc)
+
+
+def naming_series_autoname(self, method):
     doctype = self.doctype
-
-    if doctype == "Customer":
-            self.name = make_name_simple("CUS", self, sequence_length=5)
-    elif doctype == "Sales Invoice":
-
-        if hasattr(self, "is_return") and self.is_return == 1:
-            self.name = make_name_with_fiscal_year("SINV-RET", self, sequence_length=7)
-        else:
-            self.name = make_name_with_fiscal_year("SINV", self, sequence_length=7)
+    
+    # Check if doctype has naming configuration
+    if doctype not in NAMING_CONFIG:
+        return
+    
+    config = NAMING_CONFIG[doctype]
+    
+    # Determine prefix (check for return documents)
+    prefix = config["prefix"]
+    if hasattr(self, "is_return") and self.is_return == 1 and "return_prefix" in config:
+        prefix = config["return_prefix"]
+    
+    # Generate name based on configuration
+    if config["use_fiscal_year"]:
+        self.name = make_name_with_fiscal_year(
+            prefix, 
+            self, 
+            sequence_length=config["sequence_length"]
+        )
+    else:
+        self.name = make_name_simple(
+            prefix, 
+            self, 
+            sequence_length=config["sequence_length"]
+        )
+    
+    # Set custom name field if configured
+    if config.get("has_custom_name", False):
         set_custom_name_field(self)
-
-    elif  doctype == "Purchase Invoice":
-            if hasattr(self, "is_return") and self.is_return == 1:
-                self.name = make_name_with_fiscal_year("PURRR-RET", self, sequence_length=7)
-            else:    
-                self.name = make_name_with_fiscal_year("PURRR", self, sequence_length=7)
-            set_custom_name_field(self)
-
-    elif doctype == "Purchase Receipt":
-            if hasattr(self, "is_return") and self.is_return == 1:
-                self.name = make_name_simple("PR-RET", self, sequence_length=5)
-            else:
-                self.name = make_name_simple("PR", self, sequence_length=5)
-            set_custom_name_field(self)
-
-    elif doctype == "Journal Entry":
-         self.name = make_name_with_fiscal_year("JV", self, sequence_length=5)
-         set_custom_name_field(self)
-
-    elif doctype == "Customer":
-            self.name = make_name_simple("CUS", self, sequence_length=5)
-    elif doctype == "Supplier":
-            self.name = make_name_simple("SUPPP", self, sequence_length=5)
-    elif doctype == "Employee":
-            self.name = make_name_simple("EMP", self, sequence_length=5)
-    elif doctype == "Stock Reconciliation":
-            self.name = make_name_simple("MAT-RECO", self, sequence_length=5)
-    elif doctype == "Payment Entry":
-            self.name = make_name_with_fiscal_year("PAY", self, sequence_length=5)
-            set_custom_name_field(self)
-    elif doctype == "Delivery Note":
-            self.name = make_name_simple("MAT-DN", self, sequence_length=5)
-    elif doctype == "Sales Order":
-            self.name = make_name_simple("SO", self, sequence_length=5)
-
-    
- 
-
-
-
-# class CustomDocument(Document):
-#     def autoname(self):
-#         doctype = self.doctype
-         
-#         if doctype == "Purchase Invoice":
-#             self.name = make_name_with_fiscal_year("PUR", self, sequence_length=7)
-        
-#         elif doctype == "Sales Invoice":
-#             self.name = make_name_with_fiscal_year("SINV", self, sequence_length=7)
-        
-#         elif doctype == "Customer":
-#             self.name = make_name_simple("CUS", self, sequence_length=5)
-        
-#         else:
-#             pass
-
-
-# def run_custom_autoname(doc, method):
-#     # create an instance of your class using the existing doc
-#     handler = CustomDocument(doc)
-#     handler.autoname()
-
-
-# def universal_autoname(doc, method):
-
-#     doctype = doc.doctype
-    
-#     # Switch-like condition structure for different DocTypes
-#     if doctype == "Customer": 
-#             company_abbr = frappe.get_cached_value('Company', doc.custom_company, 'abbr')
-#             doc.name = make_autoname(f'{company_abbr}.-CUS-.####')
-
-#     elif doctype == "Supplier":
-#         company_abbr = frappe.get_cached_value('Company', doc.custom_company, 'abbr')
-#         doc.name = make_autoname(f'{company_abbr}.-SUP-.####')
-    
-#     elif doctype == "Employee":
-#         company_abbr = frappe.get_cached_value('Company', doc.company, 'abbr')
-#         doc.name = make_autoname(f'{company_abbr}.-EMP-.####')
-
-#     elif doctype == "Stock Reconciliation":
-#         company_abbr = frappe.get_cached_value('Company', doc.company, 'abbr')
-#         doc.name = make_autoname(f'{company_abbr}.-MAT-.RECO.-.#####')
-
-#     # elif doctype == "Purchase Invoice":
-#     #     company_abbr = frappe.get_cached_value('Company', doc.company, 'abbr')
-#     #     fiscal_year = 
-#     #     doc.name = make_autoname(f.{custom_abbr}.-PUR-.#######.-.{custom_fiscal_year}')
-
-
-    
-        
-#     # elif doctype == "Sales Invoice":
-#     #     # Get company abbreviation from company field
-#     #     if hasattr(doc, 'company') and doc.company:
-#     #         company_abbr = frappe.get_cached_value('Company', doc.company, 'abbr')
-#     #         doc.name = make_autoname(f'{company_abbr}-INV-.YYYY.-.#####')
-#     #     else:
-#     #         doc.name = make_autoname('INV-.YYYY.-.#####')
-        
-#     # elif doctype == "Purchase Order":
-#     #     doc.name = make_autoname('PO-.YY.MM.-.####')
-        
-#     # elif doctype == "Sales Order":
-#     #     doc.name = make_autoname('SO-.YYYY.-.#####')
-        
-#     # elif doctype == "Quotation":
-#     #     doc.name = make_autoname('QTN-.YY.-.####')
-        
-#     # elif doctype == "Delivery Note":
-#     #     doc.name = make_autoname('DN-.YYYY.MM.-.####')
-        
-#     # elif doctype == "Payment Entry":
-#     #     doc.name = make_autoname('PAY-.YYYY.-.#####')
-        
-#     # elif doctype == "Journal Entry":
-#     #     doc.name = make_autoname('JV-.YYYY.-.#####')
-        
-#     # elif doctype == "Employee":
-#     #     doc.name = make_autoname('EMP-.#####')
-        
-#     # elif doctype == "Project":
-#     #     doc.name = make_autoname('PROJ-.YYYY.-.####')
-        
-#     # elif doctype == "Task":
-#     #     doc.name = make_autoname('TASK-.#####')
-        
-#     # elif doctype == "Lead":
-#     #     doc.name = make_autoname('LEAD-.#####')
-        
-#     # elif doctype == "Opportunity":
-#     #     doc.name = make_autoname('OPP-.YYYY.-.####')
-        
-#     # elif doctype == "Material Request":
-#     #     doc.name = make_autoname('MR-.YYYY.-.#####')
-        
-#     # elif doctype == "Stock Entry":
-#     #     doc.name = make_autoname('STE-.YYYY.MM.-.#####')
-        
-#     # elif doctype == "Purchase Receipt":
-#     #     doc.name = make_autoname('PR-.YYYY.-.#####')
-        
-#     # elif doctype == "Issue":
-#     #     doc.name = make_autoname('ISS-.#####')
-        
-#     # elif doctype == "Timesheet":
-#     #     doc.name = make_autoname('TS-.YYYY.MM.-.####')
-        
-#     # elif doctype == "Expense Claim":
-#     #     doc.name = make_autoname('EXP-.YYYY.-.####')
-        
-#     else:
-#         # For DocTypes not listed above, let default naming take over
-#         # Don't set doc.name - ERPNext will use its default naming
-#         pass
-

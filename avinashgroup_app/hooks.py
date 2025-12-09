@@ -136,76 +136,58 @@ doctype_js = {
 
 
 
-#### Event Templates
+## Event Templates
  
-common_fiscal_naming_events = {
-    "autoname": "avinashgroup_app.custom_code.Override.naming_series.autoname"
-}
+from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 
-company_validation_events = {
-    "validate": "avinashgroup_app.custom_code.globalfilter.global.validate_company_matching"
-}
-
+# Purchase Invoice specific events
 purchase_invoice_specific_events = {
     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
-    }
+}
 
-
-# STEP 2: Define Doctype Groups (Which doctypes need which events)
-fiscal_naming_doctypes = [
-    "Sales Invoice",
-    "Purchase Invoice",
-    "Journal Entry",
-    "Payment Entry",
-    "Material Request",
-    "Address",
-    "Contact",
-    "Customer",
-    "Supplier",
-    "Employee",
-    "Customer Group", 
-    "Supplier Group", 
-    "Item Group",
-]
-
-company_validation_doctypes = [
-    "Sales Invoice",
-    "Sales Order",
-    "Delivery Note",
-    "Purchase Invoice",
-    "Purchase Order",
-    "Purchase Receipt",
-    "Payment Entry",
-    "Journal Entry",
-    "Quotation",
-    "Supplier Quotation",
-    "Material Request",
-    "Stock Entry",
-]
-
-# STEP 3: Build doc_events Dictionary
-
-# 1. Start with audit hooks
+# Build doc_events Dictionary
 doc_events = AuditEventMapper.get_doc_events()
 
-# 2. Merge fiscal naming events
-for doctype in fiscal_naming_doctypes:
-    if doctype not in doc_events:
-        doc_events[doctype] = {}
-    doc_events[doctype].update(common_fiscal_naming_events)
-
-# 3. Merge company validation events
-for doctype in company_validation_doctypes:
-    if doctype not in doc_events:
-        doc_events[doctype] = {}
-    doc_events[doctype].update(company_validation_events)
-
-# 4. Merge Purchase Invoice specific events
+# Merge Purchase Invoice specific events
 if "Purchase Invoice" not in doc_events:
     doc_events["Purchase Invoice"] = {}
 doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
 
 
+
+# for doctype in fiscal_naming_doctypes:
+#     if doctype not in doc_events:
+#         doc_events[doctype] = {}
+    
+#     # Add autoname
+#     doc_events[doctype]["autoname"] = common_fiscal_naming_events["autoname"]
+    
+#     # Add validate - if doctype also needs company validation, both will run
+#     if "validate" not in doc_events[doctype]:
+#         doc_events[doctype]["validate"] = []
+#     elif not isinstance(doc_events[doctype]["validate"], list):
+#         doc_events[doctype]["validate"] = [doc_events[doctype]["validate"]]
+    
+#     doc_events[doctype]["validate"].append(common_fiscal_naming_events["validate"])
+
+# # 3. Merge company validation events
+# for doctype in company_validation_doctypes:
+#     if doctype not in doc_events:
+#         doc_events[doctype] = {}
+    
+#     # Add validate
+#     if "validate" not in doc_events[doctype]:
+#         doc_events[doctype]["validate"] = []
+#     elif not isinstance(doc_events[doctype]["validate"], list):
+#         doc_events[doctype]["validate"] = [doc_events[doctype]["validate"]]
+    
+#     if company_validation_events["validate"] not in doc_events[doctype]["validate"]:
+#         doc_events[doctype]["validate"].append(company_validation_events["validate"])
+
+# # 4. Merge Purchase Invoice specific events
+# if "Purchase Invoice" not in doc_events:
+#     doc_events["Purchase Invoice"] = {}
+# doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
 
 
 # doc_events.setdefault("*", {}).update({
