@@ -105,28 +105,14 @@ class AuditFieldsManager(AuditBase):
         self.doctypes = doctypes or self.doctypes
 
     def get_last_tab_break(self, doctype):
-        """
-        Get the fieldname of the last Tab Break in a doctype.
-        
-        Args:
-            doctype (str): Name of the doctype
+            try:
+                meta = frappe.get_meta(doctype)
+                tab_fields = [f.fieldname for f in meta.fields if f.fieldtype == "Tab Break"]
+                return tab_fields[-1] if tab_fields else None
+            except Exception as e:
+                frappe.log_error(f"Error finding last tab for {doctype}: {str(e)}")
+                return None
             
-        Returns:
-            str: Fieldname of the last tab break, or None if no tabs exist
-        """
-        try:
-            meta = frappe.get_meta(doctype)
-            last_tab = None
-            
-            for field in meta.fields:
-                if field.fieldtype == "Tab Break":
-                    last_tab = field.fieldname
-            
-            return last_tab
-        except Exception as e:
-            frappe.log_error(f"Error finding last tab for {doctype}: {str(e)}")
-            return None
-    
     def doctype_has_company_field(self, doctype):
         try:
             meta = frappe.get_meta(doctype)
@@ -158,10 +144,9 @@ class AuditFieldsManager(AuditBase):
         
         fields = [
             {
-                "fieldname": "audit_tab",
+                "fieldname": "audit_section",
                 "label": "Audit",
-                "fieldtype": "Tab Break",
-                "insert_after": last_tab,
+                "fieldtype": "Section Break",
             }
         ]
         
@@ -190,7 +175,7 @@ class AuditFieldsManager(AuditBase):
                 "label": "Created By",
                 "fieldtype": "Link",
                 "options": "User",
-                "insert_after": "audit_tab",
+                "insert_after": "audit_section",
                 "read_only": 1,
                 "no_copy": 1,
                 "print_hide": 1,
@@ -200,7 +185,7 @@ class AuditFieldsManager(AuditBase):
                 "fieldname": "custom_created_on",
                 "label": "Created On",
                 "fieldtype": "Datetime",
-                "insert_after": "custom_created_by",
+                "insert_after": "audit_section",
                 "read_only": 1,
                 "no_copy": 1,
                 "print_hide": 1,
@@ -211,7 +196,7 @@ class AuditFieldsManager(AuditBase):
                 "label": "Modified By",
                 "fieldtype": "Link",
                 "options": "User",
-                "insert_after": "custom_created_on",
+                "insert_after": "audit_section",
                 "read_only": 1,
                 "no_copy": 1,
                 "print_hide": 1,
