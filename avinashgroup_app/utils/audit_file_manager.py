@@ -218,7 +218,7 @@ class AuditFieldsManager(AuditBase):
             if is_master:
                 fields.append({
                     "fieldname": "custom_naming_series",
-                    "label": "Custom Naming Series",
+                    "label": "Naming Series",
                     "fieldtype": "Data",
                     "mandatory": 0,
                     "in_standard_filter": 0,
@@ -235,7 +235,7 @@ class AuditFieldsManager(AuditBase):
                 
                 fields.append({
                     "fieldname": "custom_naming_series",
-                    "label": "Custom Naming Series",
+                    "label": "Naming Series",
                     "fieldtype": "Data",
                     "mandatory": 0,
                     "in_standard_filter": 0,
