@@ -95,12 +95,27 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: 1,
 		},
 		{
-			fieldtype: "Link",
-			label: __("Purchase Order"),
-			options: "Purchase Order",
-			fieldname: "purchase_order",
-			default: "",
-		},
+		fieldtype: "Link",
+		label: __("Purchase Order"),
+		options: "Purchase Order",
+		fieldname: "purchase_order",
+		default: "",
+		get_query: () => ({ filters: { docstatus: 1 } }),
+		 on_change: function () {
+        let po = frappe.query_report.get_filter_value("purchase_order");
+        if (!po) return;
+
+        frappe.call({
+            method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_rfq_from_purchase_order",
+            args: { purchase_order: po },
+            callback: function (r) {
+                if (r.message) {
+                    frappe.query_report.set_filter_value("request_for_quotation", r.message);
+                }
+            }
+        });
+    }
+	},
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {

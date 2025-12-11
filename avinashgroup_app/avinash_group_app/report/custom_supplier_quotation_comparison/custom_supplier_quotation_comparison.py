@@ -322,3 +322,29 @@ def set_default_supplier(item_code, supplier, company):
 		"default_supplier",
 		supplier,
 	)
+
+
+
+@frappe.whitelist()
+def set_default_supplier(item_code, supplier, company):
+	frappe.db.set_value(
+		"Item Default",
+		{"parent": item_code, "company": company},
+		"default_supplier",
+		supplier,
+	)
+
+
+
+@frappe.whitelist()
+def get_rfq_from_purchase_order(purchase_order):
+    rfq = frappe.db.sql("""
+        SELECT DISTINCT sqi.request_for_quotation
+        FROM `tabPurchase Order Item` poi
+        JOIN `tabSupplier Quotation Item` sqi
+            ON poi.supplier_quotation = sqi.parent
+        WHERE poi.parent = %s and sqi.request_for_quotation IS NOT NULL
+    """, purchase_order)
+
+    return rfq[0][0] if rfq else None
+
