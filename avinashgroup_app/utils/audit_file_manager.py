@@ -1,15 +1,18 @@
+
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from avinashgroup_app.custom_code.Override.naming_series import handle_validate, naming_series_autoname
-from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
+# from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
 
 class AuditBase:
     doctypes = [
     "Address",
+    "Salary Structure",
     "Appointment Letter",
     "Asset Capitalization",
     "Asset Movement",
     "Asset Repair",
+    "Asset",
     "Attendance",
     "Bank Transaction",
     "BOM Update Tool",
@@ -52,7 +55,7 @@ class AuditBase:
     "Purchase Receipt",
     "Quotation",
     "Request for Quotation",
-   # "Sales Invoice",
+    "Sales Invoice",
     "Sales Order",
     "Sales Partner",
     "Salary Slip",
@@ -67,30 +70,65 @@ class AuditBase:
     "Training Event",
     "Warranty Claim",
     "Work Order",
-    "Project Update"
-        # "Quotation",
-        # "Request for Quotation",
-        # "Supplier Quotation",
-        # "Purchase Order",
-        # "Stock Entry",
-        # "Holiday List",
-        # "Customer",
-        # "Supplier",
-        # "Employee",
-        # "Stock Reconciliation",
-        # "Payment Entry",
-        # "Delivery Note",
-        # "Sales Order",
-        # "Purchase Receipt",
-        # "Journal Entry",
-        # "Purchase Invoice",
-        # "Material Request",
-        # "Sales Invoice",
-        # "Address",
-        # "Contact",
+    "Project Update",
+    "Item",
+   #Item master
+    "Item Group",
+    "Customer Group",
+    "Supplier Group",
+    "Price List",
+    "Address",
+    "Contact",
+    "Branch",
+    "Operation",
+    "Workstation",
+    "Routing",
+    "Asset Category",
+    "Project",
+    "Task",    
+    "Serial No",
+    "Batch",
+    "Expense Claim Type",
+    "Mode of Payment",
+    "Bank Account",
+    "Holiday List",
+    "Leave Type",
+    "BOM",
+    # "BOM Template"
     ]
 
+
+    master_doctypes = [
+        "Item Group",
+        "Customer Group",
+        "Supplier Group",
+        "Price List",
+        "Address",
+        "Contact",
+        "Branch",
+        "Operation",
+        "Workstation",
+        "Routing",
+        "Asset Category",
+        "Project",
+        "Task",    
+        "Serial No",
+        "Batch",
+        "Expense Claim Type",
+        "Mode of Payment",
+        "Bank Account",
+        "Holiday List",
+        "Leave Type",
+        # "BOM Template"
+    ]
+    
+  
+
 class AuditFieldsManager(AuditBase):
+
+    def is_master_doctype(self, doctype):
+        return doctype in self.master_doctypes
+
     """Manages custom audit fields across multiple doctypes."""
     
     def __init__(self, doctypes=None):
@@ -104,15 +142,17 @@ class AuditFieldsManager(AuditBase):
         self.custom_fields = {}
         self.doctypes = doctypes or self.doctypes
 
-    def get_last_tab_break(self, doctype):
+    def get_last_field(self, doctype):
             try:
                 meta = frappe.get_meta(doctype)
-                tab_fields = [f.fieldname for f in meta.fields if f.fieldtype == "Tab Break"]
-                return tab_fields[-1] if tab_fields else None
+                if meta.fields:
+                  return meta.fields[-1].fieldname
+         
             except Exception as e:
                 frappe.log_error(f"Error finding last tab for {doctype}: {str(e)}")
                 return None
-            
+
+
     def doctype_has_company_field(self, doctype):
         try:
             meta = frappe.get_meta(doctype)
@@ -128,6 +168,9 @@ class AuditFieldsManager(AuditBase):
         except Exception as e:
             frappe.log_error(f"Error checking company field for {doctype}: {str(e)}")
             return False
+    
+    
+
         
     def get_field_definitions(self, doctype):
         """
@@ -140,19 +183,24 @@ class AuditFieldsManager(AuditBase):
             list: List of field definitions with tab and fields
         """
         has_company = self.doctype_has_company_field(doctype)
-        last_tab = self.get_last_tab_break(doctype)
+        last_feild = self.get_last_field(doctype)
+        is_master = self.is_master_doctype(doctype)
+
+
         
         fields = [
             {
                 "fieldname": "audit_section",
                 "label": "Audit",
                 "fieldtype": "Section Break",
+                "insert_after": last_feild,
+                  "read_only": 1,
             }
         ]
         
         # Add company field if doctype doesn't have one
         if not has_company:
-            fields.extend([{
+            fields.append({
                 "fieldname": "custom_company",
                 "label": "Company",
                 "fieldtype": "Link",
@@ -164,9 +212,36 @@ class AuditFieldsManager(AuditBase):
                 "bold": 0,
                 "allow_on_submit": 0,
                 "insert_after": "",
-            }])
+            })
             
-         
+            # Add naming series field for master doctypes after custom_company
+            if is_master:
+                fields.append({
+                    "fieldname": "custom_naming_series",
+                    "label": "Custom Naming Series",
+                    "fieldtype": "Data",
+                    "mandatory": 0,
+                    "in_standard_filter": 0,
+                    "in_list_view": 0,
+                    "insert_after": "custom_company",
+                })
+        else:
+            # If company field exists, add naming series after company or custom_company
+            if is_master:
+                # Determine the insert_after field
+                company_field = "company" if has_company and not frappe.db.exists(
+                    "Custom Field", {"dt": doctype, "fieldname": "custom_company"}
+                ) else "custom_company"
+                
+                fields.append({
+                    "fieldname": "custom_naming_series",
+                    "label": "Custom Naming Series",
+                    "fieldtype": "Data",
+                    "mandatory": 0,
+                    "in_standard_filter": 0,
+                    "in_list_view": 0,
+                    "insert_after": company_field,
+                })
         
         # Add audit fields
         fields.extend([
@@ -175,7 +250,7 @@ class AuditFieldsManager(AuditBase):
                 "label": "Created By",
                 "fieldtype": "Link",
                 "options": "User",
-                "insert_after": "audit_section",
+                "insert_after": "audit_tab",
                 "read_only": 1,
                 "no_copy": 1,
                 "print_hide": 1,
@@ -185,7 +260,7 @@ class AuditFieldsManager(AuditBase):
                 "fieldname": "custom_created_on",
                 "label": "Created On",
                 "fieldtype": "Datetime",
-                "insert_after": "audit_section",
+                "insert_after": "custom_created_by",
                 "read_only": 1,
                 "no_copy": 1,
                 "print_hide": 1,
@@ -196,7 +271,7 @@ class AuditFieldsManager(AuditBase):
                 "label": "Modified By",
                 "fieldtype": "Link",
                 "options": "User",
-                "insert_after": "audit_section",
+                "insert_after": "custom_created_on",
                 "read_only": 1,
                 "no_copy": 1,
                 "print_hide": 1,
@@ -205,12 +280,6 @@ class AuditFieldsManager(AuditBase):
         ])
         
         return fields
-    
-
-        
-
-
-
     
     def prepare_custom_fields(self):
         """
@@ -224,7 +293,6 @@ class AuditFieldsManager(AuditBase):
             self.custom_fields[doctype] = field_definitions
         return self.custom_fields
     
-
     def create_fields(self):
         """
         Creates custom fields in the database.
@@ -257,23 +325,6 @@ class AuditFieldsManager(AuditBase):
             "message": f"Custom fields added to {success_count} doctypes!"
         }
     
-
-    # def create_fields(self):
-    #     """
-    #     Creates custom fields in the database.
-        
-    #     Returns:
-    #         dict: Success status and message with details
-    #     """
-    #     try:
-    #         self.prepare_custom_fields()
-    #         create_custom_fields(self.custom_fields, update=True)
-    #         frappe.db.commit()
-    #     except Exception as e:
-    #         frappe.db.rollback()
-    #         frappe.log_error(f"Error creating custom fields: {str(e)}")
-    #         return {"success": False, "message": str(e)}
-    
     def remove_fields(self):
         """
         Removes custom audit fields from all doctypes.
@@ -288,7 +339,8 @@ class AuditFieldsManager(AuditBase):
                     "custom_created_by",
                     "custom_created_on",
                     "custom_modified_by",
-                    "custom_company"
+                    "custom_company",
+                    "custom_naming_series"
                 ]
                 for field in fields_to_remove:
                     custom_field = frappe.db.exists(
@@ -321,6 +373,11 @@ class AuditFieldsManager(AuditBase):
                 "custom_modified_by",
                 "custom_company"
             ]
+            
+            # Add naming series check for master doctypes
+            if self.is_master_doctype(doctype):
+                fields_to_check.append("custom_naming_series")
+            
             for field in fields_to_check:
                 exists = frappe.db.exists(
                     "Custom Field",
@@ -329,23 +386,6 @@ class AuditFieldsManager(AuditBase):
                 fields_status[field] = "✓ Exists" if exists else "✗ Missing"
             report[doctype] = fields_status
         return report
-    
-
-
-    def remove_fields(self):
-        try:
-            for doctype in self.doctypes:
-                for field in ["custom_created_by", "custom_created_on", "custom_modified_by","custom_company"]:
-                    custom_field = frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": field})
-                    if custom_field:
-                        frappe.delete_doc("Custom Field", custom_field)
-            frappe.db.commit()
-            return {"success": True, "message": "Custom fields removed!"}
-        except Exception as e:
-            frappe.db.rollback()
-            return {"success": False, "message": str(e)}
-
-
 
 
 class AuditEventMapper(AuditBase):
@@ -360,19 +400,16 @@ class AuditEventMapper(AuditBase):
         before_insert_handler_path = "avinashgroup_app.utils.audit_file_manager.before_insert"
         before_save_handler_path = "avinashgroup_app.utils.audit_file_manager.before_save"
         validate_handler_path = "avinashgroup_app.utils.audit_file_manager.validate"
-        autoname_handler_path ="avinashgroup_app.utils.audit_file_manager.autoname"
+        autoname_handler_path = "avinashgroup_app.utils.audit_file_manager.autoname"
 
         events = {}
 
         for dt in AuditEventMapper.doctypes:
-
-
             events[dt] = {
                 "before_insert": before_insert_handler_path,
                 "before_save": before_save_handler_path,
-                "validate":validate_handler_path,
-                "autoname":autoname_handler_path,
-            
+                "validate": validate_handler_path,
+                "autoname": autoname_handler_path,
             }
 
         return events
@@ -399,9 +436,8 @@ def set_audit_fields(doc, method=None):
         doc.custom_modified_by = frappe.session.user
 
 
-
 def validate(doc, method=None):
-    validate_company_matching(doc)
+    # validate_company_matching(doc)
     handle_validate(doc)
 
 def before_insert(doc, method=None):

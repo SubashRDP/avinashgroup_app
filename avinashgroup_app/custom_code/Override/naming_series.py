@@ -1,5 +1,3 @@
-
-
 import frappe
 from frappe.model.naming import make_autoname
 from frappe.model.document import Document
@@ -7,28 +5,128 @@ from frappe.model.document import Document
 ## "Item", "Salary Structure", "Contact"
 NAMING_CONFIG = {
     #MASTERS DATA
+    "Holiday List": {
+        "prefix": "Holiday",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Request for Quotation": {
+        "prefix": "RFQ",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Supplier Quotation": {
+        "prefix": "SQ",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Item Group": {
+        "prefix": "I.GR",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Item":{
+        "prefix": "ITEM",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Price List": {
+        "prefix": "P.List",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Branch": {
+        "prefix": "Branch",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Operation": {
+        "prefix": "OPR",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Workstation": {
+        "prefix": "WS",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Routing": {
+        "prefix": "ROU",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Asset Category": {
+        "prefix": "A.Cat",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Asset": {
+        "prefix": "AST",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Project": {
+        "prefix": "PROJ",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Task": {
+        "prefix": "TASK",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Serial No": {
+        "prefix": "SRLNO",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Batch": {
+        "prefix": "BATCH",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Expense Claim Type": {
+        "prefix": "PR",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Mode of Payment": {
+        "prefix": "MOP",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Bank Account": {
+        "prefix": "B.AC",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Leave Type": {
+        "prefix": "L.Type",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
     "Customer":{
         "prefix": "CUST",
         "use_fiscal_year": False,
         "sequence_length": 5
     },
      "Customer Group":{
-        "prefix": "CUSG",
+        "prefix": "C.GR",
         "use_fiscal_year": False,
         "sequence_length": 5
     },
     "Supplier":{
-        "prefix": "SUPP",
+        "prefix": "SUP",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Supplier Group":{
+        "prefix": "S.GR",
         "use_fiscal_year": False,
         "sequence_length": 5
     },
     "Employee":{
-        "prefix": "HR-EMP",
-        "use_fiscal_year": False,
-        "sequence_length": 5
-    },
-    "Item":{
-        "prefix": "ITM",
+        "prefix": "EMP",
         "use_fiscal_year": False,
         "sequence_length": 5
     },
@@ -39,6 +137,11 @@ NAMING_CONFIG = {
     },
     "Contact":{
         "prefix": "CON",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "BOM":{
+        "prefix": "BOM",
         "use_fiscal_year": False,
         "sequence_length": 5
     },
@@ -98,11 +201,6 @@ NAMING_CONFIG = {
     #     "use_fiscal_year": True,
     #     "sequence_length": 5
     # },
-    "Purchase Invoice Advance Entry": {
-        "prefix": "PIA",
-        "use_fiscal_year": True,
-        "sequence_length": 5
-    },
 
     "Material Request": {
         "prefix": "MR",
@@ -203,7 +301,7 @@ NAMING_CONFIG = {
         "use_fiscal_year": True,
         "sequence_length": 5
     },
-    "Job Card"  : {
+    "Job Card" : {
         "prefix": "JC",
         "use_fiscal_year": True,
         "sequence_length": 5
@@ -303,6 +401,7 @@ NAMING_CONFIG = {
         "use_fiscal_year": True,
         "sequence_length": 5
     },
+    
     "Sales Partner": {
         "prefix": "SP",
         "use_fiscal_year": True,
@@ -430,10 +529,13 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     company_abbr = get_company_abbr(doc)
 
     date_field = None
+   
     if hasattr(doc, "posting_date") and doc.posting_date:
         date_field = doc.posting_date
     elif hasattr(doc, "transaction_date") and doc.transaction_date:
         date_field = doc.transaction_date
+    elif hasattr(doc, "custom_created_on") and doc.custom_created_on:
+        date_field = doc.custom_created_on
 
     fiscal_year = None
     if date_field:
