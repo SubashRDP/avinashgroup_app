@@ -544,7 +544,7 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     sequence = "#" * sequence_length
 
     if company_abbr and fiscal_year:
-        naming_pattern = f".{company_abbr}.-{prefix}-.{sequence}.-.{fiscal_year}."
+        naming_pattern = f".{company_abbr}.-{prefix}-.{fiscal_year}.-.{sequence}."
     elif company_abbr:
         naming_pattern = f"{company_abbr}-{prefix}-.{sequence}"
     else:
