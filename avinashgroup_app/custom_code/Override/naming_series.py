@@ -587,13 +587,54 @@ def set_custom_name_field(doc):
     doc.custom_name = f"{base_custom_name}{amendment_suffix}"
 
 
+def naming_requirements_before_insert(doc):
+    doctype = doc.doctype
+    # frappe.msgprint("From before insert ")
+    
+    if doctype not in NAMING_CONFIG:
+        return
+    
+    config = NAMING_CONFIG[doctype]
+    
+    # Check if company abbreviation is required and available
+    company_abbr = get_company_abbr(doc)
+    if not company_abbr:
+        frappe.throw(
+            f"Company abbreviation is required for {doctype}. Please ensure 'Company' field is set with a valid company.",
+            title="Missing Company Abbreviation"
+        )
+    
+    # Check fiscal year requirement
+    if config["use_fiscal_year"]:
+        # Get the first available date field with content
+        date_field = (
+            (getattr(doc, "posting_date", None) if hasattr(doc, "posting_date") else None) or
+            (getattr(doc, "transaction_date", None) if hasattr(doc, "transaction_date") else None) or
+            (getattr(doc, "custom_created_on", None) if hasattr(doc, "custom_created_on") else None)
+        )
+        
+        if not date_field:
+            frappe.throw(
+                f"Date field (posting_date, transaction_date, or custom_created_on) is required for {doctype}.",
+                title="Missing Date Field"
+            )
+        
+        fiscal_year = get_fiscal_year_from_date(date_field)
+        if not fiscal_year:
+            frappe.throw(
+                f"No fiscal year found for date {date_field}. Please ensure fiscal year is set up correctly in the system.",
+                title="Missing Fiscal Year"
+            )
+
+def handle_before_insert(doc, method=None):
+    naming_requirements_before_insert(doc)
+
 def handle_validate(doc, method=None):
     set_custom_name_field(doc)
 
 
 def naming_series_autoname(self, method):
     doctype = self.doctype
-    
     # Check if doctype has naming configuration
     if doctype not in NAMING_CONFIG:
         return

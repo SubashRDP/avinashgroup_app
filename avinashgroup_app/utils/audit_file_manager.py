@@ -1,7 +1,7 @@
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-from avinashgroup_app.custom_code.Override.naming_series import handle_validate, naming_series_autoname
+from avinashgroup_app.custom_code.Override.naming_series import handle_validate, naming_series_autoname, handle_before_insert, naming_requirements_before_insert
 # from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
 
 class AuditBase:
@@ -415,6 +415,7 @@ class AuditEventMapper(AuditBase):
         return events
 
 
+
 # Standalone function for hooks to call
 def set_audit_fields(doc, method=None):
     # Default to UI
@@ -438,10 +439,11 @@ def set_audit_fields(doc, method=None):
 
 def validate(doc, method=None):
     # validate_company_matching(doc)
-    handle_validate(doc)
+    handle_validate(doc)    
 
 def before_insert(doc, method=None):
     set_audit_fields(doc, method)
+    naming_requirements_before_insert(doc)
 
 def before_save(doc, method=None):
     set_audit_fields(doc, method)
