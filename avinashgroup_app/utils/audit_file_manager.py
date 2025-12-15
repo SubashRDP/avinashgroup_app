@@ -97,6 +97,8 @@ class AuditBase:
     # "BOM Template"
     ]
 
+    
+
 
     master_doctypes = [
         "Item Group",
@@ -205,7 +207,7 @@ class AuditFieldsManager(AuditBase):
                 "label": "Company",
                 "fieldtype": "Link",
                 "options": "Company",
-                "mandatory": 1,
+                "reqd": 1,
                 "in_standard_filter": 1,
                 "in_list_view": 0,
                 "in_global_search": 0,
@@ -386,6 +388,58 @@ class AuditFieldsManager(AuditBase):
                 fields_status[field] = "✓ Exists" if exists else "✗ Missing"
             report[doctype] = fields_status
         return report
+    
+    def update_custom_company_reqd(self, doctype):
+    
+        doctypes = AuditBase.doctypes
+        
+        updated_count = 0
+        skipped_count = 0
+        error_count = 0
+
+        for doctype in doctypes:
+            try:
+                # Check if custom_company field exists
+                custom_field = frappe.db.get_value(
+                    "Custom Field",
+                    {"dt": doctype, "fieldname": "custom_company"},
+                    ["name", "reqd"],
+                    as_dict=True
+                )
+                
+                if custom_field:
+                    # If reqd is already 1, skip
+                    if custom_field.reqd == 1:
+                        print(f"✓ {doctype}: custom_company already mandatory")
+                        skipped_count += 1
+                    else:
+                        # Update to make it mandatory
+                        frappe.db.set_value("Custom Field", custom_field.name, "reqd", 1)
+                        print(f"✓ {doctype}: custom_company set to mandatory")
+                        updated_count += 1
+                else:
+                    print(f"⊘ {doctype}: custom_company field not found")
+                    
+            except Exception as e:
+                print(f"✗ {doctype}: Error - {str(e)}")
+                error_count += 1
+
+        # Commit the changes
+        frappe.db.commit()
+
+        print(f"\n=== Summary ===")
+        print(f"Updated: {updated_count}")
+        print(f"Already mandatory: {skipped_count}")
+        print(f"Errors: {error_count}")
+        print(f"Total processed: {len(doctypes)}")
+        
+        return {
+            "updated": updated_count,
+            "skipped": skipped_count,
+            "errors": error_count,
+            "total": len(doctypes)
+        }
+        
 
 
 class AuditEventMapper(AuditBase):
@@ -413,6 +467,60 @@ class AuditEventMapper(AuditBase):
             }
 
         return events
+    
+    
+def update_custom_company_reqd():
+    # import frappe
+    # from avinashgroup_app.utils.audit_file_manager import AuditBase
+    
+    doctypes = AuditBase.doctypes
+    
+    updated_count = 0
+    skipped_count = 0
+    error_count = 0
+
+    for doctype in doctypes:
+        try:
+           
+            custom_field = frappe.db.get_value(
+                "Custom Field",
+                {"dt": doctype, "fieldname": "custom_company"},
+                ["name", "reqd"],
+                as_dict=True
+            )
+            
+            if custom_field:
+                # If reqd is already 1, skip
+                if custom_field.reqd == 1:
+                    print(f"{doctype}: custom_company already mandatory")
+                    skipped_count += 1
+                else:
+                    # Update to make it mandatory
+                    frappe.db.set_value("Custom Field", custom_field.name, "reqd", 1)
+                    print(f"{doctype}: custom_company set to mandatory")
+                    updated_count += 1
+            else:
+                print(f"{doctype}: custom_company field not found")
+                
+        except Exception as e:
+            print(f"{doctype}: Error - {str(e)}")
+            error_count += 1
+
+
+    frappe.db.commit()
+
+    print(f"\n=== Summary ===")
+    print(f"Updated: {updated_count}")
+    print(f"Already mandatory: {skipped_count}")
+    print(f"Errors: {error_count}")
+    print(f"Total processed: {len(doctypes)}")
+    
+    return {
+        "updated": updated_count,
+        "skipped": skipped_count,
+        "errors": error_count,
+        "total": len(doctypes)
+    }
 
 
 
@@ -450,3 +558,6 @@ def before_save(doc, method=None):
 
 def autoname(doc, method=None):
     naming_series_autoname(doc, method)
+
+
+
