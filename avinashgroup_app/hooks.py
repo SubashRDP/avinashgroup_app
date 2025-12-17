@@ -29,9 +29,9 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-    # "/assets/avinashgroup_app/js/sales_invoice.js?v=8.5",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
     # "/assets/avinashgroup_app/js/purchase_invoice.js?v=1.2"
-    #  "/assets/avinashgroup_app/js/global_filter.js?v=1.3",
+    "/assets/avinashgroup_app/js/global_filter.js?v=1.3",
     #  "/assets/avinashgroup_app/js/si.js?v=1.0" ,
     # "/assets/avinashgroup_app/js/pi.js?v=2.1",
     # "/assets/avinashgroup_app/js/journal_entry.js?v=1.2"
@@ -144,6 +144,11 @@ from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 purchase_invoice_specific_events = {
     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
 }
+sales_invoice_specific_events = {
+    "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
+    }
+
 
 # Build doc_events Dictionary
 doc_events = AuditEventMapper.get_doc_events()
@@ -152,6 +157,10 @@ doc_events = AuditEventMapper.get_doc_events()
 if "Purchase Invoice" not in doc_events:
     doc_events["Purchase Invoice"] = {}
 doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
+
+if "Sales Invoice" not in doc_events:
+    doc_events["Sales Invoice"]={}
+doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
 
 
