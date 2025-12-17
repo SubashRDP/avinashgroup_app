@@ -234,18 +234,18 @@ def should_calculate_field(item, fieldname):
 def update_taxes_table(doc):
     """
     Update or create tax rows in the taxes table
-    1. Excise Duty (account starting with 347714) - position 0
+    1. Excise Duty (account starting with 348204) - position 0
     2. VAT (account starting with VAT) - position 1
     """
     total_excise = flt(doc.custom_total_excise_amount) or 0
     total_vat = flt(doc.custom_total_vat_amount) or 0
     
     # Find excise account
-    excise_account = find_account_by_prefix(doc.company, "348500")
+    excise_account = find_account_by_prefix(doc.company, "348204")
     vat_account = find_account_by_prefix(doc.company, "VAT")
     
     if not excise_account:
-        frappe.logger().warning(f"No excise account found starting with 347714 for company {doc.company}")
+        frappe.logger().warning(f"No excise account found starting with 348204 for company {doc.company}")
     
     if not vat_account:
         frappe.logger().warning(f"No VAT account found starting with VAT for company {doc.company}")
