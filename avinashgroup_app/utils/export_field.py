@@ -9,7 +9,7 @@ def export_custom_fields_to_excel():
     """
     
     # Fields to exclude
-    excluded_fields = ['custom_created_on', 'custom_created_by', 'custom_modified_by','custom_company','custom_naming_series']
+    excluded_fields = ['custom_created_on', 'custom_created_by', 'custom_modified_by','custom_company','custom_naming_series','custom_fiscal_year', 'custom_abbr', 'custom_company_abbr']
     
     # Get all Custom Field documents where fieldname starts with 'custom_'
     custom_fields = frappe.get_all(
@@ -153,7 +153,7 @@ def export_with_conditions():
     Export custom fields with specific conditions/filters
     """
     
-    excluded_fields = ['custom_created_on', 'custom_created_by', 'custom_modified_by','custom_company','custom_naming_series']
+    excluded_fields = ['custom_created_on', 'custom_created_by', 'custom_modified_by','custom_company','custom_naming_series','custom_fiscal_year', 'custom_abbr', 'custom_company_abbr']
     
     # Example conditions - modify as needed
     conditions = [
