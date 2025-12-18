@@ -105,7 +105,7 @@ NAMING_CONFIG = {
         "use_fiscal_year": False,
         "sequence_length": 5
     },
-    
+
     "Customer":{
         "prefix": "CUS",
         "use_fiscal_year": False,
@@ -288,7 +288,7 @@ NAMING_CONFIG = {
         "sequence_length": 5
     },
     "Expense Claim": {
-        "prefix": "EXP",
+        "prefix": "EC.Type",
         "use_fiscal_year": True,
         "sequence_length": 5
     },
