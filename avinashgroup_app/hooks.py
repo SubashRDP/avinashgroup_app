@@ -464,31 +464,28 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
 
 fixtures = [
-    {
+ {
         "dt": "Custom Field",
         "filters": [
-            [
-                "fieldname", "like", "custom_%"
-            ]
-        ]
-    },
-    {
-        "dt": "Property Setter",
-        "filters": [
-            [
-                "property", "=", "options"
-            ],
-            [
-                "field_name", "=", "naming_series"
-            ]
+            ["fieldname", "like", "custom_%"],
+            ["fieldname", "not in", [
+                "custom_abbr",
+                "custom_company_abbr",
+                "custom_fiscal_year"
+            ]]
         ]
     },
     {
         "dt": "Client Script",
         "filters": [
-            [
-                "module", "=", "Avinash Group App"
-            ]
+            ["module", "=", "Avinash Group App"]
+        ]
+    },
+    {
+        "dt": "DocType",
+        "filters": [
+            ["custom", "=", 1],
+            ["module", "=", "Avinash Group App"]
         ]
     }
 ]

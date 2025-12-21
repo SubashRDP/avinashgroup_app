@@ -29,8 +29,6 @@ import frappe
 #     except Exception as e:
 #         frappe.log_error(f"Error in set_custom_name_field for {doc.doctype}: {str(e)}")
 
-
-
 def handle_naming_and_fiscal_year(doc, method=None):
 
     update_fiscal_year(doc)
