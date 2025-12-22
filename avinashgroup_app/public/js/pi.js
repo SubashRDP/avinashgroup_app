@@ -1,12 +1,7 @@
 frappe.ui.form.on('Purchase Invoice', {
     refresh: function(frm) {
         account_subtype_cache = {};
-        update_fiscal_year(frm);
         prefetch_account_subtypes(frm);
-    },
-    
-    posting_date: function(frm) {
-        update_fiscal_year(frm);
     },
     
     items_add: function(frm, cdt, cdn) {
@@ -228,28 +223,3 @@ function apply_subtype_filter(frm, row_name, sub_ledger_categories) {
         grid_row.refresh_field('custom_subtype');
     }
 }
-
-function update_fiscal_year(frm) {
-    if (frm.doc.posting_date) {
-        console.log("Posting date!");
-        frappe.call({
-            method: 'frappe.client.get_value',
-            args: {
-                doctype: "Fiscal Year",
-                filters: {
-                    year_start_date: ["<=", frm.doc.posting_date],
-                    year_end_date: [">=", frm.doc.posting_date]
-                },
-                fieldname: "name"
-            },
-            callback: function(r) {
-                if (r.message) {
-                    frm.set_value("custom_fiscal_year", r.message.name);
-                } else {
-                    frm.set_value("custom_fiscal_year", "Not Found");
-                }
-            }
-        });
-    }
-}
-
