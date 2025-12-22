@@ -468,7 +468,9 @@ def get_fiscal_year_from_date(date_field):
         "Fiscal Year",
         {
             "year_start_date": ["<=", date_field],
-            "year_end_date": [">=", date_field]
+            "year_end_date": [">=", date_field],
+            "enabled": 1
+
         },
         "name"
     )
