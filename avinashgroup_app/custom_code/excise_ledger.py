@@ -651,24 +651,35 @@ def on_submit_clear_system_vat(doc, method):
     
 #     # Replace method
 #     doc.get_gl_entries = custom_get_gl_entries
-
+import frappe
+from frappe import _
 
 def modify_gl_entries(doc, method):
-  
+    """
+    Hook to modify GL entries before submit
+    Adds party information to TDS child accounts
+    """
+    # Check if document has get_gl_entries method
     if not hasattr(doc, 'get_gl_entries'):
         return
     
+    # Store original method
     original_get_gl_entries = doc.get_gl_entries
+    
     def custom_get_gl_entries(*args, **kwargs):
+        # Get original GL entries
         gl_entries = original_get_gl_entries(*args, **kwargs)
         
+        # Get company suffix
         company_suffix = ""
         if doc.company:
             company_doc = frappe.get_cached_doc('Company', doc.company)
             company_suffix = company_doc.abbr if company_doc.abbr else ""
         
+        # Build TDS parent account name
         tds_parent_account = f"348100 - TDS Payable - {company_suffix}" if company_suffix else "348100 - TDS Payable"
         
+        # Get all TDS child accounts
         tds_child_accounts = frappe.get_all(
             'Account',
             filters={
@@ -678,8 +689,15 @@ def modify_gl_entries(doc, method):
             fields=['name', 'account_type']
         )
         
+        # If no child accounts found, return original entries unchanged
+        if not tds_child_accounts:
+            frappe.logger().debug(f"No child accounts found under {tds_parent_account}. Returning original GL entries.")
+            return gl_entries
+        
+        # Create set of TDS child account names for fast lookup
         tds_child_account_names = {acc.name for acc in tds_child_accounts}
         
+        # Modify GL entries only if supplier exists
         if doc.supplier and gl_entries:
             for entry in gl_entries:
                 if entry.get('account') and entry['account'] in tds_child_account_names:
@@ -687,8 +705,54 @@ def modify_gl_entries(doc, method):
                     if account.account_type == 'Payable':
                         entry['party_type'] = 'Supplier'
                         entry['party'] = doc.supplier
+                        frappe.logger().debug(
+                            f"Added party info to GL entry for account {entry['account']}: Supplier/{doc.supplier}"
+                        )
         
         return gl_entries
     
-    # Replace method
+    # Replace the method with custom version
     doc.get_gl_entries = custom_get_gl_entries
+
+# def modify_gl_entries(doc, method):
+  
+#     if not hasattr(doc, 'get_gl_entries'):
+#         return
+    
+#     original_get_gl_entries = doc.get_gl_entries
+
+#     def custom_get_gl_entries(*args, **kwargs):
+#         gl_entries = original_get_gl_entries(*args, **kwargs)
+        
+#         company_suffix = ""
+#         if doc.company:
+#             company_doc = frappe.get_cached_doc('Company', doc.company)
+#             company_suffix = company_doc.abbr if company_doc.abbr else ""
+        
+#         tds_parent_account = f"348100 - TDS Payable - {company_suffix}" if company_suffix else "348100 - TDS Payable"
+        
+#         tds_child_accounts = frappe.get_all(
+#             'Account',
+#             filters={
+#                 'parent_account': tds_parent_account,
+#                 'company': doc.company
+#             },
+#             fields=['name', 'account_type']
+#         )
+#         if not tds_child_accounts:
+#             return gl_entries
+        
+#         tds_child_account_names = {acc.name for acc in tds_child_accounts}
+        
+#         if doc.supplier and gl_entries:
+#             for entry in gl_entries:
+#                 if entry.get('account') and entry['account'] in tds_child_account_names:
+#                     account = frappe.get_cached_doc('Account', entry['account'])
+#                     if account.account_type == 'Payable':
+#                         entry['party_type'] = 'Supplier'
+#                         entry['party'] = doc.supplier
+        
+#         return gl_entries
+    
+#     # Replace method
+#     doc.get_gl_entries = custom_get_gl_entries

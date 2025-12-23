@@ -3,22 +3,56 @@ from frappe import _
 from frappe.utils import flt
 from erpnext.controllers.taxes_and_totals import calculate_taxes_and_totals
 
+# def before_save_purchaseinvoice(doc, method=None):
+#     """
+#     Main hook that runs before saving Purchase Invoice
+#     Calculates excise, VAT, TDS, and totals
+#     Only calculates if user hasn't manually provided values
+#     """
+#     # calculate_item_excise_and_totals(doc)
+#     calculate_total_excise_amount(doc)
+#     calculate_custom_total(doc)
+#     calculate_item_vat_amounts(doc)
+#     calculate_total_vat_amount(doc)
+#     calculate_item_tds_amounts(doc)
+#     calculate_total_tds_amount(doc)
+#     update_taxes_table(doc)
+#     calculate_custom_total_amount(doc)
+#     doc.calculate_taxes_and_totals()
 def before_save_purchaseinvoice(doc, method=None):
     """
-    Main hook that runs before saving Sales Invoice
-    Calculates excise, VAT, and totals
-    Only calculates if user hasn't manually provided values
+    Final reviewed before_save hook for Purchase Invoice
+
+    Rules:
+    - Excise value is manual and NEVER recalculated
+    - custom_total = amount + custom_excise_value
+    - VAT:
+        - Percentage (%) -> ALWAYS recalculated
+        - Amount -> NEVER recalculated
+    - TDS follows existing logic
+    - Taxes table updated after all calculations
     """
-    calculate_item_excise_and_totals(doc)
-    calculate_total_excise_amount(doc)
+
+    # 1. Calculate item-level totals (manual excise respected)
+    calculate_custom_total(doc)
+
+    # 2. VAT calculation (strict rules)
     calculate_item_vat_amounts(doc)
     calculate_total_vat_amount(doc)
+
+    # 3. TDS calculation (unchanged behavior)
+    calculate_item_tds_amounts(doc)
+    tds_by_account = calculate_total_tds_amount(doc)
+
+    # 4. Excise totals (manual aggregation only)
+    calculate_total_excise_amount(doc)
+
+    # 5. Update taxes table (Excise, VAT, TDS)
     update_taxes_table(doc)
-    calculate_custom_total_amount(doc)
+
+    # 6. Let ERPNext finalize standard totals
     doc.calculate_taxes_and_totals()
 
-# def calculate_taxes_and_totals(doc):
-#     calculate_taxes_and_totals()
 
 def calculate_item_excise_and_totals(doc):
     """
@@ -39,11 +73,6 @@ def calculate_item_excise_and_totals(doc):
             # Calculate excise value
             custom_excise_value = flt(custom_excise_duty * qty, 2)
             item.custom_excise_value = custom_excise_value
-            
-            # frappe.logger().debug(
-            #     f"Calculated excise for {item.item_code}: "
-            #     f"excise_duty={custom_excise_duty}, qty={qty}, excise_value={custom_excise_value}"
-            # )
         else:
             custom_excise_value = flt(item.custom_excise_value) or 0
             frappe.logger().debug(
@@ -55,66 +84,127 @@ def calculate_item_excise_and_totals(doc):
                 frappe.logger().debug(
                     f"Manual excise value for {item.item_code}: {custom_excise_value}, cleared custom_excise_duty"
                 )
-            else:
-                frappe.logger().debug(
-                    f"Using user-provided excise for {item.item_code}: {custom_excise_value}"
-                )
         
         # Always calculate custom_total based on current excise value
         custom_total = flt(amount + custom_excise_value, 2)
         item.custom_total = custom_total
 
+def calculate_custom_total(doc):
+    for item in doc.items:
+        amount = flt(item.amount) or 0
+        excise_value = flt(item.custom_excise_value) or 0
+        item.custom_total = flt(amount + excise_value, 2)
 
 def calculate_total_excise_amount(doc):
-    """
-    Sum all custom_excise_value from items
-    """
-    total_excise_amount = 0
+    total_excise = sum(
+        flt(item.custom_excise_value) or 0 for item in doc.items
+    )
+
+    doc.custom_total_excise_amount = flt(total_excise, 2)
+    doc.custom_excise = flt(total_excise, 2)
+
+# def calculate_total_excise_amount(doc):
+#     """
+#     Sum all custom_excise_value from items
+#     """
+#     total_excise_amount = 0
     
-    for item in doc.items:
-        total_excise_amount += flt(item.custom_excise_value) or 0
+#     for item in doc.items:
+#         total_excise_amount += flt(item.custom_excise_value) or 0
     
-    doc.custom_total_excise_amount = flt(total_excise_amount, 2)
-    doc.custom_excise = flt(total_excise_amount, 2)
-    
-    # frappe.logger().debug(f"Total Excise Amount: {total_excise_amount}")
+#     doc.custom_total_excise_amount = flt(total_excise_amount, 2)
+#     doc.custom_excise = flt(total_excise_amount, 2)
 
 
+# def calculate_item_vat_amounts(doc):
+#     """
+#     Calculate VAT amount for each item based on custom_vat_apply_on selection
+    
+#     If custom_vat_apply_on = 'Percentage (%)':
+#         - custom_vat_amount = (custom_total * custom_vat_rate) / 100
+#         - custom_vat_rate is visible and editable (from Item Master)
+#         - custom_vat_amount is hidden/read-only (auto-calculated)
+    
+#     If custom_vat_apply_on = 'Amount':
+#         - custom_vat_amount is manually entered by user
+#         - custom_vat_rate is hidden and forced to 0
+#         - No auto-calculation
+#     """
+#     for item in doc.items:
+#         # Default custom_vat_apply_on to 'Percentage (%)' if not set
+#         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
+#             item.custom_vat_apply_on = 'Percentage (%)'
+        
+#         vat_apply_on = item.custom_vat_apply_on
+        
+#         if vat_apply_on == 'Percentage (%)':
+#             # VAT Rate % mode - calculate VAT amount
+#             should_calculate_vat = should_calculate_field(item, 'custom_vat_amount')
+            
+#             if should_calculate_vat:
+#                 custom_total = flt(item.custom_total) or 0
+#                 custom_vat_rate = flt(item.custom_vat_rate) or 0
+                
+#                 # Calculate VAT amount (custom_vat_rate is percentage)
+#                 custom_vat_amount = flt((custom_total * custom_vat_rate) / 100, 2)
+#                 item.custom_vat_amount = custom_vat_amount
+                
+#                 frappe.logger().debug(
+#                     f"Calculated VAT for {item.item_code}: "
+#                     f"custom_total={custom_total}, vat_rate%={custom_vat_rate}, vat_amount={custom_vat_amount}"
+#                 )
+#             else:
+#                 # User manually changed the calculated amount
+#                 custom_vat_amount = flt(item.custom_vat_amount) or 0
+#                 frappe.logger().debug(
+#                     f"Using user-provided VAT amount for {item.item_code}: {custom_vat_amount}"
+#                 )
+                
+#         elif vat_apply_on == 'Amount':
+#             # Manual Amount mode - do not calculate, use user input
+#             # Force custom_vat_rate to 0 when in Amount mode
+#             item.custom_vat_rate = 0
+            
+#             # Use manual VAT amount (no calculation)
+#             custom_vat_amount = flt(item.custom_vat_amount) or 0
+            
+#             frappe.logger().debug(
+#                 f"Manual VAT Amount mode for {item.item_code}: {custom_vat_amount}, cleared custom_vat_rate"
+#             )
 def calculate_item_vat_amounts(doc):
     """
-    Calculate VAT amount for each item
-    Only calculates if custom_vat_amount is not manually set
-    custom_vat_amount = (custom_total * custom_vat) / 100
+    VAT rules (STRICT):
+    - Percentage (%): ALWAYS recalculate VAT on every save
+    - Amount: NEVER calculate, always keep manual value
     """
     for item in doc.items:
-        # Check if user manually set VAT amount
-        should_calculate_vat = should_calculate_field(item, 'custom_vat_amount')
-        
-        if should_calculate_vat:
-            custom_total = flt(item.custom_total) or 0
-            custom_vat = flt(item.custom_vat) or 0
-            
-            # Calculate VAT amount (custom_vat is percentage)
-            custom_vat_amount = flt((custom_total * custom_vat) / 100, 2)
-            item.custom_vat_amount = custom_vat_amount
-            
-            # frappe.logger().debug(
-            #     f"Calculated VAT for {item.item_code}: "
-            #     f"custom_total={custom_total}, vat%={custom_vat}, vat_amount={custom_vat_amount}"
-            # )
-        else:
-            custom_vat_amount = flt(item.custom_vat_amount) or 0
 
-             # Clear custom_vat percentage when amount is manual
-            if custom_vat_amount > 0:
-                item.custom_vat = 0
-                frappe.logger().debug(
-                    f"Manual VAT amount for {item.item_code}: {custom_vat_amount}, cleared custom_vat%"
-                )
-            else:
-                frappe.logger().debug(
-                    f"Using user-provided VAT for {item.item_code}: {custom_vat_amount}"
-                )
+        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'Percentage (%)')
+
+        if vat_apply_on == 'Percentage (%)':
+            custom_total = flt(item.custom_total) or 0
+            custom_vat_rate = flt(item.custom_vat_rate) or 0
+
+            # ALWAYS recalculate
+            item.custom_vat_amount = flt(
+                (custom_total * custom_vat_rate) / 100, 2
+            )
+
+            frappe.logger().debug(
+                f"[VAT %] Recalculated for {item.item_code}: "
+                f"custom_total={custom_total}, rate={custom_vat_rate}, "
+                f"vat_amount={item.custom_vat_amount}"
+            )
+
+        elif vat_apply_on == 'Amount':
+            # NEVER calculate in Amount mode
+            # Force rate to 0, keep amount as user entered
+            item.custom_vat_rate = 0
+
+            frappe.logger().debug(
+                f"[VAT Amount] Manual VAT kept for {item.item_code}: "
+                f"{item.custom_vat_amount}"
+            )
 
 
 def calculate_total_vat_amount(doc):
@@ -127,30 +217,91 @@ def calculate_total_vat_amount(doc):
         total_vat_amount += flt(item.custom_vat_amount) or 0
     
     doc.custom_total_vat_amount = flt(total_vat_amount, 2)
+
+
+def calculate_item_tds_amounts(doc):
+    """
+    Calculate TDS amount for each item
+    Only calculates if custom_tds_amount is not manually set
+    If custom_tds_rate is present: custom_tds_amount = (custom_total * custom_tds_rate) / 100
+    If custom_tds_amount is manually entered: clear custom_tds_rate
+    """
+    for item in doc.items:
+        custom_tds_rate = flt(item.custom_tds_rate) or 0
+        custom_tds_amount = flt(item.custom_tds_amount) or 0
+        
+        # Check if this is a manual entry or calculated value
+        should_calculate = should_calculate_field(item, 'custom_tds_amount')
+        
+        if should_calculate:
+            # Calculate TDS amount only if rate is present
+            if custom_tds_rate > 0:
+                custom_total = flt(item.custom_total) or 0
+                
+                # Calculate TDS amount (custom_tds_rate is percentage of custom_total)
+                custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 2)
+                item.custom_tds_amount = custom_tds_amount
+                
+                frappe.logger().debug(
+                    f"Calculated TDS for {item.item_code}: "
+                    f"custom_total={custom_total}, tds_rate%={custom_tds_rate}, tds_amount={custom_tds_amount}"
+                )
+        else:
+            # User manually entered the amount
+            frappe.logger().debug(
+                f"Using user-provided TDS amount for {item.item_code}: {custom_tds_amount}"
+            )
+            
+            # Clear custom_tds_rate only when amount is manually entered
+            if custom_tds_amount > 0 and custom_tds_rate > 0:
+                item.custom_tds_rate = 0
+                frappe.logger().debug(
+                    f"Manual TDS amount for {item.item_code}: {custom_tds_amount}, cleared custom_tds_rate"
+                )
+
+
+def calculate_total_tds_amount(doc):
+    """
+    Sum all custom_tds_amount from items grouped by TDS account
+    Returns a dictionary with account as key and total TDS as value
+    """
+    tds_by_account = {}
     
-    # frappe.logger().debug(f"Total VAT Amount: {total_vat_amount}")
+    for item in doc.items:
+        tds_amount = flt(item.custom_tds_amount) or 0
+        tds_account = item.custom_account
+        
+        if tds_account and tds_amount > 0:
+            if tds_account not in tds_by_account:
+                tds_by_account[tds_account] = 0
+            tds_by_account[tds_account] += tds_amount
+    
+    # Store total TDS amount
+    total_tds_amount = sum(tds_by_account.values())
+    doc.custom_total_tds_amount = flt(total_tds_amount, 2)
+    
+    frappe.logger().debug(f"TDS by account: {tds_by_account}")
+    frappe.logger().debug(f"Total TDS Amount: {total_tds_amount}")
+    
+    return tds_by_account
 
 
 def should_calculate_field(item, fieldname):
     """
-    Determine if we should calculate the field or use user-provided value
-    
-    Logic:
-    1. If field has a non-zero value in the database (old value), keep it (user edited)
-    2. If field is newly set to non-zero in current save, keep it (user provided)
-    3. Otherwise, calculate it
-    
-    Args:
-        item: Sales Invoice Item row
-        fieldname: Field to check (custom_excise_value or custom_vat_amount)
-    
-    Returns:
-        bool: True if should calculate, False if should use existing value
+    Determine if a field should be calculated or use user-provided value
+    Special handling for VAT when custom_vat_apply_on = 'Amount'
     """
+    # Special case: VAT Amount in 'Amount' mode should never be calculated
+    if fieldname == 'custom_vat_amount':
+        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'Percentage (%)')
+        if vat_apply_on == 'Amount':
+            # In Amount mode, always use user input (never calculate)
+            return False
+    
     current_value = flt(item.get(fieldname)) or 0
     
     if not item.name:
-        # Unless user explicitly set a value
+        # New item - unless user explicitly set a value
         if current_value > 0:
             return False  # User provided value
         return True  # Calculate
@@ -159,9 +310,9 @@ def should_calculate_field(item, fieldname):
     try:
         # Get the old document from database
         old_doc = frappe.db.get_value(
-            "Sales Invoice Item",
+            "Purchase Invoice Item",
             item.name,
-            [fieldname, "qty", "rate", "amount", "custom_excise_duty", "custom_vat", "custom_total"],
+            [fieldname, "qty", "rate", "amount",  "custom_vat_rate", "custom_tds_rate", "custom_total", "custom_vat_apply_on"],
             as_dict=True
         )
         
@@ -173,7 +324,7 @@ def should_calculate_field(item, fieldname):
         
         old_value = flt(old_doc.get(fieldname)) or 0
         
-        # Check if the base values changed (qty, rate, excise_duty, vat%)
+        # Check if the base values changed (qty, rate, excise_duty, vat_rate%, tds_rate)
         if fieldname == 'custom_excise_value':
             old_qty = flt(old_doc.get('qty')) or 0
             old_excise_duty = flt(old_doc.get('custom_excise_duty')) or 0
@@ -186,15 +337,37 @@ def should_calculate_field(item, fieldname):
             expected_old_value = flt(old_excise_duty * old_qty, 2)
             
         elif fieldname == 'custom_vat_amount':
-            old_custom_total = flt(old_doc.get('custom_total')) or 0
-            old_vat = flt(old_doc.get('custom_vat')) or 0
-            current_custom_total = flt(item.custom_total) or 0
-            current_vat = flt(item.custom_vat) or 0
+            # Check if VAT Apply On mode changed
+            old_apply_on = old_doc.get('custom_vat_apply_on') or 'Percentage (%)'
+            current_apply_on = getattr(item, 'custom_vat_apply_on', 'Percentage (%)')
             
-            base_values_changed = (old_custom_total != current_custom_total or old_vat != current_vat)
+            # If switched to Amount mode, never calculate
+            if current_apply_on == 'Amount':
+                return False
+            
+            old_custom_total = flt(old_doc.get('custom_total')) or 0
+            old_vat_rate = flt(old_doc.get('custom_vat_rate')) or 0
+            current_custom_total = flt(item.custom_total) or 0
+            current_vat_rate = flt(item.custom_vat_rate) or 0
+            
+            base_values_changed = (old_custom_total != current_custom_total or old_vat_rate != current_vat_rate or old_apply_on != current_apply_on)
+            
+            if current_apply_on =='Percentage(%)' and old_custom_total!= current_custom_total:
+                return True
             
             # Calculate expected value based on old data
-            expected_old_value = flt((old_custom_total * old_vat) / 100, 2)
+            expected_old_value = flt((old_custom_total * old_vat_rate) / 100, 2)
+            
+        elif fieldname == 'custom_tds_amount':
+            old_custom_total = flt(old_doc.get('custom_total')) or 0
+            old_tds_rate = flt(old_doc.get('custom_tds_rate')) or 0
+            current_custom_total = flt(item.custom_total) or 0
+            current_tds_rate = flt(item.custom_tds_rate) or 0
+            
+            base_values_changed = (old_custom_total != current_custom_total or old_tds_rate != current_tds_rate)
+            
+            # Calculate expected value based on old data
+            expected_old_value = flt((old_custom_total * old_tds_rate) / 100, 2)
         else:
             return True  # Unknown field, calculate
         
@@ -215,8 +388,10 @@ def should_calculate_field(item, fieldname):
         # If current value differs from calculated value, user is setting it now
         if fieldname == 'custom_excise_value':
             calculated_value = flt((flt(item.custom_excise_duty) or 0) * (flt(item.qty) or 0), 2)
-        else:  # custom_vat_amount
-            calculated_value = flt(((flt(item.custom_total) or 0) * (flt(item.custom_vat) or 0)) / 100, 2)
+        elif fieldname == 'custom_vat_amount':
+            calculated_value = flt(((flt(item.custom_total) or 0) * (flt(item.custom_vat_rate) or 0)) / 100, 2)
+        else:  # custom_tds_amount
+            calculated_value = flt(((flt(item.custom_total) or 0) * (flt(item.custom_tds_rate) or 0)) / 100, 2)
         
         if current_value > 0 and abs(current_value - calculated_value) > 0.01:
             # Current value is different from calculated, user set it manually
@@ -236,11 +411,13 @@ def update_taxes_table(doc):
     Update or create tax rows in the taxes table
     1. Excise Duty (account starting with 348204) - position 0
     2. VAT (account starting with VAT) - position 1
+    3. TDS (accounts from items' custom_account field) - position 2 onwards (as deduction)
     """
     total_excise = flt(doc.custom_total_excise_amount) or 0
     total_vat = flt(doc.custom_total_vat_amount) or 0
+    tds_by_account = calculate_total_tds_amount(doc)
     
-    # Find excise account
+    # Find excise and VAT accounts
     excise_account = find_account_by_prefix(doc.company, "348204")
     vat_account = find_account_by_prefix(doc.company, "VAT")
     
@@ -250,15 +427,20 @@ def update_taxes_table(doc):
     if not vat_account:
         frappe.logger().warning(f"No VAT account found starting with VAT for company {doc.company}")
     
+    position = 0
+    
     # Update or create excise row
     if excise_account and total_excise > 0:
         update_or_create_tax_row(
             doc, 
             account_head=excise_account, 
             tax_amount=total_excise, 
-            position=0,
-            description=f"Excise Duty - {doc.company}"
+            position=position,
+            description=f"Excise Duty - {doc.company}",
+            charge_type="Actual",
+            add_deduct="Add"
         )
+        position += 1
     
     # Update or create VAT row
     if vat_account and total_vat > 0:
@@ -266,9 +448,26 @@ def update_taxes_table(doc):
             doc, 
             account_head=vat_account, 
             tax_amount=total_vat, 
-            position=1,
-            description=f"VAT - {doc.company}"
+            position=position,
+            description=f"VAT - {doc.company}",
+            charge_type="Actual",
+            add_deduct="Add"
         )
+        position += 1
+    
+    # Update or create TDS rows (one per unique account)
+    for tds_account, tds_amount in tds_by_account.items():
+        if tds_account and tds_amount > 0:
+            update_or_create_tax_row(
+                doc,
+                account_head=tds_account,
+                tax_amount=tds_amount,
+                position=position,
+                description=f"TDS - {tds_account}",
+                charge_type="Actual",
+                add_deduct="Deduct"
+            )
+            position += 1
 
 
 def find_account_by_prefix(company, prefix):
@@ -288,7 +487,7 @@ def find_account_by_prefix(company, prefix):
     return accounts[0].name if accounts else None
 
 
-def update_or_create_tax_row(doc, account_head, tax_amount, position, description):
+def update_or_create_tax_row(doc, account_head, tax_amount, position, description, charge_type="Actual", add_deduct="Add"):
     """
     Update existing tax row or create new one at specified position
     """
@@ -297,7 +496,7 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position, descriptio
     existing_index = -1
     
     for idx, tax_row in enumerate(doc.taxes or []):
-        if tax_row.account_head == account_head and tax_row.charge_type == "Actual":
+        if tax_row.account_head == account_head and tax_row.charge_type == charge_type:
             existing_row = tax_row
             existing_index = idx
             break
@@ -306,9 +505,12 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position, descriptio
         # Update existing row
         existing_row.tax_amount = tax_amount
         existing_row.base_tax_amount = tax_amount
+        existing_row.add_deduct_tax = add_deduct
+        existing_row.category = "Total"
+        existing_row.included_in_print_rate = 0
         
         frappe.logger().debug(
-            f"Updated existing tax row: {account_head} = {tax_amount}"
+            f"Updated existing tax row: {account_head} = {tax_amount} ({add_deduct})"
         )
         
         # Move to correct position if needed
@@ -317,15 +519,18 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position, descriptio
     else:
         # Create new row
         new_row = doc.append("taxes", {
-            "charge_type": "Actual",
+            "charge_type": charge_type,
             "account_head": account_head,
             "description": description,
             "tax_amount": tax_amount,
-            "base_tax_amount": tax_amount
+            "base_tax_amount": tax_amount,
+            "add_deduct_tax": add_deduct,
+            "category": "Total",
+            "included_in_print_rate": 0
         })
         
         frappe.logger().debug(
-            f"Created new tax row: {account_head} = {tax_amount}"
+            f"Created new tax row: {account_head} = {tax_amount} ({add_deduct})"
         )
         
         # Move to correct position
@@ -381,7 +586,7 @@ def on_submit(doc, method=None):
     pass
 
 
-def validate_salesinvoice(doc, method=None):
+def validate_purchaseinvoice(doc, method=None):
     """
     Hook that runs during validation
     Can be used for custom validations
@@ -398,31 +603,43 @@ def validate_custom_fields(doc):
         if not hasattr(item, 'custom_excise_duty'):
             item.custom_excise_duty = 0
         
-        # if not hasattr(item, 'custom_vat'):
-        #     item.custom_vat = 0
+        if not hasattr(item, 'custom_tds_rate'):
+            item.custom_tds_rate = 0
+        
+        # Default custom_vat_apply_on to Percentage (%)
+        if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
+            item.custom_vat_apply_on = 'Percentage (%)'
 
 
 # Helper function for data import
 @frappe.whitelist()
 def populate_item_custom_fields(item_code):
     """
-    Fetch custom_excise_duty and custom_vat from Item master
+    Fetch custom_excise_duty, custom_vat_rate, custom_tds_rate, and custom_account from Item master
     This can be called during data import or from frontend
     """
     if not item_code:
-        return {"custom_excise_duty": 0, "custom_vat": 0}
+        return {
+            "custom_excise_duty": 0,
+            "custom_vat_rate": 0,
+            "custom_tds_rate": 0,
+            "custom_account": None
+        }
     
     item = frappe.get_doc("Item", item_code)
     
     custom_excise_duty = flt(item.custom_excise_duty) if hasattr(item, 'custom_excise_duty') else 0
-    custom_vat = 0
+    custom_tds_rate = flt(item.custom_tds_rate) if hasattr(item, 'custom_tds_rate') else 0
+    custom_account = item.custom_account if hasattr(item, 'custom_account') else None
+    custom_vat_rate = 0
     
     # Get VAT from Item Tax template
     if hasattr(item, 'taxes') and item.taxes:
-        custom_vat = flt(item.taxes[0].maximum_net_rate) if item.taxes[0].maximum_net_rate else 0
+        custom_vat_rate = flt(item.taxes[0].maximum_net_rate) if item.taxes[0].maximum_net_rate else 0
     
     return {
         "custom_excise_duty": custom_excise_duty,
-        "custom_vat": custom_vat
+        "custom_vat_rate": custom_vat_rate,
+        "custom_tds_rate": custom_tds_rate,
+        "custom_account": custom_account
     }
-    

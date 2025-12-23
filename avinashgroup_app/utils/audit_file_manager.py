@@ -4,6 +4,7 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from avinashgroup_app.custom_code.Override.naming_series import handle_validate, naming_series_autoname, handle_before_insert, naming_requirements_before_insert
 # from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
 from avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes import before_save_salesinvoice, validate_salesinvoice
+from avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds import before_save_purchaseinvoice, validate_purchaseinvoice
 class AuditBase:
     doctypes = [
     "Address",
