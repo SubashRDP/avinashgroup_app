@@ -702,7 +702,7 @@ def modify_gl_entries(doc, method):
             for entry in gl_entries:
                 if entry.get('account') and entry['account'] in tds_child_account_names:
                     account = frappe.get_cached_doc('Account', entry['account'])
-                    if account.account_type == 'Payable':
+                    if not account.account_type or account.account_type == 'Payable':
                         entry['party_type'] = 'Supplier'
                         entry['party'] = doc.supplier
                         frappe.logger().debug(

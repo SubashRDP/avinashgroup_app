@@ -14,7 +14,6 @@ frappe.ui.form.on("Purchase Invoice", {
     
     refresh: function(frm) {
         account_subtype_cache = {};
-        update_fiscal_year(frm);
         prefetch_account_subtypes(frm);
         
         // Apply field visibility on refresh
@@ -25,13 +24,8 @@ frappe.ui.form.on("Purchase Invoice", {
         }
     },
     
-    is_return: function(frm) {
-        set_naming_series_based_on_return(frm);
-    },
     
-    posting_date: function(frm) {
-        update_fiscal_year(frm);
-    },
+
     
     base_total_taxes_and_charges: function(frm) {
         calculate_total(frm);
