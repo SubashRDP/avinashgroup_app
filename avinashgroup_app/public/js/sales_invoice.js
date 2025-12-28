@@ -97,9 +97,9 @@ frappe.ui.form.on("Sales Invoice Item", {
         frm.refresh_field('items');
     },
     
-    net_amount: function(frm, cdt, cdn) {
+    base_net_amount: function(frm, cdt, cdn) {
         let row = locals[cdt][cdn];
-        console.log(`Net Amount changed for ${row.item_code}: ${row.net_amount}`);
+        console.log(`Net Amount changed for ${row.item_code}: ${row.base_net_amount}`);
         
         // Backend will recalculate custom_total and VAT
         frm.refresh_field('items');
@@ -347,10 +347,10 @@ function calculate_total(frm) {
     
     if (frm.doc.items && frm.doc.items.length > 0) {
         frm.doc.items.forEach(function(item) {
-            let net_amount = flt(item.net_amount) || 0;
+            let base_net_amount = flt(item.base_net_amount) || 0;
             let excise_value = flt(item.custom_excise_value) || 0;
             
-            custom_total_excluding_excise += net_amount;
+            custom_total_excluding_excise += base_net_amount;
             total_excise += excise_value;
         });
         

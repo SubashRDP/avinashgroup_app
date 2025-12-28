@@ -59,19 +59,19 @@ def ensure_vat_apply_on_defaults(doc):
 def calculate_custom_total(doc):
     """
     Calculate custom_total for each item
-    custom_total = net_amount + custom_excise_value
+    custom_total = base_net_amount + custom_excise_value
     
     Note: custom_excise_value is ALWAYS manual (never calculated)
     """
     for item in doc.items:
-        net_amount = flt(item.net_amount) or 0
+        base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(item.custom_excise_value) or 0
         
-        item.custom_total = flt(net_amount + excise_value, 5)
+        item.custom_total = flt(base_net_amount + excise_value, 5)
         
         frappe.logger().debug(
             f"Custom Total for {item.item_code}: "
-            f"net_amount={net_amount} + excise={excise_value} = {item.custom_total}"
+            f"base_net_amount={base_net_amount} + excise={excise_value} = {item.custom_total}"
         )
 
 
@@ -306,8 +306,8 @@ def calculate_custom_total_amount(doc):
     custom_total_amount = 0
     
     for item in doc.items:
-        net_amount = flt(item.net_amount) or 0
-        custom_total_amount += net_amount
+        base_net_amount = flt(item.base_net_amount) or 0
+        custom_total_amount += base_net_amount
     
     doc.custom_total_amount = flt(custom_total_amount, 5)
     
