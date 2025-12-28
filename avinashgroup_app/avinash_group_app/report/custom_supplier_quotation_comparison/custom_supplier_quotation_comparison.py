@@ -15,13 +15,11 @@ def execute(filters=None):
 	validate_filters(filters)
 
 	# Get raw data
-	
 	supplier_quotation_data = get_data(filters)
-	
 
 	# Prepare pivoted data and get list of suppliers
 	data, suppliers = prepare_pivoted_data(supplier_quotation_data, filters)
-	print(suppliers)
+
 	# Generate columns dynamically based on suppliers found
 	columns = get_columns(filters, suppliers)
 
@@ -81,7 +79,7 @@ def get_data(filters):
 			& (sq_item.docstatus < 2)
 			& (sq.company == filters.get("company"))
 			& (sq.transaction_date.between(filters.get("from_date"), filters.get("to_date")))
-			&(sq_item.request_for_quotation == rfq)
+			& (sq_item.request_for_quotation == rfq)
 		)
 		.orderby(sq_item.item_code, sq.supplier)
 	)
@@ -105,7 +103,6 @@ def get_data(filters):
 		query = query.where(sq.status != "Expired")
 
 	supplier_quotation_data = query.run(as_dict=True)
-
 
 	return supplier_quotation_data
 
@@ -185,8 +182,6 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"apply_discount_on": row.get("apply_discount_on"),
 			}
 
-	print(all_suppliers)
-
 	# Sort suppliers alphabetically for consistent column order
 	suppliers = sorted(list(all_suppliers))
 	
@@ -221,8 +216,11 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 		
 		data.append(row)
 	
-	# Add summary rows
-	# Total row
+	# ============================================
+	# SUMMARY ROWS
+	# ============================================
+	
+	# Total row (Net Total)
 	total_row = {
 		"sn": None,
 		"item_code": None,
@@ -235,32 +233,30 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 		total_row[col_fieldname] = supplier_totals[supplier]
 	data.append(total_row)
 	
-	# Discount row
-	discount_row = {
+	# Discount on Net Total row
+	discount_net_row = {
 		"sn": None,
 		"item_code": None,
 		"item_name": None,
-		"qty": "Less: Discount",
+		"qty": "Less: Discount (on Net Total)",
 		"is_summary_row": 1,
 	}
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
+		discount_amount = 0
+		
 		if supplier in supplier_quotation_map:
 			sq_data = supplier_quotation_map[supplier]
-			discount_amount = sq_data.get("discount_amount", 0)
+			apply_on = sq_data.get("apply_discount_on")
 			
-			# Calculate percentage discount if applicable
-			if sq_data.get("additional_discount_percentage"):
-				percentage = sq_data["additional_discount_percentage"]
-				if sq_data.get("apply_discount_on") == "Net Total":
-					discount_amount = supplier_totals[supplier] * percentage / 100
-			
-			discount_row[col_fieldname] = discount_amount
-		else:
-			discount_row[col_fieldname] = 0
-	data.append(discount_row)
+			# Only show discount here if it's applied on Net Total
+			if apply_on == "Net Total":
+				discount_amount = flt(sq_data.get("discount_amount", 0), float_precision)
+		
+		discount_net_row[col_fieldname] = discount_amount
+	data.append(discount_net_row)
 	
-	# Taxable Amount row
+	# Taxable Amount row (after net discount)
 	taxable_row = {
 		"sn": None,
 		"item_code": None,
@@ -271,7 +267,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		total = total_row[col_fieldname]
-		discount = discount_row[col_fieldname]
+		discount = discount_net_row[col_fieldname]
 		taxable_row[col_fieldname] = total - discount
 	data.append(taxable_row)
 	
@@ -286,12 +282,35 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		if supplier in supplier_quotation_map:
-			vat_row[col_fieldname] = supplier_quotation_map[supplier].get("total_taxes", 0)
+			vat_row[col_fieldname] = flt(supplier_quotation_map[supplier].get("total_taxes", 0), float_precision)
 		else:
 			vat_row[col_fieldname] = 0
 	data.append(vat_row)
 	
-	# Invoice Amount row (Grand Total)
+	# Discount on Grand Total row (NEW)
+	discount_grand_row = {
+		"sn": None,
+		"item_code": None,
+		"item_name": None,
+		"qty": "Less: Discount (on Grand Total)",
+		"is_summary_row": 1,
+	}
+	for supplier in suppliers:
+		col_fieldname = frappe.scrub(supplier)
+		discount_amount = 0
+		
+		if supplier in supplier_quotation_map:
+			sq_data = supplier_quotation_map[supplier]
+			apply_on = sq_data.get("apply_discount_on")
+			
+			# Only show discount here if it's applied on Grand Total
+			if apply_on == "Grand Total":
+				discount_amount = flt(sq_data.get("discount_amount", 0), float_precision)
+		
+		discount_grand_row[col_fieldname] = discount_amount
+	data.append(discount_grand_row)
+	
+	# Invoice Amount row (Grand Total) - use DB value directly
 	invoice_row = {
 		"sn": None,
 		"item_code": None,
@@ -302,11 +321,14 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		if supplier in supplier_quotation_map:
-			invoice_row[col_fieldname] = supplier_quotation_map[supplier].get("grand_total", 0)
+			# Use grand_total directly from database
+			invoice_row[col_fieldname] = flt(supplier_quotation_map[supplier].get("grand_total", 0), float_precision)
 		else:
+			# Fallback calculation if no quotation data
 			taxable = taxable_row[col_fieldname]
 			vat = vat_row[col_fieldname]
-			invoice_row[col_fieldname] = taxable + vat
+			discount_grand = discount_grand_row[col_fieldname]
+			invoice_row[col_fieldname] = taxable + vat - discount_grand
 	data.append(invoice_row)
 
 	return data, suppliers

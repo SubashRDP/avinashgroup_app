@@ -31,6 +31,7 @@ app_license = "mit"
 app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
     "/assets/avinashgroup_app/js/purchase_invoice.js?v=2.1"
+    #"/assets/avinashgroup_app/js/purchase_invoice.js?v=1.3"
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     #  "/assets/avinashgroup_app/js/si.js?v=1.0" ,
     # "/assets/avinashgroup_app/js/pi.js?v=2.1",
