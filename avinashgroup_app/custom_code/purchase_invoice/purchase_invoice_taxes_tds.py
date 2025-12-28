@@ -7,14 +7,8 @@ def before_save_purchaseinvoice(doc, method=None):
     """
     Main hook that runs before saving Purchase Invoice
     
-    Calculation Rules:
-    1. Excise Value: ALWAYS MANUAL (never recalculated)
-    2. custom_total: amount + custom_excise_value
-    3. VAT:
-        - Percentage (%): ALWAYS recalculated from custom_total * custom_vat_rate / 100
-        - Amount: NEVER recalculated (manual entry)
-    4. TDS: Existing logic (percentage-based calculation)
-    5. Taxes table: Updated with Excise, VAT, TDS
+    Uses custom_tax_withholding_category_custom field (NOT system's tax_withholding_category)
+    This prevents ERPNext's built-in TDS logic from interfering
     """
     
     # 0. Ensure VAT Apply On defaults are set
@@ -23,358 +17,304 @@ def before_save_purchaseinvoice(doc, method=None):
     # 1. Calculate item-level totals (respects manual excise)
     calculate_custom_total(doc)
     
-    # 2. VAT calculation (strict rules)
+    # 2. Calculate total amount including excise (sum of custom_total from all items)
+    calculate_total_amount_including_excise(doc)
+    
+    # 3. VAT calculation (strict rules)
     calculate_item_vat_amounts(doc)
     calculate_total_vat_amount(doc)
     
-    # 3. TDS calculation
+    # 4. TDS calculation (using CUSTOM field)
     calculate_item_tds_amounts(doc)
     calculate_total_tds_amount(doc)
     
-    # 4. Excise totals (aggregation only, no calculation)
+    # 5. Excise totals (aggregation only, no calculation)
     calculate_total_excise_amount(doc)
     
-    # 5. Update taxes table
+    # 6. Update taxes table (with our custom TDS)
     update_taxes_table(doc)
     
-    # 6. Let ERPNext calculate standard totals
+    # 7. Let ERPNext calculate standard totals
+    # System's TDS won't trigger because we're using custom field
     doc.calculate_taxes_and_totals()
 
 
 def ensure_vat_apply_on_defaults(doc):
-    """
-    Ensure all items have custom_vat_apply_on set to default 'Percentage (%)'
-    This runs before any other calculation
-    """
+    """Ensure all items have custom_vat_apply_on set to default 'Percentage (%)'"""
     for item in doc.items:
         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
             item.custom_vat_apply_on = 'Percentage (%)'
-            frappe.logger().debug(
-                f"Set default VAT Apply On to 'Percentage (%)' for {item.item_code}"
-            )
 
 
 def calculate_custom_total(doc):
-    """
-    Calculate custom_total for each item
-    custom_total = amount + custom_excise_value
-    
-    Note: custom_excise_value is ALWAYS manual (never calculated)
-    """
+    """Calculate custom_total = base_net_amount + custom_excise_value"""
     for item in doc.items:
-        amount = flt(item.amount) or 0
+        base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(item.custom_excise_value) or 0
-        
-        item.custom_total = flt(amount + excise_value, 2)
-        
-        frappe.logger().debug(
-            f"Custom Total for {item.item_code}: "
-            f"amount={amount} + excise={excise_value} = {item.custom_total}"
-        )
+        item.custom_total = flt(base_net_amount + excise_value,5)
+
+
+def calculate_total_amount_including_excise(doc):
+    """Sum all custom_total from items"""
+    total_including_excise = sum(flt(item.custom_total) or 0 for item in doc.items)
+    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
 
 
 def calculate_total_excise_amount(doc):
-    """
-    Sum all custom_excise_value from items
-    No calculation, just aggregation
-    """
+    """Sum all custom_excise_value from items"""
     total_excise = sum(flt(item.custom_excise_value) or 0 for item in doc.items)
-    
-    doc.custom_total_excise_amount = flt(total_excise, 2)
-    doc.custom_excise = flt(total_excise, 2)
-    
-    frappe.logger().debug(f"Total Excise: {total_excise}")
+    doc.custom_total_excise_amount = flt(total_excise, 5)
+    doc.custom_excise = flt(total_excise, 5)
 
 
 def calculate_item_vat_amounts(doc):
-    """
-    Calculate VAT amount for each item based on custom_vat_apply_on
-    
-    STRICT RULES:
-    - Percentage (%): ALWAYS recalculate on every save (DEFAULT BEHAVIOR)
-        custom_vat_amount = (custom_total * custom_vat_rate) / 100
-    - Amount: NEVER calculate, keep manual value
-        custom_vat_rate forced to 0
-    """
+    """Calculate VAT amount based on Percentage or Amount mode"""
     for item in doc.items:
-        # Get vat_apply_on (should already be set by ensure_vat_apply_on_defaults)
         vat_apply_on = getattr(item, 'custom_vat_apply_on', 'Percentage (%)')
         
-        # Safeguard: if still not set, default to Percentage
         if not vat_apply_on:
             item.custom_vat_apply_on = 'Percentage (%)'
             vat_apply_on = 'Percentage (%)'
         
         if vat_apply_on == 'Percentage (%)':
-            # ALWAYS recalculate in Percentage mode (DEFAULT)
             custom_total = flt(item.custom_total) or 0
             custom_vat_rate = flt(item.custom_vat_rate) or 0
-            
-            # Calculate VAT amount
-            item.custom_vat_amount = flt((custom_total * custom_vat_rate) / 100, 2)
-            
-            frappe.logger().debug(
-                f"[VAT % - DEFAULT] Calculated for {item.item_code}: "
-                f"total={custom_total}, rate={custom_vat_rate}%, "
-                f"vat_amount={item.custom_vat_amount}"
-            )
-            
+            item.custom_vat_amount = flt((custom_total * custom_vat_rate) / 100, 5)
         elif vat_apply_on == 'Amount':
-            # NEVER calculate in Amount mode (MANUAL OVERRIDE)
-            # Force rate to 0, keep amount as-is
             item.custom_vat_rate = 0
-            
-            frappe.logger().debug(
-                f"[VAT Amount - MANUAL] Kept manual for {item.item_code}: "
-                f"{item.custom_vat_amount} (rate forced to 0)"
-            )
 
 
 def calculate_total_vat_amount(doc):
-    """
-    Sum all custom_vat_amount from items
-    """
+    """Sum all custom_vat_amount from items"""
     total_vat = sum(flt(item.custom_vat_amount) or 0 for item in doc.items)
-    
-    doc.custom_total_vat_amount = flt(total_vat, 2)
-    
-    frappe.logger().debug(f"Total VAT: {total_vat}")
+    doc.custom_total_vat_amount = flt(total_vat, 5)
 
 
 def calculate_item_tds_amounts(doc):
     """
     Calculate TDS amount for each item
-    custom_tds_amount = (custom_total * custom_tds_rate) / 100
     
-    If custom_tds_amount is manually set, respect it and clear custom_tds_rate
+    Only 2 conditions need to be true:
+    1. custom_tax_withholding_category_custom has a value (at invoice level)
+    2. apply_tds is checked at line item level
+    
+    NO need to check apply_tds at invoice level
     """
+    # Check invoice-level condition - only custom tax category
+    invoice_tax_category_custom = getattr(doc, 'custom_tax_withholding_category_custom', None)
+    
+    # Get TDS rate from CUSTOM Tax Withholding Category
+    tds_rate_from_category = get_tds_rate_from_custom_tax_withholding(doc)
+    
     for item in doc.items:
+        # Check line item apply_tds
+        item_apply_tds = getattr(item, 'apply_tds', False)
+        
+        # Only 2 conditions must be true
+        if not (invoice_tax_category_custom and item_apply_tds):
+            item.custom_tds_amount = 0
+            item.custom_tds_rate = 0
+            frappe.logger().debug(
+                f"TDS skipped for {item.item_code}: "
+                f"custom_category={invoice_tax_category_custom}, "
+                f"item_apply_tds={item_apply_tds}"
+            )
+            continue
+        
+        # Set TDS rate from Tax Withholding Category if not manually set
+        if tds_rate_from_category and not item.custom_tds_rate:
+            item.custom_tds_rate = tds_rate_from_category
+        
         custom_tds_rate = flt(item.custom_tds_rate) or 0
-        custom_tds_amount = flt(item.custom_tds_amount) or 0
         
-        # Check if this should be calculated
-        should_calculate = should_calculate_tds(item)
-        
-        if should_calculate and custom_tds_rate > 0:
-            # Calculate TDS
+        if custom_tds_rate > 0:
+            # Calculate: custom_tds_amount = custom_total * custom_tds_rate / 100
             custom_total = flt(item.custom_total) or 0
-            item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 2)
+            item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 5)
             
             frappe.logger().debug(
                 f"Calculated TDS for {item.item_code}: "
-                f"total={custom_total}, rate={custom_tds_rate}%, "
+                f"custom_total={custom_total}, rate={custom_tds_rate}%, "
                 f"tds_amount={item.custom_tds_amount}"
             )
-        else:
-            # Manual TDS amount
-            if custom_tds_amount > 0 and custom_tds_rate > 0:
-                item.custom_tds_rate = 0
-                frappe.logger().debug(
-                    f"Manual TDS for {item.item_code}: {custom_tds_amount} (rate cleared)"
-                )
-
-
-def should_calculate_tds(item):
-    """
-    Determine if TDS should be calculated or use manual value
-    Returns True if should calculate, False if should use manual value
-    """
-    current_tds = flt(item.custom_tds_amount) or 0
-    
-    # New item without TDS amount - calculate
-    if not item.name and current_tds == 0:
-        return True
-    
-    # New item with TDS amount - manual
-    if not item.name and current_tds > 0:
-        return False
-    
-    try:
-        # Get old values from database
-        old_doc = frappe.db.get_value(
-            "Purchase Invoice Item",
-            item.name,
-            ["custom_tds_amount", "custom_total", "custom_tds_rate"],
-            as_dict=True
-        )
-        
-        if not old_doc:
-            # Item doesn't exist yet
-            return current_tds == 0
-        
-        old_tds = flt(old_doc.get('custom_tds_amount')) or 0
-        old_total = flt(old_doc.get('custom_total')) or 0
-        old_rate = flt(old_doc.get('custom_tds_rate')) or 0
-        
-        current_total = flt(item.custom_total) or 0
-        current_rate = flt(item.custom_tds_rate) or 0
-        
-        # Check if values changed
-        total_changed = abs(old_total - current_total) > 0.01
-        rate_changed = abs(old_rate - current_rate) > 0.01
-        tds_changed = abs(old_tds - current_tds) > 0.01
-        
-        # If base values changed, recalculate
-        if total_changed or rate_changed:
-            return True
-        
-        # If TDS manually changed, don't recalculate
-        if tds_changed:
-            return False
-        
-        # Calculate expected old value
-        expected_old = flt((old_total * old_rate) / 100, 2)
-        
-        # If old value was manual, keep manual unless base changed
-        if abs(old_tds - expected_old) > 0.01:
-            return False
-        
-        # Default: calculate
-        return True
-        
-    except Exception as e:
-        frappe.logger().error(f"Error in should_calculate_tds: {str(e)}")
-        return current_tds == 0
 
 
 def calculate_total_tds_amount(doc):
     """
-    Sum all custom_tds_amount from items, grouped by account
-    Returns dictionary {account: total_tds}
+    Sum all custom_tds_amount from items
+    
+    Only checks if custom_tax_withholding_category_custom has value
+    Does NOT check apply_tds at invoice level
     """
-    tds_by_account = {}
+    invoice_tax_category_custom = getattr(doc, 'custom_tax_withholding_category_custom', None)
     
+    if not invoice_tax_category_custom:
+        doc.custom_total_tds_amount = 0
+        frappe.logger().debug("TDS not applicable (custom category not set)")
+        return
+    
+    total_tds = 0
     for item in doc.items:
-        tds_amount = flt(item.custom_tds_amount) or 0
-        tds_account = item.custom_account
+        # Only include items with apply_tds checked
+        item_apply_tds = getattr(item, 'apply_tds', False)
+        if item_apply_tds:
+            total_tds += flt(item.custom_tds_amount) or 0
+    
+    doc.custom_total_tds_amount = flt(total_tds,5)
+    
+    frappe.logger().info(f"📊 Total TDS Amount (from custom field): {total_tds}")
+
+
+def get_tds_rate_from_custom_tax_withholding(doc):
+    """
+    Get TDS rate from custom_tax_withholding_category_custom → Rates Table
+    Uses CUSTOM field, not system field
+    """
+    custom_tax_category = getattr(doc, 'custom_tax_withholding_category_custom', None)
+    
+    if not custom_tax_category:
+        return None
+    
+    try:
+        # Fetch Tax Withholding Category document
+        tax_category = frappe.get_doc("Tax Withholding Category", custom_tax_category)
         
-        if tds_account and tds_amount > 0:
-            if tds_account not in tds_by_account:
-                tds_by_account[tds_account] = 0
-            tds_by_account[tds_account] += tds_amount
+        # Get rate from rates table
+        if hasattr(tax_category, 'rates') and tax_category.rates:
+            for rate_row in tax_category.rates:
+                if hasattr(rate_row, 'tax_withholding_rate'):
+                    tds_rate = flt(rate_row.tax_withholding_rate)
+                    frappe.logger().debug(
+                        f"Found TDS rate from CUSTOM Tax Withholding Category: {tds_rate}%"
+                    )
+                    return tds_rate
+        
+        frappe.logger().warning(
+            f"No TDS rate found in custom Tax Withholding Category '{custom_tax_category}'"
+        )
+        return None
+        
+    except Exception as e:
+        frappe.logger().error(
+            f"Error fetching TDS rate from custom category: {str(e)}"
+        )
+        return None
+
+
+def get_tds_account_from_custom_tax_withholding(doc):
+    """
+    Get TDS account from custom_tax_withholding_category_custom → Accounts Table
     
-    total_tds = sum(tds_by_account.values())
-    doc.custom_total_tds_amount = flt(total_tds, 2)
+    Only checks if custom_tax_withholding_category_custom has value
+    Does NOT check apply_tds at invoice level
+    """
+    # Get CUSTOM Tax Withholding Category field
+    custom_tax_category = getattr(doc, 'custom_tax_withholding_category_custom', None)
     
-    frappe.logger().debug(f"TDS by account: {tds_by_account}")
-    frappe.logger().debug(f"Total TDS: {total_tds}")
+    if not custom_tax_category:
+        frappe.logger().debug("TDS not applicable (custom_tax_withholding_category_custom not set)")
+        return None
     
-    return tds_by_account
+    try:
+        # Fetch Tax Withholding Category document
+        tax_category = frappe.get_doc("Tax Withholding Category", custom_tax_category)
+        
+        # Find account for this company
+        tds_account = None
+        if hasattr(tax_category, 'accounts') and tax_category.accounts:
+            for account_row in tax_category.accounts:
+                if account_row.company == doc.company:
+                    tds_account = account_row.account
+                    frappe.logger().info(
+                        f"✅ Found TDS account from CUSTOM Tax Withholding Category: {tds_account} "
+                        f"for company {doc.company}"
+                    )
+                    break
+        
+        if not tds_account:
+            frappe.logger().warning(
+                f"No TDS account found in custom Tax Withholding Category '{custom_tax_category}' "
+                f"for company {doc.company}"
+            )
+        
+        return tds_account
+        
+    except Exception as e:
+        frappe.logger().error(
+            f"Error fetching TDS account from custom Tax Withholding Category: {str(e)}"
+        )
+        return None
 
 
 def update_taxes_table(doc):
     """
-    Update or create tax rows in the taxes table
-    1. Excise Duty (account starting with 348204) - position 0
-    2. VAT (account starting with VAT) - position 1
-    3. TDS (accounts from items) - position 2+ (as deduction)
+    Update or create tax rows for Excise, VAT, and TDS
+    TDS account comes from custom_tax_withholding_category_custom field
     """
-    total_excise = flt(doc.custom_total_excise_amount) or 0
-    total_vat = flt(doc.custom_total_vat_amount) or 0
-    tds_by_account = {}
+    total_excise = flt(doc.custom_total_excise_amount, 5)
+    total_vat = flt(doc.custom_total_vat_amount, 5)
+    total_tds = flt(doc.custom_total_tds_amount, 5)
     
-    # Recalculate TDS by account
-    for item in doc.items:
-        tds_amount = flt(item.custom_tds_amount) or 0
-        tds_account = item.custom_account
-        
-        if tds_account and tds_amount > 0:
-            if tds_account not in tds_by_account:
-                tds_by_account[tds_account] = 0
-            tds_by_account[tds_account] += tds_amount
+    frappe.logger().info(
+        f"Updating taxes table: Excise={total_excise}, VAT={total_vat}, TDS={total_tds}"
+    )
     
     # Find accounts
     excise_account = find_account_by_prefix(doc.company, "348204")
     vat_account = find_account_by_prefix(doc.company, "VAT")
-    
-    if not excise_account:
-        frappe.logger().warning(
-            f"No excise account found starting with 348204 for {doc.company}"
-        )
-    
-    if not vat_account:
-        frappe.logger().warning(
-            f"No VAT account found starting with VAT for {doc.company}"
-        )
+    tds_account = get_tds_account_from_custom_tax_withholding(doc)  # Uses CUSTOM field
     
     position = 0
     
     # Update or create excise row
     if excise_account and total_excise > 0:
-        update_or_create_tax_row(
-            doc,
-            account_head=excise_account,
-            tax_amount=total_excise,
-            position=position,
-            description=f"Excise Duty - {doc.company}",
-            charge_type="Actual",
-            add_deduct="Add"
-        )
+        update_or_create_tax_row(doc, excise_account, total_excise, position, 
+                                 f"Excise Duty - {doc.company}", "Actual", "Add")
         position += 1
     
     # Update or create VAT row
     if vat_account and total_vat > 0:
-        update_or_create_tax_row(
-            doc,
-            account_head=vat_account,
-            tax_amount=total_vat,
-            position=position,
-            description=f"VAT - {doc.company}",
-            charge_type="Actual",
-            add_deduct="Add"
-        )
+        update_or_create_tax_row(doc, vat_account, total_vat, position,
+                                 f"VAT - {doc.company}", "Actual", "Add")
         position += 1
     
-    # Update or create TDS rows
-    for tds_account, tds_amount in tds_by_account.items():
-        if tds_account and tds_amount > 0:
-            update_or_create_tax_row(
-                doc,
-                account_head=tds_account,
-                tax_amount=tds_amount,
-                position=position,
-                description=f"TDS - {tds_account}",
-                charge_type="Actual",
-                add_deduct="Deduct"
-            )
-            position += 1
+    # Update or create TDS row (from CUSTOM Tax Withholding Category)
+    if tds_account and total_tds > 0:
+        custom_tax_category = getattr(doc, 'custom_tax_withholding_category_custom', '')
+        update_or_create_tax_row(doc, tds_account, total_tds, position,
+                                 f"TDS - {custom_tax_category}", "Actual", "Deduct")
+        frappe.logger().info(
+            f"✅ Created TDS tax row: Account={tds_account}, Amount={total_tds}, "
+            f"Category={custom_tax_category}"
+        )
+        position += 1
 
 
 def find_account_by_prefix(company, prefix):
-    """
-    Find account that starts with the given prefix for the company
-    """
-    accounts = frappe.get_all(
-        "Account",
-        filters={
-            "company": company,
-            "name": ["like", f"{prefix}%"]
-        },
-        fields=["name"],
-        limit=1
-    )
+    """Find account that starts with the given prefix"""
+    accounts = frappe.get_all("Account", filters={
+        "company": company,
+        "name": ["like", f"{prefix}%"]
+    }, fields=["name"], limit=1)
     
     return accounts[0].name if accounts else None
 
 
 def update_or_create_tax_row(doc, account_head, tax_amount, position, 
                              description, charge_type="Actual", add_deduct="Add"):
-    """
-    Update existing tax row or create new one at specified position
-    """
-    # Find existing row
+    """Update existing tax row or create new one"""
+    tax_amount = flt(tax_amount, 5)
+    
     existing_row = None
     existing_index = -1
     
     for idx, tax_row in enumerate(doc.taxes or []):
-        if (tax_row.account_head == account_head and 
-            tax_row.charge_type == charge_type):
+        if tax_row.account_head == account_head and tax_row.charge_type == charge_type:
             existing_row = tax_row
             existing_index = idx
             break
     
     if existing_row:
-        # Update existing row
         existing_row.tax_amount = tax_amount
         existing_row.base_tax_amount = tax_amount
         existing_row.add_deduct_tax = add_deduct
@@ -385,11 +325,9 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position,
             f"Updated tax row: {account_head} = {tax_amount} ({add_deduct})"
         )
         
-        # Move to correct position if needed
         if existing_index != position:
             move_tax_row_to_position(doc, existing_index, position)
     else:
-        # Create new row
         doc.append("taxes", {
             "charge_type": charge_type,
             "account_head": account_head,
@@ -405,87 +343,65 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position,
             f"Created tax row: {account_head} = {tax_amount} ({add_deduct})"
         )
         
-        # Move to correct position
         new_index = len(doc.taxes) - 1
         if new_index != position and position < len(doc.taxes):
             move_tax_row_to_position(doc, new_index, position)
 
 
 def move_tax_row_to_position(doc, from_index, to_index):
-    """
-    Move a tax row from one position to another
-    """
+    """Move a tax row from one position to another"""
     if not doc.taxes or from_index == to_index:
         return
     
     if from_index >= len(doc.taxes) or to_index >= len(doc.taxes):
         return
     
-    # Remove from current position
     row = doc.taxes.pop(from_index)
-    
-    # Insert at new position
     doc.taxes.insert(to_index, row)
     
-    # Update idx for all rows
     for idx, tax_row in enumerate(doc.taxes):
         tax_row.idx = idx + 1
-    
-    frappe.logger().debug(f"Moved tax row from {from_index} to {to_index}")
 
 
 def validate_purchaseinvoice(doc, method=None):
-    """
-    Hook that runs during validation
-    """
+    """Validation hook"""
     validate_custom_fields(doc)
 
 
 def validate_custom_fields(doc):
-    """
-    Validate and set default values for custom fields
-    """
+    """Validate and set default values"""
     for item in doc.items:
-        # Set defaults if not present
         if not hasattr(item, 'custom_excise_duty'):
             item.custom_excise_duty = 0
         
         if not hasattr(item, 'custom_tds_rate'):
             item.custom_tds_rate = 0
         
-        # Default VAT Apply On to Percentage
         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
             item.custom_vat_apply_on = 'Percentage (%)'
 
 
 @frappe.whitelist()
 def populate_item_custom_fields(item_code):
-    """
-    Fetch custom fields from Item master
-    Called from frontend when item is selected
-    """
+    """Fetch custom fields from Item master"""
     if not item_code:
         return {
             "custom_excise_duty": 0,
             "custom_vat_rate": 0,
-            "custom_tds_rate": 0,
-            "custom_account": None
+            "custom_tds_rate": 0
         }
     
     item = frappe.get_doc("Item", item_code)
     
     custom_excise_duty = flt(item.custom_excise_duty) if hasattr(item, 'custom_excise_duty') else 0
     custom_tds_rate = flt(item.custom_tds_rate) if hasattr(item, 'custom_tds_rate') else 0
-    custom_account = item.custom_account if hasattr(item, 'custom_account') else None
     custom_vat_rate = 0
     
-    # Get VAT from Item Tax template
     if hasattr(item, 'taxes') and item.taxes:
         custom_vat_rate = flt(item.taxes[0].maximum_net_rate) if item.taxes[0].maximum_net_rate else 0
     
     return {
         "custom_excise_duty": custom_excise_duty,
         "custom_vat_rate": custom_vat_rate,
-        "custom_tds_rate": custom_tds_rate,
-        "custom_account": custom_account
+        "custom_tds_rate": custom_tds_rate
     }
