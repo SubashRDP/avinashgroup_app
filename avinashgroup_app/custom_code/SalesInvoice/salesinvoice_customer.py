@@ -8,6 +8,9 @@ def check_customer_credit_limit_on_load(customer):
     Check ONLY days and bill count on customer selection (load/change)
     Amount check will be done on save with current invoice amount
     """
+
+
+    
     
     # Get customer credit settings
     customer_doc = frappe.get_cached_value(
