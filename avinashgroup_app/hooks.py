@@ -162,6 +162,13 @@ if "Sales Invoice" not in doc_events:
     doc_events["Sales Invoice"]={}
 doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
+doc_events = {
+    "Sales Invoice": {
+        "before_save": "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice"
+    }
+}
+
+
 
 
 # for doctype in fiscal_naming_doctypes:
