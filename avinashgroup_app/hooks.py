@@ -30,6 +30,7 @@ app_license = "mit"
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
+    "/assets/avinashgroup_app/js/purchase_invoice.js?v=4.1",
     #"/assets/avinashgroup_app/js/purchase_invoice.js?v=1.3"
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     #  "/assets/avinashgroup_app/js/si.js?v=1.0" ,
@@ -142,7 +143,9 @@ from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 
 # Purchase Invoice specific events
 purchase_invoice_specific_events = {
-    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries"
+    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
+    "before_save": "avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds.before_save_purchaseinvoice",
+    "validate": "avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds.validate_purchaseinvoice"
 }
 sales_invoice_specific_events = {
     "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
