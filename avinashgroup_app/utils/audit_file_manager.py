@@ -9,6 +9,8 @@ class AuditBase:
     doctypes = [
     "Address",
     "Salary Structure",
+    "Vehicle",
+    "Vehicle Log",
     "Appointment Letter",
     "Asset Capitalization",
     "Asset Movement",
@@ -122,6 +124,7 @@ class AuditBase:
         "Bank Account",
         "Holiday List",
         "Leave Type",
+        "Vehicle",
         # "BOM Template"
     ]
     

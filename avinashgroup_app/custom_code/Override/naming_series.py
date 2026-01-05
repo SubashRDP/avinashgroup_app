@@ -5,6 +5,16 @@ from frappe.model.document import Document
 ## "Item", "Salary Structure", "Contact"
 NAMING_CONFIG = {
     #MASTERS DATA
+    "Vehicle" :{
+        "prefix": "VEH",
+        "sequence_length": 5,
+        "use_fiscal_year": False
+    },
+    "Vehicle Log" :{
+        "prefix": "VeLOG",
+        "sequence_length": 5,
+        "use_fiscal_year": True
+    },
     "Holiday List": {
         "prefix": "Holiday",
         "use_fiscal_year": False,
