@@ -150,7 +150,13 @@ purchase_invoice_specific_events = {
 sales_invoice_specific_events = {
     "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
+}
+
+doc_events = {
+    "Sales Invoice": {
+        "validate": "avinashgroup_app.custom_code.SalesInvoice.validate_sales_invoice"
     }
+}
 
 
 # Build doc_events Dictionary
@@ -167,7 +173,9 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
 doc_events = {
     "Sales Invoice": {
-        "before_save": "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice"
+        "before_save": "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice",
+        "before_insert": "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice"
+
     }
 }
 
