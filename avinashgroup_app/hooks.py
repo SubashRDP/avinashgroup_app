@@ -107,7 +107,7 @@ doctype_js = {
 # doc_events["Purchase Invoice"] = {
 #     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
 #     # "before_save":"avinashgroup_app.custom_code.api.set_custom_name_field"
-# }
+# }sales_invoice_specific_events
 
 
 
@@ -152,11 +152,11 @@ sales_invoice_specific_events = {
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
 }
 
-doc_events = {
-    "Sales Invoice": {
-        "validate": "avinashgroup_app.custom_code.SalesInvoice.validate_sales_invoice"
-    }
-}
+# doc_events = {
+#     "Sales Invoice": {
+#         "validate": "avinashgroup_app.custom_code.SalesInvoice.validate_sales_invoice"
+#     }
+# }
 
 
 # Build doc_events Dictionary
@@ -171,13 +171,6 @@ if "Sales Invoice" not in doc_events:
     doc_events["Sales Invoice"]={}
 doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
-doc_events = {
-    "Sales Invoice": {
-        "before_save": "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice",
-        "before_insert": "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice"
-
-    }
-}
 
 
 
@@ -400,7 +393,7 @@ doc_events = {
 # 	],
 # 	"monthly": [
 # 		"avinashgroup_app.tasks.monthly"
-# 	],
+# 	],whitelist
 # }
 
 # Testing
