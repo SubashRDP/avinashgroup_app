@@ -10,9 +10,9 @@ def before_save_purchaseinvoice(doc, method=None):
     Uses custom_tax_withholding_category_custom field (NOT system's tax_withholding_category)
     This prevents ERPNext's built-in TDS logic from interfering
     """
-    
-    # 0. Ensure VAT Apply On defaults are set
-    ensure_vat_apply_on_defaults(doc)
+
+    # 0. Ensure Apply On defaults are set
+    ensure_apply_on_defaults(doc)
     
     # 1. Calculate item-level totals (respects manual excise)
     calculate_custom_total(doc)
@@ -39,12 +39,16 @@ def before_save_purchaseinvoice(doc, method=None):
     doc.calculate_taxes_and_totals()
 
 
-def ensure_vat_apply_on_defaults(doc):
-    """Ensure all items have custom_vat_apply_on set to default 'Percentage (%)'"""
+def ensure_apply_on_defaults(doc):
+    """Ensure all items have custom_vat_apply_on and custom_tds_apply_on set to default 'Percentage (%)'"""
     for item in doc.items:
+        # VAT Apply On default
         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
             item.custom_vat_apply_on = 'Percentage (%)'
-
+        
+        # TDS Apply On default
+        if not hasattr(item, 'custom_tds_apply_on') or not item.custom_tds_apply_on:
+            item.custom_tds_apply_on = 'Percentage (%)'
 
 def calculate_custom_total(doc):
     """Calculate custom_total = base_net_amount + custom_excise_value"""
@@ -90,15 +94,16 @@ def calculate_total_vat_amount(doc):
     doc.custom_total_vat_amount = flt(total_vat, 5)
 
 
+
 def calculate_item_tds_amounts(doc):
     """
-    Calculate TDS amount for each item
+    Calculate TDS amount for each item based on Percentage or Amount mode
     
     Only 2 conditions need to be true:
     1. custom_tax_withholding_category_custom has a value (at invoice level)
     2. apply_tds is checked at line item level
     
-    NO need to check apply_tds at invoice level
+    NEW: Respects custom_tds_apply_on field (Percentage vs Amount)
     """
     # Check invoice-level condition - only custom tax category
     invoice_tax_category_custom = getattr(doc, 'custom_tax_withholding_category_custom', None)
@@ -121,22 +126,46 @@ def calculate_item_tds_amounts(doc):
             )
             continue
         
-        # Set TDS rate from Tax Withholding Category if not manually set
-        if tds_rate_from_category and not item.custom_tds_rate:
-            item.custom_tds_rate = tds_rate_from_category
+        # Get TDS Apply On mode (default to Percentage if not set)
+        tds_apply_on = getattr(item, 'custom_tds_apply_on', 'Percentage (%)')
         
-        custom_tds_rate = flt(item.custom_tds_rate) or 0
+        if not tds_apply_on:
+            item.custom_tds_apply_on = 'Percentage (%)'
+            tds_apply_on = 'Percentage (%)'
         
-        if custom_tds_rate > 0:
-            # Calculate: custom_tds_amount = custom_total * custom_tds_rate / 100
-            custom_total = flt(item.custom_total) or 0
-            item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 5)
+        if tds_apply_on == 'Percentage (%)':
+            # PERCENTAGE MODE: Calculate from rate
+            
+            # Set TDS rate from Tax Withholding Category if not manually set
+            if tds_rate_from_category and not item.custom_tds_rate:
+                item.custom_tds_rate = tds_rate_from_category
+            
+            custom_tds_rate = flt(item.custom_tds_rate) or 0
+            
+            if custom_tds_rate > 0:
+                # Calculate: custom_tds_amount = custom_total * custom_tds_rate / 100
+                custom_total = flt(item.custom_total) or 0
+                item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 5)
+                
+                frappe.logger().debug(
+                    f"Calculated TDS (Percentage) for {item.item_code}: "
+                    f"custom_total={custom_total}, rate={custom_tds_rate}%, "
+                    f"tds_amount={item.custom_tds_amount}"
+                )
+            else:
+                item.custom_tds_amount = 0
+        
+        elif tds_apply_on == 'Amount':
+            # AMOUNT MODE: Use manual amount, clear rate
+            item.custom_tds_rate = 0
+            # custom_tds_amount is already set manually by user
             
             frappe.logger().debug(
-                f"Calculated TDS for {item.item_code}: "
-                f"custom_total={custom_total}, rate={custom_tds_rate}%, "
+                f"Using manual TDS amount for {item.item_code}: "
                 f"tds_amount={item.custom_tds_amount}"
             )
+
+
 
 
 def calculate_total_tds_amount(doc):
@@ -379,6 +408,9 @@ def validate_custom_fields(doc):
         
         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
             item.custom_vat_apply_on = 'Percentage (%)'
+
+        if not hasattr(item, 'custom_tds_apply_on') or not item.custom_tds_apply_on:
+            item.custom_tds_apply_on = 'Percentage (%)'
 
 
 @frappe.whitelist()
