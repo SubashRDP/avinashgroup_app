@@ -102,7 +102,7 @@ class AuditBase:
 
     
 
-
+#for naming series
     master_doctypes = [
         "Item Group",
         "Customer Group",
@@ -124,7 +124,6 @@ class AuditBase:
         "Bank Account",
         "Holiday List",
         "Leave Type",
-        "Vehicle",
         # "BOM Template"
     ]
     

@@ -4,7 +4,6 @@ from frappe.utils import flt
 import frappe
 from frappe.utils import getdate, nowdate, flt
 
-
 def before_save_salesinvoice(doc, method=None):
     """
     Main hook that runs before saving Sales Invoice
@@ -320,7 +319,7 @@ def validate_salesinvoice(doc, method=None):
     """
     Hook that runs during validation
     """
-    validate_salesinvoice(doc)
+    validate_sales_invoice(doc, method)
     validate_custom_fields(doc)
 
 
