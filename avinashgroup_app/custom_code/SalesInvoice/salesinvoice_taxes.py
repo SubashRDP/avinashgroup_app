@@ -320,7 +320,7 @@ def validate_salesinvoice(doc, method=None):
     """
     Hook that runs during validation
     """
-    validate_salesinvoice(doc)
+    validate_sales_invoice(doc)
     validate_custom_fields(doc)
 
 
