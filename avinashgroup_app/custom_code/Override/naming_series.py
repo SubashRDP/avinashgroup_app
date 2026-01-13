@@ -567,6 +567,14 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
 def set_custom_name_field(doc):
     if not hasattr(doc, 'custom_name'):
         return
+    company_name= None
+    if hasattr(doc, 'company') and doc.company:
+        company_name = doc.company
+    elif hasattr(doc, 'custom_company') and doc.custom_company:
+        company_name = doc.custom_company
+    if company_name and company_name == "Grihalaxmi Metal Industries Pvt. Ltd":
+        doc.custom_name = ""
+        return
     
     company_code = get_company_abbr(doc) or ""
     
