@@ -378,23 +378,23 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"avinashgroup_app.tasks.all"
-# 	],
-# 	"daily": [
-# 		"avinashgroup_app.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"avinashgroup_app.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"avinashgroup_app.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"avinashgroup_app.tasks.monthly"
-# 	],whitelist
-# }
+scheduler_events = {
+	# "all": [
+	# 	"avinashgroup_app.tasks.all"
+	# ],
+	# "daily": [
+	# 	"avinashgroup_app.tasks.daily"
+	# ],
+	# "hourly": [
+	# 	"avinashgroup_app.tasks.nepali_month_deferred_calculation.process_nepali_deferred_accounting"
+	# ],
+	# "weekly": [
+	# 	"avinashgroup_app.tasks.weekly"
+	# ],
+	# "monthly": [
+	# 	"avinashgroup_app.tasks.monthly"
+	# ],whitelist
+}
 
 # Testing
 # -------
