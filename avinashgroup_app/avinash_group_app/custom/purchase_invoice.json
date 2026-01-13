@@ -1446,7 +1446,7 @@
    "label": "Purchase Type",
    "length": 0,
    "link_filters": null,
-   "mandatory_depends_on": null,
+   "mandatory_depends_on": "eval:doc.company != \"Grihalaxmi Metal Industries Pvt. Ltd\"",
    "modified": "2025-11-05 11:14:09.949841",
    "modified_by": "Administrator",
    "module": null,
