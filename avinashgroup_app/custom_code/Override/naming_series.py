@@ -193,7 +193,8 @@ NAMING_CONFIG = {
     "Purchase Receipt": {
         "prefix": "GRN",
         "use_fiscal_year": True,
-        "sequence_length": 5
+        "sequence_length": 5,
+        "has_custom_name": True
     },
     # "Purchase Receipt Return": {
     #     "prefix": "PRRET",
