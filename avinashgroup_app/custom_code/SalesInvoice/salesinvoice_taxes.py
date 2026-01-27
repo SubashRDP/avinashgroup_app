@@ -179,7 +179,7 @@ def update_taxes_table(doc):
     position = 0
     
     # Update or create excise row
-    if excise_account and total_excise > 0:
+    if excise_account :
         update_or_create_tax_row(
             doc,
             account_head=excise_account,
@@ -192,7 +192,7 @@ def update_taxes_table(doc):
         position += 1
     
     # Update or create VAT row
-    if vat_account and total_vat > 0:
+    if vat_account :
         update_or_create_tax_row(
             doc,
             account_head=vat_account,
