@@ -563,6 +563,18 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
 
     return make_autoname(naming_pattern)
 
+def format_document_number(doc):
+    doc_no = "00000"
+    doc_word = ""
+    
+    if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
+        doc_no = str(doc.custom_document_no).zfill(5)
+    
+    if hasattr(doc, 'custom_document_word') and doc.custom_document_word:
+        doc_word = str(doc.custom_document_word).strip()
+    
+    return f"{doc_no}{doc_word}"
+
 
 def set_custom_name_field(doc):
     if not hasattr(doc, 'custom_name'):
@@ -581,11 +593,9 @@ def set_custom_name_field(doc):
     p_type = ""
     if hasattr(doc, 'custom_p_type_code') and doc.custom_p_type_code:
         p_type = doc.custom_p_type_code
-    
-    doc_no = "00000"
-    if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
-        doc_no = str(doc.custom_document_no).zfill(5)
-    
+
+    doc_no = format_document_number(doc)
+  
     fiscal_year = "82/83"
     if hasattr(doc, 'custom_fiscal_year') and doc.custom_fiscal_year:
         fiscal_year = doc.custom_fiscal_year
