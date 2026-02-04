@@ -296,19 +296,19 @@ def update_taxes_table(doc):
     position = 0
     
     # Update or create excise row
-    if excise_account and total_excise > 0:
+    if excise_account and total_excise != 0:
         update_or_create_tax_row(doc, excise_account, total_excise, position, 
                                  f"Excise Duty - {doc.company}", "Actual", "Add")
         position += 1
     
     # Update or create VAT row
-    if vat_account and total_vat > 0:
+    if vat_account and total_vat != 0:
         update_or_create_tax_row(doc, vat_account, total_vat, position,
                                  f"VAT - {doc.company}", "Actual", "Add")
         position += 1
     
     # Update or create TDS row (from CUSTOM Tax Withholding Category)
-    if tds_account and total_tds > 0:
+    if tds_account and total_tds != 0:
         custom_tax_category = getattr(doc, 'custom_tax_withholding_category_custom', '')
         update_or_create_tax_row(doc, tds_account, total_tds, position,
                                  f"TDS - {custom_tax_category}", "Actual", "Deduct")
