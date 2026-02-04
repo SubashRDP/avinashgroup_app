@@ -574,10 +574,7 @@ def format_document_number(doc):
         doc_word = str(doc.custom_document_word).strip()
     
     return f"{doc_no}{doc_word}"
-<<<<<<< HEAD
-=======
 
->>>>>>> d92e434cb10167e53ba862dcf8fc3f51595c7828
 
 def set_custom_name_field(doc):
     if not hasattr(doc, 'custom_name'):
@@ -598,11 +595,7 @@ def set_custom_name_field(doc):
         p_type = doc.custom_p_type_code
 
     doc_no = format_document_number(doc)
-<<<<<<< HEAD
-    
-=======
-  
->>>>>>> d92e434cb10167e53ba862dcf8fc3f51595c7828
+
     fiscal_year = "82/83"
     if hasattr(doc, 'custom_fiscal_year') and doc.custom_fiscal_year:
         fiscal_year = doc.custom_fiscal_year
