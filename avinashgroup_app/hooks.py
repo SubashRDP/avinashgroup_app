@@ -30,17 +30,10 @@ app_license = "mit"
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
-    "/assets/avinashgroup_app/js/purchase_invoice.js?v=4.5",
-    #"/assets/avinashgroup_app/js/purchase_invoice.js?v=1.3"
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.2",  # Common taxes handler for all purchase doctypes
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
-    #  "/assets/avinashgroup_app/js/si.js?v=1.0" ,
-    # "/assets/avinashgroup_app/js/pi.js?v=2.1",
-    # "/assets/avinashgroup_app/js/journal_entry.js?v=1.2"
-    #  "/assets/avinashgroup_app/js/journal_entry"
 ]
 # my_custom_app/hooks.py
-
-
 
 # include js, css files in header of web template
 # web_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
@@ -141,12 +134,31 @@ doctype_js = {
  
 from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 
-# Purchase Invoice specific events
+# Purchase Invoice specific events (using common handler)
 purchase_invoice_specific_events = {
     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
-    "before_save": "avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds.before_save_purchaseinvoice",
-    "validate": "avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds.validate_purchaseinvoice"
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice"
 }
+
+# Purchase Order events (using common handler)
+purchase_order_events = {
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_order",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_order"
+}
+
+# Purchase Receipt events (using common handler)
+purchase_receipt_events = {
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_receipt",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_receipt"
+}
+
+# Supplier Quotation events (using common handler)
+supplier_quotation_events = {
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_supplier_quotation",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_supplier_quotation"
+}
+
 sales_invoice_specific_events = {
     "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
@@ -167,9 +179,26 @@ if "Purchase Invoice" not in doc_events:
     doc_events["Purchase Invoice"] = {}
 doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
 
+# Merge Purchase Order events
+if "Purchase Order" not in doc_events:
+    doc_events["Purchase Order"] = {}
+doc_events["Purchase Order"].update(purchase_order_events)
+
+# Merge Purchase Receipt events
+if "Purchase Receipt" not in doc_events:
+    doc_events["Purchase Receipt"] = {}
+doc_events["Purchase Receipt"].update(purchase_receipt_events)
+
+# Merge Supplier Quotation events
+if "Supplier Quotation" not in doc_events:
+    doc_events["Supplier Quotation"] = {}
+doc_events["Supplier Quotation"].update(supplier_quotation_events)
+
 if "Sales Invoice" not in doc_events:
     doc_events["Sales Invoice"]={}
 doc_events["Sales Invoice"].update(sales_invoice_specific_events)
+
+
 
 
 
