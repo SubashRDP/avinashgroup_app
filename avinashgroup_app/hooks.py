@@ -173,8 +173,6 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
 
 
-
-
 # for doctype in fiscal_naming_doctypes:
 #     if doctype not in doc_events:
 #         doc_events[doctype] = {}
