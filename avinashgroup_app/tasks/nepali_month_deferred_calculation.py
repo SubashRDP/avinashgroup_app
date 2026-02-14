@@ -6,6 +6,8 @@ from frappe import _
 from frappe.utils import cint, today, date_diff, getdate, add_days, flt, rounded
 import nepali_datetime
 from datetime import timedelta
+import random
+
 
 from avinashgroup_app.utils.nepali_date import (
     is_first_of_nepali_month,
@@ -1089,7 +1091,8 @@ def book_revenue_via_journal_entry(
     journal_entry = frappe.new_doc("Journal Entry")
     journal_entry.posting_date = posting_date
     journal_entry.custom_p_type = "Deferred Accounting"
-    journal_entry.custom_document_no = doc.name + "1"
+    random_number = random.sample(range(1, 1_000_000), 1000)
+    journal_entry.custom_document_no = doc.name + str(random_number[0])
     journal_entry.company = doc.company
     journal_entry.voucher_type = (
         "Deferred Revenue" if doc.doctype == "Sales Invoice" else "Deferred Expense"
