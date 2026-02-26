@@ -1,7 +1,4 @@
-/**
- * Common TDS, Excise, and VAT handler for Purchase documents.
- * Supports: Purchase Invoice, Purchase Order, Purchase Receipt, Supplier Quotation
- */
+
 
 // Configuration for supported doctypes
 const PURCHASE_DOCTYPES = [

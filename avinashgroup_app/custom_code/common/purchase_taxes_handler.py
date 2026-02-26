@@ -235,6 +235,27 @@ def update_taxes_table(doc):
         update_or_create_tax_row(doc, tds_account, total_tds, position,
                                  f"TDS - {custom_tax_category}", "Actual", "Deduct")
         position += 1
+    else:
+        # Remove any stale TDS rows (total_tds is now 0 or no account found)
+        remove_tds_tax_rows(doc)
+
+
+def remove_tds_tax_rows(doc):
+    """Remove all TDS tax rows (charge_type=Actual, add_deduct_tax=Deduct) from the taxes table"""
+    if not doc.taxes:
+        return
+
+    rows_to_remove = [
+        row for row in doc.taxes
+        if row.charge_type == "Actual" and row.add_deduct_tax == "Deduct"
+    ]
+
+    for row in rows_to_remove:
+        doc.taxes.remove(row)
+
+    if rows_to_remove:
+        for idx, tax_row in enumerate(doc.taxes):
+            tax_row.idx = idx + 1
 
 
 def find_account_by_prefix(company, prefix):
