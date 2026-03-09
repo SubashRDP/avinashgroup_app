@@ -1,0 +1,624 @@
+{% extends "templates/web.html" %}
+
+{% block header %}
+<h1 style="margin-top: 10px;">{{ doc.name }}</h1>
+{% endblock %}
+
+{% block script %}
+<script>
+window.doc = {{ doc.as_json() }};
+
+$(document).ready(function() {
+	new rfq();
+	doc.supplier = "{{ doc.supplier }}";
+	doc.currency = "{{ doc.currency }}";
+	doc.number_format = "{{ doc.number_format }}";
+	doc.buying_price_list = "{{ doc.buying_price_list }}";
+});
+
+rfq = class rfq {
+	constructor() {
+		this.active_uploads = new Set();
+		this.onfocus_select_all();
+		this.initialize_custom_fields();
+		this.change_qty();
+		this.change_rate();
+		this.change_vat_apply_on();
+		this.change_vat_rate();
+		this.change_rfq_attachments();
+		this.change_discount_fields();
+		this.terms();
+		this.submit_rfq();
+		this.navigate_quotations();
+		this.recalculate_totals();
+	}
+
+	fetch_vat_rate_for_item(item, vat_rate_selector) {
+		if (!item || !item.item_code) return;
+		frappe.call({
+			method: "avinashgroup_app.custom_code.common.purchase_taxes_handler.populate_item_custom_fields",
+			args: { item_code: item.item_code },
+			callback: function(r) {
+				const fetched_rate = flt(r && r.message && r.message.custom_vat_rate);
+				item.custom_vat_rate = fetched_rate || 0;
+				$(vat_rate_selector).val(format_number(item.custom_vat_rate, doc.number_format, 2));
+			}
+		});
+	}
+
+	onfocus_select_all() {
+		$("input").click(function() {
+			$(this).select();
+		});
+	}
+
+	initialize_custom_fields() {
+		var me = this;
+		doc.apply_discount_on = doc.apply_discount_on || "";
+		doc.additional_discount_percentage = flt(doc.additional_discount_percentage) || 0.0;
+		doc.discount_amount = flt(doc.discount_amount) || 0.0;
+		doc.portal_attachment_files = doc.portal_attachment_files || [];
+		doc.attachment_file_names = doc.attachment_file_names || [];
+		doc.attachment_file_keys = doc.attachment_file_keys || [];
+
+		$(".rfq-apply-discount-on").val(doc.apply_discount_on);
+		$(".rfq-additional-discount-percentage").val(
+			format_number(doc.additional_discount_percentage, doc.number_format, 2)
+		);
+		$(".rfq-discount-amount").val(format_number(doc.discount_amount, doc.number_format, 2));
+		$(".rfq-global-attachment-list").text((doc.attachment_file_names || []).join(", "));
+
+		$.each(doc.items || [], function(_idx, data) {
+			data.custom_vat_apply_on = data.custom_vat_apply_on || "Percentage (%)";
+			data.custom_vat_rate = flt(data.custom_vat_rate) || 0.0;
+			data.custom_vat_amount = flt(data.custom_vat_amount) || 0.0;
+
+			const vat_apply_selector = repl('.rfq-vat-apply-on[data-idx=%(idx)s]', { idx: data.idx });
+			const vat_rate_selector = repl('.rfq-vat-rate[data-idx=%(idx)s]', { idx: data.idx });
+
+			$(vat_apply_selector).val(data.custom_vat_apply_on);
+			if (data.custom_vat_apply_on === "Amount") {
+				$(vat_rate_selector).val(format_number(data.custom_vat_amount, doc.number_format, 2));
+				$(vat_rate_selector).prop("readonly", false);
+			} else {
+				$(vat_rate_selector).val(format_number(data.custom_vat_rate, doc.number_format, 2));
+				$(vat_rate_selector).prop("readonly", true);
+			}
+
+			if (data.custom_vat_apply_on !== "Amount") {
+				me.fetch_vat_rate_for_item(data, vat_rate_selector);
+			}
+		});
+	}
+
+	change_qty() {
+		var me = this;
+		$(".rfq-items").on("change", ".rfq-qty", function() {
+			me.idx = parseFloat($(this).attr("data-idx"));
+			me.qty = parseFloat(flt($(this).val())) || 0;
+			me.rate = parseFloat(flt($(repl(".rfq-rate[data-idx=%(idx)s]", { idx: me.idx })).val()));
+			me.update_qty_rate();
+			$(this).val(format_number(me.qty, doc.number_format, 2));
+		});
+	}
+
+	change_rate() {
+		var me = this;
+		$(".rfq-items").on("change", ".rfq-rate", function() {
+			me.idx = parseFloat($(this).attr("data-idx"));
+			me.rate = parseFloat(flt($(this).val())) || 0;
+			me.qty = parseFloat(flt($(repl(".rfq-qty[data-idx=%(idx)s]", { idx: me.idx })).val()));
+			me.update_qty_rate();
+			$(this).val(format_number(me.rate, doc.number_format, 2));
+		});
+	}
+
+	change_vat_apply_on() {
+		var me = this;
+		$(".rfq-items").on("change", ".rfq-vat-apply-on", function() {
+			const idx = parseFloat($(this).attr("data-idx"));
+			const value = $(this).val() || "Percentage (%)";
+			const item = me.get_item_by_idx(idx);
+			const vat_rate_selector = repl(".rfq-vat-rate[data-idx=%(idx)s]", { idx: idx });
+
+			if (item) {
+				item.custom_vat_apply_on = value;
+				if (value === "Amount") {
+					item.custom_vat_rate = 0.0;
+					item.custom_vat_amount = flt(item.custom_vat_amount) || 0.0;
+					$(vat_rate_selector).val(format_number(item.custom_vat_amount, doc.number_format, 2));
+					$(vat_rate_selector).prop("readonly", false);
+				} else {
+					$(vat_rate_selector).prop("readonly", true);
+					me.fetch_vat_rate_for_item(item, vat_rate_selector);
+				}
+			}
+		});
+	}
+
+	change_vat_rate() {
+		var me = this;
+		$(".rfq-items").on("change", ".rfq-vat-rate", function() {
+			const idx = parseFloat($(this).attr("data-idx"));
+			const value = parseFloat(flt($(this).val())) || 0.0;
+			const item = me.get_item_by_idx(idx);
+
+			if (item) {
+				if ((item.custom_vat_apply_on || "Percentage (%)") === "Amount") {
+					item.custom_vat_amount = value;
+					item.custom_vat_rate = 0.0;
+				} else {
+					item.custom_vat_rate = value;
+				}
+			}
+
+			$(this).val(format_number(value, doc.number_format, 2));
+		});
+	}
+
+	change_rfq_attachments() {
+		var me = this;
+		$(".rfq-global-attachment").on("change", function() {
+			const input = this;
+			const files = Array.from(input.files || []);
+			const file_list_selector = ".rfq-global-attachment-list";
+			const existing_file_keys = new Set(doc.attachment_file_keys || []);
+			const new_files = files.filter(function(file) {
+				const file_key = [file.name, file.size, file.lastModified].join("::");
+				if (existing_file_keys.has(file_key)) {
+					return false;
+				}
+
+				existing_file_keys.add(file_key);
+				doc.attachment_file_keys.push(file_key);
+				return true;
+			});
+
+			if (!new_files.length) {
+				$(file_list_selector).text((doc.attachment_file_names || []).join(", "));
+				input.value = "";
+				return;
+			}
+
+			const new_file_names = new_files.map(file => file.name);
+			const new_file_keys = new_files.map(file => [file.name, file.size, file.lastModified].join("::"));
+			doc.attachment_file_names = (doc.attachment_file_names || []).concat(new_file_names);
+			$(file_list_selector).text("Uploading...");
+			const upload_promises = new_files.map(file => me.upload_attachment_file(doc, file));
+			const batch_promise = Promise.all(upload_promises).then(function() {
+				$(file_list_selector).text((doc.attachment_file_names || []).join(", "));
+			}).catch(function() {
+				doc.attachment_file_names = (doc.attachment_file_names || []).filter(function(file_name) {
+					return !new_file_names.includes(file_name);
+				});
+				doc.attachment_file_keys = (doc.attachment_file_keys || []).filter(function(file_key) {
+					return !new_file_keys.includes(file_key);
+				});
+				$(file_list_selector).text("Upload failed");
+			}).finally(function() {
+				input.value = "";
+			});
+
+			me.track_upload_promise(batch_promise);
+		});
+	}
+
+	track_upload_promise(promise) {
+		this.active_uploads.add(promise);
+		promise.finally(() => this.active_uploads.delete(promise));
+	}
+
+	upload_attachment_file(item, file) {
+		var me = this;
+		return new Promise(function(resolve, reject) {
+			const reader = new FileReader();
+
+			reader.onload = function(e) {
+				frappe.call({
+					type: "POST",
+					method: "avinashgroup_app.templates.pages.rfq.upload_portal_item_attachment",
+					args: {
+						file_name: file.name,
+						filedata: e.target.result
+					},
+					callback: function(r) {
+						const file_name = r && r.message && r.message.file_name;
+						if (file_name) {
+							item.portal_attachment_files = item.portal_attachment_files || [];
+							item.portal_attachment_files.push(file_name);
+							resolve(file_name);
+							return;
+						}
+						reject(new Error("Upload failed"));
+					},
+					error: function() {
+						reject(new Error("Upload failed"));
+					}
+				});
+			};
+
+			reader.onerror = function() {
+				reject(new Error("File read failed"));
+			};
+
+			reader.readAsDataURL(file);
+		});
+	}
+
+	change_discount_fields() {
+		var me = this;
+
+		$(".rfq-apply-discount-on").on("change", function() {
+			doc.apply_discount_on = $(this).val() || "";
+			me.recalculate_discount_fields("apply_discount_on");
+		});
+
+		$(".rfq-additional-discount-percentage").on("change", function() {
+			doc.additional_discount_percentage = parseFloat(flt($(this).val())) || 0.0;
+			me.recalculate_discount_fields("additional_discount_percentage");
+		});
+
+		$(".rfq-discount-amount").on("change", function() {
+			doc.discount_amount = parseFloat(flt($(this).val())) || 0.0;
+			me.recalculate_discount_fields("discount_amount");
+		});
+	}
+
+	recalculate_discount_fields(changed_field) {
+		const base_total = this.get_discount_base_total();
+
+		if (changed_field === "additional_discount_percentage") {
+			doc.discount_amount = base_total ? (base_total * flt(doc.additional_discount_percentage)) / 100 : 0.0;
+		}
+
+		if (changed_field === "discount_amount") {
+			doc.additional_discount_percentage = base_total ? (flt(doc.discount_amount) * 100) / base_total : 0.0;
+		}
+
+		if (changed_field === "apply_discount_on") {
+			doc.discount_amount = base_total ? (base_total * flt(doc.additional_discount_percentage)) / 100 : 0.0;
+		}
+
+		$(".rfq-additional-discount-percentage").val(
+			format_number(doc.additional_discount_percentage, doc.number_format, 2)
+		);
+		$(".rfq-discount-amount").val(format_number(doc.discount_amount, doc.number_format, 2));
+
+		this.recalculate_totals();
+	}
+
+	get_discount_base_total() {
+		if (doc.apply_discount_on === "Grand Total" || doc.apply_discount_on === "Net Total") {
+			return flt(doc.grand_total);
+		}
+		return 0.0;
+	}
+
+	terms() {
+		$(".terms").on("change", ".terms-feedback", function() {
+			doc.terms = $(this).val();
+		});
+	}
+
+	update_qty_rate() {
+		var me = this;
+		$.each(doc.items, function(_idx, data) {
+			if (data.idx == me.idx) {
+				data.qty = me.qty;
+				data.rate = me.rate;
+				data.amount = (me.rate * me.qty) || 0.0;
+				$(repl(".rfq-amount[data-idx=%(idx)s]", { idx: me.idx })).text(
+					format_number(data.amount, doc.number_format, 2)
+				);
+			}
+		});
+
+		this.recalculate_totals();
+	}
+
+	recalculate_totals() {
+		doc.grand_total = 0.0;
+		$.each(doc.items || [], function(_idx, data) {
+			doc.grand_total += flt(data.amount);
+		});
+
+		$(".tax-grand-total").text(format_number(doc.grand_total, doc.number_format, 2));
+
+		const discounted_total = Math.max(0, flt(doc.grand_total) - flt(doc.discount_amount));
+		$(".rfq-discounted-total").text(format_number(discounted_total, doc.number_format, 2));
+	}
+
+	get_item_by_idx(idx) {
+		let result = null;
+		$.each(doc.items || [], function(_i, data) {
+			if (flt(data.idx) === flt(idx)) {
+				result = data;
+				return false;
+			}
+		});
+		return result;
+	}
+
+	submit_rfq() {
+		var me = this;
+		$(".btn-sm").click(function() {
+			const btn = this;
+			frappe.freeze();
+			Promise.allSettled(Array.from(me.active_uploads)).then(function() {
+				frappe.call({
+					type: "POST",
+					method: "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation",
+					args: {
+						doc: doc
+					},
+					btn: btn,
+					callback: function(r) {
+						frappe.unfreeze();
+						if (r.message) {
+							$(".btn-sm").hide();
+							window.location.href = "/supplier-quotations/" + encodeURIComponent(r.message);
+						}
+					}
+				});
+			});
+		});
+	}
+
+	navigate_quotations() {
+		$(".quotations").click(function() {
+			name = $(this).attr("idx");
+			window.location.href = "/quotations/" + encodeURIComponent(name);
+		});
+	}
+};
+</script>
+{% endblock %}
+
+{% block breadcrumbs %}
+	{% include "templates/includes/breadcrumbs.html" %}
+{% endblock %}
+
+{% block header_actions %}
+{% if doc.items %}
+<button class="btn btn-primary btn-sm"
+    type="button">
+    {{ _("Make Quotation") }}</button>
+{% endif %}
+{% endblock %}
+
+{% block page_content %}
+<style>
+.rfq-content {
+	margin-top: 15px;
+	max-height: none;
+	overflow-y: visible;
+	overflow-x: hidden;
+	padding-right: 6px;
+}
+.rfq-items-scroll {
+	overflow-x: visible;
+}
+.rfq-items-min-width {
+	min-width: 100%;
+}
+.rfq-form-field {
+	min-height: 36px;
+	padding-left: 10px;
+	padding-right: 10px;
+}
+.rfq-item {
+	padding: 6px 0 10px;
+	border-bottom: 1px solid var(--border-color);
+}
+.rfq-item:last-child {
+	border-bottom: 0;
+}
+.rfq-attachment-box {
+	border: 1px solid var(--border-color);
+	background: var(--gray-100);
+	border-radius: 8px;
+	padding: 6px 10px;
+	text-align: center;
+	cursor: pointer;
+	display: inline-block;
+	min-width: 90px;
+	line-height: 1.2;
+}
+.rfq-attachment-box:hover {
+	background: var(--gray-200);
+}
+.rfq-hidden-file {
+	display: none;
+}
+.rfq-attachment-list {
+	display: inline-block;
+	font-size: 12px;
+	color: var(--text-muted);
+	margin-left: 8px;
+	word-break: break-word;
+	max-width: 170px;
+	vertical-align: middle;
+}
+.rfq-global-attachments {
+	margin-top: 0;
+}
+.rfq-global-attachments .rfq-attachment-box {
+	width: 100%;
+	min-height: 100px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 12px;
+}
+.rfq-global-attachment-list {
+	display: block;
+	margin-top: 8px;
+	margin-left: 0;
+	max-width: none;
+}
+.rfq-terms-row {
+	margin-top: 48px;
+}
+.rfq-terms-block {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+.rfq-terms-label {
+	margin-bottom: 8px;
+}
+</style>
+<div class="row">
+	<div class="col-6">
+		<div class="rfq-supplier">{{ doc.supplier }}</div>
+	</div>
+	<div class="col-6 text-muted text-right h6">
+		{{ doc.get_formatted("transaction_date") }}
+	</div>
+</div>
+<div class="rfq-content">
+	<div id="order-container">
+			<div id="rfq-items" class="rfq-items-scroll">
+				<div class="rfq-items-min-width">
+				<div class="row cart-item-header">
+					<div class="col-sm-3 col-12">
+						{{ _("Items") }}
+					</div>
+					<div class="col-sm-1 col-4 text-right">
+						{{ _("Qty") }}
+					</div>
+					<div class="col-sm-2 col-4 text-right">
+						{{ _("Rate") }}
+					</div>
+					<div class="col-sm-2 col-4 text-right">
+						{{ _("Amount") }}
+					</div>
+					<div class="col-sm-2 col-6 text-right">
+						{{ _("VAT Apply On") }}
+					</div>
+					<div class="col-sm-2 col-6 text-right">
+						{{ _("VAT Rate") }}
+					</div>
+				</div>
+				<hr>
+			{% if doc.items %}
+			<div class="rfq-items">
+				{% from "templates/includes/rfq/rfq_macros.html" import item_name_and_description %}
+				{% for d in doc.items %}
+				<div class="rfq-item">
+					<div class="row">
+						<div class="col-sm-3 col-12" style="margin-bottom: 10px;margin-top: 5px;">
+							{{ item_name_and_description(d, doc) }}
+						</div>
+						<div class="col-sm-1 col-4 text-right">
+							<input type="text" class="form-control text-right rfq-form-field rfq-qty" style="margin-top: 5px;display: inline-block"
+							value="{{ d.get_formatted('qty') }}"
+							data-idx="{{ d.idx }}">
+							<p class="text-muted small" style="margin-top: 10px;">
+								{{_("UOM") + ":"+ d.uom}}
+							</p>
+						</div>
+						<div class="col-sm-2 col-4 text-right">
+							<input type="text" class="form-control text-right rfq-form-field rfq-rate"
+								style="margin-top: 5px;display: inline-block" value="0.00"
+								data-idx="{{ d.idx }}">
+						</div>
+						<div class="col-sm-2 col-4 text-right" style="padding-top: 9px;">
+							{{doc.currency_symbol}} <span class="rfq-amount" data-idx="{{ d.idx }}">0.00</span>
+						</div>
+						<div class="col-sm-2 col-6 text-right">
+							<select class="form-control text-right rfq-form-field rfq-vat-apply-on" style="margin-top: 5px;" data-idx="{{ d.idx }}">
+								<option value="Percentage (%)">{{ _("Percentage (%)") }}</option>
+								<option value="Amount">{{ _("Amount") }}</option>
+							</select>
+						</div>
+						<div class="col-sm-2 col-6 text-right">
+							<input type="text" class="form-control text-right rfq-form-field rfq-vat-rate"
+								style="margin-top: 5px;display: inline-block" value="0.00"
+								data-idx="{{ d.idx }}">
+						</div>
+					</div>
+				</div>
+				{% endfor %}
+			</div>
+			{% endif %}
+				</div>
+		</div>
+		{% if doc.items %}
+		<div class="row grand-total-row">
+			<div class="col-9 text-right">{{ _("Grand Total") }}</div>
+			<div class="col-3 text-right">
+			{{doc.currency_symbol}}  <span class="tax-grand-total">0.0</span>
+			</div>
+		</div>
+		<div class="row mt-2">
+			<div class="col-sm-4">
+				<label class="text-muted small mb-1">{{ _("Apply Discount On") }}</label>
+				<select class="form-control form-control-sm rfq-form-field rfq-apply-discount-on">
+					<option value="">{{ _("") }}</option>
+					<option value="Grand Total">{{ _("Grand Total") }}</option>
+					<option value="Net Total">{{ _("Net Total") }}</option>
+				</select>
+			</div>
+			<div class="col-sm-4">
+				<label class="text-muted small mb-1">{{ _("Additional Discount Percentage") }}</label>
+				<input type="text" class="form-control form-control-sm rfq-form-field text-right rfq-additional-discount-percentage" value="0.00">
+			</div>
+			<div class="col-sm-4">
+				<label class="text-muted small mb-1">{{ _("Discount Amount") }}</label>
+				<input type="text" class="form-control form-control-sm rfq-form-field text-right rfq-discount-amount" value="0.00">
+			</div>
+		</div>
+		<div class="row mt-2">
+			<div class="col-9 text-right">{{ _("Total After Discount") }}</div>
+			<div class="col-3 text-right">
+			{{doc.currency_symbol}}  <span class="rfq-discounted-total">0.0</span>
+			</div>
+		</div>
+		{% endif %}
+		<div class="row terms rfq-terms-row">
+			<div class="col-6">
+				<div class="rfq-terms-block">
+				<p class="text-muted small rfq-terms-label">{{ _("Notes: ") }}</p>
+				<textarea class="form-control terms-feedback" style="height: 100px;"></textarea>
+				</div>
+			</div>
+			<div class="col-6 rfq-global-attachments">
+				<div class="rfq-terms-block">
+				<p class="text-muted small rfq-terms-label">{{ _("Attachments: ") }}</p>
+				<label class="rfq-attachment-box mb-0">
+					<span class="text-muted small">{{ _("Attach Files") }}</span>
+					<input type="file" class="rfq-hidden-file rfq-global-attachment" multiple>
+				</label>
+				<span class="rfq-attachment-list rfq-global-attachment-list"></span>
+				</div>
+			</div>
+		</div>
+		<div class="row mt-5">
+			<div class="col-12">
+				<p class="text-muted small">{{ _("Quotations: ") }}</p>
+				{% if doc.rfq_links %}
+					<div class="result">
+						{% for d in doc.rfq_links %}
+							<div class="web-list-item transaction-list-item quotations" idx="{{d.name}}">
+								<div class="row">
+									<div class="col-sm-6">
+										<span class="indicator gray">{{d.name}}</span>
+									</div>
+									<div class="col-sm-3">
+										<span class="small gray">{{d.status}}</span>
+									</div>
+									<div class="col-sm-3">
+										<span class="small gray">{{d.transaction_date}}</span>
+									</div>
+								</div>
+								<a class="transaction-item-link" href="/supplier-quotations/{{d.name}}">Link</a>
+							</div>
+						{% endfor %}
+					</div>
+				{% endif %}
+			</div>
+		</div>
+	</div>
+</div>
+{% endblock %}
