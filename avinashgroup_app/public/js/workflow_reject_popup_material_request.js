@@ -94,7 +94,6 @@
 						me.frm.page.add_action_item(__(d.action), function () {
 
 							const run_workflow = () => {
-								frappe.dom.freeze();
 								me.frm.selected_workflow_action = d.action;
 
 								if (!frappe.ui.form.check_mandatory(frm)) {
