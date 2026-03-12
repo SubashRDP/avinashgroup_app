@@ -261,6 +261,7 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 # Override doctype class to bypass workflow validation for Administrator
 override_doctype_class = {
 	"Material Request": "avinashgroup_app.custom_code.Override.material_request.MaterialRequest",
+	"Purchase Order": "avinashgroup_app.custom_code.Override.purchase_order.PurchaseOrder",
 }
 
 # doc_events = {

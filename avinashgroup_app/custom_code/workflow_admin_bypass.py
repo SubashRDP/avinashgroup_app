@@ -4,11 +4,14 @@ from frappe.model.docstatus import DocStatus
 from frappe.model import workflow as workflow_module
 
 
-BYPASS_WORKFLOW_NAME = "Material Request One-Line Approver"
+BYPASS_WORKFLOW_NAMES = {
+    "Material Request One-Line Approver",
+    "Purchase Order Workflow",
+}
 
 
 def _is_admin_bypass(workflow, user):
-    return user == "Administrator" and workflow and workflow.name == BYPASS_WORKFLOW_NAME
+    return user == "Administrator" and workflow and workflow.name in BYPASS_WORKFLOW_NAMES
 
 
 @frappe.whitelist()
