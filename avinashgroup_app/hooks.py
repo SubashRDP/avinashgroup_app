@@ -33,6 +33,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.2",  # Common taxes handler for all purchase doctypes
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/workflow_reject_popup.js?v=1.1",
+    "/assets/avinashgroup_app/js/workflow_reject_popup_material_request.js?v=1.0",
 ]
 # my_custom_app/hooks.py
 
