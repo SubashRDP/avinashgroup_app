@@ -12,7 +12,7 @@
 
 	function is_target_doc(frm) {
 		const doctype = (frm && frm.doctype) ? frm.doctype.toString().trim() : "";
-		return doctype === "Purchase Order" || doctype === "Material Request";
+		return doctype === "Purchase Order";
 	}
 
 	function is_custom_approver(frm) {
@@ -40,7 +40,7 @@
 					frappe.msgprint("Please enter rejection reason");
 					return;
 				}
-				frm.set_value("custom_reason", reason.trim());
+				frm.__reject_reason = reason.trim();
 				d.hide();
 				proceed();
 			}
@@ -91,23 +91,59 @@
 							const run_workflow = () => {
 								frappe.dom.freeze();
 								me.frm.selected_workflow_action = d.action;
+								
 								if (!frappe.ui.form.check_mandatory(frm)) {
 									frappe.dom.unfreeze();
 									return;
 								}
-								
+
+								const persist_reject_reason = () => {
+									if (is_reject_action(d.action, d) && is_target_doc(frm) && frm.__reject_reason) {
+										console.log("Attempting to save rejection reason:", frm.__reject_reason);
+										
+										return frappe.xcall("avinashgroup_app.custom_code.workflow.set_reject_reason", {
+											doctype: frm.doctype,
+											name: frm.doc.name,
+											reason: frm.__reject_reason,
+										}).then((response) => {
+											console.log("Rejection reason saved successfully:", response);
+											return response;
+										}).catch((error) => {
+											console.error("Failed to save rejection reason:", error);
+											frappe.msgprint(__("Failed to save rejection reason: " + error.message));
+											throw error;
+										});
+									}
+									return Promise.resolve();
+								};
+
 								me.frm.script_manager.trigger("before_workflow_action").then(() => {
-									frappe.xcall("frappe.model.workflow.apply_workflow", {
-										doc: me.frm.doc,
-										action: d.action,
-									}).then((doc) => {
-										frappe.model.sync(doc);
-										me.frm.refresh();
-										me.frm.selected_workflow_action = null;
-										me.frm.script_manager.trigger("after_workflow_action");
-									}).finally(() => {
+									persist_reject_reason().then(() => {
+										frappe.xcall("frappe.model.workflow.apply_workflow", {
+											doc: me.frm.doc,
+											action: d.action,
+										}).then((doc) => {
+											console.log("Workflow applied successfully");
+											frappe.model.sync(doc);
+											
+											me.frm.reload_doc().then(() => {
+												me.frm.selected_workflow_action = null;
+												me.frm.__reject_reason = null;
+												me.frm.script_manager.trigger("after_workflow_action");
+											});
+										}).catch((error) => {
+											console.error("Workflow apply failed:", error);
+											frappe.msgprint(__("Workflow action failed: " + error.message));
+										}).finally(() => {
+											frappe.dom.unfreeze();
+										});
+									}).catch((error) => {
+										console.error("Persist reason failed:", error);
 										frappe.dom.unfreeze();
 									});
+								}).catch((error) => {
+									console.error("Before workflow action failed:", error);
+									frappe.dom.unfreeze();
 								});
 							};
 
