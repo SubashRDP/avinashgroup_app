@@ -2,15 +2,19 @@ frappe.ui.form.on("Material Request", {
 	before_workflow_action: function (frm) {
 		if (frm.selected_workflow_action !== "Reject") return;
 
-		if (
-			!frm.doc.custom_material_request_approver ||
-			frm.doc.custom_material_request_approver !== frappe.session.user
-		) {
-			frappe.msgprint(__("Only the assigned approver can reject this document."));
-			return Promise.reject("not_approver");
-		}
-
-		return new Promise((resolve, reject) => {
+		return new Promise((resolve, reject) => { 
+			let settled = false;
+			let is_submitting = false;
+			const resolveOnce = (value) => {
+				if (settled) return;
+				settled = true;
+				resolve(value);
+			};
+			const rejectOnce = (reason) => {
+				if (settled) return;
+				settled = true;
+				reject(reason);
+			};
 			let d = new frappe.ui.Dialog({
 				title: __("Rejection Reason"),
 				fields: [
@@ -28,7 +32,9 @@ frappe.ui.form.on("Material Request", {
 						frappe.msgprint(__("Please enter a rejection reason."));
 						return;
 					}
+					is_submitting = true;
 					d.hide();
+					frappe.dom.freeze(__("Submitting rejection..."));
 					frappe.xcall(
 						"avinashgroup_app.custom_code.workflow_material_request.set_reject_reason",
 						{
@@ -36,15 +42,34 @@ frappe.ui.form.on("Material Request", {
 							name: frm.doc.name,
 							reason: reason.trim(),
 						}
-					).then(resolve).catch(reject);
+					)
+						.then((response) => {
+							frappe.msgprint(__("Rejection recorded successfully"));
+							resolveOnce();
+						})
+						.catch((error) => {
+							frappe.msgprint(__("Error saving rejection reason"));
+							console.error(error);
+							rejectOnce(error);
+						})
+						.finally(() => {
+							frappe.dom.unfreeze();
+						});
 				},
 				secondary_action_label: __("Cancel"),
 				secondary_action() {
 					d.hide();
-					reject("cancelled");
+					rejectOnce("cancelled");
 				},
 			});
+			d.onhide = () => {
+				// If user closes the dialog via X/ESC, do not leave the promise pending.
+				if (is_submitting) return;
+				rejectOnce("dialog_closed");
+			};
 			d.show();
+			// Allow typing in the dialog while workflow waits on the promise.
+			frappe.dom.unfreeze();
 		});
 	},
 });
