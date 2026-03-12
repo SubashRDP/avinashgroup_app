@@ -404,3 +404,6 @@ def before_save_supplier_quotation(doc, method=None):
 def validate_supplier_quotation(doc, method=None):
     """Wrapper for Supplier Quotation"""
     validate_purchase_document(doc, method)
+
+
+

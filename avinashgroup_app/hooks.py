@@ -203,7 +203,6 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
 
 
-
 # for doctype in fiscal_naming_doctypes:
 #     if doctype not in doc_events:
 #         doc_events[doctype] = {}
@@ -258,6 +257,12 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 # override_doctype_class = {
 #     "Customer": "avinashgroup_app.custom_code.custom_customer.CustomCustomer"
 # }
+
+# Override doctype class to bypass workflow validation for Administrator
+override_doctype_class = {
+	"Material Request": "avinashgroup_app.custom_code.Override.material_request.MaterialRequest",
+	"Purchase Order": "avinashgroup_app.custom_code.Override.purchase_order.PurchaseOrder",
+}
 
 # doc_events = {
 #     # "Customer": {
@@ -434,7 +439,9 @@ scheduler_events = {
 # ------------------------------
 #
 override_whitelisted_methods = {
-	"erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation"
+	"erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
+	"frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
+	"frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
 }
 #
 # each overriding function accepts a `data` argument;
