@@ -204,6 +204,7 @@
 
 import frappe
 from frappe.utils import getdate, nowdate, flt
+import debugpy
 
 
 def validate_sales_invoice(doc, method):
@@ -211,7 +212,14 @@ def validate_sales_invoice(doc, method):
     Validates Sales Invoice against customer credit limits with advance payment consideration.
     Optimized for performance with early exits and minimal DB hits.
     """
-    
+
+    # --- DEBUG HOOK (temporary) ---
+    debugpy.listen(("127.0.0.1", 5678))
+    if not debugpy.is_client_connected():
+        debugpy.wait_for_client()
+    debugpy.breakpoint()
+    # --- END DEBUG HOOK ---
+
     # Early exit: Skip draft amendments or cancelled docs
     if doc.docstatus == 2 or doc.is_return:
         return

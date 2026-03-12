@@ -32,8 +32,6 @@ app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.2",  # Common taxes handler for all purchase doctypes
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
-    "/assets/avinashgroup_app/js/workflow_reject_popup.js?v=1.1",
-    "/assets/avinashgroup_app/js/workflow_reject_popup_material_request.js?v=1.0",
 ]
 # my_custom_app/hooks.py
 
@@ -55,6 +53,8 @@ app_include_js = [
 doctype_js = {
             # "Sales Invoice" : "public/js/sales_invoice.js",
             # "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
+            "Purchase Order": "public/js/purchase_order.js",
+            "Material Request": "public/js/material_request.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
