@@ -19,15 +19,8 @@ def set_reject_reason(doctype, name, reason):
 	except frappe.DoesNotExistError:
 		frappe.throw(_("Document {0} {1} does not exist").format(doctype, name))
 
-	if hasattr(doc, "custom_material_request_approver") and doc.custom_material_request_approver:
-		if doc.custom_material_request_approver != frappe.session.user:
-			frappe.throw(
-				_(
-					"You are not authorized to reject this document. Only the assigned approver ({0}) can reject it."
-				).format(doc.custom_material_request_approver)
-			)
-	else:
-		frappe.throw(_("No approver assigned to this document."))
+	# Allow any logged-in user to save rejection reason.
+	# Approval control is handled by workflow configuration, not here.
 
 	if not hasattr(doc, "custom_reason"):
 		frappe.throw(_("Document does not have a 'custom_reason' field."))
