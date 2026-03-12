@@ -32,7 +32,6 @@ app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.2",  # Common taxes handler for all purchase doctypes
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
-    "/assets/avinashgroup_app/js/workflow_admin_bypass.js?v=1.2",
 ]
 # my_custom_app/hooks.py
 
@@ -257,6 +256,11 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 #     "Customer": "avinashgroup_app.custom_code.custom_customer.CustomCustomer"
 # }
 
+# Override doctype class to bypass workflow validation for Administrator
+override_doctype_class = {
+	"Material Request": "avinashgroup_app.custom_code.Override.material_request.MaterialRequest",
+}
+
 # doc_events = {
 #     # "Customer": {
 #     #     "override_doctype_class": "your_app_name.overrides.customer.CustomCustomer"
@@ -433,8 +437,8 @@ scheduler_events = {
 #
 override_whitelisted_methods = {
 	"erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
-	"frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_override.get_transitions",
-	"frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_override.apply_workflow"
+	"frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
+	"frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
 }
 #
 # each overriding function accepts a `data` argument;
