@@ -61,22 +61,10 @@ frappe.ui.form.on("Sales Invoice Item", {
                     return;
                 }
                 
-                // Always set VAT Apply On to Percentage (%) by default FIRST
-                await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'Percentage (%)');
-                
-                // Fetch item custom fields (VAT rate from Item Tax Template)
-                const item_data = await frappe.call({
-                    method: "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.populate_item_custom_fields",
-                    args: {
-                        item_code: row.item_code
-                    }
-                });
-                
-                if (item_data.message && item_data.message.custom_vat_rate) {
-                    // Set VAT Rate from Item Tax Template's maximum_net_rate
-                    await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', item_data.message.custom_vat_rate);
-                }
-                
+                // Default to VAT 0%
+                await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 0%');
+                await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 0);
+
                 // Apply field visibility
                 frappe.after_ajax(() => {
                     toggle_vat_fields(frm, cdt, cdn);
@@ -90,66 +78,34 @@ frappe.ui.form.on("Sales Invoice Item", {
     },
 
     qty: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        console.log(`Qty changed for ${row.item_code}: ${row.qty}`);
-        
-        // Backend will recalculate VAT on save
+        setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
         frm.refresh_field('items');
     },
-    
+    rate: function(frm, cdt, cdn) {
+        setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
+        frm.refresh_field('items');
+    },
     base_net_amount: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        console.log(`Net Amount changed for ${row.item_code}: ${row.base_net_amount}`);
-        
-        // Backend will recalculate custom_total and VAT
+        calculate_item_custom_total(frm, cdt, cdn);
         frm.refresh_field('items');
     },
-    
-    net_rate: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        console.log(`Net Rate changed for ${row.item_code}: ${row.net_rate}`);
-        
-        // Backend will recalculate net_amount, custom_total and VAT
-        frm.refresh_field('items');
-    },
-    
     custom_excise_value: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        console.log(`Manual excise value set for ${row.item_code}: ${row.custom_excise_value}`);
+        calculate_item_custom_total(frm, cdt, cdn);
         frm.refresh_field('items');
     },
 
     custom_vat_apply_on: async function(frm, cdt, cdn) {
         const row = locals[cdt][cdn];
 
-        if (row.custom_vat_apply_on === "Percentage (%)") {
-            // Clear manual amount
-            await frappe.model.set_value(cdt, cdn, "custom_vat_amount", 0);
-            
-            // Re-fetch VAT rate from Item Tax Template if item exists
-            if (row.item_code) {
-                try {
-                    const item_data = await frappe.call({
-                        method: "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.populate_item_custom_fields",
-                        args: {
-                            item_code: row.item_code
-                        }
-                    });
-                    
-                    if (item_data.message && item_data.message.custom_vat_rate) {
-                        await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', item_data.message.custom_vat_rate);
-                        console.log(`Re-fetched VAT rate for ${row.item_code}: ${item_data.message.custom_vat_rate}%`);
-                    }
-                } catch(e) {
-                    console.error("Error re-fetching VAT rate:", e);
-                }
-            }
+        if (row.custom_vat_apply_on === "VAT 13%") {
+            await frappe.model.set_value(cdt, cdn, "custom_vat_rate", 13);
+        } else if (row.custom_vat_apply_on === "VAT 0%") {
+            await frappe.model.set_value(cdt, cdn, "custom_vat_rate", 0);
+        } else if (row.custom_vat_apply_on === "Amount") {
+            await frappe.model.set_value(cdt, cdn, "custom_vat_rate", 0);
         }
 
-        if (row.custom_vat_apply_on === "Amount") {
-            // Clear rate when switching to Amount mode
-            frappe.model.set_value(cdt, cdn, "custom_vat_rate", 0);
-        }
+        calculate_item_vat_amount(frm, cdt, cdn);
 
         frappe.after_ajax(() => {
             toggle_vat_fields(frm, cdt, cdn);
@@ -157,40 +113,32 @@ frappe.ui.form.on("Sales Invoice Item", {
     },
 
     custom_vat_rate: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        if (row && row.custom_vat_apply_on === 'Percentage (%)') {
-            console.log(`VAT rate changed for ${row.item_code}: ${row.custom_vat_rate}%`);
-            // Backend will recalculate VAT amount on save
-        }
         frm.refresh_field('items');
     },
-    
+
     custom_vat_amount: function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        if (row && row.custom_vat_apply_on === 'Amount') {
-            console.log(`Manual VAT amount set for ${row.item_code}: ${row.custom_vat_amount}`);
-        }
+        // In Amount mode: recalculate header total when user edits this field
+        calculate_vat_total(frm);
         frm.refresh_field('items');
     },
 
     custom_total: function(frm, cdt, cdn) {
-        frm.refresh_field('items');
-        // Recalculate total amount including excise when custom_total changes
         calculate_total_amount_including_excise(frm);
+        calculate_item_vat_amount(frm, cdt, cdn);
+        frm.refresh_field('items');
     },
 
     items_remove: function(frm) {
-        console.log("Item Removed");
         calculate_total(frm);
         calculate_total_amount_including_excise(frm);
+        calculate_vat_total(frm);
         frm.refresh_field('items');
     },
     
     items_add: function(frm, cdt, cdn) {
         console.log("Item Added");
         
-        // ALWAYS set default VAT Apply On to Percentage (%) for new rows
-        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'Percentage (%)').then(() => {
+        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 0%').then(() => {
             frappe.after_ajax(() => {
                 toggle_vat_fields(frm, cdt, cdn);
             });
@@ -248,32 +196,21 @@ function toggle_vat_fields(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     if (!row) return;
 
-    // ALWAYS default to Percentage if not set
     if (!row.custom_vat_apply_on) {
-        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'Percentage (%)');
-        row.custom_vat_apply_on = 'Percentage (%)';
+        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 0%');
+        row.custom_vat_apply_on = 'VAT 0%';
     }
 
-    if (row.custom_vat_apply_on === "Percentage (%)") {
-        // Percentage Mode: VAT Rate readonly, VAT Amount hidden
+    if (row.custom_vat_apply_on === "VAT 13%" || row.custom_vat_apply_on === "VAT 0%") {
         grid_row.toggle_display("custom_vat_rate", true);
         grid_row.toggle_editable("custom_vat_rate", false);
-
-        grid_row.toggle_display("custom_vat_amount", false);
-        grid_row.toggle_editable("custom_vat_amount", false);
-        
-        console.log(`VAT Percentage mode for ${row.item_code}: Rate readonly (${row.custom_vat_rate || 0}%), Amount hidden`);
-    }
-
-    if (row.custom_vat_apply_on === "Amount") {
-        // Amount Mode: VAT Rate hidden, VAT Amount editable
+        grid_row.toggle_display("custom_vat_amount", true);
+        grid_row.toggle_editable("custom_vat_amount", false);  // read-only, auto-calculated
+    } else if (row.custom_vat_apply_on === "Amount") {
         grid_row.toggle_display("custom_vat_rate", false);
         grid_row.toggle_editable("custom_vat_rate", false);
-
         grid_row.toggle_display("custom_vat_amount", true);
-        grid_row.toggle_editable("custom_vat_amount", true);
-        
-        console.log(`VAT Amount mode for ${row.item_code}: Rate hidden, Amount editable`);
+        grid_row.toggle_editable("custom_vat_amount", true);   // editable, manual entry
     }
 }
 
@@ -304,31 +241,57 @@ function calculate_total_amount_including_excise(frm) {
 }
 
 /**
- * Calculate total VAT from taxes table
+ * Calculate custom_total for a single line item client-side.
+ * custom_total = base_net_amount + custom_excise_value
+ * Must be called before calculate_item_vat_amount so VAT uses the fresh total.
+ */
+function calculate_item_custom_total(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row) return;
+
+    const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 5);
+    frappe.model.set_value(cdt, cdn, 'custom_total', custom_total);
+    // VAT recalculates via the custom_total change handler below
+}
+
+/**
+ * Calculate VAT amount for a single line item and update the header total.
+ * Always derives custom_total fresh from base_net_amount + custom_excise_value
+ * so it is never stale from a previous save.
+ * VAT 13%  → custom_vat_amount = custom_total × 13%  (read-only)
+ * VAT 0%   → custom_vat_amount = 0                    (read-only)
+ * Amount   → keep whatever the user entered           (editable)
+ */
+function calculate_item_vat_amount(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row) return;
+
+    const vat_apply_on = row.custom_vat_apply_on || 'VAT 0%';
+    // Always compute fresh — never trust row.custom_total (may be stale from last save)
+    const custom_total = flt(row.base_net_amount) + flt(row.custom_excise_value);
+
+    if (vat_apply_on === 'VAT 13%') {
+        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', flt((custom_total * 13) / 100, 5));
+    } else if (vat_apply_on === 'VAT 0%') {
+        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', 0);
+    }
+    // Amount mode: do nothing — user's manual entry is preserved
+
+    setTimeout(() => calculate_vat_total(frm), 50);
+}
+
+/**
+ * Calculate total VAT by summing custom_vat_amount from all line items
  */
 function calculate_vat_total(frm) {
-    if (!frm || !frm.doc) {
-        console.log("Form not available");
-        return;
-    }
-    
+    if (!frm || !frm.doc) return;
+
     let vat_total = 0;
-    
-    if (frm.doc.taxes && frm.doc.taxes.length > 0) {
-        frm.doc.taxes.forEach(function(tax_row) {
-            let account_head = tax_row.account_head || '';
-            let tax_amount = flt(tax_row.tax_amount) || 0;
-            
-            if (account_head.startsWith('VAT')) {
-                vat_total += tax_amount;
-                console.log(`VAT Row: ${account_head} = ${tax_amount}`);
-            }
-        });
-    }
-    
+    (frm.doc.items || []).forEach(function(item) {
+        vat_total += flt(item.custom_vat_amount) || 0;
+    });
+
     vat_total = flt(vat_total, 5);
-    console.log(`Total VAT: ${vat_total}`);
-    
     frm.set_value('custom_total_vat_amount', vat_total);
     frm.refresh_field('custom_total_vat_amount');
 }

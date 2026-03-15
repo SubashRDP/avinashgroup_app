@@ -46,14 +46,14 @@ def before_save_salesinvoice(doc, method=None):
 
 def ensure_vat_apply_on_defaults(doc):
     """
-    Ensure all items have custom_vat_apply_on set to default 'Percentage (%)'
+    Ensure all items have custom_vat_apply_on set to default 'VAT 0%'
     This runs before any other calculation
     """
     for item in doc.items:
         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
-            item.custom_vat_apply_on = 'Percentage (%)'
+            item.custom_vat_apply_on = 'VAT 0%'
             frappe.logger().debug(
-                f"Set default VAT Apply On to 'Percentage (%)' for {item.item_code}"
+                f"Set default VAT Apply On to 'VAT 0%' for {item.item_code}"
             )
 
 
@@ -100,44 +100,36 @@ def calculate_total_excise_amount(doc):
 def calculate_item_vat_amounts(doc):
     """
     Calculate VAT amount for each item based on custom_vat_apply_on
-    
-    STRICT RULES:
-    - Percentage (%): ALWAYS recalculate on every save (DEFAULT BEHAVIOR)
-        custom_vat_amount = (custom_total * custom_vat_rate) / 100
-    - Amount: NEVER calculate, keep manual value
-        custom_vat_rate forced to 0
+
+    RULES:
+    - VAT 13%: rate hardcoded to 13, always recalculate amount
+    - VAT 0%:  rate hardcoded to 0, amount always 0
+    - Amount:  rate forced to 0, keep manual amount as-is
     """
     for item in doc.items:
-        # Get vat_apply_on (should already be set by ensure_vat_apply_on_defaults)
-        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'Percentage (%)')
-        
-        # Safeguard: if still not set, default to Percentage
+        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'VAT 0%')
+
         if not vat_apply_on:
-            item.custom_vat_apply_on = 'Percentage (%)'
-            vat_apply_on = 'Percentage (%)'
-        
-        if vat_apply_on == 'Percentage (%)':
-            # ALWAYS recalculate in Percentage mode (DEFAULT)
+            item.custom_vat_apply_on = 'VAT 0%'
+            vat_apply_on = 'VAT 0%'
+
+        if vat_apply_on == 'VAT 13%':
+            item.custom_vat_rate = 13
             custom_total = flt(item.custom_total) or 0
-            custom_vat_rate = flt(item.custom_vat_rate) or 0
-            
-            # Calculate VAT amount
-            item.custom_vat_amount = flt((custom_total * custom_vat_rate) / 100, 5)
-            
+            item.custom_vat_amount = flt((custom_total * 13) / 100, 5)
             frappe.logger().debug(
-                f"[VAT % - DEFAULT] Calculated for {item.item_code}: "
-                f"total={custom_total}, rate={custom_vat_rate}%, "
-                f"vat_amount={item.custom_vat_amount}"
+                f"[VAT 13%] {item.item_code}: total={custom_total}, vat={item.custom_vat_amount}"
             )
-            
-        elif vat_apply_on == 'Amount':
-            # NEVER calculate in Amount mode (MANUAL OVERRIDE)
-            # Force rate to 0, keep amount as-is
+
+        elif vat_apply_on == 'VAT 0%':
             item.custom_vat_rate = 0
-            
+            item.custom_vat_amount = 0
+            frappe.logger().debug(f"[VAT 0%] {item.item_code}: amount=0")
+
+        elif vat_apply_on == 'Amount':
+            item.custom_vat_rate = 0
             frappe.logger().debug(
-                f"[VAT Amount - MANUAL] Kept manual for {item.item_code}: "
-                f"{item.custom_vat_amount} (rate forced to 0)"
+                f"[VAT Amount - MANUAL] {item.item_code}: {item.custom_vat_amount} (rate forced to 0)"
             )
 
 
@@ -490,9 +482,8 @@ def validate_custom_fields(doc):
     Validate and set default values for custom fields
     """
     for item in doc.items:
-        # Default VAT Apply On to Percentage
         if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
-            item.custom_vat_apply_on = 'Percentage (%)'
+            item.custom_vat_apply_on = 'VAT 13%'
         
         if not hasattr(item, 'custom_vat_rate'):
             item.custom_vat_rate = 0
@@ -500,36 +491,6 @@ def validate_custom_fields(doc):
 
 @frappe.whitelist()
 def populate_item_custom_fields(item_code):
-    """
-    Fetch VAT rate from Item Tax Template's maximum_net_rate field
-    Called from frontend when item is selected
-    NO excise duty or TDS for Sales Invoice
-    """
-    if not item_code:
-        return {
-            "custom_vat_rate": 0
-        }
-    
-    try:
-        item = frappe.get_doc("Item", item_code)
-        
-        # Get VAT rate from Item Tax Template's maximum_net_rate
-        custom_vat_rate = 0
-        if hasattr(item, 'taxes') and item.taxes:
-            for tax in item.taxes:
-                if hasattr(tax, 'maximum_net_rate') and tax.maximum_net_rate:
-                    custom_vat_rate = flt(tax.maximum_net_rate)
-                    frappe.logger().debug(
-                        f"Found VAT rate from Item Tax Template: {custom_vat_rate}% "
-                        f"(template: {tax.item_tax_template})"
-                    )
-                    break
-        
-        return {
-            "custom_vat_rate": custom_vat_rate
-        }
-    except Exception as e:
-        frappe.logger().error(f"Error fetching item custom fields for {item_code}: {str(e)}")
-        return {
-            "custom_vat_rate": 0
-        }
+    """VAT rate is now determined by custom_vat_apply_on selection (VAT 13% / VAT 0% / Amount).
+    No longer fetched from Item Master."""
+    return {}
