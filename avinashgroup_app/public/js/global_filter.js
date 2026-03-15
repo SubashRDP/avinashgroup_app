@@ -13,8 +13,8 @@ $(document).on('app_ready', function() {
         "Supplier Quotation",
         "Material Request",
         "Stock Entry",
-       
     ];
+
     $.each(relevantDocTypes, function(i, doctype) {
         frappe.ui.form.on(doctype, {
             company: function(frm) {
@@ -24,17 +24,97 @@ $(document).on('app_ready', function() {
                 validateAndClearFields(frm);
             },  
             supplier: function(frm){
-                  validateAndClearFields(frm);
+                validateAndClearFields(frm);
             },
             customer: function(frm){
-                    validateAndClearFields(frm);
-                },
+                validateAndClearFields(frm);
+            },
             employee: function(frm){
-                    validateAndClearFields(frm);
-                }
+                validateAndClearFields(frm);
+            }
         });
     });
+
+    // ================= GROUP FILTERS =================
+
+    // Customer Group Filter
+    frappe.ui.form.on('Customer', {
+        setup: function(frm) {
+            filterCustomerGroup(frm);
+        },
+        custom_company: function(frm) {
+            frm.refresh_field('customer_group');
+        }
+    });
+
+    // Supplier Group Filter
+    frappe.ui.form.on('Supplier', {
+        setup: function(frm) {
+            filterSupplierGroup(frm);
+        },
+        custom_company: function(frm) {
+            frm.refresh_field('supplier_group');
+        }
+    });
+
+    // Item Group Filter
+    frappe.ui.form.on('Item', {
+        setup: function(frm) {
+            filterItemGroup(frm);
+        },
+        refresh: function(frm) {
+            filterItemGroup(frm);
+        },
+        custom_company: function(frm) {
+            frm.refresh_field('item_group');
+        }
+    });
+
 });
+
+
+// ===== CUSTOMER GROUP FILTER =====
+function filterCustomerGroup(frm) {
+    frm.set_query('customer_group', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
+
+// ===== SUPPLIER GROUP FILTER =====
+function filterSupplierGroup(frm) {
+    frm.set_query('supplier_group', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
+
+// ===== ITEM GROUP FILTER =====
+function filterItemGroup(frm) {
+    frm.set_query('item_group', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
+
 
 function setupCompanyBasedFilters(frm) {
     if (!frm.fields_dict.company) {
@@ -64,7 +144,7 @@ function setupCompanyBasedFilters(frm) {
                 return {
                     filters: {
                         'custom_company': company,
-                        'disabled': 0  // Only show active customers
+                        'disabled': 0
                     }
                 };
             }
@@ -81,7 +161,7 @@ function setupCompanyBasedFilters(frm) {
                 return {
                     filters: {
                         'custom_company': company,
-                        'disabled': 0  // Only show active customers
+                        'disabled': 0
                     }
                 };
             }
@@ -120,8 +200,11 @@ function setupCompanyBasedFilters(frm) {
             return {};
         });
     }
+
     setupItemCodeFilter(frm, company);
 }
+
+
 function setupItemCodeFilter(frm, company) {
     if(frm.fields_dict.items) {
         frm.set_query('item_code', 'items', function() {
@@ -141,6 +224,8 @@ function setupItemCodeFilter(frm, company) {
         });
     }
 }
+
+
 function validateAndClearFields(frm) {
     let company = frm.doc.company;
     
@@ -176,7 +261,8 @@ function validateAndClearFields(frm) {
             }
         });
     }
-     if (frm.doc.employee) {
+
+    if (frm.doc.employee) {
         frappe.db.get_value('Employee', frm.doc.employee, 'custom_company', function(r) {
             if (r && r.custom_company && r.custom_company !== company) {
                 frappe.msgprint({
@@ -190,7 +276,7 @@ function validateAndClearFields(frm) {
         });
     }
     
-    //Validate and clear items in batch
+    // Validate and clear items in batch
     if (frm.doc.items && frm.doc.items.length > 0) {
         let itemCodes = frm.doc.items
             .filter(item => item.item_code)
@@ -210,20 +296,16 @@ function validateAndClearFields(frm) {
                     if (r && r.message && r.message.length > 0) {
                         let mismatchedItems = [];
                         
-                        // Check each item's custom_company
                         r.message.forEach(function(item) {
-                            // Item doesn't match if custom_company exists and is different
                             if (item.custom_company && item.custom_company !== company) {
                                 mismatchedItems.push(item.name);
                             }
                         });
                         
                         if (mismatchedItems.length > 0) {
-                            // Remove entire rows for mismatched items
                             let removedCount = 0;
                             let itemsToRemove = [];
                             
-                            // Collect rows to remove
                             frm.doc.items.forEach(function(row) {
                                 if (mismatchedItems.includes(row.item_code)) {
                                     itemsToRemove.push(row);
@@ -231,17 +313,14 @@ function validateAndClearFields(frm) {
                                 }
                             });
                             
-                            // Remove the rows
                             itemsToRemove.forEach(function(row) {
                                 frappe.model.clear_doc(row.doctype, row.name);
                             });
                             
-                            // Update the items array
                             frm.doc.items = frm.doc.items.filter(function(row) {
                                 return !mismatchedItems.includes(row.item_code);
                             });
                             
-                            // Show message and refresh
                             if (removedCount > 0) {
                                 frappe.msgprint({
                                     title: __('Company Mismatch'),
