@@ -13,6 +13,7 @@ $(document).on('app_ready', function() {
         "Supplier Quotation",
         "Material Request",
         "Stock Entry",
+        "Stock Reconciliation"
     ];
 
     $.each(relevantDocTypes, function(i, doctype) {
@@ -69,6 +70,14 @@ $(document).on('app_ready', function() {
             frm.refresh_field('item_group');
         }
     });
+
+    // ================= ITEM COMPANY VALIDATION =================
+    // Validates items in child tables when pasted from different companies
+    setupItemCompanyValidation();
+
+    // ================= SUPPLIER COMPANY VALIDATION =================
+    // Validates suppliers in child tables when pasted from different companies
+    setupSupplierCompanyValidation();
 
 });
 
@@ -202,12 +211,35 @@ function setupCompanyBasedFilters(frm) {
     }
 
     setupItemCodeFilter(frm, company);
+    setupSupplierFilter(frm, company);
 }
 
 
 function setupItemCodeFilter(frm, company) {
     if(frm.fields_dict.items) {
         frm.set_query('item_code', 'items', function() {
+            if (company) {
+                return {
+                    filters: {
+                        'custom_company': company,
+                        'disabled': 0
+                    }
+                };
+            }
+            return {
+                filters: {
+                    'disabled': 0
+                }
+            };
+        });
+    }
+}
+
+
+function setupSupplierFilter(frm, company) {
+    // Setup supplier filter for child table rows (e.g., Request for Quotation Supplier)
+    if(frm.doctype === 'Request for Quotation' && frm.fields_dict.suppliers) {
+        frm.set_query('supplier', 'suppliers', function() {
             if (company) {
                 return {
                     filters: {
@@ -238,7 +270,7 @@ function validateAndClearFields(frm) {
             if (r && r.custom_company && r.custom_company !== company) {
                 frappe.msgprint({
                     title: __('Company Mismatch'),
-                    message: __('Supplier {0} does not belong to company {1}. Clearing supplier field.', 
+                    message: __('Supplier {0} does not belong to company {1}.', 
                         [frm.doc.supplier, company]),
                     indicator: 'orange'
                 });
@@ -337,4 +369,138 @@ function validateAndClearFields(frm) {
             });
         }
     }
+}
+
+
+// ===== ITEM COMPANY VALIDATION IN CHILD TABLES =====
+// Detects when items from different companies are pasted and blocks them immediately
+function setupItemCompanyValidation() {
+    const ITEM_CHILD_DOCTYPES = [
+        "Sales Invoice Item",
+        "Purchase Order Item",
+        "Purchase Invoice Item",
+        "Sales Order Item",
+        "Delivery Note Item",
+        "Purchase Receipt Item",
+        "Material Request Item",
+        "Supplier Quotation Item",
+        "Quotation Item",
+        "Stock Entry Detail",
+        "Production Plan Item",
+        "Job Card Item",
+        "Purchase Request Item",
+        "Request for Quotation Item",
+        "Stock Reconciliation Item"
+    ];
+
+    ITEM_CHILD_DOCTYPES.forEach(function(child_doctype) {
+        frappe.ui.form.on(child_doctype, {
+            item_code: function(frm, cdt, cdn) {
+                validateItemCompanyMatch(frm, cdt, cdn);
+            }
+        });
+    });
+}
+
+
+function validateItemCompanyMatch(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+
+    if (!row || !row.item_code) {
+        return;
+    }
+
+    // Get parent company from standard or custom field
+    const parent_company = frm.doc.custom_company || frm.doc.company;
+
+    if (!parent_company) {
+        return;
+    }
+
+    // Fetch item's company using frappe.db.get_value
+    frappe.db.get_value('Item', row.item_code, 'custom_company', function(r) {
+        if (!r) {
+            return;
+        }
+
+        const item_company = r.custom_company;
+
+        // Check if item's company matches parent company
+        if (item_company && item_company.toLowerCase() !== parent_company.toLowerCase()) {
+            const selected_item = row.item_code;
+
+            // Clear the item_code field to remove the mismatched item
+            frappe.model.set_value(cdt, cdn, 'item_code', '');
+
+            // Show error message at top of form (standard Frappe behavior)
+            frappe.msgprint({
+                title: __('Company Mismatch'),
+                message: __('Item {0} does not belong to company {1}.', [
+                    selected_item,
+                    parent_company
+                ]),
+                indicator: 'red'
+            });
+        }
+    });
+}
+
+
+// ===== SUPPLIER COMPANY VALIDATION IN CHILD TABLES =====
+// Detects when suppliers from different companies are pasted and blocks them immediately
+function setupSupplierCompanyValidation() {
+    const SUPPLIER_CHILD_DOCTYPES = [
+        "Request for Quotation Supplier"
+    ];
+
+    SUPPLIER_CHILD_DOCTYPES.forEach(function(child_doctype) {
+        frappe.ui.form.on(child_doctype, {
+            supplier: function(frm, cdt, cdn) {
+                validateSupplierCompanyMatch(frm, cdt, cdn);
+            }
+        });
+    });
+}
+
+
+function validateSupplierCompanyMatch(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+
+    if (!row || !row.supplier) {
+        return;
+    }
+
+    // Get parent company from standard or custom field
+    const parent_company = frm.doc.custom_company || frm.doc.company;
+
+    if (!parent_company) {
+        return;
+    }
+
+    // Fetch supplier's company using frappe.db.get_value
+    frappe.db.get_value('Supplier', row.supplier, 'custom_company', function(r) {
+        if (!r) {
+            return;
+        }
+
+        const supplier_company = r.custom_company;
+
+        // Check if supplier's company matches parent company
+        if (supplier_company && supplier_company.toLowerCase() !== parent_company.toLowerCase()) {
+            const selected_supplier = row.supplier;
+
+            // Clear the supplier field to remove the mismatched supplier
+            frappe.model.set_value(cdt, cdn, 'supplier', '');
+
+            // Show error message at top of form (standard Frappe behavior)
+            frappe.msgprint({
+                title: __('Company Mismatch'),
+                message: __('Supplier {0} does not belong to company {1}. ', [
+                    selected_supplier,
+                    parent_company
+                ]),
+                indicator: 'red'
+            });
+        }
+    });
 }
