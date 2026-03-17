@@ -55,6 +55,7 @@ doctype_js = {
             # "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
             "Purchase Order": "public/js/purchase_order.js",
             "Material Request": "public/js/material_request.js",
+            "Payment Entry": "public/js/payment_entry.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
