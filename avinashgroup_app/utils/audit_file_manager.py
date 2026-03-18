@@ -98,6 +98,7 @@ class AuditBase:
     "Holiday List",
     "Leave Type",
     "BOM",
+    "Designation",
     # "BOM Template"
     ]
 
@@ -125,6 +126,7 @@ class AuditBase:
         "Bank Account",
         "Holiday List",
         "Leave Type",
+        "Designation",
         # "BOM Template"
     ]
     
