@@ -54,7 +54,7 @@ def ensure_apply_on_defaults(doc):
     """Ensure all items have custom_vat_apply_on and custom_tds_apply_on set to default"""
     for item in doc.items:
         if not getattr(item, 'custom_vat_apply_on', None):
-            item.custom_vat_apply_on = 'Percentage (%)'
+            item.custom_vat_apply_on = 'VAT 0%'
 
         if not getattr(item, 'custom_tds_apply_on', None):
             item.custom_tds_apply_on = 'Percentage (%)'
@@ -82,18 +82,21 @@ def calculate_total_excise_amount(doc):
 
 
 def calculate_item_vat_amounts(doc):
-    """Calculate VAT amount based on Percentage or Amount mode"""
+    """Calculate VAT amount based on VAT 13%, VAT 0%, or Amount mode"""
     for item in doc.items:
-        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'Percentage (%)')
+        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'VAT 0%')
 
         if not vat_apply_on:
-            item.custom_vat_apply_on = 'Percentage (%)'
-            vat_apply_on = 'Percentage (%)'
+            item.custom_vat_apply_on = 'VAT 0%'
+            vat_apply_on = 'VAT 0%'
 
-        if vat_apply_on == 'Percentage (%)':
+        if vat_apply_on == 'VAT 13%':
+            item.custom_vat_rate = 13
             custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-            custom_vat_rate = flt(getattr(item, 'custom_vat_rate', 0)) or 0
-            item.custom_vat_amount = flt((custom_total * custom_vat_rate) / 100, 5)
+            item.custom_vat_amount = flt((custom_total * 13) / 100, 5)
+        elif vat_apply_on == 'VAT 0%':
+            item.custom_vat_rate = 0
+            item.custom_vat_amount = 0
         elif vat_apply_on == 'Amount':
             item.custom_vat_rate = 0
 
@@ -333,7 +336,7 @@ def validate_custom_fields(doc):
             item.custom_tds_rate = 0
 
         if not getattr(item, 'custom_vat_apply_on', None):
-            item.custom_vat_apply_on = 'Percentage (%)'
+            item.custom_vat_apply_on = 'VAT 0%'
 
         if not getattr(item, 'custom_tds_apply_on', None):
             item.custom_tds_apply_on = 'Percentage (%)'
@@ -353,14 +356,9 @@ def populate_item_custom_fields(item_code):
 
     custom_excise_duty = flt(getattr(item, 'custom_excise_duty', 0))
     custom_tds_rate = flt(getattr(item, 'custom_tds_rate', 0))
-    custom_vat_rate = 0
-
-    if hasattr(item, 'taxes') and item.taxes:
-        custom_vat_rate = flt(item.taxes[0].maximum_net_rate) if item.taxes[0].maximum_net_rate else 0
 
     return {
         "custom_excise_duty": custom_excise_duty,
-        "custom_vat_rate": custom_vat_rate,
         "custom_tds_rate": custom_tds_rate
     }
 

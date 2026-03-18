@@ -51,10 +51,11 @@ app_include_js = [
 
 # include js in doctype views
 doctype_js = {
-	# "Sales Invoice" : "public/js/sales_invoice.js",
-	# "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
-	"Purchase Order": "public/js/purchase_order.js",
-	"Material Request": "public/js/material_request.js",
+            # "Sales Invoice" : "public/js/sales_invoice.js",
+            # "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
+            "Purchase Order": "public/js/purchase_order.js",
+            "Material Request": "public/js/material_request.js",
+            "Payment Entry": "public/js/payment_entry.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
@@ -504,15 +505,4 @@ override_whitelisted_methods = {
 # }
 
 
-fixtures = [
-	{
-		"dt": "Custom Field",
-		"filters": [
-			["fieldname", "like", "custom_%"],
-			["fieldname", "not in", ["custom_abbr", "custom_company_abbr", "custom_fiscal_year"]],
-		],
-	},
-	{"dt": "Client Script", "filters": [["module", "=", "Avinash Group App"]]},
-	{"dt": "DocType", "filters": [["custom", "=", 1], ["module", "=", "Avinash Group App"]]},
-]
 
