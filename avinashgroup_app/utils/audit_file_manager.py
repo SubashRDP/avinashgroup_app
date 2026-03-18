@@ -2,7 +2,7 @@
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from avinashgroup_app.custom_code.Override.naming_series import handle_validate, naming_series_autoname, handle_before_insert, naming_requirements_before_insert
-# from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
+from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
 from avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes import before_save_salesinvoice, validate_salesinvoice
 from avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds import before_save_purchaseinvoice, validate_purchaseinvoice
 from avinashgroup_app.custom_code.Override.company_field_lock import validate_company_field_lock
@@ -563,7 +563,7 @@ def set_audit_fields(doc, method=None):
 
 def validate(doc, method=None):
     validate_company_field_lock(doc, method)
-    # validate_company_matching(doc)
+    validate_company_matching(doc)
     handle_validate(doc)    
 
 def before_insert(doc, method=None):
