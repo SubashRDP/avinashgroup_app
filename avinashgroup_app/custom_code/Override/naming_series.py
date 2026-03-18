@@ -461,12 +461,37 @@ NAMING_CONFIG = {
     },
     "Lead":{
         "prefix": "LEAD",
-        "use_fiscal_year": True,
+        "use_fiscal_year": False,
         "sequence_length": 5
     },
     "Communication":{
         "prefix": "COM",
         "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Designation": {
+        "prefix": "DESIG",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Asset Maintenance Team": {
+        "prefix": "ASSET-MT",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Asset Value Adjustment": {
+        "prefix": "ASSET-ADJ",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Prospect": {
+        "prefix": "PROSPECT",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
+    "Manufacturer": {
+        "prefix": "MANUFACTURER",
+        "use_fiscal_year": False,
         "sequence_length": 5
     },
 }

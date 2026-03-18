@@ -76,6 +76,11 @@ class AuditBase:
     "Work Order",
     "Project Update",
     "Item",
+    "Asset Maintenance Team",
+    "Asset Value Adjustment",
+    "Designation",
+    "Manufacturer",
+    "Prospect",
    #Item master
     "Item Group",
     "Customer Group",
@@ -125,6 +130,7 @@ class AuditBase:
         "Bank Account",
         "Holiday List",
         "Leave Type",
+        "Designation",
         # "BOM Template"
     ]
     
