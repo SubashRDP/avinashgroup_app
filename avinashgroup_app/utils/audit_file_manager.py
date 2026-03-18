@@ -132,6 +132,10 @@ class AuditBase:
         "Holiday List",
         "Leave Type",
         "Designation",
+        "Asset Maintenance Team",
+        "Asset Value Adjustment",
+        "Manufacturer",
+        "Prospect",
         # "BOM Template"
     ]
     
