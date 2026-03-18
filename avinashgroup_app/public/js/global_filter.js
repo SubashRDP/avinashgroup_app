@@ -21,7 +21,11 @@ $(document).on('app_ready', function() {
             company: function(frm) {
                 setupCompanyBasedFilters(frm);
                 validateAndClearFields(frm);
-            },  
+            },
+            party_type: function(frm) {
+                setupCompanyBasedFilters(frm);
+                validateAndClearFields(frm);
+            },
             supplier: function(frm){
                 validateAndClearFields(frm);
             },
@@ -298,6 +302,22 @@ function setupCompanyBasedFilters(frm) {
             };
         });
     }
+
+    if (frm.doctype === "Payment Entry" && frm.fields_dict.party) {
+        frm.set_query('party', function() {
+            const party_type = frm.doc.party_type;
+            if (!company || !party_type) {
+                return {};
+            }
+            return {
+                query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_party",
+                filters: {
+                    party_type: party_type,
+                    company: company
+                }
+            };
+        });
+    }
     
     if (frm.fields_dict.custom_suppliers) {
         frm.set_query('custom_suppliers', function() {
@@ -329,6 +349,7 @@ function setupCompanyBasedFilters(frm) {
 
     setupItemCodeFilter(frm, company);
     setupSupplierFilter(frm, company);
+    setupJournalEntryAccountFilters(frm, company);
 }
 
 
@@ -374,6 +395,64 @@ function setupSupplierFilter(frm, company) {
             };
         });
     }
+}
+
+function setupJournalEntryAccountFilters(frm, company) {
+    if (frm.doctype !== "Journal Entry" || !frm.fields_dict.accounts) {
+        return;
+    }
+
+    // Party filter based on party type + company (same logic as Payment Entry)
+    frm.set_query('party', 'accounts', function(doc, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        const party_type = row ? row.party_type : null;
+        if (!company || !party_type) {
+            return {};
+        }
+        return {
+            query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_party",
+            filters: {
+                party_type: party_type,
+                company: company
+            }
+        };
+    });
+
+    // Vehicle (custom_subtype) company-wise filter
+    frm.set_query('custom_subtype', 'accounts', function() {
+        if (!company) {
+            return {};
+        }
+        return {
+            filters: {
+                custom_company: company
+            }
+        };
+    });
+
+    // Bank Account company-wise filter
+    frm.set_query('bank_account', 'accounts', function() {
+        if (!company) {
+            return {};
+        }
+        return {
+            filters: {
+                company: company
+            }
+        };
+    });
+
+    // Project company-wise filter
+    frm.set_query('project', 'accounts', function() {
+        if (!company) {
+            return {};
+        }
+        return {
+            filters: {
+                company: company
+            }
+        };
+    });
 }
 
 
@@ -508,7 +587,6 @@ function setupItemCompanyValidation() {
         "Purchase Request Item",
         "Request for Quotation Item",
         "Stock Reconciliation Item",
-    
     ];
 
     ITEM_CHILD_DOCTYPES.forEach(function(child_doctype) {

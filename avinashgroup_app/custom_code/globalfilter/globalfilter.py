@@ -1,5 +1,67 @@
-# import frappe
-# from frappe import _
+import frappe
+
+
+@frappe.whitelist()
+def search_party(doctype, txt, searchfield, start, page_len, filters):
+    party_type = (filters or {}).get("party_type") or doctype
+    company = (filters or {}).get("company")
+
+    if not party_type:
+        return []
+
+    if not company:
+        return frappe.desk.search.search_link(
+            party_type, txt, searchfield, start, page_len, None, None
+        )
+
+    company_fields = _get_company_fields_for_party(party_type)
+    if not company_fields:
+        return []
+
+    meta = frappe.get_meta(party_type)
+    filters_list = []
+    if _doctype_has_field(meta, "disabled"):
+        filters_list.append(["disabled", "=", 0])
+    if txt:
+        filters_list.append([searchfield, "like", f"%{txt}%"])
+
+    or_filters = [[fieldname, "=", company] for fieldname in company_fields]
+
+    rows = frappe.get_all(
+        party_type,
+        filters=filters_list,
+        or_filters=or_filters,
+        fields=["name", meta.title_field] if meta.title_field else ["name"],
+        limit_start=start,
+        limit_page_length=page_len,
+    )
+    title_field = meta.title_field
+    if title_field:
+        return [[d.name, d.get(title_field) or d.name] for d in rows]
+    return [[d.name] for d in rows]
+
+
+def _get_company_fields_for_party(doctype):
+    override = {
+        "Customer": ["custom_company"],
+        "Supplier": ["custom_company"],
+        "Employee": ["company"],
+        "Shareholder": ["company"],
+    }
+    if doctype in override:
+        return override[doctype]
+
+    meta = frappe.get_meta(doctype)
+    fields = []
+    if _doctype_has_field(meta, "custom_company"):
+        fields.append("custom_company")
+    if _doctype_has_field(meta, "company"):
+        fields.append("company")
+    return fields
+
+
+def _doctype_has_field(meta, fieldname):
+    return any(f.fieldname == fieldname for f in (meta.fields or []))
 
 # def validate_company_matching(doc, method=None):
 #     # Get company from either 'company' or 'custom_company' field

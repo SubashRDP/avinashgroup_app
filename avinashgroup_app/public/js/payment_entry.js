@@ -1,5 +1,26 @@
 frappe.ui.form.on("Payment Entry", {
+	setup_party_query: function (frm) {
+		if (!frm.fields_dict.party) return;
+		frm.set_query("party", function () {
+			const party_type = frm.doc.party_type;
+			const company = frm.doc.company;
+			if (!party_type || !company) {
+				return {};
+			}
+			return {
+				query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_party",
+				filters: {
+					party_type: party_type,
+					company: company,
+				},
+			};
+		});
+	},
+	onload: function (frm) {
+		frm.trigger("setup_party_query");
+	},
 	refresh: function (frm) {
+		frm.trigger("setup_party_query");
 		if (frm.doc.custom_cheque_bounce === "Cheque Bounced") {
 			frm.page.set_indicator(__("Cheque Bounced"), "red");
 		}
@@ -31,5 +52,11 @@ frappe.ui.form.on("Payment Entry", {
 				__("Actions")
 			);
 		}
+	},
+	company: function (frm) {
+		frm.trigger("setup_party_query");
+	},
+	party_type: function (frm) {
+		frm.trigger("setup_party_query");
 	},
 });
