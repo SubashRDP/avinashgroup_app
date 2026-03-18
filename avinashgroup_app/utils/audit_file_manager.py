@@ -103,6 +103,7 @@ class AuditBase:
     "Holiday List",
     "Leave Type",
     "BOM",
+    "Designation",
     # "BOM Template"
     ]
 

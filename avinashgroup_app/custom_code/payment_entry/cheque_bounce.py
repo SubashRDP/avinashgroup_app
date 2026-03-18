@@ -117,10 +117,10 @@ def make_cheque_bounce_entry(payment_entry_name):
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Cheque Bounce - set_value failed")
 
-	# frappe.msgprint(
-	# 	_("Cheque Bounce GL entries posted successfully for Payment Entry {0}.").format(
-	# 		frappe.bold(payment_entry_name)
-	# 	),
-	# 	title=_("Cheque Bounce"),
-	# 	indicator="green",
-	# )
+	frappe.msgprint(
+		_("Cheque Bounce GL entries posted successfully for Payment Entry {0}.").format(
+			frappe.bold(payment_entry_name)
+		),
+		title=_("Cheque Bounce"),
+		indicator="green",
+	)
