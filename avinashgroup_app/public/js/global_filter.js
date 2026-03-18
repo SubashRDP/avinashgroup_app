@@ -1,5 +1,5 @@
 $(document).on('app_ready', function() {
-    // doctypes that have company field and need supplier/customer/item filtering
+    // Doctypes that use company-based party/item filters
     const relevantDocTypes = [
         "Sales Invoice", 
         "Sales Order", 
@@ -20,8 +20,6 @@ $(document).on('app_ready', function() {
         frappe.ui.form.on(doctype, {
             company: function(frm) {
                 setupCompanyBasedFilters(frm);
-                
-                // Clear supplier/customer if they don't match new company
                 validateAndClearFields(frm);
             },  
             supplier: function(frm){
@@ -36,53 +34,78 @@ $(document).on('app_ready', function() {
         });
     });
 
-    // ================= GROUP FILTERS =================
-
-    // Customer Group Filter
+    // Customer: group + defaults filtered by custom_company
     frappe.ui.form.on('Customer', {
         setup: function(frm) {
             filterCustomerGroup(frm);
+            filterCustomerDefaultBankAccount(frm);
+            filterCustomerDefaultPriceList(frm);
+        },
+        refresh: function(frm) {
+            filterCustomerDefaultBankAccount(frm);
+            filterCustomerDefaultPriceList(frm);
         },
         custom_company: function(frm) {
             frm.refresh_field('customer_group');
+            frm.refresh_field('default_bank_account');
+            frm.refresh_field('default_company_bank_account');
+            frm.refresh_field('default_price_list');
         }
     });
 
-    // Supplier Group Filter
+    // Supplier: group + defaults filtered by custom_company
     frappe.ui.form.on('Supplier', {
         setup: function(frm) {
             filterSupplierGroup(frm);
+            filterSupplierDefaultBankAccount(frm);
+            filterSupplierDefaultPriceList(frm);
+        },
+        refresh: function(frm) {
+            filterSupplierDefaultBankAccount(frm);
+            filterSupplierDefaultPriceList(frm);
         },
         custom_company: function(frm) {
             frm.refresh_field('supplier_group');
+            frm.refresh_field('default_bank_account');
+            frm.refresh_field('default_company_bank_account');
+            frm.refresh_field('default_price_list');
         }
     });
 
-    // Item Group Filter
+    // Item: groups + child tables filtered by custom_company
     frappe.ui.form.on('Item', {
         setup: function(frm) {
             filterItemGroup(frm);
+            filterItemAssetCategory(frm);
+            setupItemPartyFilters(frm);
+            setupItemTaxTemplateFilters(frm);
         },
         refresh: function(frm) {
             filterItemGroup(frm);
+            filterItemAssetCategory(frm);
+            setupItemPartyFilters(frm);
+            setupItemTaxTemplateFilters(frm);
+        },
+        item_defaults_add: function(frm, cdt, cdn) {
+            setChildRowCompanyFromParent(frm, cdt, cdn, 'custom_company');
         },
         custom_company: function(frm) {
             frm.refresh_field('item_group');
+            frm.refresh_field('asset_category');
+            setupItemPartyFilters(frm);
+            setupItemTaxTemplateFilters(frm);
         }
     });
 
-    // ================= ITEM COMPANY VALIDATION =================
-    // Validates items in child tables when pasted from different companies
+    // Child row validation for Item child tables
     setupItemCompanyValidation();
 
-    // ================= SUPPLIER COMPANY VALIDATION =================
-    // Validates suppliers in child tables when pasted from different companies
+    // Child row validation for Supplier child tables
     setupSupplierCompanyValidation();
 
 });
 
 
-// ===== CUSTOMER GROUP FILTER =====
 function filterCustomerGroup(frm) {
     frm.set_query('customer_group', function() {
         if (frm.doc.custom_company) {
@@ -96,7 +119,86 @@ function filterCustomerGroup(frm) {
     });
 }
 
-// ===== SUPPLIER GROUP FILTER =====
+function applyCompanyFilterToLinkFields(frm, fieldnames, company_fieldname, target_company_fieldname) {
+    fieldnames.forEach(function(fieldname) {
+        if (!frm.fields_dict[fieldname]) {
+            return;
+        }
+        frm.set_query(fieldname, function() {
+            const company_value = frm.doc[company_fieldname];
+            if (company_value) {
+                return {
+                    filters: {
+                        [target_company_fieldname]: company_value
+                    }
+                };
+            }
+            return {};
+        });
+    });
+}
+
+function setChildRowCompanyFromParent(frm, cdt, cdn, parent_company_fieldname) {
+    if (!frm || !frm.doc) {
+        return;
+    }
+    const parent_company = frm.doc[parent_company_fieldname];
+    if (!parent_company) {
+        return;
+    }
+    frappe.model.set_value(cdt, cdn, 'company', parent_company);
+}
+
+function filterCustomerDefaultBankAccount(frm) {
+    applyCompanyFilterToLinkFields(
+        frm,
+        ['default_bank_account', 'default_company_bank_account'],
+        'custom_company',
+        'company'
+    );
+}
+
+function filterCustomerDefaultPriceList(frm) {
+    if (!frm.fields_dict.default_price_list) {
+        return;
+    }
+    frm.set_query('default_price_list', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
+
+function filterSupplierDefaultBankAccount(frm) {
+    applyCompanyFilterToLinkFields(
+        frm,
+        ['default_bank_account', 'default_company_bank_account'],
+        'custom_company',
+        'company'
+    );
+}
+
+function filterSupplierDefaultPriceList(frm) {
+    if (!frm.fields_dict.default_price_list) {
+        return;
+    }
+    frm.set_query('default_price_list', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
+
 function filterSupplierGroup(frm) {
     frm.set_query('supplier_group', function() {
         if (frm.doc.custom_company) {
@@ -110,7 +212,6 @@ function filterSupplierGroup(frm) {
     });
 }
 
-// ===== ITEM GROUP FILTER =====
 function filterItemGroup(frm) {
     frm.set_query('item_group', function() {
         if (frm.doc.custom_company) {
@@ -124,7 +225,23 @@ function filterItemGroup(frm) {
     });
 }
 
+function filterItemAssetCategory(frm) {
+    if (!frm.fields_dict.asset_category) {
+        return;
+    }
+    frm.set_query('asset_category', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
 
+// Main party/item filters on sales/purchase doctypes
 function setupCompanyBasedFilters(frm) {
     if (!frm.fields_dict.company) {
         return;
@@ -215,6 +332,7 @@ function setupCompanyBasedFilters(frm) {
 }
 
 
+// Items child table filter by company
 function setupItemCodeFilter(frm, company) {
     if(frm.fields_dict.items) {
         frm.set_query('item_code', 'items', function() {
@@ -236,8 +354,9 @@ function setupItemCodeFilter(frm, company) {
 }
 
 
+// RFQ supplier child table filter by company
 function setupSupplierFilter(frm, company) {
-    // Setup supplier filter for child table rows (e.g., Request for Quotation Supplier)
+    // RFQ supplier rows
     if(frm.doctype === 'Request for Quotation' && frm.fields_dict.suppliers) {
         frm.set_query('supplier', 'suppliers', function() {
             if (company) {
@@ -258,6 +377,7 @@ function setupSupplierFilter(frm, company) {
 }
 
 
+// Clear mismatched party/item rows when company changes
 function validateAndClearFields(frm) {
     let company = frm.doc.company;
     
@@ -279,7 +399,6 @@ function validateAndClearFields(frm) {
         });
     }
     
-    // Validate and clear customer
     if (frm.doc.customer) {
         frappe.db.get_value('Customer', frm.doc.customer, 'custom_company', function(r) {
             if (r && r.custom_company && r.custom_company !== company) {
@@ -308,7 +427,6 @@ function validateAndClearFields(frm) {
         });
     }
     
-    // Validate and clear items in batch
     if (frm.doc.items && frm.doc.items.length > 0) {
         let itemCodes = frm.doc.items
             .filter(item => item.item_code)
@@ -372,8 +490,7 @@ function validateAndClearFields(frm) {
 }
 
 
-// ===== ITEM COMPANY VALIDATION IN CHILD TABLES =====
-// Detects when items from different companies are pasted and blocks them immediately
+// Validate Item child tables on selection/paste
 function setupItemCompanyValidation() {
     const ITEM_CHILD_DOCTYPES = [
         "Sales Invoice Item",
@@ -390,7 +507,8 @@ function setupItemCompanyValidation() {
         "Job Card Item",
         "Purchase Request Item",
         "Request for Quotation Item",
-        "Stock Reconciliation Item"
+        "Stock Reconciliation Item",
+    
     ];
 
     ITEM_CHILD_DOCTYPES.forEach(function(child_doctype) {
@@ -410,14 +528,12 @@ function validateItemCompanyMatch(frm, cdt, cdn) {
         return;
     }
 
-    // Get parent company from standard or custom field
     const parent_company = frm.doc.custom_company || frm.doc.company;
 
     if (!parent_company) {
         return;
     }
 
-    // Fetch item's company using frappe.db.get_value
     frappe.db.get_value('Item', row.item_code, 'custom_company', function(r) {
         if (!r) {
             return;
@@ -425,14 +541,11 @@ function validateItemCompanyMatch(frm, cdt, cdn) {
 
         const item_company = r.custom_company;
 
-        // Check if item's company matches parent company
         if (item_company && item_company.toLowerCase() !== parent_company.toLowerCase()) {
             const selected_item = row.item_code;
 
-            // Clear the item_code field to remove the mismatched item
             frappe.model.set_value(cdt, cdn, 'item_code', '');
 
-            // Show error message at top of form (standard Frappe behavior)
             frappe.msgprint({
                 title: __('Company Mismatch'),
                 message: __('Item {0} does not belong to company {1}.', [
@@ -446,8 +559,7 @@ function validateItemCompanyMatch(frm, cdt, cdn) {
 }
 
 
-// ===== SUPPLIER COMPANY VALIDATION IN CHILD TABLES =====
-// Detects when suppliers from different companies are pasted and blocks them immediately
+// Validate supplier child tables on selection/paste
 function setupSupplierCompanyValidation() {
     const SUPPLIER_CHILD_DOCTYPES = [
         "Request for Quotation Supplier"
@@ -470,14 +582,12 @@ function validateSupplierCompanyMatch(frm, cdt, cdn) {
         return;
     }
 
-    // Get parent company from standard or custom field
     const parent_company = frm.doc.custom_company || frm.doc.company;
 
     if (!parent_company) {
         return;
     }
 
-    // Fetch supplier's company using frappe.db.get_value
     frappe.db.get_value('Supplier', row.supplier, 'custom_company', function(r) {
         if (!r) {
             return;
@@ -485,14 +595,11 @@ function validateSupplierCompanyMatch(frm, cdt, cdn) {
 
         const supplier_company = r.custom_company;
 
-        // Check if supplier's company matches parent company
         if (supplier_company && supplier_company.toLowerCase() !== parent_company.toLowerCase()) {
             const selected_supplier = row.supplier;
 
-            // Clear the supplier field to remove the mismatched supplier
             frappe.model.set_value(cdt, cdn, 'supplier', '');
 
-            // Show error message at top of form (standard Frappe behavior)
             frappe.msgprint({
                 title: __('Company Mismatch'),
                 message: __('Supplier {0} does not belong to company {1}. ', [
@@ -503,4 +610,72 @@ function validateSupplierCompanyMatch(frm, cdt, cdn) {
             });
         }
     });
+}
+
+
+// Item child tables: supplier/customer filters
+function setupItemPartyFilters(frm) {
+    if (!frm || !frm.doc) {
+        return;
+    }
+    const parent_company = frm.doc.custom_company;
+    if (frm.fields_dict.supplier_items) {
+        frm.set_query('supplier', 'supplier_items', function() {
+            if (parent_company) {
+                return {
+                    filters: {
+                        custom_company: parent_company,
+                        disabled: 0
+                    }
+                };
+            }
+            return {
+                filters: {
+                    disabled: 0
+                }
+            };
+        });
+    }
+    if (frm.fields_dict.customer_items) {
+        frm.set_query('customer_name', 'customer_items', function() {
+            if (parent_company) {
+                return {
+                    filters: {
+                        custom_company: parent_company,
+                        disabled: 0
+                    }
+                };
+            }
+            return {
+                filters: {
+                    disabled: 0
+                }
+            };
+        });
+    }
+}
+
+// Item taxes child table: item_tax_template filter
+function setupItemTaxTemplateFilters(frm) {
+    if (!frm || !frm.doc) {
+        return;
+    }
+    const parent_company = frm.doc.custom_company;
+    if (frm.fields_dict.taxes) {
+        frm.set_query('item_tax_template', 'taxes', function() {
+            if (parent_company) {
+                return {
+                    filters: {
+                        company: parent_company,
+                        disabled: 0
+                    }
+                };
+            }
+            return {
+                filters: {
+                    disabled: 0
+                }
+            };
+        });
+    }
 }
