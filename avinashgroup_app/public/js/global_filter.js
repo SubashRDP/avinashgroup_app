@@ -23,6 +23,10 @@ $(document).on('app_ready', function() {
                 // Clear supplier/customer if they don't match new company
                 validateAndClearFields(frm);
             },  
+            party_type: function(frm) {
+                setupCompanyBasedFilters(frm);
+                validateAndClearFields(frm);
+            },
             supplier: function(frm){
                   validateAndClearFields(frm);
             },
@@ -88,6 +92,22 @@ function setupCompanyBasedFilters(frm) {
             return {
                 filters: {
                     'disabled': 0
+                }
+            };
+        });
+    }
+
+    if (frm.doctype === "Payment Entry" && frm.fields_dict.party) {
+        frm.set_query('party', function() {
+            const party_type = frm.doc.party_type;
+            if (!company || !party_type) {
+                return {};
+            }
+            return {
+                query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_party",
+                filters: {
+                    party_type: party_type,
+                    company: company
                 }
             };
         });
@@ -189,6 +209,25 @@ function validateAndClearFields(frm) {
             }
         });
     }
+
+    // Validate and clear Payment Entry party
+    if (frm.doctype === "Payment Entry" && frm.doc.party && frm.doc.party_type) {
+        const party_type = frm.doc.party_type;
+        const company_field = getCompanyFieldForParty(party_type);
+        if (company_field) {
+            frappe.db.get_value(party_type, frm.doc.party, company_field, function(r) {
+                if (r && r[company_field] && r[company_field] !== company) {
+                    frappe.msgprint({
+                        title: __('Company Mismatch'),
+                        message: __('{0} {1} does not belong to company {2}. Clearing party field.', 
+                            [party_type, frm.doc.party, company]),
+                        indicator: 'orange'
+                    });
+                    frm.set_value('party', '');
+                }
+            });
+        }
+    }
     
     //Validate and clear items in batch
     if (frm.doc.items && frm.doc.items.length > 0) {
@@ -259,3 +298,28 @@ function validateAndClearFields(frm) {
         }
     }
 }
+
+function doctypeHasField(doctype, fieldname) {
+    const meta = frappe.get_meta(doctype);
+    return meta && meta.fields && meta.fields.some(f => f.fieldname === fieldname);
+}
+
+function getCompanyFieldForParty(doctype) {
+    if (partyTypeCompanyFieldOverride[doctype]) {
+        return partyTypeCompanyFieldOverride[doctype];
+    }
+    if (doctypeHasField(doctype, 'custom_company')) {
+        return 'custom_company';
+    }
+    if (doctypeHasField(doctype, 'company')) {
+        return 'company';
+    }
+    return null;
+}
+
+const partyTypeCompanyFieldOverride = {
+    "Customer": "custom_company",
+    "Supplier": "custom_company",
+    "Employee": "company",
+    "Shareholder": "company"
+};
