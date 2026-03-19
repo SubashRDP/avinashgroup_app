@@ -76,6 +76,19 @@ $(document).on('app_ready', function() {
         }
     });
 
+    // Asset Category: accounts child table filtered by custom_company
+    frappe.ui.form.on('Asset Category', {
+        setup: function(frm) {
+            filterAssetCategoryAccounts(frm);
+        },
+        refresh: function(frm) {
+            filterAssetCategoryAccounts(frm);
+        },
+        custom_company: function(frm) {
+            frm.refresh_field('accounts');
+        }
+    });
+
     // Item: groups + child tables filtered by custom_company
     frappe.ui.form.on('Item', {
         setup: function(frm) {
@@ -209,6 +222,22 @@ function filterSupplierGroup(frm) {
             return {
                 filters: {
                     custom_company: frm.doc.custom_company
+                }
+            };
+        }
+        return {};
+    });
+}
+
+function filterAssetCategoryAccounts(frm) {
+    if (!frm.fields_dict.accounts) {
+        return;
+    }
+    frm.set_query('company_name', 'accounts', function() {
+        if (frm.doc.custom_company) {
+            return {
+                filters: {
+                    name: frm.doc.custom_company
                 }
             };
         }
@@ -350,6 +379,7 @@ function setupCompanyBasedFilters(frm) {
     setupItemCodeFilter(frm, company);
     setupSupplierFilter(frm, company);
     setupJournalEntryAccountFilters(frm, company);
+    setupMaterialRequestWipAssetFilter(frm, company);
 }
 
 
@@ -444,6 +474,23 @@ function setupJournalEntryAccountFilters(frm, company) {
 
     // Project company-wise filter
     frm.set_query('project', 'accounts', function() {
+        if (!company) {
+            return {};
+        }
+        return {
+            filters: {
+                company: company
+            }
+        };
+    });
+}
+
+// Material Request items: WIP Composite Asset filter by company
+function setupMaterialRequestWipAssetFilter(frm, company) {
+    if (frm.doctype !== "Material Request" || !frm.fields_dict.items) {
+        return;
+    }
+    frm.set_query('wip_composite_asset', 'items', function() {
         if (!company) {
             return {};
         }
