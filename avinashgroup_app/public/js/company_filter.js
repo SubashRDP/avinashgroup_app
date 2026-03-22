@@ -290,12 +290,12 @@ $(document).on("app_ready", function() {
             }
 
             // Special blocks registered after config is loaded
-            _register_special_blocks();
+           // _register_special_blocks();
         }
     });
     /*
 
-    function _register_special_blocks() {
+    //function _register_special_blocks() {
 
         // ── PAYMENT ENTRY: party filtered by party_type ──────
         frappe.ui.form.on("Payment Entry", {
