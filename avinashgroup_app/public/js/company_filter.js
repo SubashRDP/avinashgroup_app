@@ -289,84 +289,8 @@ $(document).on("app_ready", function() {
                 avinash.filter_engine.setup(cur_frm);
             }
 
-            // Special blocks registered after config is loaded
-            _register_special_blocks();
         }
     });
-    /*
-
-    function _register_special_blocks() {
-
-        // ── PAYMENT ENTRY: party filtered by party_type ──────
-        frappe.ui.form.on("Payment Entry", {
-            setup:      function(frm) { avinash.filter_engine.setup(frm); _pe_party(frm); },
-            refresh:    function(frm) { avinash.filter_engine.setup(frm); _pe_party(frm); },
-            company:    function(frm) {
-                avinash.filter_engine.setup(frm);
-                avinash.filter_engine.validate_and_clear(frm);
-                _pe_party(frm);
-            },
-            party_type: function(frm) { _pe_party(frm); }
-        });
-
-        // ── JOURNAL ENTRY: per-row party filtered by party_type
-        frappe.ui.form.on("Journal Entry", {
-            setup:   function(frm) { _je_filters(frm); },
-            refresh: function(frm) { _je_filters(frm); },
-            company: function(frm) { _je_filters(frm); }
-        });
-        frappe.ui.form.on("Journal Entry Account", {
-            party_type: function(frm) { _je_filters(frm); }
-        });
-
-        // ── BANK ACCOUNT: party filtered by party_type ───────
-        frappe.ui.form.on("Bank Account", {
-            setup:      function(frm) { _ba_party(frm); },
-            refresh:    function(frm) { _ba_party(frm); },
-            company:    function(frm) { _ba_party(frm); },
-            party_type: function(frm) { _ba_party(frm); }
-        });
-    }
-
- 
-    function _pe_party(frm) {
-        if (!frm.doc.party_type || !frm.fields_dict.party) return;
-        const company = frm.doc.company;
-        const filter_key = avinash.filter_engine._resolve_filter_key(frm.doc.party_type);
-        frm.set_query("party", function() {
-            return company && filter_key ? { filters: { [filter_key]: company } } : {};
-        });
-    }
-
-    function _je_filters(frm) {
-        const company = frm.doc.company;
-
-        frm.set_query("bank_account", "accounts", function() {
-            return company ? { filters: { company: company } } : {};
-        });
-
-        frm.set_query("project", "accounts", function() {
-            const filter_key = avinash.filter_engine._resolve_filter_key("Project");
-            return company && filter_key ? { filters: { [filter_key]: company } } : {};
-        });
-
-        frm.set_query("party", "accounts", function(_doc, cdt, cdn) {
-            const row = locals[cdt][cdn];
-            if (!row.party_type || !company) return {};
-            const filter_key = avinash.filter_engine._resolve_filter_key(row.party_type);
-            return filter_key ? { filters: { [filter_key]: company } } : {};
-        });
-    }
-
-    function _ba_party(frm) {
-        if (!frm.doc.party_type || !frm.fields_dict.party) return;
-        const company = frm.doc.company;
-        const filter_key = avinash.filter_engine._resolve_filter_key(frm.doc.party_type);
-        frm.set_query("party", function() {
-            return company && filter_key ? { filters: { [filter_key]: company } } : {};
-        });
-    }
-   */
 });
 
 
