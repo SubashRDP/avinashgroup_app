@@ -528,11 +528,21 @@ def get_filter_config():
         if not configs:
             raise Exception("no records — use fallback")
 
+        # Dynamic-link flag fieldname
+        dyn_flag_field = "is_dynamic_link"
+
         # Fetch ALL child rows in one query (avoids N+1)
         all_rows = frappe.get_all(
             "Company Filter Field",
             filters={"parent": ["in", [c.name for c in configs]]},
-            fields=["parent", "fieldname", "is_child_table", "child_fieldname"],
+            fields=[
+                "parent",
+                "fieldname",
+                "is_child_table",
+                "child_fieldname",
+                dyn_flag_field,
+                "dynamic_link_field",
+            ],
             order_by="parent, idx asc",
             ignore_permissions=True
         )
@@ -541,14 +551,30 @@ def get_filter_config():
         for r in all_rows:
             rows_by_parent.setdefault(r.parent, []).append(r)
 
+        def _row_to_entry(r):
+            is_dyn = bool(r.get(dyn_flag_field)) if isinstance(r, dict) else bool(getattr(r, dyn_flag_field, 0))
+            dyn_field = r.get("dynamic_link_field") if isinstance(r, dict) else getattr(r, "dynamic_link_field", None)
+            if is_dyn:
+                return {
+                    "fieldname": r.get("fieldname") if isinstance(r, dict) else r.fieldname,
+                    "is_dynamic_link": 1,
+                    "dynamic_link_field": dyn_field or ""
+                }
+            return r.get("fieldname") if isinstance(r, dict) else r.fieldname
+
         result = {}
         for config in configs:
             rows = rows_by_parent.get(config.name, [])
-            top_fields = [r.fieldname for r in rows if not r.is_child_table]
+            top_fields = [_row_to_entry(r) for r in rows if not r.is_child_table]
             child_tables = {}
             for r in rows:
                 if r.is_child_table and r.child_fieldname:
-                    child_tables.setdefault(r.fieldname, []).append(r.child_fieldname)
+                    entry = _row_to_entry({
+                        "fieldname": r.child_fieldname,
+                        dyn_flag_field: r.get(dyn_flag_field) if isinstance(r, dict) else getattr(r, dyn_flag_field, 0),
+                        "dynamic_link_field": r.get("dynamic_link_field") if isinstance(r, dict) else getattr(r, "dynamic_link_field", None)
+                    })
+                    child_tables.setdefault(r.fieldname, []).append(entry)
 
             result[config.doctype_name] = {
                 "company_field": config.company_field,
@@ -559,14 +585,40 @@ def get_filter_config():
         # Pre-resolve company field for every linked doctype referenced in the config
         # so the JS engine doesn't need frappe.get_meta() on linked doctypes at runtime.
         filter_keys = {}
+
+        def _get_dynamic_targets(doctype, dt_fieldname):
+            if not doctype or not dt_fieldname:
+                return []
+            try:
+                df = frappe.get_meta(doctype).get_field(dt_fieldname)
+                if not df or not df.options:
+                    return []
+                if df.fieldtype == "Select":
+                    return [o.strip() for o in df.options.split("\n") if o.strip()]
+            except Exception:
+                pass
+            return []
+
         for config in configs:
             doctype_name = config.doctype_name
             rows = rows_by_parent.get(config.name, [])
             for r in rows:
                 try:
+                    is_dyn = bool(r.get(dyn_flag_field)) if isinstance(r, dict) else bool(getattr(r, dyn_flag_field, 0))
                     if not r.is_child_table:
                         df = frappe.get_meta(doctype_name).get_field(r.fieldname)
-                        if df and df.fieldtype == "Link" and df.options:
+                        if not df:
+                            continue
+                        # Dynamic links: pre-resolve targets from the doctype selector field (if Select)
+                        if df.fieldtype == "Dynamic Link" or is_dyn:
+                            dt_field = r.get("dynamic_link_field") if isinstance(r, dict) else getattr(r, "dynamic_link_field", None)
+                            if not dt_field:
+                                dt_field = df.options
+                            for tgt in _get_dynamic_targets(doctype_name, dt_field):
+                                if tgt not in result and tgt not in filter_keys:
+                                    filter_keys[tgt] = _resolve_company_field(tgt) or ""
+                            continue
+                        if df.fieldtype == "Link" and df.options:
                             linked_dt = df.options
                             if linked_dt not in result and linked_dt not in filter_keys:
                                 filter_keys[linked_dt] = _resolve_company_field(linked_dt) or ""
@@ -574,7 +626,17 @@ def get_filter_config():
                         tdf = frappe.get_meta(doctype_name).get_field(r.fieldname)
                         if tdf and tdf.options:
                             cdf = frappe.get_meta(tdf.options).get_field(r.child_fieldname)
-                            if cdf and cdf.fieldtype == "Link" and cdf.options:
+                            if not cdf:
+                                continue
+                            if cdf.fieldtype == "Dynamic Link" or is_dyn:
+                                dt_field = r.get("dynamic_link_field") if isinstance(r, dict) else getattr(r, "dynamic_link_field", None)
+                                if not dt_field:
+                                    dt_field = cdf.options
+                                for tgt in _get_dynamic_targets(tdf.options, dt_field):
+                                    if tgt not in result and tgt not in filter_keys:
+                                        filter_keys[tgt] = _resolve_company_field(tgt) or ""
+                                continue
+                            if cdf.fieldtype == "Link" and cdf.options:
                                 linked_dt = cdf.options
                                 if linked_dt not in result and linked_dt not in filter_keys:
                                     filter_keys[linked_dt] = _resolve_company_field(linked_dt) or ""
@@ -635,6 +697,49 @@ def search_party(doctype, txt, searchfield, start, page_len, filters):
 
     records = frappe.get_list(
         party_type,
+        filters=query_filters,
+        or_filters=or_filters or None,
+        fields=["name"],
+        start=start,
+        page_length=page_len,
+        order_by="name asc"
+    )
+
+    return [[r.name] for r in records]
+
+
+# ─────────────────────────────────────────────────────────────
+#  LINK QUERY — generic company-filtered search for Dynamic Link
+# ─────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
+    filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+    linked_dt = filters.get("linked_doctype")
+    company = filters.get("company")
+    if not linked_dt:
+        return []
+
+    try:
+        meta = frappe.get_meta(linked_dt)
+    except Exception:
+        return []
+
+    company_field = _resolve_company_field(linked_dt)
+    query_filters = {}
+    if company and company_field:
+        query_filters[company_field] = company
+    if meta.get_field("disabled"):
+        query_filters["disabled"] = 0
+
+    or_filters = []
+    if txt:
+        or_filters.append(["name", "like", f"%{txt}%"])
+        if searchfield and searchfield != "name":
+            or_filters.append([searchfield, "like", f"%{txt}%"])
+
+    records = frappe.get_list(
+        linked_dt,
         filters=query_filters,
         or_filters=or_filters or None,
         fields=["name"],

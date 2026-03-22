@@ -13,6 +13,33 @@ frappe.provide("avinash.filter_engine");
 
 avinash.filter_engine = {
 
+    _normalize_field_entry: function(entry) {
+        if (typeof entry === "string") {
+            return {
+                fieldname: entry,
+                is_dynamic_link: false,
+                dynamic_link_field: null
+            };
+        }
+        return {
+            fieldname: entry.fieldname,
+            is_dynamic_link: !!entry.is_dynamic_link,
+            dynamic_link_field: entry.dynamic_link_field || null
+        };
+    },
+
+    _resolve_linked_doctype: function(doctype, fieldname, doc_or_row, dynamic_link_field) {
+        const df = frappe.meta.get_docfield(doctype, fieldname);
+        if (!df) return null;
+        if (df.fieldtype === "Dynamic Link" || dynamic_link_field) {
+            const dt_field = dynamic_link_field || df.options;
+            if (!dt_field || !doc_or_row) return null;
+            return doc_or_row[dt_field] || null;
+        }
+        if (df.fieldtype === "Link") return df.options;
+        return null;
+    },
+
     // Returns the field name used to filter by company on linked_doctype:
     //   "name"           → linked_doctype is Company
     //   "company"        → standard company field
@@ -45,13 +72,20 @@ avinash.filter_engine = {
         const self = avinash.filter_engine;
 
         // top-level fields
-        (config.fields || []).forEach(function(fieldname) {
-            if (!frm.fields_dict[fieldname]) return;
-            const linked_dt = frappe.meta.get_docfield(frm.doctype, fieldname)?.options;
-            if (!linked_dt) return;
-            frm.set_query(fieldname, function() {
+        (config.fields || []).forEach(function(entry) {
+            const f = self._normalize_field_entry(entry);
+            if (!frm.fields_dict[f.fieldname]) return;
+            frm.set_query(f.fieldname, function() {
                 const company = frm.doc[cf];
                 if (!company) return {};
+                const linked_dt = self._resolve_linked_doctype(frm.doctype, f.fieldname, frm.doc, f.dynamic_link_field);
+                if (!linked_dt) return {};
+                if (f.is_dynamic_link) {
+                    return {
+                        query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_link_by_company",
+                        filters: { linked_doctype: linked_dt, company: company }
+                    };
+                }
                 const filter_key = self._resolve_filter_key(linked_dt);
                 return filter_key ? { filters: { [filter_key]: company } } : {};
             });
@@ -65,15 +99,22 @@ avinash.filter_engine = {
             console.log("[company_filter] child_doctype for", table, "→", child_doctype);
             if (!child_doctype) return;
 
-            fields.forEach(function(fieldname) {
-                const linked_dt = frappe.meta.get_docfield(child_doctype, fieldname)?.options;
-                console.log("[company_filter] child field", table, ".", fieldname, "→ linked_dt:", linked_dt);
-                if (!linked_dt) return;
-                frm.set_query(fieldname, table, function() {
+            fields.forEach(function(entry) {
+                const f = self._normalize_field_entry(entry);
+                frm.set_query(f.fieldname, table, function(doc, cdt, cdn) {
                     const company = frm.doc[cf];
                     if (!company) return {};
+                    const row = locals[cdt][cdn];
+                    const linked_dt = self._resolve_linked_doctype(child_doctype, f.fieldname, row, f.dynamic_link_field);
+                    console.log("[company_filter] set_query callback", table, ".", f.fieldname, "company:", company, "linked_dt:", linked_dt);
+                    if (!linked_dt) return {};
+                    if (f.is_dynamic_link) {
+                        return {
+                            query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_link_by_company",
+                            filters: { linked_doctype: linked_dt, company: company }
+                        };
+                    }
                     const filter_key = self._resolve_filter_key(linked_dt);
-                    console.log("[company_filter] set_query callback", table, ".", fieldname, "company:", company, "filter_key:", filter_key);
                     return filter_key ? { filters: { [filter_key]: company } } : {};
                 });
             });
@@ -87,8 +128,8 @@ avinash.filter_engine = {
         const company = frm.doc[cf];
         if (!company) return;
 
-        (config.fields || []).forEach(function(fieldname) {
-            avinash.filter_engine._check_field(frm, fieldname, company);
+        (config.fields || []).forEach(function(entry) {
+            avinash.filter_engine._check_field(frm, entry, company);
         });
 
         $.each(config.child_tables || {}, function(table, fields) {
@@ -96,22 +137,25 @@ avinash.filter_engine = {
         });
     },
 
-    _check_field: function(frm, fieldname, company) {
-        const value = frm.doc[fieldname];
+    _check_field: function(frm, entry, company) {
+        const f = avinash.filter_engine._normalize_field_entry(entry);
+        const value = frm.doc[f.fieldname];
         if (!value) return;
-        const df = frappe.meta.get_docfield(frm.doctype, fieldname);
-        if (!df || df.fieldtype !== "Link") return;
-        const filter_key = avinash.filter_engine._resolve_filter_key(df.options);
+        const df = frappe.meta.get_docfield(frm.doctype, f.fieldname);
+        if (!df) return;
+        const linked_dt = avinash.filter_engine._resolve_linked_doctype(frm.doctype, f.fieldname, frm.doc, f.dynamic_link_field);
+        if (!linked_dt) return;
+        const filter_key = avinash.filter_engine._resolve_filter_key(linked_dt);
         if (!filter_key) return;
 
-        frappe.db.get_value(df.options, value, filter_key, function(r) {
+        frappe.db.get_value(linked_dt, value, filter_key, function(r) {
             if (r && r[filter_key] && r[filter_key] !== company) {
                 frappe.show_alert({
                     message: __("{0} '{1}' does not belong to {2}. Field cleared.",
-                        [df.label || fieldname, value, company]),
+                        [df.label || f.fieldname, value, company]),
                     indicator: "orange"
                 }, 6);
-                frm.set_value(fieldname, "");
+                frm.set_value(f.fieldname, "");
             }
         });
     },
@@ -123,53 +167,65 @@ avinash.filter_engine = {
         const child_doctype = tdf.options;
         const self = avinash.filter_engine;
 
-        fields.forEach(function(fieldname) {
-            const cdf = frappe.meta.get_docfield(child_doctype, fieldname);
-            if (!cdf || cdf.fieldtype !== "Link") return;
-            const filter_key = self._resolve_filter_key(cdf.options);
-            if (!filter_key) return;
+        fields.forEach(function(entry) {
+            const f = self._normalize_field_entry(entry);
+            const cdf = frappe.meta.get_docfield(child_doctype, f.fieldname);
+            if (!cdf) return;
+            const values_by_dt = {};
+            (frm.doc[table] || []).forEach(function(row) {
+                const val = row[f.fieldname];
+                if (!val) return;
+                const linked_dt = self._resolve_linked_doctype(child_doctype, f.fieldname, row, f.dynamic_link_field);
+                if (!linked_dt) return;
+                if (!values_by_dt[linked_dt]) values_by_dt[linked_dt] = new Set();
+                values_by_dt[linked_dt].add(val);
+            });
 
-            const values = [...new Set(
-                frm.doc[table].filter(r => r[fieldname]).map(r => r[fieldname])
-            )];
-            if (!values.length) return;
+            Object.keys(values_by_dt).forEach(function(linked_dt) {
+                const filter_key = self._resolve_filter_key(linked_dt);
+                if (!filter_key) return;
+                const values = [...values_by_dt[linked_dt]];
+                if (!values.length) return;
 
-            frappe.call({
-                method: "frappe.client.get_list",
-                args: {
-                    doctype: cdf.options,
-                    filters: { name: ["in", values] },
-                    fields: ["name", filter_key]
-                },
-                callback: function(res) {
-                    if (!res || !res.message) return;
-                    const mismatch = new Set(
-                        res.message
-                            .filter(d => d[filter_key] && d[filter_key] !== company)
-                            .map(d => d.name)
-                    );
-                    if (!mismatch.size) return;
+                frappe.call({
+                    method: "frappe.client.get_list",
+                    args: {
+                        doctype: linked_dt,
+                        filters: { name: ["in", values] },
+                        fields: ["name", filter_key]
+                    },
+                    callback: function(res) {
+                        if (!res || !res.message) return;
+                        const mismatch = new Set(
+                            res.message
+                                .filter(d => d[filter_key] && d[filter_key] !== company)
+                                .map(d => d.name)
+                        );
+                        if (!mismatch.size) return;
 
-                    let removed = 0;
-                    frm.doc[table] = frm.doc[table].filter(function(row) {
-                        if (row[fieldname] && mismatch.has(row[fieldname])) {
-                            frappe.model.clear_doc(row.doctype, row.name);
-                            removed++;
-                            return false;
+                        let removed = 0;
+                        frm.doc[table] = frm.doc[table].filter(function(row) {
+                            const row_dt = self._resolve_linked_doctype(child_doctype, f.fieldname, row, f.dynamic_link_field);
+                            if (row_dt !== linked_dt) return true;
+                            if (row[f.fieldname] && mismatch.has(row[f.fieldname])) {
+                                frappe.model.clear_doc(row.doctype, row.name);
+                                removed++;
+                                return false;
+                            }
+                            return true;
+                        });
+
+                        if (removed) {
+                            frappe.show_alert({
+                                message: __("Removed {0} row(s) in '{1}' — {2} mismatch with {3}.",
+                                    [removed, table, f.fieldname, company]),
+                                indicator: "orange"
+                            }, 6);
+                            frm.refresh_field(table);
+                            frm.dirty();
                         }
-                        return true;
-                    });
-
-                    if (removed) {
-                        frappe.show_alert({
-                            message: __("Removed {0} row(s) in '{1}' — {2} mismatch with {3}.",
-                                [removed, table, fieldname, company]),
-                            indicator: "orange"
-                        }, 6);
-                        frm.refresh_field(table);
-                        frm.dirty();
                     }
-                }
+                });
             });
         });
     }
@@ -203,15 +259,26 @@ $(document).on("app_ready", function() {
                 const config = r.message[doctype];
                 const cf     = config.company_field || "company";
 
+                function _defer_setup(frm) {
+                    setTimeout(function() { avinash.filter_engine.setup(frm); }, 0);
+                }
+
                 const events = {
                     setup:   function(frm) { avinash.filter_engine.setup(frm); },
                     refresh: function(frm) { avinash.filter_engine.setup(frm); }
                 };
 
                 events[cf] = function(frm) {
-                    avinash.filter_engine.setup(frm);
+                    _defer_setup(frm);
                     avinash.filter_engine.validate_and_clear(frm);
                 };
+
+                // Re-apply queries when the dynamic link doctype selector changes
+                (config.fields || []).forEach(function(entry) {
+                    if (typeof entry !== "string" && entry.is_dynamic_link && entry.dynamic_link_field) {
+                        events[entry.dynamic_link_field] = function(frm) { _defer_setup(frm); };
+                    }
+                });
 
                 frappe.ui.form.on(doctype, events);
             });
@@ -226,7 +293,7 @@ $(document).on("app_ready", function() {
             _register_special_blocks();
         }
     });
-
+    /*
 
     function _register_special_blocks() {
 
@@ -261,7 +328,7 @@ $(document).on("app_ready", function() {
         });
     }
 
-
+ 
     function _pe_party(frm) {
         if (!frm.doc.party_type || !frm.fields_dict.party) return;
         const company = frm.doc.company;
@@ -299,5 +366,7 @@ $(document).on("app_ready", function() {
             return company && filter_key ? { filters: { [filter_key]: company } } : {};
         });
     }
-
+   */
 });
+
+
