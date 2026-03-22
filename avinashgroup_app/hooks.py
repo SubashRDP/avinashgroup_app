@@ -32,7 +32,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=9.9",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.3",  # Common taxes handler for all purchase doctypes
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
-    "/assets/avinashgroup_app/js/company_filter.js?v=1.0",
+    "/assets/avinashgroup_app/js/company_filter.js?v=2.1",
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
 ]
 # my_custom_app/hooks.py
@@ -178,6 +178,7 @@ sales_invoice_specific_events = {
 # Build doc_events Dictionary
 doc_events = AuditEventMapper.get_doc_events()
 
+
 # Merge Purchase Invoice specific events
 if "Purchase Invoice" not in doc_events:
     doc_events["Purchase Invoice"] = {}
@@ -204,6 +205,27 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
 
 
+
+# Ensure Company Filter config changes clear the cached config
+def _add_doc_event(doctype, event, handler):
+    if doctype not in doc_events:
+        doc_events[doctype] = {}
+    existing = doc_events[doctype].get(event)
+    if not existing:
+        doc_events[doctype][event] = handler
+        return
+    if isinstance(existing, list):
+        if handler not in existing:
+            existing.append(handler)
+        return
+    if existing != handler:
+        doc_events[doctype][event] = [existing, handler]
+
+
+_clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
+for _dt in ("Company Filter Config", "Company Filter Field"):
+    _add_doc_event(_dt, "on_update", _clear_filter_cache)
+    _add_doc_event(_dt, "on_trash", _clear_filter_cache)
 
 # for doctype in fiscal_naming_doctypes:
 #     if doctype not in doc_events:
@@ -513,28 +535,8 @@ override_whitelisted_methods = {
 
 
 fixtures = [
- {
-        "dt": "Custom Field",
-        "filters": [
-            ["fieldname", "like", "custom_%"],
-            ["fieldname", "not in", [
-                "custom_abbr",
-                "custom_company_abbr",
-                "custom_fiscal_year"
-            ]]
-        ]
-    },
-    {
-        "dt": "Client Script",
-        "filters": [
-            ["module", "=", "Avinash Group App"]
-        ]
-    },
-    {
-        "dt": "DocType",
-        "filters": [
-            ["custom", "=", 1],
-            ["module", "=", "Avinash Group App"]
-        ]
-    }
+
+ 
+    {"dt": "Company Filter Config"},
+    {"dt": "Company Filter Field"}
 ]

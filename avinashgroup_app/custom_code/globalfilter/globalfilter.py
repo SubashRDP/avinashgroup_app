@@ -2,7 +2,6 @@ import frappe
 from frappe import _
 from frappe.utils.caching import request_cache
 from collections import defaultdict
-
 # ─────────────────────────────────────────────────────────────
 #  COMPANY FILTER CONFIG
 #  company_field : field on the doc that holds the company value
@@ -148,6 +147,25 @@ FILTER_CONFIG = {
     "Bank Account": {
         "company_field": "company",
         "custom": True
+    },
+
+    # Master doctypes — use custom_company
+    "Customer": {
+        "company_field": "custom_company",
+        "fields": ["customer_group", "default_price_list", "default_bank_account", "default_company_bank_account"]
+    },
+    "Supplier": {
+        "company_field": "custom_company",
+        "fields": ["supplier_group", "default_price_list", "default_bank_account", "default_company_bank_account"]
+    },
+    "Item": {
+        "company_field": "custom_company",
+        "fields": ["item_group", "asset_category"],
+        "child_tables": {
+            "supplier_items": ["supplier"],
+            "customer_items": ["customer_name"],
+            "taxes":          ["item_tax_template"]
+        }
     },
 }
 
@@ -487,13 +505,102 @@ def validate_company_matching(doc, method=None):
 @frappe.whitelist()
 def get_filter_config():
     """
-    Expose FILTER_CONFIG to company_filter.js so the JS doesn't need
-    a mirrored static copy. The 'custom' key is backend-only and stripped.
+    Returns filter config for JS engine.
+    Redis-cached — cleared when Company Filter Config is saved/deleted.
+    Falls back to hardcoded FILTER_CONFIG before first migrate.
     """
-    return {
-        dt: {k: v for k, v in cfg.items() if k != "custom"}
-        for dt, cfg in FILTER_CONFIG.items()
-    }
+    cache_key = "company_filter_config"
+    cached = frappe.cache().get_value(cache_key)
+    if cached:
+        return cached
+
+    try:
+        if not frappe.db.table_exists("Company Filter Config"):
+            raise Exception("table not ready")
+
+        # ignore_permissions — this is system config, not user data
+        configs = frappe.get_all(
+            "Company Filter Config",
+            fields=["name", "doctype_name", "company_field"],
+            ignore_permissions=True
+        )
+
+        if not configs:
+            raise Exception("no records — use fallback")
+
+        # Fetch ALL child rows in one query (avoids N+1)
+        all_rows = frappe.get_all(
+            "Company Filter Field",
+            filters={"parent": ["in", [c.name for c in configs]]},
+            fields=["parent", "fieldname", "is_child_table", "child_fieldname"],
+            order_by="parent, idx asc",
+            ignore_permissions=True
+        )
+
+        rows_by_parent = {}
+        for r in all_rows:
+            rows_by_parent.setdefault(r.parent, []).append(r)
+
+        result = {}
+        for config in configs:
+            rows = rows_by_parent.get(config.name, [])
+            top_fields = [r.fieldname for r in rows if not r.is_child_table]
+            child_tables = {}
+            for r in rows:
+                if r.is_child_table and r.child_fieldname:
+                    child_tables.setdefault(r.fieldname, []).append(r.child_fieldname)
+
+            result[config.doctype_name] = {
+                "company_field": config.company_field,
+                "fields": top_fields,
+                "child_tables": child_tables
+            }
+
+        # Pre-resolve company field for every linked doctype referenced in the config
+        # so the JS engine doesn't need frappe.get_meta() on linked doctypes at runtime.
+        filter_keys = {}
+        for config in configs:
+            doctype_name = config.doctype_name
+            rows = rows_by_parent.get(config.name, [])
+            for r in rows:
+                try:
+                    if not r.is_child_table:
+                        df = frappe.get_meta(doctype_name).get_field(r.fieldname)
+                        if df and df.fieldtype == "Link" and df.options:
+                            linked_dt = df.options
+                            if linked_dt not in result and linked_dt not in filter_keys:
+                                filter_keys[linked_dt] = _resolve_company_field(linked_dt) or ""
+                    else:
+                        tdf = frappe.get_meta(doctype_name).get_field(r.fieldname)
+                        if tdf and tdf.options:
+                            cdf = frappe.get_meta(tdf.options).get_field(r.child_fieldname)
+                            if cdf and cdf.fieldtype == "Link" and cdf.options:
+                                linked_dt = cdf.options
+                                if linked_dt not in result and linked_dt not in filter_keys:
+                                    filter_keys[linked_dt] = _resolve_company_field(linked_dt) or ""
+                except Exception:
+                    pass
+
+        result["__filter_keys__"] = filter_keys
+        frappe.cache().set_value(cache_key, result)
+        return result
+
+    except Exception:
+        # Fallback to hardcoded config (before first migrate)
+        return {
+            dt: {k: v for k, v in cfg.items() if k != "custom"}
+            for dt, cfg in FILTER_CONFIG.items()
+        }
+
+
+def clear_filter_config_cache(doc, method=None):
+    """Called by hooks when Company Filter Config is saved/deleted."""
+    frappe.cache().delete_value("company_filter_config")
+    frappe.msgprint(
+        f"Company Filter cache cleared for <b>{doc.name}</b>. Refresh your browser to apply changes.",
+        indicator="green",
+        alert=True
+    )
 
 
 # ─────────────────────────────────────────────────────────────

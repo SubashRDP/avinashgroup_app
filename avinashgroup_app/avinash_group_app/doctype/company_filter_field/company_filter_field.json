@@ -1,0 +1,45 @@
+{
+ "actions": [],
+ "creation": "2026-03-20 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "fieldname",
+  "is_child_table",
+  "child_fieldname"
+ ],
+ "fields": [
+  {
+   "fieldname": "fieldname",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Field Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "is_child_table",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Child Table"
+  },
+  {
+   "depends_on": "eval:doc.is_child_table == 1",
+   "fieldname": "child_fieldname",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Child Field Name"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-03-20 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Company Filter Field",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
