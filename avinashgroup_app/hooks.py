@@ -29,9 +29,11 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
-	"/assets/avinashgroup_app/js/sales_invoice.js?v=9.6",
-	"/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.2",
-	"/assets/avinashgroup_app/js/global_filter.js?v=1.5",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=9.9",
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.3",  # Common taxes handler for all purchase doctypes
+    "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
+    "/assets/avinashgroup_app/js/company_filter.js?v=2.2",
+    "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
 ]
 # my_custom_app/hooks.py
 
@@ -55,7 +57,6 @@ doctype_js = {
             # "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
             "Purchase Order": "public/js/purchase_order.js",
             "Material Request": "public/js/material_request.js",
-            "Payment Entry": "public/js/payment_entry.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
@@ -83,7 +84,7 @@ doctype_js = {
 
 # Common event handler for auto-naming
 # common_naming_events = {
-#     "before_save":"avinashgroup_app.custom_code.api.handle_custom_naming"
+#     "before_save":"avinashgroup_app.custom_code.api.handle_custom_naming"    
 # }
 
 # # Define your list of DocTypes that use common naming
@@ -106,6 +107,7 @@ doctype_js = {
 # }sales_invoice_specific_events
 
 
+
 # common_fiscal_naming_events = {
 #     "autoname": "avinashgroup_app.custom_code.api.handle_naming_and_fiscal_year"
 # }
@@ -119,6 +121,7 @@ doctype_js = {
 # ]
 
 
+
 # doc_events = {
 #     doctype: common_fiscal_naming_events.copy() for doctype in fiscal_naming_doctypes
 # }
@@ -130,38 +133,39 @@ doctype_js = {
 # doc_events["Purchase Invoice"].update(purchase_invoice_events)
 
 
-## Event Templates
 
+## Event Templates
+ 
 from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 
 # Purchase Invoice specific events (using common handler)
 purchase_invoice_specific_events = {
-	"before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
-	"before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
-	"validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice",
+    "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice"
 }
 
 # Purchase Order events (using common handler)
 purchase_order_events = {
-	"before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_order",
-	"validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_order",
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_order",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_order"
 }
 
 # Purchase Receipt events (using common handler)
 purchase_receipt_events = {
-	"before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_receipt",
-	"validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_receipt",
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_receipt",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_receipt"
 }
 
 # Supplier Quotation events (using common handler)
 supplier_quotation_events = {
-	"before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_supplier_quotation",
-	"validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_supplier_quotation",
+    "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_supplier_quotation",
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_supplier_quotation"
 }
 
 sales_invoice_specific_events = {
-	"before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
-	"validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice",
+    "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
 }
 
 # doc_events = {
@@ -174,57 +178,81 @@ sales_invoice_specific_events = {
 # Build doc_events Dictionary
 doc_events = AuditEventMapper.get_doc_events()
 
+
 # Merge Purchase Invoice specific events
 if "Purchase Invoice" not in doc_events:
-	doc_events["Purchase Invoice"] = {}
+    doc_events["Purchase Invoice"] = {}
 doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
 
 # Merge Purchase Order events
 if "Purchase Order" not in doc_events:
-	doc_events["Purchase Order"] = {}
+    doc_events["Purchase Order"] = {}
 doc_events["Purchase Order"].update(purchase_order_events)
 
 # Merge Purchase Receipt events
 if "Purchase Receipt" not in doc_events:
-	doc_events["Purchase Receipt"] = {}
+    doc_events["Purchase Receipt"] = {}
 doc_events["Purchase Receipt"].update(purchase_receipt_events)
 
 # Merge Supplier Quotation events
 if "Supplier Quotation" not in doc_events:
-	doc_events["Supplier Quotation"] = {}
+    doc_events["Supplier Quotation"] = {}
 doc_events["Supplier Quotation"].update(supplier_quotation_events)
 
 if "Sales Invoice" not in doc_events:
-	doc_events["Sales Invoice"] = {}
+    doc_events["Sales Invoice"]={}
 doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 
+
+
+
+# Ensure Company Filter config changes clear the cached config
+def _add_doc_event(doctype, event, handler):
+    if doctype not in doc_events:
+        doc_events[doctype] = {}
+    existing = doc_events[doctype].get(event)
+    if not existing:
+        doc_events[doctype][event] = handler
+        return
+    if isinstance(existing, list):
+        if handler not in existing:
+            existing.append(handler)
+        return
+    if existing != handler:
+        doc_events[doctype][event] = [existing, handler]
+
+
+_clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
+for _dt in ("Company Filter Config", "Company Filter Field"):
+    _add_doc_event(_dt, "on_update", _clear_filter_cache)
+    _add_doc_event(_dt, "on_trash", _clear_filter_cache)
 
 # for doctype in fiscal_naming_doctypes:
 #     if doctype not in doc_events:
 #         doc_events[doctype] = {}
-
+    
 #     # Add autoname
 #     doc_events[doctype]["autoname"] = common_fiscal_naming_events["autoname"]
-
+    
 #     # Add validate - if doctype also needs company validation, both will run
 #     if "validate" not in doc_events[doctype]:
 #         doc_events[doctype]["validate"] = []
 #     elif not isinstance(doc_events[doctype]["validate"], list):
 #         doc_events[doctype]["validate"] = [doc_events[doctype]["validate"]]
-
+    
 #     doc_events[doctype]["validate"].append(common_fiscal_naming_events["validate"])
 
 # # 3. Merge company validation events
 # for doctype in company_validation_doctypes:
 #     if doctype not in doc_events:
 #         doc_events[doctype] = {}
-
+    
 #     # Add validate
 #     if "validate" not in doc_events[doctype]:
 #         doc_events[doctype]["validate"] = []
 #     elif not isinstance(doc_events[doctype]["validate"], list):
 #         doc_events[doctype]["validate"] = [doc_events[doctype]["validate"]]
-
+    
 #     if company_validation_events["validate"] not in doc_events[doctype]["validate"]:
 #         doc_events[doctype]["validate"].append(company_validation_events["validate"])
 
@@ -239,10 +267,11 @@ doc_events["Sales Invoice"].update(sales_invoice_specific_events)
 # })
 
 
-# If Journal Entry needs a different API than Payment Entry, override it
+# If Journal Entry needs a different API than `Payment` Entry, override it
 # doc_events["Journal Entry"] = {
 #     "before_save": "avinashgroup_app.custom_code.api.set_custom_name_jv",
 # }
+
 
 
 # override_doctype_class = {
@@ -371,21 +400,21 @@ override_doctype_class = {
 # ---------------
 # Hook on document methods and events
 
-# ROUNDING
+#ROUNDING
 # doc_events = {
 #     "Sales Invoice": {
 #         # Calculate excise duty and override base_total before ERPNext validation
 #         #ROUNDING
 #         # "before_validate": "avinashgroup_app.custom_code.override_rounding.override_totals_before_validate",
-
+        
 #         #  Re-override after ERPNext recalculates
 #         #ROUNDING
 #         # "validate": "avinashgroup_app.custom_code.override_rounding.override_totals_validate",
-
+        
 #         #  Final calcul  ation before saving (ensures everything persists)
 #         #ROUNDING
 #         # "before_save": "avinashgroup_app.custom_code.override_rounding.override_totals_before_save",
-
+        
 #         #  Before submitting - finalize all calculations
 #         #ROUNDING
 #         # "before_submit": [
@@ -393,15 +422,15 @@ override_doctype_class = {
 #         #     # "avinashgroup_app.custom_code.excise_ledger.before_submit"
 
 #         # ],
-
+        
 #         #   On submit (last change before GL entries)
 #         #ROUNDING
 #         # "on_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_submit",
-
+        
 #         #  Handle updates after submission
 #         # "on_update_after_submit": "avinashgroup_app.custom_code.override_rounding.override_totals_on_update_after_submit"
-
-
+      
+    
 #     }
 # }
 # Scheduled Tasks
@@ -505,4 +534,9 @@ override_whitelisted_methods = {
 # }
 
 
+fixtures = [
 
+ 
+    {"dt": "Company Filter Config"},
+    {"dt": "Company Filter Field"}
+]
