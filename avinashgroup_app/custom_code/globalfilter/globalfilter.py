@@ -235,6 +235,28 @@ def _resolve_company_field(linked_doctype):
     return None
 
 
+@request_cache
+def _get_allowed_transact_parents(linked_doctype, company):
+    """
+    Return parent names for doctypes that use the "Allowed To Transact With"
+    child table to store company association (e.g., Customer, Supplier).
+    """
+    if not linked_doctype or not company:
+        return []
+    try:
+        meta = frappe.get_meta(linked_doctype)
+        df = meta.get_field("companies")
+        if not df or df.options != "Allowed To Transact With":
+            return []
+        return frappe.get_all(
+            "Allowed To Transact With",
+            filters={"company": company, "parenttype": linked_doctype},
+            pluck="parent",
+        ) or []
+    except Exception:
+        return []
+
+
 def _get_company_map(linked_dt, values):
     """
     Batch-fetch the company value for all given names in linked_dt.
@@ -532,7 +554,8 @@ def get_filter_config():
         all_rows = frappe.get_all(
             "Company Filter Field",
             filters={"parent": ["in", [c.name for c in configs]]},
-            fields=["parent", "fieldname", "is_child_table", "child_fieldname"],
+            fields=["parent", "fieldname", "is_child_table", "child_fieldname",
+                    "is_dynamic_link", "dynamic_link_field"],
             order_by="parent, idx asc",
             ignore_permissions=True
         )
@@ -544,7 +567,20 @@ def get_filter_config():
         result = {}
         for config in configs:
             rows = rows_by_parent.get(config.name, [])
-            top_fields = [r.fieldname for r in rows if not r.is_child_table]
+            # Return objects for dynamic-link fields so JS knows to use
+            # search_link_by_company; plain strings for regular Link fields.
+            top_fields = []
+            for r in rows:
+                if r.is_child_table:
+                    continue
+                if r.is_dynamic_link and r.dynamic_link_field:
+                    top_fields.append({
+                        "fieldname": r.fieldname,
+                        "is_dynamic_link": True,
+                        "dynamic_link_field": r.dynamic_link_field
+                    })
+                else:
+                    top_fields.append(r.fieldname)
             child_tables = {}
             for r in rows:
                 if r.is_child_table and r.child_fieldname:
@@ -596,11 +632,13 @@ def get_filter_config():
 def clear_filter_config_cache(doc, method=None):
     """Called by hooks when Company Filter Config is saved/deleted."""
     frappe.cache().delete_value("company_filter_config")
+    '''
     frappe.msgprint(
         f"Company Filter cache cleared for <b>{doc.name}</b>. Refresh your browser to apply changes.",
         indicator="green",
         alert=True
     )
+    '''
 
 
 # ─────────────────────────────────────────────────────────────
@@ -624,6 +662,12 @@ def search_party(doctype, txt, searchfield, start, page_len, filters):
     query_filters = {}
     if company and company_field:
         query_filters[company_field] = company
+    elif company:
+        parents = _get_allowed_transact_parents(party_type, company)
+        if parents:
+            query_filters["name"] = ["in", parents]
+        else:
+            return []
     if meta.get_field("disabled"):
         query_filters["disabled"] = 0
 
@@ -635,6 +679,56 @@ def search_party(doctype, txt, searchfield, start, page_len, filters):
 
     records = frappe.get_list(
         party_type,
+        filters=query_filters,
+        or_filters=or_filters or None,
+        fields=["name"],
+        start=start,
+        page_length=page_len,
+        order_by="name asc"
+    )
+
+    return [[r.name] for r in records]
+
+
+# ─────────────────────────────────────────────────────────────
+#  LINK QUERY — generic company-filtered search for Dynamic Link
+# ─────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
+    filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+    linked_dt = filters.get("linked_doctype")
+    company = filters.get("company")
+    if not linked_dt:
+        return []
+
+    try:
+        meta = frappe.get_meta(linked_dt)
+    except Exception:
+        return []
+
+    company_field = _resolve_company_field(linked_dt)
+    query_filters = {}
+    if company and company_field:
+        query_filters[company_field] = company
+    elif company:
+        parents = _get_allowed_transact_parents(linked_dt, company)
+        if parents:
+            query_filters["name"] = ["in", parents]
+        else:
+            return []
+
+    if meta.get_field("disabled"):
+        query_filters["disabled"] = 0
+
+    or_filters = []
+    if txt:
+        or_filters.append(["name", "like", f"%{txt}%"])
+        if searchfield and searchfield != "name":
+            or_filters.append([searchfield, "like", f"%{txt}%"])
+
+    records = frappe.get_list(
+        linked_dt,
         filters=query_filters,
         or_filters=or_filters or None,
         fields=["name"],

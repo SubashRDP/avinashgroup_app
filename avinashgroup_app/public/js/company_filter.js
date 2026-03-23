@@ -75,19 +75,38 @@ avinash.filter_engine = {
         (config.fields || []).forEach(function(entry) {
             const f = self._normalize_field_entry(entry);
             if (!frm.fields_dict[f.fieldname]) return;
+
+            // Capture any get_query already set by the form's own JS (e.g. lead_query
+            // on party_name when quotation_to = Lead). setup() is called via
+            // setTimeout(0), so set_dynamic_field_label has already run by this point.
+            const prior_get_query = frm.fields_dict[f.fieldname].get_query || null;
+
             frm.set_query(f.fieldname, function() {
                 const company = frm.doc[cf];
-                if (!company) return {};
                 const linked_dt = self._resolve_linked_doctype(frm.doctype, f.fieldname, frm.doc, f.dynamic_link_field);
-                if (!linked_dt) return {};
-                if (f.is_dynamic_link) {
-                    return {
-                        query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_link_by_company",
-                        filters: { linked_doctype: linked_dt, company: company }
-                    };
+
+                if (company && linked_dt) {
+                    if (f.is_dynamic_link) {
+                        // Always delegate to the server query for dynamic link fields —
+                        // it handles all linked doctypes including Prospect, Customer, etc.
+                        return {
+                            query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_link_by_company",
+                            filters: { linked_doctype: linked_dt, company: company }
+                        };
+                    }
+                    const filter_key = self._resolve_filter_key(linked_dt);
+                    if (filter_key) return { filters: { [filter_key]: company } };
                 }
-                const filter_key = self._resolve_filter_key(linked_dt);
-                return filter_key ? { filters: { [filter_key]: company } } : {};
+
+                // No company filter applies for this linked doctype (e.g. Lead has no
+                // company field) — fall back to the query set by the form's own JS
+                // (e.g. lead_query set by set_dynamic_field_label for Quotation).
+                if (prior_get_query) {
+                    return typeof prior_get_query === "function"
+                        ? prior_get_query(frm.doc, frm.doctype, frm.docname)
+                        : prior_get_query;
+                }
+                return {};
             });
         });
 
@@ -264,8 +283,8 @@ $(document).on("app_ready", function() {
                 }
 
                 const events = {
-                    setup:   function(frm) { avinash.filter_engine.setup(frm); },
-                    refresh: function(frm) { avinash.filter_engine.setup(frm); }
+                    setup:   function(frm) { _defer_setup(frm); },
+                    refresh: function(frm) { _defer_setup(frm); }
                 };
 
                 events[cf] = function(frm) {
@@ -273,14 +292,66 @@ $(document).on("app_ready", function() {
                     avinash.filter_engine.validate_and_clear(frm);
                 };
 
-                // Re-apply queries when the dynamic link doctype selector changes
+                // Re-apply queries when dynamic link doctype selectors change
+                const dyn_link_targets = {};
                 (config.fields || []).forEach(function(entry) {
-                    if (typeof entry !== "string" && entry.is_dynamic_link && entry.dynamic_link_field) {
-                        events[entry.dynamic_link_field] = function(frm) { _defer_setup(frm); };
+                    const f = avinash.filter_engine._normalize_field_entry(entry);
+                    if (f.is_dynamic_link && f.dynamic_link_field) {
+                        if (!dyn_link_targets[f.dynamic_link_field]) {
+                            dyn_link_targets[f.dynamic_link_field] = [];
+                        }
+                        dyn_link_targets[f.dynamic_link_field].push(f.fieldname);
                     }
                 });
 
+                Object.keys(dyn_link_targets).forEach(function(dt_field) {
+                    events[dt_field] = function(frm) {
+                        _defer_setup(frm);
+                        (dyn_link_targets[dt_field] || []).forEach(function(fn) {
+                            if (frm.fields_dict[fn]) {
+                                frm.refresh_field(fn);
+                            }
+                        });
+                    };
+                });
+
+                // Quotation (and similar) can override get_query after refresh/changes.
+                // Re-apply our queries after dynamic label updates if triggered.
+                events.set_dynamic_field_label = function(frm) { _defer_setup(frm); };
+
                 frappe.ui.form.on(doctype, events);
+
+                // Child table dynamic link selector changes
+                const child_dyn_map = {};
+                $.each(config.child_tables || {}, function(table, fields) {
+                    const child_doctype = frappe.meta.get_docfield(doctype, table)?.options;
+                    if (!child_doctype) return;
+
+                    fields.forEach(function(entry) {
+                        const f = avinash.filter_engine._normalize_field_entry(entry);
+                        if (f.is_dynamic_link && f.dynamic_link_field) {
+                            if (!child_dyn_map[child_doctype]) {
+                                child_dyn_map[child_doctype] = {};
+                            }
+                            if (!child_dyn_map[child_doctype][f.dynamic_link_field]) {
+                                child_dyn_map[child_doctype][f.dynamic_link_field] = new Set();
+                            }
+                            child_dyn_map[child_doctype][f.dynamic_link_field].add(table);
+                        }
+                    });
+                });
+
+                Object.keys(child_dyn_map).forEach(function(child_dt) {
+                    const child_events = {};
+                    Object.keys(child_dyn_map[child_dt]).forEach(function(dt_field) {
+                        const tables = Array.from(child_dyn_map[child_dt][dt_field]);
+                        child_events[dt_field] = function(frm) {
+                            _defer_setup(frm);
+                            tables.forEach(function(t) { frm.refresh_field(t); });
+                        };
+                    });
+                    frappe.ui.form.on(child_dt, child_events);
+                });
             });
 
             // If a configured form is already open (race condition: form loaded
@@ -368,5 +439,3 @@ $(document).on("app_ready", function() {
     }
    */
 });
-
-
