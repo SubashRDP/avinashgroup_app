@@ -1,6 +1,27 @@
 import frappe
-from frappe.model.naming import make_autoname
+from frappe.model.naming import make_autoname, getseries
 from frappe.model.document import Document
+
+BRANCH_NAME_COMPANY = "Grishma Enterprises Pvt. Ltd."
+
+# branch_code per doctype per branch (normal and return)
+BRANCH_CODE_CONFIG = {
+    "Sales Invoice": {
+        "Annamnagar": {"normal": "INV", "return": "RT"},
+        "Balaju":     {"normal": "SB",  "return": "BSR"},
+        "Chitwan":    {"normal": "GEP", "return": "RTN"},
+    },
+    "Purchase Receipt": {
+        "Annamnagar": {"normal": "AN"},
+        "Balaju":     {"normal": "BRC"},
+        "Chitwan":    {"normal": "RC"},
+    },
+    "Purchase Invoice": {
+        "Annamnagar": {"normal": "PBA"},
+        "Balaju":     {"normal": "PBB"},
+        "Chitwan":    {"normal": "PB"},
+    },
+}
 
 ## "Item", "Salary Structure", "Contact"
 NAMING_CONFIG = {
@@ -171,7 +192,8 @@ NAMING_CONFIG = {
         "return_prefix": "SRTN",
         "use_fiscal_year": True,
         "sequence_length": 5,
-        "has_custom_name": True
+        "has_custom_name": True,
+        "has_branch_name": True
     },
     "Delivery Note": {
         "prefix": "DN",
@@ -194,7 +216,8 @@ NAMING_CONFIG = {
         "prefix": "GRN",
         "use_fiscal_year": True,
         "sequence_length": 5,
-        "has_custom_name": True
+        "has_custom_name": True,
+        "has_branch_name": True
     },
     # "Purchase Receipt Return": {
     #     "prefix": "PRRET",
@@ -206,7 +229,8 @@ NAMING_CONFIG = {
         "return_prefix": "PRTN",
         "use_fiscal_year": True,
         "sequence_length": 5,
-        "has_custom_name": True
+        "has_custom_name": True,
+        "has_branch_name": True
     },
     # "Purchase Invoice Return": {
     #     "prefix": "PIR",
@@ -680,11 +704,74 @@ def naming_requirements_before_insert(doc):
                 title="Missing Fiscal Year"
             )
 
+def set_custom_branch_name(doc):
+    """
+    Sets custom_branch_name field based on branch-wise naming.
+    Format: {company_abbr}-{branch_code}-{######}-{fiscal_year}
+    Only generated once (skipped if already set).
+    For non-Grishma companies: custom_branch_name = doc.name
+    """
+    if not hasattr(doc, 'custom_branch_name'):
+        return
+
+    # Already set — do not regenerate (counter must not increment again)
+    if doc.custom_branch_name:
+        return
+
+    company_name = None
+    if hasattr(doc, 'company') and doc.company:
+        company_name = doc.company
+    elif hasattr(doc, 'custom_company') and doc.custom_company:
+        company_name = doc.custom_company
+
+    # Non-Grishma company: mirror doc.name
+    if not company_name or company_name != BRANCH_NAME_COMPANY:
+        doc.custom_branch_name = doc.name or ""
+        return
+
+    if doc.doctype not in BRANCH_CODE_CONFIG:
+        doc.custom_branch_name = doc.name or ""
+        return
+
+    branch = getattr(doc, 'custom_branch', None)
+    if not branch:
+        doc.custom_branch_name = doc.name or ""
+        return
+
+    branch_config = BRANCH_CODE_CONFIG[doc.doctype]
+    if branch not in branch_config:
+        doc.custom_branch_name = doc.name or ""
+        return
+
+    is_return = getattr(doc, 'is_return', 0)
+    if is_return:
+        branch_code = branch_config[branch].get("return", branch_config[branch]["normal"])
+    else:
+        branch_code = branch_config[branch]["normal"]
+
+    company_abbr = get_company_abbr(doc) or ""
+
+    fiscal_year = ""
+    date_field = None
+    if hasattr(doc, 'posting_date') and doc.posting_date:
+        date_field = doc.posting_date
+    elif hasattr(doc, 'transaction_date') and doc.transaction_date:
+        date_field = doc.transaction_date
+    if date_field:
+        fiscal_year = get_fiscal_year_from_date(date_field) or ""
+
+    series_key = f"{company_abbr}-{branch_code}-{fiscal_year}-"
+    seq_number = getseries(series_key, 6)
+
+    doc.custom_branch_name = f"{company_abbr}-{branch_code}-{seq_number}-{fiscal_year}"
+
+
 def handle_before_insert(doc, method=None):
     naming_requirements_before_insert(doc)
 
 def handle_validate(doc, method=None):
     set_custom_name_field(doc)
+    set_custom_branch_name(doc)
 
 
 def naming_series_autoname(self, method):
@@ -717,3 +804,7 @@ def naming_series_autoname(self, method):
     # Set custom name field if configured
     if config.get("has_custom_name", False):
         set_custom_name_field(self)
+
+    # Set branch-based name field if configured
+    if config.get("has_branch_name", False):
+        set_custom_branch_name(self)
