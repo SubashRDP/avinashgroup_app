@@ -29,12 +29,15 @@ avinash.filter_engine = {
     },
 
     _resolve_linked_doctype: function(doctype, fieldname, doc_or_row, dynamic_link_field) {
+        // If caller explicitly knows the doctype-selector field, read it directly
+        // from the row — no meta lookup needed (avoids null if meta not yet loaded).
+        if (dynamic_link_field) {
+            return (doc_or_row && doc_or_row[dynamic_link_field]) || null;
+        }
         const df = frappe.meta.get_docfield(doctype, fieldname);
         if (!df) return null;
-        if (df.fieldtype === "Dynamic Link" || dynamic_link_field) {
-            const dt_field = dynamic_link_field || df.options;
-            if (!dt_field || !doc_or_row) return null;
-            return doc_or_row[dt_field] || null;
+        if (df.fieldtype === "Dynamic Link") {
+            return (doc_or_row && doc_or_row[df.options]) || null;
         }
         if (df.fieldtype === "Link") return df.options;
         return null;
@@ -120,7 +123,7 @@ avinash.filter_engine = {
 
             fields.forEach(function(entry) {
                 const f = self._normalize_field_entry(entry);
-                frm.set_query(f.fieldname, table, function(doc, cdt, cdn) {
+                frm.set_query(f.fieldname, table, function(_doc, cdt, cdn) {
                     const company = frm.doc[cf];
                     if (!company) return {};
                     const row = locals[cdt][cdn];
