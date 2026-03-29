@@ -476,10 +476,10 @@ class CompanyValidator:
         # Phase 1 — collect (zero DB calls)
         self._collect_top_level()
         self._collect_child_tables()
-        if config.get("custom"):
-            if doctype == "Journal Entry":    self._collect_journal_entry()
-            elif doctype == "Payment Entry":  self._collect_payment_entry()
-            elif doctype == "Bank Account":   self._collect_bank_account()
+        # if config.get("custom"):
+        #     if doctype == "Journal Entry":    self._collect_journal_entry()
+        #     elif doctype == "Payment Entry":  self._collect_payment_entry()
+        #     elif doctype == "Bank Account":   self._collect_bank_account()
 
         # Phase 2 — one query per distinct linked DocType
         self._batch_query()
@@ -488,10 +488,10 @@ class CompanyValidator:
         errors = []
         errors.extend(self._check_top_level())
         errors.extend(self._check_child_tables())
-        if config.get("custom"):
-            if doctype == "Journal Entry":    errors.extend(self._check_journal_entry())
-            elif doctype == "Payment Entry":  errors.extend(self._check_payment_entry())
-            elif doctype == "Bank Account":   errors.extend(self._check_bank_account())
+        # if config.get("custom"):
+        #     if doctype == "Journal Entry":    errors.extend(self._check_journal_entry())
+        #     elif doctype == "Payment Entry":  errors.extend(self._check_payment_entry())
+        #     elif doctype == "Bank Account":   errors.extend(self._check_bank_account())
 
         return errors
 
@@ -584,7 +584,14 @@ def get_filter_config():
             child_tables = {}
             for r in rows:
                 if r.is_child_table and r.child_fieldname:
-                    child_tables.setdefault(r.fieldname, []).append(r.child_fieldname)
+                    if r.is_dynamic_link and r.dynamic_link_field:
+                        child_tables.setdefault(r.fieldname, []).append({
+                            "fieldname": r.child_fieldname,
+                            "is_dynamic_link": True,
+                            "dynamic_link_field": r.dynamic_link_field
+                        })
+                    else:
+                        child_tables.setdefault(r.fieldname, []).append(r.child_fieldname)
 
             result[config.doctype_name] = {
                 "company_field": config.company_field,
@@ -716,7 +723,8 @@ def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
         if parents:
             query_filters["name"] = ["in", parents]
         else:
-            return []
+            # No company field and no "Allowed To Transact With" table.
+            pass
 
     if meta.get_field("disabled"):
         query_filters["disabled"] = 0
