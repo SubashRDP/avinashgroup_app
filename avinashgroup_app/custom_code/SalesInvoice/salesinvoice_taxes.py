@@ -30,6 +30,11 @@ def before_save_salesinvoice(doc, method=None):
     apply_return_vat_sign(doc)
 
 
+def before_validate_salesinvoice(doc, method=None):
+    """Before-validate hook for Sales Invoice"""
+    apply_return_qty_sign(doc)
+
+
 def calculate_all_item_fields(doc):
     """
     Single-pass calculation over items for all custom totals and VAT logic.
@@ -228,6 +233,18 @@ def apply_return_vat_sign(doc):
 
     for item in doc.items:
         item.custom_vat_amount = -abs(flt(item.custom_vat_amount) or 0)
+
+
+def apply_return_qty_sign(doc):
+    """
+    For return invoices, force item qty negative before core validation.
+    This prevents ERPNext validate_qty from throwing errors on positive qty.
+    """
+    if not getattr(doc, "is_return", 0):
+        return
+
+    for item in doc.items:
+        item.qty = -abs(flt(getattr(item, "qty", 0)) or 0)
 
 
 
