@@ -773,6 +773,7 @@ def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
         order_by="name asc"
     )
 
+
     if title_field:
         return [[r.name, getattr(r, title_field, None)] for r in records]
     return [[r.name] for r in records]
