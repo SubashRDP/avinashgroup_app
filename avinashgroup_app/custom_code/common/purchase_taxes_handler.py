@@ -63,7 +63,7 @@ def ensure_apply_on_defaults(doc):
     """Ensure all items have custom_vat_apply_on and custom_tds_apply_on set to default"""
     for item in doc.items:
         if not getattr(item, 'custom_vat_apply_on', None):
-            item.custom_vat_apply_on = 'VAT 0%'
+            item.custom_vat_apply_on = 'VAT 13%'
 
         if not getattr(item, 'custom_tds_apply_on', None):
             item.custom_tds_apply_on = 'Percentage (%)'
@@ -93,11 +93,11 @@ def calculate_total_excise_amount(doc):
 def calculate_item_vat_amounts(doc):
     """Calculate VAT amount based on VAT 13%, VAT 0%, or Amount mode"""
     for item in doc.items:
-        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'VAT 0%')
+        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'VAT 13%')
 
         if not vat_apply_on:
-            item.custom_vat_apply_on = 'VAT 0%'
-            vat_apply_on = 'VAT 0%'
+            item.custom_vat_apply_on = 'VAT 13%'
+            vat_apply_on = 'VAT 13%'
 
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
@@ -368,7 +368,7 @@ def validate_custom_fields(doc):
             item.custom_tds_rate = 0
 
         if not getattr(item, 'custom_vat_apply_on', None):
-            item.custom_vat_apply_on = 'VAT 0%'
+            item.custom_vat_apply_on = 'VAT 13%'
 
         if not getattr(item, 'custom_tds_apply_on', None):
             item.custom_tds_apply_on = 'Percentage (%)'

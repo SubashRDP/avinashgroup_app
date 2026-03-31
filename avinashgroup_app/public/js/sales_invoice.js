@@ -62,9 +62,9 @@ frappe.ui.form.on("Sales Invoice Item", {
                     return;
                 }
                 
-                // Default to VAT 0%
-                await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 0%');
-                await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 0);
+                // Default to VAT 13%
+                await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
+                await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
 
                 // Apply field visibility
                 frappe.after_ajax(() => {
@@ -142,7 +142,7 @@ frappe.ui.form.on("Sales Invoice Item", {
     items_add: function(frm, cdt, cdn) {
         console.log("Item Added");
         
-        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 0%').then(() => {
+        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
             frappe.after_ajax(() => {
                 toggle_vat_fields(frm, cdt, cdn);
             });
@@ -201,8 +201,8 @@ function toggle_vat_fields(frm, cdt, cdn) {
     if (!row) return;
 
     if (!row.custom_vat_apply_on) {
-        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 0%');
-        row.custom_vat_apply_on = 'VAT 0%';
+        frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
+        row.custom_vat_apply_on = 'VAT 13%';
     }
 
     if (row.custom_vat_apply_on === "VAT 13%" || row.custom_vat_apply_on === "VAT 0%") {
@@ -270,7 +270,7 @@ function calculate_item_vat_amount(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     if (!row) return;
 
-    const vat_apply_on = row.custom_vat_apply_on || 'VAT 0%';
+    const vat_apply_on = row.custom_vat_apply_on || 'VAT 13%';
     // Always compute fresh — never trust row.custom_total (may be stale from last save)
     const custom_total = flt(row.base_net_amount) + flt(row.custom_excise_value);
 
