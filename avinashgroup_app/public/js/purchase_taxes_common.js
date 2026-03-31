@@ -1,5 +1,3 @@
-
-
 // Configuration for supported doctypes
 const PURCHASE_DOCTYPES = [
     "Purchase Invoice",
@@ -104,6 +102,7 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
 
         qty: function(frm, cdt, cdn) {
             setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
+            setTimeout(() => apply_return_signs(frm, cdt, cdn), 350);
             frm.refresh_field('items');
         },
 
@@ -143,6 +142,7 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
         custom_vat_amount: function(frm, cdt, cdn) {
             // In Amount mode: recalculate header total when user edits this field
             calculate_vat_total(frm);
+            apply_return_signs(frm, cdt, cdn);
             frm.refresh_field('items');
         },
 
@@ -165,6 +165,7 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
         custom_total: function(frm, cdt, cdn) {
             calculate_total_amount_including_excise(frm);
             calculate_item_vat_amount(frm, cdt, cdn);
+            apply_return_signs(frm, cdt, cdn);
             frm.refresh_field('items');
         },
 
@@ -524,6 +525,37 @@ function calculate_item_vat_amount(frm, cdt, cdn) {
     // Amount mode: do nothing — user's manual entry is preserved
 
     setTimeout(() => calculate_vat_total(frm), 50);
+    apply_return_signs(frm, cdt, cdn);
+}
+
+/**
+ * Ensure negative qty and VAT amount for Purchase Invoice returns on the client
+ * so it reflects immediately after the user edits a row.
+ */
+function apply_return_signs(frm, cdt, cdn) {
+    if (!is_purchase_return(frm)) return;
+
+    const row = locals[cdt][cdn];
+    if (!row) return;
+
+    const qty = flt(row.qty) || 0;
+    if (qty > 0) {
+        frappe.model.set_value(cdt, cdn, "qty", -Math.abs(qty));
+    }
+
+    const vat_amount = flt(row.custom_vat_amount) || 0;
+    if (vat_amount > 0) {
+        frappe.model.set_value(cdt, cdn, "custom_vat_amount", -Math.abs(vat_amount));
+    }
+}
+
+function is_purchase_return(frm) {
+    return (
+        frm &&
+        frm.doc &&
+        frm.doc.doctype === "Purchase Invoice" &&
+        frm.doc.is_return
+    );
 }
 
 /**

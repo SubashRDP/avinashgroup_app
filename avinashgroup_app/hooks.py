@@ -1,5 +1,6 @@
 from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 
+
 app_name = "avinashgroup_app"
 app_title = "Avinash Group App"
 app_publisher = "Raindrop"
@@ -141,6 +142,7 @@ from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
 # Purchase Invoice specific events (using common handler)
 purchase_invoice_specific_events = {
     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
+    "before_validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_validate_purchase_invoice",
     "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
     "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice"
 }
@@ -164,6 +166,7 @@ supplier_quotation_events = {
 }
 
 sales_invoice_specific_events = {
+    "before_validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_validate_salesinvoice",
     "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
 }

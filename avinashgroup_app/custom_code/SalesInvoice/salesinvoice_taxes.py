@@ -1,8 +1,8 @@
+
 import frappe
-from frappe import _
-from frappe.utils import flt
-import frappe
-from frappe.utils import getdate, nowdate, flt
+from frappe.utils import flt, getdate, nowdate
+
+_account_cache = {}
 
 def before_save_salesinvoice(doc, method=None):
     """
@@ -18,130 +18,62 @@ def before_save_salesinvoice(doc, method=None):
     5. Taxes table: Updated with Excise and VAT
     """
     
-    # 0. Ensure VAT Apply On defaults are set
-    ensure_vat_apply_on_defaults(doc)
-    
-    # 1. Calculate item-level totals (respects manual excise)
-    calculate_custom_total(doc)
-    
-    # 2. Calculate total amount including excise (sum of custom_total from all items)
-    calculate_total_amount_including_excise(doc)
-    
-    # 3. VAT calculation (strict rules)
-    calculate_item_vat_amounts(doc)
-    calculate_total_vat_amount(doc)
-    
-    # 4. Excise totals (aggregation only, no calculation)
-    calculate_total_excise_amount(doc)
+    # 0. Calculate all item-level and total fields in a single pass
+    calculate_all_item_fields(doc)
     
     # 5. Update taxes table
     update_taxes_table(doc)
     
-    # 6. Calculate custom_total_amount
-    calculate_custom_total_amount(doc)
-    
-    # 7. Let ERPNext calculate standard totals
+    # 6. Let ERPNext calculate standard totals
     doc.calculate_taxes_and_totals()
 
+    # 8. For return invoices, ensure VAT amounts are negative (must run last)
+    apply_return_vat_sign(doc)
 
-def ensure_vat_apply_on_defaults(doc):
+
+def before_validate_salesinvoice(doc, method=None):
+    """Before-validate hook for Sales Invoice"""
+    apply_return_qty_sign(doc)
+
+
+def calculate_all_item_fields(doc):
     """
-    Ensure all items have custom_vat_apply_on set to default 'VAT 0%'
-    This runs before any other calculation
+    Single-pass calculation over items for all custom totals and VAT logic.
     """
+    total_including_excise = 0
+    total_excise = 0
+    total_vat = 0
+    custom_total_amount = 0
+
     for item in doc.items:
-        if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
-            item.custom_vat_apply_on = 'VAT 0%'
-            frappe.logger().debug(
-                f"Set default VAT Apply On to 'VAT 0%' for {item.item_code}"
-            )
+        if not hasattr(item, "custom_vat_apply_on") or not item.custom_vat_apply_on:
+            item.custom_vat_apply_on = "VAT 0%"
 
-
-def calculate_custom_total(doc):
-    """
-    Calculate custom_total for each item
-    custom_total = base_net_amount + custom_excise_value
-    
-    Note: custom_excise_value is ALWAYS manual (never calculated)
-    """
-    for item in doc.items:
         base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(item.custom_excise_value) or 0
-        
+
         item.custom_total = flt(base_net_amount + excise_value, 5)
-        
-        frappe.logger().debug(
-            f"Custom Total for {item.item_code}: "
-            f"base_net_amount={base_net_amount} + excise={excise_value} = {item.custom_total}"
-        )
 
-
-def calculate_total_amount_including_excise(doc):
-    """Sum all custom_total from items"""
-    total_including_excise = sum(flt(item.custom_total) or 0 for item in doc.items)
-    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
-    
-    frappe.logger().debug(f"Total Amount Including Excise: {total_including_excise}")
-
-
-def calculate_total_excise_amount(doc):
-    """
-    Sum all custom_excise_value from items
-    No calculation, just aggregation
-    """
-    total_excise = sum(flt(item.custom_excise_value) or 0 for item in doc.items)
-    
-    doc.custom_total_excise_amount = flt(total_excise, 5)
-    doc.custom_excise = flt(total_excise, 5)
-    
-    frappe.logger().debug(f"Total Excise: {total_excise}")
-
-
-def calculate_item_vat_amounts(doc):
-    """
-    Calculate VAT amount for each item based on custom_vat_apply_on
-
-    RULES:
-    - VAT 13%: rate hardcoded to 13, always recalculate amount
-    - VAT 0%:  rate hardcoded to 0, amount always 0
-    - Amount:  rate forced to 0, keep manual amount as-is
-    """
-    for item in doc.items:
-        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'VAT 0%')
-
-        if not vat_apply_on:
-            item.custom_vat_apply_on = 'VAT 0%'
-            vat_apply_on = 'VAT 0%'
-
-        if vat_apply_on == 'VAT 13%':
+        vat_apply_on = item.custom_vat_apply_on
+        if vat_apply_on == "VAT 13%":
             item.custom_vat_rate = 13
-            custom_total = flt(item.custom_total) or 0
-            item.custom_vat_amount = flt((custom_total * 13) / 100, 5)
-            frappe.logger().debug(
-                f"[VAT 13%] {item.item_code}: total={custom_total}, vat={item.custom_vat_amount}"
-            )
-
-        elif vat_apply_on == 'VAT 0%':
+            item.custom_vat_amount = flt((item.custom_total * 13) / 100, 5)
+        elif vat_apply_on == "VAT 0%":
             item.custom_vat_rate = 0
             item.custom_vat_amount = 0
-            frappe.logger().debug(f"[VAT 0%] {item.item_code}: amount=0")
-
-        elif vat_apply_on == 'Amount':
+        elif vat_apply_on == "Amount":
             item.custom_vat_rate = 0
-            frappe.logger().debug(
-                f"[VAT Amount - MANUAL] {item.item_code}: {item.custom_vat_amount} (rate forced to 0)"
-            )
 
+        total_including_excise += flt(item.custom_total) or 0
+        total_excise += excise_value
+        total_vat += flt(item.custom_vat_amount) or 0
+        custom_total_amount += base_net_amount
 
-def calculate_total_vat_amount(doc):
-    """
-    Sum all custom_vat_amount from items
-    """
-    total_vat = sum(flt(item.custom_vat_amount) or 0 for item in doc.items)
-    
-    doc.custom_total_vat_amount = flt(total_vat,5)
-    
-    frappe.logger().debug(f"Total VAT: {total_vat}")
+    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
+    doc.custom_total_excise_amount = flt(total_excise, 5)
+    doc.custom_excise = flt(total_excise, 5)
+    doc.custom_total_vat_amount = flt(total_vat, 5)
+    doc.custom_total_amount = flt(custom_total_amount, 5)
 
 
 def update_taxes_table(doc):
@@ -201,17 +133,20 @@ def find_account_by_prefix(company, prefix):
     """
     Find account that starts with the given prefix for the company
     """
-    accounts = frappe.get_all(
-        "Account",
-        filters={
-            "company": company,
-            "name": ["like", f"{prefix}%"]
-        },
-        fields=["name"],
-        limit=1
-    )
-    
-    return accounts[0].name if accounts else None
+    key = (company, prefix)
+    if key not in _account_cache:
+        accounts = frappe.get_all(
+            "Account",
+            filters={
+                "company": company,
+                "name": ["like", f"{prefix}%"]
+            },
+            fields=["name"],
+            limit=1
+        )
+        _account_cache[key] = accounts[0].name if accounts else None
+
+    return _account_cache[key]
 
 
 def update_or_create_tax_row(doc, account_head, tax_amount, position, 
@@ -238,10 +173,6 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position,
         existing_row.category = "Total"
         existing_row.included_in_print_rate = 0
         
-        frappe.logger().debug(
-            f"Updated tax row: {account_head} = {tax_amount} ({add_deduct})"
-        )
-        
         # Move to correct position if needed
         if existing_index != position:
             move_tax_row_to_position(doc, existing_index, position)
@@ -257,10 +188,6 @@ def update_or_create_tax_row(doc, account_head, tax_amount, position,
             "category": "Total",
             "included_in_print_rate": 0
         })
-        
-        frappe.logger().debug(
-            f"Created tax row: {account_head} = {tax_amount} ({add_deduct})"
-        )
         
         # Move to correct position
         new_index = len(doc.taxes) - 1
@@ -288,23 +215,6 @@ def move_tax_row_to_position(doc, from_index, to_index):
     for idx, tax_row in enumerate(doc.taxes):
         tax_row.idx = idx + 1
     
-    frappe.logger().debug(f"Moved tax row from {from_index} to {to_index}")
-
-
-def calculate_custom_total_amount(doc):
-    """
-    Calculate custom_total_amount (total excluding excise)
-    This is the sum of all item net_amounts (qty * net_rate)
-    """
-    custom_total_amount = 0
-    
-    for item in doc.items:
-        base_net_amount = flt(item.base_net_amount) or 0
-        custom_total_amount += base_net_amount
-    
-    doc.custom_total_amount = flt(custom_total_amount, 5)
-    
-    frappe.logger().debug(f"Custom Total Amount (excluding excise): {custom_total_amount}")
 
 
 def validate_salesinvoice(doc, method=None):
@@ -313,6 +223,29 @@ def validate_salesinvoice(doc, method=None):
     """
     # validate_sales_invoice(doc, method)
     validate_custom_fields(doc)
+
+
+def apply_return_vat_sign(doc):
+    """
+    For return invoices, force custom_vat_amount negative on each item.
+    """
+    if not getattr(doc, "is_return", 0):
+        return
+
+    for item in doc.items:
+        item.custom_vat_amount = -abs(flt(item.custom_vat_amount) or 0)
+
+
+def apply_return_qty_sign(doc):
+    """
+    For return invoices, force item qty negative before core validation.
+    This prevents ERPNext validate_qty from throwing errors on positive qty.
+    """
+    if not getattr(doc, "is_return", 0):
+        return
+
+    for item in doc.items:
+        item.qty = -abs(flt(getattr(item, "qty", 0)) or 0)
 
 
 

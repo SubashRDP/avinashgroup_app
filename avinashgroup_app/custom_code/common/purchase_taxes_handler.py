@@ -1,3 +1,4 @@
+
 import frappe
 from frappe import _
 from frappe.utils import flt
@@ -44,10 +45,18 @@ def before_save_purchase_document(doc, method=None):
     if hasattr(doc, 'calculate_taxes_and_totals'):
         doc.calculate_taxes_and_totals()
 
+    # 8. For return documents, ensure VAT amounts are negative (must run last)
+    apply_return_vat_sign(doc)
+
 
 def validate_purchase_document(doc, method=None):
     """Validation hook for purchase documents"""
     validate_custom_fields(doc)
+
+
+def before_validate_purchase_document(doc, method=None):
+    """Before-validate hook for purchase documents"""
+    apply_return_qty_sign(doc)
 
 
 def ensure_apply_on_defaults(doc):
@@ -105,6 +114,29 @@ def calculate_total_vat_amount(doc):
     """Sum all custom_vat_amount from items"""
     total_vat = sum(flt(getattr(item, 'custom_vat_amount', 0)) or 0 for item in doc.items)
     doc.custom_total_vat_amount = flt(total_vat, 5)
+
+
+def apply_return_vat_sign(doc):
+    """
+    For return documents, force custom_vat_amount negative on each item.
+    """
+    if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Purchase Invoice"):
+        return
+
+    for item in doc.items:
+        item.custom_vat_amount = -abs(flt(getattr(item, "custom_vat_amount", 0)) or 0)
+
+
+def apply_return_qty_sign(doc):
+    """
+    For return Purchase Invoices, force item qty negative before core validation.
+    This prevents ERPNext validate_qty from throwing errors on positive qty.
+    """
+    if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Purchase Invoice"):
+        return
+
+    for item in doc.items:
+        item.qty = -abs(flt(getattr(item, "qty", 0)) or 0)
 
 
 def calculate_item_tds_amounts(doc):
@@ -369,6 +401,11 @@ def before_save_purchase_invoice(doc, method=None):
     before_save_purchase_document(doc, method)
 
 
+def before_validate_purchase_invoice(doc, method=None):
+    """Wrapper for Purchase Invoice"""
+    before_validate_purchase_document(doc, method)
+
+
 def validate_purchase_invoice(doc, method=None):
     """Wrapper for Purchase Invoice"""
     validate_purchase_document(doc, method)
@@ -402,6 +439,3 @@ def before_save_supplier_quotation(doc, method=None):
 def validate_supplier_quotation(doc, method=None):
     """Wrapper for Supplier Quotation"""
     validate_purchase_document(doc, method)
-
-
-

@@ -665,6 +665,8 @@ def search_party(doctype, txt, searchfield, start, page_len, filters):
     except Exception:
         return []
 
+    title_field = meta.title_field if meta.show_title_field_in_link and meta.title_field else None
+
     company_field = _resolve_company_field(party_type)
     query_filters = {}
     if company and company_field:
@@ -683,17 +685,30 @@ def search_party(doctype, txt, searchfield, start, page_len, filters):
         or_filters.append(["name", "like", f"%{txt}%"])
         if searchfield and searchfield != "name":
             or_filters.append([searchfield, "like", f"%{txt}%"])
+        if title_field and title_field != "name":
+            or_filters.append([title_field, "like", f"%{txt}%"])
+        if meta.search_fields:
+            for field in meta.search_fields.split(","):
+                field = field.strip()
+                if field and field not in {"name", searchfield, title_field}:
+                    or_filters.append([field, "like", f"%{txt}%"])
+
+    fields = ["name"]
+    if title_field:
+        fields.append(title_field)
 
     records = frappe.get_list(
         party_type,
         filters=query_filters,
         or_filters=or_filters or None,
-        fields=["name"],
+        fields=fields,
         start=start,
         page_length=page_len,
         order_by="name asc"
     )
 
+    if title_field:
+        return [[r.name, getattr(r, title_field, None)] for r in records]
     return [[r.name] for r in records]
 
 
@@ -713,6 +728,8 @@ def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
         meta = frappe.get_meta(linked_dt)
     except Exception:
         return []
+
+    title_field = meta.title_field if meta.show_title_field_in_link and meta.title_field else None
 
     company_field = _resolve_company_field(linked_dt)
     query_filters = {}
@@ -734,15 +751,29 @@ def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
         or_filters.append(["name", "like", f"%{txt}%"])
         if searchfield and searchfield != "name":
             or_filters.append([searchfield, "like", f"%{txt}%"])
+        if title_field and title_field != "name":
+            or_filters.append([title_field, "like", f"%{txt}%"])
+        if meta.search_fields:
+            for field in meta.search_fields.split(","):
+                field = field.strip()
+                if field and field not in {"name", searchfield, title_field}:
+                    or_filters.append([field, "like", f"%{txt}%"])
+
+    fields = ["name"]
+    if title_field:
+        fields.append(title_field)
 
     records = frappe.get_list(
         linked_dt,
         filters=query_filters,
         or_filters=or_filters or None,
-        fields=["name"],
+        fields=fields,
         start=start,
         page_length=page_len,
         order_by="name asc"
     )
 
+
+    if title_field:
+        return [[r.name, getattr(r, title_field, None)] for r in records]
     return [[r.name] for r in records]
