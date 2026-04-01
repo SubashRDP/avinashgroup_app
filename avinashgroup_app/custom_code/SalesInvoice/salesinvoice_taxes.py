@@ -26,19 +26,37 @@ def before_save_salesinvoice(doc, method=None):
     # 6. Let ERPNext calculate standard totals
     doc.calculate_taxes_and_totals()
 
-    # 8. For return invoices, ensure VAT amounts are negative (must run last)
+    # 8. For return documents, ensure VAT amounts are negative (must run last)
     apply_return_vat_sign(doc)
 
 
-def calculate_all_item_fields(doc):
+def before_validate_salesinvoice(doc, method=None):
     """
-    Single-pass calculation over items for all custom totals and VAT logic.
+    Before-validate hook for Sales Invoice
     """
-    total_including_excise = 0
-    total_excise = 0
-    total_vat = 0
-    custom_total_amount = 0
+    apply_return_qty_sign(doc)
 
+
+def ensure_vat_apply_on_defaults(doc):
+    """
+    Ensure all items have custom_vat_apply_on set to default 'VAT 13%'
+    This runs before any other calculation
+    """
+    for item in doc.items:
+        if not hasattr(item, 'custom_vat_apply_on') or not item.custom_vat_apply_on:
+            item.custom_vat_apply_on = 'VAT 13%'
+            frappe.logger().debug(
+                f"Set default VAT Apply On to 'VAT 13%' for {item.item_code}"
+            )
+
+
+def calculate_custom_total(doc):
+    """
+    Calculate custom_total for each item
+    custom_total = base_net_amount + custom_excise_value
+    
+    Note: custom_excise_value is ALWAYS manual (never calculated)
+    """
     for item in doc.items:
         if not hasattr(item, "custom_vat_apply_on") or not item.custom_vat_apply_on:
             item.custom_vat_apply_on = "VAT 0%"
@@ -47,9 +65,51 @@ def calculate_all_item_fields(doc):
         excise_value = flt(item.custom_excise_value) or 0
 
         item.custom_total = flt(base_net_amount + excise_value, 5)
+        
+        frappe.logger().debug(
+            f"Custom Total for {item.item_code}: "
+            f"base_net_amount={base_net_amount} + excise={excise_value} = {item.custom_total}"
+        )
 
-        vat_apply_on = item.custom_vat_apply_on
-        if vat_apply_on == "VAT 13%":
+
+def calculate_total_amount_including_excise(doc):
+    """Sum all custom_total from items"""
+    total_including_excise = sum(flt(item.custom_total) or 0 for item in doc.items)
+    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
+    
+    frappe.logger().debug(f"Total Amount Including Excise: {total_including_excise}")
+
+
+def calculate_total_excise_amount(doc):
+    """
+    Sum all custom_excise_value from items
+    No calculation, just aggregation
+    """
+    total_excise = sum(flt(item.custom_excise_value) or 0 for item in doc.items)
+    
+    doc.custom_total_excise_amount = flt(total_excise, 5)
+    doc.custom_excise = flt(total_excise, 5)
+    
+    frappe.logger().debug(f"Total Excise: {total_excise}")
+
+
+def calculate_item_vat_amounts(doc):
+    """
+    Calculate VAT amount for each item based on custom_vat_apply_on
+
+    RULES:
+    - VAT 13%: rate hardcoded to 13, always recalculate amount
+    - VAT 0%:  rate hardcoded to 0, amount always 0
+    - Amount:  rate forced to 0, keep manual amount as-is
+    """
+    for item in doc.items:
+        vat_apply_on = getattr(item, 'custom_vat_apply_on', 'VAT 13%')
+
+        if not vat_apply_on:
+            item.custom_vat_apply_on = 'VAT 13%'
+            vat_apply_on = 'VAT 13%'
+
+        if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
             item.custom_vat_amount = flt((item.custom_total * 13) / 100, 5)
         elif vat_apply_on == "VAT 0%":
@@ -57,17 +117,43 @@ def calculate_all_item_fields(doc):
             item.custom_vat_amount = 0
         elif vat_apply_on == "Amount":
             item.custom_vat_rate = 0
+            frappe.logger().debug(
+                f"[VAT Amount - MANUAL] {item.item_code}: {item.custom_vat_amount} (rate forced to 0)"
+            )
 
-        total_including_excise += flt(item.custom_total) or 0
-        total_excise += excise_value
-        total_vat += flt(item.custom_vat_amount) or 0
-        custom_total_amount += base_net_amount
 
-    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
-    doc.custom_total_excise_amount = flt(total_excise, 5)
-    doc.custom_excise = flt(total_excise, 5)
-    doc.custom_total_vat_amount = flt(total_vat, 5)
-    doc.custom_total_amount = flt(custom_total_amount, 5)
+def calculate_total_vat_amount(doc):
+    """
+    Sum all custom_vat_amount from items
+    """
+    total_vat = sum(flt(item.custom_vat_amount) or 0 for item in doc.items)
+    
+    doc.custom_total_vat_amount = flt(total_vat,5)
+    
+    frappe.logger().debug(f"Total VAT: {total_vat}")
+
+
+def apply_return_vat_sign(doc):
+    """
+    For return Sales Invoices, force custom_vat_amount negative on each item.
+    """
+    if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Sales Invoice"):
+        return
+
+    for item in doc.items:
+        item.custom_vat_amount = -abs(flt(getattr(item, "custom_vat_amount", 0)) or 0)
+
+
+def apply_return_qty_sign(doc):
+    """
+    For return Sales Invoices, force item qty negative before core validation.
+    This prevents ERPNext validate_qty from throwing errors on positive qty.
+    """
+    if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Sales Invoice"):
+        return
+
+    for item in doc.items:
+        item.qty = -abs(flt(getattr(item, "qty", 0)) or 0)
 
 
 def update_taxes_table(doc):
