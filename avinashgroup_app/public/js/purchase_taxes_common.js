@@ -776,7 +776,7 @@ function check_and_populate_from_source(frm) {
             source_name = first_item.purchase_invoice;
         }
     }
-
+  //
     // Purchase Invoice created from Purchase Order or Purchase Receipt
     if (frm.doc.doctype === "Purchase Invoice") {
         if (first_item.purchase_order) {
