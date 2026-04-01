@@ -795,3 +795,26 @@ function check_and_populate_from_source(frm) {
         }, 500);
     }
 }
+
+// Auto-set due_date for Purchase Invoice based on supplier's custom_payment_term_days
+frappe.ui.form.on("Purchase Invoice", {
+    refresh: function(frm) {
+        if (frm.is_new()) {
+            set_pi_due_date_from_supplier(frm);
+        }
+    },
+    supplier: function(frm) {
+        set_pi_due_date_from_supplier(frm);
+    },
+    posting_date: function(frm) {
+        set_pi_due_date_from_supplier(frm);
+    }
+});
+
+function set_pi_due_date_from_supplier(frm) {
+    if (!frm.doc.supplier || !frm.doc.posting_date) return;
+    frappe.db.get_value('Supplier', frm.doc.supplier, 'custom_payment_term_days', function(data) {
+        const days = (data && data.custom_payment_term_days) ? data.custom_payment_term_days : 0;
+        frm.set_value('due_date', frappe.datetime.add_days(frm.doc.posting_date, days));
+    });
+}

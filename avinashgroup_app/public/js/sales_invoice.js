@@ -18,17 +18,20 @@ frappe.ui.form.on("Sales Invoice", {
                 toggle_vat_fields(frm, item.doctype, item.name);
             });
         }
+        if (frm.is_new()) {
+            set_due_date_from_customer(frm);
+        }
     },
-    
+
     base_total_taxes_and_charges: function(frm) {
         calculate_total(frm);
     },
-    
+
     base_grand_total: function(frm) {
         console.log("Base Grand Total changed");
         calculate_total(frm);
     },
-    
+
     taxes_and_charges: function(frm) {
         console.log("Taxes and Charges template changed");
         setTimeout(() => {
@@ -36,12 +39,20 @@ frappe.ui.form.on("Sales Invoice", {
             calculate_total(frm);
         }, 500);
     },
-    
+
     total_advance: function(frm) {
         console.log("Total Advance changed");
         calculate_total(frm);
     },
-    
+
+    customer: function(frm) {
+        set_due_date_from_customer(frm);
+    },
+
+    posting_date: function(frm) {
+        set_due_date_from_customer(frm);
+    },
+
 });
 
 frappe.ui.form.on("Sales Invoice Item", {
@@ -329,6 +340,14 @@ function calculate_vat_total(frm) {
     vat_total = flt(vat_total, 5);
     frm.set_value('custom_total_vat_amount', vat_total);
     frm.refresh_field('custom_total_vat_amount');
+}
+
+function set_due_date_from_customer(frm) {
+    if (!frm.doc.customer || !frm.doc.posting_date) return;
+    frappe.db.get_value('Customer', frm.doc.customer, 'custom_days_limit', function(data) {
+        const days = (data && data.custom_days_limit) ? data.custom_days_limit : 0;
+        frm.set_value('due_date', frappe.datetime.add_days(frm.doc.posting_date, days));
+    });
 }
 
 /**
