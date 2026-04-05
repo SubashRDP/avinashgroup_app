@@ -804,17 +804,20 @@ frappe.ui.form.on("Purchase Invoice", {
         }
     },
     supplier: function(frm) {
-        set_pi_due_date_from_supplier(frm);
+        // Run after core handlers so our custom due date wins
+        setTimeout(() => set_pi_due_date_from_supplier(frm), 0);
     },
     posting_date: function(frm) {
-        set_pi_due_date_from_supplier(frm);
+        // Run after core handlers so our custom due date wins
+        setTimeout(() => set_pi_due_date_from_supplier(frm), 0);
     }
 });
 
 function set_pi_due_date_from_supplier(frm) {
     if (!frm.doc.supplier || !frm.doc.posting_date) return;
+    const posting_date = frm.doc.posting_date;
     frappe.db.get_value('Supplier', frm.doc.supplier, 'custom_payment_term_days', function(data) {
         const days = (data && data.custom_payment_term_days) ? data.custom_payment_term_days : 0;
-        frm.set_value('due_date', frappe.datetime.add_days(frm.doc.posting_date, days));
+        frm.set_value('due_date', frappe.datetime.add_days(posting_date, days));
     });
 }

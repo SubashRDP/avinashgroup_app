@@ -46,11 +46,13 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
     customer: function(frm) {
-        set_due_date_from_customer(frm);
+        // Run after core handlers so our custom due date wins
+        setTimeout(() => set_due_date_from_customer(frm), 0);
     },
 
     posting_date: function(frm) {
-        set_due_date_from_customer(frm);
+        // Run after core handlers so our custom due date wins
+        setTimeout(() => set_due_date_from_customer(frm), 0);
     },
 
 });
@@ -344,9 +346,10 @@ function calculate_vat_total(frm) {
 
 function set_due_date_from_customer(frm) {
     if (!frm.doc.customer || !frm.doc.posting_date) return;
+    const posting_date = frm.doc.posting_date;
     frappe.db.get_value('Customer', frm.doc.customer, 'custom_days_limit', function(data) {
         const days = (data && data.custom_days_limit) ? data.custom_days_limit : 0;
-        frm.set_value('due_date', frappe.datetime.add_days(frm.doc.posting_date, days));
+        frm.set_value('due_date', frappe.datetime.add_days(posting_date, days));
     });
 }
 
