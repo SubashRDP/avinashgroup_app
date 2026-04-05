@@ -102,7 +102,7 @@ class AuditBase:
     "Mode of Payment",
     "Bank Account",
     "Holiday List",
-    "Leave Type",
+    # "Leave Type",
     "BOM",
     "Designation",
     # "BOM Template"
@@ -131,7 +131,7 @@ class AuditBase:
         "Mode of Payment",
         "Bank Account",
         "Holiday List",
-        "Leave Type",
+        # "Leave Type",
         "Designation",
         "Asset Maintenance Team",
         "Asset Value Adjustment",
