@@ -39,6 +39,7 @@ class AuditBase:
     "Landed Cost Voucher",
     "Lead",
     "Leave Application",
+    "Leave Allocation",
     "Maintenance Visit",
     "Material Request",
     "Opportunity",

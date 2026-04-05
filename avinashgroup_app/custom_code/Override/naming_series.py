@@ -131,11 +131,11 @@ NAMING_CONFIG = {
         "use_fiscal_year": False,
         "sequence_length": 5
     },
-    "Leave Type": {
-        "prefix": "L.Type",
-        "use_fiscal_year": False,
-        "sequence_length": 5
-    },
+    # "Leave Type": {
+    #     "prefix": "L.Type",
+    #     "use_fiscal_year": False,
+    #     "sequence_length": 5
+    # },
 
     "Customer":{
         "prefix": "CUS",
@@ -349,6 +349,11 @@ NAMING_CONFIG = {
     },
     "Leave Application": {
         "prefix": "LEAVE",
+        "use_fiscal_year": True,
+        "sequence_length": 5
+    },
+    "Leave Allocation": {
+        "prefix": "HR-LAL",
         "use_fiscal_year": True,
         "sequence_length": 5
     },
