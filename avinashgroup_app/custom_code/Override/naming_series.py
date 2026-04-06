@@ -1,3 +1,4 @@
+import re
 import frappe
 from frappe.model.naming import make_autoname, getseries
 from frappe.model.document import Document
@@ -210,33 +211,26 @@ NAMING_CONFIG = {
         "prefix": "PO",
         "use_fiscal_year": True,
         "sequence_length": 5,
-        "has_custom_name": True
+        "has_custom_name": True,
+        "purchase_type_field": "custom_purchase_type"
     },
     "Purchase Receipt": {
         "prefix": "GRN",
         "use_fiscal_year": True,
         "sequence_length": 5,
         "has_custom_name": True,
-        "has_branch_name": True
+        "has_branch_name": True,
+        "purchase_type_field": "custom_receipt_type"
     },
-    # "Purchase Receipt Return": {
-    #     "prefix": "PRRET",
-    #     "use_fiscal_year": True,
-    #     "sequence_length": 5
-    # },
     "Purchase Invoice": {
         "prefix": "PI",
         "return_prefix": "PRTN",
         "use_fiscal_year": True,
         "sequence_length": 5,
         "has_custom_name": True,
-        "has_branch_name": True
+        "has_branch_name": True,
+        "purchase_type_field": "custom_purchase_type"
     },
-    # "Purchase Invoice Return": {
-    #     "prefix": "PIR",
-    #     "use_fiscal_year": True,
-    #     "sequence_length": 5
-    # },
 
     "Material Request": {
         "prefix": "MR",
@@ -437,7 +431,7 @@ NAMING_CONFIG = {
         "use_fiscal_year": True,
         "sequence_length": 5
     },
-    
+
     "Sales Partner": {
         "prefix": "SP",
         "use_fiscal_year": True,
@@ -520,20 +514,52 @@ NAMING_CONFIG = {
     },
 }
 
+AUTO_NUMBER_CONFIG = {
+    "Purchase Receipt": {
+        "type_field": "custom_receipt_type",
+        "types": [
+            "Other Purchase Receipt",
+        ]
+    },
+    "Purchase Invoice": {
+        "type_field": "custom_purchase_type",
+        "types": [
+            "Purchase Return",
+        ]
+    },
+    "Payment Entry": {
+        "type_field": "custom_p_type",
+        "types": [
+            "Bank Customers Receipt",
+            "NOC Payment",
+            "Contra Voucher- cash to bank",
+        ]
+    },
+    "Journal Entry": {
+        "type_field": "custom_p_type",
+        "types": [
+            "Bank Entry",
+            "Party Journal",
+            "Debit Note",
+            "Credit Note",
+        ]
+    },
+}
+
+
 def get_fiscal_year_from_date(date_field):
     if not date_field:
         return None
-    
+
     fiscal_year = frappe.db.get_value(
         "Fiscal Year",
         {
             "year_start_date": ["<=", date_field],
             "year_end_date": [">=", date_field]
-
         },
         "name"
     )
-    
+
     return fiscal_year
 
 
@@ -558,30 +584,29 @@ def get_amendment_suffix(doc):
     """
     if not hasattr(doc, 'name') or not doc.name:
         return ""
-    
+
     if not hasattr(doc, 'amended_from') or not doc.amended_from:
         return ""
-    
+
     name = str(doc.name)
-    
-    import re
+
     match = re.search(r'-(\d+)$', name)
-    
+
     if match:
         return f"-{match.group(1)}"
-    
+
     return ""
 
 
 def make_name_simple(prefix, doc, sequence_length=5):
     company_abbr = get_company_abbr(doc)
     sequence = "#" * sequence_length
-    
+
     if company_abbr:
         naming_pattern = f'{company_abbr}-{prefix}-.{sequence}'
     else:
         naming_pattern = f'{prefix}-.{sequence}'
-    
+
     return make_autoname(naming_pattern)
 
 
@@ -589,7 +614,7 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     company_abbr = get_company_abbr(doc)
 
     date_field = None
-   
+
     if hasattr(doc, "posting_date") and doc.posting_date:
         date_field = doc.posting_date
     elif hasattr(doc, "transaction_date") and doc.transaction_date:
@@ -612,23 +637,111 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
 
     return make_autoname(naming_pattern)
 
+
 def format_document_number(doc):
-    doc_no = "00000"
+    doc_no = "000000"
     doc_word = ""
-    
+
     if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
-        doc_no = str(doc.custom_document_no).zfill(5)
-    
+        doc_no = str(doc.custom_document_no).zfill(6)
+
     if hasattr(doc, 'custom_document_word') and doc.custom_document_word:
         doc_word = str(doc.custom_document_word).strip()
-    
+
     return f"{doc_no}{doc_word}"
+
+
+def set_auto_document_no(doc):
+    """
+    Auto-sets custom_document_no for new documents whose type matches
+    AUTO_NUMBER_CONFIG. Falls back to manual entry if the type is not configured.
+
+    custom_p_type_code is NOT modified here — it must already be set on the doc
+    from the UI before this function runs.
+    """
+    doctype = doc.doctype
+
+    if doctype not in AUTO_NUMBER_CONFIG:
+        return
+
+    cfg = AUTO_NUMBER_CONFIG[doctype]
+    type_field = cfg.get("type_field")
+    type_value = getattr(doc, type_field, None) if type_field else None
+    types = cfg.get("types", [])
+
+    # If the selected type is not in config, leave custom_document_no untouched
+    if isinstance(types, dict):
+        if not type_value or type_value not in types:
+            return
+    elif isinstance(types, list):
+        if not type_value or type_value not in types:
+            return
+    else:
+        return
+
+    # Read custom_p_type_code — set by UI from the linked type doctype
+    prefix = getattr(doc, "custom_p_type_code", None)
+    company_abbr = get_company_abbr(doc)
+
+    if not prefix or not company_abbr:
+        return
+
+    # Filter by custom_name pattern — reliable because it is set on ALL documents
+    # regardless of whether older docs have the type_field populated.
+    # Pattern: {company_abbr}-{p_type_code}-* e.g. SGU-RC-000006-82/83
+    name_pattern = f"{company_abbr}-{prefix}-%"
+
+    existing = frappe.get_all(
+        doctype,
+        filters={
+            "custom_name": ["like", name_pattern],
+            "docstatus": ["!=", 2],
+        },
+        fields=["custom_name", "custom_document_no"],
+        ignore_permissions=True,
+    )
+
+    # Extract number from custom_name: SGU-RC-000057-82/83 → 57
+    name_re = re.compile(
+        r'^' + re.escape(company_abbr) + r'-' + re.escape(prefix) + r'-(\d+)-'
+    )
+    max_no = 0
+    for record in existing:
+        name_val = record.get("custom_name") or ""
+        m = name_re.match(name_val)
+        if m:
+            num = int(m.group(1))
+            if num > max_no:
+                max_no = num
+            continue
+        # Fallback: use custom_document_no if custom_name pattern doesn't match
+        doc_no = record.get("custom_document_no")
+        if doc_no:
+            try:
+                num = int(doc_no)
+                if num > max_no:
+                    max_no = num
+            except (TypeError, ValueError):
+                pass
+
+    doc.custom_document_no = max_no + 1
+
+
+@frappe.whitelist()
+def get_next_custom_document_no(**kwargs):
+    """
+    Client helper: return next custom_document_no for a draft doc.
+    Respects AUTO_NUMBER_CONFIG rules; returns None if type is not eligible.
+    """
+    doc = frappe._dict(kwargs)
+    set_auto_document_no(doc)
+    return getattr(doc, "custom_document_no", None)
 
 
 def set_custom_name_field(doc):
     if not hasattr(doc, 'custom_name'):
         return
-    company_name= None
+    company_name = None
     if hasattr(doc, 'company') and doc.company:
         company_name = doc.company
     elif hasattr(doc, 'custom_company') and doc.custom_company:
@@ -636,9 +749,9 @@ def set_custom_name_field(doc):
     if company_name and company_name == "Grihalaxmi Metal Industries Pvt. Ltd":
         doc.custom_name = ""
         return
-    
+
     company_code = get_company_abbr(doc) or ""
-    
+
     p_type = ""
     if hasattr(doc, 'custom_p_type_code') and doc.custom_p_type_code:
         p_type = doc.custom_p_type_code
@@ -654,12 +767,12 @@ def set_custom_name_field(doc):
             date_field = doc.posting_date
         elif hasattr(doc, 'transaction_date') and doc.transaction_date:
             date_field = doc.transaction_date
-        
+
         if date_field:
             calculated_fy = get_fiscal_year_from_date(date_field)
             if calculated_fy:
                 fiscal_year = calculated_fy
-    
+
     base_custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
     amendment_suffix = get_amendment_suffix(doc)
     doc.custom_name = f"{base_custom_name}{amendment_suffix}"
@@ -667,42 +780,39 @@ def set_custom_name_field(doc):
 
 def naming_requirements_before_insert(doc):
     doctype = doc.doctype
-    # frappe.msgprint("From before insert ")
-    
+
     if doctype not in NAMING_CONFIG:
         return
-    
+
     config = NAMING_CONFIG[doctype]
-    
-    # Check if company abbreviation is required and available
+
     company_abbr = get_company_abbr(doc)
     if not company_abbr:
         frappe.throw(
             f"Company abbreviation is required for {doctype}. Please ensure 'Company' field is set with a valid company.",
             title="Missing Company Abbreviation"
         )
-    
-    # Check fiscal year requirement
+
     if config["use_fiscal_year"]:
-        # Get the first available date field with content
         date_field = (
             (getattr(doc, "posting_date", None) if hasattr(doc, "posting_date") else None) or
             (getattr(doc, "transaction_date", None) if hasattr(doc, "transaction_date") else None) or
             (getattr(doc, "custom_created_on", None) if hasattr(doc, "custom_created_on") else None)
         )
-        
+
         if not date_field:
             frappe.throw(
                 f"Date field (posting_date, transaction_date, or custom_created_on) is required for {doctype}.",
                 title="Missing Date Field"
             )
-        
+
         fiscal_year = get_fiscal_year_from_date(date_field)
         if not fiscal_year:
             frappe.throw(
                 f"No fiscal year found for date {date_field}. Please ensure fiscal year is set up correctly in the system.",
                 title="Missing Fiscal Year"
             )
+
 
 def set_custom_branch_name(doc):
     """
@@ -714,7 +824,6 @@ def set_custom_branch_name(doc):
     if not hasattr(doc, 'custom_branch_name'):
         return
 
-    # Already set — do not regenerate (counter must not increment again)
     if doc.custom_branch_name:
         return
 
@@ -724,7 +833,6 @@ def set_custom_branch_name(doc):
     elif hasattr(doc, 'custom_company') and doc.custom_company:
         company_name = doc.custom_company
 
-    # Non-Grishma company: mirror doc.name
     if not company_name or company_name != BRANCH_NAME_COMPANY:
         doc.custom_branch_name = doc.name or ""
         return
@@ -769,42 +877,48 @@ def set_custom_branch_name(doc):
 def handle_before_insert(doc, method=None):
     naming_requirements_before_insert(doc)
 
+
 def handle_validate(doc, method=None):
+    if doc.is_new():
+        set_auto_document_no(doc)
+    set_custom_name_field(doc)
+    set_custom_branch_name(doc)
+
+
+def handle_before_save(doc, method=None):
+    """
+    Ensure numbering happens after fields like custom_p_type_code
+    are set (often during save). This is the final chance before insert.
+    """
+    if doc.is_new():
+        set_auto_document_no(doc)
     set_custom_name_field(doc)
     set_custom_branch_name(doc)
 
 
 def naming_series_autoname(self, method):
     doctype = self.doctype
-    # Check if doctype has naming configuration
     if doctype not in NAMING_CONFIG:
         return
-    
+
     config = NAMING_CONFIG[doctype]
-    
-    # Determine prefix (check for return documents)
+
     prefix = config["prefix"]
     if hasattr(self, "is_return") and self.is_return == 1 and "return_prefix" in config:
         prefix = config["return_prefix"]
-    
-    # Generate name based on configuration
+
     if config["use_fiscal_year"]:
         self.name = make_name_with_fiscal_year(
-            prefix, 
-            self, 
+            prefix,
+            self,
             sequence_length=config["sequence_length"]
         )
     else:
         self.name = make_name_simple(
-            prefix, 
-            self, 
+            prefix,
+            self,
             sequence_length=config["sequence_length"]
         )
-    
-    # Set custom name field if configured
-    if config.get("has_custom_name", False):
-        set_custom_name_field(self)
 
-    # Set branch-based name field if configured
     if config.get("has_branch_name", False):
         set_custom_branch_name(self)

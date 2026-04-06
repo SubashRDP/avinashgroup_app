@@ -182,34 +182,7 @@ sales_invoice_specific_events = {
 doc_events = AuditEventMapper.get_doc_events()
 
 
-# Merge Purchase Invoice specific events
-if "Purchase Invoice" not in doc_events:
-    doc_events["Purchase Invoice"] = {}
-doc_events["Purchase Invoice"].update(purchase_invoice_specific_events)
-
-# Merge Purchase Order events
-if "Purchase Order" not in doc_events:
-    doc_events["Purchase Order"] = {}
-doc_events["Purchase Order"].update(purchase_order_events)
-
-# Merge Purchase Receipt events
-if "Purchase Receipt" not in doc_events:
-    doc_events["Purchase Receipt"] = {}
-doc_events["Purchase Receipt"].update(purchase_receipt_events)
-
-# Merge Supplier Quotation events
-if "Supplier Quotation" not in doc_events:
-    doc_events["Supplier Quotation"] = {}
-doc_events["Supplier Quotation"].update(supplier_quotation_events)
-
-if "Sales Invoice" not in doc_events:
-    doc_events["Sales Invoice"]={}
-doc_events["Sales Invoice"].update(sales_invoice_specific_events)
-
-
-
-
-# Ensure Company Filter config changes clear the cached config
+# Safe merge helper — never overwrites existing handlers, converts to list instead
 def _add_doc_event(doctype, event, handler):
     if doctype not in doc_events:
         doc_events[doctype] = {}
@@ -224,6 +197,22 @@ def _add_doc_event(doctype, event, handler):
     if existing != handler:
         doc_events[doctype][event] = [existing, handler]
 
+
+# Merge per-doctype events safely (without overwriting audit/naming handlers)
+for _event, _handler in purchase_invoice_specific_events.items():
+    _add_doc_event("Purchase Invoice", _event, _handler)
+
+for _event, _handler in purchase_order_events.items():
+    _add_doc_event("Purchase Order", _event, _handler)
+
+for _event, _handler in purchase_receipt_events.items():
+    _add_doc_event("Purchase Receipt", _event, _handler)
+
+for _event, _handler in supplier_quotation_events.items():
+    _add_doc_event("Supplier Quotation", _event, _handler)
+
+for _event, _handler in sales_invoice_specific_events.items():
+    _add_doc_event("Sales Invoice", _event, _handler)
 
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):
