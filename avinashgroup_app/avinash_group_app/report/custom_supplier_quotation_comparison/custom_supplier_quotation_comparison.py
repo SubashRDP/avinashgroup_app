@@ -18,10 +18,10 @@ def execute(filters=None):
 	supplier_quotation_data = get_data(filters)
 
 	# Prepare pivoted data and get list of suppliers
-	data, suppliers = prepare_pivoted_data(supplier_quotation_data, filters)
+	data, suppliers, supplier_display_name = prepare_pivoted_data(supplier_quotation_data, filters)
 
 	# Generate columns dynamically based on suppliers found
-	columns = get_columns(filters, suppliers)
+	columns = get_columns(filters, suppliers, supplier_display_name)
 
 	message = get_message()
 
@@ -60,7 +60,8 @@ def get_data(filters):
 			sq_item.stock_uom,
 			sq_item.request_for_quotation,
 			sq_item.lead_time_days,
-			sq.supplier.as_("supplier_name"),
+			sq.supplier.as_("supplier_id"),
+			sq.supplier_name,
 			sq.valid_till,
 			sq.transaction_date,
 			sq.taxes_and_charges,
@@ -127,6 +128,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	item_supplier_map = defaultdict(lambda: defaultdict(dict))
 	supplier_quotation_map = {}  # Store quotation-level data per supplier
 	all_suppliers = set()
+	supplier_display_name = {}  # Map supplier_id -> display name
 	all_items = []  # Maintain order
 	item_meta = {}  # Store item metadata
 	seen_items = set()
@@ -134,7 +136,8 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# Process each quotation line
 	for row in supplier_quotation_data:
 		item_code = row.get("item_code")
-		supplier = row.get("supplier_name")
+		supplier = row.get("supplier_id")
+		supplier_display_name[supplier] = row.get("supplier_name") or supplier
 		quotation_name = row.get("parent")
 		
 		# Get price value based on configured field
@@ -331,10 +334,10 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			invoice_row[col_fieldname] = taxable + vat - discount_grand
 	data.append(invoice_row)
 
-	return data, suppliers
+	return data, suppliers, supplier_display_name
 
 
-def get_columns(filters, suppliers):
+def get_columns(filters, suppliers, supplier_display_name=None):
 	"""
 	Generate columns dynamically:
 	- Fixed columns for SN, item info, qty
@@ -367,9 +370,10 @@ def get_columns(filters, suppliers):
 	# Dynamic supplier columns
 	for i, supplier in enumerate(sorted(suppliers), 1):
 		col_fieldname = frappe.scrub(supplier)
+		display = (supplier_display_name or {}).get(supplier, supplier)
 		columns.append({
 			"fieldname": col_fieldname,
-			"label":  supplier,
+			"label": display,
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
 			"width": 120,

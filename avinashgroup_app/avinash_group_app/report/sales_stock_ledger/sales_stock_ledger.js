@@ -1,0 +1,266 @@
+frappe.query_reports["Sales Stock Ledger"] = {
+
+    filters: [
+        {
+            fieldname: "report_type",
+            label: __("Report Type"),
+            fieldtype: "Select",
+            options: "Detail\nSummarized",
+            default: "Detail",
+            reqd: 1,
+            on_change: function () {
+                frappe.query_report.refresh();
+            },
+        },
+        {
+            fieldname: "company",
+            label: __("Company"),
+            fieldtype: "Link",
+            options: "Company",
+            default: frappe.defaults.get_user_default("Company"),
+            on_change: function () {
+                // clear company-dependent filters when company changes
+                frappe.query_report.set_filter_value("branch", "");
+                frappe.query_report.set_filter_value("warehouse", "");
+                frappe.query_report.set_filter_value("price_list", "");
+                frappe.query_report.set_filter_value("voucher_no", "");
+            },
+        },
+        {
+            fieldname: "branch",
+            label: __("Branch"),
+            fieldtype: "Link",
+            options: "Branch",
+            get_query: function () {
+                const company = frappe.query_report.get_filter_value("company");
+                return company
+                    ? { filters: { custom_company: company } }
+                    : {};
+            },
+        },
+        {
+            fieldname: "from_date",
+            label: __("From Date"),
+            fieldtype: "Date",
+            default: frappe.datetime.month_start(),
+            reqd: 1,
+        },
+        {
+            fieldname: "to_date",
+            label: __("To Date"),
+            fieldtype: "Date",
+            default: frappe.datetime.month_end(),
+            reqd: 1,
+        },
+        {
+            fieldname: "warehouse",
+            label: __("Warehouse"),
+            fieldtype: "Link",
+            options: "Warehouse",
+            get_query: function () {
+                const company = frappe.query_report.get_filter_value("company");
+                return company
+                    ? { filters: { company: company } }
+                    : {};
+            },
+        },
+        {
+            fieldname: "item",
+            label: __("Item"),
+            fieldtype: "Link",
+            options: "Item",
+        },
+        {
+            fieldname: "item_group",
+            label: __("Item Group"),
+            fieldtype: "Link",
+            options: "Item Group",
+        },
+        {
+            fieldname: "price_list",
+            label: __("Price List"),
+            fieldtype: "Link",
+            options: "Price List",
+            get_query: function () {
+                const company = frappe.query_report.get_filter_value("company");
+                return company
+                    ? { filters: { custom_company: company } }
+                    : {};
+            },
+        },
+        {
+            fieldname: "uom",
+            label: __("UOM"),
+            fieldtype: "Link",
+            options: "UOM",
+        },
+        {
+            fieldname: "voucher_no",
+            label: __("Voucher No"),
+            fieldtype: "Link",
+            options: "Sales Invoice",
+            get_query: function () {
+                const company = frappe.query_report.get_filter_value("company");
+                return company
+                    ? { filters: { company: company, docstatus: 1 } }
+                    : { filters: { docstatus: 1 } };
+            },
+        },
+        {
+            fieldname: "voucher_type",
+            label: __("Voucher Type"),
+            fieldtype: "Select",
+            options: "\nSales Invoice\nSales Return",
+        },
+        {
+            fieldname: "fit_columns",
+            label: __("Fit Columns"),
+            fieldtype: "Check",
+            default: 1,
+            on_change: function () {
+                frappe.query_report.refresh();
+            },
+        },
+        {
+            fieldname: "sales_return_merge",
+            label: __("Sales / Return Merge"),
+            fieldtype: "Check",
+            default: 0,
+        },
+    ],
+
+    get_datatable_options(options) {
+        return Object.assign(options, { layout: "fixed" });
+    },
+
+    after_datatable_render: function (dt) {
+        const fit = frappe.query_report.get_filter_value("fit_columns");
+        if (fit) {
+            setTimeout(() => this.autoFitColumns(dt), 100);
+        }
+        this._initDragScroll(dt);
+    },
+
+    _initDragScroll: function (dt) {
+        const scrollable = dt.bodyScrollable;
+        if (!scrollable || scrollable._dragScrollBound) return;
+        scrollable._dragScrollBound = true;
+
+        let isDragging = false;
+        let startX, startY, scrollLeft, scrollTop;
+
+        scrollable.addEventListener("mousedown", (e) => {
+            // only trigger on left click, not on links/buttons
+            if (e.button !== 0) return;
+            if (e.target.closest("a, button, input, select")) return;
+            isDragging  = true;
+            startX      = e.pageX - scrollable.offsetLeft;
+            startY      = e.pageY - scrollable.offsetTop;
+            scrollLeft  = scrollable.scrollLeft;
+            scrollTop   = scrollable.scrollTop;
+            scrollable.style.cursor = "grabbing";
+            scrollable.style.userSelect = "none";
+            e.preventDefault();
+        });
+
+        document.addEventListener("mousemove", (e) => {
+            if (!isDragging) return;
+            const dx = e.pageX - scrollable.offsetLeft - startX;
+            const dy = e.pageY - scrollable.offsetTop  - startY;
+            scrollable.scrollLeft = scrollLeft - dx;
+            scrollable.scrollTop  = scrollTop  - dy;
+        });
+
+        document.addEventListener("mouseup", () => {
+            if (!isDragging) return;
+            isDragging = false;
+            scrollable.style.cursor    = "grab";
+            scrollable.style.userSelect = "";
+        });
+
+        // default cursor
+        scrollable.style.cursor = "grab";
+    },
+
+    autoFitColumns: function (dt) {
+        const datatableWrapper = dt.datatableWrapper;
+        if (!datatableWrapper) return;
+
+        const columns = dt.datamanager.getColumns(true);
+        if (!columns.length) return;
+
+        columns.forEach((col) => {
+            let maxWidth = 60;
+
+            // measure header cell
+            const headerCell = datatableWrapper.querySelector(
+                `.dt-cell__content--header-${col.colIndex}`
+            );
+            if (headerCell) {
+                maxWidth = Math.max(maxWidth, headerCell.scrollWidth + 20);
+            }
+
+            // measure all data cells for this column
+            const dataCells = datatableWrapper.querySelectorAll(
+                `.dt-cell__content--col-${col.colIndex}`
+            );
+            const sampleSize = Math.min(100, dataCells.length);
+            for (let i = 0; i < sampleSize; i++) {
+                maxWidth = Math.max(maxWidth, dataCells[i].scrollWidth + 20);
+            }
+
+            const finalWidth = Math.min(maxWidth, 400);
+            dt.datamanager.updateColumn(col.colIndex, { width: finalWidth });
+            dt.columnmanager.setColumnHeaderWidth(col.colIndex);
+            dt.columnmanager.setColumnWidth(col.colIndex);
+        });
+    },
+
+    formatter: function (value, row, column, data, default_formatter) {
+        let formatted = default_formatter(value, row, column, data);
+        if (data && data.bold) {
+            formatted = `<strong>${formatted}</strong>`;
+        }
+        return formatted;
+    },
+
+    onload: function () {
+        if (document.getElementById("ssl-report-style")) return;
+
+        const style = document.createElement("style");
+        style.id = "ssl-report-style";
+        style.textContent = `
+            .query-report-wrapper .datatable {
+                width: 100% !important;
+            }
+            .query-report-wrapper .dt-scrollable {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            .query-report-wrapper .dt-cell {
+                display: flex;
+                align-items: center;
+                padding: 8px !important;
+                box-sizing: border-box;
+            }
+            .query-report-wrapper .dt-cell__content {
+                white-space: normal;
+                word-break: break-word;
+                overflow-wrap: break-word;
+                overflow: visible;
+                max-width: 100%;
+                line-height: 1.4;
+            }
+            .query-report-wrapper .dt-cell__header {
+                font-weight: 600;
+                white-space: normal;
+                word-break: break-word;
+            }
+            .query-report-wrapper .dt-row {
+                height: auto;
+                min-height: 30px;
+            }
+        `;
+        document.head.appendChild(style);
+    },
+};
