@@ -280,7 +280,7 @@ def _get_summarized_data(filters):
                 NULL                            AS voucher_type,
                 SUM(
                     CASE WHEN si.is_return = 0
-                    THEN sii.qty ELSE -sii.qty END
+                    THEN sii.qty ELSE + sii.qty END
                 )                               AS total_sales_qty,
                 sii.uom                         AS sales_uom_label,
                 SUM(
@@ -293,11 +293,6 @@ def _get_summarized_data(filters):
                 `tabSales Invoice` si
                 JOIN `tabSales Invoice Item` sii ON si.name = sii.parent
                 JOIN `tabItem` item ON item.name = sii.item_code
-                LEFT JOIN `tabStock Ledger Entry` sle
-                    ON  sle.voucher_no = si.name
-                    AND sle.item_code  = sii.item_code
-                    AND sle.voucher_detail_no = sii.name
-                    AND sle.docstatus = 1
             WHERE
                 si.docstatus = 1
                 AND item.is_stock_item = 1
