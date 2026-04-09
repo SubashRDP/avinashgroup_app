@@ -247,6 +247,17 @@ frappe.query_reports["Sales Stock Ledger"] = {
             .query-report-wrapper .datatable {
                 width: 100% !important;
             }
+            /* Row numbering column (fix 2-digit numbers getting ellipsized) */
+            .query-report-wrapper .dt-row-header {
+                min-width: 52px !important;
+                width: 52px !important;
+            }
+            .query-report-wrapper .dt-row-header .dt-cell__content {
+                overflow: visible !important;
+                text-overflow: unset !important;
+                text-align: center;
+                width: 100%;
+            }
             .query-report-wrapper .dt-scrollable {
                 overflow-x: auto !important;
                 -webkit-overflow-scrolling: touch;

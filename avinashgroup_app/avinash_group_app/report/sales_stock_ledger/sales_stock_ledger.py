@@ -11,7 +11,7 @@ def execute(filters=None):
         data = _get_summarized_data(filters)
     else:
         columns = _get_detail_columns()
-        data = _get_detail_data(filters)
+        data = _add_detail_totals_row(_get_detail_data(filters))
 
     return columns, data
 
@@ -37,8 +37,14 @@ def _get_float_precision():
     return cint(frappe.db.get_default("float_precision")) or 2
 
 
+def _get_rate_precision():
+    # Rates should show 5 decimals (as requested) regardless of system defaults.
+    return 5
+
+
 def _get_detail_columns():
     precision = _get_float_precision()
+    rate_precision = _get_rate_precision()
     return [
         {
             "fieldname": "posting_date",
@@ -84,6 +90,7 @@ def _get_detail_columns():
             "fieldname": "sales_rate",
             "label": _("Sales Rate"),
             "fieldtype": "Currency",
+            "precision": rate_precision,
             "width": 120,
         },
         {
@@ -101,9 +108,10 @@ def _get_detail_columns():
             "width": 100,
         },
         {
-            "fieldname": "valuation_rate",
-            "label": _("Valuation Rate"),
+            "fieldname": "stock_rate",
+            "label": _("Rate of Stock UOM (NPR)"),
             "fieldtype": "Currency",
+            "precision": rate_precision,
             "width": 150,
         },
         {
@@ -158,12 +166,6 @@ def _get_summarized_columns():
             "fieldtype": "Link",
             "options": "UOM",
             "width": 100,
-        },
-        {
-            "fieldname": "valuation_rate",
-            "label": _("Valuation Rate"),
-            "fieldtype": "Currency",
-            "width": 150,
         },
         {
             "fieldname": "balance",
@@ -250,7 +252,10 @@ def _get_detail_data(filters):
             sii.rate            AS sales_rate,
             sii.stock_qty,
             sii.stock_uom,
-            sii.base_price_list_rate    AS valuation_rate,
+            COALESCE(
+                NULLIF(sii.stock_uom_rate, 0),
+                (sii.rate / NULLIF(sii.conversion_factor, 0))
+            )                   AS stock_rate,
             sii.amount          AS balance
         FROM
             `tabSales Invoice` si
@@ -285,17 +290,16 @@ def _get_summarized_data(filters):
                 NULL                            AS voucher_type,
                 SUM(
                     CASE WHEN si.is_return = 0
-                    THEN sii.qty ELSE -sii.qty END
+                    THEN ABS(sii.qty) ELSE -ABS(sii.qty) END
                 )                               AS total_sales_qty,
                 SUM(
                     CASE WHEN si.is_return = 0
-                    THEN sii.stock_qty ELSE -sii.stock_qty END
+                    THEN ABS(sii.stock_qty) ELSE -ABS(sii.stock_qty) END
                 )                               AS total_stock_qty,
                 sii.stock_uom,
-                AVG(sii.base_price_list_rate)   AS valuation_rate,
                 SUM(
                     CASE WHEN si.is_return = 0
-                    THEN sii.amount ELSE -sii.amount END
+                    THEN ABS(sii.amount) ELSE -ABS(sii.amount) END
                 )                               AS balance
             FROM
                 `tabSales Invoice` si
@@ -324,7 +328,6 @@ def _get_summarized_data(filters):
                 SUM(sii.qty)                            AS total_sales_qty,
                 SUM(sii.stock_qty)                      AS total_stock_qty,
                 sii.stock_uom,
-                AVG(sii.base_price_list_rate)           AS valuation_rate,
                 SUM(sii.amount)                         AS balance
             FROM
                 `tabSales Invoice` si
@@ -368,8 +371,33 @@ def _add_totals_row(rows):
         "sales_uom": "",
         "total_stock_qty": total_stock_qty,
         "stock_uom": "",
-        "valuation_rate": None,
         "balance": total_balance,
         "bold": 1,
     }
+    return list(rows) + [total_row]
+
+
+def _add_detail_totals_row(rows):
+    if not rows:
+        return rows
+
+    total_sales_qty = sum(r.get("sales_qty") or 0 for r in rows)
+    total_stock_qty = sum(r.get("stock_qty") or 0 for r in rows)
+    total_balance = sum(r.get("balance") or 0 for r in rows)
+
+    total_row = {
+        "posting_date": None,
+        "voucher_type": _("Total"),
+        "voucher_no": "",
+        "item_code": "",
+        "sales_qty": total_sales_qty,
+        "sales_uom": "",
+        "sales_rate": None,
+        "stock_qty": total_stock_qty,
+        "stock_uom": "",
+        "stock_rate": None,
+        "balance": total_balance,
+        "bold": 1,
+    }
+
     return list(rows) + [total_row]
