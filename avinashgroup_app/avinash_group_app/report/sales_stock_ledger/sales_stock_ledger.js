@@ -19,11 +19,13 @@ frappe.query_reports["Sales Stock Ledger"] = {
             options: "Company",
             default: frappe.defaults.get_user_default("Company"),
             on_change: function () {
-                // clear company-dependent filters when company changes
                 frappe.query_report.set_filter_value("branch", "");
                 frappe.query_report.set_filter_value("warehouse", "");
                 frappe.query_report.set_filter_value("price_list", "");
                 frappe.query_report.set_filter_value("voucher_no", "");
+                frappe.query_report.set_filter_value("item", "");
+                frappe.query_report.set_filter_value("item_group", "");
+                frappe.query_report.refresh();
             },
         },
         {
@@ -69,12 +71,24 @@ frappe.query_reports["Sales Stock Ledger"] = {
             label: __("Item"),
             fieldtype: "Link",
             options: "Item",
+            get_query: function () {
+                const company = frappe.query_report.get_filter_value("company");
+                return company
+                    ? { filters: [["Item Default", "company", "=", company]] }
+                    : {};
+            },
         },
         {
             fieldname: "item_group",
             label: __("Item Group"),
             fieldtype: "Link",
             options: "Item Group",
+            get_query: function () {
+                const company = frappe.query_report.get_filter_value("company");
+                return company
+                    ? { filters: { custom_company: company } }
+                    : {};
+            },
         },
         {
             fieldname: "price_list",
@@ -190,7 +204,7 @@ frappe.query_reports["Sales Stock Ledger"] = {
         if (!columns.length) return;
 
         columns.forEach((col) => {
-            let maxWidth = 60;
+            let maxWidth = 120;
 
             // measure header cell
             const headerCell = datatableWrapper.querySelector(
@@ -244,10 +258,9 @@ frappe.query_reports["Sales Stock Ledger"] = {
                 box-sizing: border-box;
             }
             .query-report-wrapper .dt-cell__content {
-                white-space: normal;
-                word-break: break-word;
-                overflow-wrap: break-word;
-                overflow: visible;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
                 max-width: 100%;
                 line-height: 1.4;
             }

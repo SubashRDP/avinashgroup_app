@@ -21,7 +21,6 @@ def execute(filters=None):
 # ─────────────────────────────────────────────────────────────
 
 def _validate_permissions(filters):
-    """Restrict company to companies the user is allowed to see."""
     if not filters.get("company"):
         return
     allowed = {c.name for c in frappe.get_list("Company", fields=["name"])}
@@ -33,7 +32,13 @@ def _validate_permissions(filters):
 #  COLUMNS
 # ─────────────────────────────────────────────────────────────
 
+def _get_float_precision():
+    from frappe.utils import cint
+    return cint(frappe.db.get_default("float_precision")) or 2
+
+
 def _get_detail_columns():
+    precision = _get_float_precision()
     return [
         {
             "fieldname": "posting_date",
@@ -45,45 +50,47 @@ def _get_detail_columns():
             "fieldname": "voucher_type",
             "label": _("Voucher Type"),
             "fieldtype": "Data",
-            "width": 110,
+            "width": 120,
         },
         {
             "fieldname": "voucher_no",
             "label": _("Voucher No"),
             "fieldtype": "Link",
             "options": "Sales Invoice",
-            "width": 110,
+            "width": 160,
         },
         {
             "fieldname": "item_code",
             "label": _("Item"),
             "fieldtype": "Link",
             "options": "Item",
-            "width": 110,
+            "width": 150,
         },
         {
             "fieldname": "sales_qty",
             "label": _("Sales Qty"),
             "fieldtype": "Float",
-            "width": 110,
+            "precision": precision,
+            "width": 100,
         },
         {
             "fieldname": "sales_uom",
-            "label": _("Sales UOM"),
+            "label": _("UOM"),
             "fieldtype": "Link",
             "options": "UOM",
-            "width": 110,
+            "width": 80,
         },
         {
             "fieldname": "sales_rate",
             "label": _("Sales Rate"),
             "fieldtype": "Currency",
-            "width": 110,   
+            "width": 120,
         },
         {
             "fieldname": "stock_qty",
             "label": _("Stock Qty"),
             "fieldtype": "Float",
+            "precision": precision,
             "width": 100,
         },
         {
@@ -94,58 +101,55 @@ def _get_detail_columns():
             "width": 100,
         },
         {
-            "fieldname": "stock_rate",
-            "label": _("Stock Rate"),
+            "fieldname": "valuation_rate",
+            "label": _("Valuation Rate"),
             "fieldtype": "Currency",
-            "width": 110,
+            "width": 150,
         },
         {
             "fieldname": "balance",
             "label": _("Balance"),
-            "fieldtype": "Float",
-            "width": 110,
+            "fieldtype": "Currency",
+            "width": 160,
         },
     ]
 
 
 def _get_summarized_columns():
+    precision = _get_float_precision()
     return [
         {
             "fieldname": "item_code",
             "label": _("Item"),
             "fieldtype": "Link",
             "options": "Item",
+            "width": 180,
+        },
+        {
+            "fieldname": "voucher_type",
+            "label": _("Type"),
+            "fieldtype": "Data",
+            "width": 120,
+        },
+        {
+            "fieldname": "total_sales_qty",
+            "label": _("Sales Qty"),
+            "fieldtype": "Float",
+            "precision": precision,
             "width": 110,
         },
         {
             "fieldname": "sales_uom",
-            "label": _("Sales UOM"),
+            "label": _("UOM"),
             "fieldtype": "Link",
             "options": "UOM",
-            "width": 110,
-        },
-        {
-            "fieldname": "voucher_type",
-            "label": _("Voucher Type"),
-            "fieldtype": "Data",
-            "width": 110,
-        },
-        {
-            "fieldname": "total_sales_qty",
-            "label": _("Total Sales Qty"),
-            "fieldtype": "Float",
-            "width": 110,
-        },
-        {
-            "fieldname": "sales_uom_label",
-            "label": _("UOM"),
-            "fieldtype": "Data",
-            "width": 110,
+            "width": 80,
         },
         {
             "fieldname": "total_stock_qty",
-            "label": _("Total Stock Qty"),
+            "label": _("Stock Qty"),
             "fieldtype": "Float",
+            "precision": precision,
             "width": 110,
         },
         {
@@ -153,13 +157,19 @@ def _get_summarized_columns():
             "label": _("Stock UOM"),
             "fieldtype": "Link",
             "options": "UOM",
-            "width": 110,
+            "width": 100,
+        },
+        {
+            "fieldname": "valuation_rate",
+            "label": _("Valuation Rate"),
+            "fieldtype": "Currency",
+            "width": 150,
         },
         {
             "fieldname": "balance",
             "label": _("Balance"),
-            "fieldtype": "Float",
-            "width": 110,
+            "fieldtype": "Currency",
+            "width": 160,
         },
     ]
 
@@ -169,10 +179,6 @@ def _get_summarized_columns():
 # ─────────────────────────────────────────────────────────────
 
 def _build_conditions(filters):
-    """
-    Returns (conditions_str, values_dict).
-    conditions_str is appended to the WHERE clause (starts with AND).
-    """
     cond = []
     vals = {}
 
@@ -197,7 +203,7 @@ def _build_conditions(filters):
         vals["item"] = filters["item"]
 
     if filters.get("item_group"):
-        cond.append("sii.item_group = %(item_group)s")
+        cond.append("item.item_group = %(item_group)s")
         vals["item_group"] = filters["item_group"]
 
     if filters.get("price_list"):
@@ -209,7 +215,6 @@ def _build_conditions(filters):
         vals["uom"] = filters["uom"]
 
     if filters.get("branch"):
-        # custom_branch field on Sales Invoice — add once the custom field is created
         if frappe.db.has_column("Sales Invoice", "custom_branch"):
             cond.append("si.custom_branch = %(branch)s")
             vals["branch"] = filters["branch"]
@@ -218,7 +223,6 @@ def _build_conditions(filters):
         cond.append("si.name = %(voucher_no)s")
         vals["voucher_no"] = filters["voucher_no"]
 
-    # voucher_type filter: "Sales Invoice" → is_return=0, "Sales Return" → is_return=1
     if filters.get("voucher_type") == "Sales Invoice":
         cond.append("si.is_return = 0")
     elif filters.get("voucher_type") == "Sales Return":
@@ -228,25 +232,26 @@ def _build_conditions(filters):
     return where, vals
 
 
-
+# ─────────────────────────────────────────────────────────────
+#  DETAIL
+# ─────────────────────────────────────────────────────────────
 
 def _get_detail_data(filters):
     where, vals = _build_conditions(filters)
-
 
     query = """
         SELECT
             si.posting_date,
             CASE WHEN si.is_return = 1 THEN 'Sales Return' ELSE 'Sales Invoice' END AS voucher_type,
-            si.name                     AS voucher_no,
+            si.name             AS voucher_no,
             sii.item_code,
-            sii.qty                     AS sales_qty,
-            sii.uom                     AS sales_uom,
-            sii.rate                    AS sales_rate,
+            sii.qty             AS sales_qty,
+            sii.uom             AS sales_uom,
+            sii.rate            AS sales_rate,
             sii.stock_qty,
             sii.stock_uom,
-            sii.base_price_list_rate    AS stock_rate,
-            sii.amount                  AS balance
+            sii.base_price_list_rate    AS valuation_rate,
+            sii.amount          AS balance
         FROM
             `tabSales Invoice` si
             JOIN `tabSales Invoice Item` sii ON si.name = sii.parent
@@ -264,12 +269,12 @@ def _get_detail_data(filters):
     return frappe.db.sql(query, vals, as_dict=True)
 
 
-
+# ─────────────────────────────────────────────────────────────
+#  SUMMARIZED
+# ─────────────────────────────────────────────────────────────
 
 def _get_summarized_data(filters):
     where, vals = _build_conditions(filters)
-
-
     merge = filters.get("sales_return_merge")
 
     if merge:
@@ -280,15 +285,18 @@ def _get_summarized_data(filters):
                 NULL                            AS voucher_type,
                 SUM(
                     CASE WHEN si.is_return = 0
-                    THEN sii.qty ELSE + sii.qty END
+                    THEN sii.qty ELSE -sii.qty END
                 )                               AS total_sales_qty,
-                sii.uom                         AS sales_uom_label,
                 SUM(
                     CASE WHEN si.is_return = 0
                     THEN sii.stock_qty ELSE -sii.stock_qty END
                 )                               AS total_stock_qty,
                 sii.stock_uom,
-                MAX(sle.qty_after_transaction)  AS balance
+                AVG(sii.base_price_list_rate)   AS valuation_rate,
+                SUM(
+                    CASE WHEN si.is_return = 0
+                    THEN sii.amount ELSE -sii.amount END
+                )                               AS balance
             FROM
                 `tabSales Invoice` si
                 JOIN `tabSales Invoice Item` sii ON si.name = sii.parent
@@ -302,8 +310,7 @@ def _get_summarized_data(filters):
                 sii.uom,
                 sii.stock_uom
             ORDER BY
-                sii.item_code,
-                sii.uom
+                sii.item_code
         """.format(where=where)
     else:
         query = """
@@ -315,19 +322,14 @@ def _get_summarized_data(filters):
                      ELSE 'Sales Invoice'
                 END                                     AS voucher_type,
                 SUM(sii.qty)                            AS total_sales_qty,
-                sii.uom                                 AS sales_uom_label,
                 SUM(sii.stock_qty)                      AS total_stock_qty,
                 sii.stock_uom,
-                MAX(sle.qty_after_transaction)          AS balance
+                AVG(sii.base_price_list_rate)           AS valuation_rate,
+                SUM(sii.amount)                         AS balance
             FROM
                 `tabSales Invoice` si
                 JOIN `tabSales Invoice Item` sii ON si.name = sii.parent
                 JOIN `tabItem` item ON item.name = sii.item_code
-                LEFT JOIN `tabStock Ledger Entry` sle
-                    ON  sle.voucher_no = si.name
-                    AND sle.item_code  = sii.item_code
-                    AND sle.voucher_detail_no = sii.name
-                    AND sle.docstatus = 1
             WHERE
                 si.docstatus = 1
                 AND item.is_stock_item = 1
@@ -344,27 +346,30 @@ def _get_summarized_data(filters):
         """.format(where=where)
 
     rows = frappe.db.sql(query, vals, as_dict=True)
-    return _add_totals_row(rows, filters.get("report_type"))
+    return _add_totals_row(rows)
 
 
+# ─────────────────────────────────────────────────────────────
+#  TOTALS ROW
+# ─────────────────────────────────────────────────────────────
 
-
-def _add_totals_row(rows, report_type):
+def _add_totals_row(rows):
     if not rows:
         return rows
 
     total_sales_qty = sum(r.get("total_sales_qty") or 0 for r in rows)
     total_stock_qty = sum(r.get("total_stock_qty") or 0 for r in rows)
+    total_balance = sum(r.get("balance") or 0 for r in rows)
 
     total_row = {
         "item_code": _("Total"),
-        "sales_uom": "",
         "voucher_type": "",
         "total_sales_qty": total_sales_qty,
-        "sales_uom_label": "",
+        "sales_uom": "",
         "total_stock_qty": total_stock_qty,
         "stock_uom": "",
-        "balance": "",
+        "valuation_rate": None,
+        "balance": total_balance,
         "bold": 1,
     }
     return list(rows) + [total_row]
