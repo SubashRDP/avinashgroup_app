@@ -15,6 +15,8 @@ const ITEM_DOCTYPES = {
 
 // Doctypes that have taxes table
 const DOCTYPES_WITH_TAXES = ["Purchase Invoice", "Purchase Receipt", "Purchase Order", "Supplier Quotation"];
+// Doctypes that should default VAT Apply On to VAT 13%
+const VAT_DEFAULT_DOCTYPES = ["Purchase Order", "Purchase Receipt", "Supplier Quotation"];
 
 // Item fields to map between documents
 const ITEM_FIELDS_TO_MAP = [
@@ -81,10 +83,12 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
         },
 
         items_add: function(frm, cdt, cdn) {
-            frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
-                toggle_vat_fields(frm, cdt, cdn);
-                frm.refresh_field('items');
-            });
+            if (should_apply_vat_default(frm)) {
+                frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
+                    toggle_vat_fields(frm, cdt, cdn);
+                    frm.refresh_field('items');
+                });
+            }
 
             frappe.model.set_value(cdt, cdn, 'custom_tds_apply_on', 'Percentage (%)').then(() => {
                 toggle_tds_fields(frm, cdt, cdn);
@@ -213,7 +217,7 @@ DOCTYPES_WITH_TAXES.forEach(function(doctype) {
 function purchase_taxes_onload(frm) {
     if (frm.doc.items) {
         frm.doc.items.forEach(function(item) {
-            if (!item.custom_vat_apply_on) {
+            if (should_apply_vat_default(frm) && !item.custom_vat_apply_on) {
                 item.custom_vat_apply_on = 'VAT 13%';
             }
             if (!item.custom_tds_apply_on) {
@@ -232,7 +236,7 @@ function purchase_taxes_onload(frm) {
 function purchase_taxes_refresh(frm) {
     if (frm.doc.items) {
         frm.doc.items.forEach(function(item) {
-            if (!item.custom_vat_apply_on) {
+            if (should_apply_vat_default(frm) && !item.custom_vat_apply_on) {
                 item.custom_vat_apply_on = 'VAT 13%';
             }
             if (!item.custom_tds_apply_on) {
@@ -274,8 +278,10 @@ async function handle_item_code_change(frm, cdt, cdn) {
                 await frappe.model.set_value(cdt, cdn, 'custom_subtype', '');
             }
 
-            await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
-            await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
+            if (should_apply_vat_default(frm)) {
+                await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
+                await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
+            }
             await frappe.model.set_value(cdt, cdn, 'custom_tds_apply_on', 'Percentage (%)');
 
             const item_data = await frappe.call({
@@ -405,7 +411,7 @@ function toggle_vat_fields(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     if (!row) return;
 
-    if (!row.custom_vat_apply_on) {
+    if (should_apply_vat_default(frm) && !row.custom_vat_apply_on) {
         frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
         row.custom_vat_apply_on = 'VAT 13%';
     }
@@ -423,6 +429,10 @@ function toggle_vat_fields(frm, cdt, cdn) {
     }
 
     grid_row.refresh();
+}
+
+function should_apply_vat_default(frm) {
+    return VAT_DEFAULT_DOCTYPES.includes(frm.doc.doctype);
 }
 
 /**
