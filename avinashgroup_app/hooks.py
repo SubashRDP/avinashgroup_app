@@ -35,6 +35,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
+    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.0",
 ]
 # my_custom_app/hooks.py
 
