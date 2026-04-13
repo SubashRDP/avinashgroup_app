@@ -292,117 +292,297 @@ def calculate_service_period_months(service_start_date, service_end_date):
     }
 
 
-def calculate_nepali_monthly_amount(
-    doc, item, last_gl_entry, start_date, end_date, 
-    total_days, total_booking_days, account_currency
-):
-    """
-    ✅ COMPLETELY REWRITTEN
+# def calculate_nepali_monthly_amount(
+#     doc, item, last_gl_entry, start_date, end_date, 
+#     total_days, total_booking_days, account_currency
+# ):
+#     """
+#     ✅ COMPLETELY REWRITTEN
     
-    Calculate monthly amount using EQUAL distribution for complete months
-    and proportional distribution for partial months
+#     Calculate monthly amount using EQUAL distribution for complete months
+#     and proportional distribution for partial months
     
-    LOGIC:
-    1. Identify all months in service period
-    2. Count complete months vs partial months
-    3. For complete months: divide amount equally
-    4. For partial months: prorate by (days_used / total_days_in_that_month)
-    """
+#     LOGIC:
+#     1. Identify all months in service period
+#     2. Count complete months vs partial months
+#     3. For complete months: divide amount equally
+#     4. For partial months: prorate by (days_used / total_days_in_that_month)
+#     """
     
-    amount, base_amount = 0, 0
+#     amount, base_amount = 0, 0
     
-    if not last_gl_entry:
-        # Get month distribution for entire service period
-        period_info = calculate_service_period_months(
-            item.service_start_date, 
-            item.service_end_date
-        )
+#     if not last_gl_entry:
+#         # Get month distribution for entire service period
+#         period_info = calculate_service_period_months(
+#             item.service_start_date, 
+#             item.service_end_date
+#         )
         
-        total_months = period_info['total_months']
-        complete_months = period_info['complete_months']
-        month_distribution = period_info['month_distribution']
+#         total_months = period_info['total_months']
+#         complete_months = period_info['complete_months']
+#         month_distribution = period_info['month_distribution']
         
-        # Calculate base monthly amount for complete months
-        # Formula: Total Amount / Total Months (treating all months equally first)
-        base_monthly_amount = flt(item.base_net_amount / total_months, item.precision("base_net_amount"))
+#         # Calculate base monthly amount for complete months
+#         # Formula: Total Amount / Total Months (treating all months equally first)
+#         base_monthly_amount = flt(item.base_net_amount / total_months, item.precision("base_net_amount"))
         
-        # Now adjust for partial months
-        # Complete months get full share, partial months get prorated share
+#         # Now adjust for partial months
+#         # Complete months get full share, partial months get prorated share
         
-        # Calculate total weight
-        total_weight = 0
-        for month_info in month_distribution:
-            if month_info['is_complete']:
-                total_weight += 1.0  # Complete month = weight 1.0
-            else:
-                # Partial month = weight based on days used vs total days in that month
-                weight = flt(month_info['days_in_month']) / flt(month_info['total_month_days'])
-                total_weight += weight
+#         # Calculate total weight
+#         total_weight = 0
+#         for month_info in month_distribution:
+#             if month_info['is_complete']:
+#                 total_weight += 1.0  # Complete month = weight 1.0
+#             else:
+#                 # Partial month = weight based on days used vs total days in that month
+#                 weight = flt(month_info['days_in_month']) / flt(month_info['total_month_days'])
+#                 total_weight += weight
         
-        # Amount per "weight unit"
-        amount_per_weight = flt(item.base_net_amount / total_weight, item.precision("base_net_amount"))
+#         # Amount per "weight unit"
+#         amount_per_weight = flt(item.base_net_amount / total_weight, item.precision("base_net_amount"))
         
-        # Now find which month we're currently booking
-        start_nepali = nepali_datetime.date.from_datetime_date(start_date)
-        end_nepali = nepali_datetime.date.from_datetime_date(end_date)
+#         # Now find which month we're currently booking
+#         start_nepali = nepali_datetime.date.from_datetime_date(start_date)
+#         end_nepali = nepali_datetime.date.from_datetime_date(end_date)
         
-        # Find the current month in distribution
-        current_month_info = None
-        for month_info in month_distribution:
-            if month_info['year'] == start_nepali.year and month_info['month'] == start_nepali.month:
-                current_month_info = month_info
-                break
+#         # Find the current month in distribution
+#         current_month_info = None
+#         for month_info in month_distribution:
+#             if month_info['year'] == start_nepali.year and month_info['month'] == start_nepali.month:
+#                 current_month_info = month_info
+#                 break
         
-        if current_month_info:
-            if current_month_info['is_complete']:
-                # Complete month - book full share
-                base_amount = amount_per_weight
-            else:
-                # Partial month - book prorated share
-                weight = flt(current_month_info['days_in_month']) / flt(current_month_info['total_month_days'])
-                base_amount = flt(amount_per_weight * weight, item.precision("base_net_amount"))
+#         if current_month_info:
+#             if current_month_info['is_complete']:
+#                 # Complete month - book full share
+#                 base_amount = amount_per_weight
+#             else:
+#                 # Partial month - book prorated share
+#                 weight = flt(current_month_info['days_in_month']) / flt(current_month_info['total_month_days'])
+#                 base_amount = flt(amount_per_weight * weight, item.precision("base_net_amount"))
             
-            # Prevent over-booking
-            already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
-                doc, item
-            )
+#             # Prevent over-booking
+#             already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
+#                 doc, item
+#             )
             
-            if base_amount + already_booked_amount > item.base_net_amount:
-                base_amount = item.base_net_amount - already_booked_amount
+#             if base_amount + already_booked_amount > item.base_net_amount:
+#                 base_amount = item.base_net_amount - already_booked_amount
             
-            # Handle multi-currency
-            if account_currency == doc.company_currency:
-                amount = base_amount
-            else:
-                # Apply same logic to foreign currency amount
-                fc_amount_per_weight = flt(item.net_amount / total_weight, item.precision("net_amount"))
+#             # Handle multi-currency
+#             if account_currency == doc.company_currency:
+#                 amount = base_amount
+#             else:
+#                 # Apply same logic to foreign currency amount
+#                 fc_amount_per_weight = flt(item.net_amount / total_weight, item.precision("net_amount"))
                 
-                if current_month_info['is_complete']:
-                    amount = fc_amount_per_weight
-                else:
-                    weight = flt(current_month_info['days_in_month']) / flt(current_month_info['total_month_days'])
-                    amount = flt(fc_amount_per_weight * weight, item.precision("net_amount"))
+#                 if current_month_info['is_complete']:
+#                     amount = fc_amount_per_weight
+#                 else:
+#                     weight = flt(current_month_info['days_in_month']) / flt(current_month_info['total_month_days'])
+#                     amount = flt(fc_amount_per_weight * weight, item.precision("net_amount"))
                 
-                if amount + already_booked_amount_in_account_currency > item.net_amount:
-                    amount = item.net_amount - already_booked_amount_in_account_currency
+#                 if amount + already_booked_amount_in_account_currency > item.net_amount:
+#                     amount = item.net_amount - already_booked_amount_in_account_currency
     
-    else:
-        # Last entry - book exact remaining balance
-        already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
-            doc, item
-        )
+#     else:
+#         # Last entry - book exact remaining balance
+#         already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
+#             doc, item
+#         )
         
-        base_amount = flt(item.base_net_amount - already_booked_amount, item.precision("base_net_amount"))
+#         base_amount = flt(item.base_net_amount - already_booked_amount, item.precision("base_net_amount"))
         
-        if account_currency == doc.company_currency:
-            amount = base_amount
-        else:
-            amount = flt(
-                item.net_amount - already_booked_amount_in_account_currency, 
-                item.precision("net_amount")
-            )
+#         if account_currency == doc.company_currency:
+#             amount = base_amount
+#         else:
+#             amount = flt(
+#                 item.net_amount - already_booked_amount_in_account_currency, 
+#                 item.precision("net_amount")
+#             )
     
-    return amount, base_amount
+#     return amount, base_amount
+
+# def calculate_nepali_monthly_amount(
+#     doc, item, last_gl_entry, start_date, end_date, 
+#     total_days, total_booking_days, account_currency
+# ):
+#     """
+#     ✅ NEW SIMPLIFIED ALGORITHM
+    
+#     Logic:
+#     1. Calculate per_month_amount = Total Amount / (Total Months - 1)
+#     2. For COMPLETE months: Book per_month_amount
+#     3. For FIRST partial month: 
+#        - Get first month consumed days + last month consumed days = total_partial_days
+#        - Prorate using (first_month_days / total_partial_days) * per_month_amount
+#     4. For LAST month: Book remaining balance to avoid overbooking
+#     """
+    
+#     amount, base_amount = 0, 0
+    
+#     if not last_gl_entry:
+#         # Get month distribution for entire service period
+#         period_info = calculate_service_period_months(
+#             item.service_start_date, 
+#             item.service_end_date
+#         )
+        
+#         total_months = period_info['total_months']
+#         month_distribution = period_info['month_distribution']
+        
+#         # ✅ IMPORTANT: For calculation, use (total_months - 1)
+#         # Because if service spans 6 calendar months, it's actually 5 month periods
+#         calculation_months = total_months - 1 if total_months > 1 else 1
+        
+#         # ✅ Step 1: Calculate per-month amount (simple division)
+#         per_month_base_amount = flt(
+#             item.base_net_amount / calculation_months, 
+#             item.precision("base_net_amount")
+#         )
+        
+#         # ✅ Get first and last month info for prorate calculation
+#         first_month_info = month_distribution[0]
+#         last_month_info = month_distribution[-1]
+        
+#         # Calculate total partial days (first month + last month consumed days)
+#         first_month_days = first_month_info['days_in_month']
+#         last_month_days = last_month_info['days_in_month']
+#         total_partial_days = first_month_days + last_month_days
+        
+#         frappe.logger().info(
+#             f"Total calendar months: {total_months}, "
+#             f"Calculation months: {calculation_months}, "
+#             f"Per-month amount: {per_month_base_amount}, "
+#             f"First month days: {first_month_days}, "
+#             f"Last month days: {last_month_days}, "
+#             f"Total partial days: {total_partial_days}"
+#         )
+        
+#         # Find which month we're currently booking
+#         start_nepali = nepali_datetime.date.from_datetime_date(start_date)
+        
+#         current_month_info = None
+#         current_month_index = None
+        
+#         for idx, month_info in enumerate(month_distribution):
+#             if month_info['year'] == start_nepali.year and month_info['month'] == start_nepali.month:
+#                 current_month_info = month_info
+#                 current_month_index = idx
+#                 break
+        
+#         if current_month_info:
+#             # ✅ Step 2: Determine booking amount based on month type
+            
+#             if current_month_info['is_complete']:
+#                 # Complete month - book full per-month amount
+#                 base_amount = per_month_base_amount
+#                 frappe.logger().info(
+#                     f"Complete month: {current_month_info['month_name']} - "
+#                     f"Booking full per-month amount: {base_amount}"
+#                 )
+            
+#             elif current_month_index == 0:
+#                 # ✅ FIRST partial month - prorate based on first month days / total partial days
+#                 if not first_month_info['is_complete'] and not last_month_info['is_complete']:
+#                     # Both first and last are partial
+#                     prorate_factor = flt(first_month_days) / flt(total_partial_days)
+#                     base_amount = flt(
+#                         per_month_base_amount * prorate_factor, 
+#                         item.precision("base_net_amount")
+#                     )
+#                     frappe.logger().info(
+#                         f"First partial month: {current_month_info['month_name']} - "
+#                         f"Days: {first_month_days} / Total partial days: {total_partial_days} - "
+#                         f"Prorate factor: {prorate_factor:.4f} - Amount: {base_amount}"
+#                     )
+#                 else:
+#                     # Only first month is partial (last is complete)
+#                     prorate_factor = flt(first_month_days) / flt(first_month_info['total_month_days'])
+#                     base_amount = flt(
+#                         per_month_base_amount * prorate_factor, 
+#                         item.precision("base_net_amount")
+#                     )
+#                     frappe.logger().info(
+#                         f"First partial month (last complete): {current_month_info['month_name']} - "
+#                         f"Days: {first_month_days}/{first_month_info['total_month_days']} - "
+#                         f"Prorate factor: {prorate_factor:.4f} - Amount: {base_amount}"
+#                     )
+            
+#             else:
+#                 # Middle or last partial month (not first)
+#                 # Book full per-month amount, will be corrected in last entry
+#                 base_amount = per_month_base_amount
+#                 frappe.logger().info(
+#                     f"Partial month (not first): {current_month_info['month_name']} - "
+#                     f"Booking full per-month amount: {base_amount}"
+#                 )
+            
+#             # ✅ Step 3: Check for overbooking
+#             already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
+#                 doc, item
+#             )
+            
+#             if base_amount + already_booked_amount > item.base_net_amount:
+#                 base_amount = item.base_net_amount - already_booked_amount
+#                 frappe.logger().warning(
+#                     f"Overbooking prevented! Adjusted to remaining: {base_amount}"
+#                 )
+            
+#             # ✅ Step 4: Handle multi-currency
+#             if account_currency == doc.company_currency:
+#                 amount = base_amount
+#             else:
+#                 # Apply same logic to foreign currency
+#                 per_month_fc_amount = flt(
+#                     item.net_amount / calculation_months, 
+#                     item.precision("net_amount")
+#                 )
+                
+#                 if current_month_info['is_complete']:
+#                     amount = per_month_fc_amount
+#                 elif current_month_index == 0:
+#                     # First partial month - same prorate logic
+#                     if not first_month_info['is_complete'] and not last_month_info['is_complete']:
+#                         prorate_factor = flt(first_month_days) / flt(total_partial_days)
+#                     else:
+#                         prorate_factor = flt(first_month_days) / flt(first_month_info['total_month_days'])
+#                     amount = flt(per_month_fc_amount * prorate_factor, item.precision("net_amount"))
+#                 else:
+#                     amount = per_month_fc_amount
+                
+#                 # Check overbooking for foreign currency
+#                 if amount + already_booked_amount_in_account_currency > item.net_amount:
+#                     amount = item.net_amount - already_booked_amount_in_account_currency
+    
+#     else:
+#         # ✅ LAST ENTRY - Book exact remaining balance to ensure accuracy
+#         already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
+#             doc, item
+#         )
+        
+#         base_amount = flt(
+#             item.base_net_amount - already_booked_amount, 
+#             item.precision("base_net_amount")
+#         )
+        
+#         if account_currency == doc.company_currency:
+#             amount = base_amount
+#         else:
+#             amount = flt(
+#                 item.net_amount - already_booked_amount_in_account_currency, 
+#                 item.precision("net_amount")
+#             )
+        
+#         frappe.logger().info(
+#             f"LAST ENTRY - Booking remaining balance: {base_amount} "
+#             f"(Total: {item.base_net_amount}, Already booked: {already_booked_amount})"
+#         )
+    
+#     return amount, base_amount
+
+
 
 
 # def get_nepali_booking_dates(doc, item, posting_date=None, prev_posting_date=None):
@@ -486,6 +666,210 @@ def calculate_nepali_monthly_amount(
 #         return None, None, None
 
 
+
+def calculate_nepali_monthly_amount(
+    doc, item, last_gl_entry, start_date, end_date, 
+    total_days, total_booking_days, account_currency
+):
+    """
+    ✅ NEPALI DEFERRED ACCOUNTING CALCULATION
+    
+    Logic:
+    1. Determine calculation_months based on whether first/last months are complete:
+       - If BOTH first AND last are partial: calculation_months = total_months - 1
+       - Otherwise: calculation_months = total_months
+    2. Calculate per_month_amount = Total Amount / calculation_months
+    3. For COMPLETE months: Book per_month_amount
+    4. For FIRST partial month: 
+       - If both first and last are partial: Prorate using (first_month_days / total_partial_days) * per_month_amount
+       - If only first is partial: Prorate using (first_month_days / total_days_in_first_month) * per_month_amount
+    5. For LAST month: Book exact remaining balance to avoid overbooking
+    
+    Examples:
+    - Baishak 5 to Ashwin 5 (both partial): Divide by 5, prorate first month by 28/33
+    - Baishak 1 to Ashwin 30 (both complete): Divide by 6, all months equal
+    - Baishak 1 to Ashwin 5 (first complete, last partial): Divide by 6, first month full
+    - Baishak 5 to Ashwin 30 (first partial, last complete): Divide by 6, prorate first month
+    """
+    
+    amount, base_amount = 0, 0
+    
+    if not last_gl_entry:
+        # Get month distribution for entire service period
+        period_info = calculate_service_period_months(
+            item.service_start_date, 
+            item.service_end_date
+        )
+        
+        total_months = period_info['total_months']
+        month_distribution = period_info['month_distribution']
+        
+        # Get first and last month info for calculation
+        first_month_info = month_distribution[0]
+        last_month_info = month_distribution[-1]
+        
+        # Calculate consumed days in first and last months
+        first_month_days = first_month_info['days_in_month']
+        last_month_days = last_month_info['days_in_month']
+        total_partial_days = first_month_days + last_month_days
+        
+        # ✅ CRITICAL: Determine calculation months based on whether months are complete
+        if not first_month_info['is_complete'] and not last_month_info['is_complete']:
+            # Both first and last are partial - use (total_months - 1)
+            # Example: Baishak 5 to Ashwin 5 = 6 calendar months but only 5 month periods
+            calculation_months = total_months - 1 if total_months > 1 else 1
+            frappe.logger().info(
+                f"Both endpoints partial - using calculation_months = {calculation_months} (total: {total_months})"
+            )
+        else:
+            # At least one endpoint is complete - use total_months
+            # Examples:
+            # - Baishak 1 to Ashwin 30 (both complete) = 6 months, divide by 6
+            # - Baishak 1 to Ashwin 5 (first complete) = 6 months, divide by 6
+            # - Baishak 5 to Ashwin 30 (last complete) = 6 months, divide by 6
+            calculation_months = total_months
+            frappe.logger().info(
+                f"At least one endpoint complete - using calculation_months = {calculation_months}"
+            )
+        
+        # ✅ Step 1: Calculate per-month amount (simple division)
+        per_month_base_amount = flt(
+            item.base_net_amount / calculation_months, 
+            item.precision("base_net_amount")
+        )
+        
+        frappe.logger().info(
+            f"Total calendar months: {total_months}, "
+            f"Calculation months: {calculation_months}, "
+            f"Per-month amount: {per_month_base_amount}, "
+            f"First month days: {first_month_days} (complete: {first_month_info['is_complete']}), "
+            f"Last month days: {last_month_days} (complete: {last_month_info['is_complete']}), "
+            f"Total partial days: {total_partial_days}"
+        )
+        
+        # Find which month we're currently booking
+        start_nepali = nepali_datetime.date.from_datetime_date(start_date)
+        
+        current_month_info = None
+        current_month_index = None
+        
+        for idx, month_info in enumerate(month_distribution):
+            if month_info['year'] == start_nepali.year and month_info['month'] == start_nepali.month:
+                current_month_info = month_info
+                current_month_index = idx
+                break
+        
+        if current_month_info:
+            # ✅ Step 2: Determine booking amount based on month type
+            
+            if current_month_info['is_complete']:
+                # Complete month - book full per-month amount
+                base_amount = per_month_base_amount
+                frappe.logger().info(
+                    f"Complete month: {current_month_info['month_name']} - "
+                    f"Booking full per-month amount: {base_amount}"
+                )
+            
+            elif current_month_index == 0:
+                # ✅ FIRST partial month - apply appropriate prorate logic
+                if not first_month_info['is_complete'] and not last_month_info['is_complete']:
+                    # Both first and last are partial
+                    # Prorate based on: first_month_days / (first_month_days + last_month_days)
+                    prorate_factor = flt(first_month_days) / flt(total_partial_days)
+                    base_amount = flt(
+                        per_month_base_amount * prorate_factor, 
+                        item.precision("base_net_amount")
+                    )
+                    frappe.logger().info(
+                        f"First partial month (both partial): {current_month_info['month_name']} - "
+                        f"Days: {first_month_days} / Total partial days: {total_partial_days} - "
+                        f"Prorate factor: {prorate_factor:.4f} - Amount: {base_amount}"
+                    )
+                else:
+                    # Only first month is partial (last is complete)
+                    # Prorate based on: first_month_days / total_days_in_first_month
+                    prorate_factor = flt(first_month_days) / flt(first_month_info['total_month_days'])
+                    base_amount = flt(
+                        per_month_base_amount * prorate_factor, 
+                        item.precision("base_net_amount")
+                    )
+                    frappe.logger().info(
+                        f"First partial month (last complete): {current_month_info['month_name']} - "
+                        f"Days: {first_month_days}/{first_month_info['total_month_days']} - "
+                        f"Prorate factor: {prorate_factor:.4f} - Amount: {base_amount}"
+                    )
+            
+            else:
+                # Middle or other partial month (not first)
+                # Book full per-month amount, will be corrected in last entry
+                base_amount = per_month_base_amount
+                frappe.logger().info(
+                    f"Month (not first): {current_month_info['month_name']} - "
+                    f"Booking full per-month amount: {base_amount}"
+                )
+            
+            # ✅ Step 3: Check for overbooking
+            already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
+                doc, item
+            )
+            
+            if base_amount + already_booked_amount > item.base_net_amount:
+                base_amount = item.base_net_amount - already_booked_amount
+                frappe.logger().warning(
+                    f"Overbooking prevented! Adjusted to remaining: {base_amount}"
+                )
+            
+            # ✅ Step 4: Handle multi-currency
+            if account_currency == doc.company_currency:
+                amount = base_amount
+            else:
+                # Apply same logic to foreign currency
+                per_month_fc_amount = flt(
+                    item.net_amount / calculation_months, 
+                    item.precision("net_amount")
+                )
+                
+                if current_month_info['is_complete']:
+                    amount = per_month_fc_amount
+                elif current_month_index == 0:
+                    # First partial month - same prorate logic
+                    if not first_month_info['is_complete'] and not last_month_info['is_complete']:
+                        prorate_factor = flt(first_month_days) / flt(total_partial_days)
+                    else:
+                        prorate_factor = flt(first_month_days) / flt(first_month_info['total_month_days'])
+                    amount = flt(per_month_fc_amount * prorate_factor, item.precision("net_amount"))
+                else:
+                    amount = per_month_fc_amount
+                
+                # Check overbooking for foreign currency
+                if amount + already_booked_amount_in_account_currency > item.net_amount:
+                    amount = item.net_amount - already_booked_amount_in_account_currency
+    
+    else:
+        # ✅ LAST ENTRY - Book exact remaining balance to ensure accuracy
+        already_booked_amount, already_booked_amount_in_account_currency = get_already_booked_amount(
+            doc, item
+        )
+        
+        base_amount = flt(
+            item.base_net_amount - already_booked_amount, 
+            item.precision("base_net_amount")
+        )
+        
+        if account_currency == doc.company_currency:
+            amount = base_amount
+        else:
+            amount = flt(
+                item.net_amount - already_booked_amount_in_account_currency, 
+                item.precision("net_amount")
+            )
+        
+        frappe.logger().info(
+            f"LAST ENTRY - Booking remaining balance: {base_amount} "
+            f"(Total: {item.base_net_amount}, Already booked: {already_booked_amount})"
+        )
+    
+    return amount, base_amount
 
 
 
