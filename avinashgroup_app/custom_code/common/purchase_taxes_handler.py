@@ -69,6 +69,8 @@ def ensure_apply_on_defaults(doc):
             item.custom_tds_apply_on = 'Percentage (%)'
 
 
+
+
 def calculate_custom_total(doc):
     """Calculate custom_total = base_net_amount + custom_excise_value"""
     for item in doc.items:
@@ -388,7 +390,6 @@ def populate_item_custom_fields(item_code):
 
     custom_excise_duty = flt(getattr(item, 'custom_excise_duty', 0))
     custom_tds_rate = flt(getattr(item, 'custom_tds_rate', 0))
-
     return {
         "custom_excise_duty": custom_excise_duty,
         "custom_tds_rate": custom_tds_rate

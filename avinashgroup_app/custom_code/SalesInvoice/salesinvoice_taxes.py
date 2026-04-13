@@ -17,7 +17,6 @@ def before_save_salesinvoice(doc, method=None):
     4. NO TDS in Sales Invoice
     5. Taxes table: Updated with Excise and VAT
     """
-    
     # 0. Ensure VAT Apply On defaults are set
     ensure_vat_apply_on_defaults(doc)
     

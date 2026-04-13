@@ -299,6 +299,8 @@ async function handle_item_code_change(frm, cdt, cdn) {
                 if (!row.custom_tds_rate && item_data.message.custom_tds_rate) {
                     await frappe.model.set_value(cdt, cdn, 'custom_tds_rate', item_data.message.custom_tds_rate);
                 }
+
+                // No warehouse override here; ERPNext defaults apply
             }
 
             setTimeout(() => {

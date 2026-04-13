@@ -67,14 +67,14 @@ frappe.ui.form.on("Sales Invoice Item", {
                     args: {
                         doctype: "Item",
                         filters: { name: row.item_code },
-                        fieldname: "item_name"
+                    fieldname: "item_name"
                     }
                 });
                 
                 if (!item_check.message) {
                     return;
                 }
-                
+
                 // Default to VAT 13%
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
@@ -84,7 +84,7 @@ frappe.ui.form.on("Sales Invoice Item", {
                     toggle_vat_fields(frm, cdt, cdn);
                 });
                 frm.refresh_field('items');
-                
+
             } catch(e) {
                 console.error("Error in item_code handler:", e);
             }
