@@ -351,11 +351,34 @@ def validate_salesinvoice(doc, method=None):
 def force_selling_warehouse(doc):
     """Force warehouse on each item row from Item's custom_selling_warehouse.
     Runs after ERPNext's own validate so it always wins."""
+    custom_branch = getattr(doc, "custom_branch", None)
+    warehouse_cache = {}
     for item in doc.items:
         if not item.item_code:
             item.warehouse = ""
             continue
-        item.warehouse = frappe.db.get_value("Item", item.item_code, "custom_selling_warehouse") or ""
+        if item.item_code in warehouse_cache:
+            item.warehouse = warehouse_cache[item.item_code]
+            continue
+
+        warehouse = ""
+        try:
+            item_doc = frappe.get_doc("Item", item.item_code)
+            if custom_branch:
+                branch_rows = item_doc.get("custom_branch_wise_warehouse") or []
+                branch_row = next(
+                    (r for r in branch_rows if r.custom_branch == custom_branch and r.custom_selling_warehouse),
+                    None,
+                )
+                if branch_row:
+                    warehouse = branch_row.custom_selling_warehouse
+            if not warehouse:
+                warehouse = item_doc.get("custom_selling_warehouse") or ""
+        except Exception:
+            warehouse = frappe.db.get_value("Item", item.item_code, "custom_selling_warehouse") or ""
+
+        warehouse_cache[item.item_code] = warehouse or ""
+        item.warehouse = warehouse_cache[item.item_code]
 
 
 

@@ -859,8 +859,21 @@ async function force_pi_warehouse_for_row(cdt, cdn) {
         await frappe.model.set_value(cdt, cdn, 'warehouse', '');
         return;
     }
-    const result = await frappe.db.get_value('Item', row.item_code, 'custom_buying_warehouse');
-    const warehouse = (result && result.message && result.message.custom_buying_warehouse) || '';
+    const custom_branch = cur_frm && cur_frm.doc && cur_frm.doc.custom_branch;
+    let warehouse = '';
+
+    if (custom_branch) {
+        const item_doc = await frappe.db.get_doc('Item', row.item_code);
+        const branch_rows = item_doc.custom_branch_wise_warehouse || [];
+        const branch_row = branch_rows.find(r => r.custom_branch === custom_branch);
+        if (branch_row) {
+            warehouse = branch_row.custom_buying_warehouse || '';
+        }
+    }
+    if (!warehouse) {
+        const result = await frappe.db.get_value('Item', row.item_code, 'custom_buying_warehouse');
+        warehouse = (result && result.message && result.message.custom_buying_warehouse) || '';
+    }
     await frappe.model.set_value(cdt, cdn, 'warehouse', warehouse);
 }
 
@@ -872,16 +885,30 @@ async function force_pi_warehouse_for_row(cdt, cdn) {
 async function force_all_pi_warehouses(frm) {
     if (!frm.doc.items || !frm.doc.items.length) return;
 
+    const custom_branch = frm.doc.custom_branch;
     const item_codes = [...new Set(frm.doc.items.map(r => r.item_code).filter(Boolean))];
     const warehouse_map = {};
 
     await Promise.all(item_codes.map(async (item_code) => {
+        if (custom_branch) {
+            const item_doc = await frappe.db.get_doc('Item', item_code);
+            const branch_rows = item_doc.custom_branch_wise_warehouse || [];
+            const branch_row = branch_rows.find(r => r.custom_branch === custom_branch);
+            if (branch_row && branch_row.custom_buying_warehouse) {
+                warehouse_map[item_code] = branch_row.custom_buying_warehouse;
+                return;
+            }
+        }
+        // Fallback: fetch directly from Item's custom_buying_warehouse
         const result = await frappe.db.get_value('Item', item_code, 'custom_buying_warehouse');
         warehouse_map[item_code] = (result && result.message && result.message.custom_buying_warehouse) || '';
     }));
 
     for (const item of frm.doc.items) {
-        item.warehouse = item.item_code ? (warehouse_map[item.item_code] || '') : '';
+        const warehouse = item.item_code ? (warehouse_map[item.item_code] || '') : '';
+        if (item.warehouse !== warehouse) {
+            await frappe.model.set_value(item.doctype, item.name, 'warehouse', warehouse);
+        }
     }
     frm.refresh_field('items');
 }
