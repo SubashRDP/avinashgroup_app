@@ -410,6 +410,17 @@ def before_validate_purchase_invoice(doc, method=None):
 def validate_purchase_invoice(doc, method=None):
     """Wrapper for Purchase Invoice"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
+
+
+def force_buying_warehouse(doc):
+    """Force warehouse on each item row from Item's custom_buying_warehouse.
+    Runs after ERPNext's own validate so it always wins."""
+    for item in doc.items:
+        if not item.item_code:
+            item.warehouse = ""
+            continue
+        item.warehouse = frappe.db.get_value("Item", item.item_code, "custom_buying_warehouse") or ""
 
 
 def before_save_purchase_order(doc, method=None):

@@ -1,6 +1,6 @@
 
 frappe.ui.form.on("Sales Invoice", {
-    
+
     onload: function(frm) {
         // Apply field visibility for all existing rows on load
         if (frm.doc.items) {
@@ -9,7 +9,7 @@ frappe.ui.form.on("Sales Invoice", {
             });
         }
     },
-    
+
     refresh: function(frm) {
         console.log("Refresh!!!");
         // Apply field visibility on refresh
@@ -21,6 +21,16 @@ frappe.ui.form.on("Sales Invoice", {
         if (frm.is_new()) {
             set_due_date_from_customer(frm);
         }
+    },
+
+    before_save: function(frm) {
+        return force_all_si_warehouses(frm);
+    },
+
+    // When set_warehouse changes, ERPNext propagates it to all item rows.
+    // Re-apply custom_selling_warehouse immediately after to override it.
+    set_warehouse: function(frm) {
+        setTimeout(() => force_all_si_warehouses(frm), 300);
     },
 
     base_total_taxes_and_charges: function(frm) {
@@ -67,10 +77,10 @@ frappe.ui.form.on("Sales Invoice Item", {
                     args: {
                         doctype: "Item",
                         filters: { name: row.item_code },
-                    fieldname: "item_name"
+                        fieldname: "item_name"
                     }
                 });
-                
+
                 if (!item_check.message) {
                     return;
                 }
@@ -78,6 +88,12 @@ frappe.ui.form.on("Sales Invoice Item", {
                 // Default to VAT 13%
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
+
+                // Force warehouse from Item's custom_selling_warehouse.
+                setTimeout(async () => {
+                    await force_si_warehouse_for_row(cdt, cdn);
+                    frm.refresh_field('items');
+                }, 600);
 
                 // Apply field visibility
                 frappe.after_ajax(() => {
@@ -387,4 +403,43 @@ function calculate_total(frm) {
     
     calculate_vat_total(frm);
     calculate_total_amount_including_excise(frm);
+}
+
+/**
+ * Fetch custom_selling_warehouse from Item and force-assign it to the row's warehouse.
+ * If the field is blank, warehouse is set to "" — no fallback to system defaults.
+ */
+async function force_si_warehouse_for_row(cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row || !row.item_code) {
+        await frappe.model.set_value(cdt, cdn, 'warehouse', '');
+        return;
+    }
+    const result = await frappe.db.get_value('Item', row.item_code, 'custom_selling_warehouse');
+    const warehouse = (result && result.message && result.message.custom_selling_warehouse) || '';
+    await frappe.model.set_value(cdt, cdn, 'warehouse', warehouse);
+}
+
+/**
+ * Before save: sweep all item rows and force warehouse = custom_selling_warehouse.
+ * Overrides set_warehouse, Item Defaults, and any system fallback.
+ */
+async function force_all_si_warehouses(frm) {
+    if (!frm.doc.items || !frm.doc.items.length) return;
+
+    // Collect unique item codes to batch-fetch
+    const item_codes = [...new Set(frm.doc.items.map(r => r.item_code).filter(Boolean))];
+    const warehouse_map = {};
+
+    await Promise.all(item_codes.map(async (item_code) => {
+        const result = await frappe.db.get_value('Item', item_code, 'custom_selling_warehouse');
+        warehouse_map[item_code] = (result && result.message && result.message.custom_selling_warehouse) || '';
+    }));
+
+    for (const item of frm.doc.items) {
+        const warehouse = item.item_code ? (warehouse_map[item.item_code] || '') : '';
+        // Directly assign to bypass triggering extra handler loops
+        item.warehouse = warehouse;
+    }
+    frm.refresh_field('items');
 }

@@ -299,8 +299,16 @@ async function handle_item_code_change(frm, cdt, cdn) {
                 if (!row.custom_tds_rate && item_data.message.custom_tds_rate) {
                     await frappe.model.set_value(cdt, cdn, 'custom_tds_rate', item_data.message.custom_tds_rate);
                 }
+            }
 
-                // No warehouse override here; ERPNext defaults apply
+            // For Purchase Invoice: force warehouse from Item's custom_buying_warehouse.
+            // Run in setTimeout so our assignment fires AFTER ERPNext's own item_code
+            // handler finishes setting warehouse from Item Defaults.
+            if (frm.doc.doctype === "Purchase Invoice") {
+                setTimeout(async () => {
+                    await force_pi_warehouse_for_row(cdt, cdn);
+                    frm.refresh_field('items');
+                }, 600);
             }
 
             setTimeout(() => {
@@ -808,6 +816,13 @@ function check_and_populate_from_source(frm) {
     }
 }
 
+// Force warehouse from Item's custom_buying_warehouse for Purchase Invoice
+frappe.ui.form.on("Purchase Invoice", {
+    before_save: function(frm) {
+        return force_all_pi_warehouses(frm);
+    }
+});
+
 // Auto-set due_date for Purchase Invoice based on supplier's custom_payment_term_days
 frappe.ui.form.on("Purchase Invoice", {
     refresh: function(frm) {
@@ -832,4 +847,41 @@ function set_pi_due_date_from_supplier(frm) {
         const days = (data && data.custom_payment_term_days) ? data.custom_payment_term_days : 0;
         frm.set_value('due_date', frappe.datetime.add_days(posting_date, days));
     });
+}
+
+/**
+ * Fetch custom_buying_warehouse from Item and force-assign it to the row's warehouse.
+ * If the field is blank, warehouse is set to "" — no fallback to system defaults.
+ */
+async function force_pi_warehouse_for_row(cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row || !row.item_code) {
+        await frappe.model.set_value(cdt, cdn, 'warehouse', '');
+        return;
+    }
+    const result = await frappe.db.get_value('Item', row.item_code, 'custom_buying_warehouse');
+    const warehouse = (result && result.message && result.message.custom_buying_warehouse) || '';
+    await frappe.model.set_value(cdt, cdn, 'warehouse', warehouse);
+}
+
+/**
+ * Before save: sweep all Purchase Invoice item rows and force
+ * warehouse = custom_buying_warehouse, overriding set_warehouse,
+ * Item Defaults, and any system fallback.
+ */
+async function force_all_pi_warehouses(frm) {
+    if (!frm.doc.items || !frm.doc.items.length) return;
+
+    const item_codes = [...new Set(frm.doc.items.map(r => r.item_code).filter(Boolean))];
+    const warehouse_map = {};
+
+    await Promise.all(item_codes.map(async (item_code) => {
+        const result = await frappe.db.get_value('Item', item_code, 'custom_buying_warehouse');
+        warehouse_map[item_code] = (result && result.message && result.message.custom_buying_warehouse) || '';
+    }));
+
+    for (const item of frm.doc.items) {
+        item.warehouse = item.item_code ? (warehouse_map[item.item_code] || '') : '';
+    }
+    frm.refresh_field('items');
 }

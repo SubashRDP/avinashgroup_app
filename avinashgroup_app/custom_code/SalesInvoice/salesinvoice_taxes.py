@@ -345,6 +345,17 @@ def validate_salesinvoice(doc, method=None):
     """
     # validate_sales_invoice(doc, method)
     validate_custom_fields(doc)
+    force_selling_warehouse(doc)
+
+
+def force_selling_warehouse(doc):
+    """Force warehouse on each item row from Item's custom_selling_warehouse.
+    Runs after ERPNext's own validate so it always wins."""
+    for item in doc.items:
+        if not item.item_code:
+            item.warehouse = ""
+            continue
+        item.warehouse = frappe.db.get_value("Item", item.item_code, "custom_selling_warehouse") or ""
 
 
 
