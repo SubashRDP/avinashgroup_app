@@ -1,21 +1,3 @@
-"""
-Nepali Deferred Accounting for Avinas Group - CORRECTED VERSION
-================================================================
-
-KEY FEATURES:
-1. Complete months get EQUAL amounts
-2. Partial months (start/end) get prorated based on days in that Nepali month
-3. Month-based distribution, NOT day-wise across entire period
-
-EXAMPLE:
-Service: 2081-01-04 to 2081-03-03 (Total: 10,000)
-- Baisakh (partial): 27 days out of 31 days = 8,709.68
-- Jestha (full): Equal share = 10,000 / 3 = 3,333.33  
-- Ashadh (partial): 3 days out of 32 days = 312.50
-
-Note: The "equal share" applies only to COMPLETE months in the middle.
-Partial start/end months use day-based proration.
-"""
 import pdb
 import logging
 from pydoc import doc
@@ -1107,7 +1089,7 @@ def book_revenue_via_journal_entry(
     journal_entry = frappe.new_doc("Journal Entry")
     journal_entry.posting_date = posting_date
     journal_entry.custom_p_type = "Deferred Accounting"
-    journal_entry.custom_document_no = "1234"
+    journal_entry.custom_document_no = doc.name + "1"
     journal_entry.company = doc.company
     journal_entry.voucher_type = (
         "Deferred Revenue" if doc.doctype == "Sales Invoice" else "Deferred Expense"
