@@ -273,6 +273,7 @@ async function handle_item_code_change(frm, cdt, cdn) {
                 return;
             }
 
+            
             // Clear the custom_subtype field when item_code changes
             if (row.hasOwnProperty('custom_subtype')) {
                 await frappe.model.set_value(cdt, cdn, 'custom_subtype', '');
