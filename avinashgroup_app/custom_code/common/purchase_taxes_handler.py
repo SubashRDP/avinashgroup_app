@@ -423,7 +423,8 @@ def force_buying_warehouse(doc):
             item.warehouse = ""
             continue
         if item.item_code in warehouse_cache:
-            item.warehouse = warehouse_cache[item.item_code]
+            if warehouse_cache[item.item_code]:
+                item.warehouse = warehouse_cache[item.item_code]
             continue
 
         warehouse = ""
@@ -442,8 +443,10 @@ def force_buying_warehouse(doc):
         except Exception:
             warehouse = frappe.db.get_value("Item", item.item_code, "custom_buying_warehouse") or ""
 
-        warehouse_cache[item.item_code] = warehouse or ""
-        item.warehouse = warehouse_cache[item.item_code]
+        warehouse_cache[item.item_code] = warehouse
+        # Only override if custom_buying_warehouse is set — otherwise leave user's selection
+        if warehouse:
+            item.warehouse = warehouse
 
 
 def before_save_purchase_order(doc, method=None):
@@ -454,6 +457,7 @@ def before_save_purchase_order(doc, method=None):
 def validate_purchase_order(doc, method=None):
     """Wrapper for Purchase Order"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
 
 
 def before_save_purchase_receipt(doc, method=None):
@@ -464,6 +468,7 @@ def before_save_purchase_receipt(doc, method=None):
 def validate_purchase_receipt(doc, method=None):
     """Wrapper for Purchase Receipt"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
 
 
 def before_save_supplier_quotation(doc, method=None):
@@ -474,3 +479,14 @@ def before_save_supplier_quotation(doc, method=None):
 def validate_supplier_quotation(doc, method=None):
     """Wrapper for Supplier Quotation"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
+
+
+def validate_material_request(doc, method=None):
+    """Wrapper for Material Request"""
+    force_buying_warehouse(doc)
+
+
+def validate_request_for_quotation(doc, method=None):
+    """Wrapper for Request for Quotation"""
+    force_buying_warehouse(doc)

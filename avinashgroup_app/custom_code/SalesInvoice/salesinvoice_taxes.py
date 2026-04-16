@@ -348,6 +348,21 @@ def validate_salesinvoice(doc, method=None):
     force_selling_warehouse(doc)
 
 
+def validate_quotation(doc, method=None):
+    """Wrapper for Quotation"""
+    force_selling_warehouse(doc)
+
+
+def validate_sales_order(doc, method=None):
+    """Wrapper for Sales Order"""
+    force_selling_warehouse(doc)
+
+
+def validate_delivery_note(doc, method=None):
+    """Wrapper for Delivery Note"""
+    force_selling_warehouse(doc)
+
+
 def force_selling_warehouse(doc):
     """Force warehouse on each item row from Item's custom_selling_warehouse.
     Runs after ERPNext's own validate so it always wins."""
@@ -358,7 +373,8 @@ def force_selling_warehouse(doc):
             item.warehouse = ""
             continue
         if item.item_code in warehouse_cache:
-            item.warehouse = warehouse_cache[item.item_code]
+            if warehouse_cache[item.item_code]:
+                item.warehouse = warehouse_cache[item.item_code]
             continue
 
         warehouse = ""
@@ -377,8 +393,10 @@ def force_selling_warehouse(doc):
         except Exception:
             warehouse = frappe.db.get_value("Item", item.item_code, "custom_selling_warehouse") or ""
 
-        warehouse_cache[item.item_code] = warehouse or ""
-        item.warehouse = warehouse_cache[item.item_code]
+        warehouse_cache[item.item_code] = warehouse
+        # Only override if custom_selling_warehouse is set — otherwise leave ERPNext's default
+        if warehouse:
+            item.warehouse = warehouse
 
 
 
