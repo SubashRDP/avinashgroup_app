@@ -561,18 +561,25 @@ def _create_or_update_workflow(doctype, level_field):
 		},
 	]
 
-	# Ensure "Workflow Action Master" records exist
-	# This prevents "Could not find Action: X" LinkValidationErrors
-	_ensure_workflow_actions(["Approve", "Reject", "Resubmit"])
-
-	existing = frappe.db.exists("Workflow", {"document_type": doctype, "is_active": 1})
+	existing = frappe.get_all(
+		"Workflow",
+		filters={"document_type": doctype, "is_active": 1},
+		pluck="name",
+		limit=1,
+	)
 
 	if existing:
-		# Hard delete to clear all child table references and 'Workflow Action' links
-		# that cause Row #5 LinkValidationErrors
-		frappe.delete_doc("Workflow", existing, ignore_permissions=True, force=True)
-		frappe.db.commit()
-
+		wf = frappe.get_doc("Workflow", existing[0])
+		wf.states = []
+		wf.transitions = []
+		for s in states:
+			wf.append("states", s)
+		for t in transitions:
+			wf.append("transitions", t)
+		wf.is_active = 1
+		wf.save(ignore_permissions=True)
+		frappe.msgprint(_("Updated existing workflow: {0}").format(wf.name), alert=True)
+	else:
 	wf = frappe.get_doc({
 		"doctype": "Workflow",
 		"workflow_name": f"{doctype} Approval Workflow",
@@ -583,28 +590,7 @@ def _create_or_update_workflow(doctype, level_field):
 		"transitions": transitions,
 	})
 	wf.insert(ignore_permissions=True)
-	frappe.msgprint(_("Workflow recreated for {0}").format(doctype), alert=True)
-
-def _ensure_workflow_actions(actions):
-	"""
-	Ensures that names like 'Approve', 'Reject', 'Resubmit' exist in 
-	'Workflow Action Master' if that DocType exists.
-	"""
-	if not frappe.db.exists("DocType", "Workflow Action Master"):
-		return
-
-	for action in actions:
-		if not frappe.db.exists("Workflow Action Master", action):
-			try:
-				doc = frappe.get_doc({
-					"doctype": "Workflow Action Master",
-					"workflow_action_name": action
-				})
-				doc.insert(ignore_permissions=True)
-				frappe.db.commit()
-			except Exception:
-				# Log and continue if creation fails
-				frappe.log_error(frappe.get_traceback(), _("Workflow Action Setup Error"))
+		frappe.msgprint(_("Created workflow: {0}").format(wf.name), alert=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
