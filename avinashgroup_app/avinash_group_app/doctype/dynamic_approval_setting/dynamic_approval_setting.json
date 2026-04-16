@@ -1,0 +1,153 @@
+{
+ "actions": [],
+ "creation": "2026-04-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "document_type",
+  "company",
+  "department",
+  "column_break_main",
+  "company_abbr",
+  "is_active",
+  "configuration_section",
+  "approver_table_fieldname",
+  "column_break_config",
+  "current_level_fieldname",
+  "approver_fieldname",
+  "fixed_approvers_section",
+  "dept_config_html",
+  "approvers",
+  "setup_section",
+  "setup_workflow_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Document Type",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Department",
+   "options": "Department"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "company.abbr",
+   "fieldname": "company_abbr",
+   "fieldtype": "Data",
+   "label": "Company Abbr",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "configuration_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration"
+  },
+  {
+   "default": "custom_approval_approvers",
+   "description": "Fieldname of the Table field on the target doctype that holds the approval hierarchy.",
+   "fieldname": "approver_table_fieldname",
+   "fieldtype": "Data",
+   "label": "Approver Table Fieldname",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_config",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "custom_current_approval_level",
+   "description": "Fieldname of the Int field on the target doctype that tracks the current approval level",
+   "fieldname": "current_level_fieldname",
+   "fieldtype": "Data",
+   "label": "Current Level Fieldname",
+   "reqd": 1
+  },
+  {
+   "description": "Fieldname on the target doctype where the requester selects their approver (e.g. custom_approver). The system will auto-populate the hierarchy table from this field — users never need to fill the table manually.",
+   "fieldname": "approver_fieldname",
+   "fieldtype": "Data",
+   "label": "Approver Field Name"
+  },
+  {
+   "fieldname": "fixed_approvers_section",
+   "fieldtype": "Section Break",
+   "label": "Fixed Approvers (Department-wise)"
+  },
+  {
+   "fieldname": "dept_config_html",
+   "fieldtype": "HTML",
+   "label": "Department Configuration"
+  },
+  {
+   "description": "These approvers will be automatically appended at the END of the approval chain (after any user-chosen approvers). Order matters - first row = first fixed approver.",
+   "fieldname": "approvers",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Approvers",
+   "options": "Dynamic Approval Fixed Approver"
+  },
+  {
+   "fieldname": "setup_section",
+   "fieldtype": "Section Break",
+   "label": "Workflow Setup"
+  },
+  {
+   "fieldname": "setup_workflow_html",
+   "fieldtype": "HTML",
+   "label": "Setup Workflow",
+   "options": "<p class=\"text-muted\">Use the <strong>Setup Workflow</strong> button to automatically create custom fields and the approval workflow on the target doctype.</p>"
+  }
+ ],
+ "links": [],
+ "modified": "2026-04-16 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Dynamic Approval Setting",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "document_type",
+ "show_title_field_in_link": 1,
+ "track_changes": 1
+}

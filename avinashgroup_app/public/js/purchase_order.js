@@ -1,4 +1,64 @@
 frappe.ui.form.on("Purchase Order", {
+	refresh(frm) {
+		if (frm.doc.workflow_state !== "Pending Approval") return;
+
+		const current_level  = frm.doc.custom_current_approval_level || 0;
+		const total_levels   = frm.doc.custom_total_approval_levels   || 0;
+		const current_approver = frm.doc.custom_current_approver;
+
+		// Check if this user already approved at a past level
+		const approvers_table = frm.doc.custom_approval_approvers || [];
+		const already_approved_levels = approvers_table
+			.filter(row => row.approver === frappe.session.user && row.level < current_level)
+			.map(row => row.level);
+		const already_approved = already_approved_levels.length > 0;
+
+		const is_approver = (
+			!already_approved
+			&& (current_approver === frappe.session.user || frappe.session.user === "Administrator")
+		);
+
+		// ── Approval progress banner ──────────────────────────────────────
+		if (current_level && total_levels) {
+			const steps = [];
+			for (let i = 1; i <= total_levels; i++) {
+				if (i < current_level) {
+					steps.push(`<span style="color:var(--green-500)">✔ Level ${i}</span>`);
+				} else if (i === current_level) {
+					steps.push(`<span style="color:var(--yellow-500);font-weight:600">⏳ Level ${i} (current)</span>`);
+				} else {
+					steps.push(`<span style="color:var(--gray-400)">◯ Level ${i}</span>`);
+				}
+			}
+
+			let who;
+			if (already_approved) {
+				who = `<b style="color:var(--green-600)">You approved at Level ${already_approved_levels[already_approved_levels.length - 1]}.</b> Waiting for <b>${current_approver || "approver"}</b> at Level ${current_level}.`;
+			} else if (is_approver) {
+				who = `<b>Your approval is required at Level ${current_level}.</b>`;
+			} else {
+				who = `Waiting for <b>${current_approver || "approver"}</b> at Level ${current_level}.`;
+			}
+
+			const banner_color = already_approved ? "green" : is_approver ? "yellow" : "blue";
+			frm.set_intro(
+				`${steps.join("  →  ")}<br><small style="margin-top:4px;display:block">${who}</small>`,
+				banner_color
+			);
+		}
+
+		// ── Hide Approve / Reject for non-approvers ───────────────────────
+		if (!is_approver) {
+			frm.page.actions_btn_group.find("li a, li button").filter(function () {
+				return ["Approve", "Reject"].includes($(this).text().trim());
+			}).closest("li").hide();
+
+			frm.page.inner_toolbar.find(".btn").filter(function () {
+				return ["Approve", "Reject"].includes($(this).text().trim());
+			}).hide();
+		}
+	},
+
 	before_workflow_action: function (frm) {
 		if (frm.selected_workflow_action !== "Reject") return;
 

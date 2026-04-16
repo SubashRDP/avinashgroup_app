@@ -18,8 +18,9 @@ def _is_admin_bypass(workflow, user):
 def get_transitions(doc, workflow=None, raise_exception: bool = False):
     """Return list of possible transitions for the given doc.
 
-    For Administrator on the specified workflow, return all transitions for the
-    current state without checking role or condition.
+    For Administrator on the specified workflow, skip role check but still
+    evaluate conditions (so only valid transitions for the current state are shown).
+    For all other users, delegate to the standard Frappe get_transitions.
     """
     from frappe.model.document import Document
 
@@ -47,7 +48,8 @@ def get_transitions(doc, workflow=None, raise_exception: bool = False):
     transitions = []
     for transition in workflow.transitions:
         if transition.state == current_state:
-            transitions.append(transition.as_dict())
+            if workflow_module.is_transition_condition_satisfied(transition, doc):
+                transitions.append(transition.as_dict())
 
     return transitions
 
@@ -56,7 +58,14 @@ def get_transitions(doc, workflow=None, raise_exception: bool = False):
 def apply_workflow(doc, action):
     """Allow workflow action on the current doc.
 
-    For Administrator on the specified workflow, bypass role/condition checks.
+    For Administrator on the specified workflow, bypass role checks but still
+    evaluate conditions (so the correct transition is picked when multiple
+    transitions share the same action name).
+
+    For all users, fire before_workflow_action so dynamic approval level
+    tracking (and other hooks) run before the state changes.
+    NOTE: Frappe's standard apply_workflow never calls before_workflow_action —
+    that hook is client-side JS only. We fire it server-side here for all users.
     """
     user = frappe.session.user
 
@@ -64,15 +73,28 @@ def apply_workflow(doc, action):
     doc.load_from_db()
     workflow = workflow_module.get_workflow(doc.doctype)
 
-    if not _is_admin_bypass(workflow, user):
-        return workflow_module.apply_workflow(doc, action)
+    is_admin = _is_admin_bypass(workflow, user)
 
-    transitions = get_transitions(doc, workflow)
+    # Build valid transitions:
+    #   - Admin: skip role check, still evaluate conditions
+    #   - Others: full role + condition check (same as Frappe default)
+    current_state = doc.get(workflow.workflow_state_field)
+    roles = frappe.get_roles()
+
+    transitions = []
+    for transition in workflow.transitions:
+        if transition.state != current_state:
+            continue
+        if not is_admin and transition.allowed not in roles:
+            continue
+        if not workflow_module.is_transition_condition_satisfied(transition, doc):
+            continue
+        transitions.append(transition.as_dict())
 
     # find the transition
     transition = None
     for t in transitions:
-        if t.action == action:
+        if t["action"] == action:
             transition = t
             break
 
@@ -81,6 +103,10 @@ def apply_workflow(doc, action):
 
     if not workflow_module.has_approval_access(user, doc, transition):
         frappe.throw(_("Self approval is not allowed"))
+
+    # Fire before_workflow_action for ALL users so level-tracking hooks run.
+    doc.set("workflow_action", action)
+    doc.run_method("before_workflow_action")
 
     # update workflow state field
     doc.set(workflow.workflow_state_field, transition.next_state)

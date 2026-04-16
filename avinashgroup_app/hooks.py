@@ -35,6 +35,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
+    "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.0",
 ]
 # my_custom_app/hooks.py
 
@@ -218,6 +219,11 @@ _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.cl
 for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)
     _add_doc_event(_dt, "on_trash", _clear_filter_cache)
+
+# Dynamic Approval
+_add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
+_add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
+_add_doc_event("*", "before_workflow_action", "avinashgroup_app.custom_code.dynamic_approval.before_workflow_action")
 
 # for doctype in fiscal_naming_doctypes:
 #     if doctype not in doc_events:
