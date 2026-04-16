@@ -255,10 +255,35 @@ function purchase_taxes_refresh(frm) {
 /**
  * Handle item_code change
  */
-async function handle_item_code_change(frm, cdt, cdn) {
-    let row = locals[cdt][cdn];
+function handle_item_code_change(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row || !row.item_code) return;
 
-    if (row && row.item_code) {
+    // Start fetching our warehouse immediately (runs in background)
+    const wh_promise = _fetch_buying_wh(row.item_code, frm.doc.custom_branch);
+
+    // SYNCHRONOUSLY wrap frappe.call before any await.
+    // When ERPNext's item_code handler calls get_item_details, we intercept the
+    // response and inject our warehouse BEFORE ERPNext sets it on locals.
+    const _orig = frappe.call;
+    let _restored = false;
+    const _restore = () => { if (!_restored) { frappe.call = _orig; _restored = true; } };
+    frappe.call = function(opts) {
+        if (opts && opts.method && opts.method.includes('get_item_details')) {
+            const _cb = opts.callback;
+            opts.callback = async function(r) {
+                const our_wh = await wh_promise;
+                if (r && r.message) r.message.warehouse = our_wh;
+                _cb && _cb.apply(this, arguments);
+                _restore();
+            };
+        }
+        return _orig.apply(frappe, arguments);
+    };
+    setTimeout(_restore, 5000); // safety: restore if get_item_details is never called
+
+    // Continue with VAT/TDS defaults (async, but wrapper is already in place)
+    (async () => {
         try {
             const item_check = await frappe.call({
                 method: "frappe.client.get_value",
@@ -269,11 +294,8 @@ async function handle_item_code_change(frm, cdt, cdn) {
                 }
             });
 
-            if (!item_check.message) {
-                return;
-            }
+            if (!item_check.message) { _restore(); return; }
 
-            
             // Clear the custom_subtype field when item_code changes
             if (row.hasOwnProperty('custom_subtype')) {
                 await frappe.model.set_value(cdt, cdn, 'custom_subtype', '');
@@ -287,29 +309,16 @@ async function handle_item_code_change(frm, cdt, cdn) {
 
             const item_data = await frappe.call({
                 method: "avinashgroup_app.custom_code.common.purchase_taxes_handler.populate_item_custom_fields",
-                args: {
-                    item_code: row.item_code
-                }
+                args: { item_code: row.item_code }
             });
 
             if (item_data.message) {
                 if (!row.custom_excise_duty && item_data.message.custom_excise_duty) {
                     await frappe.model.set_value(cdt, cdn, 'custom_excise_duty', item_data.message.custom_excise_duty);
                 }
-
                 if (!row.custom_tds_rate && item_data.message.custom_tds_rate) {
                     await frappe.model.set_value(cdt, cdn, 'custom_tds_rate', item_data.message.custom_tds_rate);
                 }
-            }
-
-            // For Purchase Invoice: force warehouse from Item's custom_buying_warehouse.
-            // Run in setTimeout so our assignment fires AFTER ERPNext's own item_code
-            // handler finishes setting warehouse from Item Defaults.
-            if (frm.doc.doctype === "Purchase Invoice") {
-                setTimeout(async () => {
-                    await force_pi_warehouse_for_row(cdt, cdn);
-                    frm.refresh_field('items');
-                }, 600);
             }
 
             setTimeout(() => {
@@ -320,8 +329,9 @@ async function handle_item_code_change(frm, cdt, cdn) {
 
         } catch(e) {
             console.error("Error in item_code handler:", e);
+            _restore();
         }
-    }
+    })();
 }
 
 /**
@@ -817,11 +827,56 @@ function check_and_populate_from_source(frm) {
     }
 }
 
-// Force warehouse from Item's custom_buying_warehouse for Purchase Invoice
-frappe.ui.form.on("Purchase Invoice", {
-    before_save: function(frm) {
-        return force_all_pi_warehouses(frm);
-    }
+// Force warehouse from Item's custom_buying_warehouse for all buying doctypes
+PURCHASE_DOCTYPES.forEach(function(doctype) {
+    frappe.ui.form.on(doctype, {
+        before_save: function(frm) {
+            return force_all_pi_warehouses(frm);
+        }
+    });
+});
+
+// Warehouse-only handlers for Material Request and Request for Quotation
+// Set immediately on item_code change AND again at delays to beat ERPNext's Item Defaults
+["Material Request Item", "Request for Quotation Item"].forEach(function(child_doctype) {
+    frappe.ui.form.on(child_doctype, {
+        item_code: function(frm, cdt, cdn) {
+            const row = locals[cdt][cdn];
+            if (!row || !row.item_code) return;
+
+            // Fetch our warehouse in the background
+            const wh_promise = _fetch_buying_wh(row.item_code, frm.doc.custom_branch);
+
+            // SYNCHRONOUSLY wrap frappe.call to inject warehouse into get_item_details response
+            const _orig = frappe.call;
+            let _restored = false;
+            const _restore = () => { if (!_restored) { frappe.call = _orig; _restored = true; } };
+            frappe.call = function(opts) {
+                if (opts && opts.method && (
+                    opts.method.includes('get_item_details') ||
+                    opts.method.includes('get_item_data')
+                )) {
+                    const _cb = opts.callback;
+                    opts.callback = async function(r) {
+                        const our_wh = await wh_promise;
+                        if (r && r.message) r.message.warehouse = our_wh;
+                        _cb && _cb.apply(this, arguments);
+                        _restore();
+                    };
+                }
+                return _orig.apply(frappe, arguments);
+            };
+            setTimeout(_restore, 5000);
+        }
+    });
+});
+
+["Material Request", "Request for Quotation"].forEach(function(doctype) {
+    frappe.ui.form.on(doctype, {
+        before_save: function(frm) {
+            return force_all_pi_warehouses(frm);
+        }
+    });
 });
 
 // Auto-set due_date for Purchase Invoice based on supplier's custom_payment_term_days
@@ -851,37 +906,27 @@ function set_pi_due_date_from_supplier(frm) {
 }
 
 /**
- * Fetch custom_buying_warehouse from Item and force-assign it to the row's warehouse.
- * If the field is blank, warehouse is set to "" — no fallback to system defaults.
+ * Fetch custom_buying_warehouse for an item, respecting branch-wise config.
+ * Returns "" if not configured — caller decides whether to set or leave.
  */
-async function force_pi_warehouse_for_row(cdt, cdn) {
-    const row = locals[cdt][cdn];
-    if (!row || !row.item_code) {
-        await frappe.model.set_value(cdt, cdn, 'warehouse', '');
-        return;
-    }
-    const custom_branch = cur_frm && cur_frm.doc && cur_frm.doc.custom_branch;
-    let warehouse = '';
-
+async function _fetch_buying_wh(item_code, custom_branch) {
+    let wh = '';
     if (custom_branch) {
-        const item_doc = await frappe.db.get_doc('Item', row.item_code);
-        const branch_rows = item_doc.custom_branch_wise_warehouse || [];
-        const branch_row = branch_rows.find(r => r.custom_branch === custom_branch);
-        if (branch_row) {
-            warehouse = branch_row.custom_buying_warehouse || '';
-        }
+        const item_doc = await frappe.db.get_doc('Item', item_code);
+        const brow = (item_doc.custom_branch_wise_warehouse || [])
+            .find(r => r.custom_branch === custom_branch);
+        if (brow) wh = brow.custom_buying_warehouse || '';
     }
-    if (!warehouse) {
-        const result = await frappe.db.get_value('Item', row.item_code, 'custom_buying_warehouse');
-        warehouse = (result && result.message && result.message.custom_buying_warehouse) || '';
+    if (!wh) {
+        const res = await frappe.db.get_value('Item', item_code, 'custom_buying_warehouse');
+        wh = (res && res.message && res.message.custom_buying_warehouse) || '';
     }
-    await frappe.model.set_value(cdt, cdn, 'warehouse', warehouse);
+    return wh;
 }
 
 /**
- * Before save: sweep all Purchase Invoice item rows and force
- * warehouse = custom_buying_warehouse, overriding set_warehouse,
- * Item Defaults, and any system fallback.
+ * Before save: sweep all buying doctype item rows and force warehouse = custom_buying_warehouse.
+ * Only overrides if custom_buying_warehouse is set — preserves manual user selection.
  */
 async function force_all_pi_warehouses(frm) {
     if (!frm.doc.items || !frm.doc.items.length) return;
@@ -891,23 +936,13 @@ async function force_all_pi_warehouses(frm) {
     const warehouse_map = {};
 
     await Promise.all(item_codes.map(async (item_code) => {
-        if (custom_branch) {
-            const item_doc = await frappe.db.get_doc('Item', item_code);
-            const branch_rows = item_doc.custom_branch_wise_warehouse || [];
-            const branch_row = branch_rows.find(r => r.custom_branch === custom_branch);
-            if (branch_row && branch_row.custom_buying_warehouse) {
-                warehouse_map[item_code] = branch_row.custom_buying_warehouse;
-                return;
-            }
-        }
-        // Fallback: fetch directly from Item's custom_buying_warehouse
-        const result = await frappe.db.get_value('Item', item_code, 'custom_buying_warehouse');
-        warehouse_map[item_code] = (result && result.message && result.message.custom_buying_warehouse) || '';
+        warehouse_map[item_code] = await _fetch_buying_wh(item_code, custom_branch);
     }));
 
     for (const item of frm.doc.items) {
         const warehouse = item.item_code ? (warehouse_map[item.item_code] || '') : '';
-        if (item.warehouse !== warehouse) {
+        // On save: only override if custom_buying_warehouse is set — preserves manual selection
+        if (warehouse && item.warehouse !== warehouse) {
             await frappe.model.set_value(item.doctype, item.name, 'warehouse', warehouse);
         }
     }
