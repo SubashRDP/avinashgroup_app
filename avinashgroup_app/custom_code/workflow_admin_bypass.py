@@ -7,12 +7,23 @@ from frappe.model import workflow as workflow_module
 BYPASS_WORKFLOW_NAMES = {
     "Material Request One-Line Approver",
     "Purchase Order Workflow",
+    "Purchase Order Approval Workflow",
 }
 
 
 def _is_admin_bypass(workflow, user):
-    return user == "Administrator" and workflow and workflow.name in BYPASS_WORKFLOW_NAMES
-
+    if user != "Administrator" or not workflow:
+        return False
+    
+    # 1. Exact matches for existing workflows
+    if workflow.name in BYPASS_WORKFLOW_NAMES:
+        return True
+        
+    # 2. Automatic pattern match for any Dynamic Approval workflows
+    if workflow.name.endswith("Approval Workflow"):
+        return True
+        
+    return False
 
 @frappe.whitelist()
 def get_transitions(doc, workflow=None, raise_exception: bool = False):
