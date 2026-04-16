@@ -514,8 +514,8 @@ def _create_or_update_workflow(doctype, level_field):
 		f'doc.{af} == frappe.session.user or frappe.session.user == "Administrator"'
 	)
 
-	# Automatically find everyone who has access to this DocType normally
-	# This ensures the POs are VISIBLE to the right people without hardcoding roles.
+	# DYNAMICALLY find everyone who has access to this DocType normally.
+	# This ensures the POs are VISIBLE to your team without hardcoding names.
 	doc_roles = frappe.get_all("DocPerm", filters={"parent": doctype}, fields=["role"], distinct=True)
 	role_list = [r.role for r in doc_roles if r.role not in ("All", "Guest")]
 	if not role_list:
