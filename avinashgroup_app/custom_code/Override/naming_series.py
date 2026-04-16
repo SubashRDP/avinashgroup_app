@@ -8,19 +8,19 @@ BRANCH_NAME_COMPANY = "Grishma Enterprises Pvt. Ltd."
 # branch_code per doctype per branch (normal and return)
 BRANCH_CODE_CONFIG = {
     "Sales Invoice": {
-        "Annamnagar": {"normal": "INV", "return": "RT"},
-        "Balaju":     {"normal": "SB",  "return": "BSR"},
-        "Chitwan":    {"normal": "GEP", "return": "RTN"},
+        "GEPL-Branch-00001": {"normal": "INV", "return": "RT"},
+        "GEPL-Branch-00002":     {"normal": "SB",  "return": "BSR"},
+        "GEPL-Branch-00003":    {"normal": "GEP", "return": "RTN"},
     },
     "Purchase Receipt": {
-        "Annamnagar": {"normal": "AN"},
-        "Balaju":     {"normal": "BRC"},
-        "Chitwan":    {"normal": "RC"},
+        "GEPL-Branch-00001": {"normal": "AN"},
+        "GEPL-Branch-00002":     {"normal": "BRC"},
+        "GEPL-Branch-00003":    {"normal": "RC"},
     },
     "Purchase Invoice": {
-        "Annamnagar": {"normal": "PBA"},
-        "Balaju":     {"normal": "PBB"},
-        "Chitwan":    {"normal": "PB"},
+        "GEPL-Branch-00001": {"normal": "PBA"},
+        "GEPL-Branch-00002":     {"normal": "PBB"},
+        "GEPL-Branch-00003":    {"normal": "PB"},
     },
 }
 
