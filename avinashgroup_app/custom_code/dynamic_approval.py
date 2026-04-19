@@ -35,16 +35,21 @@ def has_approval_config(doctype, company):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-def _get_config(doctype, company, department=None):
-	"""
-	Fetch the Dynamic Approval Setting for a doctype + company.
-	(Ignores the department field on the Setting document, and filters Fixed Approvers instead).
-	Always reads from DB — no caching.
-	"""
+def _get_department_fieldname(doctype):
+	"""Return the department fieldname for a doctype — checks custom_department then department."""
+	meta = frappe.get_meta(doctype)
+	if meta.has_field("custom_department"):
+		return "custom_department"
+	if meta.has_field("department"):
+		return "department"
+	return None
+
+
+def _get_config(doctype, company, department=None, has_department=False):
+	"""Fetch the Dynamic Approval Setting for a doctype + company. Always reads from DB."""
 	if not company:
 		return None
 
-	# 1. Exact match: doctype + company
 	setting = frappe.get_all(
 		"Dynamic Approval Setting",
 		filters={"document_type": doctype, "company": company, "is_active": 1},
@@ -63,12 +68,12 @@ def _get_config(doctype, company, department=None):
 		order_by="idx",
 	)
 
-	# 2. Filter Fixed Approvers by department 
-	# (If department on row is blank/None, it applies to all departments)
-	fixed = []
-	for f in fixed_all:
-		if not f.department or f.department == department:
-			fixed.append(f)
+	if has_department:
+		# Doctype has a department field — filter by it; blank department rows = global fallback
+		fixed = [f for f in fixed_all if not f.department or f.department == department]
+	else:
+		# Doctype has no department — use all fixed approvers as a flat global sequence
+		fixed = fixed_all
 
 	return {
 		"name": setting.name,
@@ -78,22 +83,15 @@ def _get_config(doctype, company, department=None):
 	}
 
 
-def _get_department_fieldname(doctype):
-	"""Return the department fieldname for a doctype — checks custom_department then department."""
-	meta = frappe.get_meta(doctype)
-	if meta.has_field("custom_department"):
-		return "custom_department"
-	if meta.has_field("department"):
-		return "department"
-	return None
-
-
 def _get_config_for_doc(doc):
 	"""Get config using the doc's company/department (reads from DB directly)."""
-	company = doc.get("company")
 	dept_field = _get_department_fieldname(doc.doctype)
-	department = doc.get(dept_field) if dept_field else None
-	return _get_config(doc.doctype, company, department)
+	return _get_config(
+		doc.doctype,
+		doc.get("company"),
+		department=doc.get(dept_field) if dept_field else None,
+		has_department=bool(dept_field),
+	)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -193,11 +191,11 @@ def before_workflow_action(doc, method=None, action=None):
 	table_field = config["approver_table_fieldname"]
 
 	if action == "Submit for Approval":
-		if not doc.get(table_field):
+		total = _get_total_levels(doc, config)
+		if not total:
 			frappe.throw(
 				_("Please add at least one approver in the Approval Hierarchy before submitting.")
 			)
-		total = _get_total_levels(doc, config)
 		approver = _get_effective_approver_at_level(doc, 1, config)
 		doc.set(level_field, 1)
 		doc.set(TOTAL_LEVELS_FIELD, total)
@@ -375,7 +373,6 @@ def setup_workflow(config_name):
 	level_field = config_doc.current_level_fieldname
 
 	_ensure_history_doctype()
-	_ensure_workflow_states()
 	_ensure_custom_fields(doctype, level_field, table_field)
 	_create_or_update_workflow(doctype, level_field)
 
@@ -473,15 +470,6 @@ def _ensure_custom_fields(doctype, level_field, table_field):
 		}).insert(ignore_permissions=True)
 
 
-def _ensure_workflow_states():
-	for state_name in ("Draft", "Pending Approval", "Approved", "Rejected"):
-		if not frappe.db.exists("Workflow State", state_name):
-			frappe.get_doc({
-				"doctype": "Workflow State",
-				"workflow_state_name": state_name,
-			}).insert(ignore_permissions=True)
-
-
 def _create_or_update_workflow(doctype, level_field):
 	"""
 	Build the sequential approval workflow using only doc fields in conditions.
@@ -561,6 +549,24 @@ def _create_or_update_workflow(doctype, level_field):
 		},
 	]
 
+	# Auto-create any Workflow State or Workflow Action Master that this
+	# workflow references but does not yet exist in the DB.
+	# This mirrors how Frappe's own workflow builder works — it never requires
+	# you to pre-create states/actions; it creates them on the fly.
+	for s in states:
+		if not frappe.db.exists("Workflow State", s["state"]):
+			frappe.get_doc({
+				"doctype": "Workflow State",
+				"workflow_state_name": s["state"],
+			}).insert(ignore_permissions=True)
+
+	for t in transitions:
+		if not frappe.db.exists("Workflow Action Master", t["action"]):
+			frappe.get_doc({
+				"doctype": "Workflow Action Master",
+				"workflow_action_name": t["action"],
+			}).insert(ignore_permissions=True)
+
 	existing = frappe.get_all(
 		"Workflow",
 		filters={"document_type": doctype, "is_active": 1},
@@ -580,16 +586,16 @@ def _create_or_update_workflow(doctype, level_field):
 		wf.save(ignore_permissions=True)
 		frappe.msgprint(_("Updated existing workflow: {0}").format(wf.name), alert=True)
 	else:
-	wf = frappe.get_doc({
-		"doctype": "Workflow",
-		"workflow_name": f"{doctype} Approval Workflow",
-		"document_type": doctype,
-		"is_active": 1,
-		"send_email_alert": 0,
-		"states": states,
-		"transitions": transitions,
-	})
-	wf.insert(ignore_permissions=True)
+		wf = frappe.get_doc({
+			"doctype": "Workflow",
+			"workflow_name": f"{doctype} Approval Workflow",
+			"document_type": doctype,
+			"is_active": 1,
+			"send_email_alert": 0,
+			"states": states,
+			"transitions": transitions,
+		})
+		wf.insert(ignore_permissions=True)
 		frappe.msgprint(_("Created workflow: {0}").format(wf.name), alert=True)
 
 
