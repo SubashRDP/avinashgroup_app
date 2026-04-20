@@ -457,6 +457,8 @@ def _ensure_custom_fields(doctype, level_field, table_field):
 		}).insert(ignore_permissions=True)
 	else:
 		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": section_hierarchy}, "insert_after", TOTAL_LEVELS_FIELD)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": section_hierarchy}, "label", "Approval Hierarchy")
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": section_hierarchy}, "hidden", 0)
 
 	# 5. Approval hierarchy table — user fills this before submitting
 	if not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": table_field}):
@@ -467,10 +469,16 @@ def _ensure_custom_fields(doctype, level_field, table_field):
 			"fieldtype": "Table",
 			"label": "Approval Hierarchy",
 			"options": "Dynamic Approval Approver",
+			"allow_on_submit": 1,
+			"hidden": 0,
+			"read_only": 0,
 			"insert_after": section_hierarchy,
 		}).insert(ignore_permissions=True)
 	else:
 		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": table_field}, "insert_after", section_hierarchy)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": table_field}, "allow_on_submit", 1)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": table_field}, "hidden", 0)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": table_field}, "read_only", 0)
 
 	# 6. Section break — Approval History
 	section_history = "custom_section_approval_history"
@@ -485,6 +493,8 @@ def _ensure_custom_fields(doctype, level_field, table_field):
 		}).insert(ignore_permissions=True)
 	else:
 		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": section_history}, "insert_after", table_field)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": section_history}, "label", "Approval History")
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": section_history}, "hidden", 0)
 
 	# 7. History Table — the log timeline
 	history_table_field = "custom_approval_history"
@@ -496,10 +506,16 @@ def _ensure_custom_fields(doctype, level_field, table_field):
 			"fieldtype": "Table",
 			"label": "Approval History",
 			"options": "Dynamic Approval History",
+			"allow_on_submit": 1,
+			"hidden": 0,
+			"read_only": 0,
 			"insert_after": section_history,
 		}).insert(ignore_permissions=True)
 	else:
 		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": history_table_field}, "insert_after", section_history)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": history_table_field}, "allow_on_submit", 1)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": history_table_field}, "hidden", 0)
+		frappe.db.set_value("Custom Field", {"dt": doctype, "fieldname": history_table_field}, "read_only", 0)
 
 
 def _create_or_update_workflow(doctype, level_field):

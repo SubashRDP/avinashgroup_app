@@ -116,9 +116,6 @@ frappe.ui.form.on("Purchase Invoice Item", {
                     return;
                 }
                 
-                // Clear the custom_subtype field when item_code changes
-                await frappe.model.set_value(cdt, cdn, 'custom_subtype', '');
-                
                 // Always set VAT Apply On to Percentage (%) by default FIRST
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'Percentage (%)');
                 await frappe.model.set_value(cdt, cdn, 'custom_tds_apply_on', 'Percentage (%)');

@@ -129,7 +129,7 @@ FILTER_CONFIG = {
         "company_field": "company",
         "fields": ["supplier"],
         "child_tables": {
-            "items":            ["item_code", "manufacturer", "project", "wip_composite_asset", "custom_subtype"],
+            "items":            ["item_code", "manufacturer", "project", "wip_composite_asset"],
             "payment_schedule": ["payment_term"]
         }
     },

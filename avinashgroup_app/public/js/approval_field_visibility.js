@@ -9,10 +9,9 @@
  */
 
 (function () {
-    // The custom fields that setup_workflow injects onto target doctypes
+    // Only the workflow-driver fields should be hidden.
+    // The editable hierarchy/history tables must stay visible so users can manage them.
     const APPROVAL_FIELDS = [
-        "custom_approval_approvers",
-        "custom_approval_history",
         "custom_current_approval_level",
         "custom_current_approver",
         "custom_total_approval_levels",
