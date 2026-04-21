@@ -35,7 +35,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
-    "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.0",
+    "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
 ]
 # my_custom_app/hooks.py
 
@@ -56,9 +56,10 @@ app_include_js = [
 # include js in doctype views
 doctype_js = {
             # "Sales Invoice" : "public/js/sales_invoice.js",
-            # "Journal Entry" : "custom_code/JournalEntry/journal_entry.js"
             "Purchase Order": "public/js/purchase_order.js",
             "Material Request": "public/js/material_request.js",
+            "Purchase Invoice": "public/js/pi.js",
+            "Journal Entry": "public/js/journal_entry.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
@@ -221,6 +222,7 @@ for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_trash", _clear_filter_cache)
 
 # Dynamic Approval
+_add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
 _add_doc_event("*", "before_workflow_action", "avinashgroup_app.custom_code.dynamic_approval.before_workflow_action")

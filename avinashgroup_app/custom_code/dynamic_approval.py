@@ -16,6 +16,11 @@ CURRENT_APPROVER_FIELD = "custom_current_approver"
 # Stored on the doc so conditions can compare without any DB query.
 TOTAL_LEVELS_FIELD = "custom_total_approval_levels"
 
+# Pinned setting name + group — injected on first submission so subsequent
+# lookups skip criteria scanning entirely (2 DB queries instead of N+3).
+APPROVAL_SETTING_FIELD = "custom_approval_setting"
+APPROVAL_GROUP_FIELD   = "custom_approval_group"
+
 
 @frappe.whitelist()
 def has_approval_config(doctype, company):
@@ -35,63 +40,119 @@ def has_approval_config(doctype, company):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
-def _get_department_fieldname(doctype):
-	"""Return the department fieldname for a doctype — checks custom_department then department."""
-	meta = frappe.get_meta(doctype)
-	if meta.has_field("custom_department"):
-		return "custom_department"
-	if meta.has_field("department"):
-		return "department"
-	return None
+def _get_config_for_doc(doc):
+	"""
+	Fast path  — setting + group already pinned on the doc (injected on first submission):
+	            2 DB queries, no criteria scanning.
+	Slow path  — first time: scan all settings for this company+doctype, score criteria
+	            groups, pick best match, then pin setting+group on the doc for next time.
+	"""
+	pinned_setting = doc.get(APPROVAL_SETTING_FIELD)
+	pinned_group   = doc.get(APPROVAL_GROUP_FIELD)
 
+	if pinned_setting:
+		return _fetch_config_by_name_and_group(pinned_setting, cint(pinned_group))
 
-def _get_config(doctype, company, department=None, has_department=False):
-	"""Fetch the Dynamic Approval Setting for a doctype + company. Always reads from DB."""
+	# ── Slow path: criteria scan ──────────────────────────────────
+	company = doc.get("company")
 	if not company:
 		return None
 
-	setting = frappe.get_all(
+	settings = frappe.get_all(
 		"Dynamic Approval Setting",
-		filters={"document_type": doctype, "company": company, "is_active": 1},
+		filters={"document_type": doc.doctype, "company": company, "is_active": 1},
 		fields=["name", "approver_table_fieldname", "current_level_fieldname"],
-		limit=1,
 	)
-
-	if not setting:
+	if not settings:
 		return None
 
-	setting = setting[0]
-	fixed_all = frappe.get_all(
+	setting_names = [s.name for s in settings]
+
+	all_criteria = frappe.get_all(
+		"Dynamic Approval Match Criteria",
+		filters={"parent": ("in", setting_names), "parenttype": "Dynamic Approval Setting"},
+		fields=["parent", "group", "field_name", "field_value"],
+	)
+	all_approvers = frappe.get_all(
 		"Dynamic Approval Fixed Approver",
-		filters={"parent": setting.name, "parenttype": "Dynamic Approval Setting"},
-		fields=["approver", "approver_name", "department"],
+		filters={"parent": ("in", setting_names), "parenttype": "Dynamic Approval Setting"},
+		fields=["parent", "group", "approver", "approver_name"],
 		order_by="idx",
 	)
 
-	if has_department:
-		# Doctype has a department field — filter by it; blank department rows = global fallback
-		fixed = [f for f in fixed_all if not f.department or f.department == department]
-	else:
-		# Doctype has no department — use all fixed approvers as a flat global sequence
-		fixed = fixed_all
+	criteria_map = {}
+	for c in all_criteria:
+		criteria_map.setdefault(c.parent, {}).setdefault(cint(c.group), []).append(c)
 
+	approver_map = {}
+	for a in all_approvers:
+		approver_map.setdefault(a.parent, {}).setdefault(cint(a.group), []).append(a)
+
+	for setting in settings:
+		sname = setting.name
+		criteria_by_group = criteria_map.get(sname, {})
+		approvers_by_group = approver_map.get(sname, {})
+
+		all_groups = set(criteria_by_group.keys()) | set(approvers_by_group.keys())
+		if not all_groups:
+			all_groups = {0}
+
+		best_group = None
+		best_score = -1
+
+		for g in all_groups:
+			criteria = criteria_by_group.get(g, [])
+			if all(
+				str(doc.get(c.field_name) or "").strip() == str(c.field_value or "").strip()
+				for c in criteria
+			):
+				score = len(criteria)
+				if score > best_score:
+					best_score = score
+					best_group = g
+
+		if best_group is None:
+			continue
+
+		# Pin setting + group on the doc so future calls skip this scan
+		doc.set(APPROVAL_SETTING_FIELD, sname)
+		doc.set(APPROVAL_GROUP_FIELD, best_group)
+
+		fixed = approvers_by_group.get(best_group, [])
+		return {
+			"name": sname,
+			"approver_table_fieldname": setting.approver_table_fieldname,
+			"current_level_fieldname": setting.current_level_fieldname,
+			"fixed_approvers": fixed,
+		}
+
+	return None
+
+
+def _fetch_config_by_name_and_group(setting_name, group):
+	"""Fast path: fetch a specific setting + its approvers for a known group."""
+	rows = frappe.get_all(
+		"Dynamic Approval Setting",
+		filters={"name": setting_name, "is_active": 1},
+		fields=["name", "approver_table_fieldname", "current_level_fieldname"],
+		limit=1,
+	)
+	if not rows:
+		return None
+	setting = rows[0]
+
+	fixed = frappe.get_all(
+		"Dynamic Approval Fixed Approver",
+		filters={"parent": setting_name, "parenttype": "Dynamic Approval Setting", "group": group},
+		fields=["group", "approver", "approver_name"],
+		order_by="idx",
+	)
 	return {
-		"name": setting.name,
+		"name": setting_name,
 		"approver_table_fieldname": setting.approver_table_fieldname,
 		"current_level_fieldname": setting.current_level_fieldname,
 		"fixed_approvers": fixed,
 	}
-
-
-def _get_config_for_doc(doc):
-	"""Get config using the doc's company/department (reads from DB directly)."""
-	dept_field = _get_department_fieldname(doc.doctype)
-	return _get_config(
-		doc.doctype,
-		doc.get("company"),
-		department=doc.get(dept_field) if dept_field else None,
-		has_department=bool(dept_field),
-	)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -149,6 +210,65 @@ def _log_approval_history(doc, action):
 		"user_name": frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user,
 		"timestamp": frappe.utils.now_datetime()
 	})
+
+
+def validate(doc, method=None):
+	"""
+	When Pending Approval:
+	  1. Only the current approver (or Administrator) may save.
+	  2. Already-approved rows (level < current_level) cannot be changed or deleted.
+	"""
+	config = _get_config_for_doc(doc)
+	if not config:
+		return
+	if doc.get("workflow_state") != "Pending Approval":
+		return
+	if doc.is_new():
+		return
+	if frappe.session.user == "Administrator":
+		return
+
+	# Read from DB — before_workflow_action already updated the in-memory field
+	# to the NEXT approver, so doc.get() would give the wrong value here.
+	current_approver = frappe.db.get_value(doc.doctype, doc.name, CURRENT_APPROVER_FIELD) or doc.get(CURRENT_APPROVER_FIELD)
+
+	if frappe.session.user != current_approver:
+		approver_name = (
+			frappe.db.get_value("User", current_approver, "full_name") or current_approver
+			if current_approver else _("the assigned approver")
+		)
+		frappe.throw(
+			_("This document is pending approval. Only {0} (the current approver) may make changes.").format(approver_name)
+		)
+
+	# Current approver cannot modify already-approved rows
+	level_field = config["current_level_fieldname"]
+	current_level = cint(doc.get(level_field) or 0)
+	if current_level <= 1:
+		return
+
+	table_field = config["approver_table_fieldname"]
+	saved_rows = {
+		cint(r["level"]): r["approver"]
+		for r in frappe.db.get_all(
+			"Dynamic Approval Approver",
+			filters={"parent": doc.name, "parenttype": doc.doctype, "parentfield": table_field},
+			fields=["level", "approver"],
+		)
+	}
+	current_rows = {cint(r.level): r.approver for r in (doc.get(table_field) or [])}
+
+	for level, approver in saved_rows.items():
+		if level >= current_level:
+			continue  # Not yet approved — current approver may still change these
+		if level not in current_rows:
+			frappe.throw(
+				_("Cannot delete approver at Level {0} — this level has already been approved.").format(level)
+			)
+		if current_rows[level] != approver:
+			frappe.throw(
+				_("Cannot change approver at Level {0} — this level has already been approved.").format(level)
+			)
 
 
 def before_save(doc, method=None):
@@ -400,7 +520,36 @@ def _ensure_history_doctype():
 
 
 def _ensure_custom_fields(doctype, level_field, table_field):
-	"""Create the four approval custom fields on the target doctype if missing."""
+	"""Create approval custom fields on the target doctype if missing."""
+
+	# 0a. Hidden Link — pinned approval setting (fast-path lookup)
+	if not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": APPROVAL_SETTING_FIELD}):
+		frappe.get_doc({
+			"doctype": "Custom Field",
+			"dt": doctype,
+			"fieldname": APPROVAL_SETTING_FIELD,
+			"fieldtype": "Link",
+			"options": "Dynamic Approval Setting",
+			"label": "Approval Setting",
+			"hidden": 1,
+			"no_copy": 1,
+			"print_hide": 1,
+			"insert_after": "amended_from",
+		}).insert(ignore_permissions=True)
+
+	# 0b. Hidden Int — pinned approval group number
+	if not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": APPROVAL_GROUP_FIELD}):
+		frappe.get_doc({
+			"doctype": "Custom Field",
+			"dt": doctype,
+			"fieldname": APPROVAL_GROUP_FIELD,
+			"fieldtype": "Int",
+			"label": "Approval Group",
+			"hidden": 1,
+			"no_copy": 1,
+			"print_hide": 1,
+			"insert_after": APPROVAL_SETTING_FIELD,
+		}).insert(ignore_permissions=True)
 
 	# 1. Hidden Int — current approval level
 	if not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": level_field}):

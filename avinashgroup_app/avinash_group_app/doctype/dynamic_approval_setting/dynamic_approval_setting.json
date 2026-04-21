@@ -6,7 +6,6 @@
  "field_order": [
   "document_type",
   "company",
-  "department",
   "column_break_main",
   "company_abbr",
   "is_active",
@@ -15,8 +14,9 @@
   "column_break_config",
   "current_level_fieldname",
   "approver_fieldname",
+  "match_criteria_section",
+  "match_criteria",
   "fixed_approvers_section",
-  "dept_config_html",
   "approvers",
   "setup_section",
   "setup_workflow_html"
@@ -37,13 +37,6 @@
    "label": "Company",
    "options": "Company",
    "reqd": 1
-  },
-  {
-   "fieldname": "department",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Department",
-   "options": "Department"
   },
   {
    "fieldname": "column_break_main",
@@ -95,20 +88,26 @@
    "label": "Approver Field Name"
   },
   {
+   "fieldname": "match_criteria_section",
+   "fieldtype": "Section Break",
+   "label": "Match Criteria"
+  },
+  {
+   "description": "Define which documents this setting applies to. Each row is a field=value condition. Rows with the same Group number are ANDed together. The group with the most matching rows wins. Group 0 (or no criteria) = catch-all fallback.",
+   "fieldname": "match_criteria",
+   "fieldtype": "Table",
+   "label": "Match Criteria",
+   "options": "Dynamic Approval Match Criteria"
+  },
+  {
    "fieldname": "fixed_approvers_section",
    "fieldtype": "Section Break",
-   "label": "Fixed Approvers (Department-wise)"
+   "label": "Fixed Approvers"
   },
   {
-   "fieldname": "dept_config_html",
-   "fieldtype": "HTML",
-   "label": "Department Configuration"
-  },
-  {
-   "description": "These approvers will be automatically appended at the END of the approval chain (after any user-chosen approvers). Order matters - first row = first fixed approver.",
+   "description": "These approvers are automatically appended at the END of the approval chain. Set Group to match the criteria group they apply to. Group 0 = used for the catch-all group.",
    "fieldname": "approvers",
    "fieldtype": "Table",
-   "hidden": 1,
    "label": "Approvers",
    "options": "Dynamic Approval Fixed Approver"
   },
@@ -125,7 +124,7 @@
   }
  ],
  "links": [],
- "modified": "2026-04-16 00:00:00.000000",
+ "modified": "2026-04-21 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Dynamic Approval Setting",

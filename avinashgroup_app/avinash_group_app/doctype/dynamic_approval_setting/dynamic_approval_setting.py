@@ -9,23 +9,13 @@ from frappe.model.document import Document
 class DynamicApprovalSetting(Document):
 	def autoname(self):
 		abbr = frappe.db.get_value("Company", self.company, "abbr") or self.company
-		dept_part = f"-{self.department}" if self.department else ""
-		self.name = f"{self.document_type}-{abbr}{dept_part}"
+		self.name = f"{self.document_type}-{abbr}-{frappe.generate_hash(length=6)}"
 
 	def validate(self):
-		# Ensure unique doctype+company+department combination
-		existing = frappe.db.get_value(
-			"Dynamic Approval Setting",
-			{"document_type": self.document_type, "company": self.company, "department": self.department or "", "name": ("!=", self.name or "")},
-			"name",
-		)
-		if existing:
-			frappe.throw(
-				_("A Dynamic Approval Setting already exists for {0} + {1} + {2}: {3}").format(
-					self.document_type, self.company, self.department or "(any department)", existing
-				)
-			)
-		# Fixed approvers are optional — the approval chain works with user-defined levels alone
+		# Validate that each criteria row has a non-empty field_name and field_value
+		for row in (self.match_criteria or []):
+			if not row.field_name or not row.field_value:
+				frappe.throw(_("Match Criteria row {0}: Field Name and Field Value are required.").format(row.idx))
 
 	def on_update(self):
 		pass

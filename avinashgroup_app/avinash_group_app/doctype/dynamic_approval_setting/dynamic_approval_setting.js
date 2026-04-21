@@ -1,6 +1,24 @@
+function set_criteria_field_options(frm) {
+	if (!frm.doc.document_type) return;
+	frappe.model.with_doctype(frm.doc.document_type, function () {
+		let skip = ["Section Break", "Column Break", "Tab Break", "HTML", "Button", "Fold", "Heading"];
+		let meta = frappe.get_meta(frm.doc.document_type);
+		let doctype_fields = (meta.fields || [])
+			.filter(f => !skip.includes(f.fieldtype))
+			.map(f => f.fieldname);
+		let standard = ["name", "owner", "company", "department", "modified_by"];
+		let all = [...new Set([...standard, ...doctype_fields])].join("\n");
+		if (frm.fields_dict.match_criteria && frm.fields_dict.match_criteria.grid) {
+			frm.fields_dict.match_criteria.grid.update_docfield_property("field_name", "options", all);
+		}
+	});
+}
+
 frappe.ui.form.on("Dynamic Approval Setting", {
 	refresh(frm) {
+		set_criteria_field_options(frm);
 		render_department_ui(frm);
+
 
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Setup Workflow"), () => {
@@ -25,8 +43,78 @@ frappe.ui.form.on("Dynamic Approval Setting", {
 				);
 			}).addClass("btn-primary");
 		}
-	}
+	},
+
+	document_type(frm) {
+		set_criteria_field_options(frm);
+	},
 });
+
+// ── Child table: update field_value picker based on selected field_name ──
+frappe.ui.form.on("Dynamic Approval Match Criteria", {
+	field_name(frm, cdt, cdn) {
+		update_field_value_options(frm, cdt, cdn);
+	},
+	form_render(frm, cdt, cdn) {
+		update_field_value_options(frm, cdt, cdn);
+	},
+});
+
+function update_field_value_options(frm, cdt, cdn) {
+	let row = locals[cdt][cdn];
+	if (!row.field_name || !frm.doc.document_type) return;
+
+	frappe.model.with_doctype(frm.doc.document_type, function () {
+		let meta = frappe.get_meta(frm.doc.document_type);
+		let field_meta = (meta.fields || []).find(f => f.fieldname === row.field_name);
+
+		// Standard fields not in meta.fields
+		let standard_link_map = {
+			owner: "User", modified_by: "User",
+			company: "Company", department: "Department",
+		};
+
+		let linked_doctype = null;
+		let select_options = null;
+
+		if (field_meta) {
+			if (field_meta.fieldtype === "Link") {
+				linked_doctype = field_meta.options;
+			} else if (field_meta.fieldtype === "Select") {
+				select_options = (field_meta.options || "").split("\n").filter(Boolean);
+			}
+		} else if (standard_link_map[row.field_name]) {
+			linked_doctype = standard_link_map[row.field_name];
+		}
+
+		if (linked_doctype) {
+			frappe.call({
+				method: "frappe.client.get_list",
+				args: { doctype: linked_doctype, fields: ["name"], limit: 200 },
+				callback(r) {
+					if (!r.message) return;
+					let options = r.message.map(d => d.name).join("\n");
+					_set_field_value_options(frm, cdt, cdn, options);
+				},
+			});
+		} else if (select_options) {
+			_set_field_value_options(frm, cdt, cdn, select_options.join("\n"));
+		} else {
+			_set_field_value_options(frm, cdt, cdn, "");
+		}
+	});
+}
+
+function _set_field_value_options(frm, cdt, cdn, options) {
+	// Update the specific row's field_value docfield
+	let df = frappe.meta.get_docfield(cdt, "field_value", cdn);
+	if (df) df.options = options;
+	// Also update grid column so inline editing shows the dropdown
+	if (frm.fields_dict.match_criteria && frm.fields_dict.match_criteria.grid) {
+		frm.fields_dict.match_criteria.grid.update_docfield_property("field_value", "options", options);
+	}
+	frm.refresh_field("match_criteria");
+}
 
 /* ───────────────────────────────────────────────
    Render the Department-wise UI into the

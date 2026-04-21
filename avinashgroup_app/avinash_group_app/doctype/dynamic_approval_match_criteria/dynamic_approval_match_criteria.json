@@ -1,13 +1,13 @@
 {
  "actions": [],
- "creation": "2026-04-13 00:00:00.000000",
+ "creation": "2026-04-21 00:00:00.000000",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "group",
-  "approver",
-  "approver_name"
+  "field_name",
+  "field_value"
  ],
  "fields": [
   {
@@ -19,20 +19,18 @@
    "reqd": 1
   },
   {
-   "fieldname": "approver",
-   "fieldtype": "Link",
+   "fieldname": "field_name",
+   "fieldtype": "Autocomplete",
    "in_list_view": 1,
-   "label": "Approver",
-   "options": "User",
+   "label": "Field Name",
    "reqd": 1
   },
   {
-   "fetch_from": "approver.full_name",
-   "fieldname": "approver_name",
-   "fieldtype": "Data",
+   "fieldname": "field_value",
+   "fieldtype": "Autocomplete",
    "in_list_view": 1,
-   "label": "Approver Name",
-   "read_only": 1
+   "label": "Field Value",
+   "reqd": 1
   }
  ],
  "istable": 1,
@@ -40,7 +38,7 @@
  "modified": "2026-04-21 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
- "name": "Dynamic Approval Fixed Approver",
+ "name": "Dynamic Approval Match Criteria",
  "owner": "Administrator",
  "permissions": [],
  "sort_field": "modified",
