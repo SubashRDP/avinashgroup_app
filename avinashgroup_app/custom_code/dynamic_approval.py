@@ -18,8 +18,8 @@ TOTAL_LEVELS_FIELD = "custom_total_approval_levels"
 
 # Pinned setting name + group — injected on first submission so subsequent
 # lookups skip criteria scanning entirely (2 DB queries instead of N+3).
-APPROVAL_SETTING_FIELD = "custom_approval_setting"
-APPROVAL_GROUP_FIELD   = "custom_approval_group"
+APPROVAL_SETTING_FIELD  = "custom_approval_setting"
+APPROVAL_SECTION_FIELD  = "custom_approval_section"
 
 
 @frappe.whitelist()
@@ -42,16 +42,16 @@ def has_approval_config(doctype, company):
 
 def _get_config_for_doc(doc):
 	"""
-	Fast path  — setting + group already pinned on the doc (injected on first submission):
+	Fast path  — setting + section already pinned on the doc (injected on first submission):
 	            2 DB queries, no criteria scanning.
-	Slow path  — first time: scan all settings for this company+doctype, score criteria
-	            groups, pick best match, then pin setting+group on the doc for next time.
+	Slow path  — first time: scan all settings for this company+doctype, score sections
+	            by criteria count, pick best match, then pin setting+section on the doc.
 	"""
 	pinned_setting = doc.get(APPROVAL_SETTING_FIELD)
-	pinned_group   = doc.get(APPROVAL_GROUP_FIELD)
+	pinned_section = doc.get(APPROVAL_SECTION_FIELD)
 
-	if pinned_setting:
-		return _fetch_config_by_name_and_group(pinned_setting, cint(pinned_group))
+	if pinned_setting and pinned_section:
+		return _fetch_config_by_section(pinned_setting, pinned_section)
 
 	# ── Slow path: criteria scan ──────────────────────────────────
 	company = doc.get("company")
@@ -71,37 +71,38 @@ def _get_config_for_doc(doc):
 	all_criteria = frappe.get_all(
 		"Dynamic Approval Match Criteria",
 		filters={"parent": ("in", setting_names), "parenttype": "Dynamic Approval Setting"},
-		fields=["parent", "group", "field_name", "field_value"],
+		fields=["parent", "section", "field_name", "field_value"],
 	)
 	all_approvers = frappe.get_all(
 		"Dynamic Approval Fixed Approver",
 		filters={"parent": ("in", setting_names), "parenttype": "Dynamic Approval Setting"},
-		fields=["parent", "group", "approver", "approver_name"],
+		fields=["parent", "section", "approver", "approver_name"],
 		order_by="idx",
 	)
 
+	# Group by (setting_name, section)
 	criteria_map = {}
 	for c in all_criteria:
-		criteria_map.setdefault(c.parent, {}).setdefault(cint(c.group), []).append(c)
+		criteria_map.setdefault(c.parent, {}).setdefault(c.section or "", []).append(c)
 
 	approver_map = {}
 	for a in all_approvers:
-		approver_map.setdefault(a.parent, {}).setdefault(cint(a.group), []).append(a)
+		approver_map.setdefault(a.parent, {}).setdefault(a.section or "", []).append(a)
 
 	for setting in settings:
 		sname = setting.name
-		criteria_by_group = criteria_map.get(sname, {})
-		approvers_by_group = approver_map.get(sname, {})
+		criteria_by_section = criteria_map.get(sname, {})
+		approvers_by_section = approver_map.get(sname, {})
 
-		all_groups = set(criteria_by_group.keys()) | set(approvers_by_group.keys())
-		if not all_groups:
-			all_groups = {0}
+		all_sections = set(criteria_by_section.keys()) | set(approvers_by_section.keys())
+		if not all_sections:
+			all_sections = {""}  # no rows at all = single catch-all section
 
-		best_group = None
+		best_section = None
 		best_score = -1
 
-		for g in all_groups:
-			criteria = criteria_by_group.get(g, [])
+		for sec in all_sections:
+			criteria = criteria_by_section.get(sec, [])
 			if all(
 				str(doc.get(c.field_name) or "").strip() == str(c.field_value or "").strip()
 				for c in criteria
@@ -109,16 +110,16 @@ def _get_config_for_doc(doc):
 				score = len(criteria)
 				if score > best_score:
 					best_score = score
-					best_group = g
+					best_section = sec
 
-		if best_group is None:
+		if best_section is None:
 			continue
 
-		# Pin setting + group on the doc so future calls skip this scan
+		# Pin setting + section on the doc so future calls skip this scan
 		doc.set(APPROVAL_SETTING_FIELD, sname)
-		doc.set(APPROVAL_GROUP_FIELD, best_group)
+		doc.set(APPROVAL_SECTION_FIELD, best_section)
 
-		fixed = approvers_by_group.get(best_group, [])
+		fixed = approvers_by_section.get(best_section, [])
 		return {
 			"name": sname,
 			"approver_table_fieldname": setting.approver_table_fieldname,
@@ -129,8 +130,8 @@ def _get_config_for_doc(doc):
 	return None
 
 
-def _fetch_config_by_name_and_group(setting_name, group):
-	"""Fast path: fetch a specific setting + its approvers for a known group."""
+def _fetch_config_by_section(setting_name, section):
+	"""Fast path: fetch a specific setting + its approvers for a known section."""
 	rows = frappe.get_all(
 		"Dynamic Approval Setting",
 		filters={"name": setting_name, "is_active": 1},
@@ -143,8 +144,8 @@ def _fetch_config_by_name_and_group(setting_name, group):
 
 	fixed = frappe.get_all(
 		"Dynamic Approval Fixed Approver",
-		filters={"parent": setting_name, "parenttype": "Dynamic Approval Setting", "group": group},
-		fields=["group", "approver", "approver_name"],
+		filters={"parent": setting_name, "parenttype": "Dynamic Approval Setting", "section": section},
+		fields=["section", "approver", "approver_name"],
 		order_by="idx",
 	)
 	return {
@@ -537,14 +538,14 @@ def _ensure_custom_fields(doctype, level_field, table_field):
 			"insert_after": "amended_from",
 		}).insert(ignore_permissions=True)
 
-	# 0b. Hidden Int — pinned approval group number
-	if not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": APPROVAL_GROUP_FIELD}):
+	# 0b. Hidden Data — pinned approval section name
+	if not frappe.db.exists("Custom Field", {"dt": doctype, "fieldname": APPROVAL_SECTION_FIELD}):
 		frappe.get_doc({
 			"doctype": "Custom Field",
 			"dt": doctype,
-			"fieldname": APPROVAL_GROUP_FIELD,
-			"fieldtype": "Int",
-			"label": "Approval Group",
+			"fieldname": APPROVAL_SECTION_FIELD,
+			"fieldtype": "Data",
+			"label": "Approval Section",
 			"hidden": 1,
 			"no_copy": 1,
 			"print_hide": 1,

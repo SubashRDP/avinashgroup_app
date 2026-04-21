@@ -17,8 +17,7 @@ function set_criteria_field_options(frm) {
 frappe.ui.form.on("Dynamic Approval Setting", {
 	refresh(frm) {
 		set_criteria_field_options(frm);
-		render_department_ui(frm);
-
+		render_sections_ui(frm);
 
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Setup Workflow"), () => {
@@ -68,7 +67,6 @@ function update_field_value_options(frm, cdt, cdn) {
 		let meta = frappe.get_meta(frm.doc.document_type);
 		let field_meta = (meta.fields || []).find(f => f.fieldname === row.field_name);
 
-		// Standard fields not in meta.fields
 		let standard_link_map = {
 			owner: "User", modified_by: "User",
 			company: "Company", department: "Department",
@@ -106,207 +104,269 @@ function update_field_value_options(frm, cdt, cdn) {
 }
 
 function _set_field_value_options(frm, cdt, cdn, options) {
-	// Update the specific row's field_value docfield
 	let df = frappe.meta.get_docfield(cdt, "field_value", cdn);
 	if (df) df.options = options;
-	// Also update grid column so inline editing shows the dropdown
 	if (frm.fields_dict.match_criteria && frm.fields_dict.match_criteria.grid) {
 		frm.fields_dict.match_criteria.grid.update_docfield_property("field_value", "options", options);
 	}
 	frm.refresh_field("match_criteria");
 }
 
-/* ───────────────────────────────────────────────
-   Render the Department-wise UI into the
-   dedicated "dept_config_html" HTML field.
-   ─────────────────────────────────────────────── */
-function render_department_ui(frm) {
-    // Use the dedicated HTML field — Frappe guarantees this exists
-    let html_field = frm.fields_dict.dept_config_html;
-    if (!html_field || !html_field.$wrapper) return;
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Virtual Section UI
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    let approvers = frm.doc.approvers || [];
+function render_sections_ui(frm) {
+	let wrapper = frm.fields_dict.dept_config_html;
+	if (!wrapper || !wrapper.$wrapper) return;
 
-    // Group rows by department
-    let depts = {};
-    approvers.forEach(row => {
-        let d = row.department || "__global__";
-        if (!depts[d]) depts[d] = [];
-        depts[d].push(row);
-    });
+	// Collect all sections from both child tables
+	let criteria_rows = frm.doc.match_criteria || [];
+	let approver_rows = frm.doc.approvers || [];
 
-    let dept_keys = Object.keys(depts);
+	// Build section name list (preserve order of first appearance)
+	let section_names = [];
+	[...criteria_rows, ...approver_rows].forEach(r => {
+		let s = r.section || "Default";
+		if (!section_names.includes(s)) section_names.push(s);
+	});
+	if (!section_names.length) section_names = [];
 
-    // Build the HTML
-    let cards = "";
-    dept_keys.forEach(d => {
-        let display_name = d === "__global__" ? "Global (All Departments)" : d;
-        let badges = depts[d].map(r =>
-            `<span style="display:inline-block;background:#f4f5f6;border:1px solid #d1d8dd;border-radius:4px;padding:2px 8px;margin:2px 2px;font-size:12px;">${frappe.utils.escape_html(r.approver_name || r.approver)}</span>`
-        ).join(' <span style="color:#aaa;font-size:10px;">➔</span> ');
+	// Build cards HTML
+	let cards_html = section_names.map(sec => {
+		let crit = criteria_rows.filter(r => (r.section || "Default") === sec);
+		let appr = approver_rows.filter(r => (r.section || "Default") === sec);
 
-        cards += `
-        <div style="border:1px solid #d1d8dd;border-radius:6px;padding:12px 16px;margin-bottom:8px;background:#fff;display:flex;justify-content:space-between;align-items:center;">
-            <div>
-                <div style="font-weight:600;font-size:14px;margin-bottom:4px;">${frappe.utils.escape_html(display_name)}</div>
-                <div style="font-size:12px;color:#6c757d;">
-                    ${badges || '<span style="color:#999;">No approvers configured</span>'}
-                </div>
-            </div>
-            <div style="display:flex;gap:6px;">
-                <button class="btn btn-xs btn-default btn-dept-edit" data-dept="${frappe.utils.escape_html(d)}">
-                    <svg class="icon icon-sm"><use href="#icon-edit"></use></svg> Edit
-                </button>
-                <button class="btn btn-xs btn-danger btn-dept-delete" data-dept="${frappe.utils.escape_html(d)}">
-                    <svg class="icon icon-sm"><use href="#icon-delete"></use></svg>
-                </button>
-            </div>
-        </div>`;
-    });
+		let crit_html = crit.length
+			? crit.map(r => `
+				<span style="display:inline-flex;align-items:center;background:#f0f4f8;border:1px solid #d1d8dd;border-radius:4px;padding:2px 8px;margin:2px;font-size:12px;">
+					<b>${frappe.utils.escape_html(r.field_name || "")}</b>&nbsp;=&nbsp;${frappe.utils.escape_html(r.field_value || "")}
+				</span>`).join("")
+			: `<span style="color:#999;font-size:12px;font-style:italic;">No criteria — catch-all</span>`;
 
-    if (!dept_keys.length) {
-        cards = '<div style="color:#999;padding:12px;text-align:center;">No department sequences configured yet.</div>';
-    }
+		let appr_html = appr.length
+			? appr.map((r, i) => `
+				<span style="display:inline-flex;align-items:center;background:#fff;border:1px solid #d1d8dd;border-radius:4px;padding:2px 8px;margin:2px;font-size:12px;">
+					${i > 0 ? '<span style="color:#aaa;margin-right:4px;">→</span>' : ""}${frappe.utils.escape_html(r.approver_name || r.approver || "")}
+				</span>`).join("")
+			: `<span style="color:#999;font-size:12px;font-style:italic;">No approvers</span>`;
 
-    let full_html = `
-    <div style="margin-bottom:10px;">
-        <p class="text-muted" style="font-size:12px;margin-bottom:10px;">
-            Define fixed approvers per department. Leave Department blank for a global (fallback) sequence.
-        </p>
-        ${cards}
-        <button class="btn btn-xs btn-primary btn-add-dept-seq" style="margin-top:6px;">
-            + Add Department Sequence
-        </button>
-    </div>`;
+		return `
+		<div style="border:1px solid #d1d8dd;border-radius:8px;margin-bottom:10px;overflow:hidden;">
+			<div style="background:#f4f5f6;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d1d8dd;">
+				<span style="font-weight:600;font-size:13px;">${frappe.utils.escape_html(sec)}</span>
+				<div style="display:flex;gap:6px;">
+					<button class="btn btn-xs btn-default btn-section-edit" data-section="${frappe.utils.escape_html(sec)}">
+						<svg class="icon icon-sm"><use href="#icon-edit"></use></svg> Edit
+					</button>
+					<button class="btn btn-xs btn-danger btn-section-delete" data-section="${frappe.utils.escape_html(sec)}">
+						<svg class="icon icon-sm"><use href="#icon-delete"></use></svg>
+					</button>
+				</div>
+			</div>
+			<div style="padding:10px 14px;">
+				<div style="margin-bottom:6px;">
+					<span style="font-size:11px;text-transform:uppercase;color:#6c757d;letter-spacing:0.5px;">Match Criteria</span>
+					<div style="margin-top:4px;">${crit_html}</div>
+				</div>
+				<div>
+					<span style="font-size:11px;text-transform:uppercase;color:#6c757d;letter-spacing:0.5px;">Approvers (in order)</span>
+					<div style="margin-top:4px;">${appr_html}</div>
+				</div>
+			</div>
+		</div>`;
+	}).join("");
 
-    html_field.$wrapper.html(full_html);
+	if (!section_names.length) {
+		cards_html = `<div style="color:#999;padding:16px;text-align:center;border:1px dashed #d1d8dd;border-radius:8px;">No sections configured yet. Click <b>+ Add Section</b> to create your first approval rule.</div>`;
+	}
 
-    // Bind events
-    html_field.$wrapper.find(".btn-add-dept-seq").on("click", function(e) {
-        e.preventDefault();
-        open_dept_dialog(frm, null, true);
-    });
+	wrapper.$wrapper.html(`
+		<div style="margin-bottom:10px;">
+			${cards_html}
+			<button class="btn btn-xs btn-primary btn-section-add" style="margin-top:6px;">
+				+ Add Section
+			</button>
+		</div>
+	`);
 
-    html_field.$wrapper.find(".btn-dept-edit").on("click", function(e) {
-        e.preventDefault();
-        let dept = $(this).attr("data-dept");
-        if (dept === "__global__") dept = "";
-        open_dept_dialog(frm, dept, false);
-    });
-
-    html_field.$wrapper.find(".btn-dept-delete").on("click", function(e) {
-        e.preventDefault();
-        let dept = $(this).attr("data-dept");
-        let dept_label = dept === "__global__" ? "Global" : dept;
-        frappe.confirm(
-            __("Remove all approvers for <b>{0}</b>?", [dept_label]),
-            () => {
-                let real_dept = dept === "__global__" ? "" : dept;
-                let remaining = (frm.doc.approvers || []).filter(r => (r.department || "") !== real_dept);
-                frm.clear_table("approvers");
-                remaining.forEach(data => {
-                    let child = frm.add_child("approvers");
-                    child.department = data.department;
-                    child.approver = data.approver;
-                    child.approver_name = data.approver_name;
-                });
-                frm.refresh_field("approvers");
-                frm.dirty();
-                render_department_ui(frm);
-            }
-        );
-    });
+	wrapper.$wrapper.find(".btn-section-add").on("click", e => {
+		e.preventDefault();
+		open_section_dialog(frm, null);
+	});
+	wrapper.$wrapper.find(".btn-section-edit").on("click", function (e) {
+		e.preventDefault();
+		open_section_dialog(frm, $(this).attr("data-section"));
+	});
+	wrapper.$wrapper.find(".btn-section-delete").on("click", function (e) {
+		e.preventDefault();
+		let sec = $(this).attr("data-section");
+		frappe.confirm(__("Delete section <b>{0}</b> and all its criteria + approvers?", [sec]), () => {
+			frm.doc.match_criteria = (frm.doc.match_criteria || []).filter(r => (r.section || "Default") !== sec);
+			frm.doc.approvers = (frm.doc.approvers || []).filter(r => (r.section || "Default") !== sec);
+			frm.refresh_field("match_criteria");
+			frm.refresh_field("approvers");
+			frm.dirty();
+			render_sections_ui(frm);
+		});
+	});
 }
 
-/* ───────────────────────────────────────────────
-   Dialog for adding / editing a department's
-   approver sequence.
-   ─────────────────────────────────────────────── */
-function open_dept_dialog(frm, target_dept, is_new) {
-    let d = new frappe.ui.Dialog({
-        title: is_new ? "Add Department Sequence" : "Edit Approver Sequence",
-        size: "large",
-        fields: [
-            {
-                fieldname: "department",
-                label: "Department",
-                fieldtype: "Link",
-                options: "Department",
-                description: "Leave blank for a global (fallback) sequence that applies to all departments.",
-                default: is_new ? "" : target_dept
-            },
-            { fieldtype: "Section Break" },
-            {
-                fieldname: "approvers_section",
-                fieldtype: "Table",
-                label: "Approvers (in order)",
-                cannot_add_rows: false,
-                in_place_edit: true,
-                data: [],
-                fields: [
-                    {
-                        fieldname: "approver",
-                        label: "Approver",
-                        fieldtype: "Link",
-                        options: "User",
-                        in_list_view: 1,
-                        reqd: 1,
-                        columns: 5
-                    },
-                    {
-                        fieldname: "approver_name",
-                        label: "Full Name",
-                        fieldtype: "Data",
-                        in_list_view: 1,
-                        read_only: 1,
-                        columns: 5
-                    }
-                ]
-            }
-        ],
-        primary_action_label: is_new ? "Add Sequence" : "Update Sequence",
-        primary_action(values) {
-            let dept = values.department || "";
-            let new_approvers = (values.approvers_section || []).filter(r => r.approver);
+function open_section_dialog(frm, existing_section) {
+	let is_new = !existing_section;
 
-            if (!new_approvers.length) {
-                frappe.msgprint(__("Please add at least one approver."));
-                return;
-            }
+	// Pre-load existing data
+	let existing_criteria = is_new ? [] :
+		(frm.doc.match_criteria || []).filter(r => (r.section || "Default") === existing_section);
+	let existing_approvers = is_new ? [] :
+		(frm.doc.approvers || []).filter(r => (r.section || "Default") === existing_section);
 
-            // Keep rows from OTHER departments
-            let keep = (frm.doc.approvers || [])
-                .filter(r => (r.department || "") !== (target_dept || ""))
-                .map(r => ({ department: r.department, approver: r.approver, approver_name: r.approver_name }));
+	let d = new frappe.ui.Dialog({
+		title: is_new ? __("Add Section") : __("Edit Section: {0}", [existing_section]),
+		size: "extra-large",
+		fields: [
+			{
+				fieldname: "section_name",
+				fieldtype: "Data",
+				label: __("Section Name"),
+				reqd: 1,
+				default: is_new ? "" : existing_section,
+				description: __("A unique name for this approval rule (e.g. 'HR Accounts', 'Finance', 'Default')")
+			},
+			{ fieldtype: "Section Break", label: __("Match Criteria") },
+			{
+				fieldname: "criteria_help",
+				fieldtype: "HTML",
+				options: `<p class="text-muted" style="font-size:12px;margin:0 0 6px;">
+					Define which documents this rule applies to. All rows must match (AND logic).
+					Leave empty to make this a catch-all rule.
+				</p>`
+			},
+			{
+				fieldname: "criteria_table",
+				fieldtype: "Table",
+				label: __("Criteria"),
+				cannot_add_rows: false,
+				in_place_edit: true,
+				data: existing_criteria.map(r => ({ field_name: r.field_name, field_value: r.field_value })),
+				fields: [
+					{
+						fieldname: "field_name",
+						label: __("Field Name"),
+						fieldtype: "Autocomplete",
+						in_list_view: 1,
+						reqd: 1,
+						columns: 5,
+						options: _get_doctype_field_options(frm),
+					},
+					{
+						fieldname: "field_value",
+						label: __("Field Value"),
+						fieldtype: "Data",
+						in_list_view: 1,
+						reqd: 1,
+						columns: 5,
+					}
+				]
+			},
+			{ fieldtype: "Section Break", label: __("Approvers") },
+			{
+				fieldname: "approvers_help",
+				fieldtype: "HTML",
+				options: `<p class="text-muted" style="font-size:12px;margin:0 0 6px;">
+					Fixed approvers automatically appended at the end of the approval chain for this rule, in order.
+				</p>`
+			},
+			{
+				fieldname: "approvers_table",
+				fieldtype: "Table",
+				label: __("Approvers (in order)"),
+				cannot_add_rows: false,
+				in_place_edit: true,
+				data: existing_approvers.map(r => ({ approver: r.approver, approver_name: r.approver_name })),
+				fields: [
+					{
+						fieldname: "approver",
+						label: __("Approver"),
+						fieldtype: "Link",
+						options: "User",
+						in_list_view: 1,
+						reqd: 1,
+						columns: 5,
+					},
+					{
+						fieldname: "approver_name",
+						label: __("Full Name"),
+						fieldtype: "Data",
+						in_list_view: 1,
+						read_only: 1,
+						columns: 5,
+						fetch_from: "approver.full_name",
+					}
+				]
+			},
+		],
+		primary_action_label: is_new ? __("Add Section") : __("Update Section"),
+		primary_action(values) {
+			let sec_name = (values.section_name || "").trim();
+			if (!sec_name) {
+				frappe.msgprint(__("Please enter a section name."));
+				return;
+			}
 
-            // Merge
-            frm.clear_table("approvers");
-            [...keep, ...new_approvers.map(r => ({ department: dept, approver: r.approver, approver_name: r.approver_name }))].forEach(data => {
-                let child = frm.add_child("approvers");
-                child.department = data.department;
-                child.approver = data.approver;
-                child.approver_name = data.approver_name;
-            });
+			// Prevent duplicate section names when adding new
+			if (is_new) {
+				let existing_names = [...new Set([
+					...(frm.doc.match_criteria || []).map(r => r.section || "Default"),
+					...(frm.doc.approvers || []).map(r => r.section || "Default"),
+				])];
+				if (existing_names.includes(sec_name)) {
+					frappe.msgprint(__("A section named <b>{0}</b> already exists.", [sec_name]));
+					return;
+				}
+			}
 
-            frm.refresh_field("approvers");
-            frm.dirty();
-            d.hide();
-            render_department_ui(frm);
-        }
-    });
+			// Remove old rows for this section
+			frm.doc.match_criteria = (frm.doc.match_criteria || []).filter(
+				r => (r.section || "Default") !== (existing_section || sec_name)
+			);
+			frm.doc.approvers = (frm.doc.approvers || []).filter(
+				r => (r.section || "Default") !== (existing_section || sec_name)
+			);
 
-    d.show();
+			// Add new criteria rows
+			(values.criteria_table || []).filter(r => r.field_name && r.field_value).forEach(r => {
+				let child = frappe.model.add_child(frm.doc, "Dynamic Approval Match Criteria", "match_criteria");
+				child.section = sec_name;
+				child.field_name = r.field_name;
+				child.field_value = r.field_value;
+			});
 
-    // If editing, populate existing rows after the dialog grid is ready
-    if (!is_new) {
-        let existing = (frm.doc.approvers || []).filter(r => (r.department || "") === (target_dept || ""));
-        if (existing.length && d.fields_dict.approvers_section) {
-            let grid = d.fields_dict.approvers_section;
-            existing.forEach(r => {
-                let row_data = { approver: r.approver, approver_name: r.approver_name };
-                grid.df.data.push(row_data);
-            });
-            grid.grid.refresh();
-        }
-    }
+			// Add new approver rows
+			(values.approvers_table || []).filter(r => r.approver).forEach(r => {
+				let child = frappe.model.add_child(frm.doc, "Dynamic Approval Fixed Approver", "approvers");
+				child.section = sec_name;
+				child.approver = r.approver;
+				child.approver_name = r.approver_name || "";
+			});
+
+			frm.refresh_field("match_criteria");
+			frm.refresh_field("approvers");
+			frm.dirty();
+			d.hide();
+			render_sections_ui(frm);
+		},
+	});
+
+	d.show();
+}
+
+function _get_doctype_field_options(frm) {
+	if (!frm.doc.document_type) return "";
+	let meta = frappe.get_meta(frm.doc.document_type);
+	if (!meta) return "";
+	let skip = ["Section Break", "Column Break", "Tab Break", "HTML", "Button", "Fold", "Heading"];
+	let fields = (meta.fields || []).filter(f => !skip.includes(f.fieldtype)).map(f => f.fieldname);
+	let standard = ["name", "owner", "company", "department", "modified_by"];
+	return [...new Set([...standard, ...fields])].join("\n");
 }

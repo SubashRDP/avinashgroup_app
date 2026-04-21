@@ -5,17 +5,16 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "group",
+  "section",
   "approver",
   "approver_name"
  ],
  "fields": [
   {
-   "default": "0",
-   "fieldname": "group",
-   "fieldtype": "Int",
+   "fieldname": "section",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Group",
+   "label": "Section",
    "reqd": 1
   },
   {

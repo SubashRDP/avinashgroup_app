@@ -14,7 +14,8 @@
   "column_break_config",
   "current_level_fieldname",
   "approver_fieldname",
-  "match_criteria_section",
+  "approval_rules_section",
+  "dept_config_html",
   "match_criteria",
   "fixed_approvers_section",
   "approvers",
@@ -88,26 +89,32 @@
    "label": "Approver Field Name"
   },
   {
-   "fieldname": "match_criteria_section",
+   "fieldname": "approval_rules_section",
    "fieldtype": "Section Break",
-   "label": "Match Criteria"
+   "label": "Approval Rules"
   },
   {
-   "description": "Define which documents this setting applies to. Each row is a field=value condition. Rows with the same Group number are ANDed together. The group with the most matching rows wins. Group 0 (or no criteria) = catch-all fallback.",
+   "fieldname": "dept_config_html",
+   "fieldtype": "HTML",
+   "label": "Approval Rules"
+  },
+  {
    "fieldname": "match_criteria",
    "fieldtype": "Table",
+   "hidden": 1,
    "label": "Match Criteria",
    "options": "Dynamic Approval Match Criteria"
   },
   {
    "fieldname": "fixed_approvers_section",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Fixed Approvers"
   },
   {
-   "description": "These approvers are automatically appended at the END of the approval chain. Set Group to match the criteria group they apply to. Group 0 = used for the catch-all group.",
    "fieldname": "approvers",
    "fieldtype": "Table",
+   "hidden": 1,
    "label": "Approvers",
    "options": "Dynamic Approval Fixed Approver"
   },
