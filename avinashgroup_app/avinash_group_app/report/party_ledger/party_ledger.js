@@ -18,32 +18,30 @@ frappe.query_reports["Party Ledger"] = {
 			options: "\nCustomer\nSupplier",
 			default: "Customer",
 			on_change: function () {
-				frappe.query_report.set_filter_value("party", "");
-				let party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
-				frappe.query_report.get_filter("party").df.options = party_type;
-				frappe.query_report.get_filter("party").refresh();
+				frappe.query_report.set_filter_value("party", []);
 			},
 		},
 		{
 			fieldname: "party",
 			label: __("Party"),
-			fieldtype: "Link",
-			options: "Customer",
-			get_query: function () {
+			fieldtype: "MultiSelectList",
+			options: "party_type",
+			get_data: function (txt) {
+				if (!frappe.query_report.filters) return;
 				let party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
-				return { doctype: party_type };
+				return frappe.db.get_link_options(party_type, txt);
 			},
 		},
 		{
 			fieldname: "account",
 			label: __("Account"),
-			fieldtype: "Link",
+			fieldtype: "MultiSelectList",
 			options: "Account",
-			get_query: function () {
+			get_data: function (txt) {
 				const company = frappe.query_report.get_filter_value("company");
-				return company
-					? { filters: { company: company, is_group: 0 } }
-					: { filters: { is_group: 0 } };
+				const filters = { is_group: 0 };
+				if (company) filters.company = company;
+				return frappe.db.get_link_options("Account", txt, filters);
 			},
 		},
 		{
@@ -59,6 +57,11 @@ frappe.query_reports["Party Ledger"] = {
 			fieldtype: "Date",
 			default: frappe.datetime.now_date(),
 			reqd: 1,
+		},
+		{
+			fieldname: "voucher_no",
+			label: __("Voucher No"),
+			fieldtype: "Data",
 		},
 		{
 			fieldname: "show_remarks",
@@ -82,7 +85,7 @@ frappe.query_reports["Party Ledger"] = {
 			fieldname: "fit_columns",
 			label: __("Fit Columns"),
 			fieldtype: "Check",
-			default: 1,
+			default: 0,
 			on_change: function () {
 				frappe.query_report.refresh();
 			},
@@ -90,7 +93,7 @@ frappe.query_reports["Party Ledger"] = {
 	],
 
 	get_datatable_options(options) {
-		return Object.assign(options, { layout: "fixed" });
+		return Object.assign(options, { layout: "fluid", serialNoColumn: false, freezeColumnsTo: 4 });
 	},
 
 	after_datatable_render: function (dt) {
@@ -148,7 +151,7 @@ frappe.query_reports["Party Ledger"] = {
 		if (!columns.length) return;
 
 		columns.forEach((col) => {
-			let maxWidth = 120;
+			let maxWidth = Math.max(col.width || 60, 60);
 
 			const headerCell = datatableWrapper.querySelector(
 				`.dt-cell__content--header-${col.colIndex}`
@@ -165,7 +168,12 @@ frappe.query_reports["Party Ledger"] = {
 				maxWidth = Math.max(maxWidth, dataCells[i].scrollWidth + 20);
 			}
 
-			const finalWidth = Math.min(maxWidth, 400);
+			let finalWidth = Math.min(maxWidth, 400);
+			if (col.id === "sr_no")       finalWidth = Math.min(finalWidth, 52);
+			if (col.id === "date")        finalWidth = Math.min(finalWidth, 110);
+			if (col.id === "miti")        finalWidth = Math.min(finalWidth, 110);
+			if (col.id === "description") finalWidth = Math.max(finalWidth, 420);
+			if (col.id === "remarks")     finalWidth = Math.min(finalWidth, 150);
 			dt.datamanager.updateColumn(col.colIndex, { width: finalWidth });
 			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
 			dt.columnmanager.setColumnWidth(col.colIndex);
@@ -184,17 +192,45 @@ frappe.query_reports["Party Ledger"] = {
 			.dt-row:not(.dt-row--header):hover .dt-cell__content {
 				background-color: #f8f9fa !important;
 			}
+			.dt-row--detail .dt-cell__content {
+				background-color: #f4f6f8 !important;
+				border-left: 3px solid #b0bec5 !important;
+				color: #546e7a !important;
+				font-size: 0.92em !important;
+			}
+			.dt-row--separator .dt-cell__content {
+				background-color: #ffffff !important;
+				height: 6px !important;
+				padding: 0 !important;
+				border-bottom: 2px solid #d5dde5 !important;
+			}
 		`);
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
 		if (!data) return default_formatter(value, row, column, data);
 
-		const isSummary = data.is_summary;
-		const bg  = isSummary ? "background-color:#ecf0f1;" : "";
-		const fw  = isSummary ? "font-weight:700;"          : "";
+		// ── Separator row: render empty thin divider ──────────────────────────
+		if (data.is_separator) {
+			return `<span style="display:block;height:6px;background:#fff;"></span>`;
+		}
 
-		// ── Voucher No: render as a clickable link ────────────────────────────
+		const isSummary = data.is_summary;
+		const isDetail  = data.is_detail;
+
+		const bg  = isSummary ? "background-color:#ecf0f1;"
+		          : isDetail  ? "background-color:#f4f6f8;"
+		          :             "";
+		const fw  = isSummary ? "font-weight:700;" : "";
+		const clr = isDetail  ? "color:#546e7a;"   : "";
+		const bl  = isDetail  ? "padding-left:8px;" : "";
+
+		// ── Detail columns: blank on non-detail rows ─────────────────────────
+		if (["detail_qty","detail_rate","detail_amount"].includes(column.fieldname) && !isDetail) {
+			return "";
+		}
+
+		// ── Voucher No: render as a clickable link (main rows only) ──────────
 		if (column.fieldname === "voucher_no" && data.voucher_type && value) {
 			const route = frappe.router.slug(data.voucher_type);
 			value = `<a href="/app/${route}/${value}" target="_blank">${value}</a>`;
@@ -216,25 +252,25 @@ frappe.query_reports["Party Ledger"] = {
 		// ── Debit column ──────────────────────────────────────────────────────
 		if (column.fieldname === "debit") {
 			if (data.debit === null || data.debit === undefined || data.debit === 0) {
-				return `<span style="${bg}${fw}display:block;padding:4px 0;color:#999;">—</span>`;
+				return `<span style="${bg}${fw}${bl}display:block;padding:4px 0;color:#999;">—</span>`;
 			}
 			value = default_formatter(value, row, column, data);
-			return `<span style="${bg}${fw}color:#e74c3c;display:block;padding:4px 0;">${value}</span>`;
+			return `<span style="${bg}${fw}${bl}color:#e74c3c;display:block;padding:4px 0;">${value}</span>`;
 		}
 
 		// ── Credit column ─────────────────────────────────────────────────────
 		if (column.fieldname === "credit") {
 			if (data.credit === null || data.credit === undefined || data.credit === 0) {
-				return `<span style="${bg}${fw}display:block;padding:4px 0;color:#999;">—</span>`;
+				return `<span style="${bg}${fw}${bl}display:block;padding:4px 0;color:#999;">—</span>`;
 			}
 			value = default_formatter(value, row, column, data);
-			return `<span style="${bg}${fw}color:#27ae60;display:block;padding:4px 0;">${value}</span>`;
+			return `<span style="${bg}${fw}${bl}color:#27ae60;display:block;padding:4px 0;">${value}</span>`;
 		}
 
 		// ── All other columns ─────────────────────────────────────────────────
 		value = default_formatter(value, row, column, data);
-		if (bg || fw) {
-			value = `<span style="${bg}${fw}display:block;padding:4px 0;">${value}</span>`;
+		if (bg || fw || clr || bl) {
+			value = `<span style="${bg}${fw}${clr}${bl}display:block;padding:4px 0;">${value}</span>`;
 		}
 		return value;
 	},

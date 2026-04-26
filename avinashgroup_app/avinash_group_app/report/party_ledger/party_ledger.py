@@ -5,6 +5,32 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 from datetime import date, datetime
+import json
+
+
+def _normalize_multiselect(value):
+	"""Return a cleaned list for MultiSelectList / Link-like inputs."""
+	if not value:
+		return []
+
+	if isinstance(value, str):
+		value = value.strip()
+		if not value:
+			return []
+		# Route/options sometimes come as a JSON string.
+		if value.startswith("[") and value.endswith("]"):
+			try:
+				parsed = json.loads(value)
+				if isinstance(parsed, list):
+					return [v for v in parsed if v]
+			except Exception:
+				pass
+		return [value]
+
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+
+	return [value]
 
 
 def execute(filters=None):
@@ -19,28 +45,48 @@ def execute(filters=None):
 
 
 def get_columns(filters=None):
+	filters = filters or {}
+	party_type = filters.get("party_type") or "Customer"
+	parties = _normalize_multiselect(filters.get("party"))
+	show_party_column = len(parties) != 1
+
 	columns = [
-		{"label": _("Date"),        "fieldname": "date",         "fieldtype": "Date",     "width": 100},
-		{"label": _("Miti (BS)"),   "fieldname": "miti",         "fieldtype": "Data",     "width": 110},
+		{"label": _("S.No"),           "fieldname": "sr_no",        "fieldtype": "Data",     "width": 40},
+		{"label": _("Date"),        "fieldname": "date",         "fieldtype": "Date",     "width": 80},
+		{"label": _("Miti (BS)"),   "fieldname": "miti",         "fieldtype": "Data",     "width": 85},
 		{"label": _("Voucher No"),  "fieldname": "voucher_no",   "fieldtype": "Data",     "width": 200},
-		{"label": _("Description"), "fieldname": "description",  "fieldtype": "Data",     "width": 280},
 	]
 
-	if filters and filters.get("show_remarks"):
-		columns.append(
-			{"label": _("Remarks"), "fieldname": "remarks", "fieldtype": "Data", "width": 250}
-		)
+	if show_party_column:
+		columns.append({
+			"label": _("Party"),
+			"fieldname": "party",
+			"fieldtype": "Link",
+			"options": party_type,
+			"width": 220,
+		})
 
-	if filters and filters.get("detailed_mapping"):
-		columns.append(
-			{"label": _("Against"), "fieldname": "against", "fieldtype": "Data", "width": 220}
-		)
+	columns.append({"label": _("Description"), "fieldname": "description", "fieldtype": "Data", "width": 320})
+
+	if filters.get("detailed_mapping"):
+		columns += [
+			{"label": "", "fieldname": "detail_qty",    "fieldtype": "Data",     "width": 100},
+			{"label": "", "fieldname": "detail_uom",    "fieldtype": "Data",     "width": 70},
+			{"label": "", "fieldname": "detail_rate",   "fieldtype": "Currency", "width": 120},
+			{"label": "", "fieldname": "detail_amount", "fieldtype": "Currency", "width": 120},
+		]
 
 	columns += [
 		{"label": _("Debit"),   "fieldname": "debit",   "fieldtype": "Currency", "width": 140},
 		{"label": _("Credit"),  "fieldname": "credit",  "fieldtype": "Currency", "width": 140},
 		{"label": _("Balance"), "fieldname": "balance", "fieldtype": "Currency", "width": 160},
 	]
+
+	if filters.get("show_remarks"):
+		columns.append(
+			{"label": _("Remarks"), "fieldname": "remarks", "fieldtype": "Data", "width": 250}
+		)
+
 	return columns
 
 
@@ -49,8 +95,9 @@ def get_data(filters):
 	from_date  = filters.get("from_date")
 	to_date    = filters.get("to_date")
 	party_type = filters.get("party_type") or "Customer"
-	party      = filters.get("party")
-	account    = filters.get("account")
+	parties    = _normalize_multiselect(filters.get("party"))
+	accounts   = _normalize_multiselect(filters.get("account"))
+	voucher_no_filter = (filters.get("voucher_no") or "").strip()
 	detailed_mapping = bool(filters.get("detailed_mapping"))
 	show_remarks = bool(filters.get("show_remarks"))
 
@@ -63,13 +110,25 @@ def get_data(filters):
 		"party_type": party_type,
 	}
 
-	if party:
-		conditions += " AND gle.party = %(party)s"
-		params["party"] = party
+	if parties:
+		if len(parties) == 1:
+			conditions += " AND gle.party = %(party)s"
+			params["party"] = parties[0]
+		else:
+			conditions += " AND gle.party in %(party)s"
+			params["party"] = tuple(parties)
 
-	if account:
-		conditions += " AND gle.account = %(account)s"
-		params["account"] = account
+	if accounts:
+		if len(accounts) == 1:
+			conditions += " AND gle.account = %(account)s"
+			params["account"] = accounts[0]
+		else:
+			conditions += " AND gle.account in %(account)s"
+			params["account"] = tuple(accounts)
+
+	if voucher_no_filter:
+		conditions += " AND gle.voucher_no LIKE %(voucher_no_filter)s"
+		params["voucher_no_filter"] = f"%{voucher_no_filter}%"
 
 	# ── Opening balance ────────────────────────────────────────────────────────
 	opening_row = frappe.db.sql(f"""
@@ -89,6 +148,7 @@ def get_data(filters):
 	# ── Period entries ─────────────────────────────────────────────────────────
 	entries = frappe.db.sql(f"""
 		SELECT
+			gle.party         AS party,
 			gle.posting_date  AS date,
 			gle.voucher_type,
 			gle.voucher_no,
@@ -117,6 +177,9 @@ def get_data(filters):
 	else:
 		entries = _merge_entries(entries)
 
+	# Batch-fetch all detail data upfront when detailed_mapping is on (avoids N+1 queries)
+	detail_data = _fetch_all_details(entries) if detailed_mapping else {}
+
 	data = []
 
 	# Opening Balance row
@@ -135,6 +198,7 @@ def get_data(filters):
 	running_balance = opening_balance
 	period_debit    = 0.0
 	period_credit   = 0.0
+	sr_no           = 0
 
 	for entry in entries:
 		debit  = flt(entry.get("debit"))
@@ -143,11 +207,14 @@ def get_data(filters):
 		period_debit   += debit
 		period_credit  += credit
 
+		sr_no += 1
 		data.append({
+			"sr_no":        sr_no,
 			"date":         entry.get("date"),
 			"miti":         "",
 			"voucher_no":   entry.get("voucher_no"),
 			"voucher_type": entry.get("voucher_type"),
+			"party":        entry.get("party") or "",
 			"description":  entry.get("description") or "",
 			"remarks":      "",
 			"against":      entry.get("against") or "",
@@ -159,11 +226,235 @@ def get_data(filters):
 			"is_summary":   0,
 		})
 
+		# Inject indented sub-rows + separator for detailed_mapping mode
+		if detailed_mapping:
+			sub_rows = _build_detail_rows(
+				entry.get("voucher_type"),
+				entry.get("voucher_no"),
+				debit, credit,
+				detail_data,
+			)
+			if sub_rows:
+				sub_rows[0]["is_first_detail"] = 1
+				sub_rows[-1]["is_last_detail"]  = 1
+			data.extend(sub_rows)
+			data.append({"is_separator": 1, "balance": None})
+
+	# ── For the Periods row ────────────────────────────────────────────────────
+	period_net = round(period_debit - period_credit, 2)
+	data.append({
+		"date":        "",
+		"miti":        "",
+		"voucher_no":  "",
+		"description": "For the Periods",
+		"debit":       round(period_debit,  2) if period_debit  else None,
+		"credit":      round(period_credit, 2) if period_credit else None,
+		"balance":     period_net or None,
+		"bold":        1,
+		"is_summary":  1,
+	})
+
+	# ── Closing Balance row ────────────────────────────────────────────────────
+	cumulative_debit  = round(opening_debit  + period_debit,  2)
+	cumulative_credit = round(opening_credit + period_credit, 2)
+	closing_label = "Closing Balance"
+	data.append({
+		"date":        "",
+		"miti":        "",
+		"voucher_no":  "NPR",
+		"description": closing_label,
+		"debit":       cumulative_debit  if cumulative_debit  else None,
+		"credit":      cumulative_credit if cumulative_credit else None,
+		"balance":     running_balance   if running_balance   else None,
+		"bold":        1,
+		"is_summary":  1,
+	})
+
 	_apply_bs_miti(data)
+	_apply_custom_voucher_names(data)
 	if show_remarks:
 		_apply_voucher_remarks(data)
 	return data
 
+
+# ── Detail helpers ─────────────────────────────────────────────────────────────
+
+def _fetch_all_details(entries):
+	"""Batch-fetch all sub-row data for detailed_mapping mode in one pass per doctype."""
+	si_names = [e["voucher_no"] for e in entries if e.get("voucher_type") == "Sales Invoice"]
+	pe_names = [e["voucher_no"] for e in entries if e.get("voucher_type") == "Payment Entry"]
+	je_names = [e["voucher_no"] for e in entries if e.get("voucher_type") == "Journal Entry"]
+	pi_names = [e["voucher_no"] for e in entries if e.get("voucher_type") == "Purchase Invoice"]
+
+	# ── Sales Invoice items + total VAT ──────────────────────────────────────
+	si_items = {}
+	si_info  = {}
+	if si_names:
+		rows = frappe.db.get_all(
+			"Sales Invoice Item",
+			filters={"parent": ("in", si_names)},
+			fields=["parent", "item_code", "item_name", "qty", "uom", "rate", "amount"],
+			order_by="parent, idx",
+		)
+		for r in rows:
+			si_items.setdefault(r.parent, []).append(r)
+
+		si_fields = ["name"]
+		if frappe.db.has_column("Sales Invoice", "custom_total_vat_amount"):
+			si_fields.append("custom_total_vat_amount")
+		rows = frappe.db.get_all("Sales Invoice",
+			filters={"name": ("in", si_names)}, fields=si_fields)
+		si_info = {r.name: r for r in rows}
+
+	# ── Payment Entry references + unallocated amount ─────────────────────────
+	pe_refs = {}
+	pe_info = {}
+	if pe_names:
+		rows = frappe.db.get_all(
+			"Payment Entry Reference",
+			filters={"parent": ("in", pe_names)},
+			fields=["parent", "reference_doctype", "reference_name", "allocated_amount"],
+			order_by="parent, idx",
+		)
+		for r in rows:
+			pe_refs.setdefault(r.parent, []).append(r)
+
+		rows = frappe.db.get_all("Payment Entry",
+			filters={"name": ("in", pe_names)},
+			fields=["name", "unallocated_amount", "payment_type"])
+		pe_info = {r.name: r for r in rows}
+
+	# ── Journal Entry remarks ─────────────────────────────────────────────────
+	je_remarks = {}
+	if je_names:
+		rows = frappe.db.get_all("Journal Entry",
+			filters={"name": ("in", je_names)},
+			fields=["name", "user_remark"])
+		je_remarks = {r.name: r.user_remark for r in rows}
+
+	# ── Purchase Invoice items + VAT ──────────────────────────────────────────
+	pi_items = {}
+	pi_info  = {}
+	if pi_names:
+		rows = frappe.db.get_all(
+			"Purchase Invoice Item",
+			filters={"parent": ("in", pi_names)},
+			fields=["parent", "item_code", "item_name", "qty", "uom", "rate", "amount"],
+			order_by="parent, idx",
+		)
+		for r in rows:
+			pi_items.setdefault(r.parent, []).append(r)
+
+		pi_fields = ["name", "is_return"]
+		if frappe.db.has_column("Purchase Invoice", "custom_vat_amount"):
+			pi_fields.append("custom_vat_amount")
+		if frappe.db.has_column("Purchase Invoice", "custom_vat_apply_on"):
+			pi_fields.append("custom_vat_apply_on")
+		rows = frappe.db.get_all("Purchase Invoice",
+			filters={"name": ("in", pi_names)}, fields=pi_fields)
+		pi_info = {r.name: r for r in rows}
+
+	return {
+		"si_items": si_items,
+		"si_info":  si_info,
+		"pe_refs":  pe_refs,
+		"pe_info":  pe_info,
+		"je_remarks": je_remarks,
+		"pi_items": pi_items,
+		"pi_info":  pi_info,
+	}
+
+
+def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail_data):
+	"""Return indented sub-rows for one voucher in detailed_mapping mode."""
+	rows = []
+	is_debit_side = main_debit > 0
+
+	def _sub(code_col, desc, qty_str="", uom="", rate=None, amount=None):
+		return {
+			"date":          "",
+			"miti":          "",
+			"voucher_no":    code_col,
+			"description":   desc,
+			"remarks":       "",
+			"detail_qty":    qty_str,
+			"detail_uom":    uom,
+			"detail_rate":   round(flt(rate), 2) if rate is not None else None,
+			"detail_amount": round(flt(amount), 2) if amount is not None else None,
+			"debit":         None,
+			"credit":        None,
+			"balance":       None,
+			"indent":        1,
+			"is_detail":     1,
+			"bold":          0,
+			"is_summary":    0,
+		}
+
+	# ── Sales Invoice / Sales Return ──────────────────────────────────────────
+	if voucher_type == "Sales Invoice":
+		items   = detail_data["si_items"].get(voucher_no, [])
+		si_info = detail_data["si_info"].get(voucher_no, {})
+
+		for item in items:
+			qty_str = f"{flt(item.qty):.3f}"
+			rows.append(_sub(
+				item.item_code or "",
+				item.item_name or item.item_code or "",
+				qty_str, item.uom or "", flt(item.rate), flt(item.amount),
+			))
+
+		total_vat = flt(si_info.get("custom_total_vat_amount")) if si_info else 0
+		rows.append(_sub("ADD :", "VAT", "", "", None, total_vat))
+
+	# ── Purchase Invoice / Purchase Return ────────────────────────────────────
+	elif voucher_type == "Purchase Invoice":
+		items   = detail_data["pi_items"].get(voucher_no, [])
+		pi_info = detail_data["pi_info"].get(voucher_no, {})
+
+		for item in items:
+			qty_str = f"{flt(item.qty):.3f}"
+			rows.append(_sub(
+				item.item_code or "",
+				item.item_name or item.item_code or "",
+				qty_str, item.uom or "", flt(item.rate), flt(item.amount),
+			))
+
+		vat_amt   = flt(pi_info.get("custom_vat_amount")) if pi_info else 0
+		vat_apply = flt(pi_info.get("custom_vat_apply_on")) if pi_info else 0
+		rate_str = f"{vat_apply:.2f}" if vat_apply else ""
+		rows.append(_sub("ADD :", "VAT", rate_str, "", None, vat_amt))
+
+	# ── Payment Entry ─────────────────────────────────────────────────────────
+	elif voucher_type == "Payment Entry":
+		refs    = detail_data["pe_refs"].get(voucher_no, [])
+		pe_info = detail_data["pe_info"].get(voucher_no, {})
+
+		for ref in refs:
+			ref_name = ref.reference_name or ""
+			ref_url  = f'/app/{(ref.reference_doctype or "").lower().replace(" ", "-")}/{ref_name}'
+			ref_link = (
+				f'<a href="{ref_url}" style="text-decoration:underline;cursor:pointer">{ref_name}</a>'
+			) if ref_name else ""
+			rows.append(_sub(
+				"Invoice Adjustment",
+				ref_link,
+				f"{flt(ref.allocated_amount):,.2f}",
+			))
+
+		unalloc = flt(pe_info.get("unallocated_amount")) if pe_info else 0
+		if unalloc:
+			rows.append(_sub("Advance", "", f"{unalloc:,.2f}"))
+
+	# ── Journal Entry ─────────────────────────────────────────────────────────
+	elif voucher_type == "Journal Entry":
+		remark = (detail_data["je_remarks"].get(voucher_no) or "").strip()
+		if remark:
+			rows.append(_sub("", remark))
+
+	return rows
+
+
+# ── Merge helpers ──────────────────────────────────────────────────────────────
 
 def _merge_entries(entries):
 	"""Return one row per voucher (unique) with summed debit/credit.
@@ -189,9 +480,10 @@ def _merge_entries(entries):
 	grouped = {}
 	order = []
 	for e in entries:
-		key = (e.get("date"), e.get("voucher_type"), e.get("voucher_no"))
+		key = (e.get("party"), e.get("date"), e.get("voucher_type"), e.get("voucher_no"))
 		if key not in grouped:
 			grouped[key] = {
+				"party": e.get("party"),
 				"date": e.get("date"),
 				"voucher_type": e.get("voucher_type"),
 				"voucher_no": e.get("voucher_no"),
@@ -213,6 +505,7 @@ def _merge_entries(entries):
 		descriptions = list(dict.fromkeys(g["_descriptions"]))
 
 		out.append({
+			"party": g.get("party") or "",
 			"date": g.get("date"),
 			"voucher_type": vt,
 			"voucher_no": g.get("voucher_no"),
@@ -232,9 +525,10 @@ def _merge_entries_detailed(entries):
 	grouped = {}
 	order = []
 	for e in entries:
-		key = (e.get("date"), e.get("voucher_type"), e.get("voucher_no"), (e.get("against") or "").strip())
+		key = (e.get("party"), e.get("date"), e.get("voucher_type"), e.get("voucher_no"), (e.get("against") or "").strip())
 		if key not in grouped:
 			grouped[key] = {
+				"party": e.get("party"),
 				"date": e.get("date"),
 				"voucher_type": e.get("voucher_type"),
 				"voucher_no": e.get("voucher_no"),
@@ -253,6 +547,7 @@ def _merge_entries_detailed(entries):
 	for key in order:
 		g = grouped[key]
 		out.append({
+			"party": g.get("party") or "",
 			"date": g.get("date"),
 			"voucher_type": g.get("voucher_type"),
 			"voucher_no": g.get("voucher_no"),
@@ -263,6 +558,56 @@ def _merge_entries_detailed(entries):
 			"credit": round(g.get("credit") or 0, 2),
 		})
 	return out
+
+
+# ── Enrichment helpers ─────────────────────────────────────────────────────────
+
+def _apply_custom_voucher_names(rows):
+	"""Replace voucher_no on main rows with custom display name if available."""
+	if not rows:
+		return
+
+	vouchers_by_type = {}
+	for r in rows:
+		if r.get("is_detail"):
+			continue
+		vt = r.get("voucher_type")
+		vn = r.get("voucher_no")
+		if not vt or not vn:
+			continue
+		vouchers_by_type.setdefault(vt, set()).add(vn)
+
+	def _get_name_map(doctype, fieldname, names):
+		if not names or not frappe.db.has_column(doctype, fieldname):
+			return {}
+		result = frappe.db.get_all(doctype,
+			filters={"name": ("in", list(names))},
+			fields=["name", fieldname])
+		return {r.name: r.get(fieldname) for r in result}
+
+	# Sales Invoice uses custom_branch_name; all others use custom_name
+	si_map = _get_name_map("Sales Invoice",    "custom_branch_name", vouchers_by_type.get("Sales Invoice"))
+	pe_map = _get_name_map("Payment Entry",    "custom_name",        vouchers_by_type.get("Payment Entry"))
+	pi_map = _get_name_map("Purchase Invoice", "custom_name",        vouchers_by_type.get("Purchase Invoice"))
+	je_map = _get_name_map("Journal Entry",    "custom_name",        vouchers_by_type.get("Journal Entry"))
+
+	type_map = {
+		"Sales Invoice":    si_map,
+		"Payment Entry":    pe_map,
+		"Purchase Invoice": pi_map,
+		"Journal Entry":    je_map,
+	}
+
+	for r in rows:
+		if r.get("is_detail"):
+			continue
+		vt = r.get("voucher_type")
+		vn = r.get("voucher_no")
+		if not vt or not vn:
+			continue
+		custom = (type_map.get(vt) or {}).get(vn)
+		if custom:
+			r["voucher_no"] = custom
 
 
 def _apply_bs_miti(rows):
