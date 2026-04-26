@@ -237,6 +237,7 @@ frappe.query_reports["Party Ledger"] = {
 			if (bg || fw) value = `<span style="${bg}${fw}display:block;padding:4px 0;">${value}</span>`;
 			return value;
 		}
+		
 
 		// ── Balance: show absolute value with DB / CR suffix ─────────────────
 		if (column.fieldname === "balance" && data.balance !== undefined && data.balance !== null) {
