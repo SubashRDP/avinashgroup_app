@@ -93,7 +93,7 @@ frappe.query_reports["Party Ledger"] = {
 	],
 
 	get_datatable_options(options) {
-		return Object.assign(options, { layout: "fluid", serialNoColumn: false, freezeColumnsTo: 4 });
+		return Object.assign(options, { layout: "fixed", serialNoColumn: false, freezeColumnsTo: 4 });
 	},
 
 	after_datatable_render: function (dt) {
