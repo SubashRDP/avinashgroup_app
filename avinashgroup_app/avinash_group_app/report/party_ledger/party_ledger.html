@@ -1,0 +1,322 @@
+<style>
+@media print {
+  @page { size: A4 landscape; margin: 12mm 15mm; }
+}
+* { box-sizing: border-box; }
+
+.pl {
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  color: #222;
+  line-height: 1.9;
+}
+
+/* ── Header ── */
+.pl-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.pl-company-name { font-size: 13px; font-weight: bold; }
+.pl-right-header { text-align: right; }
+.pl-report-title { font-size: 16px; font-weight: bold; }
+.pl-period-label { font-size: 11px; color: #555; margin-top: 2px; }
+.pl-meta-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 8px;
+}
+.pl-divider { border: none; border-top: 1.5px solid #ccc; margin: 6px 0 8px; }
+
+/* ── Table ── */
+.pl table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* Column header */
+.pl thead th {
+  background: #f0f2f5;
+  color: #222;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 8px 10px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+.pl thead th.r { text-align: right; }
+.pl thead th.l { text-align: left; }
+
+/* All cells — let text wrap naturally */
+.pl td {
+  padding: 10px 10px;
+  vertical-align: top;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+/* Opening Balance */
+.pl-row-opening td {
+  font-weight: bold;
+  background: #f7f9fc;
+  padding: 10px 10px;
+  border-top: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Normal row — plain white */
+.pl-row-main td { background: #fff; }
+
+/* Detail sub-row */
+.pl-row-detail td {
+  background: #fafcff;
+  font-size: 11px;
+  color: #444;
+  padding: 8px 10px;
+  border-bottom: 1px solid #efefef;
+}
+
+/* Spacer between voucher groups */
+.pl-row-sep td {
+  height: 12px;
+  padding: 0;
+  border: none;
+  background: #f5f5f5;
+}
+
+/* For the Periods */
+.pl-row-period td {
+  background: #f5f5f5;
+  font-weight: bold;
+  padding: 10px 10px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Closing Balance */
+.pl-row-closing td {
+  background: #f0f5ff;
+  font-weight: bold;
+  padding: 10px 10px;
+  border-top: 2px solid #555;
+  border-bottom: 2px solid #555;
+}
+
+/* Indent for detail rows */
+.pl-indent-doc  { padding-left: 22px !important; color: #666; font-size: 11px; }
+.pl-indent-desc { padding-left: 14px !important; }
+
+/* Alignment */
+.r { text-align: right; }
+.l { text-align: left; }
+
+/* Amount colours */
+.dr  { color: #c0392b; }
+.cr  { color: #1a7a2e; }
+.mut { color: #bbb; }
+
+.pl-footer {
+  font-size: 10px;
+  color: #aaa;
+  text-align: right;
+  margin-top: 10px;
+}
+</style>
+
+{% var _has_party   = false; %}
+{% var _has_detail  = false; %}
+{% var _has_remarks = false; %}
+{% for (var _ci = 0; _ci < report.columns.length; _ci++) { %}
+  {% var _cfn = report.columns[_ci].fieldname; %}
+  {% if (_cfn === 'party')      { _has_party   = true; } %}
+  {% if (_cfn === 'detail_qty') { _has_detail  = true; } %}
+  {% if (_cfn === 'remarks')    { _has_remarks = true; } %}
+{% } %}
+
+{% var _show_remarks = false; %}
+{% if (_has_remarks) { %}
+  {% for (var _ri = 0; _ri < data.length; _ri++) { %}
+    {% if (data[_ri].remarks) { _show_remarks = true; } %}
+  {% } %}
+{% } %}
+
+{% var _tcols = 8; %}
+{% if (_has_party)    { _tcols += 1; } %}
+{% if (_has_detail)   { _tcols += 3; } %}
+{% if (_show_remarks) { _tcols += 1; } %}
+
+{% var _fc = function(v) {
+  if (v === null || v === undefined || v === '') return '';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '';
+  return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}; %}
+
+{% var _bal = function(v) {
+  if (v === null || v === undefined || v === '') return '';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '';
+  var s = Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var cls = n >= 0 ? 'dr' : 'cr';
+  var lbl = n >= 0 ? 'DB' : 'CR';
+  return '<span class="' + cls + '"><b>' + s + '</b>&thinsp;<small>' + lbl + '</small></span>';
+}; %}
+
+{% var _damt = function(v) {
+  if (!v || parseFloat(v) === 0) return '<span class="mut">&mdash;</span>';
+  return '<span class="dr">' + _fc(v) + '</span>';
+}; %}
+
+{% var _camt = function(v) {
+  if (!v || parseFloat(v) === 0) return '<span class="mut">&mdash;</span>';
+  return '<span class="cr">' + _fc(v) + '</span>';
+}; %}
+
+{% var _pty   = filters.party_type || 'Customer'; %}
+{% var _title = 'Party Ledger - ' + _pty + (_has_detail ? ' - Super Detail' : ''); %}
+{% var _fd    = frappe.datetime.str_to_user(filters.from_date || ''); %}
+{% var _td2   = frappe.datetime.str_to_user(filters.to_date   || ''); %}
+
+<div class="pl">
+
+  <div class="pl-page-header">
+    <div class="pl-company-name">{%= filters.company || '' %}</div>
+    <div class="pl-right-header">
+      <div class="pl-report-title">{%= _title %}</div>
+      <div class="pl-period-label">Accounting Period&nbsp;:&nbsp;{%= _fd %}&nbsp;&ndash;&nbsp;{%= _td2 %}</div>
+    </div>
+  </div>
+  <div class="pl-meta-bar">
+    <span>From&nbsp;<b>{%= _fd %}</b>&nbsp;To&nbsp;<b>{%= _td2 %}</b></span>
+    <span>Amount in Nepalese Rupee ( NPR )</span>
+  </div>
+  <hr class="pl-divider">
+
+  <table>
+    <colgroup>
+      <col style="width:8%">     <!-- Date -->
+      <col style="width:8%">     <!-- Miti -->
+      <col style="width:13.5%">  <!-- Doc No -->
+      {% if (_has_party)  { %}<col style="width:11%">{% } %}   <!-- Party -->
+      <col>                      <!-- Description (flex) -->
+      {% if (_has_detail) { %}
+      <col style="width:8%">     <!-- Qty/UOM -->
+      <col style="width:6.5%">   <!-- Rate -->
+      <col style="width:7%">     <!-- Amount -->
+      {% } %}
+      <col style="width:9%">     <!-- Debit -->
+      <col style="width:9%">     <!-- Credit -->
+      <col style="width:11%">    <!-- Balance -->
+      {% if (_show_remarks) { %}<col style="width:9%">{% } %}  <!-- Remarks -->
+    </colgroup>
+
+    <thead>
+      <tr>
+        <th class="l">Date</th>
+        <th class="l">Miti (BS)</th>
+        <th class="l">Document No</th>
+        {% if (_has_party)    { %}<th class="l">Party</th>{% } %}
+        <th class="l">Description</th>
+        {% if (_has_detail)   { %}
+        <th class="r">Qty / UOM</th>
+        <th class="r">Rate</th>
+        <th class="r">Amount</th>
+        {% } %}
+        <th class="r">Debit</th>
+        <th class="r">Credit</th>
+        <th class="r">Balance</th>
+        {% if (_show_remarks) { %}<th class="l">Remarks</th>{% } %}
+      </tr>
+    </thead>
+
+    <tbody>
+    {% for (var _i = 0; _i < data.length; _i++) { %}
+      {% var _row = data[_i]; %}
+
+      {% if (_row.is_separator) { %}
+        <tr class="pl-row-sep"><td colspan="{%= _tcols %}"></td></tr>
+
+      {% } else if (_row.is_summary && _row.description === 'Opening Balance') { %}
+        <tr class="pl-row-opening">
+          <td></td><td></td><td></td>
+          {% if (_has_party)    { %}<td></td>{% } %}
+          <td>Opening Balance</td>
+          {% if (_has_detail)   { %}<td colspan="3"></td>{% } %}
+          <td class="r dr">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
+          <td class="r cr">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
+          <td class="r">{%= _bal(_row.balance) %}</td>
+          {% if (_show_remarks) { %}<td></td>{% } %}
+        </tr>
+
+      {% } else if (_row.is_summary && _row.description === 'For the Periods') { %}
+        <tr class="pl-row-period">
+          <td></td><td></td><td></td>
+          {% if (_has_party)    { %}<td></td>{% } %}
+          <td>For the Periods</td>
+          {% if (_has_detail)   { %}<td colspan="3"></td>{% } %}
+          <td class="r dr">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
+          <td class="r cr">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
+          <td class="r">{%= _bal(_row.balance) %}</td>
+          {% if (_show_remarks) { %}<td></td>{% } %}
+        </tr>
+
+      {% } else if (_row.is_summary) { %}
+        <tr class="pl-row-closing">
+          <td></td>
+          <td></td>
+          <td style="font-size:11px;color:#555">{%= _row.voucher_no || '' %}</td>
+          {% if (_has_party)    { %}<td></td>{% } %}
+          <td>Closing Balance</td>
+          {% if (_has_detail)   { %}<td colspan="3"></td>{% } %}
+          <td class="r dr">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
+          <td class="r cr">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
+          <td class="r">{%= _bal(_row.balance) %}</td>
+          {% if (_show_remarks) { %}<td></td>{% } %}
+        </tr>
+
+      {% } else if (_row.is_detail) { %}
+        {% var _qd = ''; %}
+        {% if (_row.detail_qty) {
+          _qd = _row.detail_qty;
+          if (_row.detail_uom) _qd += ' ' + _row.detail_uom;
+        } %}
+        <tr class="pl-row-detail">
+          <td></td><td></td>
+          <td class="pl-indent-doc">{%= _row.voucher_no || '' %}</td>
+          {% if (_has_party)    { %}<td></td>{% } %}
+          <td class="pl-indent-desc">{%= _row.description || '' %}</td>
+          {% if (_has_detail)   { %}
+          <td class="r">{%= _qd %}</td>
+          <td class="r">{%= _row.detail_rate   ? _fc(_row.detail_rate)   : '' %}</td>
+          <td class="r">{%= _row.detail_amount ? _fc(_row.detail_amount) : '' %}</td>
+          {% } %}
+          <td></td><td></td><td></td>
+          {% if (_show_remarks) { %}<td></td>{% } %}
+        </tr>
+
+      {% } else { %}
+        <tr class="pl-row-main">
+          <td>{%= _row.date ? frappe.datetime.str_to_user(_row.date) : '' %}</td>
+          <td>{%= _row.miti || '' %}</td>
+          <td>{%= _row.voucher_no || '' %}</td>
+          {% if (_has_party)    { %}<td>{%= _row.party || '' %}</td>{% } %}
+          <td>{%= _row.description || '' %}</td>
+          {% if (_has_detail)   { %}<td></td><td></td><td></td>{% } %}
+          <td class="r">{%= _damt(_row.debit) %}</td>
+          <td class="r">{%= _camt(_row.credit) %}</td>
+          <td class="r">{%= _bal(_row.balance) %}</td>
+          {% if (_show_remarks) { %}<td style="color:#555">{%= _row.remarks || '' %}</td>{% } %}
+        </tr>
+      {% } %}
+
+    {% } %}
+    </tbody>
+  </table>
+
+  <div class="pl-footer">
+    Printed on {%= frappe.datetime.str_to_user(frappe.datetime.get_datetime_as_string()) %}
+  </div>
+</div>
