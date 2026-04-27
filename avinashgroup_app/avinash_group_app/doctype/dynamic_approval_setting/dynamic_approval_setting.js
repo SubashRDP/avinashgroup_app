@@ -1,13 +1,7 @@
 function set_criteria_field_options(frm) {
 	if (!frm.doc.document_type) return;
 	frappe.model.with_doctype(frm.doc.document_type, function () {
-		let skip = ["Section Break", "Column Break", "Tab Break", "HTML", "Button", "Fold", "Heading"];
-		let meta = frappe.get_meta(frm.doc.document_type);
-		let doctype_fields = (meta.fields || [])
-			.filter(f => !skip.includes(f.fieldtype))
-			.map(f => f.fieldname);
-		let standard = ["name", "owner", "company", "department", "modified_by"];
-		let all = [...new Set([...standard, ...doctype_fields])].join("\n");
+		let all = _get_link_field_options(frm);
 		if (frm.fields_dict.match_criteria && frm.fields_dict.match_criteria.grid) {
 			frm.fields_dict.match_criteria.grid.update_docfield_property("field_name", "options", all);
 		}
@@ -239,6 +233,7 @@ function open_section_dialog(frm, existing_section) {
 				fieldtype: "HTML",
 				options: `<p class="text-muted" style="font-size:12px;margin:0 0 6px;">
 					Define which documents this rule applies to. All rows must match (AND logic).
+					This picker is link-aware: choose a Link field, then select a value from the linked DocType.
 					Leave empty to make this a catch-all rule.
 				</p>`
 			},
@@ -248,24 +243,40 @@ function open_section_dialog(frm, existing_section) {
 				label: __("Criteria"),
 				cannot_add_rows: false,
 				in_place_edit: true,
-				data: existing_criteria.map(r => ({ field_name: r.field_name, field_value: r.field_value })),
+				data: existing_criteria.map(r => ({
+					field_name: r.field_name,
+					field_value: r.field_value,
+					linked_doctype: _get_linked_doctype_for_field(frm, r.field_name),
+				})),
 				fields: [
 					{
 						fieldname: "field_name",
 						label: __("Field Name"),
-						fieldtype: "Autocomplete",
+						fieldtype: "Select",
 						in_list_view: 1,
 						reqd: 1,
 						columns: 5,
-						options: _get_doctype_field_options(frm),
+						options: _get_link_field_options(frm),
+						onchange: function () {
+							this.doc.linked_doctype = _get_linked_doctype_for_field(frm, this.doc.field_name);
+							this.doc.field_value = "";
+						},
+					},
+					{
+						fieldname: "linked_doctype",
+						fieldtype: "Data",
+						hidden: 1,
 					},
 					{
 						fieldname: "field_value",
 						label: __("Field Value"),
-						fieldtype: "Data",
+						fieldtype: "Dynamic Link",
 						in_list_view: 1,
 						reqd: 1,
 						columns: 5,
+						get_options: function (field) {
+							return field.doc.linked_doctype || "";
+						},
 					}
 				]
 			},
@@ -361,12 +372,38 @@ function open_section_dialog(frm, existing_section) {
 	d.show();
 }
 
-function _get_doctype_field_options(frm) {
+function _get_link_field_options(frm) {
 	if (!frm.doc.document_type) return "";
 	let meta = frappe.get_meta(frm.doc.document_type);
 	if (!meta) return "";
-	let skip = ["Section Break", "Column Break", "Tab Break", "HTML", "Button", "Fold", "Heading"];
-	let fields = (meta.fields || []).filter(f => !skip.includes(f.fieldtype)).map(f => f.fieldname);
-	let standard = ["name", "owner", "company", "department", "modified_by"];
+	let fields = (meta.fields || [])
+		.filter(f => f.fieldtype === "Link")
+		.map(f => f.fieldname);
+	let standard = ["owner", "company", "department", "modified_by"];
 	return [...new Set([...standard, ...fields])].join("\n");
+}
+
+function _get_linked_doctype_for_field(frm, field_name) {
+	if (!frm.doc.document_type || !field_name) return "";
+
+	let standard_link_map = {
+		owner: "User",
+		modified_by: "User",
+		company: "Company",
+		department: "Department",
+	};
+
+	if (standard_link_map[field_name]) {
+		return standard_link_map[field_name];
+	}
+
+	let meta = frappe.get_meta(frm.doc.document_type);
+	if (!meta) return "";
+
+	let field_meta = (meta.fields || []).find(f => f.fieldname === field_name);
+	if (field_meta && field_meta.fieldtype === "Link") {
+		return field_meta.options || "";
+	}
+
+	return "";
 }

@@ -11,9 +11,6 @@ def set_reject_reason(doctype, name, reason):
 	name = str(name).strip()
 	reason = str(reason).strip()
 
-	if doctype != "Purchase Order":
-		frappe.throw(_("Invalid document type. Only 'Purchase Order' is allowed."))
-
 	try:
 		doc = frappe.get_doc(doctype, name)
 	except frappe.DoesNotExistError:
@@ -22,16 +19,16 @@ def set_reject_reason(doctype, name, reason):
 	# Allow any logged-in user to save rejection reason.
 	# Approval control is handled by workflow configuration, not here.
 
-	if not hasattr(doc, "custom_reason"):
-		frappe.throw(_("Document does not have a 'custom_reason' field."))
-
-	frappe.db.set_value(
-		doctype,
-		name,
-		"custom_reason",
-		reason,
-		update_modified=False,
-	)
+	if doc.meta.has_field("custom_reason"):
+		frappe.db.set_value(
+			doctype,
+			name,
+			"custom_reason",
+			reason,
+			update_modified=False,
+		)
+	else:
+		doc.add_comment("Comment", _("Rejection reason: {0}").format(reason))
 
 	return {
 		"status": "success",

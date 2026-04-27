@@ -21,6 +21,8 @@
         let has_fields = APPROVAL_FIELDS.some(f => frm.fields_dict[f]);
         if (!has_fields) return;
 
+        const workflow = window.avinashgroup_app && window.avinashgroup_app.approval_workflow;
+
         // ── 0. Filter the approval setting picker by doctype + company ──
         if (frm.fields_dict["custom_approval_setting"]) {
             frm.set_query("custom_approval_setting", function () {
@@ -36,17 +38,32 @@
 
         // ── 1. Lock form for non-current-approvers while Pending Approval ──
         if (frm.doc.workflow_state === "Pending Approval") {
-            const current_approver = frm.doc.custom_current_approver;
-            const is_current_approver = (
-                frappe.session.user === current_approver ||
-                frappe.session.user === "Administrator"
-            );
+            const approval = workflow
+                ? workflow.getContext(frm, {
+                    currentApproverField: "custom_current_approver",
+                    currentLevelField: "custom_current_approval_level",
+                    totalLevelsField: "custom_total_approval_levels",
+                    approvalTableField: "custom_approval_approvers",
+                })
+                : {
+                    currentApprover: frm.doc.custom_current_approver,
+                    currentLevel: parseInt(frm.doc.custom_current_approval_level) || 0,
+                    isApprover: (
+                        frappe.session.user === frm.doc.custom_current_approver ||
+                        frappe.session.user === "Administrator"
+                    ),
+                };
+
+            const is_current_approver = approval.isApprover;
             if (!is_current_approver) {
                 frm.disable_form();
+                if (workflow) {
+                    workflow.hideWorkflowActions(frm, ["Approve", "Reject"]);
+                }
             }
 
             // ── 2. Visually lock already-approved rows in the hierarchy table ──
-            const current_level = parseInt(frm.doc.custom_current_approval_level) || 0;
+            const current_level = approval.currentLevel || 0;
             if (current_level > 1) {
                 setTimeout(function () {
                     Object.values(frm.fields_dict).forEach(function (field) {
@@ -63,6 +80,7 @@
                     });
                 }, 300);
             }
+
         }
 
         // ── 3. Hide the hidden workflow-driver fields ──

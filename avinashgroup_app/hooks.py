@@ -30,6 +30,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
+    "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
     "/assets/avinashgroup_app/js/sales_invoice.js?v=10.4",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.7",  # Common taxes handler for all purchase doctypes
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",

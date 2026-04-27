@@ -314,10 +314,11 @@ def before_workflow_action(doc, method=None, action=None):
 	if action == "Submit for Approval":
 		total = _get_total_levels(doc, config)
 		if not total:
-			frappe.throw(
-				_("Please add at least one approver in the Approval Hierarchy before submitting.")
-			)
-		approver = _get_effective_approver_at_level(doc, 1, config)
+			# No approvers configured — fall back to Administrator as the sole approver
+			total = 1
+			approver = "Administrator"
+		else:
+			approver = _get_effective_approver_at_level(doc, 1, config)
 		doc.set(level_field, 1)
 		doc.set(TOTAL_LEVELS_FIELD, total)
 		doc.set(CURRENT_APPROVER_FIELD, approver)
@@ -358,7 +359,11 @@ def before_workflow_action(doc, method=None, action=None):
 
 	elif action == "Resubmit":
 		total = _get_total_levels(doc, config)
-		approver = _get_effective_approver_at_level(doc, 1, config)
+		if not total:
+			total = 1
+			approver = "Administrator"
+		else:
+			approver = _get_effective_approver_at_level(doc, 1, config)
 		doc.set(level_field, 1)
 		doc.set(TOTAL_LEVELS_FIELD, total)
 		doc.set(CURRENT_APPROVER_FIELD, approver)
