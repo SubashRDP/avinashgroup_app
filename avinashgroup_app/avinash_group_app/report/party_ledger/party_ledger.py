@@ -44,6 +44,7 @@ def execute(filters=None):
 	return columns, data
 
 
+
 def get_columns(filters=None):
 	filters = filters or {}
 	party_type = filters.get("party_type") or "Customer"
@@ -233,6 +234,7 @@ def get_data(filters):
 				entry.get("voucher_no"),
 				debit, credit,
 				detail_data,
+				show_remarks,
 			)
 			if sub_rows:
 				sub_rows[0]["is_first_detail"] = 1
@@ -272,6 +274,7 @@ def get_data(filters):
 
 	_apply_bs_miti(data)
 	_apply_custom_voucher_names(data)
+	_apply_party_names(data, party_type)
 	if show_remarks:
 		_apply_voucher_remarks(data)
 	return data
@@ -365,7 +368,7 @@ def _fetch_all_details(entries):
 	}
 
 
-def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail_data):
+def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail_data, show_remarks=False):
 	"""Return indented sub-rows for one voucher in detailed_mapping mode."""
 	rows = []
 	is_debit_side = main_debit > 0
@@ -447,9 +450,10 @@ def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail
 
 	# ── Journal Entry ─────────────────────────────────────────────────────────
 	elif voucher_type == "Journal Entry":
-		remark = (detail_data["je_remarks"].get(voucher_no) or "").strip()
-		if remark:
-			rows.append(_sub("", remark))
+		if show_remarks:
+			remark = (detail_data["je_remarks"].get(voucher_no) or "").strip()
+			if remark:
+				rows.append(_sub("", remark))
 
 	return rows
 
@@ -608,6 +612,30 @@ def _apply_custom_voucher_names(rows):
 		custom = (type_map.get(vt) or {}).get(vn)
 		if custom:
 			r["voucher_no"] = custom
+
+
+def _apply_party_names(data, party_type):
+	"""Add party_name (display name) to each main row. Extra field — not in columns, invisible on screen."""
+	party_ids = {
+		r.get("party") for r in data
+		if r.get("party") and not r.get("is_summary") and not r.get("is_detail") and not r.get("is_separator")
+	}
+	if not party_ids:
+		return
+
+	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
+	if not frappe.db.has_column(party_type, name_field):
+		return
+
+	rows = frappe.db.get_all(party_type,
+		filters={"name": ("in", list(party_ids))},
+		fields=["name", name_field])
+	name_map = {r.name: r.get(name_field) for r in rows}
+
+	for row in data:
+		pid = row.get("party")
+		if pid:
+			row["party_name"] = name_map.get(pid) or pid
 
 
 def _apply_bs_miti(rows):
