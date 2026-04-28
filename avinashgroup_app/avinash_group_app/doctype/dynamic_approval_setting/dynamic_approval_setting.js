@@ -130,7 +130,6 @@ function render_sections_ui(frm) {
 	let cards_html = section_names.map(sec => {
 		let crit = criteria_rows.filter(r => (r.section || "Default") === sec);
 		let appr = approver_rows.filter(r => (r.section || "Default") === sec);
-		let is_default = (frm.doc.default_section || "").trim() === sec;
 
 		let crit_html = crit.length
 			? crit.map(r => `
@@ -151,7 +150,6 @@ function render_sections_ui(frm) {
 			<div style="background:#f4f5f6;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #d1d8dd;">
 				<span style="font-weight:600;font-size:13px;">
 					${frappe.utils.escape_html(sec)}
-					${is_default ? '<span style="margin-left:6px;background:#e8f7ef;color:#1e7e34;border:1px solid #b7ebc7;border-radius:10px;padding:1px 7px;font-size:10px;">Default</span>' : ""}
 				</span>
 				<div style="display:flex;gap:6px;">
 					<button class="btn btn-xs btn-default btn-section-edit" data-section="${frappe.utils.escape_html(sec)}">
@@ -202,10 +200,6 @@ function render_sections_ui(frm) {
 		frappe.confirm(__("Delete section <b>{0}</b> and all its criteria + approvers?", [sec]), () => {
 			frm.doc.match_criteria = (frm.doc.match_criteria || []).filter(r => (r.section || "Default") !== sec);
 			frm.doc.approvers = (frm.doc.approvers || []).filter(r => (r.section || "Default") !== sec);
-			if ((frm.doc.default_section || "").trim() === sec) {
-				frm.doc.default_section = "";
-				frm.refresh_field("default_section");
-			}
 			frm.refresh_field("match_criteria");
 			frm.refresh_field("approvers");
 			frm.dirty();
@@ -234,13 +228,6 @@ function open_section_dialog(frm, existing_section) {
 				reqd: 1,
 				default: is_new ? "" : existing_section,
 				description: __("A unique name for this approval rule (e.g. 'HR Accounts', 'Finance', 'Default')")
-			},
-			{
-				fieldname: "is_default_section",
-				fieldtype: "Check",
-				label: __("Use as default fallback section"),
-				default: (!is_new && (frm.doc.default_section || "").trim() === existing_section) ? 1 : 0,
-				description: __("If no criteria matches, this section will be used."),
 			},
 			{ fieldtype: "Section Break", label: __("Match Criteria") },
 			{
@@ -376,20 +363,8 @@ function open_section_dialog(frm, existing_section) {
 				child.approver_name = r.approver_name || "";
 			});
 
-			// Keep exactly one default fallback section.
-			const old_section_name = (existing_section || sec_name || "").trim();
-			if (values.is_default_section) {
-				frm.doc.default_section = sec_name;
-			} else if (
-				(frm.doc.default_section || "").trim() === old_section_name
-				|| (frm.doc.default_section || "").trim() === sec_name
-			) {
-				frm.doc.default_section = "";
-			}
-
 			frm.refresh_field("match_criteria");
 			frm.refresh_field("approvers");
-			frm.refresh_field("default_section");
 			frm.dirty();
 			d.hide();
 			render_sections_ui(frm);

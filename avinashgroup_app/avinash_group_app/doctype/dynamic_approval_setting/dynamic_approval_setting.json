@@ -9,7 +9,6 @@
   "column_break_main",
   "company_abbr",
   "is_active",
-  "default_section",
   "configuration_section",
   "approver_table_fieldname",
   "column_break_config",
@@ -57,13 +56,6 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Is Active"
-  },
-  {
-   "fieldname": "default_section",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Default Section",
-   "read_only": 1
   },
   {
    "fieldname": "configuration_section",

@@ -61,7 +61,7 @@ def _get_config_for_doc(doc):
 	settings = frappe.get_all(
 		"Dynamic Approval Setting",
 		filters={"document_type": doc.doctype, "company": company, "is_active": 1},
-		fields=["name", "approver_table_fieldname", "current_level_fieldname", "default_section"],
+		fields=["name", "approver_table_fieldname", "current_level_fieldname"],
 	)
 	if not settings:
 		return None
@@ -100,17 +100,10 @@ def _get_config_for_doc(doc):
 
 		best_section = None
 		best_score = -1
-		default_section = (setting.get("default_section") or "").strip()
 
 		for sec in all_sections:
-			# Default section is fallback-only — its own criteria are ignored
-			# and it never wins through the normal scoring loop.
-			if sec == default_section:
-				continue
-
 			criteria = criteria_by_section.get(sec, [])
-			# A non-default section with zero criteria matches nothing —
-			# fallback behavior is reserved for the explicit default_section.
+			# A section with zero criteria matches nothing.
 			if not criteria:
 				continue
 
@@ -122,10 +115,6 @@ def _get_config_for_doc(doc):
 				if score > best_score:
 					best_score = score
 					best_section = sec
-
-		# No criteria match? fall back to configured default section.
-		if best_section is None and default_section and default_section in all_sections:
-			best_section = default_section
 
 		if best_section is None:
 			continue
@@ -331,8 +320,19 @@ def before_workflow_action(doc, method=None, action=None):
 	if not action:
 		return
 
-	# No config for this company → let the document pass through without approval logic
+	# No config for this company → auto-approve on Submit instead of stranding
+	# the doc in Pending Approval with uninitialised level fields (which would
+	# leave only Reject visible — even for Administrator).
 	if not config:
+		if action == "Submit for Approval":
+			doc.workflow_state = "Approved"
+			doc.docstatus = 1
+			_log_approval_history(doc, "Auto-approved (no matching approval rule)")
+		elif action == "Approve":
+			_log_approval_history(doc, "Approved (no matching approval rule)")
+		elif action == "Reject":
+			doc.flags.is_rejection = True
+			_log_approval_history(doc, "Rejected")
 		return
 
 	level_field = config["current_level_fieldname"]
@@ -703,16 +703,20 @@ def _create_or_update_workflow(doctype, level_field):
 	tf = TOTAL_LEVELS_FIELD       # custom_total_approval_levels
 	lf = level_field              # custom_current_approval_level
 
-	# Intermediate: current user is the listed approver (or Admin) AND more levels remain
-	# doc.lf > 0 guard prevents false match when level not yet initialised (0 == 0 bug)
+	# Intermediate: current approver, AND more levels remain.
+	# doc.lf > 0 guard prevents false match when level not yet initialised (0 == 0 bug).
+	# Admin override: Administrator can advance only when there is a "next" level
+	# (i.e. tf is initialised and lf < tf). Otherwise admin's Approve falls through
+	# to approve_final (which also accepts uninitialised fields).
 	approve_more = (
-		f'(doc.{af} == frappe.session.user or frappe.session.user == "Administrator")'
-		f' and doc.{lf} > 0 and doc.{tf} > 0 and doc.{lf} < doc.{tf}'
+		f'(doc.{af} == frappe.session.user and doc.{lf} > 0 and doc.{tf} > 0 and doc.{lf} < doc.{tf})'
+		f' or (frappe.session.user == "Administrator" and doc.{tf} > 0 and doc.{lf} < doc.{tf})'
 	)
-	# Final: current user is the listed approver (or Admin) AND this IS the last level
+	# Final: last level reached, OR Administrator on a doc with no level data
+	# (covers stranded docs where _get_config_for_doc returned None at submit).
 	approve_final = (
-		f'(doc.{af} == frappe.session.user or frappe.session.user == "Administrator")'
-		f' and doc.{lf} > 0 and doc.{tf} > 0 and doc.{lf} == doc.{tf}'
+		f'(doc.{af} == frappe.session.user and doc.{lf} > 0 and doc.{tf} > 0 and doc.{lf} == doc.{tf})'
+		f' or (frappe.session.user == "Administrator" and (doc.{tf} == 0 or doc.{lf} == doc.{tf}))'
 	)
 	# Reject: current user is the listed approver or Admin
 	can_reject = (
