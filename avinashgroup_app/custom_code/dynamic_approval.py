@@ -61,7 +61,7 @@ def _get_config_for_doc(doc):
 	settings = frappe.get_all(
 		"Dynamic Approval Setting",
 		filters={"document_type": doc.doctype, "company": company, "is_active": 1},
-		fields=["name", "approver_table_fieldname", "current_level_fieldname"],
+		fields=["name", "approver_table_fieldname", "current_level_fieldname", "default_section"],
 	)
 	if not settings:
 		return None
@@ -100,9 +100,20 @@ def _get_config_for_doc(doc):
 
 		best_section = None
 		best_score = -1
+		default_section = (setting.get("default_section") or "").strip()
 
 		for sec in all_sections:
+			# Default section is fallback-only — its own criteria are ignored
+			# and it never wins through the normal scoring loop.
+			if sec == default_section:
+				continue
+
 			criteria = criteria_by_section.get(sec, [])
+			# A non-default section with zero criteria matches nothing —
+			# fallback behavior is reserved for the explicit default_section.
+			if not criteria:
+				continue
+
 			if all(
 				str(doc.get(c.field_name) or "").strip() == str(c.field_value or "").strip()
 				for c in criteria
@@ -111,6 +122,10 @@ def _get_config_for_doc(doc):
 				if score > best_score:
 					best_score = score
 					best_section = sec
+
+		# No criteria match? fall back to configured default section.
+		if best_section is None and default_section and default_section in all_sections:
+			best_section = default_section
 
 		if best_section is None:
 			continue
@@ -218,6 +233,10 @@ def validate(doc, method=None):
 	When Pending Approval:
 	  1. Only the current approver (or Administrator) may save.
 	  2. Already-approved rows (level < current_level) cannot be changed or deleted.
+
+	Workflow transitions are exempt from rule 1:
+	  - Submit for Approval (Draft → Pending) — workflow_state has changed
+	  - Intermediate Approve (Pending → Pending, level++) — flagged by before_workflow_action
 	"""
 	config = _get_config_for_doc(doc)
 	if not config:
@@ -229,18 +248,26 @@ def validate(doc, method=None):
 	if frappe.session.user == "Administrator":
 		return
 
-	# Read from DB — before_workflow_action already updated the in-memory field
-	# to the NEXT approver, so doc.get() would give the wrong value here.
-	current_approver = frappe.db.get_value(doc.doctype, doc.name, CURRENT_APPROVER_FIELD) or doc.get(CURRENT_APPROVER_FIELD)
-
-	if frappe.session.user != current_approver:
-		approver_name = (
-			frappe.db.get_value("User", current_approver, "full_name") or current_approver
-			if current_approver else _("the assigned approver")
-		)
-		frappe.throw(
-			_("This document is pending approval. Only {0} (the current approver) may make changes.").format(approver_name)
-		)
+	# Allow the workflow transition that brought the doc INTO Pending
+	# (Submit for Approval). DB still has old state at this point.
+	if doc.has_value_changed("workflow_state"):
+		pass
+	# Allow the intermediate Approve transition (level increment).
+	elif doc.flags.get("approval_level_changed"):
+		pass
+	else:
+		# Plain save while Pending — only the current approver may proceed.
+		# Read from DB: before_workflow_action overwrites the in-memory field
+		# during transitions, but for plain saves the DB value is authoritative.
+		current_approver = frappe.db.get_value(doc.doctype, doc.name, CURRENT_APPROVER_FIELD) or doc.get(CURRENT_APPROVER_FIELD)
+		if frappe.session.user != current_approver:
+			approver_name = (
+				frappe.db.get_value("User", current_approver, "full_name") or current_approver
+				if current_approver else _("the assigned approver")
+			)
+			frappe.throw(
+				_("This document is pending approval. Only {0} (the current approver) may make changes.").format(approver_name)
+			)
 
 	# Current approver cannot modify already-approved rows
 	level_field = config["current_level_fieldname"]
@@ -356,19 +383,6 @@ def before_workflow_action(doc, method=None, action=None):
 	elif action == "Reject":
 		doc.flags.is_rejection = True
 		_log_approval_history(doc, "Rejected")
-
-	elif action == "Resubmit":
-		total = _get_total_levels(doc, config)
-		if not total:
-			total = 1
-			approver = "Administrator"
-		else:
-			approver = _get_effective_approver_at_level(doc, 1, config)
-		doc.set(level_field, 1)
-		doc.set(TOTAL_LEVELS_FIELD, total)
-		doc.set(CURRENT_APPROVER_FIELD, approver)
-		doc.flags.approval_level_changed = True
-		_log_approval_history(doc, "Resubmitted for Approval")
 
 
 def on_update(doc, method=None):
@@ -744,11 +758,6 @@ def _create_or_update_workflow(doctype, level_field):
 			"state": "Pending Approval", "action": "Reject",
 			"next_state": "Rejected", "allowed": "All",
 			"condition": can_reject,
-		},
-		# Resubmit after rejection
-		{
-			"state": "Rejected", "action": "Resubmit",
-			"next_state": "Pending Approval", "allowed": "All", "condition": "",
 		},
 	]
 

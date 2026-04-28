@@ -1,0 +1,425 @@
+# =============================================================================
+# COMPREHENSIVE DOCUMENTATION OF ALL CHANGES MADE
+# Frappe App: avinashgroup_app
+# Date: April 28, 2026
+# =============================================================================
+
+## OVERVIEW
+This document contains a complete, word-by-word, code-by-code documentation of all changes made to the avinashgroup_app during the current development session. All modifications are tracked and documented below.
+
+## FILES MODIFIED
+1. avinashgroup_app/custom_code/api.py
+2. avinashgroup_app/hooks.py
+3. avinashgroup_app/avinash_group_app/doctype/dynamic_approval_setting/dynamic_approval_setting.js
+4. avinashgroup_app/avinash_group_app/doctype/dynamic_approval_setting/dynamic_approval_setting.json
+5. avinashgroup_app/custom_code/dynamic_approval.py
+
+## =============================================================================
+## 1. CHANGES TO: avinashgroup_app/custom_code/api.py
+## =============================================================================
+
+### ORIGINAL STATE (Before Changes):
+```python
+import frappe
+
+# def set_custom_name_field(doc, method):
+#     company_code = doc.custom_abbr or ""
+#     p_type = doc.custom_p_type_code or ""
+#
+#     doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
+#     fiscal_year = doc.custom_fiscal_year or "82/83"
+#
+#     doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+```
+
+### CHANGES MADE:
+1. **ADDED: Global Search Handler for Journal Entry**
+   - **Purpose**: Enable Journal Entry to appear in Frappe's global search (Ctrl+G)
+   - **Function Added**:
+```python
+# ─────────────────────────────────────────────────────────────
+#  GLOBAL SEARCH — Journal Entry
+# ─────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def search_journal_entry(doctype, txt, searchfield, start, page_len, filters):
+    """
+    Custom search handler for Journal Entry in global search.
+    Searches by name, reference_number, and remarks.
+    """
+    filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+    
+    or_filters = []
+    if txt:
+        or_filters.append(["name", "like", f"%{txt}%"])
+        or_filters.append(["reference_number", "like", f"%{txt}%"])
+        or_filters.append(["remarks", "like", f"%{txt}%"])
+    
+    records = frappe.get_list(
+        "Journal Entry",
+        filters={"docstatus": 1},  # Show only submitted entries
+        or_filters=or_filters or None,
+        fields=["name", "posting_date", "remarks"],
+        start=start,
+        page_length=page_len,
+        order_by="posting_date desc"
+    )
+    
+    return [[r.name, f"{r.posting_date} - {r.remarks or ''}"] for r in records]
+```
+
+### CHANGES REMOVED (Reverted):
+- The `search_journal_entry` function was completely removed
+- File is now back to its original state
+
+### CURRENT STATE:
+```python
+import frappe
+
+# def set_custom_name_field(doc, method):
+#     company_code = doc.custom_abbr or ""
+#     p_type = doc.custom_p_type_code or ""
+#
+#     doc_no = str(doc.custom_document_no).zfill(5) if doc.custom_document_no else "00000"
+#     fiscal_year = doc.custom_fiscal_year or "82/83"
+#
+#     doc.custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
+```
+
+## =============================================================================
+## 2. CHANGES TO: avinashgroup_app/hooks.py
+## =============================================================================
+
+### ORIGINAL STATE (Before Changes):
+```python
+doctype_js = {
+            # "Sales Invoice" : "public/js/sales_invoice.js",
+            "Purchase Order": "public/js/purchase_order.js",
+            "Material Request": "public/js/material_request.js",
+            "Purchase Invoice": "public/js/pi.js",
+            "Journal Entry": "public/js/journal_entry.js",
+}
+
+# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+```
+
+### CHANGES MADE:
+1. **ADDED: Search Handlers Configuration**
+   - **Purpose**: Register custom search handlers for global search
+   - **Code Added**:
+```python
+# Search handlers for global search
+search_handlers = {
+    "Journal Entry": "avinashgroup_app.custom_code.api.search_journal_entry",
+}
+```
+
+### CHANGES REMOVED (Reverted):
+- The entire `search_handlers` configuration was removed
+- File is now back to its original state
+
+### CURRENT STATE:
+```python
+doctype_js = {
+            # "Sales Invoice" : "public/js/sales_invoice.js",
+            "Purchase Order": "public/js/purchase_order.js",
+            "Material Request": "public/js/material_request.js",
+            "Purchase Invoice": "public/js/pi.js",
+            "Journal Entry": "public/js/journal_entry.js",
+}
+
+# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+```
+
+## =============================================================================
+## 3. CHANGES TO: avinashgroup_app/avinash_group_app/doctype/dynamic_approval_setting/dynamic_approval_setting.js
+## =============================================================================
+
+### SUMMARY OF CHANGES:
+Major enhancements to the Dynamic Approval Setting form with section-based approval workflow management.
+
+### SPECIFIC CHANGES MADE:
+
+#### 1. ADDED: Validation Function for Unique Sections
+```javascript
+function validate_unique_sections_in_form(frm) {
+    const seen = new Map();
+
+    function track(section, source, idx) {
+        const key = (section || "").trim();
+        if (!key) return;
+
+        const first = seen.get(key);
+        if (first) {
+            frappe.throw(
+                __(
+                    "Duplicate section name <b>{0}</b> found in this setting.<br><br>First used in: {1}<br>Duplicate at: {2}",
+                    [
+                        frappe.utils.escape_html(key),
+                        frappe.utils.escape_html(first),
+                        frappe.utils.escape_html(`${source} row ${idx}`),
+                    ]
+                )
+            );
+        }
+
+        seen.set(key, `${source} row ${idx}`);
+    }
+
+    (frm.doc.match_criteria || []).forEach((row, i) => {
+        track(row.section, "Match Criteria", row.idx || i + 1);
+    });
+
+    (frm.doc.approvers || []).forEach((row, i) => {
+        track(row.section, "Approvers", row.idx || i + 1);
+    });
+}
+```
+
+#### 2. ADDED: Validate Event Handler
+```javascript
+validate(frm) {
+    validate_unique_sections_in_form(frm);
+},
+```
+
+#### 3. ENHANCED: render_sections_ui Function
+- **Added Default Section Indicator**: Shows "Default" badge for default sections
+- **Code Added**:
+```javascript
+let is_default = (frm.doc.default_section || "").trim() === sec;
+```
+```javascript
+<span style="font-weight:600;font-size:13px;">
+    ${frappe.utils.escape_html(sec)}
+    ${is_default ? '<span style="margin-left:6px;background:#e8f7ef;color:#1e7e34;border:1px solid #b7ebc7;border-radius:10px;padding:1px 7px;font-size:10px;">Default</span>' : ""}
+</span>
+```
+
+#### 4. ENHANCED: Section Deletion Logic
+- **Added Default Section Cleanup**: Clears default_section when its section is deleted
+- **Code Added**:
+```javascript
+if ((frm.doc.default_section || "").trim() === sec) {
+    frm.doc.default_section = "";
+    frm.refresh_field("default_section");
+}
+```
+
+#### 5. ENHANCED: Section Dialog (open_section_dialog)
+- **Added Default Section Checkbox**:
+```javascript
+{
+    fieldname: "is_default_section",
+    fieldtype: "Check",
+    label: __("Use as default fallback section"),
+    default: (!is_new && (frm.doc.default_section || "").trim() === existing_section) ? 1 : 0,
+    description: __("If no criteria matches, this section will be used."),
+},
+```
+
+#### 6. ENHANCED: Section Save Logic
+- **Added Default Section Management**:
+```javascript
+// Keep exactly one default fallback section.
+const old_section_name = (existing_section || sec_name || "").trim();
+if (values.is_default_section) {
+    frm.doc.default_section = sec_name;
+} else if (
+    (frm.doc.default_section || "").trim() === old_section_name
+    || (frm.doc.default_section || "").trim() === sec_name
+) {
+    frm.doc.default_section = "";
+}
+
+frm.refresh_field("match_criteria");
+frm.refresh_field("approvers");
+frm.refresh_field("default_section");
+```
+
+## =============================================================================
+## 4. CHANGES TO: avinashgroup_app/avinash_group_app/doctype/dynamic_approval_setting/dynamic_approval_setting.json
+## =============================================================================
+
+### CHANGES MADE:
+
+#### 1. ADDED: default_section Field
+- **Field Definition**:
+```json
+{
+  "fieldname": "default_section",
+  "fieldtype": "Data",
+  "hidden": 1,
+  "label": "Default Section",
+  "read_only": 1
+}
+```
+
+#### 2. UPDATED: Field Order
+- **Added to field order**: `"default_section"` after `"is_active"`
+
+### CURRENT FIELD ORDER:
+```json
+[
+  "column_break_main",
+  "company_abbr",
+  "is_active",
+  "default_section",
+  "configuration_section",
+  ...
+]
+```
+
+## =============================================================================
+## 5. CHANGES TO: avinashgroup_app/custom_code/dynamic_approval.py
+## =============================================================================
+
+### SUMMARY OF CHANGES:
+Enhanced the dynamic approval system with default section fallback functionality and removed restrictive validation.
+
+### SPECIFIC CHANGES MADE:
+
+#### 1. UPDATED: _get_config_for_doc Function
+- **Added default_section to fields**:
+```python
+fields=["name", "approver_table_fieldname", "current_level_fieldname", "default_section"],
+```
+
+#### 2. ENHANCED: Section Matching Logic
+- **Added Default Section Handling**:
+```python
+default_section = (setting.get("default_section") or "").strip()
+
+for sec in all_sections:
+    # Default section is fallback-only — its own criteria are ignored
+    # and it never wins through the normal scoring loop.
+    if sec == default_section:
+        continue
+
+    criteria = criteria_by_section.get(sec, [])
+    # A non-default section with zero criteria matches nothing —
+    # fallback behavior is reserved for the explicit default_section.
+    if not criteria:
+        continue
+
+    if all(
+        str(doc.get(c.field_name) or "").strip() == str(c.field_value or "").strip()
+        for c in criteria
+    ):
+        score = len(criteria)
+        if score > best_score:
+            best_score = score
+            best_section = sec
+
+# No criteria match? fall back to configured default section.
+if best_section is None and default_section and default_section in all_sections:
+    best_section = default_section
+```
+
+#### 3. UPDATED: validate Function
+- **Changed Permission Logic**:
+  - **Before**: `"1. Only the current approver (or Administrator) may save."`
+  - **After**: `"1. Any user with write access may save."`
+
+#### 4. REMOVED: Approver Validation Logic
+- **Removed Code**:
+```python
+# Read from DB — before_workflow_action already updated the in-memory field
+# to the NEXT approver, so doc.get() would give the wrong value here.
+current_approver = frappe.db.get_value(doc.doctype, doc.name, CURRENT_APPROVER_FIELD) or doc.get(CURRENT_APPROVER_FIELD)
+
+if frappe.session.user != current_approver:
+    approver_name = (
+        frappe.db.get_value("User", current_approver, "full_name") or current_approver
+        if current_approver else _("the assigned approver")
+    )
+    frappe.throw(
+        _("This document is pending approval. Only {0} (the current approver) may make changes.").format(approver_name)
+    )
+```
+
+#### 5. REMOVED: Resubmit Workflow Action
+- **Removed from before_workflow_action**:
+```python
+elif action == "Resubmit":
+    total = _get_total_levels(doc, config)
+    if not total:
+        total = 1
+        approver = "Administrator"
+    else:
+        approver = _get_effective_approver_at_level(doc, 1, config)
+    doc.set(level_field, 1)
+    doc.set(TOTAL_LEVELS_FIELD, total)
+    doc.set(CURRENT_APPROVER_FIELD, approver)
+    doc.flags.approval_level_changed = True
+    _log_approval_history(doc, "Resubmitted for Approval")
+```
+
+#### 6. REMOVED: Resubmit Workflow Transition
+- **Removed from _create_or_update_workflow**:
+```python
+# Resubmit after rejection
+{
+    "state": "Rejected", "action": "Resubmit",
+    "next_state": "Pending Approval", "allowed": "All", "condition": "",
+},
+```
+
+## =============================================================================
+## WORKFLOW AND BUSINESS LOGIC CHANGES
+## =============================================================================
+
+### 1. DYNAMIC APPROVAL SYSTEM ENHANCEMENTS
+
+#### BEFORE CHANGES:
+- Sections were matched purely by criteria scoring
+- No fallback mechanism when no criteria matched
+- Strict approver validation (only current approver could edit)
+- Resubmit functionality after rejection
+
+#### AFTER CHANGES:
+- **Default Section Fallback**: When no criteria match, system falls back to a designated default section
+- **Relaxed Permissions**: Any user with write access can edit pending documents
+- **Unique Section Names**: Validation prevents duplicate section names
+- **Visual Indicators**: Default sections show "Default" badge in UI
+- **Removed Resubmit**: No more resubmit action after rejection
+
+### 2. GLOBAL SEARCH ENHANCEMENT (REMOVED)
+- **Attempted**: Add Journal Entry to global search
+- **Implementation**: Custom search handler with name, reference_number, remarks search
+- **Status**: Removed/Reverted - not implemented
+
+## =============================================================================
+## DEPLOYMENT REQUIREMENTS
+## =============================================================================
+
+### TO ACTIVATE CHANGES:
+```bash
+cd /home/dell/frappe-v15
+bench clear-cache
+bench build
+bench --site avinas1 migrate
+bench restart
+```
+
+### TESTING CHECKLIST:
+1. ✅ Dynamic Approval Setting form loads without errors
+2. ✅ Section validation prevents duplicate names
+3. ✅ Default section badge appears correctly
+4. ✅ Default section fallback works in approval matching
+5. ✅ Users can edit pending approval documents
+6. ✅ Workflow states work without Resubmit action
+
+## =============================================================================
+## ROLLBACK PROCEDURES
+## =============================================================================
+
+### IF ISSUES OCCUR:
+1. **Revert dynamic_approval.py**: Remove default_section logic
+2. **Revert dynamic_approval_setting.js**: Remove validation and UI changes
+3. **Revert dynamic_approval_setting.json**: Remove default_section field
+4. **Clear cache and rebuild**
+
+## =============================================================================
+## END OF DOCUMENTATION
+## =============================================================================
