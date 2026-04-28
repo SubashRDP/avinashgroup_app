@@ -1,9 +1,9 @@
 function set_criteria_field_options(frm) {
 	if (!frm.doc.document_type) return;
 	frappe.model.with_doctype(frm.doc.document_type, function () {
-		let all = _get_link_field_options(frm);
+		let opts = _get_link_field_options_string(frm);
 		if (frm.fields_dict.match_criteria && frm.fields_dict.match_criteria.grid) {
-			frm.fields_dict.match_criteria.grid.update_docfield_property("field_name", "options", all);
+			frm.fields_dict.match_criteria.grid.update_docfield_property("field_name", "options", opts);
 		}
 	});
 }
@@ -254,7 +254,7 @@ function open_section_dialog(frm, existing_section) {
 					{
 						fieldname: "field_name",
 						label: __("Field Name"),
-						fieldtype: "Select",
+						fieldtype: "Autocomplete",
 						in_list_view: 1,
 						reqd: 1,
 						columns: 5,
@@ -374,27 +374,49 @@ function open_section_dialog(frm, existing_section) {
 	d.show();
 }
 
+// Return [{label, value}] for Autocomplete: shows "Field Label (fieldname)"
+// in the dropdown, stores the fieldname as the value.
 function _get_link_field_options(frm) {
-	if (!frm.doc.document_type) return "";
+	if (!frm.doc.document_type) return [];
 	let meta = frappe.get_meta(frm.doc.document_type);
-	if (!meta) return "";
-	let fields = (meta.fields || [])
+	if (!meta) return [];
+
+	let opts = [];
+	let seen = new Set();
+
+	// Doc standard fields — present on every doctype
+	let standard = [
+		{ value: "owner",        label: "Owner (owner)" },
+		{ value: "modified_by",  label: "Last Modified By (modified_by)" },
+	];
+	standard.forEach(o => { if (!seen.has(o.value)) { opts.push(o); seen.add(o.value); } });
+
+	// Every Link field on this doctype (including custom_* fields)
+	(meta.fields || [])
 		.filter(f => f.fieldtype === "Link")
-		.map(f => f.fieldname);
-	let standard = ["owner", "company", "department", "modified_by"];
-	return [...new Set([...standard, ...fields])].join("\n");
+		.forEach(f => {
+			if (seen.has(f.fieldname)) return;
+			let label_text = f.label || f.fieldname;
+			opts.push({ value: f.fieldname, label: `${label_text} (${f.fieldname})` });
+			seen.add(f.fieldname);
+		});
+
+	return opts;
+}
+
+// Newline-separated fieldnames (used by the hidden grid Select control).
+function _get_link_field_options_string(frm) {
+	return _get_link_field_options(frm).map(o => o.value).join("\n");
 }
 
 function _get_linked_doctype_for_field(frm, field_name) {
 	if (!frm.doc.document_type || !field_name) return "";
 
+	// Doc standard fields that aren't in meta but are always Link → User
 	let standard_link_map = {
 		owner: "User",
 		modified_by: "User",
-		company: "Company",
-		department: "Department",
 	};
-
 	if (standard_link_map[field_name]) {
 		return standard_link_map[field_name];
 	}
