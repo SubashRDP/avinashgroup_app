@@ -41,44 +41,7 @@ frappe.ui.form.on("Dynamic Approval Setting", {
 	document_type(frm) {
 		set_criteria_field_options(frm);
 	},
-
-	validate(frm) {
-		validate_unique_sections_in_form(frm);
-	},
 });
-
-function validate_unique_sections_in_form(frm) {
-	const seen = new Map();
-
-	function track(section, source, idx) {
-		const key = (section || "").trim();
-		if (!key) return;
-
-		const first = seen.get(key);
-		if (first) {
-			frappe.throw(
-				__(
-					"Duplicate section name <b>{0}</b> found in this setting.<br><br>First used in: {1}<br>Duplicate at: {2}",
-					[
-						frappe.utils.escape_html(key),
-						frappe.utils.escape_html(first),
-						frappe.utils.escape_html(`${source} row ${idx}`),
-					]
-				)
-			);
-		}
-
-		seen.set(key, `${source} row ${idx}`);
-	}
-
-	(frm.doc.match_criteria || []).forEach((row, i) => {
-		track(row.section, "Match Criteria", row.idx || i + 1);
-	});
-
-	(frm.doc.approvers || []).forEach((row, i) => {
-		track(row.section, "Approvers", row.idx || i + 1);
-	});
-}
 
 // ── Child table: update field_value picker based on selected field_name ──
 frappe.ui.form.on("Dynamic Approval Match Criteria", {
