@@ -57,6 +57,35 @@ def validate_purchase_document(doc, method=None):
 def before_validate_purchase_document(doc, method=None):
     """Before-validate hook for purchase documents"""
     apply_return_qty_sign(doc)
+    fill_missing_warehouse(doc)
+
+
+def fill_missing_warehouse(doc):
+    """
+    For stock-item rows with no warehouse, copy Item.custom_buying_warehouse
+    onto the row. No-op for non-stock items, zero-qty rows, or rows that
+    already have a warehouse.
+    """
+    if not getattr(doc, "items", None):
+        return
+
+    for row in doc.items:
+        if row.get("warehouse"):
+            continue
+        if not row.get("item_code") or not flt(row.get("qty")):
+            continue
+
+        item_data = frappe.db.get_value(
+            "Item",
+            row.item_code,
+            ["is_stock_item", "custom_buying_warehouse"],
+            as_dict=True,
+        )
+        if not item_data or not item_data.is_stock_item:
+            continue
+
+        if item_data.custom_buying_warehouse:
+            row.warehouse = item_data.custom_buying_warehouse
 
 
 def ensure_apply_on_defaults(doc):

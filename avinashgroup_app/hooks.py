@@ -140,8 +140,6 @@ doctype_js = {
 
 ## Event Templates
  
-from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
-
 # Purchase Invoice specific events (using common handler)
 purchase_invoice_specific_events = {
     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
