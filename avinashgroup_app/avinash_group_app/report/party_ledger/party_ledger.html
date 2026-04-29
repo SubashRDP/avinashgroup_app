@@ -2,6 +2,12 @@
 @page {
   size: A4 landscape;
   margin: 12mm 15mm 18mm;
+  @bottom-center {
+    content: "Page " counter(page) "/" counter(pages);
+    font-size: 12px;
+    color: #000;
+    font-family: Arial, sans-serif;
+  }
 }
 @media print {
   .pl-footer { display: none; }
