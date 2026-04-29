@@ -117,8 +117,7 @@
 /* Remark sub-row */
 .pl-row-remark td {
   font-size: 10px;
-  color: #555;
-  font-style: italic;
+  color: #222;
   padding: 2px 8px 4px 22px;
   border-bottom: 1px solid #efefef;
 }
@@ -246,8 +245,8 @@
 
   <table>
     <colgroup>
-      <col style="width:90px">
-      <col style="width:90px">
+      <col style="width:100px">
+      <col style="width:100px">
       <col style="width:140px">
       <col>
       {% if (_has_detail) { %}
@@ -300,13 +299,18 @@
     </thead>
 
     {% var _tbo = false; %}
+    {% var _pending_remark = ''; %}
 
     {% for (var _i = 0; _i < data.length; _i++) { %}
       {% var _row = data[_i]; %}
+      {% var _next = data[_i + 1]; %}
 
       {% if (_row.is_remark) { %}
         <tr class="pl-row-remark">
-          <td colspan="{%= _tcols %}">{%= _row.description || '' %}</td>
+          <td></td><td></td><td></td>
+          <td class="pl-indent-desc">{%= _row.description || '' %}</td>
+          {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
+          <td></td><td></td><td></td>
         </tr>
 
       {% } else if (_row.is_detail) { %}
@@ -326,13 +330,22 @@
           {% } %}
           <td></td><td></td><td></td>
         </tr>
+        {% if (_pending_remark && (!_next || !_next.is_detail)) { %}
+        <tr class="pl-row-remark">
+          <td></td><td></td><td></td>
+          <td class="pl-indent-desc">{%= _pending_remark %}</td>
+          {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
+          <td></td><td></td><td></td>
+        </tr>
+        {% _pending_remark = ''; %}
+        {% } %}
 
       {% } else if (!_row.is_summary && !_row.is_separator) { %}
         {% if (_tbo) { %}</tbody>{% } %}
         <tbody class="pl-group">{% _tbo = true; %}
         <tr class="pl-row-main">
-          <td>{%= _row.date ? frappe.datetime.str_to_user(_row.date) : '' %}</td>
-          <td>{%= _row.miti || '' %}</td>
+          <td style="white-space:nowrap;">{%= _row.date ? frappe.datetime.str_to_user(_row.date) : '' %}</td>
+          <td style="white-space:nowrap;">{%= _row.miti || '' %}</td>
           <td>{%= _row.voucher_no || '' %}</td>
           <td>{%= _row.description || '' %}</td>
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
@@ -340,17 +353,27 @@
           <td class="r">{%= _camt(_row.credit) %}</td>
           <td class="r nowrap">{%= _bal(_row.balance) %}</td>
         </tr>
-        {% if (_row.remarks) { %}
-        <tr class="pl-row-detail">
-          <td></td><td></td>
-          <td></td>
-          <td class="pl-indent-desc">{%= _row.remarks %}</td>
+        {% _pending_remark = _row.remarks || ''; %}
+        {% if (_pending_remark && (!_next || !_next.is_detail)) { %}
+        <tr class="pl-row-remark">
+          <td></td><td></td><td></td>
+          <td class="pl-indent-desc">{%= _pending_remark %}</td>
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
           <td></td><td></td><td></td>
         </tr>
+        {% _pending_remark = ''; %}
         {% } %}
 
       {% } else { %}
+        {% if (_pending_remark) { %}
+        <tr class="pl-row-remark">
+          <td></td><td></td><td></td>
+          <td class="pl-indent-desc">{%= _pending_remark %}</td>
+          {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
+          <td></td><td></td><td></td>
+        </tr>
+        {% _pending_remark = ''; %}
+        {% } %}
         {% if (_tbo) { %}</tbody>{% } %}
         <tbody>{% _tbo = true; %}
         {% if (_row.is_separator) { %}

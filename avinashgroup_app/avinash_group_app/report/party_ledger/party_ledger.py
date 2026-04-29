@@ -1,11 +1,132 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
+import os
 import frappe
 from frappe import _
 from frappe.utils import flt
 from datetime import date, datetime
+from markupsafe import Markup
 import json
+
+
+def _fmt_inr(v):
+	"""Format number in Indian style (e.g. 1,50,000.00). Returns empty string for zero/None."""
+	if v is None or v == '':
+		return ''
+	try:
+		n = float(v)
+	except (TypeError, ValueError):
+		return ''
+	if n == 0:
+		return ''
+	neg = n < 0
+	n = abs(n)
+	s = f"{n:.2f}"
+	int_part, dec = s.split('.')
+	if len(int_part) > 3:
+		result = int_part[-3:]
+		int_part = int_part[:-3]
+		while int_part:
+			result = int_part[-2:] + ',' + result
+			int_part = int_part[:-2]
+	else:
+		result = int_part
+	return ('-' if neg else '') + result + '.' + dec
+
+
+def _bal_str(v):
+	"""Return bold balance string with DB/CR suffix as safe HTML Markup."""
+	if v is None or v == '':
+		return Markup('')
+	try:
+		n = float(v)
+	except (TypeError, ValueError):
+		return Markup('')
+	suffix = 'DB' if n >= 0 else 'CR'
+	formatted = _fmt_inr(abs(n)) or '0.00'
+	return Markup(f'<b>{formatted}</b>&thinsp;<small>{suffix}</small>')
+
+
+@frappe.whitelist()
+def download_pdf(filters):
+	import tempfile
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+
+	_, data = execute(filters)
+
+	# Collect unique party display names for the header
+	seen = set()
+	party_names = []
+	for row in data:
+		pn = row.get('party_name') or ''
+		for part in pn.split(','):
+			part = part.strip()
+			if part and part not in seen:
+				seen.add(part)
+				party_names.append(part)
+
+	template_path = os.path.join(os.path.dirname(__file__), 'party_ledger_pdf.html')
+	with open(template_path) as f:
+		template_content = f.read()
+
+	html = frappe.render_template(
+		template_content,
+		{
+			'filters': filters,
+			'data': data,
+			'party_names': party_names,
+			'fmt': _fmt_inr,
+			'bal': _bal_str,
+		}
+	)
+
+	# Build footer HTML (page numbers via JS — wkhtmltopdf injects page/topage in query string)
+	footer_html = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script>
+function subst() {
+	var v = {}, x = window.location.search.substring(1).split('&');
+	for (var i in x) { var z = x[i].split('=', 2); v[z[0]] = unescape(z[1]); }
+	document.getElementById('pn').textContent = v['page'];
+	document.getElementById('tp').textContent = v['topage'];
+}
+</script>
+</head>
+<body onload="subst()" style="margin:0;padding:2mm 0;font-family:Arial,sans-serif;font-size:9pt;color:#000;text-align:center;">
+Page <span id="pn"></span>/<span id="tp"></span>
+</body></html>"""
+
+	footer_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
+	footer_file.write(footer_html)
+	footer_file.close()
+
+	try:
+		options = {
+			'page-size': 'A4',
+			'orientation': 'Landscape',
+			'margin-top': '10mm',
+			'margin-right': '15mm',
+			'margin-bottom': '15mm',
+			'margin-left': '15mm',
+			'footer-html': footer_file.name,
+			'footer-spacing': '2',
+			'encoding': 'UTF-8',
+			'enable-local-file-access': None,
+		}
+		pdf_data = get_pdf(html, options)
+	finally:
+		try:
+			os.unlink(footer_file.name)
+		except FileNotFoundError:
+			pass
+
+	frappe.response.filename = 'party_ledger.pdf'
+	frappe.response.filecontent = pdf_data
+	frappe.response.type = 'download'
 
 
 def _normalize_multiselect(value):
