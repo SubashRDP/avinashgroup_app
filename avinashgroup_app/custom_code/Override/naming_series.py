@@ -8,19 +8,19 @@ BRANCH_NAME_COMPANY = "Grishma Enterprises Pvt. Ltd."
 # branch_code per doctype per branch (normal and return)
 BRANCH_CODE_CONFIG = {
     "Sales Invoice": {
-        "Annamnagar": {"normal": "INV", "return": "RT"},
-        "Balaju":     {"normal": "SB",  "return": "BSR"},
-        "Chitwan":    {"normal": "GEP", "return": "RTN"},
+        "GEPL-Branch-00001": {"normal": "INV", "return": "RT"},
+        "GEPL-Branch-00002":     {"normal": "SB",  "return": "BSR"},
+        "GEPL-Branch-00003":    {"normal": "GEP", "return": "RTN"},
     },
     "Purchase Receipt": {
-        "Annamnagar": {"normal": "AN"},
-        "Balaju":     {"normal": "BRC"},
-        "Chitwan":    {"normal": "RC"},
+        "GEPL-Branch-00001": {"normal": "AN"},
+        "GEPL-Branch-00002":     {"normal": "BRC"},
+        "GEPL-Branch-00003":    {"normal": "RC"},
     },
     "Purchase Invoice": {
-        "Annamnagar": {"normal": "PBA"},
-        "Balaju":     {"normal": "PBB"},
-        "Chitwan":    {"normal": "PB"},
+        "GEPL-Branch-00001": {"normal": "PBA"},
+        "GEPL-Branch-00002":     {"normal": "PBB"},
+        "GEPL-Branch-00003":    {"normal": "PB"},
     },
 }
 
@@ -643,12 +643,28 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
     return make_autoname(naming_pattern)
 
 
+def _get_doc_no_digits(doctype):
+    try:
+        rows = frappe.get_all(
+            "Voucher Number Settings Item",
+            filters={"doctype_name": doctype},
+            fields=["voucher_no_digits"],
+            limit=1
+        )
+        if rows:
+            return int(rows[0].voucher_no_digits or 6)
+    except Exception:
+        pass
+    return 6
+
+
 def format_document_number(doc):
-    doc_no = "000000"
+    digits = _get_doc_no_digits(doc.doctype)
+    doc_no = "0" * digits
     doc_word = ""
 
     if hasattr(doc, 'custom_document_no') and doc.custom_document_no:
-        doc_no = str(doc.custom_document_no).zfill(6)
+        doc_no = str(doc.custom_document_no).zfill(digits)
 
     if hasattr(doc, 'custom_document_word') and doc.custom_document_word:
         doc_word = str(doc.custom_document_word).strip()

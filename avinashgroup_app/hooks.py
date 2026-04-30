@@ -30,6 +30,7 @@ app_license = "mit"
 # include js, css files in header of desk.html
 # app_include_css = "/assets/avinashgroup_app/css/avinashgroup_app.css"
 app_include_js = [
+<<<<<<< HEAD
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
     "/assets/avinashgroup_app/js/sales_invoice.js?v=10.4",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.7",  # Common taxes handler for all purchase doctypes
@@ -37,6 +38,15 @@ app_include_js = [
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
+=======
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=10.5",
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",  # Common taxes + warehouse handler for all purchase doctypes
+    "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.1",  # Warehouse handler for selling hierarchy
+    "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
+    "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
+    "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
+    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.0",
+>>>>>>> develop
 ]
 # my_custom_app/hooks.py
 
@@ -172,6 +182,28 @@ sales_invoice_specific_events = {
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
 }
 
+# Selling hierarchy warehouse events
+quotation_events = {
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_quotation"
+}
+
+sales_order_events = {
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_sales_order"
+}
+
+delivery_note_events = {
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_delivery_note"
+}
+
+# Buying hierarchy warehouse events
+material_request_events = {
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_material_request"
+}
+
+rfq_events = {
+    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_request_for_quotation"
+}
+
 # doc_events = {
 #     "Sales Invoice": {
 #         "validate": "avinashgroup_app.custom_code.SalesInvoice.validate_sales_invoice"
@@ -214,6 +246,21 @@ for _event, _handler in supplier_quotation_events.items():
 
 for _event, _handler in sales_invoice_specific_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
+
+for _event, _handler in quotation_events.items():
+    _add_doc_event("Quotation", _event, _handler)
+
+for _event, _handler in sales_order_events.items():
+    _add_doc_event("Sales Order", _event, _handler)
+
+for _event, _handler in delivery_note_events.items():
+    _add_doc_event("Delivery Note", _event, _handler)
+
+for _event, _handler in material_request_events.items():
+    _add_doc_event("Material Request", _event, _handler)
+
+for _event, _handler in rfq_events.items():
+    _add_doc_event("Request for Quotation", _event, _handler)
 
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):
@@ -283,8 +330,15 @@ _add_doc_event("*", "before_workflow_action", "avinashgroup_app.custom_code.dyna
 
 # Override doctype class to bypass workflow validation for Administrator
 override_doctype_class = {
-	"Material Request": "avinashgroup_app.custom_code.Override.material_request.MaterialRequest",
-	"Purchase Order": "avinashgroup_app.custom_code.Override.purchase_order.PurchaseOrder",
+	"Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",
+	"Purchase Order": "avinashgroup_app.custom_code.Override.overrides.PurchaseOrder",
+	"Sales Invoice": "avinashgroup_app.custom_code.Override.overrides.CustomSalesInvoice",
+	"Sales Order": "avinashgroup_app.custom_code.Override.overrides.SalesOrder",
+	"Delivery Note": "avinashgroup_app.custom_code.Override.overrides.DeliveryNote",
+	"Purchase Invoice": "avinashgroup_app.custom_code.Override.overrides.PurchaseInvoice",
+	"Purchase Receipt": "avinashgroup_app.custom_code.Override.overrides.PurchaseReceipt",
+	"Supplier Quotation": "avinashgroup_app.custom_code.Override.overrides.SupplierQuotation",
+	"Request for Quotation": "avinashgroup_app.custom_code.Override.overrides.RequestforQuotation",
 }
 
 # doc_events = {

@@ -1,6 +1,6 @@
 
 frappe.ui.form.on("Sales Invoice", {
-    
+
     onload: function(frm) {
         // Apply field visibility for all existing rows on load
         if (frm.doc.items) {
@@ -9,9 +9,8 @@ frappe.ui.form.on("Sales Invoice", {
             });
         }
     },
-    
+
     refresh: function(frm) {
-        console.log("Refresh!!!");
         // Apply field visibility on refresh
         if (frm.doc.items) {
             frm.doc.items.forEach(function(item) {
@@ -23,17 +22,25 @@ frappe.ui.form.on("Sales Invoice", {
         }
     },
 
+    before_save: function(frm) {
+        return force_all_si_warehouses(frm);
+    },
+
+    // When set_warehouse changes, ERPNext propagates it to all item rows.
+    // Re-apply custom_selling_warehouse immediately after to override it.
+    set_warehouse: function(frm) {
+        setTimeout(() => force_all_si_warehouses(frm), 300);
+    },
+
     base_total_taxes_and_charges: function(frm) {
         calculate_total(frm);
     },
 
     base_grand_total: function(frm) {
-        console.log("Base Grand Total changed");
         calculate_total(frm);
     },
 
     taxes_and_charges: function(frm) {
-        console.log("Taxes and Charges template changed");
         setTimeout(() => {
             calculate_vat_total(frm);
             calculate_total(frm);
@@ -41,7 +48,6 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
     total_advance: function(frm) {
-        console.log("Total Advance changed");
         calculate_total(frm);
     },
 
@@ -58,9 +64,36 @@ frappe.ui.form.on("Sales Invoice", {
 });
 
 frappe.ui.form.on("Sales Invoice Item", {
-    item_code: async function(frm, cdt, cdn) {
-        let row = locals[cdt][cdn];
-        if (row && row.item_code) {
+    item_code: function(frm, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (!row || !row.item_code) return;
+
+        // Start fetching our warehouse immediately (runs in background)
+        const wh_promise = _fetch_selling_wh(row.item_code, frm.doc.custom_branch);
+
+        // SYNCHRONOUSLY wrap frappe.call before any await.
+        // When ERPNext's item_code handler calls get_item_details, we intercept the
+        // response and inject our warehouse BEFORE ERPNext sets it on locals.
+        // This eliminates the race condition that setTimeout-based approaches had.
+        const _orig = frappe.call;
+        let _restored = false;
+        const _restore = () => { if (!_restored) { frappe.call = _orig; _restored = true; } };
+        frappe.call = function(opts) {
+            if (opts && opts.method && opts.method.includes('get_item_details')) {
+                const _cb = opts.callback;
+                opts.callback = async function(r) {
+                    const our_wh = await wh_promise;
+                    if (r && r.message) r.message.warehouse = our_wh;
+                    _cb && _cb.apply(this, arguments);
+                    _restore();
+                };
+            }
+            return _orig.apply(frappe, arguments);
+        };
+        setTimeout(_restore, 5000); // safety: restore if get_item_details is never called
+
+        // Continue with VAT defaults and visibility (async, but wrapper is already in place)
+        (async () => {
             try {
                 const item_check = await frappe.call({
                     method: "frappe.client.get_value",
@@ -70,25 +103,19 @@ frappe.ui.form.on("Sales Invoice Item", {
                         fieldname: "item_name"
                     }
                 });
-                
-                if (!item_check.message) {
-                    return;
-                }
-                
-                // Default to VAT 13%
+
+                if (!item_check.message) { _restore(); return; }
+
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
 
-                // Apply field visibility
-                frappe.after_ajax(() => {
-                    toggle_vat_fields(frm, cdt, cdn);
-                });
+                frappe.after_ajax(() => toggle_vat_fields(frm, cdt, cdn));
                 frm.refresh_field('items');
-                
             } catch(e) {
                 console.error("Error in item_code handler:", e);
+                _restore();
             }
-        }
+        })();
     },
 
     qty: function(frm, cdt, cdn) {
@@ -153,8 +180,6 @@ frappe.ui.form.on("Sales Invoice Item", {
     },
     
     items_add: function(frm, cdt, cdn) {
-        console.log("Item Added");
-        
         frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
             frappe.after_ajax(() => {
                 toggle_vat_fields(frm, cdt, cdn);
@@ -165,7 +190,6 @@ frappe.ui.form.on("Sales Invoice Item", {
 
 frappe.ui.form.on("Sales Taxes and Charges", {
     account_head: function(frm, cdt, cdn) {
-        console.log("Tax account head changed");
         setTimeout(() => {
             calculate_vat_total(frm);
             calculate_total(frm);
@@ -236,11 +260,8 @@ function toggle_vat_fields(frm, cdt, cdn) {
  * This sums all custom_total values from items
  */
 function calculate_total_amount_including_excise(frm) {
-    if (!frm || !frm.doc) {
-        console.log("Form not available");
-        return;
-    }
-    
+    if (!frm || !frm.doc) return;
+
     let total_including_excise = 0;
     
     if (frm.doc.items && frm.doc.items.length > 0) {
@@ -251,7 +272,6 @@ function calculate_total_amount_including_excise(frm) {
     }
     
     total_including_excise = flt(total_including_excise, 5);
-    console.log(`Total Amount Including Excise: ${total_including_excise}`);
     
     frm.set_value('custom_total_amount_including_excise', total_including_excise);
     frm.refresh_field('custom_total_amount_including_excise');
@@ -345,7 +365,6 @@ function calculate_vat_total(frm) {
 }
 
 function set_due_date_from_customer(frm) {
-    console.log("Sales Invoice opened");
     if (!frm.doc.customer || !frm.doc.posting_date) return;
     const posting_date = frm.doc.posting_date;
     frappe.db.get_value('Customer', frm.doc.customer, 'custom_days_limit', function(data) {
@@ -359,10 +378,7 @@ function set_due_date_from_customer(frm) {
  * Calculate totals
  */
 function calculate_total(frm) {
-    if (!frm || !frm.doc) {
-        console.log("Form not available");
-        return;
-    }
+    if (!frm || !frm.doc) return;
     
     let custom_total_excluding_excise = 0;
     let total_excise = 0;
@@ -381,10 +397,52 @@ function calculate_total(frm) {
 
         frm.refresh_field('custom_total_amount');
         frm.refresh_field('custom_excise');
-        
-        console.log(`Total Excluding Excise: ${custom_total_excluding_excise}, Total Excise: ${total_excise}`);
     }
     
     calculate_vat_total(frm);
     calculate_total_amount_including_excise(frm);
+}
+
+/**
+ * Fetch custom_selling_warehouse for an item, respecting branch-wise config.
+ * Returns "" if not configured — caller decides whether to set or leave.
+ */
+async function _fetch_selling_wh(item_code, custom_branch) {
+    let wh = '';
+    if (custom_branch) {
+        const item_doc = await frappe.db.get_doc('Item', item_code);
+        const brow = (item_doc.custom_branch_wise_warehouse || [])
+            .find(r => r.custom_branch === custom_branch);
+        if (brow) wh = brow.custom_selling_warehouse || '';
+    }
+    if (!wh) {
+        const res = await frappe.db.get_value('Item', item_code, 'custom_selling_warehouse');
+        wh = (res && res.message && res.message.custom_selling_warehouse) || '';
+    }
+    return wh;
+}
+
+/**
+ * Before save: sweep all item rows and force warehouse = custom_selling_warehouse.
+ * Overrides set_warehouse, Item Defaults, and any system fallback.
+ */
+async function force_all_si_warehouses(frm) {
+    if (!frm.doc.items || !frm.doc.items.length) return;
+
+    const custom_branch = frm.doc.custom_branch;
+    const item_codes = [...new Set(frm.doc.items.map(r => r.item_code).filter(Boolean))];
+    const warehouse_map = {};
+
+    await Promise.all(item_codes.map(async (item_code) => {
+        warehouse_map[item_code] = await _fetch_selling_wh(item_code, custom_branch);
+    }));
+
+    for (const item of frm.doc.items) {
+        // On save: only override if custom_selling_warehouse is set — preserves manual selection
+        const wh = item.item_code ? (warehouse_map[item.item_code] || '') : '';
+        if (wh) {
+            item.warehouse = wh;
+        }
+    }
+    frm.refresh_field('items');
 }

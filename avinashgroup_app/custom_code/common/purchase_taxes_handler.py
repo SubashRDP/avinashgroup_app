@@ -98,6 +98,8 @@ def ensure_apply_on_defaults(doc):
             item.custom_tds_apply_on = 'Percentage (%)'
 
 
+
+
 def calculate_custom_total(doc):
     """Calculate custom_total = base_net_amount + custom_excise_value"""
     for item in doc.items:
@@ -417,7 +419,6 @@ def populate_item_custom_fields(item_code):
 
     custom_excise_duty = flt(getattr(item, 'custom_excise_duty', 0))
     custom_tds_rate = flt(getattr(item, 'custom_tds_rate', 0))
-
     return {
         "custom_excise_duty": custom_excise_duty,
         "custom_tds_rate": custom_tds_rate
@@ -438,6 +439,43 @@ def before_validate_purchase_invoice(doc, method=None):
 def validate_purchase_invoice(doc, method=None):
     """Wrapper for Purchase Invoice"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
+
+
+def force_buying_warehouse(doc):
+    """Force warehouse on each item row from Item's custom_buying_warehouse.
+    Runs after ERPNext's own validate so it always wins."""
+    custom_branch = getattr(doc, "custom_branch", None)
+    warehouse_cache = {}
+    for item in doc.items:
+        if not item.item_code:
+            item.warehouse = ""
+            continue
+        if item.item_code in warehouse_cache:
+            if warehouse_cache[item.item_code]:
+                item.warehouse = warehouse_cache[item.item_code]
+            continue
+
+        warehouse = ""
+        try:
+            item_doc = frappe.get_doc("Item", item.item_code)
+            if custom_branch:
+                branch_rows = item_doc.get("custom_branch_wise_warehouse") or []
+                branch_row = next(
+                    (r for r in branch_rows if r.custom_branch == custom_branch and r.custom_buying_warehouse),
+                    None,
+                )
+                if branch_row:
+                    warehouse = branch_row.custom_buying_warehouse
+            if not warehouse:
+                warehouse = item_doc.get("custom_buying_warehouse") or ""
+        except Exception:
+            warehouse = frappe.db.get_value("Item", item.item_code, "custom_buying_warehouse") or ""
+
+        warehouse_cache[item.item_code] = warehouse
+        # Only override if custom_buying_warehouse is set — otherwise leave user's selection
+        if warehouse:
+            item.warehouse = warehouse
 
 
 def before_save_purchase_order(doc, method=None):
@@ -448,6 +486,7 @@ def before_save_purchase_order(doc, method=None):
 def validate_purchase_order(doc, method=None):
     """Wrapper for Purchase Order"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
 
 
 def before_save_purchase_receipt(doc, method=None):
@@ -458,6 +497,7 @@ def before_save_purchase_receipt(doc, method=None):
 def validate_purchase_receipt(doc, method=None):
     """Wrapper for Purchase Receipt"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
 
 
 def before_save_supplier_quotation(doc, method=None):
@@ -468,3 +508,14 @@ def before_save_supplier_quotation(doc, method=None):
 def validate_supplier_quotation(doc, method=None):
     """Wrapper for Supplier Quotation"""
     validate_purchase_document(doc, method)
+    force_buying_warehouse(doc)
+
+
+def validate_material_request(doc, method=None):
+    """Wrapper for Material Request"""
+    force_buying_warehouse(doc)
+
+
+def validate_request_for_quotation(doc, method=None):
+    """Wrapper for Request for Quotation"""
+    force_buying_warehouse(doc)
