@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #222;
+  line-height: 1.7;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+/* ── Header — table layout (flexbox not supported in wkhtmltopdf) ── */
+.pl-page-header {
+  display: table;
+  width: 100%;
+  margin-bottom: 4px;
+}
+.pl-company-name-cell { display: table-cell; vertical-align: top; }
+.pl-title-cell        { display: table-cell; vertical-align: top; text-align: right; }
+.pl-company-name      { font-size: 13px; font-weight: bold; }
+.pl-report-title      { font-size: 16px; font-weight: bold; }
+.pl-subheadings       { margin: 2px 0 4px; }
+.pl-subheading        { font-size: 12px; font-weight: bold; line-height: 1.3; }
+.pl-meta-bar {
+  display: table;
+  width: 100%;
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 8px;
+}
+.pl-meta-l { display: table-cell; }
+.pl-meta-r { display: table-cell; text-align: right; }
+.pl-divider { border: none; border-top: 1.5px solid #ccc; margin: 6px 0 8px; }
+
+/* ── Table ── */
+table { width: 100%; border-collapse: collapse; }
+thead { display: table-header-group; }
+tr    { page-break-inside: avoid; }
+
+/* Column headers */
+thead th {
+  background: #f0f2f5;
+  color: #222;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 8px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+thead th.r { text-align: right; }
+thead th.l { text-align: left; }
+
+/* All cells */
+td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
+
+/* Date / Miti — never wrap */
+.td-date { white-space: nowrap; }
+
+/* Opening Balance */
+.pl-row-opening td {
+  font-weight: bold;
+  padding: 5px 8px;
+  border-top: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Normal voucher row */
+.pl-row-main td { background: #fff; }
+
+/* Detail sub-row */
+.pl-row-detail td {
+  font-size: 10px;
+  padding: 4px 8px;
+  border-bottom: 1px solid #efefef;
+  white-space: nowrap;
+}
+
+/* Remark sub-row */
+.pl-row-remark td {
+  font-size: 10px;
+  color: #222;
+  padding: 2px 8px 4px 22px;
+  border-bottom: 1px solid #efefef;
+  white-space: normal;
+}
+
+/* Spacer between voucher groups */
+.pl-row-sep td { height: 6px; padding: 0; border: none; }
+
+/* For the Periods */
+.pl-row-period td {
+  font-weight: bold;
+  padding: 5px 8px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Closing Balance */
+.pl-row-closing td {
+  font-weight: bold;
+  padding: 5px 8px;
+  border-top: 2px solid #555;
+  border-bottom: 2px solid #555;
+}
+
+/* Indents */
+.pl-indent-doc  { padding-left: 22px !important; font-size: 11px; }
+.pl-indent-desc { padding-left: 14px !important; }
+
+/* Page-break control */
+tbody.pl-group { page-break-inside: avoid; break-inside: avoid; }
+.pl-row-main   { page-break-after: avoid;  break-after: avoid;  }
+.pl-row-detail { page-break-before: avoid; break-before: avoid;
+                 page-break-after: avoid;  break-after: avoid;  }
+.pl-row-remark { page-break-before: avoid; break-before: avoid; }
+
+.r      { text-align: right; }
+.l      { text-align: left;  }
+.nowrap { white-space: nowrap; }
+
+/* Footer */
+.pl-footer {
+  font-size: 10px;
+  color: #aaa;
+  text-align: right;
+  margin-top: 10px;
+}
+</style>
+</head>
+<body>
+
+{% set has_detail = filters.get('detailed_mapping') %}
+{% set pty        = filters.get('party_type') or 'Customer' %}
+{% set tcols      = 10 if has_detail else 7 %}
+
+<table>
+  <colgroup>
+    <col style="width:100px">
+    <col style="width:100px">
+    <col style="width:140px">
+    <col>
+    {% if has_detail %}
+    <col style="width:80px">
+    <col style="width:75px">
+    <col style="width:85px">
+    {% endif %}
+    <col style="width:100px">
+    <col style="width:100px">
+    <col style="width:120px">
+  </colgroup>
+
+  <thead>
+    <!-- Company header — inside thead so wkhtmltopdf repeats it on every page -->
+    <tr>
+      <td colspan="{{ tcols }}" style="padding:4px 0 0 0; border:none;">
+        <div class="pl-page-header">
+          <div class="pl-company-name-cell">
+            <div class="pl-company-name">{{ filters.get('company') or '' }}</div>
+          </div>
+          <div class="pl-title-cell">
+            <div class="pl-report-title">Party Ledger - {{ pty }}</div>
+          </div>
+        </div>
+        {% if party_names %}
+        <div class="pl-subheadings">
+          {% for name in party_names %}
+          <div class="pl-subheading">{{ name }}</div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="pl-meta-bar">
+          <div class="pl-meta-l">From&nbsp;<b>{{ frappe.utils.formatdate(filters.get('from_date')) }}</b>&nbsp;To&nbsp;<b>{{ frappe.utils.formatdate(filters.get('to_date')) }}</b></div>
+          <div class="pl-meta-r">Amount in Nepalese Rupee ( NPR )</div>
+        </div>
+        <hr class="pl-divider" style="margin-bottom:0;">
+      </td>
+    </tr>
+    <!-- Column headers -->
+    <tr>
+      <th class="l">Date</th>
+      <th class="l">Miti (BS)</th>
+      <th class="l">Voucher No</th>
+      <th class="l">Description</th>
+      {% if has_detail %}
+      <th></th><th></th><th></th>
+      {% endif %}
+      <th class="r">Debit</th>
+      <th class="r">Credit</th>
+      <th class="r">Balance</th>
+    </tr>
+  </thead>
+
+  {#
+    Remarks are buffered and flushed AFTER all is_detail rows of each voucher,
+    so the remark appears at the bottom of each voucher group.
+  #}
+  {% set ns = namespace(in_group=false, pending_remark='') %}
+
+  {% for row in data %}
+    {% set next_row = data[loop.index0 + 1] if loop.index0 + 1 < data|length else none %}
+
+    {% if row.get('is_remark') %}
+      <tr class="pl-row-remark">
+        <td></td><td></td><td></td>
+        <td class="pl-indent-desc">{{ row.get('description') or '' }}</td>
+        {% if has_detail %}<td></td><td></td><td></td>{% endif %}
+        <td></td><td></td><td></td>
+      </tr>
+
+    {% elif row.get('is_detail') %}
+      <tr class="pl-row-detail">
+        <td></td><td></td>
+        <td class="pl-indent-doc">{{ row.get('voucher_no') or '' }}</td>
+        <td class="pl-indent-desc">{{ row.get('description') or '' }}</td>
+        {% if has_detail %}
+        <td class="r">
+          {{ row.get('detail_qty') or '' }}{% if row.get('detail_qty') and row.get('detail_uom') %} {{ row.get('detail_uom') }}{% endif %}
+        </td>
+        <td class="r">{{ fmt(row.get('detail_rate')) }}</td>
+        <td class="r">{{ fmt(row.get('detail_amount')) }}</td>
+        {% endif %}
+        <td></td><td></td><td></td>
+      </tr>
+      {% if ns.pending_remark and (not next_row or not next_row.get('is_detail')) %}
+      <tr class="pl-row-remark">
+        <td></td><td></td><td></td>
+        <td class="pl-indent-desc">{{ ns.pending_remark }}</td>
+        {% if has_detail %}<td></td><td></td><td></td>{% endif %}
+        <td></td><td></td><td></td>
+      </tr>
+      {% set ns.pending_remark = '' %}
+      {% endif %}
+
+    {% elif not row.get('is_summary') and not row.get('is_separator') %}
+      {% if ns.in_group %}</tbody>{% endif %}
+      <tbody class="pl-group">{% set ns.in_group = true %}
+      <tr class="pl-row-main">
+        <td class="td-date">{{ frappe.utils.formatdate(row.get('date')) if row.get('date') else '' }}</td>
+        <td class="td-date">{{ row.get('miti') or '' }}</td>
+        <td>{{ row.get('voucher_no') or '' }}</td>
+        <td>{{ row.get('description') or '' }}</td>
+        {% if has_detail %}<td></td><td></td><td></td>{% endif %}
+        <td class="r">{{ fmt(row.get('debit')) }}</td>
+        <td class="r">{{ fmt(row.get('credit')) }}</td>
+        <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
+      </tr>
+      {% set ns.pending_remark = row.get('remarks') or '' %}
+      {% if ns.pending_remark and (not next_row or not next_row.get('is_detail')) %}
+      <tr class="pl-row-remark">
+        <td></td><td></td><td></td>
+        <td class="pl-indent-desc">{{ ns.pending_remark }}</td>
+        {% if has_detail %}<td></td><td></td><td></td>{% endif %}
+        <td></td><td></td><td></td>
+      </tr>
+      {% set ns.pending_remark = '' %}
+      {% endif %}
+
+    {% else %}
+      {% if ns.pending_remark %}
+      <tr class="pl-row-remark">
+        <td></td><td></td><td></td>
+        <td class="pl-indent-desc">{{ ns.pending_remark }}</td>
+        {% if has_detail %}<td></td><td></td><td></td>{% endif %}
+        <td></td><td></td><td></td>
+      </tr>
+      {% set ns.pending_remark = '' %}
+      {% endif %}
+      {% if ns.in_group %}</tbody>{% set ns.in_group = false %}{% endif %}
+      <tbody>
+      {% if row.get('is_separator') %}
+        <tr class="pl-row-sep"><td colspan="{{ tcols }}"></td></tr>
+      {% elif row.get('is_summary') and row.get('description') == 'Opening Balance' %}
+        <tr class="pl-row-opening">
+          <td></td><td></td><td></td>
+          <td>Opening Balance</td>
+          {% if has_detail %}<td colspan="3"></td>{% endif %}
+          <td class="r">{{ fmt(row.get('debit'))  }}</td>
+          <td class="r">{{ fmt(row.get('credit')) }}</td>
+          <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
+        </tr>
+      {% elif row.get('is_summary') and row.get('description') == 'For the Periods' %}
+        <tr class="pl-row-period">
+          <td></td><td></td><td></td>
+          <td>For the Periods</td>
+          {% if has_detail %}<td colspan="3"></td>{% endif %}
+          <td class="r">{{ fmt(row.get('debit'))  }}</td>
+          <td class="r">{{ fmt(row.get('credit')) }}</td>
+          <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
+        </tr>
+      {% elif row.get('is_summary') %}
+        <tr class="pl-row-closing">
+          <td></td><td></td>
+          <td style="font-size:11px;">{{ row.get('voucher_no') or '' }}</td>
+          <td>Closing Balance</td>
+          {% if has_detail %}<td colspan="3"></td>{% endif %}
+          <td class="r">{{ fmt(row.get('debit'))  }}</td>
+          <td class="r">{{ fmt(row.get('credit')) }}</td>
+          <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
+        </tr>
+      {% endif %}
+      </tbody>
+    {% endif %}
+
+  {% endfor %}
+  {% if ns.in_group %}</tbody>{% endif %}
+
+</table>
+
+<hr class="pl-divider">
+<div class="pl-footer">Printed on {{ frappe.utils.now() }}</div>
+
+</body>
+</html>

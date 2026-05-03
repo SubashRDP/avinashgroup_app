@@ -181,6 +181,17 @@ frappe.query_reports["Party Ledger"] = {
 	},
 
 	onload: function (_report) {
+		_report.page.add_inner_button(__('Download PDF'), function () {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.company || !filters.from_date || !filters.to_date) {
+				frappe.msgprint(__('Please set Company, From Date and To Date'));
+				return;
+			}
+			const url = '/api/method/avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf'
+				+ '?filters=' + encodeURIComponent(JSON.stringify(filters));
+			window.open(url);
+		});
+
 		frappe.dom.set_style(`
 			.dt-cell--header .dt-cell__content {
 				background-color: #34495e !important;

@@ -1,11 +1,132 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
+import os
 import frappe
 from frappe import _
 from frappe.utils import flt
 from datetime import date, datetime
+from markupsafe import Markup
 import json
+
+
+def _fmt_inr(v):
+	"""Format number in Indian style (e.g. 1,50,000.00). Returns empty string for zero/None."""
+	if v is None or v == '':
+		return ''
+	try:
+		n = float(v)
+	except (TypeError, ValueError):
+		return ''
+	if n == 0:
+		return ''
+	neg = n < 0
+	n = abs(n)
+	s = f"{n:.2f}"
+	int_part, dec = s.split('.')
+	if len(int_part) > 3:
+		result = int_part[-3:]
+		int_part = int_part[:-3]
+		while int_part:
+			result = int_part[-2:] + ',' + result
+			int_part = int_part[:-2]
+	else:
+		result = int_part
+	return ('-' if neg else '') + result + '.' + dec
+
+
+def _bal_str(v):
+	"""Return bold balance string with DB/CR suffix as safe HTML Markup."""
+	if v is None or v == '':
+		return Markup('')
+	try:
+		n = float(v)
+	except (TypeError, ValueError):
+		return Markup('')
+	suffix = 'DB' if n >= 0 else 'CR'
+	formatted = _fmt_inr(abs(n)) or '0.00'
+	return Markup(f'<b>{formatted}</b>&thinsp;<small>{suffix}</small>')
+
+
+@frappe.whitelist()
+def download_pdf(filters):
+	import tempfile
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+
+	_, data = execute(filters)
+
+	# Collect unique party display names for the header
+	seen = set()
+	party_names = []
+	for row in data:
+		pn = row.get('party_name') or ''
+		for part in pn.split(','):
+			part = part.strip()
+			if part and part not in seen:
+				seen.add(part)
+				party_names.append(part)
+
+	template_path = os.path.join(os.path.dirname(__file__), 'party_ledger_pdf.html')
+	with open(template_path) as f:
+		template_content = f.read()
+
+	html = frappe.render_template(
+		template_content,
+		{
+			'filters': filters,
+			'data': data,
+			'party_names': party_names,
+			'fmt': _fmt_inr,
+			'bal': _bal_str,
+		}
+	)
+
+	# Build footer HTML (page numbers via JS — wkhtmltopdf injects page/topage in query string)
+	footer_html = """<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<script>
+function subst() {
+	var v = {}, x = window.location.search.substring(1).split('&');
+	for (var i in x) { var z = x[i].split('=', 2); v[z[0]] = unescape(z[1]); }
+	document.getElementById('pn').textContent = v['page'];
+	document.getElementById('tp').textContent = v['topage'];
+}
+</script>
+</head>
+<body onload="subst()" style="margin:0;padding:2mm 0;font-family:Arial,sans-serif;font-size:9pt;color:#000;text-align:center;">
+Page <span id="pn"></span>/<span id="tp"></span>
+</body></html>"""
+
+	footer_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
+	footer_file.write(footer_html)
+	footer_file.close()
+
+	try:
+		options = {
+			'page-size': 'A4',
+			'orientation': 'Landscape',
+			'margin-top': '10mm',
+			'margin-right': '15mm',
+			'margin-bottom': '15mm',
+			'margin-left': '15mm',
+			'footer-html': footer_file.name,
+			'footer-spacing': '2',
+			'encoding': 'UTF-8',
+			'enable-local-file-access': None,
+		}
+		pdf_data = get_pdf(html, options)
+	finally:
+		try:
+			os.unlink(footer_file.name)
+		except FileNotFoundError:
+			pass
+
+	frappe.response.filename = 'party_ledger.pdf'
+	frappe.response.filecontent = pdf_data
+	frappe.response.type = 'download'
 
 
 def _normalize_multiselect(value):
@@ -42,6 +163,7 @@ def execute(filters=None):
 
 	data = get_data(filters)
 	return columns, data
+
 
 
 def get_columns(filters=None):
@@ -233,6 +355,7 @@ def get_data(filters):
 				entry.get("voucher_no"),
 				debit, credit,
 				detail_data,
+				show_remarks,
 			)
 			if sub_rows:
 				sub_rows[0]["is_first_detail"] = 1
@@ -272,6 +395,7 @@ def get_data(filters):
 
 	_apply_bs_miti(data)
 	_apply_custom_voucher_names(data)
+	_apply_party_names(data, party_type)
 	if show_remarks:
 		_apply_voucher_remarks(data)
 	return data
@@ -365,7 +489,7 @@ def _fetch_all_details(entries):
 	}
 
 
-def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail_data):
+def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail_data, show_remarks=False):
 	"""Return indented sub-rows for one voucher in detailed_mapping mode."""
 	rows = []
 	is_debit_side = main_debit > 0
@@ -447,9 +571,10 @@ def _build_detail_rows(voucher_type, voucher_no, main_debit, main_credit, detail
 
 	# ── Journal Entry ─────────────────────────────────────────────────────────
 	elif voucher_type == "Journal Entry":
-		remark = (detail_data["je_remarks"].get(voucher_no) or "").strip()
-		if remark:
-			rows.append(_sub("", remark))
+		if show_remarks:
+			remark = (detail_data["je_remarks"].get(voucher_no) or "").strip()
+			if remark:
+				rows.append(_sub("", remark))
 
 	return rows
 
@@ -608,6 +733,30 @@ def _apply_custom_voucher_names(rows):
 		custom = (type_map.get(vt) or {}).get(vn)
 		if custom:
 			r["voucher_no"] = custom
+
+
+def _apply_party_names(data, party_type):
+	"""Add party_name (display name) to each main row. Extra field — not in columns, invisible on screen."""
+	party_ids = {
+		r.get("party") for r in data
+		if r.get("party") and not r.get("is_summary") and not r.get("is_detail") and not r.get("is_separator")
+	}
+	if not party_ids:
+		return
+
+	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
+	if not frappe.db.has_column(party_type, name_field):
+		return
+
+	rows = frappe.db.get_all(party_type,
+		filters={"name": ("in", list(party_ids))},
+		fields=["name", name_field])
+	name_map = {r.name: r.get(name_field) for r in rows}
+
+	for row in data:
+		pid = row.get("party")
+		if pid:
+			row["party_name"] = name_map.get(pid) or pid
 
 
 def _apply_bs_miti(rows):
