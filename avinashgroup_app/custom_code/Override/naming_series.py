@@ -682,6 +682,9 @@ def set_auto_document_no(doc):
     """
     doctype = doc.doctype
 
+    if getattr(doc, "custom_document_no", None):
+        return
+
     if doctype not in AUTO_NUMBER_CONFIG:
         return
 
@@ -707,45 +710,39 @@ def set_auto_document_no(doc):
     if not prefix or not company_abbr:
         return
 
+    fiscal_year = None
+    if hasattr(doc, "custom_fiscal_year") and doc.custom_fiscal_year:
+        fiscal_year = doc.custom_fiscal_year
+    else:
+        date_field = None
+        if hasattr(doc, "posting_date") and doc.posting_date:
+            date_field = doc.posting_date
+        elif hasattr(doc, "transaction_date") and doc.transaction_date:
+            date_field = doc.transaction_date
+        elif hasattr(doc, "custom_created_on") and doc.custom_created_on:
+            date_field = doc.custom_created_on
+
+        if date_field:
+            fiscal_year = get_fiscal_year_from_date(date_field)
+
+    if not fiscal_year:
+        return
+
     # Filter by custom_name pattern — reliable because it is set on ALL documents
     # regardless of whether older docs have the type_field populated.
-    # Pattern: {company_abbr}-{p_type_code}-* e.g. SGU-RC-000006-82/83
-    name_pattern = f"{company_abbr}-{prefix}-%"
+    # Pattern: {company_abbr}-{p_type_code}-*-{fiscal_year} e.g. SGU-RC-000006-82/83
+    name_pattern = f"{company_abbr}-{prefix}-%-{fiscal_year}%"
 
-    existing = frappe.get_all(
+    max_no = frappe.db.get_value(
         doctype,
         filters={
             "custom_name": ["like", name_pattern],
             "docstatus": ["!=", 2],
         },
-        fields=["custom_name", "custom_document_no"],
-        ignore_permissions=True,
-    )
+        fieldname="max(custom_document_no)",
+    ) or 0
 
-    # Extract number from custom_name: SGU-RC-000057-82/83 → 57
-    name_re = re.compile(
-        r'^' + re.escape(company_abbr) + r'-' + re.escape(prefix) + r'-(\d+)-'
-    )
-    max_no = 0
-    for record in existing:
-        name_val = record.get("custom_name") or ""
-        m = name_re.match(name_val)
-        if m:
-            num = int(m.group(1))
-            if num > max_no:
-                max_no = num
-            continue
-        # Fallback: use custom_document_no if custom_name pattern doesn't match
-        doc_no = record.get("custom_document_no")
-        if doc_no:
-            try:
-                num = int(doc_no)
-                if num > max_no:
-                    max_no = num
-            except (TypeError, ValueError):
-                pass
-
-    doc.custom_document_no = max_no + 1
+    doc.custom_document_no = int(max_no) + 1
 
 
 @frappe.whitelist()
