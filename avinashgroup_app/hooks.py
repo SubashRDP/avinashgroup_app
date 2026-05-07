@@ -32,6 +32,7 @@ app_license = "mit"
 app_include_js = [
     "/assets/avinashgroup_app/js/sales_invoice.js?v=10.5",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",  # Common taxes + warehouse handler for all purchase doctypes
+    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.0",  # Common VAT + excise handler for Quotation, Sales Order, Delivery Note
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.1",  # Warehouse handler for selling hierarchy
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
@@ -173,16 +174,22 @@ sales_invoice_specific_events = {
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
 }
 
-# Selling hierarchy warehouse events
+# Selling hierarchy events (VAT + excise via common handler; warehouse via salesinvoice_taxes)
 quotation_events = {
+    "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_quotation",
+    "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_quotation",
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_quotation"
 }
 
 sales_order_events = {
+    "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_sales_order",
+    "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_sales_order",
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_sales_order"
 }
 
 delivery_note_events = {
+    "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_delivery_note",
+    "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_delivery_note",
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_delivery_note"
 }
 

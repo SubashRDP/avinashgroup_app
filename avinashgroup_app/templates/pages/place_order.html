@@ -184,7 +184,7 @@ class PlaceOrder {
 				me.ctx.currency = r.message.currency;
 				me.ctx.company = r.message.company;
 				$("#po-price-list").val(r.message.price_list);
-				$("#po-currency-display").text(r.message.currency);
+				$("#po-currency-display").val(r.message.currency);
 				$("#po-currency").val(r.message.currency);
 				$("#po-company").val(r.message.company);
 				// re-fetch rates for existing rows
@@ -211,6 +211,7 @@ class PlaceOrder {
 
 		const row = $(`
 			<tr data-idx="${idx}">
+				<td class="text-center po-sn"></td>
 				<td>
 					<input type="text" class="form-control po-item-code" data-idx="${idx}"
 						placeholder="Search item" autocomplete="off">
@@ -225,16 +226,17 @@ class PlaceOrder {
 						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:150px;max-height:180px;overflow-y:auto;"></div>
 				</td>
 				<td><input type="date" class="form-control po-delivery-date" data-idx="${idx}" value="${delivery}"></td>
-				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="" min="0.001" step="any" placeholder="0"></td>
+				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="1" min="0.001" step="any" placeholder="0"></td>
 				<td><input type="text" class="form-control po-rate text-right" data-idx="${idx}" readonly value="0.00"></td>
 				<td class="text-right po-amount" data-idx="${idx}">0.00</td>
 				<td class="text-center">
-					<button class="btn btn-sm btn-danger po-remove-row" data-idx="${idx}">×</button>
+					<button class="btn btn-sm btn-light po-remove-row" data-idx="${idx}" style="font-weight:700;font-size:16px;color:#333;line-height:1;">×</button>
 				</td>
 			</tr>
 		`);
 
 		$("#po-items-body").append(row);
+		this.renumber_rows();
 
 		this.ctx.items.push({
 			_idx: idx,
@@ -461,7 +463,14 @@ class PlaceOrder {
 	remove_row(idx) {
 		$(`#po-items-body tr[data-idx=${idx}]`).remove();
 		this.ctx.items = this.ctx.items.filter(i => i._idx !== idx);
+		this.renumber_rows();
 		this.recalculate_totals();
+	}
+
+	renumber_rows() {
+		$("#po-items-body tr").each(function (i) {
+			$(this).find(".po-sn").text(i + 1);
+		});
 	}
 
 	get_item(idx) {
@@ -633,7 +642,7 @@ class PlaceOrder {
 	</div>
 	<div class="col-sm-4 mb-3">
 		<div class="po-section-label">Currency</div>
-		<div class="po-field-value" id="po-currency-display">{{ currency }}</div>
+		<input type="text" class="form-control" id="po-currency-display" value="{{ currency }}" readonly>
 		<input type="hidden" id="po-currency" value="{{ currency }}">
 	</div>
 </div>
@@ -643,6 +652,7 @@ class PlaceOrder {
 	<table class="table po-items-table">
 		<thead>
 			<tr>
+				<th style="width:40px;">S.N.</th>
 				<th style="min-width:200px;">Item</th>
 				<th style="min-width:80px;">UOM</th>
 				<th style="min-width:130px;">Delivery Date</th>
