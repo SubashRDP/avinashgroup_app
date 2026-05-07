@@ -1,0 +1,678 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Place Order{% endblock %}
+
+{% block script %}
+<script>
+window.place_order_ctx = {
+	customer: {{ customer | tojson }},
+	customer_readonly: {{ customer_readonly | tojson }},
+	company: {{ company | tojson }},
+	price_list: {{ price_list | tojson }},
+	currency: {{ currency | tojson }},
+	number_format: {{ number_format | tojson }},
+	today: {{ today | tojson }},
+	default_delivery_date: {{ default_delivery_date | tojson }},
+	items: []
+};
+
+$(document).ready(function () {
+	new PlaceOrder();
+});
+
+class PlaceOrder {
+	constructor() {
+		this.ctx = window.place_order_ctx;
+		this.row_idx = 0;
+
+		this.bind_company_search();
+		this.bind_customer_change();
+		this.bind_price_list_search();
+		this.bind_add_row();
+		this.bind_submit();
+		this.add_row(); // start with one empty row
+	}
+
+	// ── Company autocomplete ──────────────────────────────────────────
+	bind_company_search() {
+		var me = this;
+		const $input = $("#po-company");
+		const $dd = $("<div>").css({
+			position: "absolute", zIndex: 999, background: "#fff",
+			border: "1px solid #ddd", display: "none",
+			minWidth: "250px", maxHeight: "200px", overflowY: "auto"
+		}).insertAfter($input);
+
+		function search_company() {
+			const txt = $input.val().trim();
+			frappe.call({
+				method: "avinashgroup_app.templates.pages.place_order.search_companies",
+				args: { txt: txt },
+				callback: function (r) {
+					const results = r.message || [];
+					$dd.empty();
+					if (!results.length) { $dd.hide(); return; }
+					results.forEach(function (c) {
+						$("<div>").text(c.name)
+							.css({ padding: "6px 10px", cursor: "pointer" })
+							.hover(function () { $(this).css("background", "#f0f0f0"); },
+								   function () { $(this).css("background", "#fff"); })
+							.on("click", function () {
+								$input.val(c.name);
+								me.ctx.company = c.name;
+								$dd.hide();
+							})
+							.appendTo($dd);
+					});
+					$dd.show();
+				}
+			});
+		}
+
+		$input.on("focus click input", function () { search_company(); });
+
+		$input.on("blur", function () {
+			setTimeout(function () { $dd.hide(); }, 200);
+		});
+
+		$input.on("change", function () {
+			me.ctx.company = $(this).val().trim();
+		});
+	}
+
+	// ── Price List search ─────────────────────────────────────────────
+	bind_price_list_search() {
+		var me = this;
+		const $input = $("#po-price-list");
+		const $dd = $("<div>").css({
+			position: "absolute", zIndex: 999, background: "#fff",
+			border: "1px solid #ddd", display: "none",
+			minWidth: "250px", maxHeight: "200px", overflowY: "auto"
+		}).insertAfter($input);
+
+		function search_pl() {
+			const txt = $input.val().trim();
+			const customer = me.ctx.customer || $("#po-customer").val().trim();
+			frappe.call({
+				method: "avinashgroup_app.templates.pages.place_order.search_price_lists",
+				args: { txt: txt, customer: customer },
+				callback: function (r) {
+					const results = r.message || [];
+					$dd.empty();
+					if (!results.length) { $dd.hide(); return; }
+					results.forEach(function (pl) {
+						$("<div>").text(pl.name)
+							.css({ padding: "6px 10px", cursor: "pointer" })
+							.hover(function () { $(this).css("background", "#f0f0f0"); },
+								   function () { $(this).css("background", "#fff"); })
+							.on("click", function () {
+								$input.val(pl.name);
+								me.ctx.price_list = pl.name;
+								$dd.hide();
+								// re-fetch rates for all rows with new price list
+								$("#po-items-body tr").each(function () {
+									me.fetch_item_details($(this).data("idx"));
+								});
+							})
+							.appendTo($dd);
+					});
+					$dd.show();
+				}
+			});
+		}
+
+		$input.on("focus click input", function () { search_pl(); });
+		$input.on("blur", function () { setTimeout(function () { $dd.hide(); }, 200); });
+		$input.on("change", function () { me.ctx.price_list = $(this).val().trim(); });
+	}
+
+	// ── Customer search + change ──────────────────────────────────────
+	bind_customer_change() {
+		var me = this;
+		const $input = $("#po-customer");
+
+		// If readonly (portal user found), no dropdown needed
+		if (me.ctx.customer_readonly) return;
+
+		const $dd = $("<div>").css({
+			position: "absolute", zIndex: 999, background: "#fff",
+			border: "1px solid #ddd", display: "none",
+			minWidth: "250px", maxHeight: "200px", overflowY: "auto"
+		}).insertAfter($input);
+
+		function search_customer() {
+			const txt = $input.val().trim();
+			frappe.call({
+				method: "avinashgroup_app.templates.pages.place_order.search_customers",
+				args: { txt: txt },
+				callback: function (r) {
+					const results = r.message || [];
+					$dd.empty();
+					if (!results.length) { $dd.hide(); return; }
+					results.forEach(function (c) {
+						$("<div>").text(c.name + (c.customer_name !== c.name ? " — " + c.customer_name : ""))
+							.css({ padding: "6px 10px", cursor: "pointer" })
+							.hover(function () { $(this).css("background", "#f0f0f0"); },
+								   function () { $(this).css("background", "#fff"); })
+							.on("click", function () {
+								$input.val(c.name);
+								$dd.hide();
+								me.on_customer_select(c.name);
+							})
+							.appendTo($dd);
+					});
+					$dd.show();
+				}
+			});
+		}
+
+		$input.on("focus click input", function () { search_customer(); });
+		$input.on("blur", function () {
+			setTimeout(function () { $dd.hide(); }, 200);
+		});
+	}
+
+	on_customer_select(customer) {
+		var me = this;
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.place_order.get_customer_defaults",
+			args: { customer: customer },
+			callback: function (r) {
+				if (!r.message) return;
+				me.ctx.customer = customer;
+				me.ctx.price_list = r.message.price_list;
+				me.ctx.currency = r.message.currency;
+				me.ctx.company = r.message.company;
+				$("#po-price-list").val(r.message.price_list);
+				$("#po-currency-display").text(r.message.currency);
+				$("#po-currency").val(r.message.currency);
+				$("#po-company").val(r.message.company);
+				// re-fetch rates for existing rows
+				$("#po-items-body tr").each(function () {
+					const idx = $(this).data("idx");
+					me.fetch_item_details(idx);
+				});
+			}
+		});
+	}
+
+	// ── Add row ───────────────────────────────────────────────────────
+	bind_add_row() {
+		var me = this;
+		$("#po-add-row").on("click", function () {
+			me.add_row();
+		});
+	}
+
+	add_row() {
+		this.row_idx++;
+		const idx = this.row_idx;
+		const delivery = this.ctx.default_delivery_date;
+
+		const row = $(`
+			<tr data-idx="${idx}">
+				<td>
+					<input type="text" class="form-control po-item-code" data-idx="${idx}"
+						placeholder="Search item" autocomplete="off">
+					<div class="po-item-results" data-idx="${idx}"
+						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:250px;max-height:200px;overflow-y:auto;"></div>
+					<small class="text-muted po-item-name" data-idx="${idx}"></small>
+				</td>
+				<td style="position:relative;">
+					<input type="text" class="form-control po-uom" data-idx="${idx}"
+						placeholder="UOM" autocomplete="off">
+					<div class="po-uom-results" data-idx="${idx}"
+						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:150px;max-height:180px;overflow-y:auto;"></div>
+				</td>
+				<td><input type="date" class="form-control po-delivery-date" data-idx="${idx}" value="${delivery}"></td>
+				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="" min="0.001" step="any" placeholder="0"></td>
+				<td><input type="text" class="form-control po-rate text-right" data-idx="${idx}" readonly value="0.00"></td>
+				<td class="text-right po-amount" data-idx="${idx}">0.00</td>
+				<td class="text-center">
+					<button class="btn btn-sm btn-danger po-remove-row" data-idx="${idx}">×</button>
+				</td>
+			</tr>
+		`);
+
+		$("#po-items-body").append(row);
+
+		this.ctx.items.push({
+			_idx: idx,
+			item_code: "", item_name: "", uom: "",
+			qty: 0, rate: 0, amount: 0,
+			delivery_date: delivery
+		});
+
+		this.bind_row_events(idx);
+	}
+
+	bind_row_events(idx) {
+		var me = this;
+
+		// Item code search
+		function search_item() {
+			const txt = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
+			frappe.call({
+				method: "avinashgroup_app.templates.pages.place_order.search_items",
+				args: { txt: txt },
+				callback: function (r) {
+					const results = r.message || [];
+					const $dd = $(`.po-item-results[data-idx=${idx}]`);
+					$dd.empty();
+					if (!results.length) { $dd.hide(); return; }
+					results.forEach(function (item) {
+						$("<div>").text(item.item_code + " — " + item.item_name)
+							.css({ padding: "6px 10px", cursor: "pointer" })
+							.hover(function () { $(this).css("background", "#f0f0f0"); },
+								   function () { $(this).css("background", "#fff"); })
+							.on("click", function () {
+								$(`input.po-item-code[data-idx=${idx}]`).val(item.item_code);
+								$dd.hide();
+								me.fetch_item_details(idx);
+							})
+							.appendTo($dd);
+					});
+					$dd.show();
+				}
+			});
+		}
+
+		$(`input.po-item-code[data-idx=${idx}]`).on("focus click input", function () {
+			search_item();
+		});
+
+		// Hide dropdown on blur
+		$(`input.po-item-code[data-idx=${idx}]`).on("blur", function () {
+			setTimeout(function () {
+				$(`.po-item-results[data-idx=${idx}]`).hide();
+			}, 200);
+		});
+
+		// UOM search
+		function search_uom() {
+			const item = me.get_item(idx);
+			const item_code = item ? (item.item_code || "") : "";
+			const txt = $(`input.po-uom[data-idx=${idx}]`).val().trim();
+			const $dd = $(`.po-uom-results[data-idx=${idx}]`);
+
+			frappe.call({
+				method: "avinashgroup_app.templates.pages.place_order.search_uoms",
+				args: { item_code: item_code, txt: txt },
+				callback: function (r) {
+					const uoms = r.message || [];
+					$dd.empty();
+					if (!uoms.length) { $dd.hide(); return; }
+					uoms.forEach(function (uom) {
+						$("<div>").text(uom)
+							.css({ padding: "6px 10px", cursor: "pointer" })
+							.hover(function () { $(this).css("background", "#f0f0f0"); },
+								   function () { $(this).css("background", "#fff"); })
+							.on("click", function () {
+								$(`input.po-uom[data-idx=${idx}]`).val(uom);
+								if (item) item.uom = uom;
+								$dd.hide();
+								if (item && item.item_code) {
+									me.fetch_item_details_with_uom(idx, uom);
+								}
+							})
+							.appendTo($dd);
+					});
+					$dd.show();
+				}
+			});
+		}
+
+		$(`input.po-uom[data-idx=${idx}]`).on("focus click input", function () { search_uom(); });
+		$(`input.po-uom[data-idx=${idx}]`).on("blur", function () {
+			setTimeout(function () { $(`.po-uom-results[data-idx=${idx}]`).hide(); }, 200);
+		});
+
+		// Qty change
+		$(`input.po-qty[data-idx=${idx}]`).on("change", function () {
+			me.update_row_amount(idx);
+			me.recalculate_totals();
+		});
+
+		// Delivery date change
+		$(`input.po-delivery-date[data-idx=${idx}]`).on("change", function () {
+			const item = me.get_item(idx);
+			if (item) item.delivery_date = $(this).val();
+		});
+
+		// Remove row
+		$(`.po-remove-row[data-idx=${idx}]`).on("click", function () {
+			me.remove_row(idx);
+		});
+	}
+
+	fetch_item_details(idx) {
+		var me = this;
+		const item_code = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
+		if (!item_code) return;
+
+		const qty = parseFloat($(`input.po-qty[data-idx=${idx}]`).val()) || 1;
+		const args = {
+			item_code: item_code,
+			doctype: "Sales Order",
+			docname: "new-sales-order-1",
+			customer: me.ctx.customer,
+			company: me.ctx.company,
+			selling_price_list: me.ctx.price_list,
+			price_list_currency: me.ctx.currency,
+			plc_conversion_rate: 1.0,
+			currency: me.ctx.currency,
+			conversion_rate: 1.0,
+			transaction_date: $("#po-date").val() || me.ctx.today,
+			qty: qty,
+			uom: "",
+			ignore_pricing_rule: 0
+		};
+
+		frappe.call({
+			method: "erpnext.stock.get_item_details.get_item_details",
+			args: { args: args },
+			callback: function (r) {
+				if (!r.message) return;
+				const d = r.message;
+				const item = me.get_item(idx);
+				if (!item) return;
+
+				// Use all values returned by ERPNext — same as Sales Order form
+				item.item_code         = item_code;
+				item.item_name         = d.item_name || item_code;
+				item.uom               = d.uom || d.stock_uom || "";
+				item.stock_uom         = d.stock_uom || "";
+				item.conversion_factor = flt(d.conversion_factor) || 1.0;
+				item.rate              = flt(d.price_list_rate || d.rate || 0);
+				item.price_list_rate   = flt(d.price_list_rate || 0);
+				item.description       = d.description || "";
+				item.item_tax_template = d.item_tax_template || "";
+				item.item_tax_rate     = d.item_tax_rate || "{}";
+
+				$(`.po-item-name[data-idx=${idx}]`).text(item.item_name);
+				$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
+				$(`input.po-rate[data-idx=${idx}]`).val(
+					format_number(item.rate, me.ctx.number_format, 2)
+				);
+
+				me.update_row_amount(idx);
+				me.recalculate_totals();
+			}
+		});
+	}
+
+	fetch_item_details_with_uom(idx, uom) {
+		var me = this;
+		const item_code = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
+		if (!item_code) return;
+
+		const qty = parseFloat($(`input.po-qty[data-idx=${idx}]`).val()) || 1;
+		const args = {
+			item_code: item_code,
+			doctype: "Sales Order",
+			docname: "new-sales-order-1",
+			customer: me.ctx.customer,
+			company: me.ctx.company,
+			selling_price_list: me.ctx.price_list,
+			price_list_currency: me.ctx.currency,
+			plc_conversion_rate: 1.0,
+			currency: me.ctx.currency,
+			conversion_rate: 1.0,
+			transaction_date: $("#po-date").val() || me.ctx.today,
+			qty: qty,
+			uom: uom,
+			ignore_pricing_rule: 0
+		};
+
+		frappe.call({
+			method: "erpnext.stock.get_item_details.get_item_details",
+			args: { args: args },
+			callback: function (r) {
+				if (!r.message) return;
+				const d = r.message;
+				const item = me.get_item(idx);
+				if (!item) return;
+				item.uom               = uom;
+				item.conversion_factor = flt(d.conversion_factor) || 1.0;
+				item.rate              = flt(d.price_list_rate || d.rate || 0);
+				item.price_list_rate   = flt(d.price_list_rate || 0);
+				$(`input.po-rate[data-idx=${idx}]`).val(
+					format_number(item.rate, me.ctx.number_format, 2)
+				);
+				me.update_row_amount(idx);
+				me.recalculate_totals();
+			}
+		});
+	}
+
+	update_row_amount(idx) {
+		const item = this.get_item(idx);
+		if (!item) return;
+		const qty = flt($(`input.po-qty[data-idx=${idx}]`).val()) || 0;
+		item.qty = qty;
+		// amount = qty × rate (conversion_factor is for stock_qty, not amount)
+		item.amount = flt(qty * item.rate);
+		item.stock_qty = flt(qty * (item.conversion_factor || 1.0));
+		$(`.po-amount[data-idx=${idx}]`).text(
+			format_number(item.amount, this.ctx.number_format, 2)
+		);
+	}
+
+	remove_row(idx) {
+		$(`#po-items-body tr[data-idx=${idx}]`).remove();
+		this.ctx.items = this.ctx.items.filter(i => i._idx !== idx);
+		this.recalculate_totals();
+	}
+
+	get_item(idx) {
+		return this.ctx.items.find(i => i._idx === idx);
+	}
+
+	recalculate_totals() {
+		var me = this;
+		let grand_total = 0;
+		this.ctx.items.forEach(function (item) {
+			grand_total += flt(item.amount);
+		});
+
+		$("#po-grand-total").text(format_number(grand_total, me.ctx.number_format, 2));
+
+		// In words — via our whitelisted wrapper
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.place_order.get_in_words",
+			args: { amount: grand_total, currency: me.ctx.currency },
+			callback: function (r) {
+				$("#po-in-words").text(r.message || "");
+			}
+		});
+	}
+
+	// ── Submit ────────────────────────────────────────────────────────
+	bind_submit() {
+		var me = this;
+		$("#po-submit").on("click", function () {
+			me.submit_order();
+		});
+	}
+
+	submit_order() {
+		var me = this;
+
+		const customer = $("#po-customer").val().trim();
+		if (!customer) {
+			frappe.msgprint({ title: "Missing", message: "Please select a customer.", indicator: "red" });
+			return;
+		}
+
+		const valid_items = me.ctx.items.filter(i => i.item_code && i.qty > 0);
+		if (!valid_items.length) {
+			frappe.msgprint({ title: "Missing Items", message: "Please add at least one item with quantity.", indicator: "red" });
+			return;
+		}
+
+		for (let i = 0; i < valid_items.length; i++) {
+			const item = valid_items[i];
+			const delivery = $(`input.po-delivery-date[data-idx=${item._idx}]`).val();
+			if (!delivery) {
+				frappe.msgprint({ title: "Missing Date", message: `Row ${i + 1}: Delivery Date is required.`, indicator: "red" });
+				return;
+			}
+			item.delivery_date = delivery;
+		}
+
+		const payload = valid_items.map(function (item) {
+			return {
+				item_code: item.item_code,
+				item_name: item.item_name,
+				uom: item.uom,
+				qty: item.qty,
+				rate: item.rate,
+				amount: item.amount,
+				delivery_date: item.delivery_date
+			};
+		});
+
+		$("#po-submit").prop("disabled", true).text("Placing Order...");
+		frappe.freeze("Placing order...");
+
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.place_order.create_sales_order",
+			args: {
+				customer: customer,
+				company: $("#po-company").val(),
+				transaction_date: $("#po-date").val() || me.ctx.today,
+				selling_price_list: $("#po-price-list").val(),
+				currency: $("#po-currency").val(),
+				items: JSON.stringify(payload)
+			},
+			callback: function (r) {
+				frappe.unfreeze();
+				if (r.message && r.message.status === "success") {
+					frappe.msgprint({
+						title: "Order Placed!",
+						message: `Order <b>${r.message.order_id}</b> has been placed successfully.<br><br><a href="/orders">View My Orders →</a>`,
+						indicator: "green"
+					});
+					setTimeout(function () {
+						window.location.href = "/orders";
+					}, 2500);
+				} else {
+					$("#po-submit").prop("disabled", false).text("Place Order");
+				}
+			},
+			error: function () {
+				frappe.unfreeze();
+				$("#po-submit").prop("disabled", false).text("Place Order");
+			}
+		});
+	}
+}
+</script>
+{% endblock %}
+
+{% block page_content %}
+<style>
+.po-section-label {
+	font-size: 14px;
+	color: #000;
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+.po-field-value {
+	font-weight: 500;
+	padding: 6px 0;
+}
+.po-items-table th {
+	font-size: 14px;
+	color: #000;
+	font-weight: 600;
+}
+.po-items-table td {
+	vertical-align: middle;
+}
+.po-amount {
+	font-weight: 500;
+}
+</style>
+
+<h2 class="mb-4">Place Order</h2>
+
+<!-- Header Fields -->
+<div class="row mb-4">
+	<div class="col-sm-4 mb-3">
+		<div class="po-section-label">Company <span class="text-danger">*</span></div>
+		<div style="position:relative;">
+			<input type="text" class="form-control" id="po-company"
+				value="{{ company }}" placeholder="Select company">
+		</div>
+	</div>
+	<div class="col-sm-4 mb-3">
+		<div class="po-section-label">Customer <span class="text-danger">*</span></div>
+		{% if customer_readonly %}
+			<div style="position:relative;">
+				<input type="text" class="form-control" value="{{ customer_name }}" readonly>
+			</div>
+			<input type="hidden" id="po-customer" value="{{ customer }}">
+		{% else %}
+			<div style="position:relative;">
+				<input type="text" class="form-control" id="po-customer"
+					placeholder="Select customer" value="{{ customer }}">
+			</div>
+		{% endif %}
+	</div>
+	<div class="col-sm-4 mb-3">
+		<div class="po-section-label">Transaction Date <span class="text-danger">*</span></div>
+		<input type="date" class="form-control" id="po-date" value="{{ today }}">
+	</div>
+	<div class="col-sm-4 mb-3">
+		<div class="po-section-label">Price List <span class="text-danger">*</span></div>
+		<div style="position:relative;">
+			<input type="text" class="form-control" id="po-price-list"
+				value="{{ price_list }}" placeholder="Select price list">
+		</div>
+	</div>
+	<div class="col-sm-4 mb-3">
+		<div class="po-section-label">Currency</div>
+		<div class="po-field-value" id="po-currency-display">{{ currency }}</div>
+		<input type="hidden" id="po-currency" value="{{ currency }}">
+	</div>
+</div>
+
+<!-- Items Table -->
+<div class="table-responsive mb-2">
+	<table class="table po-items-table">
+		<thead>
+			<tr>
+				<th style="min-width:200px;">Item</th>
+				<th style="min-width:80px;">UOM</th>
+				<th style="min-width:130px;">Delivery Date</th>
+				<th style="min-width:80px;" class="text-right">Qty</th>
+				<th style="min-width:100px;" class="text-right">Rate</th>
+				<th style="min-width:100px;" class="text-right">Amount</th>
+				<th style="width:40px;"></th>
+			</tr>
+		</thead>
+		<tbody id="po-items-body">
+		</tbody>
+	</table>
+</div>
+
+<button class="btn btn-sm btn-secondary mb-4" id="po-add-row">+ Add Item</button>
+
+<!-- Footer / Totals -->
+<div class="row justify-content-end mb-1">
+	<div class="col-sm-4">
+		<div class="d-flex justify-content-between border-top pt-2">
+			<strong>Grand Total</strong>
+			<strong id="po-grand-total">0.00</strong>
+		</div>
+		<div class="text-muted small mt-1"><span>In Words: </span><span id="po-in-words"></span></div>
+	</div>
+</div>
+
+<div class="row justify-content-end mt-4">
+	<div class="col-sm-4 text-right">
+		<button class="btn btn-primary btn-lg" id="po-submit">Place Order</button>
+	</div>
+</div>
+{% endblock %}
