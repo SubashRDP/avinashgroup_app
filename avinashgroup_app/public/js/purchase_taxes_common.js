@@ -947,4 +947,5 @@ async function force_all_pi_warehouses(frm) {
         }
     }
     frm.refresh_field('items');
+    
 }

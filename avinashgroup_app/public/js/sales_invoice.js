@@ -403,6 +403,7 @@ function calculate_total(frm) {
     calculate_total_amount_including_excise(frm);
 }
 
+
 /**
  * Fetch custom_selling_warehouse for an item, respecting branch-wise config.
  * Returns "" if not configured — caller decides whether to set or leave.
@@ -444,5 +445,6 @@ async function force_all_si_warehouses(frm) {
             item.warehouse = wh;
         }
     }
+    
     frm.refresh_field('items');
 }
