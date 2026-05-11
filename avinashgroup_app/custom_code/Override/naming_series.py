@@ -682,8 +682,9 @@ def set_auto_document_no(doc):
     """
     doctype = doc.doctype
 
-    if getattr(doc, "custom_document_no", None):
+    if not hasattr(doc, "custom_document_no"):
         return
+
 
     if doctype not in AUTO_NUMBER_CONFIG:
         return
@@ -733,11 +734,26 @@ def set_auto_document_no(doc):
     # Pattern: {company_abbr}-{p_type_code}-*-{fiscal_year} e.g. SGU-RC-000006-82/83
     name_pattern = f"{company_abbr}-{prefix}-%-{fiscal_year}%"
 
+    if getattr(doc, "custom_document_no", None):
+        similar_docs = frappe.db.get_value(
+            doctype,
+            filters={"custom_document_no": doc.custom_document_no,
+                     "custom_name": ["like", name_pattern]},
+            fieldname="name"
+            
+        )
+        if similar_docs:           
+            frappe.throw(
+                f"Document number {doc.custom_document_no} already exists for the {similar_docs}. Please enter a different number.",
+                title="Duplicate Document Number"
+            )
+        return
+
+
     max_no = frappe.db.get_value(
         doctype,
         filters={
             "custom_name": ["like", name_pattern],
-            "docstatus": ["!=", 2],
         },
         fieldname="max(custom_document_no)",
     ) or 0
