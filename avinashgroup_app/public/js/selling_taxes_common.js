@@ -1,5 +1,4 @@
 // Common VAT + Excise handler for selling documents (Quotation, Sales Order, Delivery Note).
-// Sales Invoice has its own handler in sales_invoice.js — do NOT merge.
 
 const SELLING_TAX_DOCTYPES = ["Quotation", "Sales Order", "Delivery Note"];
 

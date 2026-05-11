@@ -6,7 +6,7 @@
 <script>
 window.place_order_ctx = {
 	customer: {{ customer | tojson }},
-	customer_readonly: {{ customer_readonly | tojson }},
+	customer_list: {{ customer_list | tojson }},
 	company: {{ company | tojson }},
 	price_list: {{ price_list | tojson }},
 	currency: {{ currency | tojson }},
@@ -61,6 +61,16 @@ class PlaceOrder {
 								$input.val(c.name);
 								me.ctx.company = c.name;
 								$dd.hide();
+								// reset customer and price list when company changes
+								me.ctx.customer = "";
+								me.ctx.price_list = "";
+								$("#po-price-list").val("");
+								if (me.ctx.customer_list && me.ctx.customer_list.length > 0) {
+									$("#po-customer").val("");
+									me.filter_customer_dropdown();
+								} else {
+									$("#po-customer").val("");
+								}
 							})
 							.appendTo($dd);
 					});
@@ -129,64 +139,93 @@ class PlaceOrder {
 	// ── Customer search + change ──────────────────────────────────────
 	bind_customer_change() {
 		var me = this;
-		const $input = $("#po-customer");
+		const $select = $("#po-customer");
 
-		// If readonly (portal user found), no dropdown needed
-		if (me.ctx.customer_readonly) return;
-
-		const $dd = $("<div>").css({
-			position: "absolute", zIndex: 999, background: "#fff",
-			border: "1px solid #ddd", display: "none",
-			minWidth: "250px", maxHeight: "200px", overflowY: "auto"
-		}).insertAfter($input);
-
-		function search_customer() {
-			const txt = $input.val().trim();
-			frappe.call({
-				method: "avinashgroup_app.templates.pages.place_order.search_customers",
-				args: { txt: txt },
-				callback: function (r) {
-					const results = r.message || [];
-					$dd.empty();
-					if (!results.length) { $dd.hide(); return; }
-					results.forEach(function (c) {
-						$("<div>").text(c.name + (c.customer_name !== c.name ? " — " + c.customer_name : ""))
-							.css({ padding: "6px 10px", cursor: "pointer" })
-							.hover(function () { $(this).css("background", "#f0f0f0"); },
-								   function () { $(this).css("background", "#fff"); })
-							.on("click", function () {
-								$input.val(c.name);
-								$dd.hide();
-								me.on_customer_select(c.name);
-							})
-							.appendTo($dd);
-					});
-					$dd.show();
-				}
+		if (me.ctx.customer_list && me.ctx.customer_list.length > 0) {
+			// Portal user — filter dropdown options by selected company
+			me.filter_customer_dropdown();
+			$select.on("change", function () {
+				const customer = $(this).val();
+				if (customer) me.on_customer_select(customer);
 			});
-		}
+		} else {
+			// No portal user — free-text search filtered by company
+			const $input = $select;
+			const $dd = $("<div>").css({
+				position: "absolute", zIndex: 999, background: "#fff",
+				border: "1px solid #ddd", display: "none",
+				minWidth: "250px", maxHeight: "200px", overflowY: "auto"
+			}).insertAfter($input);
 
-		$input.on("focus click input", function () { search_customer(); });
-		$input.on("blur", function () {
-			setTimeout(function () { $dd.hide(); }, 200);
+			function search_customer() {
+				const txt = $input.val().trim();
+				frappe.call({
+					method: "avinashgroup_app.templates.pages.place_order.search_customers",
+					args: { txt: txt, company: me.ctx.company },
+					callback: function (r) {
+						const results = r.message || [];
+						$dd.empty();
+						if (!results.length) { $dd.hide(); return; }
+						results.forEach(function (c) {
+							$("<div>").text(c.customer_name || c.name)
+								.css({ padding: "6px 10px", cursor: "pointer" })
+								.hover(function () { $(this).css("background", "#f0f0f0"); },
+									   function () { $(this).css("background", "#fff"); })
+								.on("click", function () {
+									$input.val(c.customer_name || c.name);
+									me.ctx.customer = c.name;
+									$dd.hide();
+									me.on_customer_select(c.name);
+								})
+								.appendTo($dd);
+						});
+						$dd.show();
+					}
+				});
+			}
+
+			$input.on("focus click input", function () { search_customer(); });
+			$input.on("blur", function () { setTimeout(function () { $dd.hide(); }, 200); });
+		}
+	}
+
+	filter_customer_dropdown() {
+		var me = this;
+		const company = me.ctx.company;
+		$("#po-customer option").each(function () {
+			if (!$(this).val()) return; // keep placeholder
+			const optCompany = $(this).data("company") || "";
+			$(this).toggle(!company || optCompany === company);
 		});
+		// reset selection if current value no longer visible
+		const current = $("#po-customer").val();
+		if (current) {
+			const opt = $(`#po-customer option[value="${current}"]`);
+			if (opt.length && !opt.is(":visible")) {
+				$("#po-customer").val("");
+				me.ctx.customer = "";
+			}
+		}
 	}
 
 	on_customer_select(customer) {
 		var me = this;
 		frappe.call({
 			method: "avinashgroup_app.templates.pages.place_order.get_customer_defaults",
-			args: { customer: customer },
+			args: { customer: customer, company: me.ctx.company },
 			callback: function (r) {
 				if (!r.message) return;
 				me.ctx.customer = customer;
 				me.ctx.price_list = r.message.price_list;
 				me.ctx.currency = r.message.currency;
-				me.ctx.company = r.message.company;
+				// Fill company from customer's linked company if set; otherwise leave user's choice
+				if (r.message.customer_company) {
+					me.ctx.company = r.message.customer_company;
+					$("#po-company").val(r.message.customer_company);
+				}
 				$("#po-price-list").val(r.message.price_list);
 				$("#po-currency-display").val(r.message.currency);
 				$("#po-currency").val(r.message.currency);
-				$("#po-company").val(r.message.company);
 				// re-fetch rates for existing rows
 				$("#po-items-body tr").each(function () {
 					const idx = $(this).data("idx");
@@ -219,16 +258,24 @@ class PlaceOrder {
 						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:250px;max-height:200px;overflow-y:auto;"></div>
 					<small class="text-muted po-item-name" data-idx="${idx}"></small>
 				</td>
+				<td><input type="date" class="form-control po-delivery-date" data-idx="${idx}" value="${delivery}"></td>
+				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="1" min="0.001" step="any" placeholder="0"></td>
 				<td style="position:relative;">
 					<input type="text" class="form-control po-uom" data-idx="${idx}"
 						placeholder="UOM" autocomplete="off">
 					<div class="po-uom-results" data-idx="${idx}"
 						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:150px;max-height:180px;overflow-y:auto;"></div>
 				</td>
-				<td><input type="date" class="form-control po-delivery-date" data-idx="${idx}" value="${delivery}"></td>
-				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="1" min="0.001" step="any" placeholder="0"></td>
 				<td><input type="text" class="form-control po-rate text-right" data-idx="${idx}" readonly value="0.00"></td>
 				<td class="text-right po-amount" data-idx="${idx}">0.00</td>
+				<td>
+					<select class="form-control po-vat-apply-on" data-idx="${idx}">
+						<option value="VAT 13%">VAT 13%</option>
+						<option value="VAT 0%">VAT 0%</option>
+						<option value="Amount">Amount</option>
+					</select>
+				</td>
+				<td class="text-right po-vat-amount" data-idx="${idx}">0.00</td>
 				<td class="text-center">
 					<button class="btn btn-sm btn-light po-remove-row" data-idx="${idx}" style="font-weight:700;font-size:16px;color:#333;line-height:1;">×</button>
 				</td>
@@ -242,7 +289,8 @@ class PlaceOrder {
 			_idx: idx,
 			item_code: "", item_name: "", uom: "",
 			qty: 0, rate: 0, amount: 0,
-			delivery_date: delivery
+			delivery_date: delivery,
+			vat_apply_on: "VAT 13%", vat_amount: 0
 		});
 
 		this.bind_row_events(idx);
@@ -256,7 +304,7 @@ class PlaceOrder {
 			const txt = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
 			frappe.call({
 				method: "avinashgroup_app.templates.pages.place_order.search_items",
-				args: { txt: txt },
+				args: { txt: txt, company: me.ctx.company },
 				callback: function (r) {
 					const results = r.message || [];
 					const $dd = $(`.po-item-results[data-idx=${idx}]`);
@@ -341,6 +389,22 @@ class PlaceOrder {
 			if (item) item.delivery_date = $(this).val();
 		});
 
+		// VAT Apply On change
+		$(`.po-vat-apply-on[data-idx=${idx}]`).on("change", function () {
+			const item = me.get_item(idx);
+			if (item) item.vat_apply_on = $(this).val();
+			me.update_row_amount(idx);
+			me.recalculate_totals();
+		});
+
+		// VAT Amount manual edit (only active when "Amount" is selected)
+		$(`.po-vat-amount[data-idx=${idx}]`).on("blur", function () {
+			const item = me.get_item(idx);
+			if (item && item.vat_apply_on === "Amount") {
+				item.vat_amount = flt($(this).text()) || 0;
+			}
+		});
+
 		// Remove row
 		$(`.po-remove-row[data-idx=${idx}]`).on("click", function () {
 			me.remove_row(idx);
@@ -352,44 +416,20 @@ class PlaceOrder {
 		const item_code = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
 		if (!item_code) return;
 
-		const qty = parseFloat($(`input.po-qty[data-idx=${idx}]`).val()) || 1;
-		const args = {
-			item_code: item_code,
-			doctype: "Sales Order",
-			docname: "new-sales-order-1",
-			customer: me.ctx.customer,
-			company: me.ctx.company,
-			selling_price_list: me.ctx.price_list,
-			price_list_currency: me.ctx.currency,
-			plc_conversion_rate: 1.0,
-			currency: me.ctx.currency,
-			conversion_rate: 1.0,
-			transaction_date: $("#po-date").val() || me.ctx.today,
-			qty: qty,
-			uom: "",
-			ignore_pricing_rule: 0
-		};
-
 		frappe.call({
-			method: "erpnext.stock.get_item_details.get_item_details",
-			args: { args: args },
+			method: "avinashgroup_app.templates.pages.place_order.get_item_price",
+			args: { item_code: item_code, price_list: me.ctx.price_list || "" },
 			callback: function (r) {
 				if (!r.message) return;
 				const d = r.message;
 				const item = me.get_item(idx);
 				if (!item) return;
 
-				// Use all values returned by ERPNext — same as Sales Order form
-				item.item_code         = item_code;
-				item.item_name         = d.item_name || item_code;
-				item.uom               = d.uom || d.stock_uom || "";
-				item.stock_uom         = d.stock_uom || "";
-				item.conversion_factor = flt(d.conversion_factor) || 1.0;
-				item.rate              = flt(d.price_list_rate || d.rate || 0);
-				item.price_list_rate   = flt(d.price_list_rate || 0);
-				item.description       = d.description || "";
-				item.item_tax_template = d.item_tax_template || "";
-				item.item_tax_rate     = d.item_tax_rate || "{}";
+				item.item_code = item_code;
+				item.item_name = d.item_name || item_code;
+				item.uom       = d.uom || d.stock_uom || "";
+				item.stock_uom = d.stock_uom || "";
+				item.rate      = flt(d.rate || 0);
 
 				$(`.po-item-name[data-idx=${idx}]`).text(item.item_name);
 				$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
@@ -408,36 +448,17 @@ class PlaceOrder {
 		const item_code = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
 		if (!item_code) return;
 
-		const qty = parseFloat($(`input.po-qty[data-idx=${idx}]`).val()) || 1;
-		const args = {
-			item_code: item_code,
-			doctype: "Sales Order",
-			docname: "new-sales-order-1",
-			customer: me.ctx.customer,
-			company: me.ctx.company,
-			selling_price_list: me.ctx.price_list,
-			price_list_currency: me.ctx.currency,
-			plc_conversion_rate: 1.0,
-			currency: me.ctx.currency,
-			conversion_rate: 1.0,
-			transaction_date: $("#po-date").val() || me.ctx.today,
-			qty: qty,
-			uom: uom,
-			ignore_pricing_rule: 0
-		};
-
 		frappe.call({
-			method: "erpnext.stock.get_item_details.get_item_details",
-			args: { args: args },
+			method: "avinashgroup_app.templates.pages.place_order.get_item_price",
+			args: { item_code: item_code, price_list: me.ctx.price_list || "" },
 			callback: function (r) {
 				if (!r.message) return;
 				const d = r.message;
 				const item = me.get_item(idx);
 				if (!item) return;
-				item.uom               = uom;
-				item.conversion_factor = flt(d.conversion_factor) || 1.0;
-				item.rate              = flt(d.price_list_rate || d.rate || 0);
-				item.price_list_rate   = flt(d.price_list_rate || 0);
+				item.uom  = uom || d.uom || d.stock_uom || "";
+				item.rate = flt(d.rate || 0);
+				$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
 				$(`input.po-rate[data-idx=${idx}]`).val(
 					format_number(item.rate, me.ctx.number_format, 2)
 				);
@@ -452,12 +473,26 @@ class PlaceOrder {
 		if (!item) return;
 		const qty = flt($(`input.po-qty[data-idx=${idx}]`).val()) || 0;
 		item.qty = qty;
-		// amount = qty × rate (conversion_factor is for stock_qty, not amount)
 		item.amount = flt(qty * item.rate);
 		item.stock_qty = flt(qty * (item.conversion_factor || 1.0));
 		$(`.po-amount[data-idx=${idx}]`).text(
 			format_number(item.amount, this.ctx.number_format, 2)
 		);
+
+		const vat_apply_on = item.vat_apply_on || $(`select.po-vat-apply-on[data-idx=${idx}]`).val() || "VAT 13%";
+		if (vat_apply_on === "VAT 13%") {
+			item.vat_amount = flt(item.amount * 13 / 100);
+			$(`.po-vat-amount[data-idx=${idx}]`).text(
+				format_number(item.vat_amount, this.ctx.number_format, 2)
+			).attr("contenteditable", false);
+		} else if (vat_apply_on === "VAT 0%") {
+			item.vat_amount = 0;
+			$(`.po-vat-amount[data-idx=${idx}]`).text("0.00").attr("contenteditable", false);
+		} else if (vat_apply_on === "Amount") {
+			// manual — preserve existing value, don't overwrite
+			$(`.po-vat-amount[data-idx=${idx}]`).attr("contenteditable", true)
+				.css("outline", "1px solid #ccc");
+		}
 	}
 
 	remove_row(idx) {
@@ -479,11 +514,16 @@ class PlaceOrder {
 
 	recalculate_totals() {
 		var me = this;
-		let grand_total = 0;
+		let total_amount = 0;
+		let total_vat_amount = 0;
 		this.ctx.items.forEach(function (item) {
-			grand_total += flt(item.amount);
+			total_amount += flt(item.amount);
+			total_vat_amount += flt(item.vat_amount);
 		});
+		const grand_total = total_amount + total_vat_amount;
 
+		$("#po-total-amount-incl-excise").text(format_number(total_amount, me.ctx.number_format, 2));
+		$("#po-total-vat-amount").text(format_number(total_vat_amount, me.ctx.number_format, 2));
 		$("#po-grand-total").text(format_number(grand_total, me.ctx.number_format, 2));
 
 		// In words — via our whitelisted wrapper
@@ -537,7 +577,9 @@ class PlaceOrder {
 				qty: item.qty,
 				rate: item.rate,
 				amount: item.amount,
-				delivery_date: item.delivery_date
+				delivery_date: item.delivery_date,
+				vat_apply_on: item.vat_apply_on || "",
+				vat_amount: item.vat_amount || 0
 			};
 		});
 
@@ -604,6 +646,9 @@ class PlaceOrder {
 }
 </style>
 
+<style>
+.page-content, .page_content, .container { max-width: 100% !important; padding-left: 150px !important; padding-right: 150px !important; }
+</style>
 <h2 class="mb-4">Place Order</h2>
 
 <!-- Header Fields -->
@@ -617,15 +662,17 @@ class PlaceOrder {
 	</div>
 	<div class="col-sm-4 mb-3">
 		<div class="po-section-label">Customer <span class="text-danger">*</span></div>
-		{% if customer_readonly %}
-			<div style="position:relative;">
-				<input type="text" class="form-control" value="{{ customer_name }}" readonly>
-			</div>
-			<input type="hidden" id="po-customer" value="{{ customer }}">
+		{% if customer_list %}
+			<select class="form-control" id="po-customer">
+				<option value="">-- Select Customer --</option>
+				{% for c in customer_list %}
+				<option value="{{ c.name }}" data-company="{{ c.company }}">{{ c.customer_name }}</option>
+				{% endfor %}
+			</select>
 		{% else %}
 			<div style="position:relative;">
 				<input type="text" class="form-control" id="po-customer"
-					placeholder="Select customer" value="{{ customer }}">
+					placeholder="Select customer" value="">
 			</div>
 		{% endif %}
 	</div>
@@ -653,12 +700,14 @@ class PlaceOrder {
 		<thead>
 			<tr>
 				<th style="width:40px;">S.N.</th>
-				<th style="min-width:200px;">Item</th>
-				<th style="min-width:80px;">UOM</th>
+				<th style="min-width:160px;">Item</th>
 				<th style="min-width:130px;">Delivery Date</th>
-				<th style="min-width:80px;" class="text-right">Qty</th>
-				<th style="min-width:100px;" class="text-right">Rate</th>
+				<th style="width:70px;" class="text-right">Qty</th>
+				<th style="width:80px;">UOM</th>
+				<th style="min-width:130px;" class="text-right">Rate</th>
 				<th style="min-width:100px;" class="text-right">Amount</th>
+				<th style="min-width:2px;" class="text-right">VAT Apply On</th>
+				<th style="min-width:120px;" class="text-right">VAT Amount</th>
 				<th style="width:40px;"></th>
 			</tr>
 		</thead>
@@ -673,6 +722,14 @@ class PlaceOrder {
 <div class="row justify-content-end mb-1">
 	<div class="col-sm-4">
 		<div class="d-flex justify-content-between border-top pt-2">
+			<span>Total Amount (Including Excise)</span>
+			<span id="po-total-amount-incl-excise">0.00</span>
+		</div>
+		<div class="d-flex justify-content-between pt-1">
+			<span>Total VAT Amount</span>
+			<span id="po-total-vat-amount">0.00</span>
+		</div>
+		<div class="d-flex justify-content-between border-top pt-2 mt-1">
 			<strong>Grand Total</strong>
 			<strong id="po-grand-total">0.00</strong>
 		</div>

@@ -13,48 +13,40 @@ def get_context(context):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
 
-	# Try to identify customer from Portal User
-	customer = frappe.db.get_value(
-		"Portal User",
-		{"user": frappe.session.user, "parenttype": "Customer"},
-		"parent",
-	)
-
-	context.customer = customer or ""
-	context.customer_readonly = bool(customer)
-	if customer:
-		context.customer_name = frappe.db.get_value("Customer", customer, "customer_name") or customer
-	else:
-		context.customer_name = ""
+	# Fetch ALL customers linked to this portal user
+	portal_customers = frappe.db.sql("""
+		SELECT parent FROM `tabPortal User`
+		WHERE user = %s AND parenttype = 'Customer' AND parent IS NOT NULL AND parent != ''
+	""", frappe.session.user, as_list=True)
+	portal_customers = [r[0] for r in portal_customers]
 
 	company = (
 		frappe.defaults.get_user_default("Company")
 		or frappe.db.get_single_value("Global Defaults", "default_company")
 		or ""
 	)
-	context.company = company
 
-	if customer:
-		cust = frappe.db.get_value(
-			"Customer",
-			customer,
-			["default_price_list", "default_currency"],
-			as_dict=True,
-		)
-		context.price_list = cust.default_price_list or ""
-		context.currency = (
-			cust.default_currency
-			or frappe.db.get_value("Company", company, "default_currency")
-			or frappe.db.get_single_value("Global Defaults", "default_currency")
-			or ""
-		)
+	if portal_customers:
+		# Portal user — show dropdown of their linked customers (filtered by company in JS)
+		context.customer_list = frappe.db.sql("""
+			SELECT name, customer_name, IFNULL(custom_company, '') as company
+			FROM `tabCustomer`
+			WHERE disabled = 0 AND name IN %(customers)s
+			ORDER BY customer_name
+		""", {"customers": portal_customers}, as_dict=True)
 	else:
-		context.price_list = ""
-		context.currency = (
-			frappe.db.get_value("Company", company, "default_currency")
-			or frappe.db.get_single_value("Global Defaults", "default_currency")
-			or ""
-		)
+		# No portal user — free-text search (filtered by company via search_customers)
+		context.customer_list = []
+
+	context.customer = ""
+	context.customer_name = ""
+	context.company = company
+	context.price_list = ""
+	context.currency = (
+		frappe.db.get_value("Company", company, "default_currency")
+		or frappe.db.get_single_value("Global Defaults", "default_currency")
+		or ""
+	)
 
 	context.number_format = frappe.db.get_default("number_format") or "#,###.##"
 	context.today = nowdate()
@@ -136,23 +128,21 @@ def get_item_uoms(item_code):
 
 
 @frappe.whitelist()
-def search_customers(txt):
-	if txt:
-		customers = frappe.db.sql("""
-			SELECT name, customer_name FROM `tabCustomer`
-			WHERE disabled=0
-			AND (name LIKE %(txt)s OR customer_name LIKE %(txt)s)
-			LIMIT 10
-		""", {"txt": f"%{txt}%"}, as_dict=True)
-	else:
-		customers = frappe.get_list(
-			"Customer",
-			filters={"disabled": 0},
-			fields=["name", "customer_name"],
-			limit=10,
-			ignore_permissions=True,
-		)
-	return customers
+def search_customers(txt, company=None):
+	values = {"txt": f"%{txt}%" if txt else "%"}
+	company_condition = ""
+	if company:
+		company_condition = "AND custom_company = %(company)s"
+		values["company"] = company
+
+	return frappe.db.sql(f"""
+		SELECT name, customer_name FROM `tabCustomer`
+		WHERE disabled = 0
+		{company_condition}
+		AND (name LIKE %(txt)s OR customer_name LIKE %(txt)s)
+		ORDER BY customer_name
+		LIMIT 10
+	""", values, as_dict=True)
 
 
 @frappe.whitelist()
@@ -177,17 +167,23 @@ def search_companies(txt, customer=None):
 
 
 @frappe.whitelist()
-def search_items(txt):
-	filters = {"disabled": 0, "is_sales_item": 1}
-	if txt:
-		filters["item_name"] = ["like", f"%{txt}%"]
-	return frappe.get_list(
-		"Item",
-		filters=filters,
-		fields=["item_code", "item_name"],
-		limit=10,
-		ignore_permissions=True,
-	)
+def search_items(txt, company=None):
+	txt_filter = f"%{txt}%" if txt else "%"
+	values = {"txt": txt_filter}
+	company_condition = ""
+
+	if company:
+		company_condition = "AND i.custom_company = %(company)s"
+		values["company"] = company
+
+	return frappe.db.sql(f"""
+		SELECT i.name AS item_code, i.item_name
+		FROM `tabItem` i
+		WHERE i.disabled = 0 AND i.is_sales_item = 1
+		{company_condition}
+		AND (i.name LIKE %(txt)s OR i.item_name LIKE %(txt)s)
+		LIMIT 10
+	""", values, as_dict=True)
 
 
 @frappe.whitelist()
@@ -197,29 +193,57 @@ def get_in_words(amount, currency):
 
 
 @frappe.whitelist()
-def get_customer_defaults(customer):
+def get_customer_defaults(customer, company=None):
 	if not customer or not frappe.db.exists("Customer", customer):
 		frappe.throw(_("Invalid customer."))
 
-	company = (
+	cust = frappe.db.get_value(
+		"Customer",
+		customer,
+		["default_price_list", "default_currency", "custom_company"],
+		as_dict=True,
+	)
+
+	# Use customer's linked company if set; otherwise fall back to whatever the caller passed
+	customer_company = cust.custom_company or ""
+	effective_company = customer_company or company or (
 		frappe.defaults.get_user_default("Company")
 		or frappe.db.get_single_value("Global Defaults", "default_company")
 		or ""
 	)
-	cust = frappe.db.get_value(
-		"Customer",
-		customer,
-		["default_price_list", "default_currency"],
-		as_dict=True,
-	)
+
 	price_list = cust.default_price_list or ""
 	currency = (
 		cust.default_currency
-		or frappe.db.get_value("Company", company, "default_currency")
+		or frappe.db.get_value("Company", effective_company, "default_currency")
 		or frappe.db.get_single_value("Global Defaults", "default_currency")
 		or ""
 	)
-	return {"price_list": price_list, "currency": currency, "company": company}
+	return {"price_list": price_list, "currency": currency, "customer_company": customer_company}
+
+
+@frappe.whitelist()
+def get_item_price(item_code, price_list):
+	item = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom"], as_dict=True)
+	if not item:
+		frappe.throw(_("Item {0} not found.").format(item_code))
+
+	rate = 0.0
+	uom = item.stock_uom or ""
+
+	if price_list:
+		ip = frappe.db.get_value(
+			"Item Price",
+			{"item_code": item_code, "price_list": price_list, "selling": 1},
+			["price_list_rate", "uom"],
+			as_dict=True,
+		)
+		if ip:
+			rate = flt(ip.price_list_rate)
+			if ip.uom:
+				uom = ip.uom
+
+	return {"item_name": item.item_name, "uom": uom, "stock_uom": item.stock_uom, "rate": rate}
 
 
 @frappe.whitelist()
