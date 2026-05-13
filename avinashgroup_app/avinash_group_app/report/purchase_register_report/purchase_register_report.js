@@ -41,10 +41,58 @@ frappe.query_reports["Purchase Register Report"] = {
 				return frappe.db.get_link_options("Purchase Type", txt);
 			},
 		},
+		{
+			fieldname: "fit_columns",
+			label: __("Fit Columns"),
+			fieldtype: "Check",
+			default: 1,
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
+		},
 	],
 
 	get_datatable_options(options) {
-		return Object.assign(options, { serialNoColumn: false, freezeColumnsTo: 4 });
+		return Object.assign(options, { serialNoColumn: false, freezeColumnsTo: 4, layout: "fixed" });
+	},
+
+	after_datatable_render: function (dt) {
+		const fit = frappe.query_report.get_filter_value("fit_columns");
+		if (fit) {
+			setTimeout(() => this.autoFitColumns(dt), 100);
+		}
+	},
+
+	autoFitColumns: function (dt) {
+		const datatableWrapper = dt.datatableWrapper;
+		if (!datatableWrapper) return;
+
+		const columns = dt.datamanager.getColumns(true);
+		if (!columns.length) return;
+
+		columns.forEach((col) => {
+			let maxWidth = 120;
+
+			const headerCell = datatableWrapper.querySelector(
+				`.dt-cell__content--header-${col.colIndex}`
+			);
+			if (headerCell) {
+				maxWidth = Math.max(maxWidth, headerCell.scrollWidth + 20);
+			}
+
+			const dataCells = datatableWrapper.querySelectorAll(
+				`.dt-cell__content--col-${col.colIndex}`
+			);
+			const sampleSize = Math.min(100, dataCells.length);
+			for (let i = 0; i < sampleSize; i++) {
+				maxWidth = Math.max(maxWidth, dataCells[i].scrollWidth + 20);
+			}
+
+			const finalWidth = Math.min(maxWidth, 400);
+			dt.datamanager.updateColumn(col.colIndex, { width: finalWidth });
+			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
+			dt.columnmanager.setColumnWidth(col.colIndex);
+		});
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
