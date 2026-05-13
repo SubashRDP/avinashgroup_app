@@ -147,7 +147,31 @@ def search_customers(txt, company=None):
 
 @frappe.whitelist()
 def search_companies(txt, customer=None):
-	# If only one company exists, return only that
+	# For portal users, restrict to companies linked via their customers' custom_company
+	portal_customers = frappe.db.sql("""
+		SELECT parent FROM `tabPortal User`
+		WHERE user = %s AND parenttype = 'Customer' AND parent IS NOT NULL AND parent != ''
+	""", frappe.session.user, as_list=True)
+	portal_customers = [r[0] for r in portal_customers]
+
+	if portal_customers:
+		rows = frappe.db.sql("""
+			SELECT DISTINCT custom_company AS name
+			FROM `tabCustomer`
+			WHERE disabled = 0
+			AND name IN %(customers)s
+			AND custom_company IS NOT NULL AND custom_company != ''
+			{txt_condition}
+			ORDER BY custom_company
+		""".format(
+			txt_condition="AND custom_company LIKE %(txt)s" if txt else ""
+		), {
+			"customers": portal_customers,
+			**({"txt": f"%{txt}%"} if txt else {}),
+		}, as_dict=True)
+		return rows
+
+	# Non-portal user — show all companies
 	all_companies = frappe.get_list(
 		"Company", fields=["name", "company_name"], ignore_permissions=True
 	)
