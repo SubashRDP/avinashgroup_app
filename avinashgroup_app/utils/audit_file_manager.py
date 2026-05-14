@@ -77,6 +77,7 @@ class AuditBase:
     "Work Order",
     "Project Update",
     "Item",
+    "Item Price",
     "Asset Maintenance Team",
     "Asset Value Adjustment",
     "Designation",
@@ -577,5 +578,4 @@ def before_save(doc, method=None):
 
 def autoname(doc, method=None):
     naming_series_autoname(doc, method)
-
 

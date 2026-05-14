@@ -57,6 +57,11 @@ NAMING_CONFIG = {
         "use_fiscal_year": False,
         "sequence_length": 5
     },
+    "Item Price": {
+        "prefix": "ITEM-P",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
     "Item":{
         "prefix": "ITEM",
         "use_fiscal_year": False,
