@@ -55,24 +55,23 @@ def get_context(context):
 
 @frappe.whitelist()
 def search_price_lists(txt, customer=None):
-	# If customer has a default price list, only show that one
 	if customer:
 		default_pl = frappe.db.get_value("Customer", customer, "default_price_list")
 		if default_pl:
 			if not txt or txt.lower() in default_pl.lower():
-				return [{"name": default_pl}]
+				pl_name = frappe.db.get_value("Price List", default_pl, "price_list_name") or default_pl
+				return [{"name": default_pl, "price_list_name": pl_name}]
 			return []
 
-	filters = {"enabled": 1}
-	if txt:
-		filters["name"] = ["like", f"%{txt}%"]
-	return frappe.get_list(
-		"Price List",
-		filters=filters,
-		fields=["name"],
-		limit=10,
-		ignore_permissions=True,
-	)
+	txt_filter = f"%{txt}%" if txt else "%"
+	results = frappe.db.sql("""
+		SELECT name, price_list_name
+		FROM `tabPrice List`
+		WHERE enabled = 1
+		AND (name LIKE %(txt)s OR price_list_name LIKE %(txt)s)
+		LIMIT 10
+	""", {"txt": txt_filter}, as_dict=True)
+	return results
 
 
 @frappe.whitelist()
@@ -237,13 +236,16 @@ def get_customer_defaults(customer, company=None):
 	)
 
 	price_list = cust.default_price_list or ""
+	price_list_name = (
+		frappe.db.get_value("Price List", price_list, "price_list_name") if price_list else ""
+	) or price_list
 	currency = (
 		cust.default_currency
 		or frappe.db.get_value("Company", effective_company, "default_currency")
 		or frappe.db.get_single_value("Global Defaults", "default_currency")
 		or ""
 	)
-	return {"price_list": price_list, "currency": currency, "customer_company": customer_company}
+	return {"price_list": price_list, "price_list_name": price_list_name, "currency": currency, "customer_company": customer_company}
 
 
 @frappe.whitelist()
