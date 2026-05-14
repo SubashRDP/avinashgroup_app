@@ -27,7 +27,6 @@ def get_columns():
 		{"fieldname": "vat_number",    "label": _("VAT Number"),     "fieldtype": "Data",     "width": 130},
 		{"fieldname": "total_sales",   "label": _("Total Sales"),    "fieldtype": "Currency", "width": 130},
 		{"fieldname": "tax_free_sale", "label": _("Tax Free Sale"),  "fieldtype": "Currency", "width": 140},
-		{"fieldname": "export_usd",    "label": _("Export - USD"),   "fieldtype": "Currency", "width": 130},
 		{"fieldname": "export_npr",    "label": _("Export NPR"),     "fieldtype": "Currency", "width": 130},
 		{"fieldname": "taxable_sales", "label": _("Taxable Sales"),  "fieldtype": "Currency", "width": 140},
 		{"fieldname": "vat",           "label": _("VAT"),            "fieldtype": "Currency", "width": 110},
@@ -56,9 +55,8 @@ def get_data(filters):
 			si.name                                                                                                                        AS bill_no,
 			si.customer_name                                                                                                               AS customer,
 			c.tax_id                                                                                                                       AS vat_number,
-			si.grand_total                                                                                                                 AS total_sales,
+			si.custom_total_amount_including_excise                                                                                        AS total_sales,
 			SUM(CASE WHEN sii.custom_vat_apply_on = 'VAT 0%%'                                             AND c.territory = 'Nepal'    THEN sii.amount ELSE 0 END) AS tax_free_sale,
-			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory != 'Nepal' THEN sii.amount ELSE 0 END)          AS export_usd,
 			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory != 'Nepal' THEN sii.base_amount ELSE 0 END)      AS export_npr,
 			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory = 'Nepal'  THEN sii.amount ELSE 0 END)           AS taxable_sales,
 			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory = 'Nepal'  THEN sii.custom_vat_amount ELSE 0 END) AS vat

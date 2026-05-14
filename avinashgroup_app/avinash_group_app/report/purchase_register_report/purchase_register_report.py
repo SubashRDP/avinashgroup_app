@@ -71,7 +71,7 @@ def get_data(filters):
 			pi.custom_supplier_invoice_miti                                                          AS supplier_invoice_miti,
 			pi.supplier_name                                                                         AS supplier_name,
 			s.tax_id                                                                                 AS vat_number,
-			pi.grand_total                                                                           AS purchase,
+			pi.custom_total_amount_including_excise                                                  AS purchase,
 			SUM(CASE WHEN pii.custom_vat_apply_on = 'VAT 0%%'                                                                          THEN pii.amount ELSE 0 END) AS tax_free_purchase,
 			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory = 'Nepal'    THEN pii.amount ELSE 0 END) AS taxable_purchase,
 			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount ELSE 0 END) AS vat,
@@ -79,7 +79,10 @@ def get_data(filters):
 			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory != 'Nepal'   THEN pii.custom_vat_amount ELSE 0 END) AS import_vat,
 			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 1 AND s.custom_territory = 'Nepal'    THEN pii.amount ELSE 0 END) AS capitalized_purchase,
 			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 1 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount ELSE 0 END) AS capitalized_vat,
-			SUM(pii.custom_vat_amount)                                                               AS total_vat,
+			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount
+			         WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory != 'Nepal'   THEN pii.custom_vat_amount
+			         WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 1 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount
+			         ELSE 0 END)                                                                      AS total_vat,
 			SUM(pii.qty)                                                                             AS qty
 		FROM `tabPurchase Invoice` pi
 		JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
