@@ -76,38 +76,42 @@ def search_price_lists(txt, customer=None):
 
 @frappe.whitelist()
 def search_uoms(item_code, txt):
-	uom_list = []
+	priority = []
 
 	if item_code and frappe.db.exists("Item", item_code):
-		# Item-specific UOMs first
-		rows = frappe.get_list(
-			"UOM Conversion Detail",
-			filters={"parent": item_code},
-			fields=["uom"],
-			ignore_permissions=True,
-		)
-		stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
-		uom_list = [u.uom for u in rows]
-		if stock_uom and stock_uom not in uom_list:
-			uom_list.insert(0, stock_uom)
-		if txt:
-			uom_list = [u for u in uom_list if txt.lower() in u.lower()]
+		item_vals = frappe.db.get_value("Item", item_code, ["stock_uom", "sales_uom"], as_dict=True) or {}
+		sales_uom = item_vals.get("sales_uom") or ""
+		stock_uom = item_vals.get("stock_uom") or ""
+		if sales_uom:
+			priority.append(sales_uom)
+		if stock_uom and stock_uom not in priority:
+			priority.append(stock_uom)
 
-	if not uom_list:
-		# Fall back to global UOM search
-		filters = {"enabled": 1}
-		if txt:
-			filters["uom_name"] = ["like", f"%{txt}%"]
-		rows = frappe.get_list(
-			"UOM",
-			filters=filters,
-			fields=["name"],
-			limit=10,
-			ignore_permissions=True,
-		)
-		uom_list = [r.name for r in rows]
+	# All global UOMs (filtered by txt if given)
+	filters = {"enabled": 1}
+	if txt:
+		filters["uom_name"] = ["like", f"%{txt}%"]
+	global_rows = frappe.get_list(
+		"UOM",
+		filters=filters,
+		fields=["name"],
+		limit=50,
+		ignore_permissions=True,
+	)
+	global_uoms = [r.name for r in global_rows]
 
-	return uom_list
+	if txt:
+		priority = [u for u in priority if txt.lower() in u.lower()]
+
+	# Merge: priority first, then global (no duplicates)
+	seen = set()
+	result = []
+	for u in priority + global_uoms:
+		if u not in seen:
+			result.append(u)
+			seen.add(u)
+
+	return result
 
 
 @frappe.whitelist()
@@ -249,27 +253,23 @@ def get_customer_defaults(customer, company=None):
 
 
 @frappe.whitelist()
-def get_item_price(item_code, price_list):
-	item = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom"], as_dict=True)
+def get_item_price(item_code, price_list, uom=None):
+	item = frappe.db.get_value("Item", item_code, ["item_name", "stock_uom", "sales_uom"], as_dict=True)
 	if not item:
 		frappe.throw(_("Item {0} not found.").format(item_code))
 
+	default_uom = item.sales_uom or item.stock_uom or ""
+	resolved_uom = uom or default_uom
 	rate = 0.0
-	uom = item.stock_uom or ""
 
 	if price_list:
-		ip = frappe.db.get_value(
-			"Item Price",
-			{"item_code": item_code, "price_list": price_list, "selling": 1},
-			["price_list_rate", "uom"],
-			as_dict=True,
-		)
-		if ip:
-			rate = flt(ip.price_list_rate)
-			if ip.uom:
-				uom = ip.uom
+		filters = {"item_code": item_code, "price_list": price_list, "selling": 1}
+		if resolved_uom:
+			filters["uom"] = resolved_uom
+		ip = frappe.db.get_value("Item Price", filters, "price_list_rate")
+		rate = flt(ip) if ip is not None else 0.0
 
-	return {"item_name": item.item_name, "uom": uom, "stock_uom": item.stock_uom, "rate": rate}
+	return {"item_name": item.item_name, "uom": resolved_uom, "stock_uom": item.stock_uom, "rate": rate}
 
 
 @frappe.whitelist()

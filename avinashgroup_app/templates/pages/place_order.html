@@ -31,10 +31,49 @@ $(document).ready(function () {
 	});
 });
 
+// Keyboard navigation helper for autocomplete dropdowns
+function attach_kbd_nav($input, get_dd) {
+	$input.on('keydown.po_kbd', function (e) {
+		const $dd = get_dd();
+		if (!$dd || !$dd.is(':visible')) return;
+		const $items = $dd.children('div');
+		if (!$items.length) return;
+
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			const cur = $items.index($dd.find('.po-dd-hi'));
+			$items.removeClass('po-dd-hi');
+			const next = e.key === 'ArrowDown'
+				? (cur < $items.length - 1 ? cur + 1 : 0)
+				: (cur > 0 ? cur - 1 : $items.length - 1);
+			$items.eq(next).addClass('po-dd-hi');
+			$items.eq(next)[0].scrollIntoView({ block: 'nearest' });
+		} else if (e.key === 'Enter') {
+			e.preventDefault();
+			const $active = $dd.find('.po-dd-hi');
+			if ($active.length) $active.trigger('mousedown');
+		} else if (e.key === 'Escape') {
+			$dd.hide();
+		}
+	});
+}
+
 class PlaceOrder {
 	constructor() {
 		this.ctx = window.place_order_ctx;
 		this.row_idx = 0;
+
+		// Shared UOM dropdown appended to body to escape table overflow clipping
+		var me = this;
+		this.$uom_dd = $('<div>').css({
+			position: 'absolute', zIndex: 10000, background: '#fff',
+			border: '1px solid #ddd', display: 'none',
+			minWidth: '150px', maxHeight: '200px', overflowY: 'auto',
+			boxShadow: '0 2px 8px rgba(0,0,0,0.15)', borderRadius: '4px'
+		}).appendTo('body');
+		$(document).on('mousedown.uom_dd', function(e) {
+			if (!$(e.target).hasClass('po-uom')) me.$uom_dd.hide();
+		});
 
 		this.bind_company_search();
 		this.bind_customer_change();
@@ -68,7 +107,8 @@ class PlaceOrder {
 							.css({ padding: "6px 10px", cursor: "pointer" })
 							.hover(function () { $(this).css("background", "#f0f0f0"); },
 								   function () { $(this).css("background", "#fff"); })
-							.on("click", function () {
+							.on("mousedown", function (e) {
+								e.preventDefault();
 								$input.val(c.name);
 								me.ctx.company = c.name;
 								$dd.hide();
@@ -91,10 +131,8 @@ class PlaceOrder {
 		}
 
 		$input.on("focus click input", function () { search_company(); });
-
-		$input.on("blur", function () {
-			setTimeout(function () { $dd.hide(); }, 200);
-		});
+		$input.on("blur", function () { setTimeout(function () { $dd.hide(); }, 200); });
+		attach_kbd_nav($input, function () { return $dd; });
 
 		$input.on("change", function () {
 			me.ctx.company = $(this).val().trim();
@@ -257,7 +295,7 @@ class PlaceOrder {
 	add_row() {
 		this.row_idx++;
 		const idx = this.row_idx;
-		const delivery = this.ctx.default_delivery_date;
+		const delivery = this.ctx.today;
 
 		const row = $(`
 			<tr data-idx="${idx}">
@@ -275,16 +313,14 @@ class PlaceOrder {
 						style="position:absolute;right:0;top:0;width:32px;height:100%;opacity:0;cursor:pointer;z-index:1;">
 				</td>
 				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="1" min="0" step="1" placeholder="0"></td>
-				<td style="position:relative;">
+				<td>
 					<input type="text" class="form-control po-uom" data-idx="${idx}"
 						placeholder="UOM" autocomplete="off">
-					<div class="po-uom-results" data-idx="${idx}"
-						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:150px;max-height:180px;overflow-y:auto;"></div>
 				</td>
 				<td><input type="text" class="form-control po-rate text-right" data-idx="${idx}" readonly value="0.00"></td>
 				<td class="text-right po-amount" data-idx="${idx}">0.00</td>
 				<td>
-					<select class="form-control po-vat-apply-on" data-idx="${idx}">
+					<select class="form-control po-vat-apply-on" data-idx="${idx}" disabled style="pointer-events:none;background:#f5f5f5;color:#333;">
 						<option value="VAT 13%">VAT 13%</option>
 						<option value="VAT 0%">VAT 0%</option>
 						<option value="Amount">Amount</option>
@@ -330,7 +366,8 @@ class PlaceOrder {
 							.css({ padding: "6px 10px", cursor: "pointer" })
 							.hover(function () { $(this).css("background", "#f0f0f0"); },
 								   function () { $(this).css("background", "#fff"); })
-							.on("click", function () {
+							.on("mousedown", function (e) {
+								e.preventDefault();
 								const $inp = $(`input.po-item-code[data-idx=${idx}]`);
 								$inp.val(item.item_name).data("item_code", item.item_code);
 								$dd.hide();
@@ -343,55 +380,62 @@ class PlaceOrder {
 			});
 		}
 
-		$(`input.po-item-code[data-idx=${idx}]`).on("focus click input", function () {
-			search_item();
-		});
-
-		// Hide dropdown on blur
+		$(`input.po-item-code[data-idx=${idx}]`).on("focus click input", function () { search_item(); });
 		$(`input.po-item-code[data-idx=${idx}]`).on("blur", function () {
-			setTimeout(function () {
-				$(`.po-item-results[data-idx=${idx}]`).hide();
-			}, 200);
+			setTimeout(function () { $(`.po-item-results[data-idx=${idx}]`).hide(); }, 200);
+		});
+		attach_kbd_nav($(`input.po-item-code[data-idx=${idx}]`), function () {
+			return $(`.po-item-results[data-idx=${idx}]`);
 		});
 
-		// UOM search
+		// UOM search — uses shared body-level dropdown to escape table overflow clipping
 		function search_uom() {
+			const $inp = $(`input.po-uom[data-idx=${idx}]`);
 			const item = me.get_item(idx);
 			const item_code = item ? (item.item_code || "") : "";
-			const txt = $(`input.po-uom[data-idx=${idx}]`).val().trim();
-			const $dd = $(`.po-uom-results[data-idx=${idx}]`);
+			const txt = $inp.val().trim();
 
 			frappe.call({
 				method: "avinashgroup_app.templates.pages.place_order.search_uoms",
 				args: { item_code: item_code, txt: txt },
 				callback: function (r) {
 					const uoms = r.message || [];
-					$dd.empty();
-					if (!uoms.length) { $dd.hide(); return; }
+					me.$uom_dd.empty();
+					if (!uoms.length) { me.$uom_dd.hide(); return; }
+
+					const rect = $inp[0].getBoundingClientRect();
+					me.$uom_dd.css({
+						top: rect.bottom + window.scrollY,
+						left: rect.left + window.scrollX,
+						width: Math.max(rect.width, 150)
+					});
+
 					uoms.forEach(function (uom) {
 						$("<div>").text(uom)
 							.css({ padding: "6px 10px", cursor: "pointer" })
 							.hover(function () { $(this).css("background", "#f0f0f0"); },
 								   function () { $(this).css("background", "#fff"); })
-							.on("click", function () {
-								$(`input.po-uom[data-idx=${idx}]`).val(uom);
+							.on("mousedown", function (e) {
+								e.preventDefault(); // prevent blur before click
+								$inp.val(uom);
 								if (item) item.uom = uom;
-								$dd.hide();
+								me.$uom_dd.hide();
 								if (item && item.item_code) {
 									me.fetch_item_details_with_uom(idx, uom);
 								}
 							})
-							.appendTo($dd);
+							.appendTo(me.$uom_dd);
 					});
-					$dd.show();
+					me.$uom_dd.show();
 				}
 			});
 		}
 
 		$(`input.po-uom[data-idx=${idx}]`).on("focus click input", function () { search_uom(); });
 		$(`input.po-uom[data-idx=${idx}]`).on("blur", function () {
-			setTimeout(function () { $(`.po-uom-results[data-idx=${idx}]`).hide(); }, 200);
+			setTimeout(function () { me.$uom_dd.hide(); }, 200);
 		});
+		attach_kbd_nav($(`input.po-uom[data-idx=${idx}]`), function () { return me.$uom_dd; });
 
 		// Qty change
 		$(`input.po-qty[data-idx=${idx}]`).on("change", function () {
@@ -461,7 +505,7 @@ class PlaceOrder {
 
 					$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
 				$(`input.po-rate[data-idx=${idx}]`).val(
-					format_number(item.rate, me.ctx.number_format, 2)
+					format_number(item.rate, me.ctx.number_format, 5)
 				);
 
 				me.update_row_amount(idx);
@@ -478,7 +522,7 @@ class PlaceOrder {
 
 		frappe.call({
 			method: "avinashgroup_app.templates.pages.place_order.get_item_price",
-			args: { item_code: item_code, price_list: me.ctx.price_list || "" },
+			args: { item_code: item_code, price_list: me.ctx.price_list || "", uom: uom || "" },
 			callback: function (r) {
 				if (!r.message) return;
 				const d = r.message;
@@ -488,7 +532,7 @@ class PlaceOrder {
 				item.rate = flt(d.rate || 0);
 				$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
 				$(`input.po-rate[data-idx=${idx}]`).val(
-					format_number(item.rate, me.ctx.number_format, 2)
+					format_number(item.rate, me.ctx.number_format, 5)
 				);
 				me.update_row_amount(idx);
 				me.recalculate_totals();
@@ -675,6 +719,7 @@ class PlaceOrder {
 .po-amount {
 	font-weight: 500;
 }
+.po-dd-hi { background: #e8f0fe !important; }
 </style>
 
 <style>
