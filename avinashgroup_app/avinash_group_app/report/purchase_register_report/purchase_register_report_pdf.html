@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  color: #222;
+  line-height: 1.7;
+  margin: 0;
+  padding: {% if is_html_view %}20px{% else %}0{% endif %};
+  background: {% if is_html_view %}#d0d0d0{% else %}white{% endif %};
+}
+
+{% if is_html_view %}
+.page {
+  background: #fff;
+  width: 277mm;
+  min-height: 190mm;
+  margin: 0 auto;
+  padding: 10mm 8mm 12mm 8mm;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+@media print {
+  body { background: white; padding: 0; }
+  .page { box-shadow: none; width: 100%; padding: 0; margin: 0; }
+}
+{% endif %}
+
+.pr-company-center {
+  text-align: center;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+.pr-title-l { font-size: 13px; font-weight: bold; margin-bottom: 1px; }
+
+.pr-filters {
+  font-size: 11px;
+  color: #333;
+  margin-bottom: 4px;
+}
+.pr-filter-item  { display: inline-block; margin-right: 18px; }
+.pr-filter-label { font-weight: bold; }
+
+.pr-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
+
+table { width: 100%; border-collapse: collapse; }
+thead { display: table-header-group; }
+tr    { page-break-inside: avoid; }
+
+thead th {
+  background: #f0f2f5;
+  color: #222;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 5px 5px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+thead th.r { text-align: right; }
+thead th.l { text-align: left; }
+
+td { padding: 4px 5px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
+.nowrap { white-space: nowrap; }
+
+.tr-total td {
+  font-weight: bold;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+
+.r { text-align: right; }
+.l { text-align: left; }
+
+.pr-footer {
+  font-size: 10px;
+  color: #aaa;
+  text-align: right;
+  margin-top: 10px;
+}
+</style>
+</head>
+<body>
+{% if is_html_view %}<div class="page">{% endif %}
+
+{% set companies = filters.get('company') %}
+{% if companies is string %}{% set companies = [companies] %}{% endif %}
+{% set company_label = companies | join(', ') if companies else '' %}
+
+{% set supplier_label = supplier_display or '' %}
+{% set ptype_label = ptype_display or '' %}
+
+{# sc = selected columns list; empty means show all #}
+{% set show_all = not sc %}
+{% set s_date                 = show_all or 'date'                 in sc %}
+{% set s_miti                 = show_all or 'miti'                 in sc %}
+{% set s_purchase_type        = show_all or 'purchase_type'        in sc %}
+{% set s_voucher_no           = show_all or 'voucher_no'           in sc %}
+{% set s_supplier_invoice_no  = show_all or 'supplier_invoice_no'  in sc %}
+{% set s_supplier_invoice_date= show_all or 'supplier_invoice_date'in sc %}
+{% set s_supplier_invoice_miti= show_all or 'supplier_invoice_miti'in sc %}
+{% set s_supplier_name        = show_all or 'supplier_name'        in sc %}
+{% set s_vat_number           = show_all or 'vat_number'           in sc %}
+{% set s_purchase             = show_all or 'purchase'             in sc %}
+{% set s_tax_free_purchase    = show_all or 'tax_free_purchase'    in sc %}
+{% set s_taxable_purchase     = show_all or 'taxable_purchase'     in sc %}
+{% set s_vat                  = show_all or 'vat'                  in sc %}
+{% set s_taxable_import       = show_all or 'taxable_import'       in sc %}
+{% set s_import_vat           = show_all or 'import_vat'           in sc %}
+{% set s_capitalized_purchase = show_all or 'capitalized_purchase' in sc %}
+{% set s_capitalized_vat      = show_all or 'capitalized_vat'      in sc %}
+{% set s_total_vat            = show_all or 'total_vat'            in sc %}
+{% set s_qty                  = show_all or 'qty'                  in sc %}
+
+<table>
+  <thead>
+    <tr>
+      <td colspan="19" style="padding:4px 0 0 0; border:none;">
+        <div style="text-align:right; font-size:13px; font-weight:bold;">Purchase Register</div>
+        {% if company_label %}
+        <div class="pr-company-center">{{ company_label }}</div>
+        {% endif %}
+        {% if supplier_label %}
+        <div class="pr-title-l">Supplier: {{ supplier_label }}</div>
+        {% endif %}
+        {% if ptype_label %}
+        <div class="pr-title-l">Purchase Type: {{ ptype_label }}</div>
+        {% endif %}
+        <div class="pr-filters">
+          <span class="pr-filter-item">
+            <span class="pr-filter-label">From:</span>
+            {{ frappe.utils.formatdate(filters.get('from_date')) }}
+            &nbsp;<span class="pr-filter-label">To:</span>
+            {{ frappe.utils.formatdate(filters.get('to_date')) }}
+          </span>
+          {% if filters.get('is_return') %}
+          <span class="pr-filter-item">
+            <span class="pr-filter-label">Is Return:</span> Yes
+          </span>
+          {% endif %}
+        </div>
+        <hr class="pr-divider" style="margin-bottom:0;">
+      </td>
+    </tr>
+    <tr>
+      {% if s_date %}<th class="l">Date</th>{% endif %}
+      {% if s_miti %}<th class="l">Miti</th>{% endif %}
+      {% if s_purchase_type %}<th class="l">Purchase Type</th>{% endif %}
+      {% if s_voucher_no %}<th class="l">Voucher No</th>{% endif %}
+      {% if s_supplier_invoice_no %}<th class="l">Supp. Inv No</th>{% endif %}
+      {% if s_supplier_invoice_date %}<th class="l">Supp. Inv Date</th>{% endif %}
+      {% if s_supplier_invoice_miti %}<th class="l">Supp. Inv Miti</th>{% endif %}
+      {% if s_supplier_name %}<th class="l">Supplier Name</th>{% endif %}
+      {% if s_vat_number %}<th class="l">VAT No</th>{% endif %}
+      {% if s_purchase %}<th class="r">Purchase</th>{% endif %}
+      {% if s_tax_free_purchase %}<th class="r">Tax Free</th>{% endif %}
+      {% if s_taxable_purchase %}<th class="r">Taxable Pur.</th>{% endif %}
+      {% if s_vat %}<th class="r">VAT</th>{% endif %}
+      {% if s_taxable_import %}<th class="r">Tax. Import</th>{% endif %}
+      {% if s_import_vat %}<th class="r">Imp. VAT</th>{% endif %}
+      {% if s_capitalized_purchase %}<th class="r">Cap. Pur. VAT</th>{% endif %}
+      {% if s_capitalized_vat %}<th class="r">Cap. VAT</th>{% endif %}
+      {% if s_total_vat %}<th class="r">Total VAT</th>{% endif %}
+      {% if s_qty %}<th class="r">QTY</th>{% endif %}
+    </tr>
+  </thead>
+
+  <tbody>
+  {% for row in data %}
+    <tr{% if row.get('bold') %} class="tr-total"{% endif %}>
+      {% if s_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('date')) if row.get('date') else '' }}</td>{% endif %}
+      {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
+      {% if s_purchase_type %}<td>{{ row.get('purchase_type') or '' }}</td>{% endif %}
+      {% if s_voucher_no %}<td>{{ row.get('voucher_no') or '' }}</td>{% endif %}
+      {% if s_supplier_invoice_no %}<td>{{ row.get('supplier_invoice_no') or '' }}</td>{% endif %}
+      {% if s_supplier_invoice_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('supplier_invoice_date')) if row.get('supplier_invoice_date') else '' }}</td>{% endif %}
+      {% if s_supplier_invoice_miti %}<td class="nowrap">{{ row.get('supplier_invoice_miti') or '' }}</td>{% endif %}
+      {% if s_supplier_name %}<td>{{ row.get('supplier_name') or '' }}</td>{% endif %}
+      {% if s_vat_number %}<td>{{ row.get('vat_number') or '' }}</td>{% endif %}
+      {% if s_purchase %}<td class="r nowrap">{{ fmt(row.get('purchase')) }}</td>{% endif %}
+      {% if s_tax_free_purchase %}<td class="r nowrap">{{ fmt(row.get('tax_free_purchase')) }}</td>{% endif %}
+      {% if s_taxable_purchase %}<td class="r nowrap">{{ fmt(row.get('taxable_purchase')) }}</td>{% endif %}
+      {% if s_vat %}<td class="r nowrap">{{ fmt(row.get('vat')) }}</td>{% endif %}
+      {% if s_taxable_import %}<td class="r nowrap">{{ fmt(row.get('taxable_import')) }}</td>{% endif %}
+      {% if s_import_vat %}<td class="r nowrap">{{ fmt(row.get('import_vat')) }}</td>{% endif %}
+      {% if s_capitalized_purchase %}<td class="r nowrap">{{ fmt(row.get('capitalized_purchase')) }}</td>{% endif %}
+      {% if s_capitalized_vat %}<td class="r nowrap">{{ fmt(row.get('capitalized_vat')) }}</td>{% endif %}
+      {% if s_total_vat %}<td class="r nowrap">{{ fmt(row.get('total_vat')) }}</td>{% endif %}
+      {% if s_qty %}<td class="r">{{ row.get('qty') or '' }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<hr class="pr-divider">
+<div class="pr-footer">Printed on {{ frappe.utils.now() }}</div>
+
+{% if is_html_view %}</div>{% endif %}
+</body>
+</html>

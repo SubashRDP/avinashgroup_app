@@ -42,6 +42,12 @@ frappe.query_reports["Purchase Register Report"] = {
 			},
 		},
 		{
+			fieldname: "is_return",
+			label: __("Is Return"),
+			fieldtype: "Check",
+			default: 0,
+		},
+		{
 			fieldname: "fit_columns",
 			label: __("Fit Columns"),
 			fieldtype: "Check",
@@ -93,6 +99,64 @@ frappe.query_reports["Purchase Register Report"] = {
 			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
 			dt.columnmanager.setColumnWidth(col.colIndex);
 		});
+	},
+
+	onload: function (_report) {
+		_report.page.add_inner_button(__('Download PDF'), function () {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.from_date || !filters.to_date) {
+				frappe.msgprint(__('Please set From Date and To Date'));
+				return;
+			}
+			const url = '/api/method/avinashgroup_app.avinash_group_app.report.purchase_register_report.purchase_register_report.download_pdf'
+				+ '?filters=' + encodeURIComponent(JSON.stringify(filters));
+			window.open(url);
+		});
+
+		_report.print_report = function (print_settings) {
+			const filters = frappe.query_report.get_filter_values(true);
+			const selected_columns = (print_settings && print_settings.pick_columns && print_settings.columns && print_settings.columns.length)
+				? print_settings.columns : [];
+			frappe.call({
+				method: 'avinashgroup_app.avinash_group_app.report.purchase_register_report.purchase_register_report.get_print_html',
+				args: { filters: JSON.stringify(filters), selected_columns: JSON.stringify(selected_columns) },
+				callback: function (r) {
+					if (!r.message) return;
+					const win = window.open('', '_blank');
+					win.document.open();
+					win.document.write(r.message);
+					win.document.close();
+				},
+			});
+		};
+
+		if (!frappe.ui.get_print_settings._pick_columns_patched) {
+			const _orig = frappe.ui.get_print_settings;
+			const _our_reports = ['Sales Register Report', 'Purchase Register Report'];
+			const _patched = function (pdf, callback, letter_head, pick_columns, has_filters) {
+				const report_name = frappe.query_report && frappe.query_report.report_name;
+				if (_our_reports.indexOf(report_name) === -1) {
+					return _orig(pdf, callback, letter_head, pick_columns, has_filters);
+				}
+				const _wrappedCb = function (data) {
+					if (data.pick_columns && !(data.columns && data.columns.length)) {
+						frappe.msgprint({ message: __('Please choose the columns you want to include'), indicator: 'orange' });
+						setTimeout(function () {
+							frappe.ui.get_print_settings(pdf, callback, letter_head, pick_columns, has_filters);
+						}, 150);
+						return;
+					}
+					callback(data);
+				};
+				const d = _orig(pdf, _wrappedCb, letter_head, pick_columns, has_filters);
+				if (d && pick_columns && pick_columns.length) {
+					setTimeout(function () { d.set_value('pick_columns', 1); }, 100);
+				}
+				return d;
+			};
+			_patched._pick_columns_patched = true;
+			frappe.ui.get_print_settings = _patched;
+		}
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
