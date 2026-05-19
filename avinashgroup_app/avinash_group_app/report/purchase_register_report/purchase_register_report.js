@@ -163,8 +163,10 @@ frappe.query_reports["Purchase Register Report"] = {
 		if (!data) return default_formatter(value, row, column, data);
 
 		if (column.fieldname === "voucher_no" && value && !data.bold) {
-			value = `<a href="/app/purchase-invoice/${value}" target="_blank">${value}</a>`;
-			return value;
+			const parts = value.split("::");
+			const label = parts[0];
+			const docname = parts[1] || parts[0];
+			return frappe.utils.get_form_link("Purchase Invoice", docname, true, label);
 		}
 
 		value = default_formatter(value, row, column, data);

@@ -142,7 +142,7 @@ def get_columns():
 		{"fieldname": "date",                  "label": _("Date"),                    "fieldtype": "Date",            "width": 100},
 		{"fieldname": "miti",                  "label": _("Miti"),                    "fieldtype": "Data",            "width": 120},
 		{"fieldname": "purchase_type",         "label": _("Purchase Type"),           "fieldtype": "Data",            "width": 120},
-		{"fieldname": "voucher_no",            "label": _("Voucher No"),              "fieldtype": "Link",            "options": "Purchase Invoice", "width": 170},
+		{"fieldname": "voucher_no",            "label": _("Voucher No"),              "fieldtype": "Data",            "width": 170},
 		{"fieldname": "supplier_invoice_no",   "label": _("Supplier Invoice No"),     "fieldtype": "Data",            "width": 150},
 		{"fieldname": "supplier_invoice_date", "label": _("Supplier Invoice Date"),   "fieldtype": "Date",            "width": 130},
 		{"fieldname": "supplier_invoice_miti", "label": _("Supplier Invoice Miti"),   "fieldtype": "Data",            "width": 130},
@@ -179,16 +179,16 @@ def get_data(filters):
 		placeholders = ", ".join(["'{}'".format(c) for c in filters.get("purchase_type")])
 		conditions += " AND pi.custom_purchase_type IN ({})".format(placeholders)
 
-	return frappe.db.sql(
+	rows = frappe.db.sql(
 		f"""
 		SELECT
 			pi.posting_date                                                                          AS date,
-			pi.custom_nepali_miti                                                                    AS miti,
+			DATE(pi.custom_nepali_miti)                                                              AS miti,
 			pi.custom_purchase_type                                                                  AS purchase_type,
-			pi.name                                                                                  AS voucher_no,
+			CONCAT(IFNULL(pi.custom_name, pi.name), '::', pi.name)                                  AS voucher_no,
 			pi.bill_no                                                                               AS supplier_invoice_no,
 			pi.bill_date                                                                             AS supplier_invoice_date,
-			pi.custom_supplier_invoice_miti                                                          AS supplier_invoice_miti,
+			DATE(pi.custom_supplier_invoice_miti)                                                    AS supplier_invoice_miti,
 			pi.supplier_name                                                                         AS supplier_name,
 			s.tax_id                                                                                 AS vat_number,
 			pi.custom_total_amount_including_excise                                                  AS purchase,
@@ -215,3 +215,4 @@ def get_data(filters):
 		filters,
 		as_dict=True,
 	)
+	return rows
