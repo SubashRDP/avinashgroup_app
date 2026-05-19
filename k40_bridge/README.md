@@ -2,20 +2,22 @@
 
 A Windows application that syncs attendance punches from one or more ZKTeco K40 devices to one or more ERPNext sites.
 
+> **For a full end-to-end setup walkthrough (ERPNext side + device side + bridge install),** see [SETUP.md](SETUP.md). This README is the reference for the bridge itself.
+
 ---
 
 ## Quick Start
 
-1. Download `k40_bridge.exe` from the latest GitHub Actions build artifact.
-2. Place it in a folder of your choice (e.g. `C:\K40Bridge\`).
-3. Double-click `k40_bridge.exe` — the setup wizard appears on first run.
-4. Fill in:
-   - **ERPNext URL** — e.g. `https://rpl-live.raindropinc.com`
+1. Download the installer from the latest release:
+   `https://github.com/SubashRDP/avinashgroup_app/releases/latest/download/K40BridgeSetup.exe`
+2. Run it as administrator (it registers an auto-start task).
+3. The setup wizard appears on first launch. Fill in:
+   - **ERPNext URL** — e.g. `https://your-site.example.com`
    - **API Key** + **API Secret** — generated from a Frappe User (see below)
    - **Devices** — one row per K40 (Name, IP, Port, Serial)
-   - **Sync Frequency** — default `1 day`
-5. Click **Test Connection** to verify credentials, then **Save & Start**.
-6. The control panel opens. Sync runs automatically; use **Force Sync All** for ad-hoc real-time sync.
+   - **Sync Frequency** — default `1 day` (use `2 minutes` for near-real-time)
+4. Click **Test Connection** to verify credentials, then **Save & Start**.
+5. The control panel opens. Sync runs automatically; use **Force Sync All** for ad-hoc real-time sync.
 
 ---
 
@@ -112,7 +114,7 @@ Before each device sync, the bridge does a fast TCP probe (5-second timeout, 3 r
 |---------|-------|
 | Status: AUTH FAIL | Verify API Key + Secret in `config.json`. Test on ERPNext: `curl -H "Authorization: token KEY:SECRET" https://your-site/api/method/frappe.auth.get_logged_user` |
 | Status: UNREACHABLE | Ping the device IP from this Windows machine. Verify port 4370 is open. |
-| Status: ERROR (HTTP 404) | ERPNext URL is wrong, or `biometric_integration` app is not installed on that site. |
+| Status: ERROR (HTTP 404) | ERPNext URL is wrong, or `avinashgroup_app` is not installed on that site. |
 | No punches appearing | Verify Employee record has `attendance_device_id` matching the K40's user ID. |
 | GUI doesn't open | Run the exe from a Command Prompt to see any errors. |
 
