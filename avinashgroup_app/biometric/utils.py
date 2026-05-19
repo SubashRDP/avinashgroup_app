@@ -6,16 +6,21 @@ from collections import defaultdict
 
 def process_attendance_records(attendance_data, device_identifier=None):
     """
-    Process biometric punch records: group by (user_id, date), then create/update
-    exactly one IN checkin and one OUT checkin per employee per day.
-    Attendance is handled by ERPNext's built-in auto attendance.
+    Store every biometric punch as its own Employee Checkin row. For each
+    (employee, date), all punches (existing in DB + new from this batch) are
+    merged, deduped by exact timestamp, sorted chronologically, and assigned
+    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ...
+
+    Re-running with the same batch is idempotent. A late-arriving punch slots
+    in by time and downstream rows flip IN↔OUT if needed.
 
     Args:
         attendance_data: list of {"user_id": str, "timestamp": str} dicts
         device_identifier: optional device name/IP
 
     Returns:
-        dict with success, synced, errors, message, error_details, synced_punches, failed_punches
+        dict with success, synced, errors, message, error_details,
+        synced_punches, failed_punches
     """
     if not attendance_data:
         return {
@@ -31,7 +36,6 @@ def process_attendance_records(attendance_data, device_identifier=None):
     synced_punches = []
     failed_punches = []
 
-    # Parse all punches and group by (user_id, date)
     grouped = defaultdict(list)
     record_ids_by_group = defaultdict(list)
 
@@ -54,8 +58,7 @@ def process_attendance_records(attendance_data, device_identifier=None):
         grouped[key].append(ts)
         record_ids_by_group[key].append(record_id)
 
-    # Process each (user_id, date) group
-    for (user_id, punch_date), timestamps in grouped.items():
+    for (user_id, punch_date), new_timestamps in grouped.items():
         group_record_ids = record_ids_by_group[(user_id, punch_date)]
 
         try:
@@ -72,42 +75,16 @@ def process_attendance_records(attendance_data, device_identifier=None):
                 failed_punches.extend(group_record_ids)
                 continue
 
-            timestamps.sort()
-            batch_earliest = timestamps[0]
-            batch_latest = timestamps[-1]
-
-            day_start = datetime.combine(punch_date, datetime.min.time())
-            day_end = datetime.combine(punch_date, datetime.max.time())
-            existing_in = frappe.db.get_value(
-                "Employee Checkin",
-                {"employee": employee.name, "log_type": "IN", "time": ["between", [day_start, day_end]]},
-                ["name", "time"], as_dict=True,
-            )
-            existing_out = frappe.db.get_value(
-                "Employee Checkin",
-                {"employee": employee.name, "log_type": "OUT", "time": ["between", [day_start, day_end]]},
-                ["name", "time"], as_dict=True,
+            inserted, updated = _reconcile_day_checkins(
+                employee, punch_date, new_timestamps, device_identifier
             )
 
-            # Earliest seen so far across this batch + DB, latest similarly.
-            desired_in = batch_earliest
-            if existing_in and existing_in.time < desired_in:
-                desired_in = existing_in.time
-            desired_out = batch_latest
-            if existing_out and existing_out.time > desired_out:
-                desired_out = existing_out.time
-
-            _apply_checkin(employee, "IN", desired_in, existing_in, device_identifier)
-            if desired_out != desired_in:
-                _apply_checkin(employee, "OUT", desired_out, existing_out, device_identifier)
-
-            synced += len(timestamps)
+            synced += len(new_timestamps)
             synced_punches.extend(group_record_ids)
 
             frappe.logger("biometric").info(
-                f"Processed {employee.name} on {punch_date}: "
-                f"IN={desired_in}, OUT={desired_out if desired_out != desired_in else 'N/A'}, "
-                f"punches={len(timestamps)}"
+                f"{employee.name} {punch_date}: new={len(new_timestamps)} "
+                f"inserted={inserted} relabeled={updated}"
             )
 
         except Exception as e:
@@ -135,25 +112,52 @@ def process_attendance_records(attendance_data, device_identifier=None):
     }
 
 
-def _apply_checkin(employee, log_type, desired_time, existing, device_identifier=None):
-    """Insert a checkin or update an existing one if the time has moved."""
-    if existing:
-        if existing.time != desired_time:
-            frappe.db.set_value("Employee Checkin", existing.name, "time", desired_time)
-        return
+def _reconcile_day_checkins(employee, punch_date, new_timestamps, device_identifier=None):
+    """Merge new punches with existing rows for the day, dedup by exact time,
+    and apply IN/OUT alternation in chronological order.
 
-    checkin = frappe.new_doc("Employee Checkin")
-    checkin.employee = employee.name
-    checkin.employee_name = employee.employee_name
-    checkin.time = desired_time
-    checkin.log_type = log_type
-    checkin.skip_auto_attendance = 0
-    if log_type == "OUT":
-        checkin.latitude = 27.7228
-        checkin.longitude = 85.3211
-    if device_identifier:
-        checkin.device_id = device_identifier
-    checkin.insert(ignore_permissions=True)
+    Returns (inserted_count, relabeled_count).
+    """
+    day_start = datetime.combine(punch_date, datetime.min.time())
+    day_end = datetime.combine(punch_date, datetime.max.time())
+
+    existing_rows = frappe.db.get_all(
+        "Employee Checkin",
+        filters={
+            "employee": employee.name,
+            "time": ["between", [day_start, day_end]],
+        },
+        fields=["name", "time", "log_type"],
+        order_by="time asc",
+    )
+    existing_by_time = {row.time: row for row in existing_rows}
+
+    all_times = sorted(set(existing_by_time.keys()) | set(new_timestamps))
+
+    inserted = 0
+    relabeled = 0
+    for idx, ts in enumerate(all_times):
+        desired_log_type = "IN" if idx % 2 == 0 else "OUT"
+        existing = existing_by_time.get(ts)
+        if existing:
+            if existing.log_type != desired_log_type:
+                frappe.db.set_value(
+                    "Employee Checkin", existing.name, "log_type", desired_log_type
+                )
+                relabeled += 1
+        else:
+            checkin = frappe.new_doc("Employee Checkin")
+            checkin.employee = employee.name
+            checkin.employee_name = employee.employee_name
+            checkin.time = ts
+            checkin.log_type = desired_log_type
+            checkin.skip_auto_attendance = 0
+            if device_identifier:
+                checkin.device_id = device_identifier
+            checkin.insert(ignore_permissions=True)
+            inserted += 1
+
+    return inserted, relabeled
 
 
 def _parse_timestamp(timestamp_str):
