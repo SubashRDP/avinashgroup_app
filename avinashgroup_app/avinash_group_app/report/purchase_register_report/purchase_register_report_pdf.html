@@ -175,7 +175,7 @@ td { padding: 4px 5px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
       {% if s_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('date')) if row.get('date') else '' }}</td>{% endif %}
       {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
       {% if s_purchase_type %}<td>{{ row.get('purchase_type') or '' }}</td>{% endif %}
-      {% if s_voucher_no %}<td>{{ row.get('voucher_no') or '' }}</td>{% endif %}
+      {% if s_voucher_no %}<td>{{ (row.get('voucher_no') or '').split('::')[0] }}</td>{% endif %}
       {% if s_supplier_invoice_no %}<td>{{ row.get('supplier_invoice_no') or '' }}</td>{% endif %}
       {% if s_supplier_invoice_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('supplier_invoice_date')) if row.get('supplier_invoice_date') else '' }}</td>{% endif %}
       {% if s_supplier_invoice_miti %}<td class="nowrap">{{ row.get('supplier_invoice_miti') or '' }}</td>{% endif %}
