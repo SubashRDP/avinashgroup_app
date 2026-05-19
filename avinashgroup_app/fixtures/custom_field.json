@@ -1,0 +1,68 @@
+[
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_shift_deviation_section",
+    "dt": "Attendance",
+    "fieldname": "custom_shift_deviation_section",
+    "fieldtype": "Section Break",
+    "label": "Shift Deviation",
+    "insert_after": "modify_half_day_status",
+    "read_only": 0
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_late_entry",
+    "dt": "Attendance",
+    "fieldname": "custom_late_entry",
+    "fieldtype": "Duration",
+    "label": "Late Entry",
+    "insert_after": "custom_shift_deviation_section",
+    "read_only": 1,
+    "in_list_view": 0,
+    "description": "How late the employee punched in after shift start"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_early_entry",
+    "dt": "Attendance",
+    "fieldname": "custom_early_entry",
+    "fieldtype": "Duration",
+    "label": "Early Entry",
+    "insert_after": "custom_late_entry",
+    "read_only": 1,
+    "in_list_view": 0,
+    "description": "How early the employee punched in before shift start"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_col_break_deviation",
+    "dt": "Attendance",
+    "fieldname": "custom_col_break_deviation",
+    "fieldtype": "Column Break",
+    "insert_after": "custom_early_entry"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_early_exit",
+    "dt": "Attendance",
+    "fieldname": "custom_early_exit",
+    "fieldtype": "Duration",
+    "label": "Early Exit",
+    "insert_after": "custom_col_break_deviation",
+    "read_only": 1,
+    "in_list_view": 0,
+    "description": "How early the employee punched out before shift end"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Attendance-custom_late_exit",
+    "dt": "Attendance",
+    "fieldname": "custom_late_exit",
+    "fieldtype": "Duration",
+    "label": "Late Exit",
+    "insert_after": "custom_early_exit",
+    "read_only": 1,
+    "in_list_view": 0,
+    "description": "How late the employee punched out after shift end"
+  }
+]
