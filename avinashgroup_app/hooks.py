@@ -87,9 +87,10 @@ rfq_events = {
 
 attendance_events = {
     "validate": "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
-    "before_save": "avinashgroup_app.biometric.attendance_override.set_shift_deviation_fields",
-    "before_submit": "avinashgroup_app.biometric.attendance_override.adjust_out_time",
-    "on_update": "avinashgroup_app.biometric.attendance_override.auto_submit_attendance",
+    "before_save": [
+        "avinashgroup_app.biometric.attendance_override.set_shift_deviation_fields",
+        "avinashgroup_app.biometric.attendance_override.enforce_late_arrival_half_day",
+    ],
 }
 
 doc_events = AuditEventMapper.get_doc_events()
@@ -184,6 +185,7 @@ fixtures = [
                 "Attendance-custom_col_break_deviation",
                 "Attendance-custom_early_exit",
                 "Attendance-custom_late_exit",
+                "Shift Type-custom_late_arrival_cutoff_time",
             ]]
         ],
     },
