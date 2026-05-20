@@ -11,22 +11,12 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			reqd: 1,
 		},
 		{
-			fieldname: "from_date",
-			label: __("From Date (AD)"),
-			fieldtype: "Date",
-			description: __("Only used when BS Year + BS Month are cleared"),
-		},
-		{
-			fieldname: "to_date",
-			label: __("To Date (AD)"),
-			fieldtype: "Date",
-		},
-		{
-			fieldname: "bs_year",
-			label: __("BS Year"),
-			fieldtype: "Int",
-			default: _default_bs_year(),
-			description: __("e.g. 2082"),
+			fieldname: "fiscal_year",
+			label: __("Fiscal Year"),
+			fieldtype: "Link",
+			options: "Fiscal Year",
+			default: frappe.defaults.get_user_default("fiscal_year"),
+			description: __("BS fiscal year, e.g. 82/83 covering Shrawan 2082 to Ashad 2083."),
 		},
 		{
 			fieldname: "bs_month",
@@ -34,9 +24,6 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			fieldtype: "Select",
 			options: [
 				"",
-				"01 - Baisakh",
-				"02 - Jestha",
-				"03 - Ashadh",
 				"04 - Shrawan",
 				"05 - Bhadra",
 				"06 - Ashwin",
@@ -46,8 +33,23 @@ frappe.query_reports["Monthly Attendance BS"] = {
 				"10 - Magh",
 				"11 - Falgun",
 				"12 - Chaitra",
+				"01 - Baisakh",
+				"02 - Jestha",
+				"03 - Ashadh",
 			].join("\n"),
 			default: _default_bs_month(),
+			description: __("Listed in fiscal-year order: Shrawan → Ashadh."),
+		},
+		{
+			fieldname: "from_date",
+			label: __("From Date (AD)"),
+			fieldtype: "Date",
+			description: __("Only used when Fiscal Year + BS Month are cleared"),
+		},
+		{
+			fieldname: "to_date",
+			label: __("To Date (AD)"),
+			fieldtype: "Date",
 		},
 		{
 			fieldname: "department",
@@ -138,18 +140,6 @@ function _make_full_width(report) {
 		"max-width": "100%",
 		"width": "100%",
 	});
-}
-
-function _default_bs_year() {
-	// Best-effort: current BS year from today's AD date.
-	// Crude approximation — fine as a UI default; Python uses authoritative converter.
-	const today = new Date();
-	const year = today.getFullYear();
-	const month = today.getMonth() + 1; // 1-12
-	// Nepali new year falls in mid-April; before that, BS year = AD + 56, after = AD + 57
-	return month < 4 || (month === 4 && today.getDate() < 14)
-		? year + 56
-		: year + 57;
 }
 
 function _default_bs_month() {

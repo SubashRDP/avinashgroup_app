@@ -28,7 +28,7 @@ Columns:
 
 import frappe
 from frappe import _
-from frappe.utils import getdate, cint, flt, strip_html_tags
+from frappe.utils import getdate, flt, strip_html_tags
 
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
@@ -104,14 +104,18 @@ def execute(filters=None):
 def _resolve_period(filters):
 	"""Return (ad_start, ad_end, bs_label_for_header).
 
-	Priority: BS Year + BS Month wins when both are set. Only fall back to
-	From Date + To Date when BS filters are blank — otherwise Frappe's
+	Priority: Fiscal Year + BS Month wins when both are set. Only fall back to
+	From Date + To Date when those filters are blank — otherwise Frappe's
 	Date-type widgets (which can retain values across runs) would silently
 	override a freshly-picked BS month.
 	"""
-	if filters.get("bs_year") and filters.get("bs_month"):
-		bs_year = cint(filters.bs_year)
+	if filters.get("fiscal_year") and filters.get("bs_month"):
 		bs_month = _parse_bs_month(filters.bs_month)
+		fy = frappe.get_cached_doc("Fiscal Year", filters.fiscal_year)
+		# FY starts on Shrawan 1 of some BS year. Months 4-12 belong to that BS
+		# year; months 1-3 (Baisakh–Ashadh) roll into the next BS year.
+		fy_start_bs_year = ad_to_bs(getdate(fy.year_start_date)).year
+		bs_year = fy_start_bs_year if bs_month >= 4 else fy_start_bs_year + 1
 		company = filters.get("company")
 
 		raw_start, raw_end = get_bs_month_range(bs_year, bs_month)
@@ -136,7 +140,7 @@ def _resolve_period(filters):
 			)
 		return ad_start, ad_end, label
 
-	frappe.throw(_("Provide either BS Year + BS Month, or From Date + To Date."))
+	frappe.throw(_("Provide either Fiscal Year + BS Month, or From Date + To Date."))
 
 
 def _parse_bs_month(value):
