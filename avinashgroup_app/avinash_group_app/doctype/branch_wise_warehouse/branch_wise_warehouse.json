@@ -1,28 +1,16 @@
 {
  "actions": [],
  "allow_rename": 1,
-<<<<<<< HEAD
  "creation": "2026-04-15 09:21:37.465998",
-=======
- "creation": "2026-04-13 13:35:21.455187",
->>>>>>> cc8d673666b7bc9a7409ea50f76908e4f7e35755
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-<<<<<<< HEAD
   "section_break_2qd8"
  ],
  "fields": [
   {
    "fieldname": "section_break_2qd8",
-=======
-  "section_break_xofw"
- ],
- "fields": [
-  {
-   "fieldname": "section_break_xofw",
->>>>>>> cc8d673666b7bc9a7409ea50f76908e4f7e35755
    "fieldtype": "Section Break"
   }
  ],
@@ -30,21 +18,13 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
-<<<<<<< HEAD
  "modified": "2026-04-15 09:21:37.465998",
-=======
- "modified": "2026-04-13 13:35:21.455187",
->>>>>>> cc8d673666b7bc9a7409ea50f76908e4f7e35755
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Branch Wise Warehouse",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",
-<<<<<<< HEAD
-=======
- "rows_threshold_for_grid_search": 20,
->>>>>>> cc8d673666b7bc9a7409ea50f76908e4f7e35755
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

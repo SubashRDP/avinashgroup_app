@@ -1,0 +1,81 @@
+name: Build K40 Bridge EXE
+
+on:
+  push:
+    paths:
+      - 'k40_bridge/**'
+      - '.github/workflows/build-k40-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r k40_bridge/requirements.txt
+          pip install pyinstaller
+
+      - name: Build EXE
+        run: |
+          pyinstaller --onefile --noconsole --name k40_bridge `
+            --collect-all pystray `
+            --collect-all PIL `
+            --hidden-import=pystray._win32 `
+            --hidden-import=PIL._imaging `
+            k40_bridge/k40_bridge.py
+
+      - name: Build Installer (Inno Setup)
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" k40_bridge/installer.iss
+        continue-on-error: true
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: k40_bridge
+          path: dist/k40_bridge.exe
+
+      - name: Upload Installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: K40BridgeSetup
+          path: k40_bridge/Output/K40BridgeSetup.exe
+        continue-on-error: true
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(head -1 k40_bridge/latest_version.txt | tr -d '[:space:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Create / update GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: k40-v${{ steps.version.outputs.version }}
+          name: K40 Bridge v${{ steps.version.outputs.version }}
+          body: |
+            Download `K40BridgeSetup.exe` below and run it on the Windows machine.
+            See `k40_bridge/README.md` for setup instructions.
+
+            Bridge points at:
+              `/api/method/avinashgroup_app.biometric.biometric_integration.zkteco_push_attendance`
+          files: |
+            dist/k40_bridge.exe
+            k40_bridge/Output/K40BridgeSetup.exe
+          make_latest: 'true'
+          token: ${{ secrets.GITHUB_TOKEN }}
