@@ -1472,6 +1472,7 @@ def book_revenue_via_journal_entry(
         f"Posting Date: {posting_date}"
     )
 
+
     journal_entry = frappe.new_doc("Journal Entry")
     journal_entry.posting_date = posting_date
     journal_entry.custom_p_type = "Deferred Accounting"
