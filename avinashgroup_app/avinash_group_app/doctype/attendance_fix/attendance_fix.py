@@ -33,16 +33,24 @@ class AttendanceFix(Document):
             frappe.throw(_("From Date must be on or before To Date."))
 
     def on_submit(self):
-        try:
-            self._run_fix()
-            self.db_set("status", "Fixed", update_modified=False)
-        except Exception:
-            self.db_set("status", "Failed", update_modified=False)
-            frappe.log_error(
-                title=f"Attendance Fix failed: {self.name}",
-                message=frappe.get_traceback(),
-            )
-            raise
+        """Enqueue the heavy reconciliation in the background worker.
+
+        We never run _run_fix() inside the HTTP request — a wide range can iterate
+        tens of thousands of (employee, date) pairs (each one calling stock HRMS
+        mark_attendance_and_link_log, which fires every Attendance hook on the
+        site). Synchronous execution times out the desk.
+
+        Flow: on_submit returns immediately with status=Queued. The worker
+        picks it up, sets Running, runs _run_fix, persists Fixed/Failed.
+        """
+        self.db_set("status", "Queued", update_modified=False)
+        frappe.enqueue(
+            "avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix.run_attendance_fix_in_background",
+            queue="long",
+            timeout=14400,
+            doc_name=self.name,
+            enqueue_after_commit=True,
+        )
 
     def on_cancel(self):
         self.db_set("status", "Pending", update_modified=False)
