@@ -21,6 +21,16 @@ FILTERED_DOCTYPES = {
     "Attendance",
 }
 
+
+def _is_admin(user):
+    """Check if user has System Manager role (admins bypass filtering)."""
+    try:
+        user_doc = frappe.get_cached_doc("User", user)
+        user_roles = [role.role for role in user_doc.roles]
+        return "System Manager" in user_roles
+    except Exception:
+        return False
+
 # Date field to use for filtering (most transactions use posting_date)
 DATE_FIELD_MAP = {
     "Attendance": "attendance_date",
@@ -98,8 +108,8 @@ def apply_fiscal_year_filter_to_list(doctype, filters=None, **kwargs):
 
     user = frappe.session.user
 
-    # Check if user is Administrator - admins bypass filtering
-    if frappe.db.get_value("User", user, "user_type") == "System User":
+    # Check if user is System Manager - admins bypass filtering
+    if _is_admin(user):
         return
 
     access_map = _get_user_fiscal_access(user)
@@ -170,8 +180,8 @@ def validate_fiscal_year_access(doc, method=None):
 
     user = frappe.session.user
 
-    # Check if user is Administrator
-    if frappe.db.get_value("User", user, "user_type") == "System User":
+    # Check if user is System Manager - admins bypass filtering
+    if _is_admin(user):
         return
 
     access_map = _get_user_fiscal_access(user)
@@ -251,9 +261,8 @@ def filtered_get_list(doctype, *args, **kwargs):
 
     user = frappe.session.user
 
-    # Check if user is Administrator - admins bypass filtering
-    user_doc = frappe.db.get_value("User", user, ["user_type"], as_dict=True)
-    if user_doc and user_doc.user_type == "System User":
+    # Check if user is System Manager - admins bypass filtering
+    if _is_admin(user):
         return frappe.call("frappe.client.get_list", args={"doctype": doctype, **kwargs}, async_=False)
 
     access_map = _get_user_fiscal_access(user)
