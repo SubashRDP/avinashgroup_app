@@ -24,10 +24,14 @@ FILTERED_DOCTYPES = {
 
 def _is_admin(user):
     """Check if user has System Manager role (admins bypass filtering)."""
+    if not user or user == "Guest":
+        return False
     try:
-        user_doc = frappe.get_cached_doc("User", user)
-        user_roles = [role.role for role in user_doc.roles]
-        return "System Manager" in user_roles
+        result = frappe.db.sql("""
+            SELECT role FROM tabUserRole WHERE parent = %s AND role = 'System Manager'
+            LIMIT 1
+        """, (user,))
+        return bool(result)
     except Exception:
         return False
 
@@ -55,6 +59,8 @@ def _get_user_fiscal_access(user):
 
     try:
         user_doc = frappe.get_cached_doc("User", user)
+    except (frappe.DoesNotExistError, frappe.PermissionError):
+        return {}
     except Exception:
         return {}
 
@@ -250,6 +256,7 @@ def get_user_fiscal_access(user=None):
     return _get_user_fiscal_access(user)
 
 
+@frappe.whitelist(allow_guest=False)
 def filtered_get_list(doctype, *args, **kwargs):
     """
     Override for frappe.client.get_list to apply fiscal year filtering.
