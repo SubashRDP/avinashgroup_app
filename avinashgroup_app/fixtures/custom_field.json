@@ -64,5 +64,15 @@
     "read_only": 1,
     "in_list_view": 0,
     "description": "How late the employee punched out after shift end"
+  },
+  {
+    "doctype": "Custom Field",
+    "name": "Shift Type-custom_late_arrival_cutoff_time",
+    "dt": "Shift Type",
+    "fieldname": "custom_late_arrival_cutoff_time",
+    "fieldtype": "Time",
+    "label": "Late Arrival Cutoff (forces Half Day)",
+    "insert_after": "late_entry_grace_period",
+    "description": "If the employee's first check-in is after this time, Attendance is forced to Half Day regardless of hours worked. Leave blank to disable this rule for this shift."
   }
 ]

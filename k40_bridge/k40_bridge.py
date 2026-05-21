@@ -31,7 +31,7 @@ TASK_NAME = "K40 Bridge"
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 WEBHOOK_PATH = (
     "/api/method/avinashgroup_app.biometric."
@@ -929,13 +929,28 @@ class SetupWizard:
         f2 = ttk.LabelFrame(self.window, text="Step 2: Devices")
         f2.pack(fill="both", expand=True, padx=10, pady=6)
 
+        # Plain-English description so installers don't confuse the device IP
+        # with this PC's IP. The bridge always runs on a PC inside the LAN;
+        # what we ask for here is the FINGERPRINT DEVICE's address.
+        ttk.Label(
+            f2,
+            text=(
+                "Enter the biometric device's LAN address (not this PC). "
+                "Find it on the device: Menu → Comm. → Ethernet → IP. "
+                "Default port is 4370 for ZKTeco/K40, 80 for Hikvision."
+            ),
+            foreground="gray",
+            wraplength=720,
+            justify="left",
+        ).pack(fill="x", padx=8, pady=(4, 6))
+
         header = ttk.Frame(f2)
         header.pack(fill="x", padx=6, pady=(4, 2))
         for i, (text, width) in enumerate(
             [
                 ("Name", 14),
                 ("Type", 10),
-                ("IP", 14),
+                ("Device IP", 14),
                 ("Port", 6),
                 ("Serial/ID", 16),
                 ("User", 10),

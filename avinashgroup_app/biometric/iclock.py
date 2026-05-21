@@ -18,7 +18,10 @@ import frappe
 from werkzeug.wrappers import Response
 
 from frappe.website.page_renderers.base_renderer import BaseRenderer
-from avinashgroup_app.biometric.utils import process_attendance_records
+from avinashgroup_app.biometric.utils import (
+	assert_known_device,
+	process_attendance_records,
+)
 
 def _log():
 	import logging
@@ -123,6 +126,12 @@ def _config_block(sn):
 
 
 def _process_attlog(raw, sn, log):
+	try:
+		assert_known_device(sn)
+	except frappe.PermissionError:
+		log.warning("ATTLOG SN=%s rejected: device not registered or disabled", sn)
+		return 0
+
 	records = []
 	skipped = 0
 	for line in raw.splitlines():

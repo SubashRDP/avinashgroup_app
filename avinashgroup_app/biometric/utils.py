@@ -1,7 +1,42 @@
 import frappe
+from frappe import _
 from frappe.utils import now_datetime
 from datetime import datetime
 from collections import defaultdict
+
+
+def assert_known_device(serial: str) -> str:
+    """Reject punches from unregistered or disabled biometric devices.
+
+    Looks up Biometric Device by `device_serial` (the hardware serial the
+    bridge / ADMS push sends) and requires `enabled = 1`. Raises
+    PermissionError (HTTP 403) and writes one Error Log entry on miss.
+
+    Returns the Biometric Device record name on success.
+    """
+    serial = (serial or "").strip()
+    if not serial:
+        frappe.log_error(
+            title="Biometric Device Rejected",
+            message="Empty device serial in request.",
+        )
+        frappe.throw(_("Device serial is required."), frappe.PermissionError)
+
+    name = frappe.db.get_value(
+        "Biometric Device",
+        {"device_serial": serial, "enabled": 1},
+        "name",
+    )
+    if not name:
+        frappe.log_error(
+            title="Biometric Device Rejected",
+            message=f"Unregistered or disabled device serial: {serial!r}",
+        )
+        frappe.throw(
+            _("Device serial {0} is not registered or is disabled.").format(serial),
+            frappe.PermissionError,
+        )
+    return name
 
 
 def process_attendance_records(attendance_data, device_identifier=None):
@@ -174,28 +209,29 @@ def _parse_timestamp(timestamp_str):
 
 
 def _update_device_record(device_identifier, synced_count):
-    """Update last_sync_time and total_synced on the Biometric Device record."""
+    """Update last_sync_time and total_synced on the Biometric Device record.
+
+    Looks up by `device_serial` — the canonical key set by the bridge
+    payload / ADMS push SN. The ingestion endpoints have already validated
+    the serial via assert_known_device(), so a miss here would mean the row
+    was deleted mid-request; we just no-op.
+    """
     device_name = frappe.db.get_value(
         "Biometric Device",
-        {"device_name": device_identifier},
+        {"device_serial": device_identifier},
         "name",
     )
     if not device_name:
-        device_name = frappe.db.get_value(
-            "Biometric Device",
-            {"device_ip": device_identifier},
-            "name",
-        )
-    if device_name:
-        frappe.db.set_value(
-            "Biometric Device",
-            device_name,
-            {
-                "last_sync_time": now_datetime(),
-                "total_synced": (
-                    frappe.db.get_value("Biometric Device", device_name, "total_synced")
-                    or 0
-                )
-                + synced_count,
-            },
-        )
+        return
+    frappe.db.set_value(
+        "Biometric Device",
+        device_name,
+        {
+            "last_sync_time": now_datetime(),
+            "total_synced": (
+                frappe.db.get_value("Biometric Device", device_name, "total_synced")
+                or 0
+            )
+            + synced_count,
+        },
+    )

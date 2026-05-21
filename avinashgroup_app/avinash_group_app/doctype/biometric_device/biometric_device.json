@@ -9,6 +9,7 @@
  "field_order": [
   "device_information_section",
   "device_name",
+  "device_serial",
   "device_ip",
   "device_port",
   "column_break_1",
@@ -26,6 +27,9 @@
   "sync_interval",
   "column_break_3",
   "timeout",
+  "alerting_section",
+  "alert_threshold_minutes",
+  "alert_recipients",
   "notes_section",
   "notes"
  ],
@@ -41,6 +45,15 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Device Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Hardware serial number — must match the device_id sent by the bridge or SN sent via ADMS push. Punches from any other serial are rejected.",
+   "fieldname": "device_serial",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Device Serial",
    "reqd": 1,
    "unique": 1
   },
@@ -64,8 +77,8 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "0",
-   "description": "Enable automatic attendance syncing",
+   "default": "1",
+   "description": "If unchecked, this device's punches are rejected at the API.",
    "fieldname": "enabled",
    "fieldtype": "Check",
    "label": "Enabled"
@@ -152,6 +165,26 @@
    "fieldname": "timeout",
    "fieldtype": "Int",
    "label": "Connection Timeout (seconds)"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "alerting_section",
+   "fieldtype": "Section Break",
+   "label": "Heartbeat Alerting"
+  },
+  {
+   "default": "120",
+   "description": "Send an email to the recipients below if the device hasn't reported a sync in this many minutes.",
+   "fieldname": "alert_threshold_minutes",
+   "fieldtype": "Int",
+   "label": "Alert Threshold (minutes)"
+  },
+  {
+   "description": "Emails to notify when this device's bridge stops syncing or recovers. Leave empty to disable alerting for this device.",
+   "fieldname": "alert_recipients",
+   "fieldtype": "Table",
+   "label": "Alert Recipients",
+   "options": "Biometric Device Alert Recipient"
   },
   {
    "collapsible": 1,

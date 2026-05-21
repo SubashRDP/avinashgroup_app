@@ -1,5 +1,8 @@
 import frappe
-from avinashgroup_app.biometric.utils import process_attendance_records
+from avinashgroup_app.biometric.utils import (
+    assert_known_device,
+    process_attendance_records,
+)
 
 @frappe.whitelist(methods=["POST"])
 def zkteco_push_attendance(**kwargs):
@@ -23,6 +26,8 @@ def zkteco_push_attendance(**kwargs):
 
     if not employee_id or not punch_time:
         return {"success": False, "message": "Missing employee_id or punch_time"}
+
+    assert_known_device(device_id)
 
     records = [{"user_id": employee_id, "timestamp": punch_time}]
     result = process_attendance_records(records, device_identifier=device_id)

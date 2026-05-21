@@ -1,8 +1,7 @@
 import frappe
 from datetime import datetime, timedelta
-from frappe.utils import getdate, get_datetime
-from frappe.utils import get_time, get_datetime, get_traceback
-from erpnext.setup.doctype.employee.employee import get_holiday_list_for_employee
+from frappe.utils import getdate, get_datetime, today
+
 
 def _round_to_minute(seconds):
     """
@@ -27,7 +26,6 @@ def set_shift_deviation_fields(doc, method):
     Values are rounded to the nearest minute (>=30s rounds up, <30s rounds down).
     Duration fields store seconds as integers.
     """
-    # Reset all deviation fields first
     doc.custom_late_entry = 0
     doc.custom_early_entry = 0
     doc.custom_early_exit = 0
@@ -70,232 +68,81 @@ def set_shift_deviation_fields(doc, method):
         )
 
 
-def cap_working_hours_to_shift_end(doc, method):
-    """
-    On Attendance before_submit: apply two rules based on OUT time vs shift end time:
+def reconcile_with_existing_attendance(doc, method=None):
+    """Employee Checkin after_insert: link orphan punches to an existing
+    Present/Half Day Attendance row for the same (employee, date).
 
-    1. OUT after shift end        → keep actual out_time, cap working_hours to (shift_end - in_time)
-    2. early_exit flagged by ERPNext → keep working_hours as-is (actual out - in),
-                                       set status = Half Day, leave_type = Leave Without Pay
+    Scope is intentionally narrow — this hook never deletes, never cancels,
+    never changes status. Absent → Present transitions, stale-row cleanup,
+    and any other reconciliation go through the Attendance Fix doctype so
+    HR has a submitted, auditable record of every change.
 
-    IN time always stays as the actual checkin time.
-    Skips if already On Leave / no shift / no in_time / no out_time.
+    Behavior:
+    - Existing row is Present/Half Day and this checkin has no `attendance`
+      link → set it. Pure data-correctness fix, no business decision.
+    - Existing row is Absent → no-op. HR uses Attendance Fix to convert.
+    - No existing row → no-op. HR uses Attendance Fix to materialize.
+
+    Runs only for past-date punches; today's punches go through the normal
+    real-time auto-attendance flow.
     """
-    if not doc.out_time or not doc.shift or not doc.in_time:
+    if not doc.employee or not doc.time or doc.attendance:
+        return
+    punch_date = getdate(doc.time)
+    if punch_date >= getdate(today()):
         return
 
-    # Don't interfere with leave-based attendance
-    if doc.status in ("On Leave", "Absent"):
+    existing = frappe.db.get_value(
+        "Attendance",
+        {
+            "employee": doc.employee,
+            "attendance_date": punch_date,
+            "docstatus": ("<", 2),
+            "status": ("in", ("Present", "Half Day")),
+        },
+        "name",
+    )
+    if not existing:
+        return
+
+    frappe.db.set_value(
+        "Employee Checkin",
+        doc.name,
+        "attendance",
+        existing,
+        update_modified=False,
+    )
+
+
+def enforce_late_arrival_half_day(doc, method=None):
+    """
+    Before save: if Shift Type has custom_late_arrival_cutoff_time and the
+    employee's first check-in is after that time, force status to Half Day
+    (Leave Without Pay) regardless of total working hours.
+
+    Cutoff blank on the Shift Type disables this rule for that shift.
+    """
+    if not doc.shift or not doc.in_time:
+        return
+    if doc.status in ("On Leave", "Absent", "Half Day"):
         return
 
     try:
         shift = frappe.get_cached_doc("Shift Type", doc.shift)
+        cutoff = shift.get("custom_late_arrival_cutoff_time")
+        if not cutoff:
+            return
 
-        # shift.end_time / start_time are timedelta (seconds from midnight)
         attendance_date = getdate(doc.attendance_date)
-        shift_end_dt = datetime.combine(attendance_date, datetime.min.time()) + shift.end_time
+        cutoff_dt = datetime.combine(attendance_date, datetime.min.time()) + cutoff
+        in_time = get_datetime(doc.in_time)
 
-        # Overnight shift: end_time < start_time means end falls on the next day
-        if shift.end_time < shift.start_time:
-            shift_end_dt += timedelta(days=1)
-
-        out_time = get_datetime(doc.out_time)
-
-        if out_time > shift_end_dt:
-            # --- Rule 1: Late exit — cap working_hours to shift end, keep actual out_time ---
-            in_time = get_datetime(doc.in_time)
-            doc.working_hours = round(
-                float((shift_end_dt - in_time).total_seconds()) / 3600, 2
-            )
-
-        elif doc.early_exit:
-            # --- Rule 2: Early exit (as flagged by ERPNext) — Half Day + LWP ---
+        if in_time > cutoff_dt:
             doc.status = "Half Day"
             doc.leave_type = "Leave Without Pay"
-            # working_hours stays as calculated by ERPNext (actual out - in)
 
     except Exception:
         frappe.log_error(
             frappe.get_traceback(),
-            f"Error in attendance override for Attendance {doc.name}"
+            f"Error enforcing late-arrival Half Day for Attendance {doc.name}"
         )
-
-
-def create_compensatory_leave_on_holiday(doc, method):
-    """
-    On Attendance submit: if the employee punched IN and OUT on a holiday,
-    auto-create and submit a Compensatory Leave Request so a leave day is allocated.
-    """
-    # Only process if employee actually worked (both checkins present)
-    if not doc.in_time or not doc.out_time:
-        return
-
-    try:
-        # Get holiday list for the employee (Employee → Company → Global Defaults)
-       
-        holiday_list = get_holiday_list_for_employee(doc.employee, raise_exception=False)
-        if not holiday_list:
-            return
-
-        # Check if attendance_date is a holiday
-        is_holiday = frappe.db.exists(
-            "Holiday",
-            {"parent": holiday_list, "holiday_date": doc.attendance_date}
-        )
-        if not is_holiday:
-            return
-
-        # Skip if a Compensatory Leave Request already exists for this employee + date
-        already_exists = frappe.db.exists(
-            "Compensatory Leave Request",
-            {
-                "employee": doc.employee,
-                "work_from_date": doc.attendance_date,
-                "work_end_date": doc.attendance_date,
-                "docstatus": ["!=", 2],
-            },
-        )
-        if already_exists:
-            return
-
-        # Find the compensatory leave type
-        leave_type = frappe.db.get_value("Leave Type", {"is_compensatory": 1}, "name")
-        if not leave_type:
-            frappe.log_error(
-                f"No Leave Type with 'Is Compensatory' found. "
-                f"Cannot create compensatory leave for {doc.employee} on {doc.attendance_date}.",
-                "Compensatory Leave Setup Missing"
-            )
-            return
-
-        # Create and submit Compensatory Leave Request
-        comp_leave = frappe.new_doc("Compensatory Leave Request")
-        comp_leave.employee = doc.employee
-        comp_leave.work_from_date = doc.attendance_date
-        comp_leave.work_end_date = doc.attendance_date
-        comp_leave.reason = f"Worked on holiday — auto-created from biometric punch"
-        comp_leave.leave_type = leave_type
-        comp_leave.insert(ignore_permissions=True)
-        comp_leave.submit()
-
-        frappe.logger("biometric").info(
-            f"Compensatory Leave Request {comp_leave.name} created for "
-            f"{doc.employee} on holiday {doc.attendance_date}"
-        )
-
-    except Exception:
-        frappe.log_error(
-            frappe.get_traceback(),
-            f"Error creating compensatory leave for Attendance {doc.name}"
-        )
-
-
-
-# Put end time if approved in out time
-
-APPROVED_WORKFLOW_KEYWORDS = ("approve",)
-REJECTED_WORKFLOW_KEYWORDS = ("reject",)
-
-
-def _workflow_state(doc):
-	return (doc.get("workflow_state") or "").strip().lower()
-
-
-def _is_approved(doc):
-	state = _workflow_state(doc)
-	return any(keyword in state for keyword in APPROVED_WORKFLOW_KEYWORDS)
-
-
-def _is_rejected(doc):
-	state = _workflow_state(doc)
-	return any(keyword in state for keyword in REJECTED_WORKFLOW_KEYWORDS)
-
-
-def adjust_out_time(doc, method=None):
-	"""
-	Adjusts Attendance out_time to shift end time if earlier.
-	Triggered before_save / before_submit.
-	Only adjusts when workflow state is Approved.
-	"""
-	# Never change out_time for rejected records.
-	if _is_rejected(doc):
-		return
-
-	# On submit path (Approve), enforce adjustment regardless of workflow_state label timing.
-	if method != "before_submit" and not _is_approved(doc):
-		return
-	
-	# Ensure we have required fields
-	if not doc.attendance_date or not doc.out_time or not doc.shift:
-		return
-	
-	try:
-		# Get the shift dynamically from attendance doc.shift (the shift field in Attendance)
-		shift = frappe.get_cached_doc("Shift Type", doc.shift)
-		if not shift or not shift.end_time:
-			return
-		
-		# Get shift end time
-		shift_end = get_time(shift.end_time)
-		
-		# Convert out_time to datetime
-		out_dt = get_datetime(doc.out_time)
-		
-		# Create shift_end_dt with same date as attendance_date
-		shift_end_dt = get_datetime(doc.attendance_date).replace(
-			hour=int(shift_end.hour or 0),
-			minute=int(shift_end.minute or 0),
-			second=0,
-			microsecond=0
-		)
-		
-		# If out_time is EARLIER than shift_end, adjust it
-		if out_dt < shift_end_dt:
-			doc.out_time = shift_end_dt
-	
-	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Attendance Out Time Adjustment Failed")
-
-
-
-
-
-# Automatically submit attendance if present full time 
-
-def auto_submit_attendance(doc, method=None):
-	"""
-	Auto-submit Attendance if out_time >= shift end_time.
-	Triggered on_update.
-	"""
-	# Ensure we have required fields
-	if not doc.name or not doc.attendance_date or not doc.out_time or not doc.shift:
-		return
-	
-	# Skip if already submitted
-	if doc.docstatus != 0:
-		return
-	
-	try:
-		shift = frappe.get_cached_doc("Shift Type", doc.shift)
-		if not shift or not shift.end_time:
-			return
-		
-		shift_end = get_time(shift.end_time)
-		shift_end_dt = get_datetime(doc.attendance_date).replace(
-			hour=int(shift_end.hour or 0),
-			minute=int(shift_end.minute or 0),
-			second=0,
-			microsecond=0
-		)
-		
-		out_dt = get_datetime(doc.out_time)
-		
-		# Check if out_time >= shift end time
-		if out_dt >= shift_end_dt:
-			doc.workflow_state = "Approved"
-			doc.status = "Present"
-			doc.flags.ignore_permissions = True
-			doc.submit()
-	
-	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Attendance Auto Submit Failed")
