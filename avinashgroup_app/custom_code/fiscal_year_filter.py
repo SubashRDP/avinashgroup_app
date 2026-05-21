@@ -238,3 +238,76 @@ def get_user_fiscal_access(user=None):
     if not user:
         user = frappe.session.user
     return _get_user_fiscal_access(user)
+
+
+def filtered_get_list(doctype, *args, **kwargs):
+    """
+    Override for frappe.client.get_list to apply fiscal year filtering.
+    This is called before the original get_list method.
+    """
+    if doctype not in FILTERED_DOCTYPES:
+        # Not a filtered doctype, call original method
+        return frappe.call("frappe.client.get_list", args={"doctype": doctype, **kwargs}, async_=False)
+
+    user = frappe.session.user
+
+    # Check if user is Administrator - admins bypass filtering
+    user_doc = frappe.db.get_value("User", user, ["user_type"], as_dict=True)
+    if user_doc and user_doc.user_type == "System User":
+        return frappe.call("frappe.client.get_list", args={"doctype": doctype, **kwargs}, async_=False)
+
+    access_map = _get_user_fiscal_access(user)
+
+    # Check for global full access
+    if access_map.get("__full_access__"):
+        return frappe.call("frappe.client.get_list", args={"doctype": doctype, **kwargs}, async_=False)
+
+    doctype_access = access_map.get(doctype, [])
+
+    if not doctype_access:
+        # User has no access to this doctype
+        return []
+
+    # Check if user has full access for this doctype
+    for rule in doctype_access:
+        if rule.get("full_access"):
+            return frappe.call("frappe.client.get_list", args={"doctype": doctype, **kwargs}, async_=False)
+
+    # Build date ranges from fiscal years
+    date_ranges = []
+    for rule in doctype_access:
+        fiscal_year = rule.get("fiscal_year")
+        if fiscal_year:
+            from_date, to_date = _get_fiscal_year_dates(fiscal_year)
+            if from_date and to_date:
+                date_ranges.append((from_date, to_date))
+
+    if not date_ranges:
+        return []
+
+    # Add date range filters to kwargs
+    date_field = DATE_FIELD_MAP.get(doctype, "posting_date")
+
+    # Get existing filters
+    filters = kwargs.get("filters", [])
+    if not filters:
+        filters = []
+    elif isinstance(filters, dict):
+        filters = list(filters.items()) if filters else []
+
+    # Add date range filters
+    if len(date_ranges) == 1:
+        from_date, to_date = date_ranges[0]
+        filters.append([doctype, date_field, ">=", from_date])
+        filters.append([doctype, date_field, "<=", to_date])
+    else:
+        # Multiple date ranges
+        or_filters = []
+        for from_date, to_date in date_ranges:
+            or_filters.append([[doctype, date_field, ">=", from_date], [doctype, date_field, "<=", to_date]])
+        filters.append(or_filters)
+
+    kwargs["filters"] = filters
+
+    # Call original get_list with modified filters
+    return frappe.call("frappe.client.get_list", args={"doctype": doctype, **kwargs}, async_=False)

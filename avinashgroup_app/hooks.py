@@ -199,24 +199,7 @@ override_whitelisted_methods = {
     "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
     "frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
-}
-
-# Fiscal Year Access List Filtering - Backend
-list_filters = {
-    "Sales Invoice": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Sales Order": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Quotation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Delivery Note": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Purchase Invoice": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Purchase Order": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Request for Quotation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Supplier Quotation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Material Request": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Stock Entry": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Stock Reconciliation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Journal Entry": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Payment Entry": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
-    "Attendance": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",
 }
 
 fixtures = [
