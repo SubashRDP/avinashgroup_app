@@ -1,0 +1,212 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-05-21 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "shift_type",
+  "company",
+  "column_break_1",
+  "from_date",
+  "to_date",
+  "employee",
+  "devices",
+  "scope_section",
+  "status",
+  "summary_section",
+  "employees_processed",
+  "absent_rows_deleted",
+  "column_break_2",
+  "attendance_created_or_updated",
+  "checkins_relinked",
+  "log_section",
+  "log",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "default": "AF-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "AF-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shift_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shift Type",
+   "options": "Shift Type",
+   "reqd": 1,
+   "description": "Restricts the fix to employees assigned to this shift."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "From Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "to_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "To Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee (optional)",
+   "options": "Employee",
+   "description": "Leave blank to fix every employee on this shift. Set to limit the fix to one employee."
+  },
+  {
+   "fieldname": "devices",
+   "fieldtype": "Table MultiSelect",
+   "label": "Devices (optional)",
+   "options": "Attendance Fix Device",
+   "description": "Limit the fix to employees with checkins from these biometric devices in the date range. Leave blank to include checkins from all devices."
+  },
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nQueued\nRunning\nFixed\nFailed",
+   "read_only": 1
+  },
+  {
+   "collapsible": 0,
+   "fieldname": "summary_section",
+   "fieldtype": "Section Break",
+   "label": "Summary"
+  },
+  {
+   "default": "0",
+   "fieldname": "employees_processed",
+   "fieldtype": "Int",
+   "label": "Employees Processed",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "absent_rows_deleted",
+   "fieldtype": "Int",
+   "label": "Stale Absent Rows Deleted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "attendance_created_or_updated",
+   "fieldtype": "Int",
+   "label": "Attendance Created/Updated",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "checkins_relinked",
+   "fieldtype": "Int",
+   "label": "Checkins Relinked",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "log_section",
+   "fieldtype": "Section Break",
+   "label": "Log"
+  },
+  {
+   "fieldname": "log",
+   "fieldtype": "Long Text",
+   "label": "Per-Day Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Attendance Fix",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-05-21 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Attendance Fix",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "share": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
