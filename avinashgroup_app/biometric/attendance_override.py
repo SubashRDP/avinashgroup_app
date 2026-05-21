@@ -1,6 +1,6 @@
 import frappe
 from datetime import datetime, timedelta
-from frappe.utils import getdate, get_datetime
+from frappe.utils import getdate, get_datetime, today
 
 
 def _round_to_minute(seconds):
@@ -66,6 +66,52 @@ def set_shift_deviation_fields(doc, method):
             frappe.get_traceback(),
             f"Error calculating shift deviation for Attendance {doc.name}"
         )
+
+
+def reconcile_with_existing_attendance(doc, method=None):
+    """Employee Checkin after_insert: link orphan punches to an existing
+    Present/Half Day Attendance row for the same (employee, date).
+
+    Scope is intentionally narrow — this hook never deletes, never cancels,
+    never changes status. Absent → Present transitions, stale-row cleanup,
+    and any other reconciliation go through the Attendance Fix doctype so
+    HR has a submitted, auditable record of every change.
+
+    Behavior:
+    - Existing row is Present/Half Day and this checkin has no `attendance`
+      link → set it. Pure data-correctness fix, no business decision.
+    - Existing row is Absent → no-op. HR uses Attendance Fix to convert.
+    - No existing row → no-op. HR uses Attendance Fix to materialize.
+
+    Runs only for past-date punches; today's punches go through the normal
+    real-time auto-attendance flow.
+    """
+    if not doc.employee or not doc.time or doc.attendance:
+        return
+    punch_date = getdate(doc.time)
+    if punch_date >= getdate(today()):
+        return
+
+    existing = frappe.db.get_value(
+        "Attendance",
+        {
+            "employee": doc.employee,
+            "attendance_date": punch_date,
+            "docstatus": ("<", 2),
+            "status": ("in", ("Present", "Half Day")),
+        },
+        "name",
+    )
+    if not existing:
+        return
+
+    frappe.db.set_value(
+        "Employee Checkin",
+        doc.name,
+        "attendance",
+        existing,
+        update_modified=False,
+    )
 
 
 def enforce_late_arrival_half_day(doc, method=None):

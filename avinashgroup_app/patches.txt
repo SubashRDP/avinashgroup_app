@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 #avinashgroup_app.patches.seed_company_filter_config
 avinashgroup_app.patches.setup_attendance_allowance
+avinashgroup_app.patches.v1_add_biometric_device_serial

@@ -99,15 +99,21 @@ def _add_doc_event(doctype, event, handler):
     if doctype not in doc_events:
         doc_events[doctype] = {}
     existing = doc_events[doctype].get(event)
-    if not existing:
-        doc_events[doctype][event] = handler
+
+    new_handlers = handler if isinstance(handler, list) else [handler]
+    existing_list = (
+        list(existing) if isinstance(existing, list) else ([existing] if existing else [])
+    )
+
+    for h in new_handlers:
+        if h not in existing_list:
+            existing_list.append(h)
+
+    if not existing_list:
         return
-    if isinstance(existing, list):
-        if handler not in existing:
-            existing.append(handler)
-        return
-    if existing != handler:
-        doc_events[doctype][event] = [existing, handler]
+    doc_events[doctype][event] = (
+        existing_list if len(existing_list) > 1 else existing_list[0]
+    )
 
 for _event, _handler in purchase_invoice_specific_events.items():
     _add_doc_event("Purchase Invoice", _event, _handler)
@@ -142,6 +148,12 @@ for _event, _handler in rfq_events.items():
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
 
+_add_doc_event(
+    "Employee Checkin",
+    "after_insert",
+    "avinashgroup_app.biometric.attendance_override.reconcile_with_existing_attendance",
+)
+
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)
@@ -164,7 +176,11 @@ override_doctype_class = {
     "Request for Quotation": "avinashgroup_app.custom_code.Override.overrides.RequestforQuotation",
 }
 
-scheduler_events = {}
+scheduler_events = {
+    "hourly": [
+        "avinashgroup_app.biometric.heartbeat.check_bridge_heartbeats",
+    ],
+}
 
 override_whitelisted_methods = {
     "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
