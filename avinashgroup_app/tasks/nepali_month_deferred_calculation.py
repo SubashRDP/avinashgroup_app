@@ -1476,7 +1476,7 @@ def book_revenue_via_journal_entry(
     journal_entry.posting_date = posting_date
     journal_entry.custom_p_type = "Deferred Accounting"
     random_number = random.sample(range(1, 1_000_000), 1000)
-    journal_entry.custom_document_no = doc.name + str(random_number[0])
+    journal_entry.custom_document_no = random_number[0]
     journal_entry.company = doc.company
     journal_entry.voucher_type = (
         "Deferred Revenue" if doc.doctype == "Sales Invoice" else "Deferred Expense"
