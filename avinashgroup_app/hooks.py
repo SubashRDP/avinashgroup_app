@@ -159,6 +159,19 @@ for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)
     _add_doc_event(_dt, "on_trash", _clear_filter_cache)
 
+# Fiscal Year Filter Hooks
+_clear_user_fiscal_cache = "avinashgroup_app.custom_code.fiscal_year_filter.clear_user_fiscal_cache"
+_add_doc_event("User", "on_update", _clear_user_fiscal_cache)
+
+# Validate fiscal year access on load/read
+_validate_fiscal_access = "avinashgroup_app.custom_code.fiscal_year_filter.validate_fiscal_year_access"
+for _dt in (
+    "Sales Invoice", "Sales Order", "Quotation", "Delivery Note",
+    "Purchase Invoice", "Purchase Order", "Request for Quotation", "Supplier Quotation",
+    "Material Request", "Stock Entry", "Stock Reconciliation", "Journal Entry", "Payment Entry", "Attendance"
+):
+    _add_doc_event(_dt, "before_read", _validate_fiscal_access)
+
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
@@ -188,9 +201,28 @@ override_whitelisted_methods = {
     "frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
 }
 
+# Fiscal Year Access List Filtering - Backend
+list_filters = {
+    "Sales Invoice": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Sales Order": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Quotation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Delivery Note": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Purchase Invoice": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Purchase Order": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Request for Quotation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Supplier Quotation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Material Request": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Stock Entry": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Stock Reconciliation": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Journal Entry": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Payment Entry": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+    "Attendance": "avinashgroup_app.custom_code.fiscal_year_filter.apply_fiscal_year_filter_to_list",
+}
+
 fixtures = [
     {"dt": "Company Filter Config"},
     {"dt": "Company Filter Field"},
+    {"dt": "User Fiscal Year Access"},
     {
         "dt": "Custom Field",
         "filters": [
