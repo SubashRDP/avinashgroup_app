@@ -58,16 +58,17 @@ def download_pdf(filters):
 
 	_, data = execute(filters)
 
-	# Collect unique party display names for the header
+	# Only show party names in header when a specific party filter was applied
 	seen = set()
 	party_names = []
-	for row in data:
-		pn = row.get('party_name') or ''
-		for part in pn.split(','):
-			part = part.strip()
-			if part and part not in seen:
-				seen.add(part)
-				party_names.append(part)
+	if _normalize_multiselect(filters.get("party")):
+		for row in data:
+			pn = row.get('party_name') or ''
+			for part in pn.split(','):
+				part = part.strip()
+				if part and part not in seen:
+					seen.add(part)
+					party_names.append(part)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'party_ledger_pdf.html')
 	with open(template_path) as f:

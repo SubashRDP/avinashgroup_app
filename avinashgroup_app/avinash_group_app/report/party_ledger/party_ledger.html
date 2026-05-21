@@ -202,20 +202,22 @@
 {% var _fd    = frappe.datetime.str_to_user(filters.from_date || ''); %}
 {% var _td2   = frappe.datetime.str_to_user(filters.to_date   || ''); %}
 
-{% var _party_names = []; %}
-{% var _seen_pn = {}; %}
-{% for (var _pi = 0; _pi < data.length; _pi++) { %}
-  {% var _pn = data[_pi].party_name; %}
-  {% if (_pn && !_seen_pn[_pn]) { _seen_pn[_pn] = true; _party_names.push(_pn); } %}
-{% } %}
-
 {% var _heading_parties = []; %}
-{% var _seen_hp = {}; %}
-{% for (var _hpi = 0; _hpi < _party_names.length; _hpi++) { %}
-  {% var _parts = ('' + (_party_names[_hpi] || '')).split(','); %}
-  {% for (var _pp = 0; _pp < _parts.length; _pp++) { %}
-    {% var _nm = (_parts[_pp] || '').trim(); %}
-    {% if (_nm && !_seen_hp[_nm]) { _seen_hp[_nm] = true; _heading_parties.push(_nm); } %}
+{% var _party_filter = filters.party; %}
+{% if (_party_filter && (typeof _party_filter === 'string' ? _party_filter.trim() : _party_filter.length > 0)) { %}
+  {% var _party_names = []; %}
+  {% var _seen_pn = {}; %}
+  {% for (var _pi = 0; _pi < data.length; _pi++) { %}
+    {% var _pn = data[_pi].party_name; %}
+    {% if (_pn && !_seen_pn[_pn]) { _seen_pn[_pn] = true; _party_names.push(_pn); } %}
+  {% } %}
+  {% var _seen_hp = {}; %}
+  {% for (var _hpi = 0; _hpi < _party_names.length; _hpi++) { %}
+    {% var _parts = ('' + (_party_names[_hpi] || '')).split(','); %}
+    {% for (var _pp = 0; _pp < _parts.length; _pp++) { %}
+      {% var _nm = (_parts[_pp] || '').trim(); %}
+      {% if (_nm && !_seen_hp[_nm]) { _seen_hp[_nm] = true; _heading_parties.push(_nm); } %}
+    {% } %}
   {% } %}
 {% } %}
 

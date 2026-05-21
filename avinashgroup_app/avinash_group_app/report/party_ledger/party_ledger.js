@@ -192,98 +192,17 @@ frappe.query_reports["Party Ledger"] = {
 			window.open(url);
 		});
 
-		frappe.dom.set_style(`
-			.dt-cell--header .dt-cell__content {
-				background-color: #34495e !important;
-				color: #ffffff !important;
-				font-weight: 600 !important;
-			}
-			.dt-cell--header { background-color: #34495e !important; }
-			.dt-cell { border-bottom: 1px solid #ecf0f1 !important; }
-			.dt-row:not(.dt-row--header):hover .dt-cell__content {
-				background-color: #f8f9fa !important;
-			}
-			.dt-row--detail .dt-cell__content {
-				background-color: #f4f6f8 !important;
-				border-left: 3px solid #b0bec5 !important;
-				color: #546e7a !important;
-				font-size: 0.92em !important;
-			}
-			.dt-row--separator .dt-cell__content {
-				background-color: #ffffff !important;
-				height: 6px !important;
-				padding: 0 !important;
-				border-bottom: 2px solid #d5dde5 !important;
-			}
-		`);
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
 		if (!data) return default_formatter(value, row, column, data);
-
-		// ── Separator row: render empty thin divider ──────────────────────────
-		if (data.is_separator) {
-			return `<span style="display:block;height:6px;background:#fff;"></span>`;
-		}
-
-		const isSummary = data.is_summary;
-		const isDetail  = data.is_detail;
-
-		const bg  = isSummary ? "background-color:#ecf0f1;"
-		          : isDetail  ? "background-color:#f4f6f8;"
-		          :             "";
-		const fw  = isSummary ? "font-weight:700;" : "";
-		const clr = isDetail  ? "color:#546e7a;"   : "";
-		const bl  = isDetail  ? "padding-left:8px;" : "";
-
-		// ── Detail columns: blank on non-detail rows ─────────────────────────
-		if (["detail_qty","detail_rate","detail_amount"].includes(column.fieldname) && !isDetail) {
+		if (["detail_qty","detail_rate","detail_amount"].includes(column.fieldname) && !data.is_detail) {
 			return "";
 		}
-
-		// ── Voucher No: render as a clickable link (main rows only) ──────────
 		if (column.fieldname === "voucher_no" && data.voucher_type && value) {
 			const route = frappe.router.slug(data.voucher_type);
-			value = `<a href="/app/${route}/${value}" target="_blank">${value}</a>`;
-			if (bg || fw) value = `<span style="${bg}${fw}display:block;padding:4px 0;">${value}</span>`;
-			return value;
+			return `<a href="/app/${route}/${value}" target="_blank">${value}</a>`;
 		}
-		
-
-		// ── Balance: show absolute value with DB / CR suffix ─────────────────
-		if (column.fieldname === "balance" && data.balance !== undefined && data.balance !== null) {
-			const bal    = data.balance;
-			const absVal = Math.abs(bal);
-			const suffix = bal >= 0 ? '<span style="color:#e74c3c;font-size:0.8em;margin-left:3px;">DB</span>'
-			                        : '<span style="color:#27ae60;font-size:0.8em;margin-left:3px;">CR</span>';
-			const formatted = format_currency(absVal, frappe.defaults.get_default("currency"));
-			const color = bal >= 0 ? "color:#e74c3c;" : "color:#27ae60;";
-			return `<span style="${bg}${fw}${color}display:block;padding:4px 0;">${formatted}${suffix}</span>`;
-		}
-
-		// ── Debit column ──────────────────────────────────────────────────────
-		if (column.fieldname === "debit") {
-			if (data.debit === null || data.debit === undefined || data.debit === 0) {
-				return `<span style="${bg}${fw}${bl}display:block;padding:4px 0;color:#999;">—</span>`;
-			}
-			value = default_formatter(value, row, column, data);
-			return `<span style="${bg}${fw}${bl}color:#e74c3c;display:block;padding:4px 0;">${value}</span>`;
-		}
-
-		// ── Credit column ─────────────────────────────────────────────────────
-		if (column.fieldname === "credit") {
-			if (data.credit === null || data.credit === undefined || data.credit === 0) {
-				return `<span style="${bg}${fw}${bl}display:block;padding:4px 0;color:#999;">—</span>`;
-			}
-			value = default_formatter(value, row, column, data);
-			return `<span style="${bg}${fw}${bl}color:#27ae60;display:block;padding:4px 0;">${value}</span>`;
-		}
-
-		// ── All other columns ─────────────────────────────────────────────────
-		value = default_formatter(value, row, column, data);
-		if (bg || fw || clr || bl) {
-			value = `<span style="${bg}${fw}${clr}${bl}display:block;padding:4px 0;">${value}</span>`;
-		}
-		return value;
+		return default_formatter(value, row, column, data);
 	},
 };
