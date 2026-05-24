@@ -183,12 +183,12 @@ def get_data(filters):
 		f"""
 		SELECT
 			pi.posting_date                                                                          AS date,
-			pi.custom_nepali_miti                                                                    AS miti,
+			SUBSTRING_INDEX(pi.custom_nepali_miti, ' ', 1)                                           AS miti,
 			pi.custom_purchase_type                                                                  AS purchase_type,
 			CONCAT(IFNULL(pi.custom_name, pi.name), '::', pi.name)                                  AS voucher_no,
 			pi.bill_no                                                                               AS supplier_invoice_no,
 			pi.bill_date                                                                             AS supplier_invoice_date,
-			pi.custom_supplier_invoice_miti                                                          AS supplier_invoice_miti,
+			SUBSTRING_INDEX(pi.custom_supplier_invoice_miti, ' ', 1)                                 AS supplier_invoice_miti,
 			pi.supplier_name                                                                         AS supplier_name,
 			s.tax_id                                                                                 AS vat_number,
 			pi.custom_total_amount_including_excise                                                  AS purchase,

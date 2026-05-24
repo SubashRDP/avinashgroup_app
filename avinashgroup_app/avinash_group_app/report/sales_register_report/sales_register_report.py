@@ -165,7 +165,7 @@ def get_data(filters):
 		f"""
 		SELECT
 			si.posting_date                                                                                                               AS date,
-			si.custom_invoice_miti                                                                                                        AS miti,
+			SUBSTRING_INDEX(si.custom_invoice_miti, ' ', 1)                                                                               AS miti,
 			si.name                                                                                                                        AS bill_no,
 			si.customer_name                                                                                                               AS customer,
 			c.tax_id                                                                                                                       AS vat_number,
