@@ -3,29 +3,92 @@ from frappe import _
 from frappe.utils.caching import request_cache
 from datetime import datetime
 
-# Transaction doctypes that need fiscal year filtering
-FILTERED_DOCTYPES = {
-    "Sales Invoice",
-    "Sales Order",
-    "Quotation",
+# Submittable transaction doctypes with a fiscal-year date field.
+FILTERED_DOCTYPES = (
+    "Additional Salary",
+    "Appraisal",
+    "Asset Capitalization",
+    "Asset Movement",
+    "Asset Value Adjustment",
+    "Attendance",
+    "Attendance Fix",
+    "Attendance Request",
+    "Bank Guarantee",
+    "Bank Transaction",
+    "Blanket Order",
+    "Cashier Closing",
+    "Closing Stock Balance",
+    "Contract",
     "Delivery Note",
+    "Dunning",
+    "Employee Advance",
+    "Employee Benefit Application",
+    "Employee Grievance",
+    "Employee Referral",
+    "Exchange Rate Revaluation",
+    "Exit Interview",
+    "Expense Claim",
+    "Full and Final Statement",
+    "Gratuity",
+    "Invoice Discounting",
+    "Job Card",
+    "Journal Entry",
+    "Landed Cost Voucher",
+    "Leave Adjustment",
+    "Leave Allocation",
+    "Leave Application",
+    "Leave Encashment",
+    "Leave Ledger Entry",
+    "Maintenance Schedule",
+    "Material Request",
+    "Overtime Slip",
+    "POS Closing Entry",
+    "POS Invoice",
+    "POS Invoice Merge Log",
+    "POS Opening Entry",
+    "Payment Entry",
+    "Payment Order",
+    "Payment Request",
+    "Payroll Entry",
+    "Period Closing Voucher",
+    "Process Deferred Accounting",
+    "Process Subscription",
+    "Production Plan",
+    "Project Update",
     "Purchase Invoice",
     "Purchase Order",
+    "Purchase Receipt",
+    "Quotation",
+    "Repost Item Valuation",
+    "Repost Payment Ledger",
     "Request for Quotation",
-    "Supplier Quotation",
-    "Material Request",
+    "Salary Slip",
+    "Salary Structure Assignment",
+    "Salary Withholding",
+    "Sales Invoice",
+    "Sales Order",
+    "Serial and Batch Bundle",
+    "Share Transfer",
+    "Shift Assignment",
+    "Shift Request",
+    "Staffing Plan",
     "Stock Entry",
     "Stock Reconciliation",
-    "Journal Entry",
-    "Payment Entry",
-    "Attendance",
-}
+    "Subcontracting Order",
+    "Subcontracting Receipt",
+    "Supplier Quotation",
+    "Supplier Scorecard Period",
+    "Timesheet",
+    "Vehicle Log",
+)
 
 
 def _is_admin(user):
-    """Check if user has System Manager role (admins bypass filtering)."""
+    """Check if user should bypass fiscal-year filtering."""
     if not user or user == "Guest":
         return False
+    if user == "Administrator":
+        return True
     try:
         result = frappe.db.sql("""
             SELECT role FROM tabUserRole WHERE parent = %s AND role = 'System Manager'
@@ -35,16 +98,82 @@ def _is_admin(user):
     except Exception:
         return False
 
-# Date field to use for filtering (most transactions use posting_date)
 DATE_FIELD_MAP = {
+    "Additional Salary": "from_date",
+    "Appraisal": "start_date",
+    "Asset Capitalization": "posting_date",
+    "Asset Movement": "transaction_date",
+    "Asset Value Adjustment": "date",
     "Attendance": "attendance_date",
-    "Quotation": "transaction_date",
-    "Sales Order": "transaction_date",
+    "Attendance Fix": "from_date",
+    "Attendance Request": "from_date",
+    "Bank Guarantee": "start_date",
+    "Bank Transaction": "date",
+    "Blanket Order": "from_date",
+    "Cashier Closing": "date",
+    "Closing Stock Balance": "from_date",
+    "Contract": "start_date",
     "Delivery Note": "posting_date",
+    "Dunning": "posting_date",
+    "Employee Advance": "posting_date",
+    "Employee Benefit Application": "date",
+    "Employee Grievance": "date",
+    "Employee Referral": "date",
+    "Exchange Rate Revaluation": "posting_date",
+    "Exit Interview": "date",
+    "Expense Claim": "posting_date",
+    "Full and Final Statement": "transaction_date",
+    "Gratuity": "posting_date",
+    "Invoice Discounting": "posting_date",
+    "Job Card": "posting_date",
+    "Journal Entry": "posting_date",
+    "Landed Cost Voucher": "posting_date",
+    "Leave Adjustment": "posting_date",
+    "Leave Allocation": "from_date",
+    "Leave Application": "posting_date",
+    "Leave Encashment": "posting_date",
+    "Leave Ledger Entry": "from_date",
+    "Maintenance Schedule": "transaction_date",
+    "Material Request": "transaction_date",
+    "Overtime Slip": "posting_date",
+    "POS Closing Entry": "posting_date",
+    "POS Invoice": "posting_date",
+    "POS Invoice Merge Log": "posting_date",
+    "POS Opening Entry": "posting_date",
+    "Payment Entry": "posting_date",
+    "Payment Order": "posting_date",
+    "Payment Request": "transaction_date",
+    "Payroll Entry": "posting_date",
+    "Period Closing Voucher": "transaction_date",
+    "Process Deferred Accounting": "posting_date",
+    "Process Subscription": "posting_date",
+    "Production Plan": "posting_date",
+    "Project Update": "date",
+    "Purchase Invoice": "posting_date",
     "Purchase Order": "transaction_date",
+    "Purchase Receipt": "posting_date",
+    "Quotation": "transaction_date",
+    "Repost Item Valuation": "posting_date",
+    "Repost Payment Ledger": "posting_date",
     "Request for Quotation": "transaction_date",
+    "Salary Slip": "posting_date",
+    "Salary Structure Assignment": "from_date",
+    "Salary Withholding": "posting_date",
+    "Sales Invoice": "posting_date",
+    "Sales Order": "transaction_date",
+    "Serial and Batch Bundle": "posting_date",
+    "Share Transfer": "date",
+    "Shift Assignment": "start_date",
+    "Shift Request": "from_date",
+    "Staffing Plan": "from_date",
     "Stock Entry": "posting_date",
     "Stock Reconciliation": "posting_date",
+    "Subcontracting Order": "transaction_date",
+    "Subcontracting Receipt": "posting_date",
+    "Supplier Quotation": "transaction_date",
+    "Supplier Scorecard Period": "start_date",
+    "Timesheet": "start_date",
+    "Vehicle Log": "date",
 }
 
 
@@ -58,36 +187,102 @@ def _get_user_fiscal_access(user):
         return {}
 
     try:
-        user_doc = frappe.get_cached_doc("User", user)
-    except (frappe.DoesNotExistError, frappe.PermissionError):
-        return {}
+        access_doc = frappe.db.sql(
+            """
+            SELECT name, full_access
+            FROM `tabFiscal Year Access Control`
+            WHERE user = %s
+            LIMIT 1
+            """,
+            (user,),
+            as_dict=True,
+        )
     except Exception:
+        return _get_legacy_user_fiscal_access(user)
+
+    if not access_doc:
         return {}
 
-    # If user has global full access, return special marker
-    if user_doc.get("full_access"):
+    access_doc = access_doc[0]
+    if access_doc.get("full_access"):
         return {"__full_access__": True}
 
-    # Get all rows from user_fiscal_years child table
     access_map = {}
-    for row in user_doc.get("user_fiscal_years", []):
+    rows = frappe.db.sql(
+        """
+        SELECT doctype_name, fiscal_year, full_access
+        FROM `tabUser Fiscal Year Access`
+        WHERE parenttype = 'Fiscal Year Access Control'
+            AND parentfield = 'access_details'
+            AND parent = %s
+        ORDER BY idx
+        """,
+        (access_doc.name,),
+        as_dict=True,
+    )
+
+    for row in rows:
         doctype_name = row.get("doctype_name")
         if not doctype_name:
             continue
 
         if row.get("full_access"):
-            # Full access for this doctype → all fiscal years allowed
             access_map.setdefault(doctype_name, []).append({
                 "full_access": True
             })
         else:
-            # Specific fiscal year
             fiscal_year = row.get("fiscal_year")
             if fiscal_year:
                 access_map.setdefault(doctype_name, []).append({
                     "fiscal_year": fiscal_year,
                     "full_access": False
                 })
+
+    return access_map
+
+
+def _get_legacy_user_fiscal_access(user):
+    """Temporary fallback for sites that have not run the migration patch yet."""
+    try:
+        full_access = frappe.db.get_value("User", user, "full_access")
+    except Exception:
+        return {}
+
+    if full_access:
+        return {"__full_access__": True}
+
+    try:
+        rows = frappe.db.sql(
+            """
+            SELECT doctype_name, fiscal_year, full_access
+            FROM `tabUser Fiscal Year Access`
+            WHERE parenttype = 'User'
+                AND parentfield = 'user_fiscal_years'
+                AND parent = %s
+            ORDER BY idx
+            """,
+            (user,),
+            as_dict=True,
+        )
+    except Exception:
+        return {}
+
+    access_map = {}
+    for row in rows:
+        doctype_name = row.get("doctype_name")
+        if not doctype_name:
+            continue
+
+        if row.get("full_access"):
+            access_map.setdefault(doctype_name, []).append({"full_access": True})
+            continue
+
+        fiscal_year = row.get("fiscal_year")
+        if fiscal_year:
+            access_map.setdefault(doctype_name, []).append({
+                "fiscal_year": fiscal_year,
+                "full_access": False,
+            })
 
     return access_map
 
@@ -254,6 +449,125 @@ def get_user_fiscal_access(user=None):
     if not user:
         user = frappe.session.user
     return _get_user_fiscal_access(user)
+
+
+def _build_query_conditions(doctype, user):
+    """
+    Build SQL WHERE clause for list view filtering.
+    Returns a string used by Frappe's permission_query_conditions hook.
+    Empty string = no restriction. "1=0" = no rows.
+    """
+    if not user:
+        user = frappe.session.user
+
+    if _is_admin(user):
+        return ""
+
+    access_map = _get_user_fiscal_access(user)
+
+    if access_map.get("__full_access__"):
+        return ""
+
+    doctype_access = access_map.get(doctype, [])
+
+    if not doctype_access:
+        return "1=0"
+
+    # Full access for this doctype
+    for rule in doctype_access:
+        if rule.get("full_access"):
+            return ""
+
+    date_field = DATE_FIELD_MAP.get(doctype, "posting_date")
+    table_name = f"`tab{doctype}`"
+
+    conditions = []
+    for rule in doctype_access:
+        fiscal_year = rule.get("fiscal_year")
+        if fiscal_year:
+            from_date, to_date = _get_fiscal_year_dates(fiscal_year)
+            if from_date and to_date:
+                conditions.append(
+                    f"({table_name}.`{date_field}` BETWEEN '{from_date}' AND '{to_date}')"
+                )
+
+    if not conditions:
+        return "1=0"
+
+    return "(" + " OR ".join(conditions) + ")"
+
+
+def _make_query_conditions_for(doctype):
+    """Factory to create per-doctype permission_query_conditions function."""
+    def query_conditions(user=None):
+        return _build_query_conditions(doctype, user)
+    query_conditions.__name__ = f"query_conditions_{doctype.replace(' ', '_').lower()}"
+    return query_conditions
+
+
+# Dynamically generate one function per filtered doctype, registered at module level
+# so hooks.py can reference them as
+# avinashgroup_app.custom_code.fiscal_year_filter.query_conditions_<doctype>
+for _dt in FILTERED_DOCTYPES:
+    _func_name = f"query_conditions_{_dt.replace(' ', '_').lower()}"
+    globals()[_func_name] = _make_query_conditions_for(_dt)
+
+
+def has_fiscal_year_permission(doc, ptype=None, user=None):
+    """
+    has_permission hook: check if user has access to this document
+    based on fiscal year assignments.
+    """
+    if not user:
+        user = frappe.session.user
+
+    if _is_admin(user):
+        return True
+
+    # Resolve doctype from doc (can be Document object or dict)
+    doctype = getattr(doc, "doctype", None) or (doc.get("doctype") if isinstance(doc, dict) else None)
+    if not doctype or doctype not in FILTERED_DOCTYPES:
+        return True
+
+    access_map = _get_user_fiscal_access(user)
+
+    if access_map.get("__full_access__"):
+        return True
+
+    doctype_access = access_map.get(doctype, [])
+
+    if not doctype_access:
+        return False
+
+    for rule in doctype_access:
+        if rule.get("full_access"):
+            return True
+
+    date_field = DATE_FIELD_MAP.get(doctype, "posting_date")
+    doc_date = getattr(doc, date_field, None) if not isinstance(doc, dict) else doc.get(date_field)
+
+    if not doc_date:
+        return True
+
+    if isinstance(doc_date, str):
+        try:
+            doc_date = datetime.strptime(doc_date, "%Y-%m-%d").date()
+        except Exception:
+            return True
+
+    for rule in doctype_access:
+        fiscal_year = rule.get("fiscal_year")
+        if fiscal_year:
+            from_date, to_date = _get_fiscal_year_dates(fiscal_year)
+            if from_date and to_date:
+                if isinstance(from_date, str):
+                    from_date = datetime.strptime(from_date, "%Y-%m-%d").date()
+                if isinstance(to_date, str):
+                    to_date = datetime.strptime(to_date, "%Y-%m-%d").date()
+                if from_date <= doc_date <= to_date:
+                    return True
+
+    return False
 
 
 @frappe.whitelist(allow_guest=False)

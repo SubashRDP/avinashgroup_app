@@ -8,3 +8,4 @@
 avinashgroup_app.patches.setup_attendance_allowance
 avinashgroup_app.patches.v1_add_biometric_device_serial
 avinashgroup_app.patches.user_fiscal_year_access_fields
+avinashgroup_app.patches.migrate_fiscal_year_access_control
