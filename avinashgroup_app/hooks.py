@@ -182,8 +182,13 @@ scheduler_events = {
     ],
 }
 
+before_request = [
+    "avinashgroup_app.custom_code.Override.auto_insert_item_price.patch_insert_item_price_set_company"
+]
+
 override_whitelisted_methods = {
     "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
+    "erpnext.stock.get_item_details.get_item_details": "avinashgroup_app.custom_code.Override.get_item_details.get_item_details",
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
     "frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
 }
