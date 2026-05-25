@@ -11,7 +11,7 @@ import sys
 import tempfile
 import threading
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta as _timedelta
 from tkinter import StringVar, Tk, Toplevel, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
@@ -31,12 +31,32 @@ TASK_NAME = "K40 Bridge"
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
-WEBHOOK_PATH = (
-    "/api/method/avinashgroup_app.biometric."
-    "biometric_integration.zkteco_push_attendance"
+# The only endpoint the bridge uses to deliver punches.
+# Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
+# valid — there is no separate single-record endpoint.
+BATCH_WEBHOOK_PATH = (
+    "/api/method/avinashgroup_app.biometric.api.receive_attendance"
 )
+# Heartbeat ping — bridge calls this every sync cycle so the server knows the
+# bridge is alive even when no new punches were found.
+HEARTBEAT_PATH = "/api/method/avinashgroup_app.biometric.heartbeat.ping"
+# Command tunnel — bridge polls this, runs the returned commands, reports back.
+POLL_COMMANDS_PATH = (
+    "/api/method/avinashgroup_app.biometric.bridge_commands.poll_commands"
+)
+REPORT_COMMAND_PATH = (
+    "/api/method/avinashgroup_app.biometric.bridge_commands.report_command_result"
+)
+# How many punches per batch POST. The server processes one (employee, date)
+# group at a time, so a batch that's too big has no advantage; a batch that's
+# too small still pays HTTP overhead per call.
+BATCH_SIZE = 100
+# How often the command poller checks the server (independent of sync cycle).
+COMMAND_POLL_INTERVAL_SEC = 30
+# Prune dedup entries whose punch date is older than this many days.
+DEDUP_RETENTION_DAYS = 90
 
 # URL to the version-tracker file in the repo. Bumped on each release.
 UPDATE_CHECK_URL = (
@@ -321,6 +341,15 @@ def setup_logging(config, gui_callback=None):
 # DEDUP STATE (one file shared across all devices)
 # ============================================
 class DedupStore:
+    """In-memory set of {serial}_{user_id}_{YYYY-MM-DD HH:MM:SS} keys.
+
+    Prevents the bridge from re-POSTing a punch the server already accepted.
+    Persisted to k40_synced.json. Pruned on load + on save so the file does
+    not grow without bound — keys whose date is older than
+    DEDUP_RETENTION_DAYS are dropped (the server-side time-exact merge in
+    _reconcile_day_checkins is the long-term backstop, not this file).
+    """
+
     def __init__(self):
         self.synced = set()
         if os.path.exists(SYNCED_RECORDS_FILE):
@@ -329,6 +358,7 @@ class DedupStore:
                     self.synced = set(json.load(f))
             except Exception:
                 self.synced = set()
+        self._prune()
 
     def is_synced(self, key):
         return key in self.synced
@@ -337,11 +367,36 @@ class DedupStore:
         self.synced.add(key)
 
     def save(self):
+        self._prune()
         try:
             with open(SYNCED_RECORDS_FILE, "w") as f:
                 json.dump(list(self.synced), f)
         except Exception:
             pass
+
+    def _prune(self):
+        """Drop entries whose embedded date is older than DEDUP_RETENTION_DAYS.
+        Keys we don't recognize (malformed / older format) are kept so a bad
+        parser change does not silently delete valid history."""
+        cutoff = datetime.now() - _timedelta(days=DEDUP_RETENTION_DAYS)
+        pruned = set()
+        for k in self.synced:
+            ts = _parse_key_timestamp(k)
+            if ts is None or ts >= cutoff:
+                pruned.add(k)
+        self.synced = pruned
+
+
+def _parse_key_timestamp(key):
+    """Best-effort: extract the trailing 'YYYY-MM-DD HH:MM:SS' from a dedup key.
+    Returns a datetime, or None if the key format isn't recognized."""
+    if not key or len(key) < 19:
+        return None
+    tail = key[-19:]
+    try:
+        return datetime.strptime(tail, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
 
 
 # ============================================
@@ -566,15 +621,24 @@ class ErpnextClient:
     def __init__(self, device):
         self.device = device
         base = device["erpnext_url"].rstrip("/")
-        self.url = base + WEBHOOK_PATH
+        self.base = base
+        self.batch_url = base + BATCH_WEBHOOK_PATH
+        self.heartbeat_url = base + HEARTBEAT_PATH
+        self.poll_url = base + POLL_COMMANDS_PATH
+        self.report_url = base + REPORT_COMMAND_PATH
         self.auth_header = f"token {device['api_key']}:{device['api_secret']}"
+
+    def _headers(self):
+        return {
+            "Content-Type": "application/json",
+            "Authorization": self.auth_header,
+        }
 
     def test_connection(self):
         """Verify auth using a built-in Frappe method. Returns (ok, message)."""
-        base = self.device["erpnext_url"].rstrip("/")
         try:
             r = requests.get(
-                base + "/api/method/frappe.auth.get_logged_user",
+                self.base + "/api/method/frappe.auth.get_logged_user",
                 headers={"Authorization": self.auth_header},
                 timeout=10,
             )
@@ -585,46 +649,148 @@ class ErpnextClient:
         except Exception as e:
             return False, str(e)
 
-    def push_punch(self, user_id, timestamp_str):
-        """Send a single punch. Returns (result, message).
-        Result is one of: 'synced', 'skipped', 'auth_fail', 'error'."""
-        payload = {
-            "device_id": self.device.get("serial", ""),
-            "employee_id": str(user_id),
-            "punch_time": timestamp_str,
-            "punch_type": "IN",
-        }
+    # ── Heartbeat ──────────────────────────────────────────────────────
+    def heartbeat(self):
+        """Tell the server the bridge is alive (updates last_contact_time).
+        Returns (ok, message). Network failures are non-fatal — they just
+        mean the server will eventually trip the disconnect alert."""
+        serial = self.device.get("serial", "")
+        if not serial:
+            return False, "no serial configured"
         try:
             r = requests.post(
-                self.url,
-                json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": self.auth_header,
-                },
-                timeout=15,
+                self.heartbeat_url,
+                json={"device_serial": serial},
+                headers=self._headers(),
+                timeout=10,
             )
         except Exception as e:
-            return "error", str(e)
-
+            return False, str(e)
         if r.status_code in (401, 403):
-            return "auth_fail", f"HTTP {r.status_code}"
+            return False, f"auth/whitelist: HTTP {r.status_code}"
         if r.status_code != 200:
-            return "error", f"HTTP {r.status_code}: {r.text[:200]}"
+            return False, f"HTTP {r.status_code}: {r.text[:160]}"
+        return True, None
+
+    # ── Batch push ─────────────────────────────────────────────────────
+    def push_batch(self, records):
+        """Send a list of {user_id, timestamp_str} dicts in one POST.
+
+        Returns (per_record_results, message). per_record_results is a list
+        the same length as `records`, each entry one of:
+            'synced'    — accepted by server
+            'skipped'   — already existed
+            'error'     — record-level error (employee not found, etc.)
+        On full-request failure (network, 5xx, auth) returns ([], message)
+        with an empty list and the caller treats every record as errored.
+        On auth_fail returns ('auth_fail', message).
+        """
+        if not records:
+            return [], None
+
+        payload_records = [
+            {"user_id": str(r["user_id"]), "timestamp": r["timestamp_str"]}
+            for r in records
+        ]
+        payload = {
+            "attendance_data": payload_records,
+            "device_identifier": self.device.get("serial", ""),
+        }
 
         try:
-            msg = r.json().get("message", {})
-            if isinstance(msg, dict):
-                details = msg.get("error_details") or []
-                for d in details:
-                    if "already has a log with the same timestamp" in str(d):
-                        return "skipped", "already exists"
-                if msg.get("errors", 0) > 0 and msg.get("synced", 0) == 0:
-                    return "error", "; ".join(str(d) for d in details[:2])
+            r = requests.post(
+                self.batch_url,
+                json=payload,
+                headers=self._headers(),
+                timeout=60,
+            )
+        except Exception as e:
+            return [], f"network: {e}"
+
+        if r.status_code in (401, 403):
+            return "auth_fail", f"HTTP {r.status_code}: {r.text[:160]}"
+        if r.status_code != 200:
+            return [], f"HTTP {r.status_code}: {r.text[:200]}"
+
+        try:
+            msg = r.json().get("message", {}) or {}
+        except Exception:
+            return [], f"non-JSON response: {r.text[:160]}"
+
+        # receive_attendance returns process_attendance_records output:
+        #   { success, synced, errors, message, synced_punches, failed_punches }
+        # synced_punches / failed_punches are "{user_id}_{timestamp}" identifiers.
+        synced_set = set(msg.get("synced_punches") or [])
+        failed_set = set(msg.get("failed_punches") or [])
+        error_details = msg.get("error_details") or []
+        skip_markers = [
+            d for d in error_details
+            if "already" in str(d).lower() or "duplicate" in str(d).lower()
+        ]
+        any_skipped = bool(skip_markers)
+
+        results = []
+        for rec in records:
+            rid = f"{rec['user_id']}_{rec['timestamp_str']}"
+            if rid in synced_set:
+                results.append("synced")
+            elif rid in failed_set:
+                # Server-side classification doesn't separate "skipped duplicate"
+                # from "real error", so we conservatively call any failed record
+                # an error and let the next cycle retry it (no dedup mark).
+                # If overall errors look like duplicate noise, treat as skipped.
+                results.append("skipped" if any_skipped else "error")
+            else:
+                # Server didn't enumerate this record. If global synced == total,
+                # treat as synced; otherwise error.
+                if msg.get("synced", 0) == len(records) and msg.get("errors", 0) == 0:
+                    results.append("synced")
+                else:
+                    results.append("error")
+
+        return results, "; ".join(str(d) for d in error_details[:3]) or None
+
+    # ── Command tunnel ─────────────────────────────────────────────────
+    def poll_commands(self):
+        """Ask the server for any Pending commands for this device.
+        Returns a list of {name, command_type, payload} dicts, or [] on failure."""
+        serial = self.device.get("serial", "")
+        if not serial:
+            return []
+        try:
+            r = requests.post(
+                self.poll_url,
+                json={"device_serial": serial, "max_commands": 5},
+                headers=self._headers(),
+                timeout=10,
+            )
+        except Exception:
+            return []
+        if r.status_code != 200:
+            return []
+        try:
+            msg = r.json().get("message", {}) or {}
+        except Exception:
+            return []
+        return msg.get("commands") or []
+
+    def report_command(self, command_name, status, result_text=""):
+        """Tell the server a command finished. status in ('Done','Failed')."""
+        serial = self.device.get("serial", "")
+        try:
+            requests.post(
+                self.report_url,
+                json={
+                    "device_serial": serial,
+                    "command": command_name,
+                    "status": status,
+                    "result": result_text[:4000],
+                },
+                headers=self._headers(),
+                timeout=10,
+            )
         except Exception:
             pass
-
-        return "synced", None
 
 
 # ============================================
@@ -642,6 +808,7 @@ class SyncEngine:
         self.force_subset = None  # None=all, list=specific
         self.force_from_date = None  # if set, used as date_from for the next sync
         self.thread = None
+        self.command_thread = None
         self.last_sync_per_device = {}
         self.next_sync_at = None
         self.reschedule_event = threading.Event()
@@ -649,6 +816,13 @@ class SyncEngine:
     def start(self):
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
+        # Command poller — separate thread so it can react to admin-issued
+        # Force Sync within COMMAND_POLL_INTERVAL_SEC, independent of how long
+        # the sync cycle is set to.
+        self.command_thread = threading.Thread(
+            target=self._command_poll_loop, daemon=True
+        )
+        self.command_thread.start()
 
     def stop(self):
         self.stop_event.set()
@@ -838,35 +1012,68 @@ class SyncEngine:
         self.logger.info(f"[{name}] fetched {len(attendances)} records")
 
         erpnext = ErpnextClient(device)
-        synced = skipped = errors = 0
-        last_err = None
 
+        # Heartbeat first — server learns the bridge is alive even when the
+        # device has no new punches. Failures here don't block the data sync.
+        hb_ok, hb_err = erpnext.heartbeat()
+        if not hb_ok:
+            self.logger.warning(f"[{name}] heartbeat failed: {hb_err}")
+
+        # Filter out records already in the local dedup set so we don't even
+        # serialize them into the batch payload.
+        to_send = []  # list of (key, {user_id, timestamp_str})
+        skipped = 0
+        serial = device.get("serial", "")
         for att in attendances:
             if self.stop_event.is_set():
                 return
-            key = f"{device.get('serial', '')}_{att.user_id}_{att.timestamp}"
+            ts_str = att.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            key = f"{serial}_{att.user_id}_{ts_str}"
             if self.dedup.is_synced(key):
                 skipped += 1
                 continue
+            to_send.append((key, {"user_id": att.user_id, "timestamp_str": ts_str}))
 
-            ts_str = att.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-            result, err = erpnext.push_punch(att.user_id, ts_str)
+        synced = errors = 0
+        last_err = None
 
-            if result == "synced":
-                synced += 1
-                self.dedup.mark(key)
-            elif result == "skipped":
-                skipped += 1
-                self.dedup.mark(key)
-            elif result == "auth_fail":
+        for batch_start in range(0, len(to_send), BATCH_SIZE):
+            if self.stop_event.is_set():
+                self.dedup.save()
+                return
+            batch = to_send[batch_start:batch_start + BATCH_SIZE]
+            keys = [k for (k, _) in batch]
+            records = [r for (_, r) in batch]
+
+            results, err = erpnext.push_batch(records)
+
+            if results == "auth_fail":
                 self.logger.error(f"[{name}] auth failed: {err}")
                 self.status_callback(name, "auth_fail", err or "401/403")
                 self.dedup.save()
                 return
-            else:
-                errors += 1
+
+            if not results:
+                # Whole batch failed (network / 5xx). Treat all as errors and
+                # let the next cycle retry — dedup marks are only added below
+                # for records the server confirmed.
+                errors += len(records)
                 last_err = err
-                self.logger.error(f"[{name}] push error: {err}")
+                self.logger.error(
+                    f"[{name}] batch push failed ({len(records)} records): {err}"
+                )
+                continue
+
+            for k, outcome in zip(keys, results):
+                if outcome == "synced":
+                    synced += 1
+                    self.dedup.mark(k)
+                elif outcome == "skipped":
+                    skipped += 1
+                    self.dedup.mark(k)
+                else:
+                    errors += 1
+                    last_err = err
 
         self.dedup.save()
         self.last_sync_per_device[name] = datetime.now().strftime("%H:%M:%S")
@@ -884,6 +1091,81 @@ class SyncEngine:
             self.status_callback(name, "error", f"{errors} errors ({last_err or 'see log'})")
         else:
             self.status_callback(name, "ok", f"{synced} new, {skipped} skipped")
+
+    # ──────────────────────────────────────────────────────────────────
+    # COMMAND POLLER — pulls Pending commands from the server and runs them.
+    # ──────────────────────────────────────────────────────────────────
+    def _command_poll_loop(self):
+        """Every COMMAND_POLL_INTERVAL_SEC, ask the server for any pending
+        commands for each configured device and dispatch them. Runs forever
+        until stop_event is set. Failures are swallowed and logged — this
+        loop must never crash the bridge."""
+        # Wait a few seconds after startup so the main sync thread can settle.
+        if self.stop_event.wait(timeout=5):
+            return
+        while not self.stop_event.is_set():
+            try:
+                for device in self.config.get("devices", []):
+                    if self.stop_event.is_set():
+                        return
+                    self._poll_and_dispatch(device)
+            except Exception:
+                self.logger.exception("command poll loop error")
+            # Sleep, but break out early if stop is signalled.
+            if self.stop_event.wait(timeout=COMMAND_POLL_INTERVAL_SEC):
+                return
+
+    def _poll_and_dispatch(self, device):
+        if not device.get("serial"):
+            return  # device without serial can't auth against the tunnel
+        erpnext = ErpnextClient(device)
+        commands = erpnext.poll_commands()
+        if not commands:
+            return
+        name = device["name"]
+        self.logger.info(f"[{name}] received {len(commands)} command(s) from server")
+        for cmd in commands:
+            cmd_name = cmd.get("name")
+            cmd_type = cmd.get("command_type")
+            payload = cmd.get("payload") or {}
+            self.logger.info(f"[{name}] running command {cmd_name} ({cmd_type})")
+            status, result = self._run_command(device, cmd_type, payload)
+            erpnext.report_command(cmd_name, status, result)
+            self.logger.info(
+                f"[{name}] command {cmd_name} ({cmd_type}) -> {status}: {result[:120]}"
+            )
+
+    def _run_command(self, device, cmd_type, payload):
+        """Execute one command. Returns (status, result_text) where status is
+        'Done' or 'Failed'. Never raises — exceptions become Failed."""
+        try:
+            if cmd_type == "force_sync":
+                # Run a sync of just this device, optionally with a date override.
+                from_date_raw = payload.get("from_date")
+                from_date = None
+                if from_date_raw:
+                    try:
+                        from_date = datetime.strptime(from_date_raw, "%Y-%m-%d").date()
+                    except ValueError:
+                        return "Failed", f"invalid from_date {from_date_raw!r} (need YYYY-MM-DD)"
+                self.run_sync(device_names=[device["name"]], from_date_override=from_date)
+                return "Done", f"force_sync executed (from_date={from_date or 'last_sync_date'})"
+
+            if cmd_type == "test_connection":
+                client = make_device_client(
+                    device,
+                    timeout=int(self.config.get("device_timeout_seconds", 5)),
+                    retries=int(self.config.get("network_probe_retries", 3)),
+                )
+                ok = client.probe_network()
+                if ok:
+                    return "Done", f"device {device.get('ip')}:{device.get('port', 4370)} reachable"
+                return "Failed", f"device {device.get('ip')}:{device.get('port', 4370)} unreachable"
+
+            return "Failed", f"unsupported command_type {cmd_type!r}"
+        except Exception as e:
+            self.logger.exception(f"command {cmd_type} crashed")
+            return "Failed", f"exception: {e}"
 
 
 # ============================================
