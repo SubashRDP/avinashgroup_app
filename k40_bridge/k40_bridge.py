@@ -31,7 +31,7 @@ TASK_NAME = "K40 Bridge"
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -57,6 +57,10 @@ BATCH_SIZE = 100
 COMMAND_POLL_INTERVAL_SEC = 30
 # Prune dedup entries whose punch date is older than this many days.
 DEDUP_RETENTION_DAYS = 90
+# Re-check GitHub for new bridge versions this often, in addition to the
+# one-shot check at startup. 24h keeps long-running installs current
+# without hammering the update URL.
+UPDATE_CHECK_INTERVAL_HOURS = 24
 
 # URL to the version-tracker file in the repo. Bumped on each release.
 UPDATE_CHECK_URL = (
@@ -1537,14 +1541,19 @@ class ControlPanel:
 
         self.logger = setup_logging(config, gui_callback=self._on_log)
         self.engine = SyncEngine(config, self.logger, self._on_status)
+        # Latest version learned from GitHub, or None if not checked / up to date.
+        # Drives whether clicking the banner kicks off a self-update.
+        self._known_latest_version = None
+        self._self_update_running = False
         self._build()
         self.engine.start()
         self._tick()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.tray_icon = None
         self._setup_tray()
-        # Run update check in background; popup notification if newer version exists
+        # One-shot update check at startup, then a daily background re-check.
         threading.Thread(target=self._check_update_quiet, daemon=True).start()
+        threading.Thread(target=self._periodic_update_check_loop, daemon=True).start()
 
     def _build(self):
         top = ttk.Frame(self.root)
@@ -1557,7 +1566,10 @@ class ControlPanel:
 
         self.update_label = ttk.Label(top, text="", foreground="blue", cursor="hand2")
         self.update_label.pack(side="left", padx=12)
-        self.update_label.bind("<Button-1>", lambda e: self._open_download_page())
+        # When a newer version is known, clicking the banner triggers the
+        # in-app self-update. Falls back to opening the releases page if the
+        # update server hasn't been reached yet.
+        self.update_label.bind("<Button-1>", lambda e: self._handle_update_click())
 
         self.pause_btn = ttk.Button(top, text="Pause", command=self._toggle_pause)
         self.pause_btn.pack(side="right", padx=2)
@@ -1744,16 +1756,19 @@ class ControlPanel:
         webbrowser.open(DOWNLOAD_PAGE_URL)
 
     def _check_update_quiet(self):
-        """Run on startup. Show banner only if newer version exists."""
+        """Run on startup + once a day. Show banner only if newer version exists.
+        Caches the latest version so the banner click can self-update."""
         latest, newer = check_for_update()
         if newer:
+            self._known_latest_version = latest
             self.root.after(0, lambda: self.update_label.config(
-                text=f"⬆ Update available: v{latest} (click to download)"
+                text=f"⬆ v{latest} available — click to install",
+                foreground="blue",
             ))
             self.logger.info(f"Update available: v{latest} (running v{VERSION})")
 
     def _check_update_manual(self):
-        """Manual 'Check Updates' button — always shows result."""
+        """Manual 'Check Updates' button — always shows result + offers self-update."""
         self.update_label.config(text="Checking…", foreground="gray")
         self.root.update_idletasks()
 
@@ -1764,21 +1779,186 @@ class ControlPanel:
                     self.update_label.config(text="", foreground="blue")
                     messagebox.showwarning("Check Updates", "Could not reach update server.")
                 elif newer:
+                    self._known_latest_version = latest
                     self.update_label.config(
-                        text=f"⬆ Update available: v{latest} (click to download)",
+                        text=f"⬆ v{latest} available — click to install",
                         foreground="blue",
                     )
                     if messagebox.askyesno(
                         "Update Available",
-                        f"A newer version is available.\n\nCurrent: v{VERSION}\nLatest:  v{latest}\n\nOpen the download page now?",
+                        f"A newer version is available.\n\n"
+                        f"Current: v{VERSION}\n"
+                        f"Latest:  v{latest}\n\n"
+                        f"Install it now? The bridge will restart automatically.",
                     ):
-                        self._open_download_page()
+                        self._perform_self_update(latest)
                 else:
+                    self._known_latest_version = None
                     self.update_label.config(text=f"✓ Up to date (v{VERSION})", foreground="green")
                     messagebox.showinfo("Check Updates", f"You're running the latest version (v{VERSION}).")
             self.root.after(0, show)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _periodic_update_check_loop(self):
+        """Re-check for updates once a day so long-running installs eventually
+        notice a new release without needing a restart. Exits when the sync
+        engine signals stop."""
+        interval_sec = UPDATE_CHECK_INTERVAL_HOURS * 3600
+        while not self.engine.stop_event.is_set():
+            # Use the engine's stop_event as a sleep so we exit promptly on quit.
+            if self.engine.stop_event.wait(timeout=interval_sec):
+                return
+            try:
+                self._check_update_quiet()
+            except Exception:
+                self.logger.exception("periodic update check failed")
+
+    def _handle_update_click(self):
+        """User clicked the update banner. Self-update if we know there's one,
+        otherwise just open the releases page so they can browse."""
+        if self._self_update_running:
+            return
+        if self._known_latest_version:
+            if messagebox.askyesno(
+                "Install Update",
+                f"Install K40 Bridge v{self._known_latest_version} now?\n\n"
+                f"The bridge will close, the installer will run, and the\n"
+                f"bridge will restart automatically. Takes about 30-60 seconds.\n\n"
+                f"Make sure no sync is mid-flight you don't want interrupted.",
+            ):
+                self._perform_self_update(self._known_latest_version)
+        else:
+            # No known update yet (banner shouldn't be clickable in this state,
+            # but be defensive). Open the releases page as a fallback.
+            self._open_download_page()
+
+    def _perform_self_update(self, latest):
+        """Download the installer, launch it silently, then exit. The installer
+        kills any remaining bridge process, overwrites the exe, and relaunches.
+
+        Reentrancy is guarded by self._self_update_running — a second click
+        while we're already downloading is a no-op."""
+        if self._self_update_running:
+            return
+        self._self_update_running = True
+        self.update_label.config(text=f"Downloading v{latest}…", foreground="gray")
+        self.root.update_idletasks()
+
+        def worker():
+            try:
+                installer_path = self._download_installer(latest)
+                if not installer_path:
+                    return  # _download_installer already surfaced the error
+                self.root.after(0, lambda: self.update_label.config(
+                    text=f"Installing v{latest}…", foreground="blue"
+                ))
+                self._launch_installer_and_exit(installer_path)
+            except Exception as e:
+                self.logger.exception("self-update failed")
+                self._self_update_running = False
+                self.root.after(0, lambda: messagebox.showerror(
+                    "Update Failed",
+                    f"Could not install update: {e}\n\n"
+                    f"You can download the installer manually from the releases page."
+                ))
+                self.root.after(0, lambda: self.update_label.config(
+                    text=f"⬆ v{latest} available — click to retry",
+                    foreground="orange",
+                ))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _download_installer(self, latest):
+        """Stream-download the installer to a temp file with progress updates.
+        Returns the path on success, None on failure (caller will see banner
+        and dialog from the worker's except block)."""
+        import tempfile
+
+        tmp_dir = tempfile.gettempdir()
+        installer_path = os.path.join(tmp_dir, f"K40BridgeSetup_{latest}.exe")
+        self.logger.info(f"Self-update: downloading {INSTALLER_DOWNLOAD_URL} → {installer_path}")
+
+        with requests.get(INSTALLER_DOWNLOAD_URL, stream=True, timeout=120) as r:
+            r.raise_for_status()
+            total = int(r.headers.get("content-length", 0))
+            downloaded = 0
+            with open(installer_path, "wb") as f:
+                for chunk in r.iter_content(64 * 1024):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total:
+                        pct = int(downloaded * 100 / total)
+                        self.root.after(0, lambda p=pct: self.update_label.config(
+                            text=f"Downloading v{latest}… {p}%",
+                            foreground="gray",
+                        ))
+
+        size_mb = os.path.getsize(installer_path) / (1024 * 1024)
+        self.logger.info(f"Self-update: downloaded {size_mb:.1f} MB")
+        return installer_path
+
+    def _launch_installer_and_exit(self, installer_path):
+        """Spawn the installer detached, wait a beat, then kill ourselves so
+        the installer can overwrite k40_bridge.exe.
+
+        Inno Setup config (installer.iss):
+          - CloseApplications=force      → kills the running bridge if needed
+          - InitializeSetup → taskkill   → belt-and-suspenders against the tray icon
+          - The silent-path [Run] entry  → re-launches the bridge after install
+
+        So this code's only job is: download, spawn, exit. The installer does
+        the rest."""
+        # `/SILENT` shows a small progress dialog (good UX); `/VERYSILENT` hides
+        # everything — pick SILENT so the user sees something is happening.
+        # `/SUPPRESSMSGBOXES` skips "are you sure?" prompts.
+        # `/NORESTART` ensures Windows doesn't reboot if Inno asks.
+        args = [installer_path, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
+        self.logger.info(f"Self-update: launching installer {args}")
+
+        if IS_WINDOWS:
+            # DETACHED_PROCESS + CREATE_NEW_PROCESS_GROUP so the installer
+            # outlives our exit. close_fds=True severs handle inheritance.
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            subprocess.Popen(
+                args,
+                creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
+        else:
+            # Linux/macOS — for dev builds. Inno installer is Windows-only,
+            # but allow the codepath to run for smoke testing.
+            subprocess.Popen(args, close_fds=True)
+
+        # Give the installer a couple of seconds to read our exe into memory
+        # before we exit (paranoia — taskkill /F handles it anyway).
+        time.sleep(2)
+        self.root.after(0, self._force_quit_for_update)
+
+    def _force_quit_for_update(self):
+        """Hard-exit the bridge so the installer can replace the running exe.
+        Cleans up tray icon and sync engine first, then calls os._exit to
+        bypass any lingering atexit handlers that might fight us."""
+        self.logger.info("Self-update: exiting to allow installer to proceed")
+        try:
+            self.engine.stop()
+        except Exception:
+            pass
+        try:
+            if self.tray_icon:
+                self.tray_icon.stop()
+        except Exception:
+            pass
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+        # Hard exit — the installer's CloseApplications=force will also kill
+        # us if this doesn't take effect, so being aggressive is fine.
+        os._exit(0)
 
     def _refresh_autostart_label(self):
         if not IS_WINDOWS or not hasattr(self, "autostart_btn"):

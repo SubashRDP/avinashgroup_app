@@ -6,7 +6,7 @@
 ; CI builds it via .github/workflows/build-exe.yml (Inno Setup 6 is preinstalled on the runner).
 
 #define MyAppName "K40 Bridge"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.3"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "k40_bridge.exe"
 
@@ -59,7 +59,14 @@ Filename: "schtasks"; \
   Flags: runhidden waituntilterminated; \
   Tasks: autostart
 
-; Optional: launch the bridge right after install
+; Launch the bridge after install. Two entries on purpose:
+;   1. Silent path  → always relaunch (no flags). Used by self-update from
+;      inside the running bridge, where /SILENT skips postinstall items.
+;   2. Wizard path  → checkbox on Finished page for interactive installs.
+Filename: "{app}\{#MyAppExeName}"; \
+  Flags: nowait runascurrentuser; \
+  Check: WizardSilent
+
 Filename: "{app}\{#MyAppExeName}"; \
   Description: "Launch K40 Bridge now"; \
   Flags: nowait postinstall skipifsilent
