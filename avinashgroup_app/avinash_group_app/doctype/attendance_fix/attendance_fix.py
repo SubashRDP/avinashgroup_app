@@ -73,9 +73,17 @@ class AttendanceFix(Document):
         }
         log_lines: list[str] = []
 
-        for employee in employees:
+        # Calculate total work items for progress
+        total_items = len(employees) * len(date_list)
+        items_done = 0
+
+        for emp_idx, employee in enumerate(employees):
             counters["employees_processed"] += 1
             holiday_dates = _get_holiday_dates(employee, from_date, to_date)
+
+            # Publish progress update for new employee
+            self._publish_progress(emp_idx, len(employees), f"Processing {employee}...")
+
             for d in date_list:
                 savepoint = f"af_{employee}_{d}".replace("-", "_").replace(" ", "_")[:60]
                 frappe.db.savepoint(savepoint)
@@ -91,11 +99,36 @@ class AttendanceFix(Document):
                         title=f"Attendance Fix {self.name}: {employee} {d}",
                     )
 
+                items_done += 1
+                if items_done % 10 == 0:  # Update every 10 items to avoid too many updates
+                    progress = int((items_done / total_items) * 100) if total_items > 0 else 0
+                    self._publish_progress(progress, 100, f"{items_done}/{total_items} days processed")
+
         self.employees_processed = counters["employees_processed"]
         self.absent_rows_deleted = counters["absent_rows_deleted"]
         self.attendance_created_or_updated = counters["attendance_created_or_updated"]
         self.checkins_relinked = counters["checkins_relinked"]
         self.log = "\n".join(log_lines[-500:])  # cap to last 500 lines
+
+        # Final progress update
+        self._publish_progress(100, 100, "✅ Reconciliation complete!")
+
+    def _publish_progress(self, current, total, message=""):
+        """Publish realtime progress update to client."""
+        progress_pct = int((current / total) * 100) if total > 0 else 0
+        self.db_set({
+            "progress_percentage": progress_pct,
+            "progress_message": message,
+        }, update_modified=False)
+        frappe.publish_realtime(
+            "attendance_fix_progress",
+            {
+                "doc_name": self.name,
+                "progress": progress_pct,
+                "message": message,
+            },
+            user=self.owner
+        )
 
     def _resolve_employees(self, shift_doc) -> list[str]:
         # Stock helper returns employees with this shift assigned (or default shift).
@@ -202,6 +235,9 @@ class AttendanceFix(Document):
                 return  # leave as-is
             marked = mark_attendance(employee, attendance_date, "Absent", shift_doc.name)
             if marked:
+                # Ensure posting_date is set (required system field)
+                if not marked.posting_date:
+                    marked.db_set("posting_date", attendance_date, update_modified=False)
                 counters["attendance_created_or_updated"] += 1
                 log_lines.append(f"{employee} {attendance_date}: marked Absent (no checkins)")
             return
@@ -254,6 +290,9 @@ class AttendanceFix(Document):
             shift_doc.name,
         )
         if attendance:
+            # Ensure posting_date is set (required system field)
+            if not attendance.posting_date:
+                attendance.db_set("posting_date", attendance_date, update_modified=False)
             counters["attendance_created_or_updated"] += 1
             log_lines.append(
                 f"{employee} {attendance_date}: created {attendance.name} ({status}, "
@@ -277,7 +316,17 @@ class AttendanceFix(Document):
                 c.shift_end = ck_doc.shift_end
                 c.shift_actual_start = ck_doc.shift_actual_start
                 c.shift_actual_end = ck_doc.shift_actual_end
-            if c.shift != shift_doc.name:
+
+            # DEBUG: Log shift comparison
+            if not c.shift:
+                frappe.log_error(
+                    f"Employee Checkin {c.name}: shift is empty after fetch_shift",
+                    "Attendance Fix Debug"
+                )
+
+            # Match by shift name (not strict equality - allow None to match)
+            shift_matches = (c.shift == shift_doc.name) if c.shift else False
+            if not shift_matches:
                 continue
             prepared.append(c)
         return prepared

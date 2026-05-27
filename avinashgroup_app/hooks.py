@@ -11,6 +11,7 @@ app_license = "mit"
 page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 
 app_include_js = [
+    "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
     "/assets/avinashgroup_app/js/sales_invoice.js?v=10.5",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",
@@ -34,6 +35,7 @@ doctype_js = {
 
 purchase_invoice_specific_events = {
     "before_submit": "avinashgroup_app.custom_code.excise_ledger.modify_gl_entries",
+    "on_submit": "avinashgroup_app.custom_code.stock_revaluation.on_purchase_invoice_submit",
     "before_validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_validate_purchase_invoice",
     "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
     "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice"

@@ -140,7 +140,7 @@ def _resolve_period(filters):
 			)
 		return ad_start, ad_end, label
 
-	frappe.throw(_("Provide either Fiscal Year + BS Month, or From Date + To Date."))
+	frappe.throw(_("Select Fiscal Year + BS Month or From Date + To Date to run the report."))
 
 
 def _parse_bs_month(value):
@@ -170,19 +170,26 @@ def _parse_bs_month(value):
 # ---------------------------------------------------------------------------
 
 def _get_employees(filters, ad_start, ad_end):
-	emp_filters = {"status": filters.get("status") or "Active"}
+	emp_filters = [["Employee", "status", "=", filters.get("status") or "Active"]]
 	if filters.get("company"):
-		emp_filters["company"] = filters.company
+		emp_filters.append(["Employee", "company", "=", filters.company])
 	if filters.get("department"):
-		emp_filters["department"] = filters.department
+		emp_filters.append(["Employee", "department", "=", filters.department])
 	if filters.get("branch"):
-		emp_filters["branch"] = filters.branch
+		emp_filters.append(["Employee", "branch", "=", filters.branch])
 	if filters.get("designation"):
-		emp_filters["designation"] = filters.designation
+		emp_filters.append(["Employee", "designation", "=", filters.designation])
 	if filters.get("employee"):
-		emp_filters["name"] = filters.employee
+		emp_filters.append(["Employee", "name", "=", filters.employee])
 
-	rows = frappe.get_all(
+	emp_filters.append(["Employee", "date_of_joining", "<=", ad_end])
+	emp_filters.append([
+		"or",
+		[["Employee", "relieving_date", "is", "not set"],
+		 ["Employee", "relieving_date", ">", ad_start]]
+	])
+
+	return frappe.get_all(
 		"Employee",
 		filters=emp_filters,
 		fields=[
@@ -191,16 +198,8 @@ def _get_employees(filters, ad_start, ad_end):
 			"holiday_list", "default_shift",
 			"date_of_joining", "relieving_date",
 		],
-		order_by="employee_name asc",
+		order_by="Employee.employee_name asc",
 	)
-	out = []
-	for r in rows:
-		if r.date_of_joining and getdate(r.date_of_joining) > ad_end:
-			continue
-		if r.relieving_date and getdate(r.relieving_date) < ad_start:
-			continue
-		out.append(r)
-	return out
 
 
 # ---------------------------------------------------------------------------

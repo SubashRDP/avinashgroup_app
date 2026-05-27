@@ -2,8 +2,9 @@
 // (BS Year + BS Month wins over AD range; AD range only used if BS is cleared).
 
 frappe.query_reports["Monthly Attendance Summary BS"] = {
-	onload: function (report) {
+	onload: async function (report) {
 		_make_full_width(report);
+		_setup_bs_defaults(report);
 	},
 
 	filters: [
@@ -19,7 +20,6 @@ frappe.query_reports["Monthly Attendance Summary BS"] = {
 			fieldname: "bs_year",
 			label: __("BS Year"),
 			fieldtype: "Int",
-			default: _default_bs_year(),
 			description: __("e.g. 2082"),
 		},
 		{
@@ -41,7 +41,6 @@ frappe.query_reports["Monthly Attendance Summary BS"] = {
 				"11 - Falgun",
 				"12 - Chaitra",
 			].join("\n"),
-			default: _default_bs_month(),
 		},
 		{
 			fieldname: "from_date",
@@ -116,29 +115,29 @@ function _make_full_width(report) {
 	});
 }
 
-function _default_bs_year() {
-	const today = new Date();
-	const year = today.getFullYear();
-	const month = today.getMonth() + 1;
-	return month < 4 || (month === 4 && today.getDate() < 14)
-		? year + 56
-		: year + 57;
-}
-
-function _default_bs_month() {
-	const today = new Date();
-	const m = today.getMonth() + 1;
-	const d = today.getDate();
-	const table = [
-		[1, 9], [2, 10], [3, 11], [4, 12],
-		[5, 1], [6, 2], [7, 3], [8, 4],
-		[9, 5], [10, 6], [11, 7], [12, 8],
-	];
-	const [, base] = table[m - 1];
-	const bs = d > 15 ? (base % 12) + 1 : base;
-	const names = [
+function _setup_bs_defaults(report) {
+	const nepaliMonths = [
 		"Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
-		"Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
+		"Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra"
 	];
-	return `${String(bs).padStart(2, "0")} - ${names[bs - 1]}`;
+
+	if (typeof window.NepaliFunctions === "undefined") {
+		console.warn("⚠️ NepaliFunctions not loaded");
+		return;
+	}
+
+	const today = new Date();
+	const bsDate = window.NepaliFunctions.AD2BS({
+		year: today.getFullYear(),
+		month: today.getMonth() + 1,
+		day: today.getDate()
+	});
+
+	const bsYear = Number(bsDate.year);
+	const bsMonth = Number(bsDate.month);
+	const bsMonthName = nepaliMonths[bsMonth - 1];
+	const bsMonthFormatted = `${String(bsMonth).padStart(2, "0")} - ${bsMonthName}`;
+
+	frappe.query_report.set_filter_value("bs_year", bsYear);
+	frappe.query_report.set_filter_value("bs_month", bsMonthFormatted);
 }

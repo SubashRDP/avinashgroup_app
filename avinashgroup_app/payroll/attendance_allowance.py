@@ -154,14 +154,6 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	unit = sc.custom_unit or "Per Day"
 	present_statuses = get_present_statuses()
 
-	if condition == "Working Hours >= Threshold":
-		threshold = flt(sc.custom_threshold_hours)
-		if status in present_statuses and working_hours >= threshold:
-			return _per_unit(unit, day=1.0, hours=working_hours)
-		if status == "Half Day" and threshold and working_hours >= threshold / 2:
-			return _per_unit(unit, day=0.5, hours=working_hours)
-		return 0.0
-
 	if condition == "Status = Present":
 		if status in present_statuses:
 			return _per_unit(unit, day=1.0, hours=working_hours)
@@ -173,12 +165,11 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		return 1.0 if status == "Half Day" else 0.0
 
 	if condition == "Worked on Holiday":
-		if status not in present_statuses and status != "Half Day":
-			return 0.0
 		if not row.custom_worked_on_holiday:
 			return 0.0
-		day = 0.5 if status == "Half Day" else 1.0
-		return _per_unit(unit, day=day, hours=working_hours)
+		if status not in present_statuses and status != "Half Day":
+			return 0.0
+		return _per_unit(unit, day=1.0, hours=working_hours)
 
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
 		offset_seconds = flt(sc.custom_time_offset_hours) * 3600.0
@@ -213,25 +204,29 @@ def _employee_holiday_list(employee: str) -> str:
 	return frappe.db.get_value("Company", company, "default_holiday_list") or ""
 
 
-def set_holiday_flag(doc, method=None):
+def set_holiday_flag(doc, _method=None):
 	"""doc_event hook on Attendance.validate.
 
 	Auto-populates the read-only `custom_worked_on_holiday` checkbox by checking
 	whether the attendance_date matches a Holiday row in the employee's
 	Holiday List (or the company's default Holiday List if the employee has none).
 	"""
-	if not doc.employee or not doc.attendance_date:
+	if not (doc.employee and doc.attendance_date):
 		doc.custom_worked_on_holiday = 0
 		return
-	holiday_list = _employee_holiday_list(doc.employee)
-	if not holiday_list:
-		doc.custom_worked_on_holiday = 0
-		return
-	is_holiday = frappe.db.exists(
-		"Holiday",
-		{"parent": holiday_list, "holiday_date": doc.attendance_date},
+
+	emp = frappe.get_cached_doc("Employee", doc.employee)
+	holiday_list = emp.holiday_list or (
+		frappe.db.get_value("Company", emp.company, "default_holiday_list")
+		if emp.company else None
 	)
-	doc.custom_worked_on_holiday = 1 if is_holiday else 0
+
+	doc.custom_worked_on_holiday = int(
+		holiday_list and frappe.db.exists("Holiday", {
+			"parent": holiday_list,
+			"holiday_date": doc.attendance_date,
+		})
+	)
 
 
 @frappe.whitelist()
