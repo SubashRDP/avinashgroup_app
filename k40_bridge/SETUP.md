@@ -128,7 +128,14 @@ Click **Save & Start**.
 
 ### C.4 Confirm it's running
 
-The control panel shows each device with a green dot and a Last Sync time. The bridge runs in the background; closing the window doesn't stop it (look for the tray icon).
+The control panel shows each device with a green dot and a Last Sync time.
+
+**How it runs:** the bridge works **invisibly in the background** — once installed it auto-starts at login with **no window and no tray icon**, so the person using the PC won't see anything. It keeps posting attendance on its own.
+
+- **To open it** (to change settings or check status): launch **K40 Bridge** again (Start Menu / desktop / double-click the exe). The running background copy pops its window up — it does not start a second copy.
+- **Closing the window (X)** just hides it again (window + tray icon disappear); **posting keeps running** in the background.
+- **To fully stop it**, use the **Quit Bridge** button (or the tray icon's **Exit** while the window is open). It will start again at the next login.
+- **Updates** install themselves automatically while it runs in the background.
 
 ---
 

@@ -54,22 +54,35 @@ def process_attendance_records(attendance_data, device_identifier=None):
         device_identifier: optional device name/IP
 
     Returns:
-        dict with success, synced, errors, message, error_details,
-        synced_punches, failed_punches
+        dict with success, synced, errors, skipped, message, error_details,
+        synced_punches, failed_punches, skipped_punches
+
+    Outcome categories (so the caller knows what to retry):
+      - synced_punches  → stored successfully.
+      - skipped_punches → permanently unprocessable for a business reason
+        (unknown device user_id, malformed timestamp). Retrying won't help, so
+        the bridge stops resending and doesn't flag them as errors.
+      - failed_punches  → transient failure (exception). Safe to retry.
     """
     if not attendance_data:
         return {
             "success": True,
             "synced": 0,
             "errors": 0,
+            "skipped": 0,
             "message": "No attendance records to process",
+            "synced_punches": [],
+            "failed_punches": [],
+            "skipped_punches": [],
         }
 
     synced = 0
     errors = 0
+    skipped = 0
     error_details = []
     synced_punches = []
     failed_punches = []
+    skipped_punches = []
 
     grouped = defaultdict(list)
     record_ids_by_group = defaultdict(list)
@@ -84,9 +97,10 @@ def process_attendance_records(attendance_data, device_identifier=None):
 
         ts = _parse_timestamp(timestamp_str)
         if not ts:
-            errors += 1
+            # Malformed data the device will keep sending — permanent skip.
+            skipped += 1
             error_details.append(f"Invalid timestamp: {timestamp_str}")
-            failed_punches.append(record_id)
+            skipped_punches.append(record_id)
             continue
 
         key = (user_id, ts.date())
@@ -105,9 +119,11 @@ def process_attendance_records(attendance_data, device_identifier=None):
             )
 
             if not employee:
-                errors += 1
+                # No Employee maps to this device user_id. Not our error and
+                # not retryable until someone registers the employee — skip.
+                skipped += len(group_record_ids)
                 error_details.append(f"Employee not found having ID: {user_id} in device {device_identifier}")
-                failed_punches.extend(group_record_ids)
+                skipped_punches.extend(group_record_ids)
                 continue
 
             inserted, updated = _reconcile_day_checkins(
@@ -140,10 +156,12 @@ def process_attendance_records(attendance_data, device_identifier=None):
         "success": True,
         "synced": synced,
         "errors": errors,
-        "message": f"Synced {synced} punches, {errors} errors.",
+        "skipped": skipped,
+        "message": f"Synced {synced} punches, {skipped} skipped, {errors} errors.",
         "error_details": error_details[:10],
         "synced_punches": synced_punches,
         "failed_punches": failed_punches,
+        "skipped_punches": skipped_punches,
     }
 
 

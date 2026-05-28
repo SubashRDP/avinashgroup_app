@@ -6,7 +6,7 @@
 ; CI builds it via .github/workflows/build-exe.yml (Inno Setup 6 is preinstalled on the runner).
 
 #define MyAppName "K40 Bridge"
-#define MyAppVersion "1.0.3"
+#define MyAppVersion "1.0.4"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "k40_bridge.exe"
 
@@ -55,7 +55,7 @@ Name: "{autodesktop}\K40 Bridge"; Filename: "{app}\{#MyAppExeName}"; Tasks: desk
 ; Register the Task Scheduler entry (auto-start at boot + restart on failure)
 ; Done via schtasks for simplicity. Runs only if the user kept the "autostart" task ticked.
 Filename: "schtasks"; \
-  Parameters: "/Create /TN ""K40 Bridge"" /TR ""\""{app}\{#MyAppExeName}\"""" /SC ONSTART /RL HIGHEST /F"; \
+  Parameters: "/Create /TN ""K40 Bridge"" /TR ""\""{app}\{#MyAppExeName}\"" --background"" /SC ONSTART /RL HIGHEST /F"; \
   Flags: runhidden waituntilterminated; \
   Tasks: autostart
 
@@ -64,6 +64,7 @@ Filename: "schtasks"; \
 ;      inside the running bridge, where /SILENT skips postinstall items.
 ;   2. Wizard path  → checkbox on Finished page for interactive installs.
 Filename: "{app}\{#MyAppExeName}"; \
+  Parameters: "--background"; \
   Flags: nowait runascurrentuser; \
   Check: WizardSilent
 

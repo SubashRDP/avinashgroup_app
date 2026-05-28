@@ -6,7 +6,7 @@ from frappe.utils import now_datetime
 import socket
 import traceback
 
-from avinashgroup_app.biometric.utils import process_attendance_records
+from avinashgroup_app.biometric.utils import assert_known_device, process_attendance_records
 
 # Check if pyzk is installed
 try:
@@ -139,11 +139,18 @@ def receive_attendance(attendance_data, device_identifier=None):
 
     Args:
         attendance_data: JSON string or list of {"user_id": str, "timestamp": str} dicts
-        device_identifier: optional device name or IP to update Biometric Device record
+        device_identifier: hardware serial of the sending device. Required —
+            must match a registered, enabled Biometric Device or the request
+            is rejected with HTTP 403.
 
     Returns:
         dict: processing result from process_attendance_records()
     """
+    # Reject punches from unregistered/disabled devices (403). Matches the
+    # heartbeat / command-tunnel / ADMS endpoints, which all gate on this, and
+    # the documented contract ("unknown serials get HTTP 403").
+    assert_known_device(device_identifier)
+
     if isinstance(attendance_data, str):
         try:
             attendance_data = json.loads(attendance_data)

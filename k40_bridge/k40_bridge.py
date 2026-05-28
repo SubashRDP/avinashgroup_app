@@ -28,10 +28,21 @@ except ImportError:
 IS_WINDOWS = platform.system() == "Windows"
 TASK_NAME = "K40 Bridge"
 
+# Suppress the brief black console window that pops up when this --noconsole
+# GUI build shells out to schtasks/taskkill on Windows. Without this flag, a
+# cmd window flashes on screen every time a subprocess runs (e.g. the
+# schtasks /Query that fires at every startup). 0 on non-Windows = no-op.
+CREATE_NO_WINDOW = 0x08000000 if IS_WINDOWS else 0
+
+# Set when launched by the scheduler / auto-start with --background (or
+# --hidden): start with the window withdrawn to the tray so a boot-time
+# launch never pops the GUI to the foreground.
+START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
+
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.0.3"
+VERSION = "1.0.4"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -157,6 +168,7 @@ def autostart_status():
         result = subprocess.run(
             ["schtasks", "/Query", "/TN", TASK_NAME],
             capture_output=True, text=True, timeout=5,
+            creationflags=CREATE_NO_WINDOW,
         )
         return result.returncode == 0
     except Exception:
@@ -176,8 +188,14 @@ def autostart_install():
             "Run as administrator, then click Enable Auto-Start again."
         )
 
+    from xml.sax.saxutils import escape
+
     exe_path = os.path.abspath(sys.argv[0])
     work_dir = os.path.dirname(exe_path)
+    # Escape so paths containing &, <, > (e.g. a user folder named "A & B")
+    # don't produce malformed XML that schtasks rejects.
+    exe_path_x = escape(exe_path)
+    work_dir_x = escape(work_dir)
 
     xml = (
         '<?xml version="1.0" encoding="UTF-16"?>\n'
@@ -203,11 +221,13 @@ def autostart_install():
         '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n'
         '    <AllowHardTerminate>true</AllowHardTerminate>\n'
         '    <StartWhenAvailable>true</StartWhenAvailable>\n'
+        '    <Hidden>true</Hidden>\n'
         '  </Settings>\n'
         '  <Actions>\n'
         f'    <Exec>\n'
-        f'      <Command>{exe_path}</Command>\n'
-        f'      <WorkingDirectory>{work_dir}</WorkingDirectory>\n'
+        f'      <Command>{exe_path_x}</Command>\n'
+        f'      <Arguments>--background</Arguments>\n'
+        f'      <WorkingDirectory>{work_dir_x}</WorkingDirectory>\n'
         '    </Exec>\n'
         '  </Actions>\n'
         '</Task>\n'
@@ -221,6 +241,7 @@ def autostart_install():
         result = subprocess.run(
             ["schtasks", "/Create", "/XML", xml_path, "/TN", TASK_NAME, "/F"],
             capture_output=True, text=True, timeout=10,
+            creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode == 0:
             return True, "Auto-start enabled. Bridge will launch at every boot."
@@ -244,6 +265,7 @@ def autostart_uninstall():
         result = subprocess.run(
             ["schtasks", "/Delete", "/TN", TASK_NAME, "/F"],
             capture_output=True, text=True, timeout=5,
+            creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode == 0:
             return True, "Auto-start disabled."
@@ -282,6 +304,28 @@ def check_for_update():
 # ============================================
 # CONFIG I/O
 # ============================================
+def _atomic_write_json(path, obj, indent=None):
+    """Write JSON to `path` atomically: serialize to a temp file in the same
+    directory, fsync, then os.replace over the target. A crash or power loss
+    mid-write leaves the old file intact instead of a half-written (corrupt)
+    one — important for config.json, whose loss drops the user back into the
+    setup wizard."""
+    directory = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(dir=directory, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=indent)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return None
@@ -296,8 +340,7 @@ def load_config():
 
 
 def save_config(config):
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+    _atomic_write_json(CONFIG_FILE, config, indent=2)
 
 
 # ============================================
@@ -355,6 +398,10 @@ class DedupStore:
     """
 
     def __init__(self):
+        # Guards self.synced so the (serialized) sync path and any future
+        # caller can mutate/iterate it without "set changed size during
+        # iteration". Non-reentrant: _prune() assumes the lock is already held.
+        self._lock = threading.Lock()
         self.synced = set()
         if os.path.exists(SYNCED_RECORDS_FILE):
             try:
@@ -362,26 +409,31 @@ class DedupStore:
                     self.synced = set(json.load(f))
             except Exception:
                 self.synced = set()
-        self._prune()
+        self._prune()  # construction is single-threaded; no lock needed
 
     def is_synced(self, key):
-        return key in self.synced
+        with self._lock:
+            return key in self.synced
 
     def mark(self, key):
-        self.synced.add(key)
+        with self._lock:
+            self.synced.add(key)
 
     def save(self):
-        self._prune()
+        with self._lock:
+            self._prune()
+            data = list(self.synced)
+        # Write outside the lock; an atomic replace can't corrupt the file.
         try:
-            with open(SYNCED_RECORDS_FILE, "w") as f:
-                json.dump(list(self.synced), f)
+            _atomic_write_json(SYNCED_RECORDS_FILE, data)
         except Exception:
             pass
 
     def _prune(self):
         """Drop entries whose embedded date is older than DEDUP_RETENTION_DAYS.
         Keys we don't recognize (malformed / older format) are kept so a bad
-        parser change does not silently delete valid history."""
+        parser change does not silently delete valid history.
+        Assumes self._lock is held (or single-threaded construction)."""
         cutoff = datetime.now() - _timedelta(days=DEDUP_RETENTION_DAYS)
         pruned = set()
         for k in self.synced:
@@ -722,32 +774,28 @@ class ErpnextClient:
             return [], f"non-JSON response: {r.text[:160]}"
 
         # receive_attendance returns process_attendance_records output:
-        #   { success, synced, errors, message, synced_punches, failed_punches }
-        # synced_punches / failed_punches are "{user_id}_{timestamp}" identifiers.
+        #   { success, synced, errors, skipped, message,
+        #     synced_punches, failed_punches, skipped_punches }
+        # Each *_punches list holds "{user_id}_{timestamp}" identifiers so we
+        # can resolve every record to a definite outcome.
         synced_set = set(msg.get("synced_punches") or [])
+        skipped_set = set(msg.get("skipped_punches") or [])
         failed_set = set(msg.get("failed_punches") or [])
         error_details = msg.get("error_details") or []
-        skip_markers = [
-            d for d in error_details
-            if "already" in str(d).lower() or "duplicate" in str(d).lower()
-        ]
-        any_skipped = bool(skip_markers)
 
         results = []
         for rec in records:
             rid = f"{rec['user_id']}_{rec['timestamp_str']}"
             if rid in synced_set:
                 results.append("synced")
+            elif rid in skipped_set:
+                results.append("skipped")
             elif rid in failed_set:
-                # Server-side classification doesn't separate "skipped duplicate"
-                # from "real error", so we conservatively call any failed record
-                # an error and let the next cycle retry it (no dedup mark).
-                # If overall errors look like duplicate noise, treat as skipped.
-                results.append("skipped" if any_skipped else "error")
+                results.append("error")
             else:
-                # Server didn't enumerate this record. If global synced == total,
-                # treat as synced; otherwise error.
-                if msg.get("synced", 0) == len(records) and msg.get("errors", 0) == 0:
+                # Not individually enumerated (e.g. an older server build).
+                # Infer from totals: clean run → synced, otherwise retry it.
+                if msg.get("errors", 0) == 0 and msg.get("synced", 0) >= len(records):
                     results.append("synced")
                 else:
                     results.append("error")
@@ -816,6 +864,10 @@ class SyncEngine:
         self.last_sync_per_device = {}
         self.next_sync_at = None
         self.reschedule_event = threading.Event()
+        # Serializes run_sync across the scheduled loop and the command-tunnel
+        # thread so they can never sync the same device at once (which would
+        # race on the dedup set / state files and double-POST punches).
+        self._sync_lock = threading.Lock()
 
     def start(self):
         self.thread = threading.Thread(target=self._loop, daemon=True)
@@ -866,8 +918,7 @@ class SyncEngine:
 
     def _save_next_sync(self, ts):
         try:
-            with open(NEXT_SYNC_FILE, "w") as f:
-                json.dump({"next_sync_at": ts, "saved_at": time.time()}, f)
+            _atomic_write_json(NEXT_SYNC_FILE, {"next_sync_at": ts, "saved_at": time.time()})
         except Exception:
             pass
 
@@ -894,13 +945,15 @@ class SyncEngine:
         dates = self._load_last_sync_dates()
         dates[device_name] = d.strftime("%Y-%m-%d")
         try:
-            with open(LAST_SYNC_DATES_FILE, "w") as f:
-                json.dump(dates, f, indent=2)
+            _atomic_write_json(LAST_SYNC_DATES_FILE, dates, indent=2)
         except Exception:
             pass
 
     def _loop(self):
-        interval = int(self.config.get("sync_interval_minutes", 1440)) * 60
+        try:
+            interval = int(self.config.get("sync_interval_minutes", 1440)) * 60
+        except (TypeError, ValueError):
+            interval = 1440 * 60
         saved_next = self._load_next_sync()
         now = time.time()
 
@@ -927,43 +980,68 @@ class SyncEngine:
             self.logger.info(f"Resuming schedule — next sync in {wait_min} min")
 
         while not self.stop_event.is_set():
-            interval = int(self.config.get("sync_interval_minutes", 1440)) * 60
+            try:
+                interval = int(self.config.get("sync_interval_minutes", 1440)) * 60
+            except (TypeError, ValueError):
+                interval = 1440 * 60
+            if self.next_sync_at is None:
+                self.next_sync_at = time.time() + interval
             wait_time = max(0.0, self.next_sync_at - time.time())
             woken = self.force_event.wait(timeout=wait_time)
             if self.stop_event.is_set():
                 break
 
-            # Reschedule signal (e.g. interval changed in GUI) — don't sync, just
-            # re-evaluate the wait based on the new next_sync_at.
-            if self.reschedule_event.is_set():
-                self.reschedule_event.clear()
-                self.force_event.clear()
-                remaining = int(self.next_sync_at - time.time())
-                self.logger.info(f"Schedule updated — next sync in {remaining}s")
-                continue
+            try:
+                # Reschedule signal (e.g. interval changed in GUI) — don't sync,
+                # just re-evaluate the wait based on the new next_sync_at.
+                if self.reschedule_event.is_set():
+                    self.reschedule_event.clear()
+                    self.force_event.clear()
+                    remaining = int(self.next_sync_at - time.time())
+                    self.logger.info(f"Schedule updated — next sync in {remaining}s")
+                    continue
 
-            if woken:
+                if woken:
+                    self.force_event.clear()
+                    subset = self.force_subset
+                    from_date = self.force_from_date
+                    self.force_subset = None
+                    self.force_from_date = None
+                    self.run_sync(subset, from_date_override=from_date)
+                    # Force-sync does NOT reset the scheduled time —
+                    # the regular cycle stays on its rhythm.
+                elif not self.paused:
+                    self.run_sync()
+                    self.next_sync_at = time.time() + interval
+                    self._save_next_sync(self.next_sync_at)
+            except Exception:
+                # Never let the scheduling thread die — log and keep the cycle
+                # alive so syncing resumes on the next tick.
+                self.logger.exception("sync loop iteration failed (recovered)")
                 self.force_event.clear()
-                subset = self.force_subset
-                from_date = self.force_from_date
-                self.force_subset = None
-                self.force_from_date = None
-                self.run_sync(subset, from_date_override=from_date)
-                # Force-sync does NOT reset the scheduled time —
-                # the regular cycle stays on its rhythm.
-            elif not self.paused:
-                self.run_sync()
-                self.next_sync_at = time.time() + interval
-                self._save_next_sync(self.next_sync_at)
+                if self.next_sync_at is None or self.next_sync_at <= time.time():
+                    self.next_sync_at = time.time() + interval
 
     def run_sync(self, device_names=None, from_date_override=None):
-        devices = self.config.get("devices", [])
-        if device_names is not None:
-            devices = [d for d in devices if d["name"] in device_names]
-        for device in devices:
-            if self.stop_event.is_set():
-                return
-            self._sync_one(device, from_date_override=from_date_override)
+        # Hold the lock for the whole run so a force-sync from the command
+        # thread can't interleave with the scheduled cycle. Per-device errors
+        # are caught here so one bad device can never kill the sync thread.
+        with self._sync_lock:
+            devices = self.config.get("devices", [])
+            if device_names is not None:
+                devices = [d for d in devices if d.get("name") in device_names]
+            for device in devices:
+                if self.stop_event.is_set():
+                    return
+                try:
+                    self._sync_one(device, from_date_override=from_date_override)
+                except Exception as e:
+                    name = device.get("name", device.get("ip", "?"))
+                    self.logger.exception(f"[{name}] sync crashed (recovered)")
+                    try:
+                        self.status_callback(name, "error", f"internal error: {str(e)[:80]}")
+                    except Exception:
+                        pass
 
     def _sync_one(self, device, from_date_override=None):
         name = device["name"]
@@ -996,7 +1074,10 @@ class SyncEngine:
                     f"[{name}] last synced {last_sync_date}; fetching from that date through today"
                 )
 
-        attendances, status = client.fetch_attendance(date_from=date_from, date_to=today)
+        # No upper bound: if the device clock runs ahead, punches stamped in
+        # the "future" must still be captured rather than silently dropped by a
+        # date_to=today cutoff. The dedup set keeps re-fetches cheap.
+        attendances, status = client.fetch_attendance(date_from=date_from, date_to=None)
 
         if status == "UNREACHABLE":
             self.logger.warning(
@@ -1073,8 +1154,11 @@ class SyncEngine:
                     synced += 1
                     self.dedup.mark(k)
                 elif outcome == "skipped":
+                    # Permanently unprocessable for now (e.g. employee not yet
+                    # registered). NOT dedup-marked on purpose: if the employee
+                    # is added while the punch is still in the fetch window, the
+                    # next cycle resends it and it goes through. Not an error.
                     skipped += 1
-                    self.dedup.mark(k)
                 else:
                     errors += 1
                     last_err = err
@@ -1475,10 +1559,10 @@ class SetupWizard:
             except ValueError:
                 port = 80 if dtype == "hikvision" else 4370
 
-            if not (name and ip):
-                continue
-            # Hikvision needs username; ZKTeco needs serial (for device_id on checkins)
-            if dtype == "zkteco" and not serial:
+            # Serial is required for every device type: it's the dedup key, the
+            # heartbeat/command-tunnel identity, and the key the server matches
+            # against a registered+enabled Biometric Device (unknown → 403).
+            if not (name and ip and serial):
                 continue
             if dtype == "hikvision" and not username:
                 continue
@@ -1529,11 +1613,52 @@ class SetupWizard:
 
 
 # ============================================
+# SINGLE INSTANCE  (one bridge per machine + "summon" channel)
+# ============================================
+# A loopback-only socket doubles as the single-instance lock AND the channel
+# the user uses to open the app: the running (possibly invisible) instance
+# binds the port; a second launch fails to bind, connects, and asks the
+# running instance to show its window — then exits. Binding 127.0.0.1 does not
+# trip the Windows firewall.
+SINGLE_INSTANCE_PORT = 47291
+
+
+def acquire_single_instance():
+    """Become the one running bridge. Returns the bound listening socket if
+    we're the primary, or None if another bridge already holds the port."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        s.listen(5)
+        return s
+    except OSError:
+        s.close()
+        return None
+
+
+def signal_existing_instance():
+    """Ask the already-running bridge to show its window. Returns True only if
+    a bridge actually answered, so a non-bridge app squatting on the port
+    doesn't make us silently refuse to start."""
+    try:
+        with socket.create_connection(("127.0.0.1", SINGLE_INSTANCE_PORT), timeout=3) as c:
+            c.sendall(b"SHOW\n")
+            c.settimeout(3)
+            return c.recv(16).strip() == b"OK"
+    except OSError:
+        return False
+
+
+# ============================================
 # CONTROL PANEL
 # ============================================
 class ControlPanel:
-    def __init__(self, config):
+    def __init__(self, config, primary_sock=None, start_hidden=False):
         self.config = config
+        # Listening socket from acquire_single_instance(): kept open for our
+        # whole lifetime so no second instance can start, and used to receive
+        # "show the window" requests when the user opens the app again.
+        self.primary_sock = primary_sock
         self.root = Tk()
         self.root.title(f"K40 Bridge  v{VERSION}")
         self.root.geometry("960x640")
@@ -1545,15 +1670,78 @@ class ControlPanel:
         # Drives whether clicking the banner kicks off a self-update.
         self._known_latest_version = None
         self._self_update_running = False
+        self.tray_icon = None
+        # Whether the window is currently on screen. Drives auto-update: an
+        # invisible background instance installs updates on its own (no click);
+        # a visible one shows the banner so it doesn't interrupt active use.
+        self._visible = False
         self._build()
         self.engine.start()
         self._tick()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.tray_icon = None
-        self._setup_tray()
+        # Listen for a second launch asking us to pop the window.
+        self._start_summon_listener()
+
+        if start_hidden:
+            # Invisible background mode (scheduler / auto-start): no window and
+            # NO tray icon — the person at the PC sees nothing at all. Posting
+            # still runs. The UI appears only when someone opens the app, which
+            # summons us through the single-instance listener above.
+            self.root.withdraw()
+            self.logger.info("Started invisibly — posting in background (no window, no tray)")
+        else:
+            # Launched by hand → show the window (and tray while it's open).
+            self.root.after(0, self._reveal)
+
         # One-shot update check at startup, then a daily background re-check.
         threading.Thread(target=self._check_update_quiet, daemon=True).start()
         threading.Thread(target=self._periodic_update_check_loop, daemon=True).start()
+
+    # ── Visibility: invisible ⇆ window+tray ────────────────────────────
+    def _reveal(self):
+        """Bring the app on screen: create the tray icon and show the window.
+        Safe to call repeatedly (idempotent)."""
+        self._ensure_tray()
+        self._visible = True
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+        except Exception:
+            pass
+
+    def _start_summon_listener(self):
+        if self.primary_sock is None:
+            return
+        threading.Thread(target=self._summon_loop, daemon=True).start()
+
+    def _summon_loop(self):
+        """Accept connections from second launches and pop the window for each.
+        Never crashes the app — all errors are swallowed."""
+        sock = self.primary_sock
+        sock.settimeout(1.0)
+        while not self.engine.stop_event.is_set():
+            try:
+                conn, _ = sock.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break  # socket closed on exit
+            try:
+                data = conn.recv(64)
+                if b"SHOW" in data:
+                    self.root.after(0, self._reveal)
+                    try:
+                        conn.sendall(b"OK\n")
+                    except OSError:
+                        pass
+            except OSError:
+                pass
+            finally:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
 
     def _build(self):
         top = ttk.Frame(self.root)
@@ -1602,6 +1790,9 @@ class ControlPanel:
             self.autostart_btn.pack(side="left", padx=12)
             self._refresh_autostart_label()
 
+        # Quit = full stop. The window's X only hides the app (posting keeps
+        # running), so this is the explicit "actually stop" control.
+        ttk.Button(btns, text="Quit Bridge", command=self._quit_app).pack(side="right", padx=2)
         ttk.Button(btns, text="Open Log Folder", command=self._open_log_folder).pack(side="right", padx=2)
 
         ttk.Label(self.root, text="Recent log:").pack(anchor="w", padx=10, pady=(6, 0))
@@ -1756,16 +1947,23 @@ class ControlPanel:
         webbrowser.open(DOWNLOAD_PAGE_URL)
 
     def _check_update_quiet(self):
-        """Run on startup + once a day. Show banner only if newer version exists.
-        Caches the latest version so the banner click can self-update."""
+        """Run on startup + once a day. If a newer version exists: when the app
+        is invisible (unattended background instance) install it automatically;
+        when the window is open, just show the banner so we don't interrupt the
+        user mid-task."""
         latest, newer = check_for_update()
-        if newer:
-            self._known_latest_version = latest
+        if not newer:
+            return
+        self._known_latest_version = latest
+        self.logger.info(f"Update available: v{latest} (running v{VERSION})")
+        if not self._visible:
+            self.logger.info("Auto-installing update (running unattended in background)")
+            self.root.after(0, lambda: self._perform_self_update(latest))
+        else:
             self.root.after(0, lambda: self.update_label.config(
                 text=f"⬆ v{latest} available — click to install",
                 foreground="blue",
             ))
-            self.logger.info(f"Update available: v{latest} (running v{VERSION})")
 
     def _check_update_manual(self):
         """Manual 'Check Updates' button — always shows result + offers self-update."""
@@ -1896,8 +2094,23 @@ class ControlPanel:
                             foreground="gray",
                         ))
 
-        size_mb = os.path.getsize(installer_path) / (1024 * 1024)
-        self.logger.info(f"Self-update: downloaded {size_mb:.1f} MB")
+        # Integrity guard before we execute it: confirm we actually got a
+        # Windows executable (PE files start with "MZ") of plausible size, not
+        # an HTML error page or a truncated download. Full code-signing
+        # verification would be the real fix; this stops the worst cases.
+        size = os.path.getsize(installer_path)
+        with open(installer_path, "rb") as fh:
+            magic = fh.read(2)
+        if magic != b"MZ" or size < 200_000:
+            try:
+                os.remove(installer_path)
+            except OSError:
+                pass
+            raise ValueError(
+                f"downloaded installer failed integrity check "
+                f"(magic={magic!r}, size={size} bytes)"
+            )
+        self.logger.info(f"Self-update: downloaded {size / (1024 * 1024):.1f} MB")
         return installer_path
 
     def _launch_installer_and_exit(self, installer_path):
@@ -2004,9 +2217,10 @@ class ControlPanel:
             self.countdown_label.config(text="")
         self.root.after(1000, self._tick)
 
-    def _setup_tray(self):
-        """Create the system tray icon. Bridge keeps running when window is hidden."""
-        if not HAS_TRAY:
+    def _ensure_tray(self):
+        """Create + run the tray icon if it isn't already showing. The tray
+        only exists while the app is open; closing the window removes it."""
+        if not HAS_TRAY or self.tray_icon is not None:
             return
         try:
             img = Image.new("RGB", (64, 64), color=(40, 100, 200))
@@ -2025,32 +2239,49 @@ class ControlPanel:
             self.logger.warning(f"Tray icon could not start: {e}")
             self.tray_icon = None
 
-    def _show_window(self, *_):
-        self.root.after(0, lambda: (self.root.deiconify(), self.root.lift()))
-
-    def _on_close(self):
-        """X button = hide to tray, bridge keeps running."""
-        if self.tray_icon:
-            self.root.withdraw()
-            self.logger.info("Window hidden to tray — bridge continues running")
-        else:
-            # No tray support — fall back to ask-before-exit behavior
-            if messagebox.askyesno(
-                "Exit K40 Bridge",
-                "Closing this window will STOP the sync engine.\n\n"
-                "Do you want to exit?",
-            ):
-                self.engine.stop()
-                self.root.destroy()
-
-    def _real_exit(self, *_):
-        """Called from tray menu — fully exits the bridge."""
-        self.engine.stop()
-        if self.tray_icon:
+    def _remove_tray(self):
+        """Stop + drop the tray icon so the app becomes fully invisible again."""
+        icon, self.tray_icon = self.tray_icon, None
+        if icon is not None:
             try:
-                self.tray_icon.stop()
+                icon.stop()
             except Exception:
                 pass
+
+    def _show_window(self, *_):
+        self.root.after(0, self._reveal)
+
+    def _on_close(self):
+        """X button = go fully invisible (no window, no tray). Posting keeps
+        running in the background; the app reappears only when someone opens it
+        again. Use the Quit button (or tray → Exit) to actually stop."""
+        self._visible = False
+        self.root.withdraw()
+        self._remove_tray()
+        self.logger.info("Hidden — posting continues in background (no window, no tray)")
+
+    def _quit_app(self):
+        """Quit button — full stop, with a warning since X is the keep-running
+        action."""
+        if messagebox.askyesno(
+            "Quit K40 Bridge",
+            "Quitting STOPS attendance posting until the bridge is started again "
+            "(e.g. at next login).\n\n"
+            "To keep posting in the background, use the X button instead — it "
+            "just hides the app.\n\nQuit now?",
+        ):
+            self._real_exit()
+
+    def _real_exit(self, *_):
+        """Fully exit the bridge: stop syncing, drop the tray, release the
+        single-instance lock, and close the window."""
+        self.engine.stop()
+        self._remove_tray()
+        try:
+            if self.primary_sock:
+                self.primary_sock.close()
+        except Exception:
+            pass
         self.root.after(0, self.root.destroy)
 
     def run(self):
@@ -2061,9 +2292,22 @@ class ControlPanel:
 # MAIN
 # ============================================
 def main():
+    # One bridge per machine. If we're not the primary, the user double-clicked
+    # the exe while it's already running in the background → tell the running
+    # instance to show its window, then exit. (If nobody answers, the port is
+    # held by some other app; fall through and run without the lock rather than
+    # refusing to start.)
+    primary_sock = acquire_single_instance()
+    if primary_sock is None:
+        if signal_existing_instance():
+            return
+
     config = load_config()
+    start_hidden = START_HIDDEN
 
     if config is None or not config.get("devices"):
+        # Nothing configured yet → must set up interactively, no matter how we
+        # were launched. Show the wizard, then the visible control panel.
         boot = Tk()
         boot.withdraw()
         wizard_completed = {"value": False, "config": None}
@@ -2078,10 +2322,13 @@ def main():
         boot.destroy()
 
         if not wizard_completed["value"]:
+            if primary_sock:
+                primary_sock.close()
             return  # user cancelled
         config = wizard_completed["config"]
+        start_hidden = False  # just configured by hand → show the panel
 
-    cp = ControlPanel(config)
+    cp = ControlPanel(config, primary_sock=primary_sock, start_hidden=start_hidden)
     cp.run()
 
 
