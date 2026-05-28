@@ -41,7 +41,9 @@ body {
 /* ── Table ── */
 table { width: 100%; border-collapse: collapse; }
 thead { display: table-header-group; }
-tr    { page-break-inside: avoid; }
+/* No per-row page-break-avoid: applied to every row it makes wkhtmltopdf
+   re-paginate the whole document and is the main cause of slow renders.
+   Voucher groups are still kept together via tbody.pl-group below. */
 
 /* Column headers */
 thead th {

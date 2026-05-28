@@ -50,13 +50,50 @@ def _bal_str(v):
 
 @frappe.whitelist()
 def download_pdf(filters, orientation=None):
-	import tempfile
-	from frappe.utils.pdf import get_pdf
+	"""Queue PDF generation in the background so the web worker is never blocked.
 
+	A large ledger can take wkhtmltopdf minutes to render; doing that inline ties up a
+	worker and times out, making the whole server feel unresponsive. Instead we enqueue
+	the work and push a download link over realtime once the file is ready.
+	"""
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 
 	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
+
+	frappe.enqueue(
+		_generate_pdf_in_background,
+		queue='long',
+		timeout=900,
+		user=frappe.session.user,
+		filters=dict(filters),
+		orientation=orientation,
+	)
+	return {"queued": True}
+
+
+def _generate_pdf_in_background(filters, orientation, user):
+	try:
+		pdf_data = _render_pdf(frappe._dict(filters), orientation)
+		file_doc = frappe.get_doc({
+			"doctype": "File",
+			"file_name": "party_ledger.pdf",
+			"content": pdf_data,
+			"is_private": 1,
+		}).insert(ignore_permissions=True)
+		frappe.publish_realtime(
+			"party_ledger_pdf_ready",
+			{"file_url": file_doc.file_url},
+			user=user,
+		)
+	except Exception:
+		frappe.log_error(title="Party Ledger PDF generation failed")
+		frappe.publish_realtime("party_ledger_pdf_ready", {"error": 1}, user=user)
+
+
+def _render_pdf(filters, orientation):
+	import tempfile
+	from frappe.utils.pdf import get_pdf
 
 	_, data = execute(filters)
 
@@ -128,9 +165,7 @@ Page <span id="pn"></span>/<span id="tp"></span>
 		except FileNotFoundError:
 			pass
 
-	frappe.response.filename = 'party_ledger.pdf'
-	frappe.response.filecontent = pdf_data
-	frappe.response.type = 'download'
+	return pdf_data
 
 
 def _normalize_multiselect(value):
@@ -156,6 +191,40 @@ def _normalize_multiselect(value):
 		return [v for v in value if v]
 
 	return [value]
+
+
+@frappe.whitelist()
+def get_company_parties(party_type, company, txt=None):
+	"""Party options limited to those that actually transact in the selected company.
+
+	Customer/Supplier are global in ERPNext, so we scope the list by checking for any
+	GL Entry of that party in the company. Keeps the dropdown relevant per company.
+	"""
+	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
+	if not company:
+		return []
+
+	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
+	like = f"%{(txt or '').strip()}%"
+
+	return frappe.db.sql(
+		f"""
+		SELECT p.name AS value, p.`{name_field}` AS description
+		FROM `tab{party_type}` p
+		WHERE (p.name LIKE %(txt)s OR p.`{name_field}` LIKE %(txt)s)
+		  AND EXISTS (
+			SELECT 1 FROM `tabGL Entry` gle
+			WHERE gle.party = p.name
+			  AND gle.party_type = %(party_type)s
+			  AND gle.company = %(company)s
+			  AND gle.is_cancelled = 0
+		  )
+		ORDER BY p.`{name_field}`
+		LIMIT 50
+		""",
+		{"txt": like, "party_type": party_type, "company": company},
+		as_dict=True,
+	)
 
 
 def execute(filters=None):

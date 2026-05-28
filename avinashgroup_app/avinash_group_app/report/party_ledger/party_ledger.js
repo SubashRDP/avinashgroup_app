@@ -29,7 +29,16 @@ frappe.query_reports["Party Ledger"] = {
 			get_data: function (txt) {
 				if (!frappe.query_report.filters) return;
 				let party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
-				return frappe.db.get_link_options(party_type, txt);
+				let company = frappe.query_report.get_filter_value("company");
+				if (!company) {
+					return frappe.db.get_link_options(party_type, txt);
+				}
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.get_company_parties",
+						args: { party_type, company, txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -187,11 +196,34 @@ frappe.query_reports["Party Ledger"] = {
 				frappe.msgprint(__('Please set Company, From Date and To Date'));
 				return;
 			}
-			const url = '/api/method/avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf'
-				+ '?filters=' + encodeURIComponent(JSON.stringify(filters));
-			window.open(url);
+			frappe.call({
+				method: 'avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf',
+				args: { filters: JSON.stringify(filters) },
+				callback: function () {
+					frappe.show_alert({
+						message: __('Preparing your PDF… a download link will appear here when it is ready.'),
+						indicator: 'blue',
+					}, 7);
+				},
+			});
 		});
 
+		// Listen once for the "PDF ready" signal pushed by the background job.
+		if (!frappe.query_reports["Party Ledger"]._pdf_listener_bound) {
+			frappe.query_reports["Party Ledger"]._pdf_listener_bound = true;
+			frappe.realtime.on('party_ledger_pdf_ready', function (data) {
+				if (data && data.error) {
+					frappe.msgprint(__('Could not generate the Party Ledger PDF. Please try again.'));
+					return;
+				}
+				if (data && data.file_url) {
+					frappe.show_alert({
+						message: __('Party Ledger PDF is ready') + `: <a href="${data.file_url}" target="_blank"><b>${__('Download')}</b></a>`,
+						indicator: 'green',
+					}, 20);
+				}
+			});
+		}
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
