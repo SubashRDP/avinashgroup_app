@@ -196,16 +196,32 @@ frappe.query_reports["Party Ledger"] = {
 				frappe.msgprint(__('Please set Company, From Date and To Date'));
 				return;
 			}
-			frappe.call({
-				method: 'avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf',
-				args: { filters: JSON.stringify(filters) },
-				callback: function () {
-					frappe.show_alert({
-						message: __('Preparing your PDF… a download link will appear here when it is ready.'),
-						indicator: 'blue',
-					}, 7);
-				},
-			});
+
+			const start_download = function (orientation) {
+				orientation = orientation || 'Landscape';
+				frappe.call({
+					method: 'avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf',
+					args: { filters: JSON.stringify(filters), orientation: orientation },
+					callback: function () {
+						frappe.show_alert({
+							message: __('Preparing your {0} PDF… a download link will appear here when it is ready.', [orientation]),
+							indicator: 'blue',
+						}, 7);
+					},
+				});
+			};
+
+			// Let the user pick Portrait / Landscape (no new tab, no freeze — runs in background).
+			if (typeof window.askPrintOrientation === 'function') {
+				window.askPrintOrientation(start_download);
+			} else {
+				frappe.prompt(
+					{ fieldname: 'orientation', label: __('Orientation'), fieldtype: 'Select', options: 'Landscape\nPortrait', default: 'Landscape', reqd: 1 },
+					function (v) { start_download(v.orientation); },
+					__('Choose Orientation'),
+					__('Download')
+				);
+			}
 		});
 
 		// Listen once for the "PDF ready" signal pushed by the background job.
