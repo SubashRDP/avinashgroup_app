@@ -117,9 +117,10 @@ frappe.query_reports["Purchase Register Report"] = {
 			const filters = frappe.query_report.get_filter_values(true);
 			const selected_columns = (print_settings && print_settings.pick_columns && print_settings.columns && print_settings.columns.length)
 				? print_settings.columns : [];
+			const orientation = (print_settings && print_settings.orientation) || 'Landscape';
 			frappe.call({
 				method: 'avinashgroup_app.avinash_group_app.report.purchase_register_report.purchase_register_report.get_print_html',
-				args: { filters: JSON.stringify(filters), selected_columns: JSON.stringify(selected_columns) },
+				args: { filters: JSON.stringify(filters), selected_columns: JSON.stringify(selected_columns), orientation: orientation },
 				callback: function (r) {
 					if (!r.message) return;
 					const win = window.open('', '_blank');

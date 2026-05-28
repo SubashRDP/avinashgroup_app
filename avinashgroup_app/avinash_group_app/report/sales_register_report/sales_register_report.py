@@ -29,7 +29,7 @@ def _get_customer_display(filters):
 
 
 @frappe.whitelist()
-def get_print_html(filters, selected_columns=None):
+def get_print_html(filters, selected_columns=None, orientation=None):
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 	if isinstance(selected_columns, str):
@@ -48,17 +48,20 @@ def get_print_html(filters, selected_columns=None):
 		'fmt': _fmt_inr,
 		'sc': selected_columns or [],
 		'is_html_view': True,
+		'orientation': orientation or 'Landscape',
 		'customer_display': customer_display,
 	})
 
 
 @frappe.whitelist()
-def download_pdf(filters):
+def download_pdf(filters, orientation=None):
 	from frappe.utils.pdf import get_pdf
 	import tempfile
 
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
+
+	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
 
 	_, data = execute(filters)
 	customer_display = _get_customer_display(filters)
@@ -71,6 +74,7 @@ def download_pdf(filters):
 		'filters': filters,
 		'data': data,
 		'fmt': _fmt_inr,
+		'orientation': orientation,
 		'customer_display': customer_display,
 	})
 
@@ -96,7 +100,7 @@ Page <span id="pn"></span>/<span id="tp"></span>
 	try:
 		options = {
 			'page-size': 'A4',
-			'orientation': 'Landscape',
+			'orientation': orientation,
 			'margin-top': '10mm',
 			'margin-right': '10mm',
 			'margin-bottom': '15mm',
@@ -122,6 +126,15 @@ def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
 	data = get_data(filters)
+
+	# Sales Returns store amounts as negatives in the DB. Show them as positives in the register.
+	if filters.get("is_return") and data:
+		numeric_fields = [c["fieldname"] for c in columns if c.get("fieldtype") in ("Currency", "Float")]
+		for row in data:
+			for f in numeric_fields:
+				if row.get(f) is not None:
+					row[f] = abs(row[f])
+
 	if data:
 		total = {"date": None, "miti": None, "bill_no": _("Total"), "customer": None, "vat_number": None, "bold": 1}
 		for col in columns:

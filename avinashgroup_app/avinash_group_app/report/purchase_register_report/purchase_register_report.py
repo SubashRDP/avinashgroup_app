@@ -33,7 +33,7 @@ def _get_display_names(filters):
 
 
 @frappe.whitelist()
-def get_print_html(filters, selected_columns=None):
+def get_print_html(filters, selected_columns=None, orientation=None):
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 	if isinstance(selected_columns, str):
@@ -52,18 +52,21 @@ def get_print_html(filters, selected_columns=None):
 		'fmt': _fmt_inr,
 		'sc': selected_columns or [],
 		'is_html_view': True,
+		'orientation': orientation or 'Landscape',
 		'supplier_display': supplier_display,
 		'ptype_display': ptype_display,
 	})
 
 
 @frappe.whitelist()
-def download_pdf(filters):
+def download_pdf(filters, orientation=None):
 	from frappe.utils.pdf import get_pdf
 	import tempfile
 
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
+
+	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
 
 	_, data = execute(filters)
 	supplier_display, ptype_display = _get_display_names(filters)
@@ -78,6 +81,7 @@ def download_pdf(filters):
 		'ptype_display': ptype_display,
 		'data': data,
 		'fmt': _fmt_inr,
+		'orientation': orientation,
 	})
 
 	footer_html = """<!DOCTYPE html>
@@ -102,7 +106,7 @@ Page <span id="pn"></span>/<span id="tp"></span>
 	try:
 		options = {
 			'page-size': 'A4',
-			'orientation': 'Landscape',
+			'orientation': orientation,
 			'margin-top': '10mm',
 			'margin-right': '8mm',
 			'margin-bottom': '15mm',
@@ -128,6 +132,15 @@ def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
 	data = get_data(filters)
+
+	# Purchase Returns store amounts as negatives in the DB. Show them as positives in the register.
+	if filters.get("is_return") and data:
+		numeric_fields = [c["fieldname"] for c in columns if c.get("fieldtype") in ("Currency", "Float")]
+		for row in data:
+			for f in numeric_fields:
+				if row.get(f) is not None:
+					row[f] = abs(row[f])
+
 	if data:
 		total = {"date": None, "miti": None, "purchase_type": None, "voucher_no": _("Total"), "supplier_invoice_no": None, "supplier_invoice_date": None, "supplier_invoice_miti": None, "supplier_name": None, "vat_number": None, "bold": 1}
 		for col in columns:

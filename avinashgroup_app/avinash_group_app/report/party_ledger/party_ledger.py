@@ -49,12 +49,14 @@ def _bal_str(v):
 
 
 @frappe.whitelist()
-def download_pdf(filters):
+def download_pdf(filters, orientation=None):
 	import tempfile
 	from frappe.utils.pdf import get_pdf
 
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
+
+	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
 
 	_, data = execute(filters)
 
@@ -82,6 +84,7 @@ def download_pdf(filters):
 			'party_names': party_names,
 			'fmt': _fmt_inr,
 			'bal': _bal_str,
+			'orientation': orientation,
 		}
 	)
 
@@ -108,7 +111,7 @@ Page <span id="pn"></span>/<span id="tp"></span>
 	try:
 		options = {
 			'page-size': 'A4',
-			'orientation': 'Landscape',
+			'orientation': orientation,
 			'margin-top': '10mm',
 			'margin-right': '15mm',
 			'margin-bottom': '15mm',
@@ -183,9 +186,8 @@ def get_columns(filters=None):
 	if show_party_column:
 		columns.append({
 			"label": _("Party"),
-			"fieldname": "party",
-			"fieldtype": "Link",
-			"options": party_type,
+			"fieldname": "party_name",
+			"fieldtype": "Data",
 			"width": 220,
 		})
 

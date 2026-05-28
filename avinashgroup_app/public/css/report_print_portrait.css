@@ -1,0 +1,298 @@
+/*
+ * Global Portrait Print Stylesheet
+ *
+ * Loaded on all desk pages via hooks.app_include_css.
+ *
+ * Two scopes:
+ *   1. @media print and (orientation: portrait) — actual paper print
+ *   2. .print-format scope — Frappe's in-page print preview (screen mode)
+ *
+ * Landscape actual-print rendering is untouched (no @media print landscape rule here).
+ * Landscape in-page preview will also pick up the compact styling because the
+ * .print-format selector cannot reliably detect orientation in screen mode.
+ * Real landscape print output is unaffected.
+ */
+
+/* ─────────────────────────────────────────────
+ * SCOPE 1 — Actual print in Portrait orientation
+ * ───────────────────────────────────────────── */
+@media print and (orientation: portrait) {
+
+	@page {
+		size: A4 portrait;
+		margin: 10mm 16mm 14mm 14mm;
+	}
+
+	* {
+		box-sizing: border-box !important;
+	}
+
+	html, body {
+		max-width: 100% !important;
+		overflow-x: hidden !important;
+	}
+
+	body,
+	.print-format,
+	.reportview-container,
+	.report-wrapper,
+	.pl,
+	.layout-main-section {
+		font-size: 9.5px !important;
+		line-height: 1.45 !important;
+		color: #222 !important;
+		max-width: 100% !important;
+	}
+
+	table {
+		width: 100% !important;
+		max-width: 100% !important;
+		border-collapse: collapse !important;
+		table-layout: auto !important;
+	}
+
+	thead th,
+	table th {
+		font-size: 9.5px !important;
+		padding: 4px 5px !important;
+		line-height: 1.3 !important;
+	}
+
+	tbody td,
+	table td {
+		padding: 3px 5px !important;
+		line-height: 1.4 !important;
+		vertical-align: top !important;
+		word-break: break-word !important;
+		overflow-wrap: anywhere !important;
+	}
+
+	colgroup col {
+		width: auto !important;
+	}
+
+	td.r,
+	th.r,
+	td.text-right,
+	th.text-right,
+	.r {
+		text-align: right !important;
+	}
+
+	h1, h2, h3,
+	.pl-report-title,
+	.print-heading h2,
+	.print-heading {
+		font-size: 13px !important;
+		line-height: 1.25 !important;
+		margin: 0 0 4px 0 !important;
+	}
+
+	.pl-company-name,
+	.print-format .company-name {
+		font-size: 11px !important;
+	}
+
+	.pl-subheading {
+		font-size: 10px !important;
+		line-height: 1.25 !important;
+	}
+
+	.pl-meta-bar,
+	.pl-period-label,
+	.pl-footer {
+		font-size: 9px !important;
+	}
+
+	.pl-divider,
+	hr {
+		margin: 3px 0 5px 0 !important;
+	}
+
+	.pl-row-detail td {
+		font-size: 8.5px !important;
+		padding: 2px 5px !important;
+	}
+
+	.pl-row-detail .pl-indent-doc,
+	td.pl-indent-doc {
+		padding-left: 12px !important;
+		white-space: nowrap !important;
+	}
+
+	.pl-row-main td:nth-child(3),
+	td.voucher-no,
+	td.no-wrap {
+		white-space: nowrap !important;
+	}
+
+	.pl-indent-desc {
+		padding-left: 6px !important;
+	}
+
+	tr.pl-row-opening td,
+	tr.pl-row-closing td,
+	tr.pl-row-period td {
+		font-weight: bold !important;
+		padding: 4px 5px !important;
+	}
+
+	a, a:link, a:visited {
+		color: inherit !important;
+		text-decoration: none !important;
+	}
+
+	.btn,
+	.page-form,
+	.report-filters,
+	.standard-actions,
+	.page-head,
+	.page-actions,
+	.month-picker-wrapper,
+	nav,
+	.navbar {
+		display: none !important;
+	}
+
+	.print-format {
+		padding: 0 !important;
+		margin: 0 !important;
+	}
+
+	tr, tbody {
+		page-break-inside: avoid !important;
+	}
+
+	thead {
+		display: table-header-group !important;
+	}
+
+	tfoot {
+		display: table-footer-group !important;
+	}
+}
+
+
+/* ─────────────────────────────────────────────
+ * SCOPE 2 — In-page print preview (screen mode)
+ * Scoped to .print-format so non-print pages are not affected.
+ * ───────────────────────────────────────────── */
+
+/* Constrain the print-format box to A4 portrait shape in screen-mode
+ * preview so the popup window doesn't fill the whole browser. */
+.print-format:not(.landscape) {
+	width: 210mm !important;
+	max-width: 100% !important;
+	min-height: 297mm !important;
+	margin: 12mm auto !important;
+	padding: 10mm 14mm 12mm 14mm !important;
+	background: #ffffff !important;
+	box-shadow: 0 2px 10px rgba(0,0,0,0.18) !important;
+	box-sizing: border-box !important;
+}
+
+/* Light gray surround so the white A4 box stands out like a page */
+body:has(> .print-format-gutter > .print-format:not(.landscape)),
+body:has(> .print-format:not(.landscape)) {
+	background: #d8d8d8 !important;
+	margin: 0 !important;
+	padding: 0 !important;
+}
+
+.print-format:not(.landscape),
+.print-format:not(.landscape) .pl {
+	font-size: 9.5px !important;
+	line-height: 1.45 !important;
+	color: #222 !important;
+}
+
+.print-format:not(.landscape) * {
+	box-sizing: border-box !important;
+}
+
+.print-format:not(.landscape) table {
+	width: 100% !important;
+	max-width: 100% !important;
+	border-collapse: collapse !important;
+	table-layout: auto !important;
+}
+
+.print-format:not(.landscape) thead th,
+.print-format:not(.landscape) table th {
+	font-size: 9.5px !important;
+	padding: 4px 5px !important;
+	line-height: 1.3 !important;
+}
+
+.print-format:not(.landscape) tbody td,
+.print-format:not(.landscape) table td {
+	padding: 3px 5px !important;
+	line-height: 1.4 !important;
+	vertical-align: top !important;
+	word-break: break-word !important;
+	overflow-wrap: anywhere !important;
+}
+
+.print-format:not(.landscape) colgroup col {
+	width: auto !important;
+}
+
+.print-format:not(.landscape) h1,
+.print-format:not(.landscape) h2,
+.print-format:not(.landscape) h3,
+.print-format:not(.landscape) .pl-report-title,
+.print-format:not(.landscape) .print-heading h2,
+.print-format:not(.landscape) .print-heading {
+	font-size: 13px !important;
+	line-height: 1.25 !important;
+	margin: 0 0 4px 0 !important;
+}
+
+.print-format:not(.landscape) .pl-company-name,
+.print-format:not(.landscape) .company-name {
+	font-size: 11px !important;
+}
+
+.print-format:not(.landscape) .pl-subheading {
+	font-size: 10px !important;
+	line-height: 1.25 !important;
+}
+
+.print-format:not(.landscape) .pl-meta-bar,
+.print-format:not(.landscape) .pl-period-label,
+.print-format:not(.landscape) .pl-footer {
+	font-size: 9px !important;
+}
+
+.print-format:not(.landscape) .pl-divider,
+.print-format:not(.landscape) hr {
+	margin: 3px 0 5px 0 !important;
+}
+
+.print-format:not(.landscape) .pl-row-detail td {
+	font-size: 8.5px !important;
+	padding: 2px 5px !important;
+}
+
+.print-format:not(.landscape) .pl-row-detail .pl-indent-doc,
+.print-format:not(.landscape) td.pl-indent-doc {
+	padding-left: 12px !important;
+	white-space: nowrap !important;
+}
+
+.print-format:not(.landscape) .pl-row-main td:nth-child(3),
+.print-format:not(.landscape) td.voucher-no,
+.print-format:not(.landscape) td.no-wrap {
+	white-space: nowrap !important;
+}
+
+.print-format:not(.landscape) .pl-indent-desc {
+	padding-left: 6px !important;
+}
+
+.print-format:not(.landscape) tr.pl-row-opening td,
+.print-format:not(.landscape) tr.pl-row-closing td,
+.print-format:not(.landscape) tr.pl-row-period td {
+	font-weight: bold !important;
+	padding: 4px 5px !important;
+}
