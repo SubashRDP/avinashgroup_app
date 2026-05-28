@@ -362,6 +362,10 @@ def run_attendance_fix_in_background(doc_name: str):
     doc.db_set("status", "Running", update_modified=False)
     frappe.db.commit()
 
+    # The worker runs as Administrator (above), but audit fields on the
+    # Attendance rows it creates should credit whoever created this fix.
+    frappe.flags.audit_user = doc.owner
+
     try:
         doc._run_fix()
         doc.db_set(
@@ -389,6 +393,8 @@ def run_attendance_fix_in_background(doc_name: str):
         frappe.db.commit()
         frappe.log_error(message=traceback, title=f"Attendance Fix {doc_name} failed")
         raise
+    finally:
+        frappe.flags.audit_user = None
 
 
 def _get_holiday_dates(employee, from_date, to_date) -> set:
