@@ -17,6 +17,7 @@
   "device_model",
   "connection_status",
   "sync_information_section",
+  "last_contact_time",
   "last_sync_time",
   "total_synced",
   "column_break_2",
@@ -102,7 +103,14 @@
    "label": "Sync Information"
   },
   {
-   "description": "Last time attendance was synced",
+   "description": "Last time the bridge made contact (every sync cycle, even if no new punches). Heartbeat alerting is based on this field.",
+   "fieldname": "last_contact_time",
+   "fieldtype": "Datetime",
+   "label": "Last Contact Time",
+   "read_only": 1
+  },
+  {
+   "description": "Last time at least one new punch was actually synced (data movement, not just connectivity).",
    "fieldname": "last_sync_time",
    "fieldtype": "Datetime",
    "label": "Last Sync Time",

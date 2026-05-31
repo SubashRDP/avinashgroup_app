@@ -3,9 +3,10 @@ email the configured recipients.
 
 How it works:
   - For each enabled Biometric Device with at least one Alert Recipient, compare
-    `last_sync_time` against `alert_threshold_minutes`. Devices with no recorded
-    sync at all are treated as Disconnected (until the bridge POSTs the first
-    punch, which sets `last_sync_time`).
+    `last_contact_time` against `alert_threshold_minutes`. `last_contact_time`
+    is updated every sync cycle by the bridge (via the heartbeat endpoint),
+    whether or not new punches were found — that way a genuinely quiet device
+    (no new punches) does NOT look indistinguishable from a dead bridge.
   - Only emails on a *transition*: Connected → Disconnected fires a "down" mail,
     Disconnected → Connected fires a "recovered" mail. So a permanently down
     device emails once, not every hour.
@@ -16,7 +17,10 @@ How it works:
 from datetime import timedelta
 
 import frappe
+from frappe import _
 from frappe.utils import get_datetime, now_datetime
+
+from avinashgroup_app.biometric.utils import assert_known_device
 
 
 def check_bridge_heartbeats() -> dict:
@@ -29,6 +33,7 @@ def check_bridge_heartbeats() -> dict:
             "device_name",
             "device_serial",
             "device_ip",
+            "last_contact_time",
             "last_sync_time",
             "alert_threshold_minutes",
             "connection_status",
@@ -47,7 +52,11 @@ def check_bridge_heartbeats() -> dict:
         threshold = int(d.alert_threshold_minutes or 120)
         stale_after = now - timedelta(minutes=threshold)
 
-        is_connected = bool(d.last_sync_time and get_datetime(d.last_sync_time) >= stale_after)
+        # Prefer last_contact_time (every cycle). Fall back to last_sync_time
+        # for legacy rows that pre-date the field — once the bridge upgrades
+        # to ping the heartbeat endpoint, last_contact_time will start winning.
+        contact_time = d.last_contact_time or d.last_sync_time
+        is_connected = bool(contact_time and get_datetime(contact_time) >= stale_after)
         new_status = "Connected" if is_connected else "Disconnected"
         old_status = d.connection_status or ""
 
@@ -88,8 +97,29 @@ def _get_recipient_emails(device_name: str) -> list[str]:
     return [r.email for r in rows if r.email]
 
 
+@frappe.whitelist(methods=["POST"])
+def ping(device_serial: str) -> dict:
+    """Bridge calls this every sync cycle to update `last_contact_time`,
+    whether or not new punches were pushed. That's what lets the heartbeat
+    distinguish "bridge is alive but device is quiet" from "bridge is dead".
+
+    Gated by assert_known_device — unknown/disabled serial → 403.
+    """
+    device_name = assert_known_device(device_serial)
+    frappe.db.set_value(
+        "Biometric Device",
+        device_name,
+        "last_contact_time",
+        now_datetime(),
+        update_modified=False,
+    )
+    frappe.db.commit()
+    return {"ok": True, "device": device_name}
+
+
 def _send_down_email(d, recipients, threshold_minutes, now):
-    last = get_datetime(d.last_sync_time).strftime("%Y-%m-%d %H:%M:%S") if d.last_sync_time else "never"
+    last_contact = d.last_contact_time or d.last_sync_time
+    last = get_datetime(last_contact).strftime("%Y-%m-%d %H:%M:%S") if last_contact else "never"
     subject = f"[Biometric] Bridge for '{d.device_name}' has stopped syncing"
     message = (
         f"<p>The biometric device <b>{d.device_name}</b> "
@@ -108,7 +138,8 @@ def _send_down_email(d, recipients, threshold_minutes, now):
 
 
 def _send_recovered_email(d, recipients, now):
-    last = get_datetime(d.last_sync_time).strftime("%Y-%m-%d %H:%M:%S") if d.last_sync_time else "—"
+    last_contact = d.last_contact_time or d.last_sync_time
+    last = get_datetime(last_contact).strftime("%Y-%m-%d %H:%M:%S") if last_contact else "—"
     subject = f"[Biometric] Bridge for '{d.device_name}' is syncing again"
     message = (
         f"<p>The biometric device <b>{d.device_name}</b> resumed syncing.</p>"

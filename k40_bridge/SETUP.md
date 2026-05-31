@@ -173,16 +173,17 @@ Logs live in `%APPDATA%\K40Bridge\k40_bridge.log` (last 5 rotated files, 10 MB e
 If you ever need to push punches without the bridge (testing, alternate scripts):
 
 ```http
-POST /api/method/avinashgroup_app.biometric.biometric_integration.zkteco_push_attendance
+POST /api/method/avinashgroup_app.biometric.api.receive_attendance
 Authorization: token KEY:SECRET
 Content-Type: application/json
 
 {
-  "device_id": "A6F5215360564",
-  "employee_id": "42",
-  "punch_time": "2026-05-19 09:00:00",
-  "punch_type": "IN"
+  "device_identifier": "A6F5215360564",
+  "attendance_data": [
+    {"user_id": "42", "timestamp": "2026-05-19 09:00:00"},
+    {"user_id": "42", "timestamp": "2026-05-19 13:30:00"}
+  ]
 }
 ```
 
-`punch_type` in the payload is **ignored** by the server — IN/OUT is computed from chronological position across all punches for that (employee, date). One POST per punch.
+`device_identifier` must match a registered `Biometric Device.device_serial` (with `enabled=1`) or the request is rejected 403. IN/OUT is computed from chronological position across all punches for that (employee, date) — you don't supply it.

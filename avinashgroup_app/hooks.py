@@ -1,4 +1,5 @@
 from avinashgroup_app.utils.audit_file_manager import AuditEventMapper
+from avinashgroup_app.custom_code.fiscal_year_filter import FILTERED_DOCTYPES
 
 app_name = "avinashgroup_app"
 app_title = "Avinash Group App"
@@ -164,6 +165,22 @@ for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)
     _add_doc_event(_dt, "on_trash", _clear_filter_cache)
 
+# Fiscal Year Filter Hooks
+_clear_user_fiscal_cache = "avinashgroup_app.custom_code.fiscal_year_filter.clear_user_fiscal_cache"
+_add_doc_event("User", "on_update", _clear_user_fiscal_cache)
+
+# List view filtering via SQL WHERE conditions
+permission_query_conditions = {
+    _dt: f"avinashgroup_app.custom_code.fiscal_year_filter.query_conditions_{_dt.replace(' ', '_').lower()}"
+    for _dt in FILTERED_DOCTYPES
+}
+
+# Per-document access control
+has_permission = {
+    _dt: "avinashgroup_app.custom_code.fiscal_year_filter.has_fiscal_year_permission"
+    for _dt in FILTERED_DOCTYPES
+}
+
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
@@ -196,6 +213,7 @@ override_whitelisted_methods = {
     "erpnext.stock.get_item_details.get_item_details": "avinashgroup_app.custom_code.Override.get_item_details.get_item_details",
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
     "frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
+    "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",
 }
 
 fixtures = [

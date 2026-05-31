@@ -106,7 +106,7 @@ def process_attendance_records(attendance_data, device_identifier=None):
 
             if not employee:
                 errors += 1
-                error_details.append(f"Employee not found for device ID: {user_id}")
+                error_details.append(f"Employee not found having ID: {user_id} in device {device_identifier}")
                 failed_punches.extend(group_record_ids)
                 continue
 

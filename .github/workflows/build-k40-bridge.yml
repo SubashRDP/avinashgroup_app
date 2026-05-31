@@ -72,8 +72,13 @@ jobs:
             Download `K40BridgeSetup.exe` below and run it on the Windows machine.
             See `k40_bridge/README.md` for setup instructions.
 
-            Bridge points at:
-              `/api/method/avinashgroup_app.biometric.biometric_integration.zkteco_push_attendance`
+            Server endpoints this bridge uses:
+              - `…/avinashgroup_app.biometric.api.receive_attendance` (batched punch ingest)
+              - `…/avinashgroup_app.biometric.heartbeat.ping` (every-cycle liveness)
+              - `…/avinashgroup_app.biometric.bridge_commands.poll_commands` (Force Sync tunnel)
+              - `…/avinashgroup_app.biometric.bridge_commands.report_command_result`
+
+            Each device must be registered in `Biometric Device` with its hardware serial and `enabled=1` — unknown serials get HTTP 403.
           files: |
             dist/k40_bridge.exe
             k40_bridge/Output/K40BridgeSetup.exe

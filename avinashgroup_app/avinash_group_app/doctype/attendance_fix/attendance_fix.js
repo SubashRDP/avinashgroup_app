@@ -13,13 +13,26 @@ frappe.ui.form.on("Attendance Fix", {
 			console.warn("Attendance Fix: could not filter device picker", e);
 		}
 
-		if (frm.doc.docstatus === 1 && frm.doc.status === "Fixed") {
-			frm.dashboard.set_headline_alert(
-				`Fixed: ${frm.doc.attendance_created_or_updated} attendance row(s), ` +
-				`${frm.doc.checkins_relinked} checkin(s) relinked, ` +
-				`${frm.doc.absent_rows_deleted} stale Absent row(s) deleted.`,
-				"green",
-			);
+		if (frm.doc.docstatus === 1) {
+			if (frm.doc.status === "Queued" || frm.doc.status === "Running") {
+				frm.dashboard.set_headline_alert(
+					`Reconciliation is ${frm.doc.status.toLowerCase()} in the background worker. ` +
+					`This page won't auto-refresh — reload to see progress.`,
+					"orange",
+				);
+			} else if (frm.doc.status === "Fixed") {
+				frm.dashboard.set_headline_alert(
+					`Fixed: ${frm.doc.attendance_created_or_updated} attendance row(s), ` +
+					`${frm.doc.checkins_relinked} checkin(s) relinked, ` +
+					`${frm.doc.absent_rows_deleted} stale Absent row(s) deleted.`,
+					"green",
+				);
+			} else if (frm.doc.status === "Failed") {
+				frm.dashboard.set_headline_alert(
+					`Reconciliation failed — see the Log field for the traceback.`,
+					"red",
+				);
+			}
 		}
 	},
 });

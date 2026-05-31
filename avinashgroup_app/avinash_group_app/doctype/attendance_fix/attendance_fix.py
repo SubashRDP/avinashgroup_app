@@ -292,6 +292,56 @@ class AttendanceFix(Document):
         )
 
 
+def run_attendance_fix_in_background(doc_name: str):
+    """Background worker entry point.
+
+    Opens the queued Attendance Fix doc, flips status to Running, executes
+    _run_fix(), and persists Fixed/Failed plus counters and log.
+
+    Runs as Administrator so HR users without write-on-submit perms don't
+    block the worker, and so stock HRMS helpers that do their own
+    permission checks don't fail mid-loop.
+    """
+    frappe.set_user("Administrator")
+
+    doc = frappe.get_doc("Attendance Fix", doc_name)
+    if doc.docstatus != 1:
+        return  # cancelled/amended before worker picked it up
+    if doc.status not in ("Queued", "Running"):
+        return  # already finished — don't redo
+
+    doc.db_set("status", "Running", update_modified=False)
+    frappe.db.commit()
+
+    try:
+        doc._run_fix()
+        doc.db_set(
+            {
+                "status": "Fixed",
+                "employees_processed": doc.employees_processed,
+                "absent_rows_deleted": doc.absent_rows_deleted,
+                "attendance_created_or_updated": doc.attendance_created_or_updated,
+                "checkins_relinked": doc.checkins_relinked,
+                "log": doc.log,
+            },
+            update_modified=False,
+        )
+        frappe.db.commit()
+    except Exception:
+        frappe.db.rollback()
+        traceback = frappe.get_traceback()
+        doc.db_set(
+            {
+                "status": "Failed",
+                "log": (doc.log or "") + "\n\nFATAL:\n" + traceback[-4000:],
+            },
+            update_modified=False,
+        )
+        frappe.db.commit()
+        frappe.log_error(message=traceback, title=f"Attendance Fix {doc_name} failed")
+        raise
+
+
 def _get_holiday_dates(employee, from_date, to_date) -> set:
     holiday_list = frappe.db.get_value("Employee", employee, "holiday_list")
     if not holiday_list:
