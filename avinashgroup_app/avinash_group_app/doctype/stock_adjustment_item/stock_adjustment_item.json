@@ -11,8 +11,7 @@
   "warehouse",
   "uom",
   "adjustment_qty",
-  "rate",
-  "stock_entry"
+  "rate"
  ],
  "fields": [
   {
@@ -61,14 +60,6 @@
    "in_list_view": 1,
    "label": "Rate",
    "precision": "6"
-  },
-  {
-   "fieldname": "stock_entry",
-   "fieldtype": "Link",
-   "label": "Stock Entry",
-   "no_copy": 1,
-   "options": "Stock Entry",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,
