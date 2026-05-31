@@ -557,10 +557,20 @@ def set_audit_fields(doc, method=None):
         from_ui = False
 
     if from_ui:
-        if doc.is_new():
-            doc.custom_created_by = frappe.session.user
-            doc.custom_created_on = frappe.utils.now_datetime()
-        doc.custom_modified_by = frappe.session.user
+        user = frappe.session.user
+    else:
+        # Background jobs (e.g. Attendance Fix) run without a request and as
+        # Administrator; honour an explicit audit_user flag so the user who
+        # triggered the job is recorded instead.
+        user = getattr(frappe.flags, "audit_user", None)
+
+    if not user:
+        return
+
+    if doc.is_new():
+        doc.custom_created_by = user
+        doc.custom_created_on = frappe.utils.now_datetime()
+    doc.custom_modified_by = user
 
 
 def validate(doc, method=None):

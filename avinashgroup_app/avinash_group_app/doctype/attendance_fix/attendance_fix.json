@@ -16,6 +16,8 @@
   "devices",
   "scope_section",
   "status",
+  "progress_percentage",
+  "progress_message",
   "summary_section",
   "employees_processed",
   "absent_rows_deleted",
@@ -95,6 +97,21 @@
    "label": "Status",
    "options": "Pending\nQueued\nRunning\nFixed\nFailed",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "progress_percentage",
+   "fieldtype": "Int",
+   "label": "Progress %",
+   "read_only": 1,
+   "description": "Real-time progress of the background job"
+  },
+  {
+   "fieldname": "progress_message",
+   "fieldtype": "Data",
+   "label": "Current Step",
+   "read_only": 1,
+   "description": "What is currently being processed"
   },
   {
    "collapsible": 0,

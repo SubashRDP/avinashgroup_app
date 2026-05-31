@@ -1,6 +1,12 @@
 
 
 frappe.query_reports["Monthly Attendance BS"] = {
+	onload: async function (report) {
+		_make_full_width(report);
+		_setup_fiscal_year_visibility(report);
+		await _init_default_fiscal_year(report);
+	},
+
 	filters: [
 		{
 			fieldname: "company",
@@ -15,7 +21,6 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			label: __("Fiscal Year"),
 			fieldtype: "Link",
 			options: "Fiscal Year",
-			default: frappe.defaults.get_user_default("fiscal_year"),
 			description: __("BS fiscal year, e.g. 82/83 covering Shrawan 2082 to Ashad 2083."),
 		},
 		{
@@ -92,10 +97,6 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		},
 	],
 
-	onload: function (report) {
-		_make_full_width(report);
-	},
-
 	formatter: function (value, row, column, data, default_formatter) {
 		value = default_formatter(value, row, column, data, { css: {} });
 		if (!data) return value;
@@ -119,6 +120,44 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		return value;
 	},
 };
+
+async function _init_default_fiscal_year(report) {
+	if (typeof window.FiscalYearCache === "undefined") {
+		console.warn("⚠️ FiscalYearCache not loaded");
+		return;
+	}
+
+	const fy = await window.FiscalYearCache.getDefaultFiscalYear();
+	if (fy) {
+		frappe.query_report.set_filter_value("fiscal_year", fy);
+		frappe.query_report.set_filter_value("bs_month", _default_bs_month());
+	}
+}
+
+function _setup_fiscal_year_visibility(report) {
+	const updateADVisibility = () => {
+		const hasFY = frappe.query_report.get_filter_value("fiscal_year");
+		const hasBSMonth = frappe.query_report.get_filter_value("bs_month");
+		const useAD = !hasFY || !hasBSMonth;
+
+		const $fromDate = $(`.frappe-control[data-fieldname="from_date"]`);
+		const $toDate = $(`.frappe-control[data-fieldname="to_date"]`);
+
+		if (useAD) {
+			$fromDate.show().removeClass("hide");
+			$toDate.show().removeClass("hide");
+		} else {
+			$fromDate.hide().addClass("hide");
+			$toDate.hide().addClass("hide");
+		}
+	};
+
+	updateADVisibility();
+
+	frappe.query_report.page.wrapper.on("change", ".report-filters input, .report-filters select", () => {
+		setTimeout(() => updateADVisibility(), 100);
+	});
+}
 
 function _make_full_width(report) {
 	// Stretch every Frappe v15 layout wrapper so the wide grid uses the full viewport.
