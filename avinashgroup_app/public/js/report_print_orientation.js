@@ -26,6 +26,42 @@
 (function () {
 
 	const PRINT_PORTRAIT_CSS = "/assets/avinashgroup_app/css/report_print_portrait.css?v=4";
+	const PORTRAIT_CSS_ID    = "rdp-portrait-print-css";
+
+	// ─────────────────────────────────────────────────────────────────
+	// 0) Scope guard — only act on query-report routes. Loading the
+	//    portrait stylesheet globally would change every doctype's
+	//    print format too; we want it to affect reports only.
+	// ─────────────────────────────────────────────────────────────────
+
+	function isReportRoute() {
+		const p = (window.location && window.location.pathname) || "";
+		return p.indexOf("/app/query-report/") === 0;
+	}
+
+	function ensurePortraitCssLoaded() {
+		const existing = document.getElementById(PORTRAIT_CSS_ID);
+		if (!isReportRoute()) {
+			if (existing) existing.remove();
+			return;
+		}
+		if (existing) return;
+		const link = document.createElement("link");
+		link.id   = PORTRAIT_CSS_ID;
+		link.rel  = "stylesheet";
+		link.href = PRINT_PORTRAIT_CSS;
+		document.head.appendChild(link);
+	}
+
+	// Apply once now and again on every route change.
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", ensurePortraitCssLoaded);
+	} else {
+		ensurePortraitCssLoaded();
+	}
+	if (typeof frappe !== "undefined" && frappe.router && typeof frappe.router.on === "function") {
+		frappe.router.on("change", ensurePortraitCssLoaded);
+	}
 
 	// ─────────────────────────────────────────────────────────────────
 	// 1) Side-by-side orientation dialog
@@ -134,6 +170,9 @@
 	}
 
 	function processPopup(win) {
+		// Don't touch popups opened from a non-report context — those are
+		// doctype print previews and must render with their own format.
+		if (!isReportRoute()) return;
 		injectPrintCss(win);
 		fitContentToPage(win);
 	}

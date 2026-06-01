@@ -22,12 +22,13 @@ app_include_js = [
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
-    "/assets/avinashgroup_app/js/report_print_orientation.js?v=5",
+    "/assets/avinashgroup_app/js/report_print_orientation.js?v=6",
 ]
 
-app_include_css = [
-    "/assets/avinashgroup_app/css/report_print_portrait.css?v=4",
-]
+# report_print_portrait.css is no longer loaded globally — it would change every
+# doctype print format too. report_print_orientation.js injects it dynamically
+# only when the user is on a query-report route.
+app_include_css = []
 
 doctype_js = {
     "Purchase Order": "public/js/purchase_order.js",
