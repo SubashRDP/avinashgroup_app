@@ -167,7 +167,7 @@ def get_columns():
 		{"fieldname": "vat",                   "label": _("VAT"),                     "fieldtype": "Currency",        "width": 110},
 		{"fieldname": "taxable_import",        "label": _("Taxable Import"),          "fieldtype": "Currency",        "width": 140},
 		{"fieldname": "import_vat",            "label": _("Import VAT"),              "fieldtype": "Currency",        "width": 110},
-		{"fieldname": "capitalized_purchase",  "label": _("Capitalized Purchase VAT"),"fieldtype": "Currency",        "width": 170},
+		{"fieldname": "capitalized_purchase",  "label": _("Capitalized Purchase"),    "fieldtype": "Currency",        "width": 170},
 		{"fieldname": "capitalized_vat",       "label": _("Capitalized VAT"),         "fieldtype": "Currency",        "width": 120},
 		{"fieldname": "total_vat",             "label": _("Total VAT"),               "fieldtype": "Currency",        "width": 110},
 		{"fieldname": "qty",                   "label": _("QTY"),                     "fieldtype": "Float",           "width": 80},
