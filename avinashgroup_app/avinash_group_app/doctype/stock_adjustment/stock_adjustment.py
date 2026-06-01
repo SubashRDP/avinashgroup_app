@@ -26,6 +26,13 @@ class StockAdjustment(StockController):
 						"correction; use Stock Entry for value-bearing movements."
 					).format(row.idx)
 				)
+			warehouse_company = frappe.db.get_value("Warehouse", row.warehouse, "company")
+			if warehouse_company and warehouse_company != self.company:
+				frappe.throw(
+					_(
+						"Row #{0}: Warehouse {1} does not belong to company {2}"
+					).format(row.idx, row.warehouse, self.company)
+				)
 
 	def on_submit(self):
 		self.update_stock_ledger()
