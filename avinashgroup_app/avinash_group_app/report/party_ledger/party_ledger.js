@@ -190,6 +190,9 @@ frappe.query_reports["Party Ledger"] = {
 	},
 
 	onload: function (_report) {
+		const ctx = frappe.query_reports["Party Ledger"];
+		ctx._pending_pdf_windows = ctx._pending_pdf_windows || [];
+
 		_report.page.add_inner_button(__('Download PDF'), function () {
 			const filters = frappe.query_report.get_filter_values(true);
 			if (!filters.company || !filters.from_date || !filters.to_date) {
@@ -199,19 +202,31 @@ frappe.query_reports["Party Ledger"] = {
 
 			const start_download = function (orientation) {
 				orientation = orientation || 'Landscape';
+
+				// Open the tab right now while we still have the user's click —
+				// that way no popup blocker fires and it feels like the old flow.
+				// The tab shows "Preparing…" and is auto-navigated to the PDF
+				// the moment the background job finishes (see realtime listener).
+				const pdf_window = window.open('about:blank', '_blank');
+				if (pdf_window) {
+					try {
+						pdf_window.document.write(
+							'<!DOCTYPE html><html><head><title>' + __('Preparing PDF…') + '</title></head>' +
+							'<body style="font-family:Arial,sans-serif;padding:40px;text-align:center;color:#333">' +
+							'<h2>' + __('Preparing your {0} Party Ledger PDF…', [orientation]) + '</h2>' +
+							'<p>' + __('This tab will load the PDF automatically when it is ready. Please keep it open.') + '</p>' +
+							'</body></html>'
+						);
+					} catch (e) { /* about:blank write can fail in odd cases — ignore */ }
+					ctx._pending_pdf_windows.push(pdf_window);
+				}
+
 				frappe.call({
 					method: 'avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf',
 					args: { filters: JSON.stringify(filters), orientation: orientation },
-					callback: function () {
-						frappe.show_alert({
-							message: __('Preparing your {0} PDF… a download link will appear here when it is ready.', [orientation]),
-							indicator: 'blue',
-						}, 7);
-					},
 				});
 			};
 
-			// Let the user pick Portrait / Landscape (no new tab, no freeze — runs in background).
 			if (typeof window.askPrintOrientation === 'function') {
 				window.askPrintOrientation(start_download);
 			} else {
@@ -224,20 +239,28 @@ frappe.query_reports["Party Ledger"] = {
 			}
 		});
 
-		// Listen once for the "PDF ready" signal pushed by the background job.
-		if (!frappe.query_reports["Party Ledger"]._pdf_listener_bound) {
-			frappe.query_reports["Party Ledger"]._pdf_listener_bound = true;
+		// One realtime listener for the page. When a PDF finishes building, navigate
+		// the oldest still-open "Preparing…" tab to the file URL. If the user closed
+		// every tab, fall back to a clickable alert.
+		if (!ctx._pdf_listener_bound) {
+			ctx._pdf_listener_bound = true;
 			frappe.realtime.on('party_ledger_pdf_ready', function (data) {
 				if (data && data.error) {
 					frappe.msgprint(__('Could not generate the Party Ledger PDF. Please try again.'));
 					return;
 				}
-				if (data && data.file_url) {
-					frappe.show_alert({
-						message: __('Party Ledger PDF is ready') + `: <a href="${data.file_url}" target="_blank"><b>${__('Download')}</b></a>`,
-						indicator: 'green',
-					}, 20);
+				if (!data || !data.file_url) return;
+
+				while (ctx._pending_pdf_windows.length) {
+					const w = ctx._pending_pdf_windows.shift();
+					if (w && !w.closed) {
+						try { w.location = data.file_url; return; } catch (e) { /* try next */ }
+					}
 				}
+				frappe.show_alert({
+					message: __('Party Ledger PDF is ready') + `: <a href="${data.file_url}" target="_blank"><b>${__('Download')}</b></a>`,
+					indicator: 'green',
+				}, 20);
 			});
 		}
 	},
