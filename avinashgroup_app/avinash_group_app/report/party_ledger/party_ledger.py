@@ -50,50 +50,13 @@ def _bal_str(v):
 
 @frappe.whitelist()
 def download_pdf(filters, orientation=None):
-	"""Queue PDF generation in the background so the web worker is never blocked.
+	import tempfile
+	from frappe.utils.pdf import get_pdf
 
-	A large ledger can take wkhtmltopdf minutes to render; doing that inline ties up a
-	worker and times out, making the whole server feel unresponsive. Instead we enqueue
-	the work and push a download link over realtime once the file is ready.
-	"""
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 
 	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
-
-	frappe.enqueue(
-		_generate_pdf_in_background,
-		queue='long',
-		timeout=900,
-		user=frappe.session.user,
-		filters=dict(filters),
-		orientation=orientation,
-	)
-	return {"queued": True}
-
-
-def _generate_pdf_in_background(filters, orientation, user):
-	try:
-		pdf_data = _render_pdf(frappe._dict(filters), orientation)
-		file_doc = frappe.get_doc({
-			"doctype": "File",
-			"file_name": "party_ledger.pdf",
-			"content": pdf_data,
-			"is_private": 1,
-		}).insert(ignore_permissions=True)
-		frappe.publish_realtime(
-			"party_ledger_pdf_ready",
-			{"file_url": file_doc.file_url},
-			user=user,
-		)
-	except Exception:
-		frappe.log_error(title="Party Ledger PDF generation failed")
-		frappe.publish_realtime("party_ledger_pdf_ready", {"error": 1}, user=user)
-
-
-def _render_pdf(filters, orientation):
-	import tempfile
-	from frappe.utils.pdf import get_pdf
 
 	_, data = execute(filters)
 
@@ -165,7 +128,9 @@ Page <span id="pn"></span>/<span id="tp"></span>
 		except FileNotFoundError:
 			pass
 
-	return pdf_data
+	frappe.response.filename = 'party_ledger.pdf'
+	frappe.response.filecontent = pdf_data
+	frappe.response.type = 'download'
 
 
 def _normalize_multiselect(value):
