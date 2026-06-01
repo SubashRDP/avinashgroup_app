@@ -303,8 +303,8 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
           <td></td><td></td><td></td>
           <td>Opening Balance</td>
           {% if has_detail %}<td colspan="3"></td>{% endif %}
-          <td class="r">{{ fmt(row.get('debit'))  }}</td>
-          <td class="r">{{ fmt(row.get('credit')) }}</td>
+          <td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>
+          <td class="r nowrap">{{ fmt(row.get('credit')) }}</td>
           <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
         </tr>
       {% elif row.get('is_summary') and row.get('description') == 'For the Periods' %}
@@ -312,8 +312,8 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
           <td></td><td></td><td></td>
           <td>For the Periods</td>
           {% if has_detail %}<td colspan="3"></td>{% endif %}
-          <td class="r">{{ fmt(row.get('debit'))  }}</td>
-          <td class="r">{{ fmt(row.get('credit')) }}</td>
+          <td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>
+          <td class="r nowrap">{{ fmt(row.get('credit')) }}</td>
           <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
         </tr>
       {% elif row.get('is_summary') %}
@@ -322,8 +322,8 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
           <td style="font-size:11px;">{{ row.get('voucher_no') or '' }}</td>
           <td>Closing Balance</td>
           {% if has_detail %}<td colspan="3"></td>{% endif %}
-          <td class="r">{{ fmt(row.get('debit'))  }}</td>
-          <td class="r">{{ fmt(row.get('credit')) }}</td>
+          <td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>
+          <td class="r nowrap">{{ fmt(row.get('credit')) }}</td>
           <td class="r nowrap">{{ bal(row.get('balance')) }}</td>
         </tr>
       {% endif %}

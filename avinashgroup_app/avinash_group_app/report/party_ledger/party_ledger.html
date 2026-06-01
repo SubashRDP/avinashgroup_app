@@ -385,8 +385,8 @@
             <td></td><td></td><td></td>
             <td>Opening Balance</td>
             {% if (_has_detail) { %}<td colspan="3"></td>{% } %}
-            <td class="r">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
-            <td class="r">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
+            <td class="r nowrap">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
+            <td class="r nowrap">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
             <td class="r nowrap">{%= _bal(_row.balance) %}</td>
           </tr>
         {% } else if (_row.is_summary && _row.description === 'For the Periods') { %}
@@ -394,8 +394,8 @@
             <td></td><td></td><td></td>
             <td>For the Periods</td>
             {% if (_has_detail) { %}<td colspan="3"></td>{% } %}
-            <td class="r">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
-            <td class="r">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
+            <td class="r nowrap">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
+            <td class="r nowrap">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
             <td class="r nowrap">{%= _bal(_row.balance) %}</td>
           </tr>
         {% } else if (_row.is_summary) { %}
@@ -405,8 +405,8 @@
             <td style="font-size:11px;">{%= _row.voucher_no || '' %}</td>
             <td>Closing Balance</td>
             {% if (_has_detail) { %}<td colspan="3"></td>{% } %}
-            <td class="r">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
-            <td class="r">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
+            <td class="r nowrap">{%= _row.debit  ? _fc(_row.debit)  : '' %}</td>
+            <td class="r nowrap">{%= _row.credit ? _fc(_row.credit) : '' %}</td>
             <td class="r nowrap">{%= _bal(_row.balance) %}</td>
           </tr>
         {% } %}
