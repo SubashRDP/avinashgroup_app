@@ -309,7 +309,7 @@
 
       {% if (_row.is_remark) { %}
         <tr class="pl-row-remark">
-          <td><b>Remarks:</b></td><td></td><td></td>
+          <td>Remarks:</td><td></td><td></td>
           <td class="pl-indent-desc">{%= _row.description || '' %}</td>
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
           <td></td><td></td><td></td>
@@ -334,7 +334,7 @@
         </tr>
         {% if (_pending_remark && (!_next || !_next.is_detail)) { %}
         <tr class="pl-row-remark">
-          <td><b>Remarks:</b></td><td></td><td></td>
+          <td>Remarks:</td><td></td><td></td>
           <td class="pl-indent-desc">{%= _pending_remark %}</td>
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
           <td></td><td></td><td></td>
@@ -358,7 +358,7 @@
         {% _pending_remark = _row.remarks || ''; %}
         {% if (_pending_remark && (!_next || !_next.is_detail)) { %}
         <tr class="pl-row-remark">
-          <td><b>Remarks:</b></td><td></td><td></td>
+          <td>Remarks:</td><td></td><td></td>
           <td class="pl-indent-desc">{%= _pending_remark %}</td>
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
           <td></td><td></td><td></td>
@@ -369,7 +369,7 @@
       {% } else { %}
         {% if (_pending_remark) { %}
         <tr class="pl-row-remark">
-          <td><b>Remarks:</b></td><td></td><td></td>
+          <td>Remarks:</td><td></td><td></td>
           <td class="pl-indent-desc">{%= _pending_remark %}</td>
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
           <td></td><td></td><td></td>
