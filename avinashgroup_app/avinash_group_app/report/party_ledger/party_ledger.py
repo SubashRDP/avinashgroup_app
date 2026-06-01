@@ -109,13 +109,21 @@ Page <span id="pn"></span>/<span id="tp"></span>
 	footer_file.close()
 
 	try:
+		# Portrait needs the table to use as much of the 210mm width as
+		# possible — generous margins push wide columns off the page.
+		# Landscape (297mm) has room, keep its margins comfortable.
+		if orientation == 'Portrait':
+			margin_top, margin_right, margin_bottom, margin_left = '4mm', '5mm', '10mm', '5mm'
+		else:
+			margin_top, margin_right, margin_bottom, margin_left = '10mm', '12mm', '15mm', '12mm'
+
 		options = {
 			'page-size': 'A4',
 			'orientation': orientation,
-			'margin-top': '10mm',
-			'margin-right': '15mm',
-			'margin-bottom': '15mm',
-			'margin-left': '15mm',
+			'margin-top': margin_top,
+			'margin-right': margin_right,
+			'margin-bottom': margin_bottom,
+			'margin-left': margin_left,
 			'footer-html': footer_file.name,
 			'footer-spacing': '2',
 			'encoding': 'UTF-8',
