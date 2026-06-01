@@ -1,0 +1,230 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-06-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "title",
+  "template",
+  "company",
+  "column_break_main",
+  "target_doctype",
+  "reference_name",
+  "party",
+  "status",
+  "source_section",
+  "data_provider",
+  "print_orientation",
+  "payload",
+  "sections_section",
+  "working_sections",
+  "output_section",
+  "output_action",
+  "recipients",
+  "email_status",
+  "column_break_output",
+  "error",
+  "rendered_section",
+  "rendered_html"
+ ],
+ "fields": [
+  {
+   "default": "DOC-GEN-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "DOC-GEN-.YYYY.-.#####"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Template",
+   "options": "Document Template",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "label": "Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party",
+   "read_only": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nFinalized\nSent",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Source"
+  },
+  {
+   "fieldname": "data_provider",
+   "fieldtype": "Data",
+   "label": "Data Provider",
+   "read_only": 1
+  },
+  {
+   "default": "Portrait",
+   "description": "Stored on the document so the PDF reproduces identically even if the template changes.",
+   "fieldname": "print_orientation",
+   "fieldtype": "Select",
+   "label": "Print Orientation",
+   "options": "Portrait\nLandscape",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Code",
+   "label": "Payload (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sections_section",
+   "fieldtype": "Section Break",
+   "label": "Sections"
+  },
+  {
+   "fieldname": "working_sections",
+   "fieldtype": "Table",
+   "label": "Sections",
+   "options": "Generated Document Section"
+  },
+  {
+   "fieldname": "output_section",
+   "fieldtype": "Section Break",
+   "label": "Output"
+  },
+  {
+   "fieldname": "output_action",
+   "fieldtype": "Select",
+   "label": "Last Output Action",
+   "options": "\nEmail\nPrint\nBoth",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Small Text",
+   "label": "Recipients"
+  },
+  {
+   "default": "Not Sent",
+   "fieldname": "email_status",
+   "fieldtype": "Select",
+   "label": "Email Status",
+   "options": "Not Sent\nQueued\nSent\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_output",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "rendered_section",
+   "fieldtype": "Section Break",
+   "label": "Rendered Snapshot"
+  },
+  {
+   "description": "Snapshot of the assembled HTML at last save.",
+   "fieldname": "rendered_html",
+   "fieldtype": "Code",
+   "label": "Rendered HTML",
+   "options": "HTML",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Generated Document",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template User",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

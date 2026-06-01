@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:template_name",
+ "creation": "2026-06-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "target_doctype",
+  "data_provider",
+  "party_type",
+  "companies",
+  "column_break_main",
+  "letter_head",
+  "print_orientation",
+  "default_recipient_field",
+  "is_active",
+  "email_section",
+  "email_subject",
+  "data_section",
+  "inputs",
+  "data_sources",
+  "layout_designer_section",
+  "layout_designer",
+  "sections_section",
+  "sections"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "label": "Template Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "default": "Single Record",
+   "description": "Single Record: bind to one record of the target doctype. Party Balance Confirmation: aggregate a Customer/Supplier ledger over a period.",
+   "fieldname": "data_provider",
+   "fieldtype": "Select",
+   "label": "Data Provider",
+   "options": "Single Record\nParty Balance Confirmation\nCustom Data Sources",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.data_provider == \"Party Balance Confirmation\"",
+   "fieldname": "party_type",
+   "fieldtype": "Select",
+   "label": "Party Type",
+   "options": "\nCustomer\nSupplier"
+  },
+  {
+   "description": "Companies this template applies to. Leave empty to make it reusable for all companies.",
+   "fieldname": "companies",
+   "fieldtype": "Table MultiSelect",
+   "label": "Companies",
+   "options": "Document Template Company"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "letter_head",
+   "fieldtype": "Link",
+   "label": "Letter Head",
+   "options": "Letter Head"
+  },
+  {
+   "default": "Portrait",
+   "fieldname": "print_orientation",
+   "fieldtype": "Select",
+   "label": "Print Orientation",
+   "options": "Portrait\nLandscape"
+  },
+  {
+   "default": "email_id",
+   "description": "Fieldname on the target record / party used to resolve the recipient email when sending.",
+   "fieldname": "default_recipient_field",
+   "fieldtype": "Data",
+   "label": "Default Recipient Field"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "email_section",
+   "fieldtype": "Section Break",
+   "label": "Email"
+  },
+  {
+   "description": "Subject line for the email. Supports Jinja placeholders.",
+   "fieldname": "email_subject",
+   "fieldtype": "Data",
+   "label": "Email Subject"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.data_provider == \"Custom Data Sources\"",
+   "fieldname": "data_section",
+   "fieldtype": "Section Break",
+   "label": "Custom Data (inputs the user fills + queries that fetch data)"
+  },
+  {
+   "description": "Inputs the user fills at generation. Each fieldname binds into every query as a named parameter, e.g. company -> %(company)s.",
+   "fieldname": "inputs",
+   "fieldtype": "Table",
+   "label": "Inputs",
+   "options": "Document Template Input"
+  },
+  {
+   "description": "One or more SQL / Python sources. Each result is exposed to the document as {{ data.<source_name>.rows }} and {{ data.<source_name>.row.<column> }}.",
+   "fieldname": "data_sources",
+   "fieldtype": "Table",
+   "label": "Data Sources",
+   "options": "Document Template Data Source"
+  },
+  {
+   "fieldname": "layout_designer_section",
+   "fieldtype": "Section Break",
+   "label": "Layout Designer"
+  },
+  {
+   "description": "Drag, resize and edit the section boxes here. Save the form to persist the layout. (Save a new template once before designing.)",
+   "fieldname": "layout_designer",
+   "fieldtype": "HTML",
+   "label": "Layout Designer"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:false",
+   "fieldname": "sections_section",
+   "fieldtype": "Section Break",
+   "label": "Sections (advanced grid)"
+  },
+  {
+   "description": "The default catalog of sections. End users may toggle, reorder, edit, add and remove these when generating (mandatory sections cannot be removed).",
+   "fieldname": "sections",
+   "fieldtype": "Table",
+   "label": "Sections",
+   "options": "Document Template Section"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Document Template",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "template_name",
+ "show_title_field_in_link": 1,
+ "track_changes": 1
+}

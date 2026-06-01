@@ -50,8 +50,7 @@ def _bal_str(v):
 
 @frappe.whitelist()
 def download_pdf(filters):
-	import tempfile
-	from frappe.utils.pdf import get_pdf
+	from avinashgroup_app.custom_code.document_generator.pdf import build_pdf
 
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
@@ -85,45 +84,16 @@ def download_pdf(filters):
 		}
 	)
 
-	# Build footer HTML (page numbers via JS — wkhtmltopdf injects page/topage in query string)
-	footer_html = """<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<script>
-function subst() {
-	var v = {}, x = window.location.search.substring(1).split('&');
-	for (var i in x) { var z = x[i].split('=', 2); v[z[0]] = unescape(z[1]); }
-	document.getElementById('pn').textContent = v['page'];
-	document.getElementById('tp').textContent = v['topage'];
-}
-</script>
-</head>
-<body onload="subst()" style="margin:0;padding:2mm 0;font-family:Arial,sans-serif;font-size:9pt;color:#000;text-align:center;">
-Page <span id="pn"></span>/<span id="tp"></span>
-</body></html>"""
-
-	footer_file = tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8')
-	footer_file.write(footer_html)
-	footer_file.close()
-
-	try:
-		options = {
-			'page-size': 'A4',
-			'orientation': 'Landscape',
+	pdf_data = build_pdf(
+		html,
+		orientation='Landscape',
+		margins={
 			'margin-top': '10mm',
 			'margin-right': '15mm',
 			'margin-bottom': '15mm',
 			'margin-left': '15mm',
-			'footer-html': footer_file.name,
-			'footer-spacing': '2',
-			'encoding': 'UTF-8',
-			'enable-local-file-access': None,
-		}
-		pdf_data = get_pdf(html, options)
-	finally:
-		try:
-			os.unlink(footer_file.name)
-		except FileNotFoundError:
-			pass
+		},
+	)
 
 	frappe.response.filename = 'party_ledger.pdf'
 	frappe.response.filecontent = pdf_data

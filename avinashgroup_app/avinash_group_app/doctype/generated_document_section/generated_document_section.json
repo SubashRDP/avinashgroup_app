@@ -1,0 +1,93 @@
+{
+ "actions": [],
+ "creation": "2026-06-01 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "section_title",
+  "section_type",
+  "column_break_flags",
+  "enabled",
+  "is_locked",
+  "layout_section",
+  "align",
+  "width_pct",
+  "content_section",
+  "content"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Section Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Section Type",
+   "options": "Rich Text\nLetter Head\nField Table\nData Table\nSignature Block\nImage\nSpacer"
+  },
+  {
+   "fieldname": "column_break_flags",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "default": "0",
+   "description": "Mandatory section inherited from the template; cannot be removed or disabled by the user.",
+   "fieldname": "is_locked",
+   "fieldtype": "Check",
+   "label": "Locked"
+  },
+  {
+   "fieldname": "layout_section",
+   "fieldtype": "Section Break",
+   "label": "Layout"
+  },
+  {
+   "default": "Left",
+   "fieldname": "align",
+   "fieldtype": "Select",
+   "label": "Align",
+   "options": "Left\nCenter\nRight"
+  },
+  {
+   "default": "100",
+   "fieldname": "width_pct",
+   "fieldtype": "Select",
+   "label": "Width %",
+   "options": "25\n50\n75\n100"
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "description": "Final, resolved HTML for this section (placeholders already filled). Treated as HTML, not re-evaluated as a template.",
+   "fieldname": "content",
+   "fieldtype": "Text Editor",
+   "label": "Content"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Generated Document Section",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

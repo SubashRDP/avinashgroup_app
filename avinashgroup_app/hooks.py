@@ -22,6 +22,11 @@ app_include_js = [
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
+    "/assets/avinashgroup_app/js/document_canvas.js?v=1.2",
+]
+
+app_include_css = [
+    "/assets/avinashgroup_app/css/document_canvas.css?v=1.2",
 ]
 
 doctype_js = {

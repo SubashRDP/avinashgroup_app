@@ -1,6 +1,7 @@
 [pre_model_sync]
 # Patches added in this section will be executed before doctypes are migrated
 # Read docs to understand patches: https://frappeframework.com/docs/v14/user/en/database-migrations
+avinashgroup_app.patches.create_document_generator_roles
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -9,3 +10,5 @@ avinashgroup_app.patches.setup_attendance_allowance
 avinashgroup_app.patches.v1_add_biometric_device_serial
 avinashgroup_app.patches.user_fiscal_year_access_fields
 avinashgroup_app.patches.migrate_fiscal_year_access_control
+avinashgroup_app.patches.seed_balance_confirmation_template
+avinashgroup_app.patches.seed_supplier_balance_confirmation_template
