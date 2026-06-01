@@ -20,7 +20,7 @@
 
 	@page {
 		size: A4 portrait;
-		margin: 4mm 5mm 10mm 5mm;
+		margin: 10mm 5mm 14mm 5mm;
 	}
 
 	* {
@@ -189,7 +189,7 @@
 	max-width: 100% !important;
 	min-height: 297mm !important;
 	margin: 12mm auto !important;
-	padding: 4mm 5mm 8mm 5mm !important;
+	padding: 10mm 5mm 12mm 5mm !important;
 	background: #ffffff !important;
 	box-shadow: 0 2px 10px rgba(0,0,0,0.18) !important;
 	box-sizing: border-box !important;

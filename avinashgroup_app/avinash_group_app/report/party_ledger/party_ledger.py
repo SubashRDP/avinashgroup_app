@@ -113,9 +113,9 @@ Page <span id="pn"></span>/<span id="tp"></span>
 		# possible — generous margins push wide columns off the page.
 		# Landscape (297mm) has room, keep its margins comfortable.
 		if orientation == 'Portrait':
-			margin_top, margin_right, margin_bottom, margin_left = '4mm', '5mm', '10mm', '5mm'
+			margin_top, margin_right, margin_bottom, margin_left = '10mm', '5mm', '15mm', '5mm'
 		else:
-			margin_top, margin_right, margin_bottom, margin_left = '10mm', '12mm', '15mm', '12mm'
+			margin_top, margin_right, margin_bottom, margin_left = '10mm', '15mm', '15mm', '15mm'
 
 		options = {
 			'page-size': 'A4',
