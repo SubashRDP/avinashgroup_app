@@ -16,7 +16,8 @@
     "items",
     "audit_section",
     "created_by",
-    "approved_by"
+    "approved_by",
+    "amended_from"
   ],
   "fields": [
     {
@@ -86,6 +87,14 @@
       "label": "Approved By",
       "options": "User",
       "permlevel": 0
+    },
+    {
+      "fieldname": "amended_from",
+      "fieldtype": "Link",
+      "label": "Amended From",
+      "options": "Stock Adjustment",
+      "permlevel": 0,
+      "read_only": 1
     }
   ],
   "idx": 0,

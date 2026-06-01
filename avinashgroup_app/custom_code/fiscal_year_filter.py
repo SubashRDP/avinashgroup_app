@@ -523,6 +523,7 @@ def has_fiscal_year_permission(doc, ptype=None, user=None):
 @frappe.whitelist(allow_guest=False)
 def filtered_get_list(doctype, *args, **kwargs):
     """Override for frappe.client.get_list to apply fiscal year filtering."""
+    kwargs.pop('cmd', None)
     if doctype not in FILTERED_DOCTYPES:
         return frappe.client.get_list(doctype, **kwargs)
 
