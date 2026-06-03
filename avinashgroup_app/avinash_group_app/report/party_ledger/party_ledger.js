@@ -190,6 +190,31 @@ frappe.query_reports["Party Ledger"] = {
 	},
 
 	onload: function (_report) {
+		// Resolve which columns the PRINT pdf should show, matching the report:
+		//  1) "Pick Columns" in the print dialog, else
+		//  2) whatever columns are still visible in the datatable (after removals).
+		// Returns [] when all columns are visible => template shows all.
+		// Used by print_report only; the Download PDF button stays "show all".
+		const pl_selected_columns = function (print_settings) {
+			const cols = frappe.query_report.columns || [];
+			const report_fields = new Set(cols.map(c => c.fieldname));
+
+			if (print_settings && print_settings.pick_columns && print_settings.columns && print_settings.columns.length) {
+				const by_label = {};
+				cols.forEach(c => { by_label[c.label] = c.fieldname; });
+				return print_settings.columns
+					.map(v => (report_fields.has(v) ? v : by_label[v]))
+					.filter(Boolean);
+			}
+
+			const dt = frappe.query_report.datatable;
+			if (!dt || !dt.datamanager) return [];
+			const visible = dt.datamanager.getColumns()
+				.map(c => c.fieldname || c.id)
+				.filter(fn => report_fields.has(fn));
+			return visible.length === report_fields.size ? [] : visible;
+		};
+
 		_report.page.add_inner_button(__('Download PDF'), function () {
 			const filters = frappe.query_report.get_filter_values(true);
 			if (!filters.company || !filters.from_date || !filters.to_date) {
@@ -200,6 +225,22 @@ frappe.query_reports["Party Ledger"] = {
 				+ '?filters=' + encodeURIComponent(JSON.stringify(filters));
 			window.open(url);
 		});
+
+		// Native Print opens the SAME wkhtmltopdf PDF as the Download button (orientation
+		// from the print dialog), so Print and Download are identical — like the registers.
+		_report.print_report = function (print_settings) {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.company || !filters.from_date || !filters.to_date) {
+				frappe.msgprint(__('Please set Company, From Date and To Date'));
+				return;
+			}
+			const orientation = (print_settings && print_settings.orientation) || 'Landscape';
+			const url = '/api/method/avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf'
+				+ '?filters=' + encodeURIComponent(JSON.stringify(filters))
+				+ '&orientation=' + encodeURIComponent(orientation)
+				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(pl_selected_columns(print_settings)));
+			window.open(url);
+		};
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {

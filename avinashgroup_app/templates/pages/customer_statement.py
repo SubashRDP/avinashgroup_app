@@ -279,7 +279,8 @@ def _empty_result(company, from_date, to_date):
 def download_pdf(company=None, customers=None, from_date=None, to_date=None):
 	"""Download the report part as a Portrait PDF (with page numbers).
 
-	Reuses Party Ledger's PDF generator — same look, same footer page numbering.
+	Reuses Party Ledger's PDF generator — same look, same in-body page numbering
+	(manual pagination, so it works on plain/unpatched wkhtmltopdf).
 	Security is re-validated server-side, exactly like get_statement: the browser
 	cannot request a company/customer that isn't the logged-in user's.
 	"""
@@ -300,8 +301,8 @@ def download_pdf(company=None, customers=None, from_date=None, to_date=None):
 		"show_remarks": 0,
 	})
 
-	# Always Portrait for a customer-facing statement; page numbers come from the
-	# report's own wkhtmltopdf footer.
+	# Always Portrait for a customer-facing statement; page numbers are rendered in the
+	# PDF body by the report's manual pagination (no patched-wkhtmltopdf footer needed).
 	party_ledger_download_pdf(
 		filters,
 		orientation="Portrait",
