@@ -446,6 +446,9 @@ def get_data(filters):
 			"date":         entry.get("date"),
 			"miti":         "",
 			"voucher_no":   entry.get("voucher_no"),
+			# Real document id for the navigation link — kept separate so a custom
+			# display name (applied later) doesn't break the href.
+			"voucher_link": entry.get("voucher_no"),
 			"voucher_type": entry.get("voucher_type"),
 			"party":        entry.get("party") or "",
 			"description":  entry.get("description") or "",

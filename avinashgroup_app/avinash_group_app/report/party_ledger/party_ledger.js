@@ -250,7 +250,9 @@ frappe.query_reports["Party Ledger"] = {
 		}
 		if (column.fieldname === "voucher_no" && data.voucher_type && value) {
 			const route = frappe.router.slug(data.voucher_type);
-			return `<a href="/app/${route}/${value}" target="_blank">${value}</a>`;
+			// Link to the real document id (voucher_link); the shown value may be a custom name.
+			const target = data.voucher_link || value;
+			return `<a href="/app/${route}/${encodeURIComponent(target)}" target="_blank">${value}</a>`;
 		}
 		return default_formatter(value, row, column, data);
 	},
