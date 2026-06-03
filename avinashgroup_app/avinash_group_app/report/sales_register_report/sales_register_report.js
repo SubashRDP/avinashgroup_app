@@ -94,6 +94,33 @@ frappe.query_reports["Sales Register Report"] = {
 	},
 
 	onload: function (_report) {
+		// Resolve which columns the PRINT pdf should show, matching the report:
+		//  1) if "Pick Columns" was used in the print dialog, use those;
+		//  2) otherwise use whatever columns are still visible in the datatable
+		//     (so removing a column via the datatable menu reflects in the print).
+		// Returns [] when all columns are visible => template shows all.
+		// NOTE: used by print_report only; the Download PDF button stays "show all".
+		const sr_selected_columns = function (print_settings) {
+			const cols = frappe.query_report.columns || [];
+			const report_fields = new Set(cols.map(c => c.fieldname));
+
+			if (print_settings && print_settings.pick_columns && print_settings.columns && print_settings.columns.length) {
+				const by_label = {};
+				cols.forEach(c => { by_label[c.label] = c.fieldname; });
+				return print_settings.columns
+					.map(v => (report_fields.has(v) ? v : by_label[v]))
+					.filter(Boolean);
+			}
+
+			const dt = frappe.query_report.datatable;
+			if (!dt || !dt.datamanager) return [];
+			const visible = dt.datamanager.getColumns()
+				.map(c => c.fieldname || c.id)
+				.filter(fn => report_fields.has(fn));
+			// nothing removed -> [] so the template just shows all
+			return visible.length === report_fields.size ? [] : visible;
+		};
+
 		_report.page.add_inner_button(__('Download PDF'), function () {
 			const filters = frappe.query_report.get_filter_values(true);
 			if (!filters.from_date || !filters.to_date) {
@@ -107,20 +134,19 @@ frappe.query_reports["Sales Register Report"] = {
 
 		_report.print_report = function (print_settings) {
 			const filters = frappe.query_report.get_filter_values(true);
-			const selected_columns = (print_settings && print_settings.pick_columns && print_settings.columns && print_settings.columns.length)
-				? print_settings.columns : [];
+			if (!filters.from_date || !filters.to_date) {
+				frappe.msgprint(__('Please set From Date and To Date'));
+				return;
+			}
+			// Print opens the SAME wkhtmltopdf PDF the Download button produces (orientation
+			// from the print dialog). Print and Download are now identical, and printing or
+			// saving from the PDF viewer is exact — no browser re-pagination.
 			const orientation = (print_settings && print_settings.orientation) || 'Landscape';
-			frappe.call({
-				method: 'avinashgroup_app.avinash_group_app.report.sales_register_report.sales_register_report.get_print_html',
-				args: { filters: JSON.stringify(filters), selected_columns: JSON.stringify(selected_columns), orientation: orientation },
-				callback: function (r) {
-					if (!r.message) return;
-					const win = window.open('', '_blank');
-					win.document.open();
-					win.document.write(r.message);
-					win.document.close();
-				},
-			});
+			const url = '/api/method/avinashgroup_app.avinash_group_app.report.sales_register_report.sales_register_report.download_pdf'
+				+ '?filters=' + encodeURIComponent(JSON.stringify(filters))
+				+ '&orientation=' + encodeURIComponent(orientation)
+				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(sr_selected_columns(print_settings)));
+			window.open(url);
 		};
 
 		if (!frappe.ui.get_print_settings._pick_columns_patched) {
