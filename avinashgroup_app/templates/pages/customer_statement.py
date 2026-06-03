@@ -1,0 +1,310 @@
+import json
+
+import frappe
+from frappe import _
+from frappe.utils import get_first_day, nowdate, formatdate
+
+from avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger import (
+	execute as party_ledger_execute,
+	download_pdf as party_ledger_download_pdf,
+	_fmt_inr,
+	_bal_str,
+)
+
+
+def _get_portal_customers():
+	"""Customers linked to the logged-in user via the Portal User child table"""
+	rows = frappe.db.sql(
+		"""
+		SELECT parent FROM `tabPortal User`
+		WHERE user = %s AND parenttype = 'Customer'
+		  AND parent IS NOT NULL AND parent != ''
+		""",
+		frappe.session.user,
+		as_list=True,
+	)
+	return [r[0] for r in rows]
+
+
+def _get_allowed_companies(portal_customers):
+	"""Distinct companies (custom_company) for the given customers."""
+	if not portal_customers:
+		return []
+	rows = frappe.db.sql(
+		"""
+		SELECT DISTINCT custom_company AS name
+		FROM `tabCustomer`
+		WHERE disabled = 0
+		  AND name IN %(customers)s
+		  AND custom_company IS NOT NULL AND custom_company != ''
+		ORDER BY custom_company
+		""",
+		{"customers": portal_customers},
+		as_dict=True,
+	)
+	return [r.name for r in rows]
+
+
+def get_context(context):
+	if frappe.session.user == "Guest":
+		frappe.local.flags.redirect_location = "/login"
+		raise frappe.Redirect
+
+	if "Customer" not in frappe.get_roles(frappe.session.user):
+		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
+
+	portal_customers = _get_portal_customers()
+
+	# Customer dropdown — only this user's linked customers, with their company tag
+	if portal_customers:
+		context.customer_list = frappe.db.sql(
+			"""
+			SELECT name, customer_name, IFNULL(custom_company, '') AS company
+			FROM `tabCustomer`
+			WHERE disabled = 0 AND name IN %(customers)s
+			ORDER BY customer_name
+			""",
+			{"customers": portal_customers},
+			as_dict=True,
+		)
+		context.company_list = _get_allowed_companies(portal_customers)
+	else:
+		# Non-portal user (e.g. staff with Customer role) — free-text search fallback
+		context.customer_list = []
+		context.company_list = [r.name for r in frappe.get_all("Company", fields=["name"], ignore_permissions=True)]
+
+	# Single-select company defaults to the user's default company if it's one of theirs, else the first.
+	user_default = frappe.defaults.get_user_default("Company")
+	if user_default in context.company_list:
+		context.default_company = user_default
+	else:
+		context.default_company = context.company_list[0] if context.company_list else ""
+
+	context.today = nowdate()
+	context.from_date = str(get_first_day(nowdate()))
+	context.to_date = nowdate()
+
+
+@frappe.whitelist()
+def search_companies(txt=None):
+	"""Company options restricted to the logged-in user's linked companies."""
+	portal_customers = _get_portal_customers()
+	if portal_customers:
+		companies = _get_allowed_companies(portal_customers)
+		if txt:
+			companies = [c for c in companies if txt.lower() in (c or "").lower()]
+		return [{"name": c} for c in companies]
+
+	# Non-portal user — show all companies
+	filters = {}
+	if txt:
+		filters["company_name"] = ["like", f"%{txt}%"]
+	return frappe.get_list(
+		"Company", filters=filters, fields=["name"], limit=10, ignore_permissions=True
+	)
+
+
+@frappe.whitelist()
+def search_customers(txt=None, company=None):
+	"""Customer options restricted to the logged-in user's linked customers."""
+	portal_customers = _get_portal_customers()
+
+	if portal_customers:
+		values = {"customers": tuple(portal_customers), "txt": f"%{txt}%" if txt else "%"}
+		company_condition = ""
+		if company:
+			company_condition = "AND custom_company = %(company)s"
+			values["company"] = company
+		return frappe.db.sql(
+			f"""
+			SELECT name, customer_name FROM `tabCustomer`
+			WHERE disabled = 0
+			  AND name IN %(customers)s
+			  {company_condition}
+			  AND (name LIKE %(txt)s OR customer_name LIKE %(txt)s)
+			ORDER BY customer_name
+			""",
+			values,
+			as_dict=True,
+		)
+
+	# Non-portal user — search all customers (optionally by company)
+	values = {"txt": f"%{txt}%" if txt else "%"}
+	company_condition = ""
+	if company:
+		company_condition = "AND custom_company = %(company)s"
+		values["company"] = company
+	return frappe.db.sql(
+		f"""
+		SELECT name, customer_name FROM `tabCustomer`
+		WHERE disabled = 0
+		  {company_condition}
+		  AND (name LIKE %(txt)s OR customer_name LIKE %(txt)s)
+		ORDER BY customer_name
+		LIMIT 10
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+def _to_list(value):
+	if not value:
+		return []
+	if isinstance(value, str):
+		value = value.strip()
+		if value.startswith("[") and value.endswith("]"):
+			try:
+				return [v for v in json.loads(value) if v]
+			except Exception:
+				pass
+		return [value] if value else []
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
+
+
+def _format_row(d):
+	"""Shape one Party Ledger data row for the portal table (simple format)."""
+	raw_date = d.get("date")
+	return {
+		"sr_no": d.get("sr_no") or "",
+		"date": formatdate(raw_date) if raw_date else "",
+		"miti": d.get("miti") or "",
+		"voucher_no": d.get("voucher_no") or "",
+		"party_name": d.get("party_name") or "",
+		"description": d.get("description") or "",
+		"debit": _fmt_inr(d.get("debit")),
+		"credit": _fmt_inr(d.get("credit")),
+		"balance": str(_bal_str(d.get("balance"))),
+		"is_summary": 1 if d.get("is_summary") else 0,
+		"bold": 1 if d.get("bold") else 0,
+	}
+
+
+def _my_customers_in_company(portal_customers, company):
+	"""The logged-in user's customers that belong to the given company."""
+	if not portal_customers:
+		return []
+	rows = frappe.get_all(
+		"Customer",
+		filters={"name": ("in", portal_customers), "custom_company": company},
+		fields=["name"],
+	)
+	return [r.name for r in rows]
+
+
+def _resolve_request(company, customers):
+	"""Role check + ownership re-validation shared by get_statement and download_pdf.
+
+	Returns (customers, is_portal_user). For a portal user the list is forced to their
+	own customers and never falls back to "all parties" (empty party = ALL parties in
+	the company, which would leak other customers' data). Raises on any violation.
+	"""
+	if "Customer" not in frappe.get_roles(frappe.session.user):
+		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
+
+	customers = _to_list(customers)
+	portal_customers = _get_portal_customers()
+
+	if portal_customers:
+		# Hard restriction — company and every customer must be the user's own.
+		if company not in _get_allowed_companies(portal_customers):
+			frappe.throw(_("You are not allowed to view this company."), frappe.PermissionError)
+		if any(c not in portal_customers for c in customers):
+			frappe.throw(_("You are not allowed to view one of these customers."), frappe.PermissionError)
+		if not customers:
+			customers = _my_customers_in_company(portal_customers, company)
+
+	return customers, bool(portal_customers)
+
+
+@frappe.whitelist()
+def get_statement(company=None, customers=None, from_date=None, to_date=None):
+	"""Return one Party Ledger statement (simple format) for a single company.
+	"""
+	if not (company and from_date and to_date):
+		frappe.throw(_("Company, From Date and To Date are required."))
+
+	customers, is_portal = _resolve_request(company, customers)
+	if is_portal and not customers:
+		return _empty_result(company, from_date, to_date)
+
+	filters = frappe._dict({
+		"company": company,
+		"party_type": "Customer",
+		"party": customers,            
+		"from_date": from_date,
+		"to_date": to_date,
+		"detailed_mapping": 0,
+		"show_remarks": 0,
+	})
+	_columns, data = party_ledger_execute(filters)
+
+	return {
+		"company": company,
+		"multi_customer": len(customers) != 1,
+		"customer_names": _customer_names(customers),
+		"rows": [_format_row(d) for d in data],
+		"from_date": from_date,
+		"to_date": to_date,
+		"from_date_disp": formatdate(from_date),
+		"to_date_disp": formatdate(to_date),
+	}
+
+
+def _customer_names(customers):
+	"""Display names for the chosen customers, in the given order."""
+	if not customers:
+		return []
+	rows = frappe.get_all("Customer", filters={"name": ("in", customers)}, fields=["name", "customer_name"])
+	name_map = {r.name: r.customer_name for r in rows}
+	return [name_map.get(c, c) for c in customers]
+
+
+def _empty_result(company, from_date, to_date):
+	return {
+		"company": company,
+		"multi_customer": False,
+		"customer_names": [],
+		"rows": [],
+		"from_date": from_date,
+		"to_date": to_date,
+		"from_date_disp": formatdate(from_date),
+		"to_date_disp": formatdate(to_date),
+	}
+
+
+@frappe.whitelist()
+def download_pdf(company=None, customers=None, from_date=None, to_date=None):
+	"""Download the report part as a Portrait PDF (with page numbers).
+
+	Reuses Party Ledger's PDF generator — same look, same footer page numbering.
+	Security is re-validated server-side, exactly like get_statement: the browser
+	cannot request a company/customer that isn't the logged-in user's.
+	"""
+	if not (company and from_date and to_date):
+		frappe.throw(_("Company, From Date and To Date are required."))
+
+	customers, is_portal = _resolve_request(company, customers)
+	if is_portal and not customers:
+		frappe.throw(_("No statement to download for the selected filters."))
+
+	filters = frappe._dict({
+		"company": company,
+		"party_type": "Customer",
+		"party": customers,
+		"from_date": from_date,
+		"to_date": to_date,
+		"detailed_mapping": 0,
+		"show_remarks": 0,
+	})
+
+	# Always Portrait for a customer-facing statement; page numbers come from the
+	# report's own wkhtmltopdf footer.
+	party_ledger_download_pdf(
+		filters,
+		orientation="Portrait",
+		report_title="Customer Statement",
+		filename="customer_statement.pdf",
+	)

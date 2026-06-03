@@ -187,7 +187,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
             <div class="pl-company-name">{{ filters.get('company') or '' }}</div>
           </div>
           <div class="pl-title-cell">
-            <div class="pl-report-title">Party Ledger - {{ pty }}</div>
+            <div class="pl-report-title">{{ report_title or ('Party Ledger - ' + pty) }}</div>
           </div>
         </div>
         {% if party_names %}

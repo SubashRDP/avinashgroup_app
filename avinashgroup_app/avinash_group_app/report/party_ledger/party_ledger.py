@@ -49,7 +49,7 @@ def _bal_str(v):
 
 
 @frappe.whitelist()
-def download_pdf(filters, orientation=None):
+def download_pdf(filters, orientation=None, report_title=None, filename=None):
 	import tempfile
 	from frappe.utils.pdf import get_pdf
 
@@ -57,6 +57,9 @@ def download_pdf(filters, orientation=None):
 		filters = frappe._dict(json.loads(filters))
 
 	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
+	# Default keeps the existing "Party Ledger - Customer/Supplier" heading; callers
+	# (e.g. the Customer Statement portal) can override with their own title.
+	report_title = report_title or 'Party Ledger - {0}'.format(filters.get('party_type') or 'Customer')
 
 	_, data = execute(filters)
 
@@ -85,6 +88,7 @@ def download_pdf(filters, orientation=None):
 			'fmt': _fmt_inr,
 			'bal': _bal_str,
 			'orientation': orientation,
+			'report_title': report_title,
 		}
 	)
 
@@ -136,7 +140,7 @@ Page <span id="pn"></span>/<span id="tp"></span>
 		except FileNotFoundError:
 			pass
 
-	frappe.response.filename = 'party_ledger.pdf'
+	frappe.response.filename = filename or 'party_ledger.pdf'
 	frappe.response.filecontent = pdf_data
 	frappe.response.type = 'download'
 
