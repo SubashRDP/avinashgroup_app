@@ -1,0 +1,275 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-06-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "title",
+  "template",
+  "company",
+  "column_break_main",
+  "target_doctype",
+  "reference_name",
+  "party",
+  "status",
+  "source_section",
+  "data_provider",
+  "print_orientation",
+  "payload",
+  "preview_section",
+  "rendered_document",
+  "body_section",
+  "body_html",
+  "hf_section",
+  "header_html",
+  "header_height",
+  "column_break_hf",
+  "footer_html",
+  "footer_height",
+  "output_section",
+  "output_action",
+  "recipients",
+  "email_status",
+  "column_break_output",
+  "error"
+ ],
+ "fields": [
+  {
+   "default": "DOC-GEN-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "DOC-GEN-.YYYY.-.#####"
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Template",
+   "options": "Document Template",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_name",
+   "fieldtype": "Data",
+   "label": "Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Data",
+   "label": "Party",
+   "read_only": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nFinalized\nSent",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Source"
+  },
+  {
+   "fieldname": "data_provider",
+   "fieldtype": "Data",
+   "label": "Data Provider",
+   "read_only": 1
+  },
+  {
+   "default": "Portrait",
+   "description": "Stored on the document so the PDF reproduces identically even if the template changes.",
+   "fieldname": "print_orientation",
+   "fieldtype": "Select",
+   "label": "Print Orientation",
+   "options": "Portrait\nLandscape",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Code",
+   "label": "Payload (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "preview_section",
+   "fieldtype": "Section Break",
+   "label": "Document"
+  },
+  {
+   "description": "Read-only preview of the saved document. Use \"Edit in Generator\" to change it.",
+   "fieldname": "rendered_document",
+   "fieldtype": "HTML",
+   "label": "Preview"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:false",
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Raw HTML (read-only)"
+  },
+  {
+   "description": "The final document HTML (rendered from the template + data). The PDF/email is produced from this. Edit it via \"Edit in Generator\", not here.",
+   "fieldname": "body_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Body HTML",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "hf_section",
+   "fieldtype": "Section Break",
+   "label": "Header & Footer (snapshot)"
+  },
+  {
+   "fieldname": "header_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Header HTML",
+   "read_only": 1
+  },
+  {
+   "default": "25",
+   "fieldname": "header_height",
+   "fieldtype": "Float",
+   "label": "Header Height (mm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_hf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "footer_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Footer HTML",
+   "read_only": 1
+  },
+  {
+   "default": "15",
+   "fieldname": "footer_height",
+   "fieldtype": "Float",
+   "label": "Footer Height (mm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "output_section",
+   "fieldtype": "Section Break",
+   "label": "Output"
+  },
+  {
+   "fieldname": "output_action",
+   "fieldtype": "Select",
+   "label": "Last Output Action",
+   "options": "\nEmail\nPrint\nBoth",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Small Text",
+   "label": "Recipients"
+  },
+  {
+   "default": "Not Sent",
+   "fieldname": "email_status",
+   "fieldtype": "Select",
+   "label": "Email Status",
+   "options": "Not Sent\nQueued\nSent\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_output",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Last Error",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Generated Document",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template User",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1
+}

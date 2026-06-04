@@ -1,0 +1,222 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:template_name",
+ "creation": "2026-06-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "template_name",
+  "target_doctype",
+  "companies",
+  "column_break_main",
+  "letter_head",
+  "print_orientation",
+  "default_recipient_field",
+  "is_active",
+  "email_section",
+  "email_subject",
+  "data_section",
+  "inputs",
+  "data_sources",
+  "header_footer_section",
+  "hf_help",
+  "header_html",
+  "header_height",
+  "column_break_hf",
+  "footer_html",
+  "footer_height",
+  "body_section",
+  "body_help",
+  "body_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "label": "Template Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Optional — only used to resolve a default email recipient.",
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target DocType (optional)",
+   "options": "DocType"
+  },
+  {
+   "description": "Companies this template applies to. Leave empty to make it reusable for all companies.",
+   "fieldname": "companies",
+   "fieldtype": "Table MultiSelect",
+   "label": "Companies",
+   "options": "Document Template Company"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "letter_head",
+   "fieldtype": "Link",
+   "label": "Letter Head",
+   "options": "Letter Head"
+  },
+  {
+   "default": "Portrait",
+   "fieldname": "print_orientation",
+   "fieldtype": "Select",
+   "label": "Print Orientation",
+   "options": "Portrait\nLandscape"
+  },
+  {
+   "default": "email_id",
+   "description": "Fieldname on the target record / party used to resolve the recipient email when sending.",
+   "fieldname": "default_recipient_field",
+   "fieldtype": "Data",
+   "label": "Default Recipient Field"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "email_section",
+   "fieldtype": "Section Break",
+   "label": "Email"
+  },
+  {
+   "description": "Subject line for the email. Supports Jinja placeholders.",
+   "fieldname": "email_subject",
+   "fieldtype": "Data",
+   "label": "Email Subject"
+  },
+  {
+   "fieldname": "data_section",
+   "fieldtype": "Section Break",
+   "label": "Data (inputs the user fills + queries that fetch data)"
+  },
+  {
+   "description": "Inputs the user fills at generation. Each fieldname binds into every query as a named parameter, e.g. company -> %(company)s.",
+   "fieldname": "inputs",
+   "fieldtype": "Table",
+   "label": "Inputs",
+   "options": "Document Template Input"
+  },
+  {
+   "description": "One or more SQL / Python sources. Each result is exposed to the document as {{ data.<source_name>.rows }} and {{ data.<source_name>.row.<column> }}.",
+   "fieldname": "data_sources",
+   "fieldtype": "Table",
+   "label": "Data Sources",
+   "options": "Document Template Data Source"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "header_footer_section",
+   "fieldtype": "Section Break",
+   "label": "Header & Footer"
+  },
+  {
+   "fieldname": "hf_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\"><b>Email</b> renders this header/footer on every page (digital letterhead). <b>Print (letterhead paper)</b> leaves the same amount of blank space at top/bottom (set by the heights) but does <b>not</b> draw them — for printing on your pre-printed letterhead. Set the heights to match your pre-printed header/footer band. Supports Jinja; leave empty to fall back to the linked Letter Head.</p>"
+  },
+  {
+   "description": "Header HTML (repeats on every page).",
+   "fieldname": "header_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Header HTML"
+  },
+  {
+   "default": "25",
+   "description": "Reserved header height in mm (top page margin).",
+   "fieldname": "header_height",
+   "fieldtype": "Float",
+   "label": "Header Height (mm)"
+  },
+  {
+   "fieldname": "column_break_hf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Footer HTML (repeats on every page).",
+   "fieldname": "footer_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Footer HTML"
+  },
+  {
+   "default": "15",
+   "description": "Reserved footer height in mm (bottom page margin).",
+   "fieldname": "footer_height",
+   "fieldtype": "Float",
+   "label": "Footer Height (mm)"
+  },
+  {
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Document Body (HTML + Jinja)"
+  },
+  {
+   "fieldname": "body_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">Write the document as HTML. Use placeholders from your data sources, e.g. <code>{{ data.sales.row.total }}</code> (single value) or loop rows with <code>{% for r in data.totals.rows %}...{% endfor %}</code>. Inputs are available as <code>{{ inputs.company }}</code>, plus <code>{{ company }}</code>, <code>{{ today }}</code> and <code>{{ fmt(value) }}</code>. Use the <b>Preview</b> button to see it rendered.</p>"
+  },
+  {
+   "description": "The document template as raw HTML + Jinja. Rendered with your data at generation time; the user can then edit the result before printing/emailing.",
+   "fieldname": "body_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Body HTML"
+  }
+ ],
+ "links": [],
+ "modified": "2026-06-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Document Template",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "template_name",
+ "show_title_field_in_link": 1,
+ "track_changes": 1
+}
