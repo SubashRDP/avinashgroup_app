@@ -3,16 +3,15 @@
 
 """Shared wkhtmltopdf helper.
 
-Extracted from the Party Ledger report so both that report and the Document
-Generator use a single, consistent PDF pipeline (A4, page-numbered footer).
-
-Page numbers use wkhtmltopdf's NATIVE text footer (``--footer-center`` with the
-``[page]``/``[topage]`` substitutions) rather than ``--footer-html``. The HTML
-footer triggers a second JavaScript WebKit render that segfaults (exit -11) in the
-headless/forked web-worker process, so the text footer is far more robust.
+Uses ``pdfkit`` directly rather than ``frappe.utils.pdf.get_pdf`` because get_pdf
+force-overrides ``margin-top``/``margin-bottom`` to 15mm when the HTML has no
+``id=header-html``/``id=footer-html`` element. We need exact control of the page
+margins (to reserve space for pre-printed letterhead), and pdfkit honours them.
+Our HTML is self-contained (data-URI images), so we don't need get_pdf's cookie /
+local-image handling.
 """
 
-from frappe.utils.pdf import get_pdf
+import pdfkit
 
 _DEFAULT_MARGINS = {
 	"margin-top": "15mm",
@@ -21,26 +20,21 @@ _DEFAULT_MARGINS = {
 	"margin-left": "15mm",
 }
 
-_ZERO_MARGINS = {
-	"margin-top": "0mm",
-	"margin-right": "0mm",
-	"margin-bottom": "0mm",
-	"margin-left": "0mm",
-}
-
 
 def build_pdf(html, orientation="Portrait", margins=None, footer=True):
-	"""Render HTML to PDF bytes.
+	"""Render HTML to PDF bytes with exact margins.
 
 	orientation: "Portrait" or "Landscape".
-	margins: optional dict overriding the default 15mm margins.
-	footer: include the "Page x/y" text footer (uses page margin space).
+	margins: dict of wkhtmltopdf margin options; defaults to 15mm all round.
+	footer: include a "Page x/y" text footer (used by reports, not the letters).
 	"""
 	options = {
 		"page-size": "A4",
 		"orientation": orientation or "Portrait",
 		"encoding": "UTF-8",
-		"enable-local-file-access": None,
+		"enable-local-file-access": "",
+		"print-media-type": "",
+		"quiet": "",
 	}
 	if footer:
 		options.update(
@@ -52,10 +46,5 @@ def build_pdf(html, orientation="Portrait", margins=None, footer=True):
 			}
 		)
 	options.update(margins or _DEFAULT_MARGINS)
-	return get_pdf(html, options)
-
-
-def build_canvas_pdf(html, orientation="Portrait"):
-	"""PDF for the absolute-layout canvas: zero margins, no footer, so the 794px
-	page maps 1:1 onto A4 (210mm = 794px @ 96 dpi)."""
-	return build_pdf(html, orientation=orientation, margins=_ZERO_MARGINS, footer=False)
+	pdf = pdfkit.from_string(html, False, options=options)
+	return pdf if isinstance(pdf, (bytes, bytearray)) else pdf.encode("latin-1")

@@ -18,16 +18,22 @@
   "data_provider",
   "print_orientation",
   "payload",
-  "sections_section",
-  "working_sections",
+  "preview_section",
+  "rendered_document",
+  "body_section",
+  "body_html",
+  "hf_section",
+  "header_html",
+  "header_height",
+  "column_break_hf",
+  "footer_html",
+  "footer_height",
   "output_section",
   "output_action",
   "recipients",
   "email_status",
   "column_break_output",
-  "error",
-  "rendered_section",
-  "rendered_html"
+  "error"
  ],
  "fields": [
   {
@@ -119,15 +125,68 @@
    "read_only": 1
   },
   {
-   "fieldname": "sections_section",
+   "fieldname": "preview_section",
    "fieldtype": "Section Break",
-   "label": "Sections"
+   "label": "Document"
   },
   {
-   "fieldname": "working_sections",
-   "fieldtype": "Table",
-   "label": "Sections",
-   "options": "Generated Document Section"
+   "description": "Read-only preview of the saved document. Use \"Edit in Generator\" to change it.",
+   "fieldname": "rendered_document",
+   "fieldtype": "HTML",
+   "label": "Preview"
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "eval:false",
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Raw HTML (read-only)"
+  },
+  {
+   "description": "The final document HTML (rendered from the template + data). The PDF/email is produced from this. Edit it via \"Edit in Generator\", not here.",
+   "fieldname": "body_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Body HTML",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "hf_section",
+   "fieldtype": "Section Break",
+   "label": "Header & Footer (snapshot)"
+  },
+  {
+   "fieldname": "header_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Header HTML",
+   "read_only": 1
+  },
+  {
+   "default": "25",
+   "fieldname": "header_height",
+   "fieldtype": "Float",
+   "label": "Header Height (mm)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_hf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "footer_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Footer HTML",
+   "read_only": 1
+  },
+  {
+   "default": "15",
+   "fieldname": "footer_height",
+   "fieldtype": "Float",
+   "label": "Footer Height (mm)",
+   "read_only": 1
   },
   {
    "fieldname": "output_section",
@@ -162,20 +221,6 @@
    "fieldname": "error",
    "fieldtype": "Small Text",
    "label": "Last Error",
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "rendered_section",
-   "fieldtype": "Section Break",
-   "label": "Rendered Snapshot"
-  },
-  {
-   "description": "Snapshot of the assembled HTML at last save.",
-   "fieldname": "rendered_html",
-   "fieldtype": "Code",
-   "label": "Rendered HTML",
-   "options": "HTML",
    "read_only": 1
   }
  ],

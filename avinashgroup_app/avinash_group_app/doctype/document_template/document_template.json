@@ -8,8 +8,6 @@
  "field_order": [
   "template_name",
   "target_doctype",
-  "data_provider",
-  "party_type",
   "companies",
   "column_break_main",
   "letter_head",
@@ -21,10 +19,16 @@
   "data_section",
   "inputs",
   "data_sources",
-  "layout_designer_section",
-  "layout_designer",
-  "sections_section",
-  "sections"
+  "header_footer_section",
+  "hf_help",
+  "header_html",
+  "header_height",
+  "column_break_hf",
+  "footer_html",
+  "footer_height",
+  "body_section",
+  "body_help",
+  "body_html"
  ],
  "fields": [
   {
@@ -35,28 +39,12 @@
    "unique": 1
   },
   {
+   "description": "Optional — only used to resolve a default email recipient.",
    "fieldname": "target_doctype",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Target DocType",
-   "options": "DocType",
-   "reqd": 1
-  },
-  {
-   "default": "Single Record",
-   "description": "Single Record: bind to one record of the target doctype. Party Balance Confirmation: aggregate a Customer/Supplier ledger over a period.",
-   "fieldname": "data_provider",
-   "fieldtype": "Select",
-   "label": "Data Provider",
-   "options": "Single Record\nParty Balance Confirmation\nCustom Data Sources",
-   "reqd": 1
-  },
-  {
-   "depends_on": "eval:doc.data_provider == \"Party Balance Confirmation\"",
-   "fieldname": "party_type",
-   "fieldtype": "Select",
-   "label": "Party Type",
-   "options": "\nCustomer\nSupplier"
+   "label": "Target DocType (optional)",
+   "options": "DocType"
   },
   {
    "description": "Companies this template applies to. Leave empty to make it reusable for all companies.",
@@ -108,11 +96,9 @@
    "label": "Email Subject"
   },
   {
-   "collapsible": 1,
-   "depends_on": "eval:doc.data_provider == \"Custom Data Sources\"",
    "fieldname": "data_section",
    "fieldtype": "Section Break",
-   "label": "Custom Data (inputs the user fills + queries that fetch data)"
+   "label": "Data (inputs the user fills + queries that fetch data)"
   },
   {
    "description": "Inputs the user fills at generation. Each fieldname binds into every query as a named parameter, e.g. company -> %(company)s.",
@@ -129,29 +115,64 @@
    "options": "Document Template Data Source"
   },
   {
-   "fieldname": "layout_designer_section",
-   "fieldtype": "Section Break",
-   "label": "Layout Designer"
-  },
-  {
-   "description": "Drag, resize and edit the section boxes here. Save the form to persist the layout. (Save a new template once before designing.)",
-   "fieldname": "layout_designer",
-   "fieldtype": "HTML",
-   "label": "Layout Designer"
-  },
-  {
    "collapsible": 1,
-   "collapsible_depends_on": "eval:false",
-   "fieldname": "sections_section",
+   "fieldname": "header_footer_section",
    "fieldtype": "Section Break",
-   "label": "Sections (advanced grid)"
+   "label": "Header & Footer"
   },
   {
-   "description": "The default catalog of sections. End users may toggle, reorder, edit, add and remove these when generating (mandatory sections cannot be removed).",
-   "fieldname": "sections",
-   "fieldtype": "Table",
-   "label": "Sections",
-   "options": "Document Template Section"
+   "fieldname": "hf_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\"><b>Email</b> renders this header/footer on every page (digital letterhead). <b>Print (letterhead paper)</b> leaves the same amount of blank space at top/bottom (set by the heights) but does <b>not</b> draw them — for printing on your pre-printed letterhead. Set the heights to match your pre-printed header/footer band. Supports Jinja; leave empty to fall back to the linked Letter Head.</p>"
+  },
+  {
+   "description": "Header HTML (repeats on every page).",
+   "fieldname": "header_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Header HTML"
+  },
+  {
+   "default": "25",
+   "description": "Reserved header height in mm (top page margin).",
+   "fieldname": "header_height",
+   "fieldtype": "Float",
+   "label": "Header Height (mm)"
+  },
+  {
+   "fieldname": "column_break_hf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Footer HTML (repeats on every page).",
+   "fieldname": "footer_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Footer HTML"
+  },
+  {
+   "default": "15",
+   "description": "Reserved footer height in mm (bottom page margin).",
+   "fieldname": "footer_height",
+   "fieldtype": "Float",
+   "label": "Footer Height (mm)"
+  },
+  {
+   "fieldname": "body_section",
+   "fieldtype": "Section Break",
+   "label": "Document Body (HTML + Jinja)"
+  },
+  {
+   "fieldname": "body_help",
+   "fieldtype": "HTML",
+   "options": "<p class=\"text-muted small\">Write the document as HTML. Use placeholders from your data sources, e.g. <code>{{ data.sales.row.total }}</code> (single value) or loop rows with <code>{% for r in data.totals.rows %}...{% endfor %}</code>. Inputs are available as <code>{{ inputs.company }}</code>, plus <code>{{ company }}</code>, <code>{{ today }}</code> and <code>{{ fmt(value) }}</code>. Use the <b>Preview</b> button to see it rendered.</p>"
+  },
+  {
+   "description": "The document template as raw HTML + Jinja. Rendered with your data at generation time; the user can then edit the result before printing/emailing.",
+   "fieldname": "body_html",
+   "fieldtype": "Code",
+   "options": "HTML",
+   "label": "Body HTML"
   }
  ],
  "links": [],

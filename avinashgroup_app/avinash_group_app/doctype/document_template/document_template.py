@@ -8,18 +8,8 @@ from frappe.model.document import Document
 
 class DocumentTemplate(Document):
 	def validate(self):
-		self.validate_sections()
-		self.validate_party_type()
 		self.validate_companies()
 		self.validate_jinja()
-
-	def validate_sections(self):
-		if not self.sections:
-			frappe.throw(_("Add at least one section to the template."))
-
-	def validate_party_type(self):
-		if self.data_provider == "Party Balance Confirmation" and not self.party_type:
-			frappe.throw(_("Party Type is required for the Party Balance Confirmation data provider."))
 
 	def validate_companies(self):
 		"""De-duplicate the company list (empty list = applies to all companies)."""
@@ -32,20 +22,21 @@ class DocumentTemplate(Document):
 		self.companies = unique_rows
 
 	def validate_jinja(self):
-		"""Dry-render each Jinja section against a permissive stub to catch syntax
+		"""Dry-render body/header/footer against a permissive stub to catch syntax
 		errors early (without needing the real data, which only exists at generation)."""
 		from avinashgroup_app.custom_code.document_generator.providers import stub_context
 
 		stub = stub_context()
 		if self.companies:
 			stub["company"] = self.companies[0].company
-		for row in self.sections:
-			if row.section_type in ("Rich Text", "Letter Head", "Signature Block") and row.content:
-				try:
-					frappe.render_template(row.content, stub)
-				except Exception as e:
-					frappe.throw(
-						_("Section {0} ({1}) has an invalid template: {2}").format(
-							row.idx, row.section_title, str(e)
-						)
-					)
+		for label, content in (
+			(_("body"), self.body_html),
+			(_("header"), self.header_html),
+			(_("footer"), self.footer_html),
+		):
+			if not content:
+				continue
+			try:
+				frappe.render_template(content, stub)
+			except Exception as e:
+				frappe.throw(_("The document {0} has an invalid template: {1}").format(label, str(e)))

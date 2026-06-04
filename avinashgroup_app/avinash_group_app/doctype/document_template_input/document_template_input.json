@@ -9,7 +9,9 @@
   "label",
   "input_type",
   "options",
-  "reqd"
+  "reqd",
+  "exclusive_group",
+  "exclusive_set"
  ],
  "fields": [
   {
@@ -46,6 +48,20 @@
    "fieldname": "reqd",
    "fieldtype": "Check",
    "label": "Mandatory"
+  },
+  {
+   "description": "Optional. Inputs sharing the SAME group are filled together (a bundle). Bundles compete only within the same Exclusive Set. e.g. put both From Date and To Date in group 'date_range' so they stay together.",
+   "fieldname": "exclusive_group",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Exclusive Group"
+  },
+  {
+   "description": "Optional. The exclusivity scope. Bundles (Exclusive Groups) sharing the same Exclusive Set are mutually exclusive — filling one clears the others in that set. Bundles in DIFFERENT sets are independent, so you can have several separate either/or choices on one template. Blank = the default shared set. e.g. set 'period' on the Fiscal-Year and Date-Range bundles, and 'party' on the Customer and Supplier bundles — picking a period won't touch the party choice.",
+   "fieldname": "exclusive_set",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Exclusive Set"
   }
  ],
  "istable": 1,

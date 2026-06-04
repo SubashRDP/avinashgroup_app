@@ -1,6 +1,4 @@
 /* Copyright (c) 2026, Raindrop and contributors */
-/* Page-specific chrome only. The canvas/box/toolbar styles are shared via
-   /assets/avinashgroup_app/css/document_canvas.css (app_include_css). */
 
 .dg-wrap {
 	display: flex;
@@ -12,6 +10,13 @@
 	border: 1px solid var(--border-color, #e2e2e2);
 	border-radius: var(--border-radius-md, 6px);
 	padding: 12px;
+	/* Sit above the sticky toolbar (z-index:5) so Link autocomplete dropdowns
+	   (e.g. Fiscal Year) overlay it instead of rendering behind it. */
+	position: relative;
+	z-index: 20;
+}
+.dg-selector .awesomplete > ul {
+	z-index: 30;
 }
 .dg-selector-row {
 	display: flex;
@@ -31,4 +36,59 @@
 .dg-empty {
 	padding: 16px 4px;
 	text-align: center;
+}
+
+/* Formatting toolbar */
+.dg-toolbar {
+	display: flex;
+	gap: 4px;
+	padding: 6px 8px;
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #e2e2e2);
+	border-radius: var(--border-radius-md, 6px);
+	position: sticky;
+	top: 0;
+	z-index: 5;
+}
+.dg-toolbar button {
+	background: #f4f5f6;
+	border: 1px solid var(--border-color, #e2e2e2);
+	border-radius: 4px;
+	padding: 3px 9px;
+	font-size: 12px;
+	cursor: pointer;
+}
+.dg-toolbar button:hover {
+	background: var(--primary, #2490ef);
+	color: #fff;
+}
+
+/* Editable A4-ish document */
+.dg-page-wrap {
+	background: var(--gray-100, #f4f5f6);
+	border: 1px solid var(--border-color, #e2e2e2);
+	border-radius: var(--border-radius-md, 6px);
+	padding: 24px;
+	overflow: auto;
+	max-height: 78vh;
+	display: flex;
+	justify-content: center;
+}
+.dg-doc-edit {
+	width: 794px;
+	min-height: 1000px;
+	background: #fff;
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+	padding: 57px; /* ~15mm */
+	outline: none;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 11pt;
+	color: #000;
+	line-height: 1.5;
+}
+.dg-doc-edit img {
+	max-width: 100%;
+}
+.dg-doc-edit table {
+	border-collapse: collapse;
 }

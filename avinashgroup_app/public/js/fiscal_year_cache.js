@@ -120,9 +120,19 @@ window.FiscalYearCache = {
 	},
 };
 
-// Auto-start when Frappe is ready
-frappe.ready(() => {
-	if (typeof window.FiscalYearCache !== "undefined") {
-		window.FiscalYearCache.start();
+// Auto-start when Frappe is ready.
+// `frappe.ready` only exists on website/portal pages, not in Desk, so guard
+// for it and fall back to jQuery's document-ready (available in both contexts).
+(function () {
+	const init = () => {
+		if (typeof window.FiscalYearCache !== "undefined") {
+			window.FiscalYearCache.start();
+		}
+	};
+
+	if (typeof frappe !== "undefined" && typeof frappe.ready === "function") {
+		frappe.ready(init);
+	} else {
+		$(document).ready(init);
 	}
-});
+})();
