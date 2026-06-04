@@ -106,6 +106,7 @@ class AuditBase:
     # "Leave Type",
     "BOM",
     "Designation",
+    "Shift Type",
     # "BOM Template"
     ]
 
@@ -138,6 +139,7 @@ class AuditBase:
         "Asset Value Adjustment",
         "Manufacturer",
         "Prospect",
+        "Shift Type",
         # "BOM Template"
     ]
     

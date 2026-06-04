@@ -29,7 +29,16 @@ frappe.query_reports["Party Ledger"] = {
 			get_data: function (txt) {
 				if (!frappe.query_report.filters) return;
 				let party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
-				return frappe.db.get_link_options(party_type, txt);
+				let company = frappe.query_report.get_filter_value("company");
+				if (!company) {
+					return frappe.db.get_link_options(party_type, txt);
+				}
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.get_company_parties",
+						args: { party_type, company, txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -181,6 +190,31 @@ frappe.query_reports["Party Ledger"] = {
 	},
 
 	onload: function (_report) {
+		// Resolve which columns the PRINT pdf should show, matching the report:
+		//  1) "Pick Columns" in the print dialog, else
+		//  2) whatever columns are still visible in the datatable (after removals).
+		// Returns [] when all columns are visible => template shows all.
+		// Used by print_report only; the Download PDF button stays "show all".
+		const pl_selected_columns = function (print_settings) {
+			const cols = frappe.query_report.columns || [];
+			const report_fields = new Set(cols.map(c => c.fieldname));
+
+			if (print_settings && print_settings.pick_columns && print_settings.columns && print_settings.columns.length) {
+				const by_label = {};
+				cols.forEach(c => { by_label[c.label] = c.fieldname; });
+				return print_settings.columns
+					.map(v => (report_fields.has(v) ? v : by_label[v]))
+					.filter(Boolean);
+			}
+
+			const dt = frappe.query_report.datatable;
+			if (!dt || !dt.datamanager) return [];
+			const visible = dt.datamanager.getColumns()
+				.map(c => c.fieldname || c.id)
+				.filter(fn => report_fields.has(fn));
+			return visible.length === report_fields.size ? [] : visible;
+		};
+
 		_report.page.add_inner_button(__('Download PDF'), function () {
 			const filters = frappe.query_report.get_filter_values(true);
 			if (!filters.company || !filters.from_date || !filters.to_date) {
@@ -192,6 +226,21 @@ frappe.query_reports["Party Ledger"] = {
 			window.open(url);
 		});
 
+		// Native Print opens the SAME wkhtmltopdf PDF as the Download button (orientation
+		// from the print dialog), so Print and Download are identical — like the registers.
+		_report.print_report = function (print_settings) {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.company || !filters.from_date || !filters.to_date) {
+				frappe.msgprint(__('Please set Company, From Date and To Date'));
+				return;
+			}
+			const orientation = (print_settings && print_settings.orientation) || 'Landscape';
+			const url = '/api/method/avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf'
+				+ '?filters=' + encodeURIComponent(JSON.stringify(filters))
+				+ '&orientation=' + encodeURIComponent(orientation)
+				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(pl_selected_columns(print_settings)));
+			window.open(url);
+		};
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
@@ -201,7 +250,9 @@ frappe.query_reports["Party Ledger"] = {
 		}
 		if (column.fieldname === "voucher_no" && data.voucher_type && value) {
 			const route = frappe.router.slug(data.voucher_type);
-			return `<a href="/app/${route}/${value}" target="_blank">${value}</a>`;
+			// Link to the real document id (voucher_link); the shown value may be a custom name.
+			const target = data.voucher_link || value;
+			return `<a href="/app/${route}/${encodeURIComponent(target)}" target="_blank">${value}</a>`;
 		}
 		return default_formatter(value, row, column, data);
 	},

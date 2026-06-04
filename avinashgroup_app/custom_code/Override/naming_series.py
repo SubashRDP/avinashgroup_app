@@ -502,6 +502,11 @@ NAMING_CONFIG = {
         "use_fiscal_year": False,
         "sequence_length": 5
     },
+    "Shift Type": {
+        "prefix": "SHIFT",
+        "use_fiscal_year": False,
+        "sequence_length": 5
+    },
     "Asset Maintenance Team": {
         "prefix": "ASSET-MT",
         "use_fiscal_year": False,

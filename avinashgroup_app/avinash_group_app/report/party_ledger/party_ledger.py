@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import os
+import math
 import frappe
 from frappe import _
 from frappe.utils import flt
@@ -48,12 +49,102 @@ def _bal_str(v):
 	return Markup(f'<b>{formatted}</b>&thinsp;<small>{suffix}</small>')
 
 
+# ── PDF pagination (manual, so "Page X of Y" works on plain/unpatched wkhtmltopdf) ──
+# Unlike the registers, ledger rows vary in height (wrapping remarks, detail sub-rows,
+# summary rows) and a voucher + its details + remark must stay together. So we can't
+# chunk by a fixed row count — we group rows into atomic blocks, estimate each block's
+# height in "line units", and pack blocks into pages without ever splitting a block.
+# Capacity / chars-per-line are conservative: the safe failure is a slightly under-full
+# page, never a split voucher. Tune these 4 numbers against real data.
+# Capacity differs by mode: detailed_mapping vouchers are denser (item + VAT detail
+# lines + remark + separator each), so fewer line-units fit on a page. Keys: False=plain,
+# True=detailed_mapping. Conservative on purpose — a slightly under-full page is the safe
+# failure; an overflow splits a voucher across pages (what we're fixing).
+# Body line-units per page (the header is repeated on EVERY page and is subtracted
+# separately, incl. one line per party name). Keys: False=plain, True=detailed_mapping.
+_PL_CAPACITY = {
+	'Portrait':  {False: 64, True: 48},
+	'Landscape': {False: 23, True: 26},
+}
+_PL_CHARS_PER_LINE = {'Portrait': 55, 'Landscape': 90}  # remark chars before it wraps to another line
+
+
+def _pl_block_height(block, show_remarks, chars_per_line):
+	h = 0.0
+	for r in block:
+		if r.get('is_detail'):
+			h += 0.85   # detail rows use a smaller font (10px) so they're shorter
+		elif r.get('is_separator'):
+			h += 0.4
+		else:
+			h += 1.0  # main row or summary row
+		rem = r.get('remarks') or ''
+		if show_remarks and rem:
+			h += max(1, math.ceil(len(rem) / chars_per_line)) * 0.85
+	return h
+
+
+def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None):
+	"""Group flat ledger rows into atomic blocks and pack them into pages by estimated
+	height. Returns a list of pages, each a flat list of rows (block order preserved)."""
+	if not data:
+		return []
+
+	capacity = _PL_CAPACITY.get(orientation, {}).get(bool(detailed), 18)
+	# The header (repeated on every page) grows by one line per party name shown.
+	capacity -= len(party_names or [])
+	if capacity < 5:
+		capacity = 5
+	chars_per_line = _PL_CHARS_PER_LINE.get(orientation, 90)
+
+	# Group into atomic blocks: a main/summary row plus the detail/separator rows that
+	# follow it (a voucher's remark is a field on its main row, so it travels with it).
+	blocks = []
+	i, n = 0, len(data)
+	while i < n:
+		r = data[i]
+		if r.get('is_detail') or r.get('is_separator') or r.get('is_remark'):
+			# Continuation row with no preceding main row (shouldn't normally happen) —
+			# attach it to the current block, starting one if needed.
+			if not blocks:
+				blocks.append([])
+			blocks[-1].append(r)
+			i += 1
+			continue
+		block = [r]
+		i += 1
+		while i < n and (data[i].get('is_detail') or data[i].get('is_separator')):
+			block.append(data[i])
+			i += 1
+		blocks.append(block)
+
+	# Pack blocks into pages, never splitting a block.
+	pages, cur, used = [], [], 0.0
+	for block in blocks:
+		bh = _pl_block_height(block, show_remarks, chars_per_line)
+		if cur and used + bh > capacity:
+			pages.append(cur)
+			cur, used = [], 0.0
+		cur.extend(block)
+		used += bh
+	if cur:
+		pages.append(cur)
+	return pages
+
+
 @frappe.whitelist()
-def download_pdf(filters):
-	from avinashgroup_app.custom_code.document_generator.pdf import build_pdf
+def download_pdf(filters, orientation=None, report_title=None, filename=None, selected_columns=None):
+	from frappe.utils.pdf import get_pdf
 
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
+	if isinstance(selected_columns, str):
+		selected_columns = json.loads(selected_columns)
+
+	orientation = orientation if orientation in ('Portrait', 'Landscape') else 'Landscape'
+	# Default keeps the existing "Party Ledger - Customer/Supplier" heading; callers
+	# (e.g. the Customer Statement portal) can override with their own title.
+	report_title = report_title or 'Party Ledger - {0}'.format(filters.get('party_type') or 'Customer')
 
 	_, data = execute(filters)
 
@@ -69,33 +160,49 @@ def download_pdf(filters):
 					seen.add(part)
 					party_names.append(part)
 
+	pages = _pl_paginate(data, orientation, bool(filters.get('show_remarks')), bool(filters.get('detailed_mapping')), party_names)
+
 	template_path = os.path.join(os.path.dirname(__file__), 'party_ledger_pdf.html')
 	with open(template_path) as f:
 		template_content = f.read()
 
+	# Page numbers are rendered in the template body (manual pagination) so they work on
+	# plain/unpatched wkhtmltopdf — no --footer-html (needs patched-Qt, silently ignored).
 	html = frappe.render_template(
 		template_content,
 		{
 			'filters': filters,
-			'data': data,
+			'pages': pages,
+			'total_pages': len(pages) or 1,
 			'party_names': party_names,
 			'fmt': _fmt_inr,
 			'bal': _bal_str,
+			'sc': selected_columns or [],
+			'orientation': orientation,
+			'report_title': report_title,
 		}
 	)
 
-	pdf_data = build_pdf(
-		html,
-		orientation='Landscape',
-		margins={
-			'margin-top': '10mm',
-			'margin-right': '15mm',
-			'margin-bottom': '15mm',
-			'margin-left': '15mm',
-		},
-	)
+	# Portrait needs the table to use as much of the 210mm width as possible — generous
+	# margins push wide columns off the page. Landscape (297mm) has room.
+	if orientation == 'Portrait':
+		margin_top, margin_right, margin_bottom, margin_left = '10mm', '5mm', '15mm', '5mm'
+	else:
+		margin_top, margin_right, margin_bottom, margin_left = '10mm', '15mm', '15mm', '15mm'
 
-	frappe.response.filename = 'party_ledger.pdf'
+	options = {
+		'page-size': 'A4',
+		'orientation': orientation,
+		'margin-top': margin_top,
+		'margin-right': margin_right,
+		'margin-bottom': margin_bottom,
+		'margin-left': margin_left,
+		'encoding': 'UTF-8',
+		'enable-local-file-access': None,
+	}
+	pdf_data = get_pdf(html, options)
+
+	frappe.response.filename = filename or 'party_ledger.pdf'
 	frappe.response.filecontent = pdf_data
 	frappe.response.type = 'download'
 
@@ -123,6 +230,40 @@ def _normalize_multiselect(value):
 		return [v for v in value if v]
 
 	return [value]
+
+
+@frappe.whitelist()
+def get_company_parties(party_type, company, txt=None):
+	"""Party options limited to those that actually transact in the selected company.
+
+	Customer/Supplier are global in ERPNext, so we scope the list by checking for any
+	GL Entry of that party in the company. Keeps the dropdown relevant per company.
+	"""
+	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
+	if not company:
+		return []
+
+	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
+	like = f"%{(txt or '').strip()}%"
+
+	return frappe.db.sql(
+		f"""
+		SELECT p.name AS value, p.`{name_field}` AS description
+		FROM `tab{party_type}` p
+		WHERE (p.name LIKE %(txt)s OR p.`{name_field}` LIKE %(txt)s)
+		  AND EXISTS (
+			SELECT 1 FROM `tabGL Entry` gle
+			WHERE gle.party = p.name
+			  AND gle.party_type = %(party_type)s
+			  AND gle.company = %(company)s
+			  AND gle.is_cancelled = 0
+		  )
+		ORDER BY p.`{name_field}`
+		LIMIT 50
+		""",
+		{"txt": like, "party_type": party_type, "company": company},
+		as_dict=True,
+	)
 
 
 def execute(filters=None):
@@ -153,9 +294,8 @@ def get_columns(filters=None):
 	if show_party_column:
 		columns.append({
 			"label": _("Party"),
-			"fieldname": "party",
-			"fieldtype": "Link",
-			"options": party_type,
+			"fieldname": "party_name",
+			"fieldtype": "Data",
 			"width": 220,
 		})
 
@@ -306,6 +446,9 @@ def get_data(filters):
 			"date":         entry.get("date"),
 			"miti":         "",
 			"voucher_no":   entry.get("voucher_no"),
+			# Real document id for the navigation link — kept separate so a custom
+			# display name (applied later) doesn't break the href.
+			"voucher_link": entry.get("voucher_no"),
 			"voucher_type": entry.get("voucher_type"),
 			"party":        entry.get("party") or "",
 			"description":  entry.get("description") or "",
