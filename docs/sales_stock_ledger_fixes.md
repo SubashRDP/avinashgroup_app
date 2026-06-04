@@ -109,5 +109,44 @@ on_change: function () {
 
 ---
 
-## Pending / To Investigate
-- Detail mode not working as expected (under investigation)
+## Nepali Month Support & UI Polish (2026-06-04)
+
+### Nepali (Bikram Sambat) month reporting
+The report now reports **in Nepali month**. This intentionally reuses the
+shared dual-date system in `rdp_common_app/public/js/report_nepali_date.js`
+rather than adding a parallel month selector:
+
+- Because the report exposes `from_date` / `to_date` (`Date` fieldtype),
+  rdp_common_app automatically:
+  - renders a Nepali **BS date input** beside each date filter (with a Nepali
+    date picker), and
+  - adds the **📅 Select Month** button whose **Nepali (BS)** tab sets the
+    period to a whole Bikram Sambat month.
+- A new **Nepali Date (BS)** column was added to the Detail view, showing each
+  voucher's posting date in BS (e.g. `2082-12-05`). Conversion uses the
+  `nepali_datetime` library (`_to_nepali_date_str`).
+- `get_default_nepali_month()` (whitelisted) returns the current BS month and
+  its Gregorian range — a reusable helper for defaults/automation.
+
+> A dedicated `period_type` + `nepali_year` + `nepali_month` filter set was
+> prototyped first, but it duplicated and visually clashed with the global
+> Select Month widget (two month pickers, hidden date fields). It was removed
+> in favour of the consistent shared mechanism.
+
+### Period validation (graceful)
+`_resolve_period()` returns an **empty report** (no error popup) when the
+period is incomplete, and only raises for a genuinely inverted range
+(*From Date after To Date*). This keeps the first auto-load clean.
+
+### UI polish
+- Header band, zebra striping, hover highlight, and a highlighted bold **Total** row.
+- Voucher Type rendered as colour-coded pill badges — green **Sales Invoice**,
+  red **Sales Return** (via `formatter` + `_tagRows`).
+- Nepali date emphasised (tabular figures).
+
+### Tested (site: `avinas1`)
+- Detail / Summarized / Summarized+Merge — all error-free.
+- BS dates verified contained within the selected month (e.g. Chaitra 2082 →
+  all rows `2082-12-01 … 2082-12-30`).
+- Sales Return rows show negative qty + red badge; totals correct.
+- Incomplete period → empty (no error); `from > to` → clean validation error.

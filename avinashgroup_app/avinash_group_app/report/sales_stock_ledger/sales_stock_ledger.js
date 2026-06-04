@@ -40,6 +40,11 @@ frappe.query_reports["Sales Stock Ledger"] = {
                     : {};
             },
         },
+        // Nepali (Bikram Sambat) month selection is provided by the shared
+        // "📅 Select Month" widget + the per-field BS date inputs that
+        // rdp_common_app injects for every Date filter (its Nepali tab sets the
+        // period to a whole BS month). The Detail view also shows a "Nepali
+        // Date (BS)" column for each row.
         {
             fieldname: "from_date",
             label: __("From Date"),
@@ -153,6 +158,29 @@ frappe.query_reports["Sales Stock Ledger"] = {
             setTimeout(() => this.autoFitColumns(dt), 100);
         }
         this._initDragScroll(dt);
+        this._tagRows(dt);
+    },
+
+    // Add CSS hooks to rows so total / return rows and zebra striping render.
+    _tagRows: function (dt) {
+        const scrollable = dt && dt.bodyScrollable;
+        if (!scrollable) return;
+        const data = (dt.datamanager && dt.datamanager.data) || [];
+        const rows = scrollable.querySelectorAll(".dt-row");
+        rows.forEach((rowEl, i) => {
+            const d = data[i] || {};
+            rowEl.classList.remove(
+                "ssl-total-row", "ssl-return-row", "ssl-row-even"
+            );
+            if (d.bold) {
+                rowEl.classList.add("ssl-total-row");
+            } else {
+                if (d.voucher_type === "Sales Return") {
+                    rowEl.classList.add("ssl-return-row");
+                }
+                if (i % 2 === 1) rowEl.classList.add("ssl-row-even");
+            }
+        });
     },
 
     _initDragScroll: function (dt) {
@@ -232,9 +260,27 @@ frappe.query_reports["Sales Stock Ledger"] = {
 
     formatter: function (value, row, column, data, default_formatter) {
         let formatted = default_formatter(value, row, column, data);
-        if (data && data.bold) {
-            formatted = `<strong>${formatted}</strong>`;
+
+        if (data) {
+            // Color-code the voucher type as a pill badge (skip the total row).
+            if (column.fieldname === "voucher_type" && !data.bold && value) {
+                if (value === "Sales Return") {
+                    formatted = `<span class="ssl-badge ssl-badge--return">${value}</span>`;
+                } else if (value === "Sales Invoice") {
+                    formatted = `<span class="ssl-badge ssl-badge--invoice">${value}</span>`;
+                }
+            }
+
+            // Emphasise the Nepali (BS) date.
+            if (column.fieldname === "nepali_date" && value) {
+                formatted = `<span class="ssl-nepali-date">${value}</span>`;
+            }
+
+            if (data.bold) {
+                formatted = `<strong>${formatted}</strong>`;
+            }
         }
+
         return formatted;
     },
 
@@ -284,6 +330,47 @@ frappe.query_reports["Sales Stock Ledger"] = {
                 height: auto;
                 min-height: 30px;
             }
+            /* Header band */
+            .query-report-wrapper .dt-header .dt-cell--header {
+                background: #f4f5f6;
+                border-bottom: 2px solid #d1d8dd;
+            }
+            .query-report-wrapper .dt-header .dt-cell__content--header {
+                color: #1f272e;
+                font-weight: 600;
+            }
+            /* Zebra striping for readability */
+            .query-report-wrapper .dt-row.ssl-row-even .dt-cell {
+                background: #fbfcfd;
+            }
+            .query-report-wrapper .dt-row:hover .dt-cell {
+                background: #f0f7ff !important;
+            }
+            /* Total row highlight (rows we tag with .ssl-total-row) */
+            .query-report-wrapper .dt-row.ssl-total-row .dt-cell {
+                background: #eef4ff !important;
+                border-top: 2px solid #b3c8ff;
+            }
+            /* Sales Return rows tinted */
+            .query-report-wrapper .dt-row.ssl-return-row .dt-cell {
+                background: #fff6f6;
+            }
+            /* Nepali date cell */
+            .ssl-nepali-date {
+                color: #b5430f;
+                font-weight: 600;
+                font-variant-numeric: tabular-nums;
+            }
+            .ssl-badge {
+                display: inline-block;
+                padding: 1px 7px;
+                border-radius: 10px;
+                font-size: 11px;
+                font-weight: 600;
+                line-height: 1.5;
+            }
+            .ssl-badge--invoice { background: #e6f4ea; color: #137333; }
+            .ssl-badge--return  { background: #fce8e6; color: #c5221f; }
         `;
         document.head.appendChild(style);
     },
