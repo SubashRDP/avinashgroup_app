@@ -22,17 +22,28 @@ APPROVAL_SETTING_FIELD  = "custom_approval_setting"
 APPROVAL_SECTION_FIELD  = "custom_approval_section"
 
 
+def _is_managed_doctype(doc):
+	"""
+	A doctype is managed by Dynamic Approval only if `setup_workflow` has created
+	its driver field. The doc-event hooks are registered on "*", so this cheap,
+	DB-free meta check is the gate that keeps us from touching any other doctype's
+	workflow (e.g. the Material Request One-Line Approver) and avoids a config DB
+	scan on every save of every doctype in the system.
+	"""
+	return bool(doc and doc.meta.has_field(CURRENT_APPROVER_FIELD))
+
+
 @frappe.whitelist()
 def has_approval_config(doctype, company):
 	"""Check if a Dynamic Approval Setting exists for this doctype + company.
 	Called from client JS to toggle visibility of approval fields."""
 	if not doctype or not company:
 		return False
-	return bool(frappe.db.exists("Dynamic Approval Setting", {
-		"document_type": doctype,
-		"company": company,
-		"is_active": 1,
-	}))
+	return bool(frappe.db.get_all(
+		"Dynamic Approval Setting",
+		filters={"document_type": doctype, "company": company, "is_active": 1},
+		limit=1,
+	))
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -170,8 +181,6 @@ def _get_total_levels(doc, config):
 	              +  fixed approvers in Dynamic Approval Setting.
 	"""
 	table_field = config["approver_table_fieldname"]
-	user_count = len([r for r in doc.get(table_field) or [] if not getattr(r, "flags", {}).get("__islocal")]) # actually just len
-	# To handle deleted rows safely if they exist in doc, they usually lack docstatus=2 in memory but frappe usually cleanly removes them from doc.get
 	user_count = len(doc.get(table_field) or [])
 	return user_count + len(config["fixed_approvers"])
 
@@ -227,6 +236,8 @@ def validate(doc, method=None):
 	  - Submit for Approval (Draft → Pending) — workflow_state has changed
 	  - Intermediate Approve (Pending → Pending, level++) — flagged by before_workflow_action
 	"""
+	if not _is_managed_doctype(doc):
+		return
 	config = _get_config_for_doc(doc)
 	if not config:
 		return
@@ -313,6 +324,12 @@ def before_workflow_action(doc, method=None, action=None):
 	  4. workflow_state is updated on the doc
 	  5. doc.save() → before_save → on_update
 	"""
+	# Hook is registered on "*". Never touch a doctype we don't manage —
+	# otherwise the no-config branch below could auto-submit, say, a Material
+	# Request whose own workflow happens to use a "Submit for Approval" action.
+	if not _is_managed_doctype(doc):
+		return
+
 	config = _get_config_for_doc(doc)
 
 	# Frappe sets doc.workflow_action before calling this hook.
@@ -392,6 +409,8 @@ def on_update(doc, method=None):
 	   of what happened in the save cycle.
 	2. Send email notification when the level changes via a workflow action.
 	"""
+	if not _is_managed_doctype(doc):
+		return
 	config = _get_config_for_doc(doc)
 	if not config:
 		return
@@ -732,11 +751,29 @@ def _create_or_update_workflow(doctype, level_field):
 	
 	permissions = [{"role": role} for role in role_list]
 
+	# Some submittable doctypes gate their own submission on a native `status`
+	# field — e.g. HRMS Leave Application throws unless status is Approved/Rejected
+	# before submit. When the target has such a status field, bridge
+	# workflow_state → status so reaching Approved/Rejected also sets it.
+	status_df = frappe.get_meta(doctype).get_field("status")
+	bridge_status = bool(
+		status_df
+		and status_df.fieldtype == "Select"
+		and "Approved" in (status_df.options or "")
+		and "Rejected" in (status_df.options or "")
+	)
+
+	approved_state = {"state": "Approved", "doc_status": "1", "allow_edit": "All", "permissions": permissions}
+	rejected_state = {"state": "Rejected", "doc_status": "0", "allow_edit": "All", "permissions": permissions}
+	if bridge_status:
+		approved_state.update({"update_field": "status", "update_value": "Approved"})
+		rejected_state.update({"update_field": "status", "update_value": "Rejected"})
+
 	states = [
 		{"state": "Draft",            "doc_status": "0", "allow_edit": "All", "permissions": permissions},
 		{"state": "Pending Approval", "doc_status": "0", "allow_edit": "All", "permissions": permissions},
-		{"state": "Approved",         "doc_status": "1", "allow_edit": "All", "permissions": permissions},
-		{"state": "Rejected",         "doc_status": "0", "allow_edit": "All", "permissions": permissions},
+		approved_state,
+		rejected_state,
 	]
 
 	transitions = [
