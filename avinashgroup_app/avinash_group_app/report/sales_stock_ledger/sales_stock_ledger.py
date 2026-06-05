@@ -6,14 +6,103 @@ def execute(filters=None):
     filters = filters or {}
     _validate_permissions(filters)
 
-    if filters.get("report_type") == "Summarized":
-        columns = _get_summarized_columns()
+    summarized = filters.get("report_type") == "Summarized"
+    columns = _get_summarized_columns() if summarized else _get_detail_columns()
+
+    # When the period is incomplete (e.g. the very first auto-load before the
+    # Nepali Year/Month defaults are populated) we show an empty report rather
+    # than raising an error — keeps the page clean and error-free.
+    if not _resolve_period(filters):
+        return columns, []
+
+    if summarized:
         data = _get_summarized_data(filters)
     else:
-        columns = _get_detail_columns()
-        data = _add_detail_totals_row(_get_detail_data(filters))
+        data = _add_detail_totals_row(_add_nepali_dates(_get_detail_data(filters)))
 
     return columns, data
+
+
+# ─────────────────────────────────────────────────────────────
+#  NEPALI (BIKRAM SAMBAT) CALENDAR
+# ─────────────────────────────────────────────────────────────
+
+NEPALI_MONTHS = [
+    "Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
+    "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
+]
+
+
+def _bs_month_to_gregorian_range(year, month):
+    """Convert a Bikram Sambat (year, month) to a Gregorian (start, end) date pair."""
+    import nepali_datetime
+    from datetime import timedelta
+
+    start = nepali_datetime.date(year, month, 1).to_datetime_date()
+    next_year, next_month = (year + 1, 1) if month == 12 else (year, month + 1)
+    end = nepali_datetime.date(next_year, next_month, 1).to_datetime_date() - timedelta(days=1)
+    return start, end
+
+
+def _resolve_period(filters):
+    """Validate the reporting period.
+
+    Returns True when a usable from/to date range is available, False when the
+    period is still incomplete (caller should render an empty report rather
+    than raising). Raises only for a genuinely invalid range (From after To).
+
+    Nepali-month filtering is handled in the browser by the shared dual-date /
+    "Select Month" widget (rdp_common_app/report_nepali_date.js), which writes
+    the chosen Bikram Sambat month back into from_date / to_date.
+    """
+    if not filters.get("from_date") or not filters.get("to_date"):
+        return False
+
+    if filters["from_date"] > filters["to_date"]:
+        frappe.throw(_("From Date cannot be after To Date."))
+
+    return True
+
+
+def _to_nepali_date_str(gregorian_date):
+    """Format a Gregorian date as a Bikram Sambat date string, e.g. '2082-12-05'."""
+    if not gregorian_date:
+        return ""
+    try:
+        import nepali_datetime
+        from frappe.utils import getdate
+
+        bs = nepali_datetime.date.from_datetime_date(getdate(gregorian_date))
+        return "{0:04d}-{1:02d}-{2:02d}".format(bs.year, bs.month, bs.day)
+    except Exception:
+        return ""
+
+
+def _add_nepali_dates(rows):
+    for row in rows:
+        row["nepali_date"] = _to_nepali_date_str(row.get("posting_date"))
+    return rows
+
+
+@frappe.whitelist()
+def get_default_nepali_month():
+    """Return the current Bikram Sambat month and its Gregorian (AD) date range.
+
+    Used by the report's JS to default the period to the running Nepali month,
+    so the report opens "in Nepali month" out of the box.
+    """
+    import nepali_datetime
+
+    today = nepali_datetime.date.today()
+    from_date, to_date = _bs_month_to_gregorian_range(today.year, today.month)
+    return {
+        "year": today.year,
+        "month": today.month,
+        "month_name": NEPALI_MONTHS[today.month - 1],
+        "bs_label": "{0} {1}".format(NEPALI_MONTHS[today.month - 1], today.year),
+        "from_date": str(from_date),
+        "to_date": str(to_date),
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -51,6 +140,12 @@ def _get_detail_columns():
             "label": _("Date"),
             "fieldtype": "Date",
             "width": 110,
+        },
+        {
+            "fieldname": "nepali_date",
+            "label": _("Nepali Date (BS)"),
+            "fieldtype": "Data",
+            "width": 130,
         },
         {
             "fieldname": "voucher_type",
@@ -387,6 +482,7 @@ def _add_detail_totals_row(rows):
 
     total_row = {
         "posting_date": None,
+        "nepali_date": "",
         "voucher_type": _("Total"),
         "voucher_no": "",
         "item_code": "",
