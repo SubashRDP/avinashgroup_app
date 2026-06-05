@@ -59,7 +59,7 @@ def get_print_html(filters, selected_columns=None, orientation=None):
 
 
 @frappe.whitelist()
-def download_pdf(filters, orientation=None, selected_columns=None):
+def download_pdf(filters, orientation=None, selected_columns=None, view=None):
 	from frappe.utils.pdf import get_pdf
 
 	if isinstance(filters, str):
@@ -104,7 +104,8 @@ def download_pdf(filters, orientation=None, selected_columns=None):
 
 	frappe.response.filename = 'purchase_register.pdf'
 	frappe.response.filecontent = pdf_data
-	frappe.response.type = 'download'
+	# view=1 (Print) → open inline in the browser tab; otherwise download the file.
+	frappe.response.type = 'pdf' if frappe.utils.cint(view) else 'download'
 
 
 def execute(filters=None):

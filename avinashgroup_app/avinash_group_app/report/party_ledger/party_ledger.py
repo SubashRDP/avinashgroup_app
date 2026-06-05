@@ -49,19 +49,6 @@ def _bal_str(v):
 	return Markup(f'<b>{formatted}</b>&thinsp;<small>{suffix}</small>')
 
 
-# ── PDF pagination (manual, so "Page X of Y" works on plain/unpatched wkhtmltopdf) ──
-# Unlike the registers, ledger rows vary in height (wrapping remarks, detail sub-rows,
-# summary rows) and a voucher + its details + remark must stay together. So we can't
-# chunk by a fixed row count — we group rows into atomic blocks, estimate each block's
-# height in "line units", and pack blocks into pages without ever splitting a block.
-# Capacity / chars-per-line are conservative: the safe failure is a slightly under-full
-# page, never a split voucher. Tune these 4 numbers against real data.
-# Capacity differs by mode: detailed_mapping vouchers are denser (item + VAT detail
-# lines + remark + separator each), so fewer line-units fit on a page. Keys: False=plain,
-# True=detailed_mapping. Conservative on purpose — a slightly under-full page is the safe
-# failure; an overflow splits a voucher across pages (what we're fixing).
-# Body line-units per page (the header is repeated on EVERY page and is subtracted
-# separately, incl. one line per party name). Keys: False=plain, True=detailed_mapping.
 _PL_CAPACITY = {
 	'Portrait':  {False: 64, True: 48},
 	'Landscape': {False: 23, True: 26},
@@ -84,13 +71,17 @@ def _pl_block_height(block, show_remarks, chars_per_line):
 	return h
 
 
-def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None):
-	"""Group flat ledger rows into atomic blocks and pack them into pages by estimated
-	height. Returns a list of pages, each a flat list of rows (block order preserved)."""
+def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None, capacity_override=None):
+
 	if not data:
 		return []
 
-	capacity = _PL_CAPACITY.get(orientation, {}).get(bool(detailed), 18)
+	# capacity_override lets a specific caller (e.g. the Customer Statement) pack more
+	# rows per page without changing the shared _PL_CAPACITY used by the report itself.
+	if capacity_override:
+		capacity = capacity_override
+	else:
+		capacity = _PL_CAPACITY.get(orientation, {}).get(bool(detailed), 18)
 	# The header (repeated on every page) grows by one line per party name shown.
 	capacity -= len(party_names or [])
 	if capacity < 5:
@@ -133,7 +124,7 @@ def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None):
 
 
 @frappe.whitelist()
-def download_pdf(filters, orientation=None, report_title=None, filename=None, selected_columns=None):
+def download_pdf(filters, orientation=None, report_title=None, filename=None, selected_columns=None, view=None, capacity_override=None):
 	from frappe.utils.pdf import get_pdf
 
 	if isinstance(filters, str):
@@ -160,14 +151,13 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 					seen.add(part)
 					party_names.append(part)
 
-	pages = _pl_paginate(data, orientation, bool(filters.get('show_remarks')), bool(filters.get('detailed_mapping')), party_names)
+	pages = _pl_paginate(data, orientation, bool(filters.get('show_remarks')), bool(filters.get('detailed_mapping')), party_names, capacity_override=capacity_override)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'party_ledger_pdf.html')
 	with open(template_path) as f:
 		template_content = f.read()
 
 	# Page numbers are rendered in the template body (manual pagination) so they work on
-	# plain/unpatched wkhtmltopdf — no --footer-html (needs patched-Qt, silently ignored).
 	html = frappe.render_template(
 		template_content,
 		{
@@ -183,8 +173,6 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 		}
 	)
 
-	# Portrait needs the table to use as much of the 210mm width as possible — generous
-	# margins push wide columns off the page. Landscape (297mm) has room.
 	if orientation == 'Portrait':
 		margin_top, margin_right, margin_bottom, margin_left = '10mm', '5mm', '15mm', '5mm'
 	else:
@@ -204,7 +192,8 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 
 	frappe.response.filename = filename or 'party_ledger.pdf'
 	frappe.response.filecontent = pdf_data
-	frappe.response.type = 'download'
+	# view=1 (Print) → open inline in the browser tab; otherwise download the file.
+	frappe.response.type = 'pdf' if frappe.utils.cint(view) else 'download'
 
 
 def _normalize_multiselect(value):
@@ -364,13 +353,17 @@ def get_data(filters):
 		params["voucher_no_filter"] = f"%{voucher_no_filter}%"
 
 	# ── Opening balance ────────────────────────────────────────────────────────
+	# Match ERPNext General Ledger: opening = everything before the From Date PLUS any
+	# opening-balance entries (is_opening = 'Yes') regardless of their posting date.
+	# Those opening entries are excluded from the period rows below so they are not
+	# counted/shown twice.
 	opening_row = frappe.db.sql(f"""
 		SELECT
 			COALESCE(SUM(gle.debit),  0) AS opening_debit,
 			COALESCE(SUM(gle.credit), 0) AS opening_credit
 		FROM `tabGL Entry` gle
 		WHERE {conditions}
-		  AND gle.posting_date < %(from_date)s
+		  AND (gle.posting_date < %(from_date)s OR gle.is_opening = 'Yes')
 	""", params, as_dict=True)
 
 	opening = opening_row[0] if opening_row else {}
@@ -385,6 +378,7 @@ def get_data(filters):
 			gle.posting_date  AS date,
 			gle.voucher_type,
 			gle.voucher_no,
+			gle.account       AS account,
 			gle.against,
 			gle.debit,
 			gle.credit,
@@ -402,6 +396,7 @@ def get_data(filters):
 		LEFT JOIN `tabPurchase Invoice` pi ON pi.name = gle.voucher_no AND gle.voucher_type = 'Purchase Invoice'
 		WHERE {conditions}
 		  AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
+		  AND COALESCE(gle.is_opening, 'No') != 'Yes'
 		ORDER BY gle.posting_date ASC, gle.creation ASC
 	""", params, as_dict=True)
 
@@ -700,6 +695,12 @@ def _merge_entries(entries):
 
 	GL Entries can have multiple rows for the same voucher_no for the same party;
 	we merge them so each voucher appears only once in the report.
+
+	Exception — Journal Entries: a single JE can post both a debit and a credit to
+	the SAME party across two different accounts (e.g. a contra between deposit
+	accounts). We keep those as separate lines (group also by account) so each
+	account posting shows on its own row, with the account as its description —
+	instead of collapsing into one line showing both a debit and a credit.
 	"""
 	if not entries:
 		return []
@@ -719,13 +720,19 @@ def _merge_entries(entries):
 	grouped = {}
 	order = []
 	for e in entries:
-		key = (e.get("party"), e.get("date"), e.get("voucher_type"), e.get("voucher_no"))
+		vt = e.get("voucher_type")
+		# Journal Entries split by account; all other voucher types merge per voucher.
+		if vt == "Journal Entry":
+			key = (e.get("party"), e.get("date"), vt, e.get("voucher_no"), e.get("account"))
+		else:
+			key = (e.get("party"), e.get("date"), vt, e.get("voucher_no"))
 		if key not in grouped:
 			grouped[key] = {
 				"party": e.get("party"),
 				"date": e.get("date"),
-				"voucher_type": e.get("voucher_type"),
+				"voucher_type": vt,
 				"voucher_no": e.get("voucher_no"),
+				"account": e.get("account"),
 				"debit": 0.0,
 				"credit": 0.0,
 				"_descriptions": [],
@@ -743,12 +750,18 @@ def _merge_entries(entries):
 		vt = g.get("voucher_type")
 		descriptions = list(dict.fromkeys(g["_descriptions"]))
 
+		# For a JE line, the account is the meaningful label (not the generic "Journal Entry").
+		if vt == "Journal Entry":
+			description = g.get("account") or _pick_description(descriptions, vt)
+		else:
+			description = _pick_description(descriptions, vt)
+
 		out.append({
 			"party": g.get("party") or "",
 			"date": g.get("date"),
 			"voucher_type": vt,
 			"voucher_no": g.get("voucher_no"),
-			"description": _pick_description(descriptions, vt),
+			"description": description,
 			"remarks": "",
 			"debit": round(g.get("debit") or 0, 2),
 			"credit": round(g.get("credit") or 0, 2),

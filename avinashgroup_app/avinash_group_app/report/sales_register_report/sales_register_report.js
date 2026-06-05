@@ -145,7 +145,8 @@ frappe.query_reports["Sales Register Report"] = {
 			const url = '/api/method/avinashgroup_app.avinash_group_app.report.sales_register_report.sales_register_report.download_pdf'
 				+ '?filters=' + encodeURIComponent(JSON.stringify(filters))
 				+ '&orientation=' + encodeURIComponent(orientation)
-				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(sr_selected_columns(print_settings)));
+				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(sr_selected_columns(print_settings)))
+				+ '&view=1';  // Print → view inline in a new tab (no download)
 			window.open(url);
 		};
 

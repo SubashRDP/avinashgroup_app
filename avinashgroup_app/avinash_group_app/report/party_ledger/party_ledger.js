@@ -238,7 +238,8 @@ frappe.query_reports["Party Ledger"] = {
 			const url = '/api/method/avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.download_pdf'
 				+ '?filters=' + encodeURIComponent(JSON.stringify(filters))
 				+ '&orientation=' + encodeURIComponent(orientation)
-				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(pl_selected_columns(print_settings)));
+				+ '&selected_columns=' + encodeURIComponent(JSON.stringify(pl_selected_columns(print_settings)))
+				+ '&view=1';  // Print → view inline in a new tab (no download)
 			window.open(url);
 		};
 	},

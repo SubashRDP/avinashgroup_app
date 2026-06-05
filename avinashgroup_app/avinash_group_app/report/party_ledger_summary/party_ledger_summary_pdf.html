@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #222;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+/* ── Header — table layout (flexbox not supported in wkhtmltopdf) ── */
+.pl-page-header { display: table; width: 100%; margin-bottom: 4px; }
+.pl-company-name-cell { display: table-cell; vertical-align: top; }
+.pl-title-cell        { display: table-cell; vertical-align: top; text-align: right; }
+.pl-company-name      { font-size: 13px; font-weight: bold; }
+.pl-report-title      { font-size: 16px; font-weight: bold; }
+.pl-acct-period       { font-size: 11px; font-weight: bold; }
+.pl-meta-bar {
+  display: table;
+  width: 100%;
+  font-size: 11px;
+  color: #555;
+  margin-bottom: 8px;
+}
+.pl-meta-l { display: table-cell; }
+.pl-meta-r { display: table-cell; text-align: right; }
+.pl-divider { border: none; border-top: 1.5px solid #ccc; margin: 6px 0 8px; }
+
+/* ── Table ── */
+table { width: 100%; border-collapse: collapse; }
+
+thead th {
+  background: #f0f2f5;
+  color: #222;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 8px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+thead th.r { text-align: right; }
+thead th.l { text-align: left; }
+
+td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
+.r { text-align: right; }
+.l { text-align: left;  }
+.nowrap { white-space: nowrap; }
+
+/* Group header row */
+.pl-row-grouphead td {
+  font-weight: bold;
+  background: #f7f8fa;
+  padding: 5px 8px;
+  border-top: 1px solid #ccc;
+  border-bottom: 1px solid #ccc;
+}
+
+/* Group total row */
+.pl-row-grouptotal td {
+  font-weight: bold;
+  padding: 5px 8px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+
+/* Grand total row (Super Summary) */
+.pl-row-grandtotal td {
+  font-weight: bold;
+  padding: 6px 8px;
+  border-top: 2px solid #555;
+  border-bottom: 2px solid #555;
+}
+
+/* In-body page number (works on plain/unpatched wkhtmltopdf, unlike --footer-html). */
+.pl-pageno { text-align: center; font-size: 10px; color: #555; margin-top: 8px; }
+.pl-footer { font-size: 10px; color: #aaa; text-align: right; margin-top: 10px; }
+.brk { page-break-after: always; }
+
+{% if orientation == 'Portrait' %}
+body              { font-size: 9px !important; line-height: 1.4 !important; }
+.pl-company-name  { font-size: 11px !important; }
+.pl-report-title  { font-size: 13px !important; }
+.pl-acct-period   { font-size: 9.5px !important; }
+.pl-meta-bar      { font-size: 9px !important; margin-bottom: 4px !important; }
+.pl-divider       { margin: 3px 0 4px !important; }
+thead th          { font-size: 9px !important; padding: 4px 4px !important; }
+td                { padding: 3px 4px !important; }
+.pl-footer        { font-size: 7.5px !important; margin-top: 4px !important; }
+{% endif %}
+</style>
+</head>
+<body>
+
+{% set pty = filters.get('party_type') or 'Customer' %}
+{% set code_label = 'Customer Code' if pty == 'Customer' else 'Vendor Code' %}
+{% set name_label = 'Customer Name' if pty == 'Customer' else 'Vendor Name' %}
+{% set group_label = 'Customer Group / Subgroup / Name' if pty == 'Customer' else 'Vendor Group / Subgroup / Name' %}
+
+{# sc = columns to show (empty => show all). Print passes the columns currently in the
+   report (picked in the dialog, or what's left after datatable removals). #}
+{% set show_all = not sc %}
+{% set s_party      = show_all or 'party'      in sc %}
+{% set s_party_name = show_all or 'party_name' in sc %}
+{% set s_opening    = show_all or 'opening'    in sc %}
+{% set s_debit      = show_all or 'debit'      in sc %}
+{% set s_credit     = show_all or 'credit'     in sc %}
+{% set s_closing    = show_all or 'closing'    in sc %}
+{% set tcols = (s_party|int) + (s_party_name|int) + (s_opening|int) + (s_debit|int) + (s_credit|int) + (s_closing|int) %}
+{# label cell for total rows spans the leading text columns that are shown (min 1) #}
+{% set label_span = (s_party|int) + (s_party_name|int) %}
+{% if label_span < 1 %}{% set label_span = 1 %}{% endif %}
+
+{% for page_rows in pages %}
+<div class="pl-sheet{% if not loop.last %} brk{% endif %}">
+{% set page_index = loop.index %}
+{% set page_is_last = loop.last %}
+
+<table>
+  <colgroup>
+    {% if s_party %}<col style="width:90px">{% endif %}
+    {% if s_party_name %}<col>{% endif %}
+    {% if s_opening %}<col style="width:120px">{% endif %}
+    {% if s_debit %}<col style="width:110px">{% endif %}
+    {% if s_credit %}<col style="width:110px">{% endif %}
+    {% if s_closing %}<col style="width:130px">{% endif %}
+  </colgroup>
+
+  <thead>
+    <!-- Company / report header — inside thead so wkhtmltopdf repeats it per page -->
+    <tr>
+      <td colspan="{{ tcols }}" style="padding:4px 0 0 0; border:none;">
+        <div class="pl-page-header">
+          <div class="pl-company-name-cell">
+            <div class="pl-company-name">{{ filters.get('company') or '' }}</div>
+          </div>
+          <div class="pl-title-cell">
+            <div class="pl-report-title">{{ report_title }}</div>
+            <div class="pl-acct-period">Accounting Period : {{ frappe.utils.formatdate(filters.get('from_date')) }} - {{ frappe.utils.formatdate(filters.get('to_date')) }}</div>
+          </div>
+        </div>
+        <div class="pl-meta-bar">
+          <div class="pl-meta-l">From&nbsp;<b>{{ frappe.utils.formatdate(filters.get('from_date')) }}</b>&nbsp;To&nbsp;<b>{{ frappe.utils.formatdate(filters.get('to_date')) }}</b></div>
+          <div class="pl-meta-r">Amount in Nepalese Rupee ( NPR )</div>
+        </div>
+        <hr class="pl-divider" style="margin-bottom:0;">
+      </td>
+    </tr>
+    <!-- Grouping caption (group-wise only) -->
+    {% if filters.get('report_type') == 'Group Wise' %}
+    <tr><th class="l" colspan="{{ tcols }}" style="font-size:11px;">{{ group_label }}</th></tr>
+    {% endif %}
+    <!-- Column headers -->
+    <tr>
+      {% if s_party %}<th class="l">{{ code_label }}</th>{% endif %}
+      {% if s_party_name %}<th class="l">{{ name_label }}</th>{% endif %}
+      {% if s_opening %}<th class="r">Opening</th>{% endif %}
+      {% if s_debit %}<th class="r">Debit</th>{% endif %}
+      {% if s_credit %}<th class="r">Credit</th>{% endif %}
+      {% if s_closing %}<th class="r">Closing</th>{% endif %}
+    </tr>
+  </thead>
+
+  <tbody>
+  {% for row in page_rows %}
+    {% if row.get('is_group_header') %}
+      <tr class="pl-row-grouphead">
+        <td colspan="{{ tcols }}">{{ row.get('party') or '' }}</td>
+      </tr>
+    {% elif row.get('is_group_total') or row.get('is_grand_total') %}
+      <tr class="{{ 'pl-row-grandtotal' if row.get('is_grand_total') else 'pl-row-grouptotal' }}">
+        <td colspan="{{ label_span }}">{{ row.get('party_name') or '' }}</td>
+        {% if s_opening %}<td class="r nowrap">{{ bal(row.get('opening')) }}</td>{% endif %}
+        {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>{% endif %}
+        {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) }}</td>{% endif %}
+        {% if s_closing %}<td class="r nowrap">{{ bal(row.get('closing')) }}</td>{% endif %}
+      </tr>
+    {% else %}
+      <tr class="pl-row-main">
+        {% if s_party %}<td class="nowrap">{{ row.get('party') or '' }}</td>{% endif %}
+        {% if s_party_name %}<td>{{ row.get('party_name') or '' }}</td>{% endif %}
+        {% if s_opening %}<td class="r nowrap">{{ bal(row.get('opening')) }}</td>{% endif %}
+        {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>{% endif %}
+        {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) }}</td>{% endif %}
+        {% if s_closing %}<td class="r nowrap">{{ bal(row.get('closing')) }}</td>{% endif %}
+      </tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="pl-pageno">Page {{ page_index }} of {{ total_pages }}</div>
+{% if page_is_last %}
+<hr class="pl-divider">
+<div class="pl-footer">Printed on {{ frappe.utils.now() }}</div>
+{% endif %}
+
+</div>
+{% endfor %}
+
+</body>
+</html>
