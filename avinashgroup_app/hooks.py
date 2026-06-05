@@ -25,6 +25,10 @@ app_include_js = [
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
 ]
 
+app_include_css = [
+    "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
+]
+
 doctype_js = {
     # Approval-workflow UI (banner + reject dialog) is now generic — see
     # approval_workflow_auto.js in app_include_js. No per-doctype file needed;
