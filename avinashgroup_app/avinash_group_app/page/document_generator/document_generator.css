@@ -10,10 +10,11 @@
 	border: 1px solid var(--border-color, #e2e2e2);
 	border-radius: var(--border-radius-md, 6px);
 	padding: 12px;
-	/* Sit above the sticky toolbar (z-index:5) so Link autocomplete dropdowns
-	   (e.g. Fiscal Year) overlay it instead of rendering behind it. */
-	position: relative;
-	z-index: 20;
+	/* Deliberately NOT a stacking context: an elevated z-index here would paint the
+	   card over Frappe's page-head (z-index:6) and hide the Actions > Print/Email menu.
+	   The Link autocomplete dropdown still overlays the sticky toolbar (z-index:5) via
+	   the rule below — its z-index:30 floats at the root level (30 > 5) because this
+	   card no longer clamps it. */
 }
 .dg-selector .awesomplete > ul {
 	z-index: 30;

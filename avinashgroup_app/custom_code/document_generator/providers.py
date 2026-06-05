@@ -118,14 +118,19 @@ def image_data_uri(file_url):
 
 
 def current_user_info():
-	"""Name, designation and signature image of the logged-in user (for signatures)."""
+	"""Name, designation and signature image of the logged-in user (for signatures).
+
+	The employee is resolved through the custom ``Employee.custom_document_user`` link
+	(see the create_document_generator_signatory_field patch) — deliberately NOT the
+	stock ``user_id`` relation."""
 	user = frappe.session.user
 	full_name = frappe.db.get_value("User", user, "full_name") or user
 	designation = signature = ""
 	fields = ["designation", "employee_name"]
 	if frappe.db.has_column("Employee", "custom_signature_image"):
 		fields.append("custom_signature_image")
-	emp = frappe.db.get_value("Employee", {"user_id": user}, fields, as_dict=True)
+	link_field = "custom_document_user" if frappe.db.has_column("Employee", "custom_document_user") else "user_id"
+	emp = frappe.db.get_value("Employee", {link_field: user}, fields, as_dict=True)
 	if emp:
 		designation = emp.get("designation") or ""
 		full_name = emp.get("employee_name") or full_name

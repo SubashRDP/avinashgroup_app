@@ -1,0 +1,46 @@
+/* Light-orange focus highlight for the active (tabbed-into) form field.
+ * Overrides Frappe's default neutral-grey focus ring.
+ * Tune the orange in one place via the variables below. */
+
+:root {
+  --focus-orange-border: #f97316;                          /* darker orange border */
+  --focus-orange-ring: 0 0 0 2px rgba(249, 115, 22, 0.30); /* soft orange glow */
+  --focus-orange-bg: rgba(249, 115, 22, 0.16);             /* active dropdown-item tint */
+
+  /* Link/Select field suggestion dropdown (awesomplete) active+hover item */
+  --awesomplete-hover-bg: var(--focus-orange-bg);
+}
+
+.form-control:focus,
+textarea.form-control:focus,
+select.form-control:focus,
+.input-with-feedback:focus,
+.frappe-control input:focus,
+.grid-body .editable-row .form-control:focus,
+.awesomplete > input:focus {
+  border-color: var(--focus-orange-border) !important;
+  box-shadow: var(--focus-orange-ring) !important;
+  outline: 0;
+}
+
+/* Active / hovered suggestion in Link/Select field dropdowns (awesomplete).
+ * Mirrors Frappe's own selectors (items are [role=option], not <li>). */
+.awesomplete > [role="listbox"] > li:hover,
+.awesomplete > [role="listbox"] > li[aria-selected="true"],
+.awesomplete > [role="listbox"] > [role="option"]:hover,
+.awesomplete > [role="listbox"] > [role="option"][aria-selected="true"] {
+  background-color: var(--focus-orange-bg) !important;
+  color: var(--text-color) !important;
+}
+
+/* Active / keyboard-highlighted item in standard dropdown menus
+ * (action menus, navbar menus, combo lists). */
+.dropdown-menu .dropdown-item:hover,
+.dropdown-menu .dropdown-item:focus,
+.dropdown-menu .dropdown-item.active,
+.dropdown-menu .dropdown-item.selected,
+.dropdown-menu li.selected > a,
+.dropdown-menu li > a:focus {
+  background-color: var(--focus-orange-bg) !important;
+  color: var(--text-color) !important;
+}

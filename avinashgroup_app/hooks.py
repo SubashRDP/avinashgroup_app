@@ -21,6 +21,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
+    "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=6",
 ]
@@ -28,10 +29,14 @@ app_include_js = [
 # report_print_portrait.css is no longer loaded globally — it would change every
 # doctype print format too. report_print_orientation.js injects it dynamically
 # only when the user is on a query-report route.
-app_include_css = []
+app_include_css = [
+    "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
+]
 
 doctype_js = {
-    "Purchase Order": "public/js/purchase_order.js",
+    # Approval-workflow UI (banner + reject dialog) is now generic — see
+    # approval_workflow_auto.js in app_include_js. No per-doctype file needed;
+    # any doctype set up via setup_workflow gets it automatically.
     "Material Request": "public/js/material_request.js",
     "Purchase Invoice": "public/js/pi.js",
     "Journal Entry": "public/js/journal_entry.js",
