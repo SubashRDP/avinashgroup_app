@@ -380,10 +380,6 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
 </table>
 
 <div class="pl-pageno">Page {{ page_index }} of {{ total_pages }}</div>
-{% if page_is_last %}
-<hr class="pl-divider">
-<div class="pl-footer">Printed on {{ frappe.utils.now() }}</div>
-{% endif %}
 
 </div>
 {% endfor %}

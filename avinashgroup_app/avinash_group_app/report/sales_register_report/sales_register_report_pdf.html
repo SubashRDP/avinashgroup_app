@@ -215,9 +215,6 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 </table>
 
 <div class="sr-pageno">Page {{ page_num + 1 }} of {{ total_pages }}</div>
-{% if loop.last %}
-<div class="sr-footer">Printed on {{ frappe.utils.now() }}</div>
-{% endif %}
 
 </div>
 
