@@ -108,13 +108,14 @@ td                { padding: 3px 4px !important; }
 {% set show_all = not sc %}
 {% set s_party      = show_all or 'party'      in sc %}
 {% set s_party_name = show_all or 'party_name' in sc %}
+{% set s_taxid      = show_all or 'tax_id'     in sc %}
 {% set s_opening    = show_all or 'opening'    in sc %}
 {% set s_debit      = show_all or 'debit'      in sc %}
 {% set s_credit     = show_all or 'credit'     in sc %}
 {% set s_closing    = show_all or 'closing'    in sc %}
-{% set tcols = (s_party|int) + (s_party_name|int) + (s_opening|int) + (s_debit|int) + (s_credit|int) + (s_closing|int) %}
+{% set tcols = (s_party|int) + (s_party_name|int) + (s_taxid|int) + (s_opening|int) + (s_debit|int) + (s_credit|int) + (s_closing|int) %}
 {# label cell for total rows spans the leading text columns that are shown (min 1) #}
-{% set label_span = (s_party|int) + (s_party_name|int) %}
+{% set label_span = (s_party|int) + (s_party_name|int) + (s_taxid|int) %}
 {% if label_span < 1 %}{% set label_span = 1 %}{% endif %}
 
 {% for page_rows in pages %}
@@ -126,6 +127,7 @@ td                { padding: 3px 4px !important; }
   <colgroup>
     {% if s_party %}<col style="width:90px">{% endif %}
     {% if s_party_name %}<col>{% endif %}
+    {% if s_taxid %}<col style="width:120px">{% endif %}
     {% if s_opening %}<col style="width:120px">{% endif %}
     {% if s_debit %}<col style="width:110px">{% endif %}
     {% if s_credit %}<col style="width:110px">{% endif %}
@@ -160,6 +162,7 @@ td                { padding: 3px 4px !important; }
     <tr>
       {% if s_party %}<th class="l">{{ code_label }}</th>{% endif %}
       {% if s_party_name %}<th class="l">{{ name_label }}</th>{% endif %}
+      {% if s_taxid %}<th class="l">Vat/Pan No</th>{% endif %}
       {% if s_opening %}<th class="r">Opening</th>{% endif %}
       {% if s_debit %}<th class="r">Debit</th>{% endif %}
       {% if s_credit %}<th class="r">Credit</th>{% endif %}
@@ -185,6 +188,7 @@ td                { padding: 3px 4px !important; }
       <tr class="pl-row-main">
         {% if s_party %}<td class="nowrap">{{ row.get('party') or '' }}</td>{% endif %}
         {% if s_party_name %}<td>{{ row.get('party_name') or '' }}</td>{% endif %}
+        {% if s_taxid %}<td class="nowrap">{{ row.get('tax_id') or '' }}</td>{% endif %}
         {% if s_opening %}<td class="r nowrap">{{ bal(row.get('opening')) }}</td>{% endif %}
         {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  or '0.00' }}</td>{% endif %}
         {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) or '0.00' }}</td>{% endif %}

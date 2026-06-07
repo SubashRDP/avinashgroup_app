@@ -82,6 +82,18 @@ frappe.query_reports["Party Ledger"] = {
 			},
 		},
 		{
+			// When checked (default) the running balance shows on every line. When
+			// unchecked, the balance is blanked on the transaction rows only — the
+			// Opening Balance, For the Periods and Closing Balance rows still show it.
+			fieldname: "show_balance",
+			label: __("Show Balance"),
+			fieldtype: "Check",
+			default: 1,
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "detailed_mapping",
 			label: __("Detailed Mapping"),
 			fieldtype: "Check",
@@ -253,6 +265,15 @@ frappe.query_reports["Party Ledger"] = {
 		if (column.fieldname === "debit" || column.fieldname === "credit") {
 			if (data.is_detail || data.is_separator || data.is_remark) return "";
 			return format_number(flt(value), null, 2);
+		}
+		// Balance: show the amount with a DB/CR tag (positive = DB, negative = CR),
+		// matching the print/PDF. When "Show Balance" is off, blank it on transaction
+		// rows only — the Opening / For the Periods / Closing summary rows keep it.
+		if (column.fieldname === "balance") {
+			if (!data.is_summary && !frappe.query_report.get_filter_value("show_balance")) return "";
+			if (value === null || value === undefined || value === "") return "";
+			const n = flt(value);
+			return format_number(Math.abs(n), null, 2) + (n >= 0 ? " DB" : " CR");
 		}
 		if (column.fieldname === "voucher_no" && data.voucher_type && value) {
 			const route = frappe.router.slug(data.voucher_type);

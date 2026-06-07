@@ -90,8 +90,9 @@ def get_columns(filters=None):
 	name_label = _("Customer Name") if party_type == "Customer" else _("Vendor Name")
 
 	return [
-		{"label": code_label,    "fieldname": "party",      "fieldtype": "Data",     "width": 120},
-		{"label": name_label,    "fieldname": "party_name", "fieldtype": "Data",     "width": 280},
+		{"label": code_label,      "fieldname": "party",      "fieldtype": "Data",     "width": 120},
+		{"label": name_label,      "fieldname": "party_name", "fieldtype": "Data",     "width": 280},
+		{"label": _("Vat/Pan No"), "fieldname": "tax_id",     "fieldtype": "Data",     "width": 130},
 		{"label": _("Opening"),  "fieldname": "opening",    "fieldtype": "Currency", "width": 150},
 		{"label": _("Debit"),    "fieldname": "debit",      "fieldtype": "Currency", "width": 140},
 		{"label": _("Credit"),   "fieldname": "credit",     "fieldtype": "Currency", "width": 140},
@@ -173,10 +174,15 @@ def get_data(filters):
 		return []
 
 	# ── Names + groups for the displayed parties ─────────────────────────────
+	# tax_id (Tax tab) feeds the "Vat/Pan No" column; guard in case a site lacks it.
+	has_tax = frappe.db.has_column(party_type, "tax_id")
+	info_fields = ["name", f"{name_field} as party_name", f"{group_field} as party_group"]
+	if has_tax:
+		info_fields.append("tax_id")
 	info_rows = frappe.get_all(
 		party_type,
 		filters={"name": ("in", list(display_ids))},
-		fields=["name", f"{name_field} as party_name", f"{group_field} as party_group"],
+		fields=info_fields,
 	)
 	info = {r["name"]: r for r in info_rows}
 
@@ -216,6 +222,7 @@ def get_data(filters):
 		records.append({
 			"party":       pid,
 			"party_name":  m.get("party_name") or pid,
+			"tax_id":      m.get("tax_id") or "",
 			"party_group": group_name_map.get(group_id) or group_id or _("Ungrouped"),
 			"opening":     round(opening, 2),
 			"debit":       round(debit, 2),

@@ -187,6 +187,8 @@
   return '<b>' + s + '</b>&thinsp;<small>' + lbl + '</small>';
 }; %}
 
+{% var _show_bal = !(filters.show_balance === 0 || filters.show_balance === '0' || filters.show_balance === false); %}
+
 {% var _damt = function(v) {
   return _fc(v) || '0.00';
 }; %}
@@ -351,7 +353,7 @@
           {% if (_has_detail) { %}<td></td><td></td><td></td>{% } %}
           <td class="r">{%= _damt(_row.debit) %}</td>
           <td class="r">{%= _camt(_row.credit) %}</td>
-          <td class="r nowrap">{%= _bal(_row.balance) %}</td>
+          <td class="r nowrap">{%= _show_bal ? _bal(_row.balance) : '' %}</td>
         </tr>
         {% _pending_remark = _row.remarks || ''; %}
         {% if (_pending_remark && (!_next || !_next.is_detail)) { %}
