@@ -249,6 +249,11 @@ frappe.query_reports["Party Ledger"] = {
 		if (["detail_qty","detail_rate","detail_amount"].includes(column.fieldname) && !data.is_detail) {
 			return "";
 		}
+		// Debit / Credit: show 0.00 when empty on transaction & summary rows (blank on detail/separator/remark).
+		if (column.fieldname === "debit" || column.fieldname === "credit") {
+			if (data.is_detail || data.is_separator || data.is_remark) return "";
+			return format_number(flt(value), null, 2);
+		}
 		if (column.fieldname === "voucher_no" && data.voucher_type && value) {
 			const route = frappe.router.slug(data.voucher_type);
 			// Link to the real document id (voucher_link); the shown value may be a custom name.

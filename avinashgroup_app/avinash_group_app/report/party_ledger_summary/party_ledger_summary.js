@@ -238,10 +238,9 @@ frappe.query_reports["Party Ledger Summary"] = {
 			return out;
 		}
 
-		// Debit / Credit: blank instead of 0.00; bold on total rows.
+		// Debit / Credit: show 0.00 when empty; bold on total rows.
 		if (fn === "debit" || fn === "credit") {
 			const n = flt(value);
-			if (!n) return "";
 			let out = format_number(n, null, 2);
 			if (data.bold) out = `<b>${out}</b>`;
 			return out;

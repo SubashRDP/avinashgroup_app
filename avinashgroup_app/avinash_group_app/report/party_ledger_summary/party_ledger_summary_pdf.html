@@ -177,8 +177,8 @@ td                { padding: 3px 4px !important; }
       <tr class="{{ 'pl-row-grandtotal' if row.get('is_grand_total') else 'pl-row-grouptotal' }}">
         <td colspan="{{ label_span }}">{{ row.get('party_name') or '' }}</td>
         {% if s_opening %}<td class="r nowrap">{{ bal(row.get('opening')) }}</td>{% endif %}
-        {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>{% endif %}
-        {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) }}</td>{% endif %}
+        {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  or '0.00' }}</td>{% endif %}
+        {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) or '0.00' }}</td>{% endif %}
         {% if s_closing %}<td class="r nowrap">{{ bal(row.get('closing')) }}</td>{% endif %}
       </tr>
     {% else %}
@@ -186,8 +186,8 @@ td                { padding: 3px 4px !important; }
         {% if s_party %}<td class="nowrap">{{ row.get('party') or '' }}</td>{% endif %}
         {% if s_party_name %}<td>{{ row.get('party_name') or '' }}</td>{% endif %}
         {% if s_opening %}<td class="r nowrap">{{ bal(row.get('opening')) }}</td>{% endif %}
-        {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  }}</td>{% endif %}
-        {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) }}</td>{% endif %}
+        {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  or '0.00' }}</td>{% endif %}
+        {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) or '0.00' }}</td>{% endif %}
         {% if s_closing %}<td class="r nowrap">{{ bal(row.get('closing')) }}</td>{% endif %}
       </tr>
     {% endif %}
