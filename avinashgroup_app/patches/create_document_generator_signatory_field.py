@@ -1,5 +1,5 @@
 # Copyright (c) 2026, Raindrop and contributors
-q# For license information, please see license.txt
+# For license information, please see license.txt
 
 """Custom Employee->User link used by the Document Generator to resolve the
 signatory for {{ user.* }} (name, designation, signature).
