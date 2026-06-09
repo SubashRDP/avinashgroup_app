@@ -30,6 +30,7 @@
    "label": "Full Access (All Transaction Data)"
   },
   {
+   "depends_on": "eval:!doc.full_access",
    "fieldname": "access_section",
    "fieldtype": "Section Break",
    "label": "Fiscal Year Access"

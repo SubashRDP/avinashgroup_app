@@ -19,6 +19,8 @@
       "reqd": 1
     },
     {
+      "depends_on": "eval:!doc.full_access",
+      "mandatory_depends_on": "eval:!doc.full_access",
       "fieldname": "fiscal_year",
       "fieldtype": "Link",
       "in_list_view": 1,
@@ -26,6 +28,7 @@
       "options": "Fiscal Year"
     },
     {
+      "description": "When checked, this row grants access to all fiscal years for the selected DocType (Fiscal Year is then ignored).",
       "fieldname": "full_access",
       "fieldtype": "Check",
       "in_list_view": 1,

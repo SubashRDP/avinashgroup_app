@@ -227,7 +227,7 @@ def _get_user_fiscal_access(user):
     access_map = {}
     rows = frappe.db.sql(
         """
-        SELECT doctype_name, fiscal_year
+        SELECT doctype_name, fiscal_year, full_access
         FROM `tabUser Fiscal Year Access`
         WHERE parenttype = 'Fiscal Year Access Control'
             AND parentfield = 'access_details'
@@ -240,8 +240,17 @@ def _get_user_fiscal_access(user):
 
     for row in rows:
         doctype_name = row.get("doctype_name")
+        if not doctype_name:
+            continue
+        # Row-level full access = all fiscal years for this doctype.
+        if row.get("full_access"):
+            access_map[doctype_name] = "__full_access__"
+            continue
+        # A doctype already granted full access can't be narrowed by another row.
+        if access_map.get(doctype_name) == "__full_access__":
+            continue
         fiscal_year = row.get("fiscal_year")
-        if doctype_name and fiscal_year:
+        if fiscal_year:
             access_map.setdefault(doctype_name, []).append({"fiscal_year": fiscal_year})
 
     return access_map
@@ -262,7 +271,7 @@ def _get_legacy_user_fiscal_access(user):
     try:
         rows = frappe.db.sql(
             """
-            SELECT doctype_name, fiscal_year
+            SELECT doctype_name, fiscal_year, full_access
             FROM `tabUser Fiscal Year Access`
             WHERE parenttype = 'User'
                 AND parentfield = 'user_fiscal_years'
@@ -278,8 +287,15 @@ def _get_legacy_user_fiscal_access(user):
     access_map = {}
     for row in rows:
         doctype_name = row.get("doctype_name")
+        if not doctype_name:
+            continue
+        if row.get("full_access"):
+            access_map[doctype_name] = "__full_access__"
+            continue
+        if access_map.get(doctype_name) == "__full_access__":
+            continue
         fiscal_year = row.get("fiscal_year")
-        if doctype_name and fiscal_year:
+        if fiscal_year:
             access_map.setdefault(doctype_name, []).append({"fiscal_year": fiscal_year})
 
     return access_map if access_map else {"__full_access__": True}
@@ -454,16 +470,18 @@ def _build_query_conditions(doctype, user):
     date_field = DATE_FIELD_MAP.get(doctype, "posting_date")
     table_name = f"`tab{doctype}`"
 
+    # permission_query_conditions must return a SQL *string*; inline the
+    # (escaped) dates rather than executing a query.
     conditions = []
     for from_date, to_date in date_ranges:
-        conditions.append(f"({table_name}.`{date_field}` BETWEEN %s AND %s)")
+        fd = frappe.db.escape(str(from_date))
+        td = frappe.db.escape(str(to_date))
+        conditions.append(f"({table_name}.`{date_field}` BETWEEN {fd} AND {td})")
 
-    sql = "(" + " OR ".join(conditions) + ")"
-    params = []
-    for from_date, to_date in date_ranges:
-        params.extend([from_date, to_date])
+    if not conditions:
+        return "1=0"
 
-    return frappe.db.sql(f"SELECT {sql}", params) if params else "1=0"
+    return "(" + " OR ".join(conditions) + ")"
 
 
 def _make_query_conditions_for(doctype):
