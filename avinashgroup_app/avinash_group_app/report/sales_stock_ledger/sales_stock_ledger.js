@@ -149,17 +149,71 @@ frappe.query_reports["Sales Stock Ledger"] = {
     ],
 
     get_datatable_options(options) {
-        // "Fit Columns" → frappe-datatable's native fluid layout, which stretches
-        // every column to fill the table width (and re-balances on window resize),
-        // keeping header and body in sync. Unchecked → fixed widths from the .py
-        // column defs, with horizontal scroll when they exceed the viewport.
-        const fit = frappe.query_report.get_filter_value("fit_columns");
-        return Object.assign(options, { layout: fit ? "fluid" : "fixed" });
+        // Always "fixed" — the actual "Fit Columns" behaviour is applied in
+        // after_datatable_render (_applyColumnFit). frappe-datatable's "fluid"
+        // layout only DISTRIBUTES leftover width, so it can expand a short table
+        // (e.g. Summarized) but cannot shrink one whose columns already overflow
+        // the viewport (e.g. Detail's 12 columns) — that's why Fit Columns
+        // appeared to do nothing on the Detail view. Scaling widths ourselves
+        // handles both directions and re-applies on every refresh (the datatable
+        // is created once and reused, so a layout set here would otherwise freeze
+        // at its first-load value).
+        return Object.assign(options, { layout: "fixed" });
     },
 
     after_datatable_render: function (dt) {
+        this._applyColumnFit(dt);
         this._initDragScroll(dt);
         this._tagRows(dt);
+    },
+
+    // "Fit Columns" → scale every data column proportionally so they exactly fill
+    // the available width (shrinking Detail to fit, expanding Summarized). When
+    // unchecked, restore the original widths from the .py column defs and let the
+    // table scroll horizontally if they overflow.
+    _applyColumnFit: function (dt) {
+        if (!dt || !dt.datamanager || !dt.style) return;
+
+        const dataColumns = dt.datamanager.getColumns(true) || [];
+        if (!dataColumns.length) return;
+
+        // Capture the originally-defined width once, so repeated refreshes always
+        // scale from the same base rather than from an already-shrunk value.
+        dataColumns.forEach((col) => {
+            if (col._baseWidth == null) col._baseWidth = col.width;
+        });
+
+        const fit = frappe.query_report.get_filter_value("fit_columns");
+        const totalBase = dataColumns.reduce(
+            (sum, col) => sum + (col._baseWidth || 0), 0
+        );
+
+        let widths = dataColumns.map((col) => col._baseWidth);
+
+        if (fit && totalBase > 0) {
+            // Width consumed by the serial-no / checkbox columns.
+            const standardWidth = (dt.datamanager.getColumns() || [])
+                .filter((col) => col.id === "_rowIndex" || col.id === "_checkbox")
+                .reduce((sum, col) => sum + (col.width || 52), 0);
+
+            const wrapperWidth = dt.datatableWrapper
+                ? dt.datatableWrapper.clientWidth
+                : 0;
+            const available = wrapperWidth - standardWidth - 2;
+
+            if (available > 0) {
+                const ratio = available / totalBase;
+                widths = dataColumns.map((col) =>
+                    Math.max(40, Math.floor((col._baseWidth || 0) * ratio))
+                );
+            }
+        }
+
+        dataColumns.forEach((col, i) => {
+            dt.datamanager.updateColumn(col.colIndex, { width: widths[i] });
+        });
+        dt.style.refreshColumnWidth();
+        dt.style.setBodyStyle();
     },
 
     // Add CSS hooks to rows so total / return rows and zebra striping render.
