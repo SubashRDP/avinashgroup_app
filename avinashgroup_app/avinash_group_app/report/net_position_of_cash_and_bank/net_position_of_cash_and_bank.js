@@ -61,4 +61,13 @@ frappe.query_reports["Net Position of Cash and Bank"] = {
 		}
 		return value;
 	},
+
+	// Stretch columns to fill the full width of the report container instead of
+	// leaving empty space on the right when the fixed widths don't add up to the
+	// viewport width.
+	get_datatable_options(options) {
+		return Object.assign(options, {
+			layout: "fluid",
+		});
+	},
 };

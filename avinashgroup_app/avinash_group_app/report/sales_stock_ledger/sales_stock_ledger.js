@@ -149,14 +149,15 @@ frappe.query_reports["Sales Stock Ledger"] = {
     ],
 
     get_datatable_options(options) {
-        return Object.assign(options, { layout: "fixed" });
+        // "Fit Columns" → frappe-datatable's native fluid layout, which stretches
+        // every column to fill the table width (and re-balances on window resize),
+        // keeping header and body in sync. Unchecked → fixed widths from the .py
+        // column defs, with horizontal scroll when they exceed the viewport.
+        const fit = frappe.query_report.get_filter_value("fit_columns");
+        return Object.assign(options, { layout: fit ? "fluid" : "fixed" });
     },
 
     after_datatable_render: function (dt) {
-        const fit = frappe.query_report.get_filter_value("fit_columns");
-        if (fit) {
-            setTimeout(() => this.autoFitColumns(dt), 100);
-        }
         this._initDragScroll(dt);
         this._tagRows(dt);
     },
@@ -224,40 +225,6 @@ frappe.query_reports["Sales Stock Ledger"] = {
         scrollable.style.cursor = "grab";
     },
 
-    autoFitColumns: function (dt) {
-        const datatableWrapper = dt.datatableWrapper;
-        if (!datatableWrapper) return;
-
-        const columns = dt.datamanager.getColumns(true);
-        if (!columns.length) return;
-
-        columns.forEach((col) => {
-            let maxWidth = 120;
-
-            // measure header cell
-            const headerCell = datatableWrapper.querySelector(
-                `.dt-cell__content--header-${col.colIndex}`
-            );
-            if (headerCell) {
-                maxWidth = Math.max(maxWidth, headerCell.scrollWidth + 20);
-            }
-
-            // measure all data cells for this column
-            const dataCells = datatableWrapper.querySelectorAll(
-                `.dt-cell__content--col-${col.colIndex}`
-            );
-            const sampleSize = Math.min(100, dataCells.length);
-            for (let i = 0; i < sampleSize; i++) {
-                maxWidth = Math.max(maxWidth, dataCells[i].scrollWidth + 20);
-            }
-
-            const finalWidth = Math.min(maxWidth, 400);
-            dt.datamanager.updateColumn(col.colIndex, { width: finalWidth });
-            dt.columnmanager.setColumnHeaderWidth(col.colIndex);
-            dt.columnmanager.setColumnWidth(col.colIndex);
-        });
-    },
-
     formatter: function (value, row, column, data, default_formatter) {
         let formatted = default_formatter(value, row, column, data);
 
@@ -281,11 +248,20 @@ frappe.query_reports["Sales Stock Ledger"] = {
             }
         }
 
+        // Some fonts lack the ₨ (U+20A8) glyph and render it as an empty box in
+        // front of currency values; show the universally-available "Rs" instead.
+        if (formatted && formatted.indexOf("₨") !== -1) {
+            formatted = formatted.split("₨").join("Rs");
+        }
+
         return formatted;
     },
 
     onload: function () {
-        if (document.getElementById("ssl-report-style")) return;
+        // Always re-inject so CSS updates apply on SPA navigation (a stale style
+        // tag from a previous visit would otherwise mask changes).
+        const existing = document.getElementById("ssl-report-style");
+        if (existing) existing.remove();
 
         const style = document.createElement("style");
         style.id = "ssl-report-style";
@@ -315,11 +291,20 @@ frappe.query_reports["Sales Stock Ledger"] = {
                 box-sizing: border-box;
             }
             .query-report-wrapper .dt-cell__content {
+                /* Fill the cell so right-aligned currency values (rendered as an
+                   inner <div style="text-align:right">) span the full width and
+                   aren't clipped to a sliver by flex shrinking. */
+                flex: 1 1 auto;
+                min-width: 0;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                max-width: 100%;
                 line-height: 1.4;
+            }
+            /* The empty inline-edit overlay is unused in a read-only report and
+               can steal width inside the flex cell. */
+            .query-report-wrapper .dt-cell__edit {
+                display: none !important;
             }
             .query-report-wrapper .dt-cell__header {
                 font-weight: 600;
