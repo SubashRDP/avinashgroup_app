@@ -14,7 +14,7 @@ A consolidated totals row is appended at the bottom.
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, flt, getdate
+from frappe.utils import flt, getdate
 
 
 def execute(filters=None):
@@ -102,7 +102,6 @@ def _build_data(filters):
 	company = filters.company
 	from_date = getdate(filters.from_date)
 	to_date = getdate(filters.to_date)
-	day_before_from = add_days(from_date, -1)
 	suppress_lc = cint_bool(filters.get("suppress_local_currency_equivalents"))
 	consider_pdc = cint_bool(filters.get("consider_post_dated_cheques"))
 
@@ -113,7 +112,7 @@ def _build_data(filters):
 	# Aggregate opening + period movements in two SQL queries (one per phase),
 	# keyed by account, for efficiency on companies with many accounts.
 	account_names = [a.name for a in accounts]
-	opening_map = _opening_balances(account_names, day_before_from, consider_pdc)
+	opening_map = _opening_balances(account_names, from_date, to_date, consider_pdc)
 	movement_map = _period_movements(account_names, from_date, to_date, consider_pdc)
 
 	company_currency = frappe.get_cached_value("Company", company, "default_currency")
@@ -196,8 +195,13 @@ def _cash_and_bank_accounts(company, code_filter):
 	return rows
 
 
-def _opening_balances(account_names, before_date, consider_pdc):
-	"""Returns {account: opening_balance} as (sum debit − sum credit) before from_date."""
+def _opening_balances(account_names, from_date, to_date, consider_pdc):
+	"""Returns {account: opening_balance} as (sum debit − sum credit).
+
+	Opening balance = everything posted before `from_date` PLUS any opening
+	entries (is_opening = 'Yes') that fall within the period. Opening entries
+	are always treated as part of the opening balance regardless of their
+	posting date, matching ERPNext's standard General Ledger behaviour."""
 	if not account_names:
 		return {}
 	pdc_clause = "" if consider_pdc else "AND (is_pdc = 0 OR is_pdc IS NULL)"
@@ -205,11 +209,14 @@ def _opening_balances(account_names, before_date, consider_pdc):
 		f"""SELECT account, COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) AS bal
 		    FROM `tabGL Entry`
 		    WHERE account IN %(accounts)s
-		      AND posting_date <= %(date)s
 		      AND is_cancelled = 0
+		      AND (
+		            posting_date < %(from_date)s
+		            OR (is_opening = 'Yes' AND posting_date BETWEEN %(from_date)s AND %(to_date)s)
+		      )
 		      {pdc_clause if _gl_has_pdc_column() else ''}
 		    GROUP BY account""",
-		{"accounts": tuple(account_names), "date": before_date},
+		{"accounts": tuple(account_names), "from_date": from_date, "to_date": to_date},
 		as_dict=True,
 	)
 	return {r.account: r.bal for r in rows}
@@ -228,6 +235,7 @@ def _period_movements(account_names, from_date, to_date, consider_pdc):
 		    WHERE account IN %(accounts)s
 		      AND posting_date BETWEEN %(from)s AND %(to)s
 		      AND is_cancelled = 0
+		      AND COALESCE(is_opening, 'No') != 'Yes'
 		      {pdc_clause if _gl_has_pdc_column() else ''}
 		    GROUP BY account""",
 		{"accounts": tuple(account_names), "from": from_date, "to": to_date},
