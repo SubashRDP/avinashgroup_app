@@ -135,6 +135,38 @@ async function _init_default_fiscal_year(report) {
 }
 
 function _setup_fiscal_year_visibility(report) {
+	// BS mode (fiscal_year + bs_month) and AD mode (from_date + to_date) are
+	// mutually exclusive — populating one mode nulls out the other.
+	let _syncing = false;
+
+	const clearFilters = (fieldnames) => {
+		fieldnames.forEach((fn) => {
+			if (frappe.query_report.get_filter_value(fn)) {
+				frappe.query_report.set_filter_value(fn, "");
+			}
+		});
+	};
+
+	const enforceExclusivity = (changedField) => {
+		if (_syncing) return;
+		_syncing = true;
+		try {
+			if (changedField === "fiscal_year" || changedField === "bs_month") {
+				// Picking a BS field clears the AD date range.
+				if (frappe.query_report.get_filter_value(changedField)) {
+					clearFilters(["from_date", "to_date"]);
+				}
+			} else if (changedField === "from_date" || changedField === "to_date") {
+				// Picking an AD date clears the BS fiscal year + month.
+				if (frappe.query_report.get_filter_value(changedField)) {
+					clearFilters(["fiscal_year", "bs_month"]);
+				}
+			}
+		} finally {
+			_syncing = false;
+		}
+	};
+
 	const updateADVisibility = () => {
 		const hasFY = frappe.query_report.get_filter_value("fiscal_year");
 		const hasBSMonth = frappe.query_report.get_filter_value("bs_month");
@@ -154,8 +186,12 @@ function _setup_fiscal_year_visibility(report) {
 
 	updateADVisibility();
 
-	frappe.query_report.page.wrapper.on("change", ".report-filters input, .report-filters select", () => {
-		setTimeout(() => updateADVisibility(), 100);
+	frappe.query_report.page.wrapper.on("change", ".report-filters input, .report-filters select", (e) => {
+		const changedField = $(e.target).closest(".frappe-control").attr("data-fieldname");
+		setTimeout(() => {
+			enforceExclusivity(changedField);
+			updateADVisibility();
+		}, 100);
 	});
 }
 
@@ -182,27 +218,22 @@ function _make_full_width(report) {
 }
 
 function _default_bs_month() {
-	// Approximate current BS month index. UI default only.
+	// Current BS month, derived from today's AD date via the accurate
+	// NepaliFunctions.AD2BS converter (same one the BS month picker uses).
+	// UI default only.
+	if (typeof window.NepaliFunctions === "undefined") {
+		console.warn("⚠️ NepaliFunctions not loaded — leaving BS Month blank");
+		return "";
+	}
+
 	const today = new Date();
-	const m = today.getMonth() + 1;
-	const d = today.getDate();
-	// rough mapping AD → BS (mid-month transitions)
-	const table = [
-		[1, 9],   // Jan → Poush
-		[2, 10],  // Feb → Magh
-		[3, 11],  // Mar → Falgun
-		[4, 12],  // Apr early → Chaitra; mid → Baisakh
-		[5, 1],   // May → Baisakh/Jestha
-		[6, 2],   // Jun → Jestha/Ashadh
-		[7, 3],   // Jul → Ashadh/Shrawan
-		[8, 4],   // Aug → Shrawan/Bhadra
-		[9, 5],   // Sep → Bhadra/Ashwin
-		[10, 6],  // Oct → Ashwin/Kartik
-		[11, 7],  // Nov → Kartik/Mangsir
-		[12, 8],  // Dec → Mangsir/Poush
-	];
-	const [, base] = table[m - 1];
-	const bs = d > 15 ? (base % 12) + 1 : base;
+	const bsDate = window.NepaliFunctions.AD2BS({
+		year: today.getFullYear(),
+		month: today.getMonth() + 1,
+		day: today.getDate(),
+	});
+
+	const bs = Number(bsDate.month);
 	const names = [
 		"Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
 		"Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
