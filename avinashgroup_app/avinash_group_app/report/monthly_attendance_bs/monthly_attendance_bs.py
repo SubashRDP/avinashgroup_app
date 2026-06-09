@@ -183,15 +183,17 @@ def _get_employees(filters, ad_start, ad_end):
 		emp_filters.append(["Employee", "name", "=", filters.employee])
 
 	emp_filters.append(["Employee", "date_of_joining", "<=", ad_end])
-	emp_filters.append([
-		"or",
-		[["Employee", "relieving_date", "is", "not set"],
-		 ["Employee", "relieving_date", ">", ad_start]]
-	])
+
+	# Either still employed (no relieving date) or relieved after the period start.
+	emp_or_filters = [
+		["Employee", "relieving_date", "is", "not set"],
+		["Employee", "relieving_date", ">", ad_start],
+	]
 
 	return frappe.get_all(
 		"Employee",
 		filters=emp_filters,
+		or_filters=emp_or_filters,
 		fields=[
 			"name", "employee_name", "employee_number",
 			"company", "department", "designation", "branch",
