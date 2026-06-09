@@ -10,3 +10,12 @@ try:
 except Exception:
 	import frappe
 	frappe.log_error(frappe.get_traceback(), "Stock Adjustment engine patch failed to load")
+
+# Allow Administrator to delete Nepal-company Sales Invoice / Payment Entry.
+# Overrides erpnext.regional.check_deletion_permission (core, untouched).
+try:
+	from avinashgroup_app.custom_code.regional_deletion_override import apply_patch as apply_deletion_patch
+	apply_deletion_patch()
+except Exception:
+	import frappe
+	frappe.log_error(frappe.get_traceback(), "Regional deletion-permission patch failed to load")
