@@ -6,7 +6,7 @@
 ; CI builds it via .github/workflows/build-exe.yml (Inno Setup 6 is preinstalled on the runner).
 
 #define MyAppName "K40 Bridge"
-#define MyAppVersion "1.0.4"
+#define MyAppVersion "1.0.5"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "k40_bridge.exe"
 

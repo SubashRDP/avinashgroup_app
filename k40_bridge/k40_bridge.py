@@ -42,7 +42,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -80,9 +80,28 @@ UPDATE_CHECK_URL = (
 )
 # Direct download URL — Releases on public repos work WITHOUT GitHub login.
 DOWNLOAD_PAGE_URL = "https://github.com/SubashRDP/avinashgroup_app/releases/latest"
+# Fallback only. Prefer the version-explicit URL from installer_download_url()
+# below: GitHub's "latest" pointer can drift to an OLDER release (e.g. if an old
+# release's assets get re-uploaded), which would make the self-updater download a
+# version that doesn't match latest_version.txt and loop forever. Pinning the URL
+# to the exact advertised version removes that whole failure mode.
 INSTALLER_DOWNLOAD_URL = (
     "https://github.com/SubashRDP/avinashgroup_app/releases/latest/download/K40BridgeSetup.exe"
 )
+
+
+def installer_download_url(version):
+    """Build the version-explicit installer URL for a given version string.
+
+    The release tag is `k40-v{version}` (see build-k40-bridge.yml), so the asset
+    lives at releases/download/k40-v{version}/K40BridgeSetup.exe. This always
+    fetches exactly the version latest_version.txt advertises, independent of
+    which release GitHub currently flags as "latest"."""
+    v = version.strip().lstrip("v")
+    return (
+        "https://github.com/SubashRDP/avinashgroup_app/"
+        f"releases/download/k40-v{v}/K40BridgeSetup.exe"
+    )
 
 def _data_dir():
     """Return a stable per-user data directory that survives exe moves/replacements."""
@@ -2067,21 +2086,14 @@ class ControlPanel:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _download_installer(self, latest):
-        """Stream-download the installer to a temp file with progress updates.
-        Returns the path on success, None on failure (caller will see banner
-        and dialog from the worker's except block)."""
-        import tempfile
-
-        tmp_dir = tempfile.gettempdir()
-        installer_path = os.path.join(tmp_dir, f"K40BridgeSetup_{latest}.exe")
-        self.logger.info(f"Self-update: downloading {INSTALLER_DOWNLOAD_URL} → {installer_path}")
-
-        with requests.get(INSTALLER_DOWNLOAD_URL, stream=True, timeout=120) as r:
+    def _stream_download(self, url, dest_path, latest):
+        """Stream `url` to `dest_path`, updating the banner with progress.
+        Raises on any HTTP error so the caller can try a fallback URL."""
+        with requests.get(url, stream=True, timeout=120) as r:
             r.raise_for_status()
             total = int(r.headers.get("content-length", 0))
             downloaded = 0
-            with open(installer_path, "wb") as f:
+            with open(dest_path, "wb") as f:
                 for chunk in r.iter_content(64 * 1024):
                     if not chunk:
                         continue
@@ -2093,6 +2105,28 @@ class ControlPanel:
                             text=f"Downloading v{latest}… {p}%",
                             foreground="gray",
                         ))
+
+    def _download_installer(self, latest):
+        """Stream-download the installer to a temp file with progress updates.
+        Returns the path on success, None on failure (caller will see banner
+        and dialog from the worker's except block)."""
+        import tempfile
+
+        tmp_dir = tempfile.gettempdir()
+        installer_path = os.path.join(tmp_dir, f"K40BridgeSetup_{latest}.exe")
+        # Version-explicit URL first (always the right version); fall back to the
+        # "latest" pointer only if the pinned release/asset can't be reached.
+        url = installer_download_url(latest)
+        self.logger.info(f"Self-update: downloading {url} → {installer_path}")
+
+        try:
+            self._stream_download(url, installer_path, latest)
+        except Exception as e:
+            self.logger.warning(
+                f"Self-update: version-pinned download failed ({e}); "
+                f"falling back to {INSTALLER_DOWNLOAD_URL}"
+            )
+            self._stream_download(INSTALLER_DOWNLOAD_URL, installer_path, latest)
 
         # Integrity guard before we execute it: confirm we actually got a
         # Windows executable (PE files start with "MZ") of plausible size, not
