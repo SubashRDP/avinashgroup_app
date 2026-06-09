@@ -49,6 +49,13 @@ def _bal_str(v):
 	return Markup(f'<b>{formatted}</b>&thinsp;<small>{suffix}</small>')
 
 
+def _drcr(v):
+	"""Dr / Cr indicator from a signed balance (positive = Dr). Blank for zero/empty."""
+	if v is None or v == '' or round(flt(v), 2) == 0:
+		return ""
+	return "Dr" if flt(v) > 0 else "Cr"
+
+
 def _normalize_multiselect(value):
 	"""Return a cleaned list for MultiSelectList / Link-like inputs."""
 	if not value:
@@ -90,6 +97,8 @@ def get_columns(filters=None):
 	name_label = _("Customer Name") if party_type == "Customer" else _("Vendor Name")
 
 	return [
+		# Kept as Data (not Link) so the inline column filter can search it; the JS
+		# formatter renders it as a clickable link to the Customer/Supplier master.
 		{"label": code_label,      "fieldname": "party",      "fieldtype": "Data",     "width": 120},
 		{"label": name_label,      "fieldname": "party_name", "fieldtype": "Data",     "width": 280},
 		{"label": _("Vat/Pan No"), "fieldname": "tax_id",     "fieldtype": "Data",     "width": 130},
@@ -163,12 +172,10 @@ def get_data(filters):
 	agg = {r["party"]: r for r in agg_rows}
 
 	# ── Which parties to display ─────────────────────────────────────────────
+	# agg already holds every party with GL activity in the SELECTED COMPANY. Show Zero
+	# Balance must stay company-scoped — it only stops hiding the zero-closing company
+	# parties (handled by the skip below); it must NOT pull in parties from other companies.
 	display_ids = set(agg.keys())
-	if show_zero:
-		if allowed is not None:
-			display_ids |= allowed
-		else:
-			display_ids |= set(frappe.get_all(party_type, pluck="name"))
 
 	if not display_ids:
 		return []
@@ -312,6 +319,37 @@ def _build_group_wise(records, party_type):
 # ── Filter helper: parties that actually transact in the selected company ────────
 
 @frappe.whitelist()
+@frappe.whitelist()
+def get_company_party_groups(party_type, company, txt=None):
+	"""Party groups that actually have parties transacting in the selected company."""
+	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
+	if not company:
+		return []
+
+	group_field = "customer_group" if party_type == "Customer" else "supplier_group"
+	like = f"%{(txt or '').strip()}%"
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT p.`{group_field}` AS value, p.`{group_field}` AS description
+		FROM `tab{party_type}` p
+		WHERE p.`{group_field}` IS NOT NULL AND p.`{group_field}` LIKE %(txt)s
+		  AND EXISTS (
+			SELECT 1 FROM `tabGL Entry` gle
+			WHERE gle.party = p.name
+			  AND gle.party_type = %(party_type)s
+			  AND gle.company = %(company)s
+			  AND gle.is_cancelled = 0
+		  )
+		ORDER BY p.`{group_field}`
+		LIMIT 50
+		""",
+		{"txt": like, "party_type": party_type, "company": company},
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
 def get_company_parties(party_type, company, txt=None):
 	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
 	if not company:
@@ -364,6 +402,47 @@ def _paginate(rows, orientation):
 	if cur:
 		pages.append(cur)
 	return pages
+
+
+@frappe.whitelist()
+def export_xlsx(filters):
+	"""Excel-only layout: Opening/Closing as magnitude, each followed by a Dr/Cr column.
+	The on-screen report and PDF are unchanged — this layout lives only in the export."""
+	from frappe.utils.xlsxutils import make_xlsx
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+
+	columns, data = execute(filters)
+	# First three labels (Customer/Supplier Code, Name, Vat/Pan) come from the report itself.
+	base_labels = [c["label"] for c in columns[:3]]
+	headers = base_labels + ["Opening", "Opening Dr/Cr", "Debit", "Credit", "Closing", "Closing Dr/Cr"]
+
+	rows = [headers]
+	for d in data:
+		if not isinstance(d, dict):
+			continue
+		# Group-header rows carry only the group name, no balances.
+		if d.get("is_group_header"):
+			rows.append([d.get("party") or "", "", "", "", "", "", "", "", ""])
+			continue
+
+		opening = flt(d.get("opening"))
+		closing = flt(d.get("closing"))
+		rows.append([
+			d.get("party") or "",
+			d.get("party_name") or "",
+			d.get("tax_id") or "",
+			round(abs(opening), 2), _drcr(opening),     # Opening magnitude + Dr/Cr
+			flt(d.get("debit")),
+			flt(d.get("credit")),
+			round(abs(closing), 2), _drcr(closing),     # Closing magnitude + Dr/Cr
+		])
+
+	xlsx = make_xlsx(rows, "Party Ledger Summary")
+	frappe.response.filename = "party_ledger_summary.xlsx"
+	frappe.response.filecontent = xlsx.getvalue()
+	frappe.response.type = "binary"
 
 
 @frappe.whitelist()

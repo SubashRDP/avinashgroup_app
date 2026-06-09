@@ -42,8 +42,19 @@ frappe.query_reports["Party Ledger Summary"] = {
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
 				const party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
-				const doctype = party_type === "Customer" ? "Customer Group" : "Supplier Group";
-				return frappe.db.get_link_options(doctype, txt);
+				const company = frappe.query_report.get_filter_value("company");
+				// No company yet → fall back to all groups; otherwise scope to groups whose
+				// parties transact in the selected company.
+				if (!company) {
+					const doctype = party_type === "Customer" ? "Customer Group" : "Supplier Group";
+					return frappe.db.get_link_options(doctype, txt);
+				}
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.party_ledger_summary.party_ledger_summary.get_company_party_groups",
+						args: { party_type, company, txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -100,7 +111,9 @@ frappe.query_reports["Party Ledger Summary"] = {
 	],
 
 	get_datatable_options(options) {
-		return Object.assign(options, { layout: "fixed", serialNoColumn: false });
+		// serialNoColumn: true adds a leading "Sr No" column so Customer Code is no longer
+		// the first column — its inline filter binds correctly only when not at index 0.
+		return Object.assign(options, { layout: "fixed", serialNoColumn: true });
 	},
 
 	after_datatable_render: function (dt) {
@@ -109,6 +122,18 @@ frappe.query_reports["Party Ledger Summary"] = {
 			setTimeout(() => this.autoFitColumns(dt), 100);
 		}
 		this._placeMonthPickerNextToFit();
+		// Reveal the datatable's inline filter row (hidden by default) so the per-column
+		// search boxes — incl. Customer Code — are visible without pressing Ctrl+Shift+F.
+		if (dt && dt.columnmanager && !dt.columnmanager.isFilterShown) {
+			dt.columnmanager.toggleFilter(true);
+		}
+		// Constrain the scroll area to the viewport so the horizontal scrollbar stays
+		// visible and fixed at the bottom (even after Fit Columns widens the table) —
+		// otherwise it sits below all the rows and you must scroll down to reach it.
+		if (dt && dt.bodyScrollable) {
+			dt.bodyScrollable.style.maxHeight = "calc(100vh - 230px)";
+			dt.bodyScrollable.style.overflow = "auto";
+		}
 	},
 
 	// The shared rdp_common_app appends its "Select Month" picker to the end of the
@@ -165,6 +190,21 @@ frappe.query_reports["Party Ledger Summary"] = {
 	},
 
 	onload: function (_report) {
+		// Override the built-in Export menu: produce a custom Excel where Opening and
+		// Closing each show the magnitude followed by a Dr/Cr column. The on-screen report
+		// is unchanged. Instance-level override only — does not affect other reports.
+		_report.export_report = function () {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.company) {
+				frappe.msgprint(__("Please set Company"));
+				return;
+			}
+			const url =
+				"/api/method/avinashgroup_app.avinash_group_app.report.party_ledger_summary.party_ledger_summary.export_xlsx" +
+				"?filters=" + encodeURIComponent(JSON.stringify(filters));
+			window.open(url);
+		};
+
 		// Resolve which columns the PRINT pdf should show:
 		//  1) "Pick Columns" in the print dialog, else
 		//  2) whatever columns are still visible in the datatable (after removals).
@@ -227,6 +267,17 @@ frappe.query_reports["Party Ledger Summary"] = {
 		const fn = column.fieldname;
 		const is_total = data.is_group_total || data.is_grand_total;
 		const is_header = data.is_group_header;
+
+		// Party code column: group-header / total rows are labels, not real parties —
+		// render plain text, keep bold.
+		if (fn === "party" && (is_total || is_header)) {
+			return value ? `<b>${value}</b>` : "";
+		}
+		// Normal party rows: clickable link to the Customer/Supplier master.
+		if (fn === "party" && value) {
+			const pt = frappe.query_report.get_filter_value("party_type") || "Customer";
+			return `<a href="/app/${pt.toLowerCase()}/${encodeURIComponent(value)}">${value}</a>`;
+		}
 
 		// Opening / Closing: show absolute amount with DB/CR suffix.
 		if (fn === "opening" || fn === "closing") {
