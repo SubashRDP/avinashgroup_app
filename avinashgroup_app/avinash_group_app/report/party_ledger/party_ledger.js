@@ -103,6 +103,17 @@ frappe.query_reports["Party Ledger"] = {
 			},
 		},
 		{
+			// Unchecked (default): Journal Entries with JV Type "Contract Form" are hidden.
+			// Checked: they are included in the ledger.
+			fieldname: "show_contract_form",
+			label: __("Show Contract Form"),
+			fieldtype: "Check",
+			default: 0,
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "fit_columns",
 			label: __("Fit Columns"),
 			fieldtype: "Check",

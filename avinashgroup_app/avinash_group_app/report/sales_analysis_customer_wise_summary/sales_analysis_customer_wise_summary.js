@@ -37,7 +37,7 @@ frappe.query_reports["Sales Analysis Customer wise Summary"] = {
 			fieldname: "include_return",
 			label: __("Include Return"),
 			fieldtype: "Check",
-			default: 0,
+			default: 1,
 			on_change: function () {
 				frappe.query_report.refresh();
 			},

@@ -71,7 +71,7 @@ def _pl_block_height(block, show_remarks, chars_per_line):
 	return h
 
 
-def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None, capacity_override=None):
+def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None, capacity_override=None, extra_header_lines=0):
 
 	if not data:
 		return []
@@ -82,8 +82,9 @@ def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None, ca
 		capacity = capacity_override
 	else:
 		capacity = _PL_CAPACITY.get(orientation, {}).get(bool(detailed), 18)
-	# The header (repeated on every page) grows by one line per party name shown.
-	capacity -= len(party_names or [])
+	# The header (repeated on every page) grows by one line per party name shown,
+	# plus any extra header lines (e.g. the single-party Tax ID line).
+	capacity -= len(party_names or []) + (extra_header_lines or 0)
 	if capacity < 5:
 		capacity = 5
 	chars_per_line = _PL_CHARS_PER_LINE.get(orientation, 90)
@@ -142,7 +143,8 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 	# Only show party names in header when a specific party filter was applied
 	seen = set()
 	party_names = []
-	if _normalize_multiselect(filters.get("party")):
+	selected_parties = _normalize_multiselect(filters.get("party"))
+	if selected_parties:
 		for row in data:
 			pn = row.get('party_name') or ''
 			for part in pn.split(','):
@@ -151,7 +153,18 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 					seen.add(part)
 					party_names.append(part)
 
-	pages = _pl_paginate(data, orientation, bool(filters.get('show_remarks')), bool(filters.get('detailed_mapping')), party_names, capacity_override=capacity_override)
+	# When exactly one party is selected, show its Tax ID (VAT/PAN) under the name.
+	party_tax_id = None
+	if len(selected_parties) == 1:
+		party_tax_id = frappe.db.get_value(
+			filters.get("party_type") or "Customer", selected_parties[0], "tax_id"
+		)
+
+	pages = _pl_paginate(
+		data, orientation, bool(filters.get('show_remarks')), bool(filters.get('detailed_mapping')),
+		party_names, capacity_override=capacity_override,
+		extra_header_lines=1 if party_tax_id else 0,
+	)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'party_ledger_pdf.html')
 	with open(template_path) as f:
@@ -165,6 +178,7 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 			'pages': pages,
 			'total_pages': len(pages) or 1,
 			'party_names': party_names,
+			'party_tax_id': party_tax_id,
 			'fmt': _fmt_inr,
 			'bal': _bal_str,
 			'sc': selected_columns or [],
@@ -351,6 +365,19 @@ def get_data(filters):
 	if voucher_no_filter:
 		conditions += " AND gle.voucher_no LIKE %(voucher_no_filter)s"
 		params["voucher_no_filter"] = f"%{voucher_no_filter}%"
+
+	# Exclude Journal Entries whose JV Type (custom_p_type) is "Contract Form" UNLESS the
+	# "Show Contract Form" checkbox is ticked. Applied to the shared conditions so both the
+	# opening balance and the period rows drop them (keeps the running balance consistent).
+	# The customer_statement portal never sets this flag, so it always excludes them.
+	if not filters.get("show_contract_form"):
+		conditions += """ AND NOT EXISTS (
+			SELECT 1 FROM `tabJournal Entry` je
+			WHERE je.name = gle.voucher_no
+			  AND gle.voucher_type = 'Journal Entry'
+			  AND je.custom_p_type = %(exclude_jv_type)s
+		)"""
+		params["exclude_jv_type"] = "Contract Form"
 
 	# ── Opening balance ────────────────────────────────────────────────────────
 	# Match ERPNext General Ledger: opening = everything before the From Date PLUS any
