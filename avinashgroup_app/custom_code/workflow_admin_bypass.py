@@ -7,7 +7,6 @@ from frappe.model import workflow as workflow_module
 BYPASS_WORKFLOW_NAMES = {
     "Material Request One-Line Approver",
     "Purchase Order Workflow",
-    "Purchase Order Approval Workflow",
 }
 
 
