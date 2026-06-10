@@ -10,7 +10,10 @@ from frappe import _
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
-	include_return = int(filters.get("include_return") if filters.get("include_return") is not None else 1)
+	# Frappe's query report drops falsy filter values before sending them, so an UNCHECKED
+	# "Include Return" (value 0) never reaches the server. Treat absent as OFF (cint(None) == 0);
+	# the JS filter's default:1 keeps it ON on first load.
+	include_return = frappe.utils.cint(filters.get("include_return"))
 
 	columns = get_columns()
 	data = build_rows(filters, include_return, include_agent=True)
@@ -181,19 +184,24 @@ def build_rows(filters, include_return, include_agent=True):
 				data.append(_summary_row(_("Agent Net Sales"), _diff(prod_sales, prod_returns), kind="agent"))
 
 		# Product totals block — boxed by a rule above (first row) and below (last row).
-		data.append(_summary_row(_("Product Total Sales"), prod_sales, kind="product", product_start=1))
+		# With returns off there's no Return/Net working (Net would just equal Sales), so the
+		# block collapses to the single Product Total Sales row.
 		if include_return:
+			data.append(_summary_row(_("Product Total Sales"), prod_sales, kind="product", product_start=1))
 			data.append(_summary_row(_("Return Totals"), prod_returns, kind="product"))
-		data.append(_summary_row(_("Product Net Sales"), _diff(prod_sales, prod_returns), kind="product", product_end=1))
+			data.append(_summary_row(_("Product Net Sales"), _diff(prod_sales, prod_returns), kind="product", product_end=1))
+		else:
+			data.append(_summary_row(_("Product Total Sales"), prod_sales, kind="product", product_start=1, product_end=1))
 
 		_add(grand_sales, prod_sales)
 		_add(grand_returns, prod_returns)
 
 	# Grand totals — a single bold line above this block sets it apart from the products.
+	# Returns off → only the Total of Reported Sales row (no Returns/Net).
 	data.append(_summary_row(_("Total of Reported Sales"), grand_sales, kind="grand", grand_start=1))
 	if include_return:
 		data.append(_summary_row(_("Total of Reported Returns"), grand_returns, kind="grand"))
-	data.append(_summary_row(_("Net Sales"), _diff(grand_sales, grand_returns), kind="grand"))
+		data.append(_summary_row(_("Net Sales"), _diff(grand_sales, grand_returns), kind="grand"))
 
 	return data
 
@@ -245,7 +253,10 @@ def _company_label(filters):
 
 
 def _render(filters, orientation, is_html_view):
-	include_return = int(filters.get("include_return") if filters.get("include_return") is not None else 1)
+	# Frappe's query report drops falsy filter values before sending them, so an UNCHECKED
+	# "Include Return" (value 0) never reaches the server. Treat absent as OFF (cint(None) == 0);
+	# the JS filter's default:1 keeps it ON on first load.
+	include_return = frappe.utils.cint(filters.get("include_return"))
 	data = build_rows(filters, include_return, include_agent=True)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'sales_analysis_product_wise_invoice_details_pdf.html')

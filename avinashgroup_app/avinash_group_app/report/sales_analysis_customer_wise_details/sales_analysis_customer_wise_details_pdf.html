@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 10.5px;
+  color: #222;
+  line-height: 1.5;
+  margin: 0;
+  padding: {% if is_html_view %}20px{% else %}0{% endif %};
+  background: {% if is_html_view %}#d0d0d0{% else %}white{% endif %};
+}
+
+{% if is_html_view %}
+.page {
+  background: #fff;
+  box-sizing: border-box;
+  width:       {% if orientation == 'Portrait' %}210mm{% else %}297mm{% endif %};
+  min-height:  {% if orientation == 'Portrait' %}297mm{% else %}210mm{% endif %};
+  margin: 0 auto 12px;
+  padding: 10mm 10mm 15mm 10mm;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+@media print {
+  @page { size: {% if orientation == 'Portrait' %}210mm 297mm{% else %}297mm 210mm{% endif %}; margin: 0; }
+  body { background: white; padding: 0; }
+  .page { box-shadow: none; margin: 0 auto; }
+}
+{% endif %}
+
+.sa-company-center { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 2px; }
+.sa-filters { font-size: 10.5px; color: #333; margin-bottom: 4px; }
+.sa-filter-item  { display: inline-block; margin-right: 18px; }
+.sa-filter-label { font-weight: bold; }
+.sa-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
+
+table { width: 100%; border-collapse: collapse; }
+tr    { page-break-inside: avoid; }
+
+thead th {
+  background: #f0f2f5;
+  color: #222;
+  font-size: 10.5px;
+  font-weight: bold;
+  padding: 5px 6px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+  text-align: left;
+}
+thead th.r { text-align: right; }
+
+td { padding: 3px 6px; vertical-align: top; }
+.r { text-align: right; }
+.nowrap { white-space: nowrap; }
+
+/* Row variants */
+.cust-head td { font-weight: bold; font-size: 11px; padding-top: 6px; }
+.prod-head td { font-weight: bold; padding-top: 4px; }
+
+/* Product sub-totals: plain weight, boxed by a rule above the first row and below the last. */
+.summary.prod-total td       { font-weight: normal; }
+.summary.prod-total-start td  { border-top: 1px solid #bbb; }
+.summary.prod-total-end td    { border-bottom: 1px solid #bbb; }
+
+/* Customer Total / Net block: bold, one thin rule above the block. */
+.summary.cust-total td        { font-weight: bold; }
+.summary.cust-total-start td  { border-top: 1px solid #000; padding-top: 4px; }
+.summary.cust-total-end td    { border-bottom: 1.5px solid #000; }
+
+/* Grand-total block: bold, one thick rule above the block. */
+.summary.grand td        { font-weight: bold; }
+.summary.grand-start td  { border-top: 2px solid #000; padding-top: 5px; }
+
+.sa-pageno { text-align: center; font-size: 10px; color: #555; margin-top: 8px; }
+.brk { page-break-after: always; }
+
+{% if orientation == 'Portrait' %}
+body          { font-size: 9px !important; line-height: 1.35 !important; }
+thead th      { font-size: 9px !important; padding: 3px 4px !important; }
+td            { padding: 2px 4px !important; }
+.cust-head td { font-size: 9.5px !important; }
+{% endif %}
+</style>
+</head>
+<body>
+
+{% set ncols = 6 %}
+
+{# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ── #}
+{% set row_limit = 60 if orientation == 'Portrait' else 30 %}
+{% set total_rows = data | length %}
+{% set total_pages = (total_rows // row_limit) + (1 if total_rows % row_limit > 0 else 0) %}
+{% if total_pages < 1 %}{% set total_pages = 1 %}{% endif %}
+
+{% for page_num in range(total_pages) %}
+{% set start = page_num * row_limit %}
+{% set page_rows = data[start : start + row_limit] %}
+
+<div class="sheet{% if not loop.last %} brk{% endif %}{% if is_html_view %} page{% endif %}">
+
+<table>
+  <thead>
+    <tr>
+      <td colspan="{{ ncols }}" style="padding:4px 0 0 0; border:none;">
+        <div style="text-align:right; font-size:13px; font-weight:bold;">
+          Sales Analysis Customer Wise{% if include_return %} Include Return{% endif %} Details
+        </div>
+        {% if company_label %}
+        <div class="sa-company-center">{{ company_label }}</div>
+        {% endif %}
+        <div class="sa-filters">
+          <span class="sa-filter-item">
+            <span class="sa-filter-label">From:</span>
+            {{ frappe.utils.formatdate(filters.get('from_date')) }}
+            &nbsp;<span class="sa-filter-label">To:</span>
+            {{ frappe.utils.formatdate(filters.get('to_date')) }}
+          </span>
+        </div>
+        <hr class="sa-divider" style="margin-bottom:0;">
+      </td>
+    </tr>
+    <tr>
+      <th>Customer/Item Code</th>
+      <th>Customer/Item Name</th>
+      <th class="r">Quantity</th>
+      <th class="r">Value</th>
+      <th class="r">VAT Amount</th>
+      <th class="r">Total Including VAT</th>
+    </tr>
+  </thead>
+
+  <tbody>
+  {% for row in page_rows %}
+    {% if row.get('is_customer_header') %}
+    <tr class="cust-head">
+      <td>{{ row.get('cust_item_code') or '' }}</td>
+      <td colspan="{{ ncols - 1 }}">{{ row.get('cust_item_name') or '' }}</td>
+    </tr>
+    {% elif row.get('is_product_header') %}
+    <tr class="prod-head">
+      <td>{{ row.get('cust_item_code') or '' }}</td>
+      <td colspan="{{ ncols - 1 }}">{{ row.get('cust_item_name') or '' }}</td>
+    </tr>
+    {% else %}
+    {% set k = row.get('summary_kind') %}
+    <tr class="summary{% if k == 'product' %} prod-total{% endif %}{% if k == 'cust' %} cust-total{% endif %}{% if k == 'grand' %} grand{% endif %}{% if row.get('product_start') %} prod-total-start{% endif %}{% if row.get('product_end') %} prod-total-end{% endif %}{% if row.get('cust_start') %} cust-total-start{% endif %}{% if row.get('cust_end') %} cust-total-end{% endif %}{% if row.get('grand_start') %} grand-start{% endif %}">
+      <td colspan="2" class="r">{{ row.get('cust_item_name') or '' }}</td>
+      <td class="r nowrap">{{ fmtq(row.get('qty')) }}</td>
+      <td class="r nowrap">{{ fmt(row.get('value')) }}</td>
+      <td class="r nowrap">{{ fmt(row.get('vat')) }}</td>
+      <td class="r nowrap">{{ fmt(row.get('total_incl_vat')) }}</td>
+    </tr>
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="sa-pageno">Page {{ page_num + 1 }} of {{ total_pages }}</div>
+
+</div>
+
+{% endfor %}
+</body>
+</html>
