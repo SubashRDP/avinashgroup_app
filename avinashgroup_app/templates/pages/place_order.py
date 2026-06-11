@@ -52,6 +52,23 @@ def get_context(context):
 	context.today = nowdate()
 	context.default_delivery_date = add_days(nowdate(), 7)
 
+	# Place Order sells only LP Gas — the item is fixed on the form (no item picker).
+	# Prefer the LP Gas item of the context company; fall back to any LP Gas sales item.
+	default_item = (
+		frappe.db.get_value(
+			"Item",
+			{"item_name": "LP Gas", "disabled": 0, "is_sales_item": 1, "custom_company": company},
+			["name", "item_name"], as_dict=True,
+		)
+		or frappe.db.get_value(
+			"Item",
+			{"item_name": "LP Gas", "disabled": 0, "is_sales_item": 1},
+			["name", "item_name"], as_dict=True,
+		)
+	)
+	context.default_item_code = default_item.name if default_item else ""
+	context.default_item_name = default_item.item_name if default_item else "LP Gas"
+
 
 @frappe.whitelist()
 def search_price_lists(txt, customer=None):
@@ -74,44 +91,17 @@ def search_price_lists(txt, customer=None):
 	return results
 
 
+# Place Order only offers these cylinder UOMs — not the full UOM list. Client-specific
+# to avinashgroup_app; edit this list (exact UOM names) to change the available options.
+PLACE_ORDER_UOMS = ["5 KG", "7.1 KG", "14.2 KG"]
+
+
 @frappe.whitelist()
 def search_uoms(item_code, txt):
-	priority = []
-
-	if item_code and frappe.db.exists("Item", item_code):
-		item_vals = frappe.db.get_value("Item", item_code, ["stock_uom", "sales_uom"], as_dict=True) or {}
-		sales_uom = item_vals.get("sales_uom") or ""
-		stock_uom = item_vals.get("stock_uom") or ""
-		if sales_uom:
-			priority.append(sales_uom)
-		if stock_uom and stock_uom not in priority:
-			priority.append(stock_uom)
-
-	# All global UOMs (filtered by txt if given)
-	filters = {"enabled": 1}
-	if txt:
-		filters["uom_name"] = ["like", f"%{txt}%"]
-	global_rows = frappe.get_list(
-		"UOM",
-		filters=filters,
-		fields=["name"],
-		limit=50,
-		ignore_permissions=True,
-	)
-	global_uoms = [r.name for r in global_rows]
-
-	if txt:
-		priority = [u for u in priority if txt.lower() in u.lower()]
-
-	# Merge: priority first, then global (no duplicates)
-	seen = set()
-	result = []
-	for u in priority + global_uoms:
-		if u not in seen:
-			result.append(u)
-			seen.add(u)
-
-	return result
+	# Only the fixed cylinder UOMs, narrowed by the search text. item_code is accepted for
+	# signature compatibility with the caller but no longer affects the options.
+	needle = (txt or "").strip().lower()
+	return [u for u in PLACE_ORDER_UOMS if not needle or needle in u.lower()]
 
 
 @frappe.whitelist()

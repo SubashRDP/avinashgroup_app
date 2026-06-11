@@ -140,11 +140,14 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 
 	_, data = execute(filters)
 
-	# Only show party names in header when a specific party filter was applied
+	# Only show party names in header when a specific party filter was applied.
+	# In customer-wise grouped mode (2+ parties) each section already names its customer,
+	# so we keep the page header clean instead of listing every party there.
+	selected_parties = _normalize_multiselect(filters.get("party"))
+	grouped_mode = len(selected_parties) != 1 and not filters.get("disable_party_grouping")
 	seen = set()
 	party_names = []
-	selected_parties = _normalize_multiselect(filters.get("party"))
-	if selected_parties:
+	if selected_parties and not grouped_mode:
 		for row in data:
 			pn = row.get('party_name') or ''
 			for part in pn.split(','):
@@ -179,6 +182,8 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 			'total_pages': len(pages) or 1,
 			'party_names': party_names,
 			'party_tax_id': party_tax_id,
+			# No Party column: in grouped mode each customer is named in a header row instead.
+			'show_party': False,
 			'fmt': _fmt_inr,
 			'bal': _bal_str,
 			'sc': selected_columns or [],
@@ -283,24 +288,14 @@ def execute(filters=None):
 
 def get_columns(filters=None):
 	filters = filters or {}
-	party_type = filters.get("party_type") or "Customer"
-	parties = _normalize_multiselect(filters.get("party"))
-	show_party_column = len(parties) != 1
-
+	# Customer-wise grouping identifies each customer with a header row (code + name/VAT),
+	# so there is no separate Party column.
 	columns = [
-		{"label": _("S.No"),           "fieldname": "sr_no",        "fieldtype": "Data",     "width": 40},
-		{"label": _("Date"),        "fieldname": "date",         "fieldtype": "Date",     "width": 80},
-		{"label": _("Miti (BS)"),   "fieldname": "miti",         "fieldtype": "Data",     "width": 85},
+		{"label": _("S.No"),        "fieldname": "sr_no",        "fieldtype": "Data",     "width": 40},
+		{"label": _("Date"),        "fieldname": "date",         "fieldtype": "Date",     "width": 90},
+		{"label": _("Miti (BS)"),   "fieldname": "miti",         "fieldtype": "Data",     "width": 200},
 		{"label": _("Voucher No"),  "fieldname": "voucher_no",   "fieldtype": "Data",     "width": 200},
 	]
-
-	if show_party_column:
-		columns.append({
-			"label": _("Party"),
-			"fieldname": "party_name",
-			"fieldtype": "Data",
-			"width": 220,
-		})
 
 	columns.append({"label": _("Description"), "fieldname": "description", "fieldtype": "Data", "width": 320})
 
@@ -336,6 +331,10 @@ def get_data(filters):
 	voucher_no_filter = (filters.get("voucher_no") or "").strip()
 	detailed_mapping = bool(filters.get("detailed_mapping"))
 	show_remarks = bool(filters.get("show_remarks"))
+	# Customer-wise grouping: one section per party (each with its own opening/running/
+	# closing balance) plus a combined grand total. Group unless exactly one party is selected
+	# (none selected → every party in the company; a single party → the plain flat ledger).
+	grouped_mode = len(parties) != 1 and not filters.get("disable_party_grouping")
 
 	# GL Entry conditions — party_type + party narrows to the receivable/payable account rows only
 	conditions = "gle.is_cancelled = 0 AND gle.company = %(company)s AND gle.party_type = %(party_type)s"
@@ -384,19 +383,36 @@ def get_data(filters):
 	# opening-balance entries (is_opening = 'Yes') regardless of their posting date.
 	# Those opening entries are excluded from the period rows below so they are not
 	# counted/shown twice.
-	opening_row = frappe.db.sql(f"""
-		SELECT
-			COALESCE(SUM(gle.debit),  0) AS opening_debit,
-			COALESCE(SUM(gle.credit), 0) AS opening_credit
-		FROM `tabGL Entry` gle
-		WHERE {conditions}
-		  AND (gle.posting_date < %(from_date)s OR gle.is_opening = 'Yes')
-	""", params, as_dict=True)
+	# Grouped mode needs each party's own opening (GROUP BY party); otherwise one combined opening.
+	if grouped_mode:
+		opening_rows = frappe.db.sql(f"""
+			SELECT
+				gle.party                    AS party,
+				COALESCE(SUM(gle.debit),  0) AS opening_debit,
+				COALESCE(SUM(gle.credit), 0) AS opening_credit
+			FROM `tabGL Entry` gle
+			WHERE {conditions}
+			  AND (gle.posting_date < %(from_date)s OR gle.is_opening = 'Yes')
+			GROUP BY gle.party
+		""", params, as_dict=True)
+		opening_by_party = {
+			r.party: (flt(r.opening_debit), flt(r.opening_credit)) for r in opening_rows
+		}
+		opening_debit = opening_credit = opening_balance = 0.0
+	else:
+		opening_row = frappe.db.sql(f"""
+			SELECT
+				COALESCE(SUM(gle.debit),  0) AS opening_debit,
+				COALESCE(SUM(gle.credit), 0) AS opening_credit
+			FROM `tabGL Entry` gle
+			WHERE {conditions}
+			  AND (gle.posting_date < %(from_date)s OR gle.is_opening = 'Yes')
+		""", params, as_dict=True)
 
-	opening = opening_row[0] if opening_row else {}
-	opening_debit   = flt(opening.get("opening_debit"))
-	opening_credit  = flt(opening.get("opening_credit"))
-	opening_balance = opening_debit - opening_credit   # positive = DB, negative = CR
+		opening = opening_row[0] if opening_row else {}
+		opening_debit   = flt(opening.get("opening_debit"))
+		opening_credit  = flt(opening.get("opening_credit"))
+		opening_balance = opening_debit - opening_credit   # positive = DB, negative = CR
 
 	# ── Period entries ─────────────────────────────────────────────────────────
 	entries = frappe.db.sql(f"""
@@ -435,10 +451,47 @@ def get_data(filters):
 	# Batch-fetch all detail data upfront when detailed_mapping is on (avoids N+1 queries)
 	detail_data = _fetch_all_details(entries) if detailed_mapping else {}
 
-	data = []
+	if grouped_mode:
+		data = _build_grouped_data(
+			entries, opening_by_party, party_type,
+			detail_data, detailed_mapping, show_remarks,
+		)
+	else:
+		data, _pd, _pc, _run = _build_section_rows(
+			entries, opening_debit, opening_credit,
+			detail_data, detailed_mapping, show_remarks,
+			closing_voucher_no="NPR",
+		)
 
-	# Opening Balance row
-	data.append({
+	_apply_bs_miti(data)
+	_apply_custom_voucher_names(data)
+	# Grouped mode sets party_name only on each section's first row (the name shows once);
+	# the flat layout fills it on every row via _apply_party_names.
+	if not grouped_mode:
+		_apply_party_names(data, party_type)
+	if show_remarks:
+		_apply_voucher_remarks(data)
+	return data
+
+
+# ── Section builders ───────────────────────────────────────────────────────────
+
+def _build_section_rows(entries, opening_debit, opening_credit, detail_data,
+						detailed_mapping, show_remarks, closing_voucher_no="NPR",
+						section_mode=False):
+	"""Build one ledger section: Opening row → entry rows → For the Periods → Closing.
+
+	Returns (rows, period_debit, period_credit, closing_balance). Used both for the
+	whole ledger (non-grouped) and for each customer's section (grouped mode).
+	section_mode tags the subtotal rows so the PDF can keep them light (one thin line
+	per customer) instead of the heavy boxed rules used for the flat/grand-total totals.
+	"""
+	# is_section: 1 on a per-customer subtotal row → light styling in the PDF.
+	sec = 1 if section_mode else 0
+	rows = []
+	opening_balance = opening_debit - opening_credit
+
+	rows.append({
 		"date":        "",
 		"miti":        "",
 		"voucher_no":  "",
@@ -448,6 +501,8 @@ def get_data(filters):
 		"balance":     opening_balance,
 		"bold":        1,
 		"is_summary":  1,
+		"is_section":  sec,
+		"kind":        "opening",
 	})
 
 	running_balance = opening_balance
@@ -463,7 +518,7 @@ def get_data(filters):
 		period_credit  += credit
 
 		sr_no += 1
-		data.append({
+		rows.append({
 			"sr_no":        sr_no,
 			"date":         entry.get("date"),
 			"miti":         "",
@@ -496,12 +551,12 @@ def get_data(filters):
 			if sub_rows:
 				sub_rows[0]["is_first_detail"] = 1
 				sub_rows[-1]["is_last_detail"]  = 1
-			data.extend(sub_rows)
-			data.append({"is_separator": 1, "balance": None})
+			rows.extend(sub_rows)
+			rows.append({"is_separator": 1, "balance": None})
 
 	# ── For the Periods row ────────────────────────────────────────────────────
 	period_net = round(period_debit - period_credit, 2)
-	data.append({
+	rows.append({
 		"date":        "",
 		"miti":        "",
 		"voucher_no":  "",
@@ -511,29 +566,139 @@ def get_data(filters):
 		"balance":     period_net or None,
 		"bold":        1,
 		"is_summary":  1,
+		"is_section":  sec,
+		"kind":        "period",
 	})
 
 	# ── Closing Balance row ────────────────────────────────────────────────────
 	cumulative_debit  = round(opening_debit  + period_debit,  2)
 	cumulative_credit = round(opening_credit + period_credit, 2)
-	closing_label = "Closing Balance"
-	data.append({
+	rows.append({
 		"date":        "",
 		"miti":        "",
-		"voucher_no":  "NPR",
-		"description": closing_label,
+		"voucher_no":  closing_voucher_no,
+		"description": "Closing Balance",
 		"debit":       cumulative_debit  if cumulative_debit  else None,
 		"credit":      cumulative_credit if cumulative_credit else None,
 		"balance":     running_balance   if running_balance   else None,
 		"bold":        1,
 		"is_summary":  1,
+		"is_section":  sec,
+		"kind":        "closing",
 	})
 
-	_apply_bs_miti(data)
-	_apply_custom_voucher_names(data)
-	_apply_party_names(data, party_type)
-	if show_remarks:
-		_apply_voucher_remarks(data)
+	return rows, period_debit, period_credit, running_balance
+
+
+def _party_info_map(party_type, party_ids):
+	"""Map party id → {"name": display name, "tax_id": VAT/PAN}. Name falls back to the id."""
+	party_ids = [p for p in party_ids if p]
+	if not party_ids:
+		return {}
+	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
+	fields = ["name"]
+	has_name = frappe.db.has_column(party_type, name_field)
+	has_tax = frappe.db.has_column(party_type, "tax_id")
+	if has_name:
+		fields.append(name_field)
+	if has_tax:
+		fields.append("tax_id")
+	rows = frappe.db.get_all(party_type, filters={"name": ("in", party_ids)}, fields=fields)
+	return {
+		r.name: {"name": (r.get(name_field) if has_name else None) or r.name,
+				 "tax_id": (r.get("tax_id") if has_tax else None)}
+		for r in rows
+	}
+
+
+def _customer_header_label(info, party):
+	"""'<Customer Name> (VAT/PAN No.: <tax_id>)' — tax id omitted when missing."""
+	name = (info or {}).get("name") or party
+	tax_id = (info or {}).get("tax_id")
+	return f"{name} (VAT/PAN No.: {tax_id})" if tax_id else name
+
+
+def _build_grouped_data(entries, opening_by_party, party_type, detail_data,
+						detailed_mapping, show_remarks):
+	"""Customer-wise layout:
+	    Total Opening Balance (all customers)
+	    ── per customer ──
+	      header: <Customer Code> | <Customer Name (VAT/PAN No.)>
+	      Opening Balance → transactions → For the Periods → Closing Balance
+	    Total Period Closing  (all customers)
+	    Total Closing Balance (all customers)
+	"""
+	from collections import OrderedDict
+
+	entries_by_party = OrderedDict()
+	for e in entries:
+		entries_by_party.setdefault(e.get("party") or "", []).append(e)
+
+	all_parties = set(opening_by_party) | set(entries_by_party)
+	info_map = _party_info_map(party_type, all_parties)
+	# Display A → B → C: order sections by the party's display name.
+	ordered = sorted(all_parties, key=lambda p: ((info_map.get(p) or {}).get("name") or p or "").lower())
+
+	sections = []
+	g_open_debit = g_open_credit = 0.0
+	g_period_debit = g_period_credit = 0.0
+	g_closing = 0.0
+
+	for party in ordered:
+		open_debit, open_credit = opening_by_party.get(party, (0.0, 0.0))
+		party_entries = entries_by_party.get(party, [])
+		# Skip a selected party with no opening and no activity in the period.
+		if not party_entries and open_debit == 0 and open_credit == 0:
+			continue
+
+		section_rows, period_debit, period_credit, closing = _build_section_rows(
+			party_entries, open_debit, open_credit,
+			detail_data, detailed_mapping, show_remarks,
+			closing_voucher_no="",  # NPR label only on the grand-total closing
+			section_mode=True,      # light per-customer subtotals + one separator line
+		)
+		# Customer header: code in the Date column, "Name (VAT/PAN No.)" in the Miti column.
+		sections.append({
+			"cust_code":  party,
+			"cust_label": _customer_header_label(info_map.get(party), party),
+			"date": "", "miti": "", "voucher_no": "", "description": "",
+			"balance": None, "is_customer_header": 1, "bold": 1,
+		})
+		sections.extend(section_rows)
+
+		g_open_debit    += open_debit
+		g_open_credit   += open_credit
+		g_period_debit  += period_debit
+		g_period_credit += period_credit
+		g_closing       += closing
+
+	data = []
+	# ── Total Opening Balance (all customers) — shown up front ──
+	data.append({
+		"date": "", "miti": "", "voucher_no": "", "description": "Total Opening Balance",
+		"debit":   round(g_open_debit,  2),
+		"credit":  round(g_open_credit, 2),
+		"balance": round(g_open_debit - g_open_credit, 2),
+		"bold": 1, "is_summary": 1, "kind": "grand_opening",
+	})
+	data.extend(sections)
+	# ── Totals across all customers — at the end ──
+	data.append({
+		"date": "", "miti": "", "voucher_no": "", "description": "Total Period Closing",
+		"debit":   round(g_period_debit,  2) if g_period_debit  else None,
+		"credit":  round(g_period_credit, 2) if g_period_credit else None,
+		"balance": round(g_period_debit - g_period_credit, 2) or None,
+		"bold": 1, "is_summary": 1, "kind": "grand_period",
+	})
+	cum_debit  = round(g_open_debit  + g_period_debit,  2)
+	cum_credit = round(g_open_credit + g_period_credit, 2)
+	data.append({
+		"date": "", "miti": "", "voucher_no": "NPR", "description": "Total Closing Balance",
+		"debit":   cum_debit  if cum_debit  else None,
+		"credit":  cum_credit if cum_credit else None,
+		"balance": round(g_closing, 2) or None,
+		"bold": 1, "is_summary": 1, "kind": "grand_closing",
+	})
 	return data
 
 

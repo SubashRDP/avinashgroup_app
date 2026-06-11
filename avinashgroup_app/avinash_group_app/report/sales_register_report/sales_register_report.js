@@ -30,7 +30,14 @@ frappe.query_reports["Sales Register Report"] = {
 			label: __("Customer"),
 			fieldtype: "MultiSelectList",
 			get_data: function(txt) {
-				return frappe.db.get_link_options("Customer", txt);
+				// Scope customers to those with invoices in the selected company(ies).
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_register_report.sales_register_report.get_company_customers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

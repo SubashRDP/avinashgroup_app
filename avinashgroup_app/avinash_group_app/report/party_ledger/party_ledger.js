@@ -269,6 +269,13 @@ frappe.query_reports["Party Ledger"] = {
 
 	formatter: function (value, row, column, data, default_formatter) {
 		if (!data) return default_formatter(value, row, column, data);
+		// Customer header (grouped mode): Customer Code in Date, Name (VAT/PAN No.) in Miti,
+		// every other column blank (no 0.00 in the amount columns).
+		if (data.is_customer_header) {
+			if (column.fieldname === "date") return `<b>${frappe.utils.escape_html(data.cust_code || "")}</b>`;
+			if (column.fieldname === "miti") return `<b>${frappe.utils.escape_html(data.cust_label || "")}</b>`;
+			return "";
+		}
 		if (["detail_qty","detail_rate","detail_amount"].includes(column.fieldname) && !data.is_detail) {
 			return "";
 		}

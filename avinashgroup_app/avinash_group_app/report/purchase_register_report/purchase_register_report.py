@@ -8,6 +8,50 @@ import frappe
 from frappe import _
 
 
+def _as_list(value):
+	"""Normalize a MultiSelectList/Link filter value (list, JSON string, or single) to a list."""
+	if not value:
+		return []
+	if isinstance(value, str):
+		value = value.strip()
+		if value.startswith("["):
+			try:
+				value = json.loads(value)
+			except Exception:
+				return [value]
+		else:
+			return [value]
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
+
+
+@frappe.whitelist()
+def get_company_suppliers(company=None, txt=None):
+	"""Supplier options limited to suppliers with a submitted Purchase Invoice in the company."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["pi.docstatus = 1", "(pi.supplier LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("pi.company IN %(company)s")
+		values["company"] = tuple(company)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT pi.supplier AS value, sup.supplier_name AS description
+		FROM `tabPurchase Invoice` pi
+		LEFT JOIN `tabSupplier` sup ON sup.name = pi.supplier
+		WHERE {where}
+		ORDER BY sup.supplier_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
 def _fmt_inr(v):
 	if not v:
 		return ''

@@ -30,7 +30,14 @@ frappe.query_reports["Sales Analysis Customer wise Details"] = {
 			label: __("Customer"),
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Customer", txt);
+				// Scope customers to those with invoices in the selected company(ies).
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_customer_wise_details.sales_analysis_customer_wise_details.get_company_customers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -38,7 +45,15 @@ frappe.query_reports["Sales Analysis Customer wise Details"] = {
 			label: __("Product"),
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Item", txt);
+				// Items are global in ERPNext, so scope the list to items sold in the
+				// selected company(ies) instead of listing every item.
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_customer_wise_details.sales_analysis_customer_wise_details.get_company_items",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
