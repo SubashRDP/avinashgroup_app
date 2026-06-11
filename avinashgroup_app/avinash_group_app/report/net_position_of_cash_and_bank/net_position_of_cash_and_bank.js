@@ -51,6 +51,12 @@ frappe.query_reports["Net Position of Cash and Bank"] = {
 			fieldtype: "Check",
 			default: 0,
 		},
+		{
+			fieldname: "show_zero_balance",
+			label: __("Show Zero Balance"),
+			fieldtype: "Check",
+			default: 0,
+		},
 	],
 
 	formatter: function (value, row, column, data, default_formatter) {
@@ -60,14 +66,5 @@ frappe.query_reports["Net Position of Cash and Bank"] = {
 			value = `<span style="font-weight:600">${value}</span>`;
 		}
 		return value;
-	},
-
-	// Stretch columns to fill the full width of the report container instead of
-	// leaving empty space on the right when the fixed widths don't add up to the
-	// viewport width.
-	get_datatable_options(options) {
-		return Object.assign(options, {
-			layout: "fluid",
-		});
 	},
 };

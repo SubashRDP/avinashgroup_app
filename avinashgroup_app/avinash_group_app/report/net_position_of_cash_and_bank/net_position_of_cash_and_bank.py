@@ -104,6 +104,7 @@ def _build_data(filters):
 	to_date = getdate(filters.to_date)
 	suppress_lc = cint_bool(filters.get("suppress_local_currency_equivalents"))
 	consider_pdc = cint_bool(filters.get("consider_post_dated_cheques"))
+	show_zero = cint_bool(filters.get("show_zero_balance"))
 
 	accounts = _cash_and_bank_accounts(company, filters.get("cash_bank_codes"))
 	if not accounts:
@@ -126,6 +127,10 @@ def _build_data(filters):
 		receipts = flt(mv["receipts"])
 		payments = flt(mv["payments"])
 		closing = opening + receipts - payments
+
+		# Skip accounts with no balance and no movement unless explicitly requested.
+		if not show_zero and not any(flt(v, 2) for v in (opening, receipts, payments, closing)):
+			continue
 
 		currency = acc.account_currency or company_currency
 		if suppress_lc and currency != company_currency:
