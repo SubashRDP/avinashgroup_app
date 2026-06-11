@@ -918,6 +918,58 @@ def set_custom_branch_name(doc):
     doc.custom_branch_name = f"{company_abbr}-{branch_code}-{seq_number}-{fiscal_year}"
 
 
+def _revert_series_if_last(key, deleted_number):
+    """
+    Same logic as frappe.model.naming.revert_series_if_last: decrement the
+    tabSeries counter by one only when the deleted document held the current
+    (highest) number. Called with the exact series key instead of the core
+    helper because our keys are built dynamically (company abbr + fiscal
+    year) and may contain dots (e.g. GEPL-C.GR-), which the core helper's
+    pattern parsing would mangle.
+    """
+    current = frappe.db.sql(
+        "select current from `tabSeries` where name=%s for update", key
+    )
+    if current and current[0][0] == deleted_number:
+        frappe.db.sql(
+            "UPDATE `tabSeries` SET `current` = `current` - 1 WHERE `name`=%s", key
+        )
+
+
+def revert_series_on_delete(doc, method=None):
+    """
+    Called on after_delete. Mirrors what frappe.model.delete_doc does for
+    standard naming_series doctypes: if the deleted document was the last
+    one issued in its series, the counter steps back so the number is reused.
+    Mid-series gaps are left alone, exactly like core.
+    """
+    doctype = doc.doctype
+    if doctype not in NAMING_CONFIG:
+        return
+
+    # Main name: series key is everything before the trailing digit run,
+    # e.g. GEPL-SB-82/83-00015 -> key "GEPL-SB-82/83-", number 15.
+    # Amended names (…-00015-1) derive a key that has no Series row, so
+    # they are skipped safely.
+    m = re.match(r"^(.+?)(\d+)$", str(doc.name or ""))
+    if m:
+        _revert_series_if_last(m.group(1), int(m.group(2)))
+
+    # Branch series: {abbr}-{branch_code}-{number}-{fiscal_year} counted via
+    # getseries("{abbr}-{branch_code}-{fiscal_year}-", 6).
+    branch_name = getattr(doc, "custom_branch_name", None)
+    if (
+        NAMING_CONFIG[doctype].get("has_branch_name", False)
+        and branch_name
+        and branch_name != doc.name
+    ):
+        m = re.match(r"^(.+)-(\d{6,})-(.+)$", str(branch_name))
+        if m:
+            _revert_series_if_last(
+                f"{m.group(1)}-{m.group(3)}-", int(m.group(2))
+            )
+
+
 def handle_before_insert(doc, method=None):
     naming_requirements_before_insert(doc)
 
