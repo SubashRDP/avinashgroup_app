@@ -30,7 +30,14 @@ frappe.query_reports["Sales Analysis Customer wise Summary"] = {
 			label: __("Customer"),
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Customer", txt);
+				// Scope customers to those with invoices in the selected company(ies).
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_customer_wise_summary.sales_analysis_customer_wise_summary.get_company_customers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

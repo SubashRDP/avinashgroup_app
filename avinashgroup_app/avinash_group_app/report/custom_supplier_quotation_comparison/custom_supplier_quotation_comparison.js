@@ -49,7 +49,14 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			fieldtype: "MultiSelectList",
 			options: "Supplier",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Supplier", txt);
+				// Scope suppliers to those with a Supplier Quotation in the selected company.
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_company_suppliers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

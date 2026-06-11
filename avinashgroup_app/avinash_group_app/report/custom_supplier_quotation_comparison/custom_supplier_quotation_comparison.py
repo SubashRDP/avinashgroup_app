@@ -1,11 +1,56 @@
 # Copyright (c) 2013, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
+import json
 from collections import defaultdict
 
 import frappe
 from frappe import _
 from frappe.utils import cint, flt
+
+
+def _as_list(value):
+	"""Normalize a MultiSelectList/Link filter value (list, JSON string, or single) to a list."""
+	if not value:
+		return []
+	if isinstance(value, str):
+		value = value.strip()
+		if value.startswith("["):
+			try:
+				value = json.loads(value)
+			except Exception:
+				return [value]
+		else:
+			return [value]
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
+
+
+@frappe.whitelist()
+def get_company_suppliers(company=None, txt=None):
+	"""Supplier options limited to suppliers with a Supplier Quotation in the company."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["sq.docstatus < 2", "(sq.supplier LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("sq.company IN %(company)s")
+		values["company"] = tuple(company)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT sq.supplier AS value, sup.supplier_name AS description
+		FROM `tabSupplier Quotation` sq
+		LEFT JOIN `tabSupplier` sup ON sup.name = sq.supplier
+		WHERE {where}
+		ORDER BY sup.supplier_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
 
 
 def execute(filters=None):

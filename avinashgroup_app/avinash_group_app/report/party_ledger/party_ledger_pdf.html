@@ -112,6 +112,28 @@ td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
   border-bottom: 2px solid #555;
 }
 
+/* Customer-wise sections: per-customer subtotals are borderless (bold text marks
+   them). One line per customer comes from the customer header's top border.
+   Heavy boxed rules stay only on the flat / grand totals. */
+.pl-row-opening.pl-sub td,
+.pl-row-period.pl-sub td,
+.pl-row-closing.pl-sub td {
+  border-top: none;
+  border-bottom: none;
+  padding: 3px 8px;
+}
+
+/* Customer header (grouped mode): Customer Code | Customer Name (VAT/PAN No.).
+   The top border is the single line that separates one customer from the previous. */
+.pl-row-cust-header td {
+  font-weight: bold;
+  font-size: 11px;
+  padding: 6px 8px 3px;
+  background: #f2f2f2;
+  border-top: 1px solid #999;
+  white-space: normal;
+}
+
 /* Indents */
 .pl-indent-doc  { padding-left: 22px !important; font-size: 11px; }
 .pl-indent-desc { padding-left: 14px !important; }
@@ -183,7 +205,9 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
 {% set s_debit       = show_all or 'debit'       in sc %}
 {% set s_credit      = show_all or 'credit'      in sc %}
 {% set s_balance     = show_all or 'balance'     in sc %}
-{% set tcols = (s_date|int) + (s_miti|int) + (s_voucher_no|int) + (s_description|int) + (3 if has_detail else 0) + (s_debit|int) + (s_credit|int) + (s_balance|int) %}
+{# Party column only in customer-wise grouped mode (name written once per section). #}
+{% set s_party       = show_party %}
+{% set tcols = (s_date|int) + (s_miti|int) + (s_voucher_no|int) + (s_party|int) + (s_description|int) + (3 if has_detail else 0) + (s_debit|int) + (s_credit|int) + (s_balance|int) %}
 
 {% for page_rows in pages %}
 {% set page_index = loop.index %}
@@ -195,6 +219,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
     {% if s_date %}<col style="width:100px">{% endif %}
     {% if s_miti %}<col style="width:100px">{% endif %}
     {% if s_voucher_no %}<col style="width:140px">{% endif %}
+    {% if s_party %}<col style="width:150px">{% endif %}
     {% if s_description %}<col>{% endif %}
     {% if has_detail %}
     <col style="width:80px">
@@ -240,6 +265,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
       {% if s_date %}<th class="l">Date</th>{% endif %}
       {% if s_miti %}<th class="l">Miti (BS)</th>{% endif %}
       {% if s_voucher_no %}<th class="l">Voucher No</th>{% endif %}
+      {% if s_party %}<th class="l">Party</th>{% endif %}
       {% if s_description %}<th class="l">Description</th>{% endif %}
       {% if has_detail %}
       <th></th><th></th><th></th>
@@ -259,11 +285,27 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
   {% for row in page_rows %}
     {% set next_row = page_rows[loop.index0 + 1] if loop.index0 + 1 < page_rows|length else none %}
 
-    {% if row.get('is_remark') %}
+    {% if row.get('is_customer_header') %}
+      {% if ns.in_group %}</tbody>{% set ns.in_group = false %}{% endif %}
+      <tbody>
+      <tr class="pl-row-cust-header">
+        {% if s_date %}<td>{{ row.get('cust_code') or '' }}</td>{% endif %}
+        {% if s_miti %}<td>{{ row.get('cust_label') or '' }}</td>{% endif %}
+        {% if s_voucher_no %}<td></td>{% endif %}
+        {% if s_description %}<td></td>{% endif %}
+        {% if has_detail %}<td></td><td></td><td></td>{% endif %}
+        {% if s_debit %}<td></td>{% endif %}
+        {% if s_credit %}<td></td>{% endif %}
+        {% if s_balance %}<td></td>{% endif %}
+      </tr>
+      </tbody>
+
+    {% elif row.get('is_remark') %}
       <tr class="pl-row-remark">
         {% if s_date %}<td>Remarks:</td>{% endif %}
         {% if s_miti %}<td></td>{% endif %}
         {% if s_voucher_no %}<td></td>{% endif %}
+        {% if s_party %}<td></td>{% endif %}
         {% if s_description %}<td class="pl-indent-desc">{{ row.get('description') or '' }}</td>{% endif %}
         {% if has_detail %}<td></td><td></td><td></td>{% endif %}
         {% if s_debit %}<td></td>{% endif %}
@@ -276,6 +318,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
         {% if s_date %}<td></td>{% endif %}
         {% if s_miti %}<td></td>{% endif %}
         {% if s_voucher_no %}<td class="pl-indent-doc">{{ row.get('voucher_no') or '' }}</td>{% endif %}
+        {% if s_party %}<td></td>{% endif %}
         {% if s_description %}<td class="pl-indent-desc">{{ row.get('description') or '' }}</td>{% endif %}
         {% if has_detail %}
         <td class="r nowrap">{{ row.get('detail_qty') or '' }}{% if row.get('detail_qty') and row.get('detail_uom') %} {{ row.get('detail_uom') }}{% endif %}</td>
@@ -291,6 +334,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
         {% if s_date %}<td>Remarks:</td>{% endif %}
         {% if s_miti %}<td></td>{% endif %}
         {% if s_voucher_no %}<td></td>{% endif %}
+        {% if s_party %}<td></td>{% endif %}
         {% if s_description %}<td class="pl-indent-desc">{{ ns.pending_remark }}</td>{% endif %}
         {% if has_detail %}<td></td><td></td><td></td>{% endif %}
         {% if s_debit %}<td></td>{% endif %}
@@ -307,6 +351,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
         {% if s_date %}<td class="td-date">{{ frappe.utils.formatdate(row.get('date')) if row.get('date') else '' }}</td>{% endif %}
         {% if s_miti %}<td class="td-date">{{ row.get('miti') or '' }}</td>{% endif %}
         {% if s_voucher_no %}<td>{{ row.get('voucher_no') or '' }}</td>{% endif %}
+        {% if s_party %}<td>{{ row.get('party_name') or '' }}</td>{% endif %}
         {% if s_description %}<td>{{ row.get('description') or '' }}</td>{% endif %}
         {% if has_detail %}<td></td><td></td><td></td>{% endif %}
         {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit')) or '0.00' }}</td>{% endif %}
@@ -319,6 +364,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
         {% if s_date %}<td>Remarks:</td>{% endif %}
         {% if s_miti %}<td></td>{% endif %}
         {% if s_voucher_no %}<td></td>{% endif %}
+        {% if s_party %}<td></td>{% endif %}
         {% if s_description %}<td class="pl-indent-desc">{{ ns.pending_remark }}</td>{% endif %}
         {% if has_detail %}<td></td><td></td><td></td>{% endif %}
         {% if s_debit %}<td></td>{% endif %}
@@ -334,6 +380,7 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
         {% if s_date %}<td>Remarks:</td>{% endif %}
         {% if s_miti %}<td></td>{% endif %}
         {% if s_voucher_no %}<td></td>{% endif %}
+        {% if s_party %}<td></td>{% endif %}
         {% if s_description %}<td class="pl-indent-desc">{{ ns.pending_remark }}</td>{% endif %}
         {% if has_detail %}<td></td><td></td><td></td>{% endif %}
         {% if s_debit %}<td></td>{% endif %}
@@ -346,34 +393,34 @@ td                   { padding: 2px 3px !important; line-height: 1.3 !important;
       <tbody>
       {% if row.get('is_separator') %}
         <tr class="pl-row-sep"><td colspan="{{ tcols }}"></td></tr>
-      {% elif row.get('is_summary') and row.get('description') == 'Opening Balance' %}
-        <tr class="pl-row-opening">
+      {% elif row.get('kind') in ('opening', 'grand_opening') %}
+        <tr class="pl-row-opening{% if row.get('is_section') %} pl-sub{% endif %}">
           {% if s_date %}<td></td>{% endif %}
           {% if s_miti %}<td></td>{% endif %}
           {% if s_voucher_no %}<td></td>{% endif %}
-          {% if s_description %}<td>Opening Balance</td>{% endif %}
+          {% if s_description %}<td>{{ row.get('description') or '' }}</td>{% endif %}
           {% if has_detail %}<td colspan="3"></td>{% endif %}
           {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  or '0.00' }}</td>{% endif %}
           {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) or '0.00' }}</td>{% endif %}
           {% if s_balance %}<td class="r nowrap">{{ bal(row.get('balance')) }}</td>{% endif %}
         </tr>
-      {% elif row.get('is_summary') and row.get('description') == 'For the Periods' %}
-        <tr class="pl-row-period">
+      {% elif row.get('kind') in ('period', 'grand_period') %}
+        <tr class="pl-row-period{% if row.get('is_section') %} pl-sub{% endif %}">
           {% if s_date %}<td></td>{% endif %}
           {% if s_miti %}<td></td>{% endif %}
           {% if s_voucher_no %}<td></td>{% endif %}
-          {% if s_description %}<td>For the Periods</td>{% endif %}
+          {% if s_description %}<td>{{ row.get('description') or '' }}</td>{% endif %}
           {% if has_detail %}<td colspan="3"></td>{% endif %}
           {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  or '0.00' }}</td>{% endif %}
           {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) or '0.00' }}</td>{% endif %}
           {% if s_balance %}<td class="r nowrap">{{ bal(row.get('balance')) }}</td>{% endif %}
         </tr>
       {% elif row.get('is_summary') %}
-        <tr class="pl-row-closing">
+        <tr class="pl-row-closing{% if row.get('is_section') %} pl-sub{% endif %}">
           {% if s_date %}<td></td>{% endif %}
           {% if s_miti %}<td></td>{% endif %}
           {% if s_voucher_no %}<td style="font-size:11px;">{{ row.get('voucher_no') or '' }}</td>{% endif %}
-          {% if s_description %}<td>Closing Balance</td>{% endif %}
+          {% if s_description %}<td>{{ row.get('description') or '' }}</td>{% endif %}
           {% if has_detail %}<td colspan="3"></td>{% endif %}
           {% if s_debit %}<td class="r nowrap">{{ fmt(row.get('debit'))  or '0.00' }}</td>{% endif %}
           {% if s_credit %}<td class="r nowrap">{{ fmt(row.get('credit')) or '0.00' }}</td>{% endif %}

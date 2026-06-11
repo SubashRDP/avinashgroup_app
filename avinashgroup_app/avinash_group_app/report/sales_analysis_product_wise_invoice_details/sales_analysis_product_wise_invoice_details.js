@@ -30,7 +30,13 @@ frappe.query_reports["Sales Analysis Product wise Invoice Details"] = {
 			label: __("Customer"),
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Customer", txt);
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_product_wise_invoice_details.sales_analysis_product_wise_invoice_details.get_company_customers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -38,7 +44,13 @@ frappe.query_reports["Sales Analysis Product wise Invoice Details"] = {
 			label: __("Product"),
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Item", txt);
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_product_wise_invoice_details.sales_analysis_product_wise_invoice_details.get_company_items",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

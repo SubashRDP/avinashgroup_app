@@ -13,6 +13,8 @@ window.place_order_ctx = {
 	number_format: {{ number_format | tojson }},
 	today: {{ today | tojson }},
 	default_delivery_date: {{ default_delivery_date | tojson }},
+	default_item_code: {{ default_item_code | tojson }},
+	default_item_name: {{ default_item_name | tojson }},
 	items: []
 };
 
@@ -285,15 +287,17 @@ class PlaceOrder {
 		this.row_idx++;
 		const idx = this.row_idx;
 		const delivery = this.ctx.today;
+		// LP Gas is the only product — the item is fixed and not editable on the form.
+		const defaultItemName = this.ctx.default_item_name || "LP Gas";
+		const defaultItemCode = this.ctx.default_item_code || "";
 
 		const row = $(`
 			<tr data-idx="${idx}">
 				<td class="text-center po-sn"></td>
 				<td>
 					<input type="text" class="form-control po-item-code" data-idx="${idx}"
-						placeholder="Search item" autocomplete="off">
-					<div class="po-item-results" data-idx="${idx}"
-						style="position:absolute;z-index:999;background:#fff;border:1px solid #ddd;display:none;min-width:250px;max-height:200px;overflow-y:auto;"></div>
+						value="${defaultItemName}" readonly tabindex="-1"
+						style="background:#f5f5f5;cursor:default;" title="${defaultItemName}">
 					</td>
 				<td>
 					<input type="date" class="form-control po-delivery-date" data-idx="${idx}" value="${delivery}">
@@ -324,55 +328,25 @@ class PlaceOrder {
 
 		this.ctx.items.push({
 			_idx: idx,
-			item_code: "", item_name: "", uom: "",
+			item_code: defaultItemCode, item_name: defaultItemName, uom: "",
 			qty: 0, rate: 0, amount: 0,
 			delivery_date: delivery,
 			vat_apply_on: "VAT 13%", vat_amount: 0
 		});
 
+		// Fixed item — store its code on the input so rate lookups use the real item.
+		$(`input.po-item-code[data-idx=${idx}]`).data("item_code", defaultItemCode);
+
 		this.bind_row_events(idx);
+
+		// Pull the item's details (name/rate) right away; UOM stays blank for the client to pick.
+		if (defaultItemCode) this.fetch_item_details(idx);
 	}
 
 	bind_row_events(idx) {
 		var me = this;
 
-		// Item code search
-		function search_item() {
-			const txt = $(`input.po-item-code[data-idx=${idx}]`).val().trim();
-			frappe.call({
-				method: "avinashgroup_app.templates.pages.place_order.search_items",
-				args: { txt: txt, company: me.ctx.company },
-				callback: function (r) {
-					const results = r.message || [];
-					const $dd = $(`.po-item-results[data-idx=${idx}]`);
-					$dd.empty();
-					if (!results.length) { $dd.hide(); return; }
-					results.forEach(function (item) {
-						$("<div>").text(item.item_name)
-							.css({ padding: "6px 10px", cursor: "pointer" })
-							.hover(function () { $(this).css("background", "#f0f0f0"); },
-								   function () { $(this).css("background", "#fff"); })
-							.on("mousedown", function (e) {
-								e.preventDefault();
-								const $inp = $(`input.po-item-code[data-idx=${idx}]`);
-								$inp.val(item.item_name).data("item_code", item.item_code);
-								$dd.hide();
-								me.fetch_item_details(idx);
-							})
-							.appendTo($dd);
-					});
-					$dd.show();
-				}
-			});
-		}
-
-		$(`input.po-item-code[data-idx=${idx}]`).on("focus click input", function () { search_item(); });
-		$(`input.po-item-code[data-idx=${idx}]`).on("blur", function () {
-			setTimeout(function () { $(`.po-item-results[data-idx=${idx}]`).hide(); }, 200);
-		});
-		attach_kbd_nav($(`input.po-item-code[data-idx=${idx}]`), function () {
-			return $(`.po-item-results[data-idx=${idx}]`);
-		});
+		// Item is fixed to LP Gas — no item search/dropdown.
 
 		// UOM search — uses shared body-level dropdown to escape table overflow clipping
 		function search_uom() {
@@ -474,11 +448,12 @@ class PlaceOrder {
 
 				item.item_code = item_code;
 				item.item_name = d.item_name || item_code;
-				item.uom       = d.uom || d.stock_uom || "";
+				// Leave UOM blank on item select — client picks it from the dropdown.
+				item.uom       = "";
 				item.stock_uom = d.stock_uom || "";
 				item.rate      = flt(d.rate || 0);
 
-					$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
+					$(`input.po-uom[data-idx=${idx}]`).val("");
 				$(`input.po-rate[data-idx=${idx}]`).val(
 					format_number(item.rate, me.ctx.number_format, 5)
 				);

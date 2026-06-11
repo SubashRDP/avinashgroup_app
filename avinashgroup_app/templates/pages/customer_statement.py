@@ -172,12 +172,17 @@ def _format_row(d):
 		"date": formatdate(raw_date) if raw_date else "",
 		"miti": d.get("miti") or "",
 		"voucher_no": d.get("voucher_no") or "",
-		"party_name": d.get("party_name") or "",
 		"description": d.get("description") or "",
 		"debit": _fmt_inr(d.get("debit")),
 		"credit": _fmt_inr(d.get("credit")),
 		"balance": str(_bal_str(d.get("balance"))),
 		"is_summary": 1 if d.get("is_summary") else 0,
+		"is_section": 1 if d.get("is_section") else 0,
+		# Customer-wise grouping: header row (code + name/VAT) and total-row kind.
+		"is_customer_header": 1 if d.get("is_customer_header") else 0,
+		"cust_code": d.get("cust_code") or "",
+		"cust_label": d.get("cust_label") or "",
+		"kind": d.get("kind") or "",
 		"bold": 1 if d.get("bold") else 0,
 	}
 
@@ -233,7 +238,7 @@ def get_statement(company=None, customers=None, from_date=None, to_date=None):
 	filters = frappe._dict({
 		"company": company,
 		"party_type": "Customer",
-		"party": customers,            
+		"party": customers,
 		"from_date": from_date,
 		"to_date": to_date,
 		"detailed_mapping": 0,
@@ -241,10 +246,17 @@ def get_statement(company=None, customers=None, from_date=None, to_date=None):
 	})
 	_columns, data = party_ledger_execute(filters)
 
+	# When exactly one customer is selected, show its Tax ID (PAN/VAT) under the name,
+	# mirroring the PDF/print header.
+	party_tax_id = None
+	if len(customers) == 1:
+		party_tax_id = frappe.db.get_value("Customer", customers[0], "tax_id")
+
 	return {
 		"company": company,
 		"multi_customer": len(customers) != 1,
 		"customer_names": _customer_names(customers),
+		"party_tax_id": party_tax_id,
 		"rows": [_format_row(d) for d in data],
 		"from_date": from_date,
 		"to_date": to_date,
@@ -267,6 +279,7 @@ def _empty_result(company, from_date, to_date):
 		"company": company,
 		"multi_customer": False,
 		"customer_names": [],
+		"party_tax_id": None,
 		"rows": [],
 		"from_date": from_date,
 		"to_date": to_date,

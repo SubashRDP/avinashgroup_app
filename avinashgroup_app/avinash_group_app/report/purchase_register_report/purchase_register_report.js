@@ -30,7 +30,14 @@ frappe.query_reports["Purchase Register Report"] = {
 			label: __("Supplier"),
 			fieldtype: "MultiSelectList",
 			get_data: function(txt) {
-				return frappe.db.get_link_options("Supplier", txt);
+				// Scope suppliers to those with purchase invoices in the selected company(ies).
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.purchase_register_report.purchase_register_report.get_company_suppliers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

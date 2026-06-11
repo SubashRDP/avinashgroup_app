@@ -20,6 +20,83 @@ def execute(filters=None):
 	return columns, data
 
 
+def _as_list(value):
+	"""Normalize a MultiSelectList filter value (list, JSON string, or single value) to a list."""
+	if not value:
+		return []
+	if isinstance(value, str):
+		value = value.strip()
+		if value.startswith("["):
+			try:
+				value = json.loads(value)
+			except Exception:
+				return [value]
+		else:
+			return [value]
+	if isinstance(value, (list, tuple, set)):
+		return [v for v in value if v]
+	return [value]
+
+
+@frappe.whitelist()
+def get_company_items(company=None, txt=None):
+	"""Product options limited to items actually sold in the selected company(ies).
+
+	Items are global in ERPNext, so the plain Item link lists every item regardless of
+	company. Here we scope the Product filter to items that appear on a submitted Sales
+	Invoice of the chosen company — keeping the dropdown relevant per company.
+	"""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+
+	conditions = ["si.docstatus = 1", "(it.name LIKE %(txt)s OR it.item_name LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("si.company IN %(company)s")
+		values["company"] = tuple(company)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT it.name AS value, it.item_name AS description
+		FROM `tabSales Invoice Item` sii
+		JOIN `tabSales Invoice` si ON si.name = sii.parent
+		JOIN `tabItem` it ON it.name = sii.item_code
+		WHERE {where}
+		ORDER BY it.item_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_company_customers(company=None, txt=None):
+	"""Customer options limited to customers with a submitted Sales Invoice in the company."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["si.docstatus = 1", "(si.customer LIKE %(txt)s OR cust.customer_name LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("si.company IN %(company)s")
+		values["company"] = tuple(company)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT si.customer AS value, cust.customer_name AS description
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabCustomer` cust ON cust.name = si.customer
+		WHERE {where}
+		ORDER BY cust.customer_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
 def get_columns(include_return):
 	# All columns always show, regardless of "Include Return". Code + Name double up:
 	# customer id/name on customer rows, item id/name on product rows. The toggle only
