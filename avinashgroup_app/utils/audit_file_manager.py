@@ -1,7 +1,7 @@
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-from avinashgroup_app.custom_code.Override.naming_series import handle_validate, handle_before_save, naming_series_autoname, handle_before_insert, naming_requirements_before_insert
+from avinashgroup_app.custom_code.Override.naming_series import handle_validate, handle_before_save, naming_series_autoname, handle_before_insert, naming_requirements_before_insert, revert_series_on_delete
 from avinashgroup_app.custom_code.globalfilter.globalfilter import validate_company_matching
 from avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes import before_save_salesinvoice, validate_salesinvoice
 from avinashgroup_app.custom_code.purchase_invoice.purchase_invoice_taxes_tds import before_save_purchaseinvoice, validate_purchaseinvoice
@@ -475,6 +475,7 @@ class AuditEventMapper(AuditBase):
         before_save_handler_path = "avinashgroup_app.utils.audit_file_manager.before_save"
         validate_handler_path = "avinashgroup_app.utils.audit_file_manager.validate"
         autoname_handler_path = "avinashgroup_app.utils.audit_file_manager.autoname"
+        after_delete_handler_path = "avinashgroup_app.utils.audit_file_manager.after_delete"
 
         events = {}
 
@@ -484,6 +485,7 @@ class AuditEventMapper(AuditBase):
                 "before_save": before_save_handler_path,
                 "validate": validate_handler_path,
                 "autoname": autoname_handler_path,
+                "after_delete": after_delete_handler_path,
             }
 
         return events
@@ -590,4 +592,7 @@ def before_save(doc, method=None):
 
 def autoname(doc, method=None):
     naming_series_autoname(doc, method)
+
+def after_delete(doc, method=None):
+    revert_series_on_delete(doc, method)
 
