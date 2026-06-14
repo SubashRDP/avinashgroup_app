@@ -100,7 +100,7 @@ def get_columns(filters=None):
 		# Kept as Data (not Link) so the inline column filter can search it; the JS
 		# formatter renders it as a clickable link to the Customer/Supplier master.
 		{"label": code_label,      "fieldname": "party",      "fieldtype": "Data",     "width": 120},
-		{"label": name_label,      "fieldname": "party_name", "fieldtype": "Data",     "width": 280},
+		{"label": name_label,      "fieldname": "party_name", "fieldtype": "Data",     "width": 280, "align": "left"},
 		{"label": _("Vat/Pan No"), "fieldname": "tax_id",     "fieldtype": "Data",     "width": 130},
 		{"label": _("Opening"),  "fieldname": "opening",    "fieldtype": "Currency", "width": 150},
 		{"label": _("Debit"),    "fieldname": "debit",      "fieldtype": "Currency", "width": 140},
@@ -327,13 +327,18 @@ def get_company_party_groups(party_type, company, txt=None):
 		return []
 
 	group_field = "customer_group" if party_type == "Customer" else "supplier_group"
+	group_doctype = "Customer Group" if party_type == "Customer" else "Supplier Group"
+	group_name_field = "customer_group_name" if party_type == "Customer" else "supplier_group_name"
 	like = f"%{(txt or '').strip()}%"
 
+	# value = group id (used by the report filter); description = readable group name.
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT p.`{group_field}` AS value, p.`{group_field}` AS description
+		SELECT DISTINCT p.`{group_field}` AS value, g.`{group_name_field}` AS description
 		FROM `tab{party_type}` p
-		WHERE p.`{group_field}` IS NOT NULL AND p.`{group_field}` LIKE %(txt)s
+		JOIN `tab{group_doctype}` g ON g.name = p.`{group_field}`
+		WHERE p.`{group_field}` IS NOT NULL
+		  AND (p.`{group_field}` LIKE %(txt)s OR g.`{group_name_field}` LIKE %(txt)s)
 		  AND EXISTS (
 			SELECT 1 FROM `tabGL Entry` gle
 			WHERE gle.party = p.name
@@ -341,7 +346,7 @@ def get_company_party_groups(party_type, company, txt=None):
 			  AND gle.company = %(company)s
 			  AND gle.is_cancelled = 0
 		  )
-		ORDER BY p.`{group_field}`
+		ORDER BY g.`{group_name_field}`
 		LIMIT 50
 		""",
 		{"txt": like, "party_type": party_type, "company": company},

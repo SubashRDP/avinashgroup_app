@@ -279,6 +279,11 @@ frappe.query_reports["Party Ledger Summary"] = {
 			return `<a href="/app/${pt.toLowerCase()}/${encodeURIComponent(value)}">${value}</a>`;
 		}
 
+		// Group header rows are just the group label — no amounts (don't render 0.00).
+		if (is_header && (fn === "opening" || fn === "closing" || fn === "debit" || fn === "credit")) {
+			return "";
+		}
+
 		// Opening / Closing: show absolute amount with DB/CR suffix.
 		if (fn === "opening" || fn === "closing") {
 			if (value === null || value === undefined || value === "") return "";

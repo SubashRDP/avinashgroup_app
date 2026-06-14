@@ -38,7 +38,7 @@ body {
 .sa-filter-label { font-weight: bold; }
 .sa-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
 
-table { width: 100%; border-collapse: collapse; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 tr    { page-break-inside: avoid; }
 
 thead th {
@@ -91,7 +91,7 @@ td            { padding: 2px 4px !important; }
 {% set ncols = 6 %}
 
 {# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ── #}
-{% set row_limit = 60 if orientation == 'Portrait' else 30 %}
+{% set row_limit = 70 if orientation == 'Portrait' else 40 %}
 {% set total_rows = data | length %}
 {% set total_pages = (total_rows // row_limit) + (1 if total_rows % row_limit > 0 else 0) %}
 {% if total_pages < 1 %}{% set total_pages = 1 %}{% endif %}
@@ -103,6 +103,14 @@ td            { padding: 2px 4px !important; }
 <div class="sheet{% if not loop.last %} brk{% endif %}{% if is_html_view %} page{% endif %}">
 
 <table>
+  <colgroup>
+    <col style="width:13%">   <!-- Customer/Item Code -->
+    <col style="width:29%">   <!-- Customer/Item Name -->
+    <col style="width:14.5%"> <!-- Quantity -->
+    <col style="width:14.5%"> <!-- Value -->
+    <col style="width:14.5%"> <!-- VAT Amount -->
+    <col style="width:14.5%"> <!-- Total Including VAT -->
+  </colgroup>
   <thead>
     <tr>
       <td colspan="{{ ncols }}" style="padding:4px 0 0 0; border:none;">
