@@ -222,6 +222,8 @@ override_whitelisted_methods = {
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
     "frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
     "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",
+    # Report "Add Column": show a Link field's name instead of its id.
+    "frappe.desk.query_report.get_data_for_custom_field": "avinashgroup_app.custom_code.Override.query_report.get_data_for_custom_field",
 }
 
 fixtures = [

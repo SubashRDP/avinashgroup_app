@@ -8,6 +8,7 @@
 # All three read the same customer receipts (submitted Payment Entries, type Receive).
 
 import json
+import os
 from collections import OrderedDict
 
 import frappe
@@ -67,7 +68,7 @@ def get_receipts(filters):
 		f"""
 		SELECT
 			pe.posting_date         AS date,
-			pe.custom_posting_miti  AS miti,
+			SUBSTRING_INDEX(pe.custom_posting_miti, ' ', 1) AS miti,
 			COALESCE(NULLIF(pe.custom_name, ''), pe.name) AS voucher_no,
 			pe.name                 AS voucher_link,
 			pe.party                AS customer_code,
@@ -108,11 +109,12 @@ def build_date_wise(rows):
 
 	data = []
 	grand_total = 0.0
-	sn = 0
+	date_no = 0          # S.N. numbers the DATE groups (date 1 → 1, date 2 → 2, …)
 	i, n = 0, len(rows)
 
 	while i < n:
 		current_date = rows[i]["date"]
+		date_no += 1
 		group_total = 0.0
 		first = True
 		while i < n and rows[i]["date"] == current_date:
@@ -120,10 +122,9 @@ def build_date_wise(rows):
 			net = flt(r.get("net_amount"))
 			group_total += net
 			grand_total += net
-			sn += 1
 
 			data.append({
-				"sn":            sn,
+				"sn":            date_no if first else None,
 				"date":          r["date"] if first else None,
 				"miti":          r.get("miti") if first else None,
 				"voucher_no":    r.get("voucher_no"),
@@ -256,25 +257,22 @@ def _as_list(value):
 
 @frappe.whitelist()
 def get_company_customers(company=None, txt=None):
-	"""Customers with a submitted customer receipt (Payment Entry) in the company."""
+	"""Customer options scoped to the selected company via the customer's custom_company."""
 	company = _as_list(company)
 	like = f"%{(txt or '').strip()}%"
-	conditions = [
-		"pe.docstatus = 1", "pe.payment_type = 'Receive'", "pe.party_type = 'Customer'",
-		"(pe.party LIKE %(txt)s OR pe.party_name LIKE %(txt)s)",
-	]
+	conditions = ["(cust.name LIKE %(txt)s OR cust.customer_name LIKE %(txt)s)"]
 	values = {"txt": like}
 	if company:
-		conditions.append("pe.company IN %(company)s")
+		conditions.append("(cust.custom_company IN %(company)s OR COALESCE(cust.custom_company, '') = '')")
 		values["company"] = tuple(company)
 	where = " AND ".join(conditions)
 
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT pe.party AS value, pe.party_name AS description
-		FROM `tabPayment Entry` pe
+		SELECT cust.name AS value, cust.customer_name AS description
+		FROM `tabCustomer` cust
 		WHERE {where}
-		ORDER BY pe.party_name
+		ORDER BY cust.customer_name
 		LIMIT 50
 		""",
 		values,
@@ -305,3 +303,130 @@ def get_company_bank_accounts(company=None, txt=None):
 		values,
 		as_dict=True,
 	)
+
+
+# ── PDF / Print ─────────────────────────────────────────────────────────────────
+
+def _fmt_inr(v):
+	"""Indian-style grouping (e.g. 1,07,056.00). Empty for zero/None."""
+	if v is None or v == "":
+		return ""
+	try:
+		n = float(v)
+	except (TypeError, ValueError):
+		return ""
+	if n == 0:
+		return ""
+	neg = n < 0
+	n = abs(n)
+	int_part, dec = f"{n:.2f}".split(".")
+	if len(int_part) > 3:
+		result = int_part[-3:]
+		int_part = int_part[:-3]
+		while int_part:
+			result = int_part[-2:] + "," + result
+			int_part = int_part[:-2]
+	else:
+		result = int_part
+	return ("-" if neg else "") + result + "." + dec
+
+
+# Per-page capacity in "line units" (after the repeated header band) and the chars that
+# fit on one wrapped line of a remark / wide cell. Conservative — better an under-filled
+# page than content spilling onto the next physical page.
+_PAGE_CAP = {"Portrait": 66.0, "Landscape": 30.0}
+_CHARS_PER_LINE = 45
+
+
+def _row_line_units(row):
+	"""Estimate how many text lines a data row occupies (remarks/long cells wrap)."""
+	import math
+	if row.get("is_sub"):
+		# Remarks now render on a FULL-WIDTH line, so far more chars fit before wrapping.
+		text = " ".join(p for p in (row.get("voucher_no"), row.get("bank_account"), row.get("customer_name")) if p)
+		return max(1, math.ceil(len(text) / 130)) * 0.9
+	# primary / header / total row — long name/bank/combined cells can wrap to 2+ lines
+	height = 1.0
+	for f in ("customer_name", "bank_account", "cust_combined"):
+		v = row.get(f) or ""
+		if len(v) > _CHARS_PER_LINE:
+			height += math.ceil(len(v) / _CHARS_PER_LINE) - 1
+	return height
+
+
+def _paginate(data, orientation):
+	"""Split rows into pages by estimated height (not a flat row count), keeping each
+	receipt's main row + its Remarks sub-line together on one page."""
+	if not data:
+		return []
+	cap = _PAGE_CAP.get(orientation, 40.0)
+
+	# Atomic blocks: a primary row plus the is_sub row(s) that immediately follow it.
+	blocks = []
+	i, n = 0, len(data)
+	while i < n:
+		block = [data[i]]
+		i += 1
+		while i < n and data[i].get("is_sub"):
+			block.append(data[i])
+			i += 1
+		blocks.append(block)
+
+	pages, cur, used = [], [], 0.0
+	for block in blocks:
+		bh = sum(_row_line_units(r) for r in block)
+		if cur and used + bh > cap:
+			pages.append(cur)
+			cur, used = [], 0.0
+		cur.extend(block)
+		used += bh
+	if cur:
+		pages.append(cur)
+	return pages
+
+
+def _render(filters, orientation):
+	columns, data = execute(filters)
+	pages = _paginate(data, orientation)
+	template_path = os.path.join(os.path.dirname(__file__), "receipt_register_pdf.html")
+	with open(template_path) as f:
+		template = f.read()
+	return frappe.render_template(template, {
+		"filters": filters,
+		"columns": columns,
+		"pages": pages,
+		"total_pages": len(pages) or 1,
+		"view": filters.get("view") or VIEW_DATE_WISE,
+		"company": filters.get("company") or "",
+		"orientation": orientation,
+		"fmt": _fmt_inr,
+		"fmtdate": frappe.utils.formatdate,
+	})
+
+
+@frappe.whitelist()
+def download_pdf(filters, orientation=None, view=None):
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+	orientation = orientation if orientation in ("Portrait", "Landscape") else "Landscape"
+
+	html = _render(filters, orientation)
+
+	options = {
+		"page-size": "A4",
+		"orientation": orientation,
+		"margin-top": "10mm",
+		"margin-right": "8mm",
+		"margin-bottom": "12mm",
+		"margin-left": "8mm",
+		"encoding": "UTF-8",
+		"enable-local-file-access": None,
+	}
+	pdf_data = get_pdf(html, options)
+
+	frappe.response.filename = "receipt_register.pdf"
+	frappe.response.filecontent = pdf_data
+	# view=1 (Print) → open inline in a new tab; otherwise download.
+	frappe.response.type = "pdf" if frappe.utils.cint(view) else "download"

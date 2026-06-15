@@ -28,21 +28,20 @@ def _as_list(value):
 
 @frappe.whitelist()
 def get_company_customers(company=None, txt=None):
-	"""Customer options limited to customers with a submitted Sales Invoice in the company."""
+	"""Customer options scoped to the selected company via the customer's custom_company."""
 	company = _as_list(company)
 	like = f"%{(txt or '').strip()}%"
-	conditions = ["si.docstatus = 1", "(si.customer LIKE %(txt)s OR cust.customer_name LIKE %(txt)s)"]
+	conditions = ["(cust.name LIKE %(txt)s OR cust.customer_name LIKE %(txt)s)"]
 	values = {"txt": like}
 	if company:
-		conditions.append("si.company IN %(company)s")
+		conditions.append("(cust.custom_company IN %(company)s OR COALESCE(cust.custom_company, '') = '')")
 		values["company"] = tuple(company)
 	where = " AND ".join(conditions)
 
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT si.customer AS value, cust.customer_name AS description
-		FROM `tabSales Invoice` si
-		LEFT JOIN `tabCustomer` cust ON cust.name = si.customer
+		SELECT cust.name AS value, cust.customer_name AS description
+		FROM `tabCustomer` cust
 		WHERE {where}
 		ORDER BY cust.customer_name
 		LIMIT 50

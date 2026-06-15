@@ -29,21 +29,20 @@ def _as_list(value):
 
 @frappe.whitelist()
 def get_company_suppliers(company=None, txt=None):
-	"""Supplier options limited to suppliers with a Supplier Quotation in the company."""
+	"""Supplier options scoped to the selected company via the supplier's custom_company."""
 	company = _as_list(company)
 	like = f"%{(txt or '').strip()}%"
-	conditions = ["sq.docstatus < 2", "(sq.supplier LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
+	conditions = ["(sup.name LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
 	values = {"txt": like}
 	if company:
-		conditions.append("sq.company IN %(company)s")
+		conditions.append("(sup.custom_company IN %(company)s OR COALESCE(sup.custom_company, '') = '')")
 		values["company"] = tuple(company)
 	where = " AND ".join(conditions)
 
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT sq.supplier AS value, sup.supplier_name AS description
-		FROM `tabSupplier Quotation` sq
-		LEFT JOIN `tabSupplier` sup ON sup.name = sq.supplier
+		SELECT sup.name AS value, sup.supplier_name AS description
+		FROM `tabSupplier` sup
 		WHERE {where}
 		ORDER BY sup.supplier_name
 		LIMIT 50

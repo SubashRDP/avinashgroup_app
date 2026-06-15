@@ -1,0 +1,96 @@
+{# Receipt Register PDF — renders the current view (Date Wise / Customer Wise / Summary).
+   Manual pagination with in-body "Page X of Y" (works on plain/unpatched wkhtmltopdf).
+   HTML colspan gives a clean full-width customer banner for the Customer Wise view. #}
+<style>
+	* { box-sizing: border-box; }
+	body { font-family: "Helvetica Neue", Arial, sans-serif; color: #222; font-size: 11px; }
+	.rr-header { margin-bottom: 4px; }
+	.rr-company { font-size: 15px; font-weight: bold; }
+	.rr-title { font-size: 12px; font-weight: bold; margin-top: 1px; }
+	.rr-meta { font-size: 9.5px; color: #444; margin-top: 1px; }
+	.rr-divider { border: none; border-top: 1.2px solid #000; margin: 3px 0 0; }
+
+	table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+	thead { display: table-header-group; }
+	th {
+		text-align: left; font-size: 11px; font-weight: bold;
+		border-bottom: 1.2px solid #000; padding: 3px 5px; vertical-align: bottom;
+	}
+	td { padding: 1.5px 5px; vertical-align: top; border-bottom: 1px solid #eee;
+		word-wrap: break-word; overflow-wrap: anywhere; }
+	.l { text-align: left; } .r { text-align: right; } .c { text-align: center; }
+
+	tr { page-break-inside: avoid; }
+	tr.cust-header td {
+		background: #f2f2f2; font-weight: bold; font-size: 9.5px;
+		border-top: 1px solid #999; padding: 3px 5px;
+	}
+	tr.total td { font-weight: bold; border-top: 1px solid #999; }
+	tr.sub td { color: #000; font-size: 11px; border-bottom: 1px solid #f3f3f3; }
+	td.sub-full { padding-left: 56px; white-space: normal; font-size: 11px; }
+	td.sub-full .sub-chq { margin-right: 40px; }
+	td.sub-full .sub-rem { margin-right: 24px; }
+
+	.brk { page-break-after: always; }
+	.rr-pageno { text-align: center; font-size: 10px; color: #555; margin-top: 8px; }
+</style>
+
+{% for page_rows in pages %}
+<div class="rr-sheet{% if not loop.last %} brk{% endif %}">
+
+	<div class="rr-header">
+		<div class="rr-company">{{ company }}</div>
+		<div class="rr-title">Receipt Register - {{ view }}</div>
+		<div class="rr-meta">
+			From <b>{{ fmtdate(filters.get('from_date')) }}</b> To <b>{{ fmtdate(filters.get('to_date')) }}</b>
+			&nbsp;&nbsp;|&nbsp;&nbsp; Amount in Nepalese Rupee ( NPR )
+		</div>
+		<hr class="rr-divider">
+	</div>
+
+	<table>
+		<thead>
+			<tr>
+				{% for col in columns %}
+				<th class="{% if col.fieldtype == 'Currency' %}r{% elif col.fieldname == 'sn' %}c{% else %}l{% endif %}"
+					style="width: {{ col.width or 100 }}px;">{{ col.label }}</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+		{% for row in page_rows %}
+			{% if row.get('is_customer_header') %}
+			<tr class="cust-header">
+				<td class="c">{{ row.get('sn') or '' }}</td>
+				<td colspan="{{ columns|length - 1 }}">{{ row.get('cust_combined') or '' }}</td>
+			</tr>
+			{% elif row.get('is_sub') %}
+			{# Chq No + Remarks on one full-width line so it's readable (no column wrapping).
+			   Separate spans give a real gap (plain spaces collapse in HTML). #}
+			<tr class="sub">
+				<td colspan="{{ columns|length }}" class="sub-full">
+					{%- if row.get('voucher_no') %}<span class="sub-chq">{{ row.get('voucher_no') }}</span>{% endif -%}
+					{%- if row.get('bank_account') %}<span class="sub-rem">{{ row.get('bank_account') }}</span>{% endif -%}
+					{%- if row.get('customer_name') %}<span class="sub-rem">{{ row.get('customer_name') }}</span>{% endif -%}
+				</td>
+			</tr>
+			{% else %}
+			<tr class="{% if row.get('is_total') %}total{% elif row.get('is_sub') %}sub{% endif %}">
+				{% for col in columns %}
+				{% set v = row.get(col.fieldname) %}
+				<td class="{% if col.fieldtype == 'Currency' %}r{% elif col.fieldname == 'sn' %}c{% else %}l{% endif %}">
+					{%- if v is none or v == '' -%}
+					{%- elif col.fieldtype == 'Date' -%}{{ fmtdate(v) }}
+					{%- elif col.fieldtype == 'Currency' -%}{% set fv = fmt(v) %}{% if fv %}Rs {{ fv }}{% endif %}
+					{%- else -%}{{ v }}{%- endif -%}
+				</td>
+				{% endfor %}
+			</tr>
+			{% endif %}
+		{% endfor %}
+		</tbody>
+	</table>
+
+	<div class="rr-pageno">Page {{ loop.index }} of {{ total_pages }}</div>
+</div>
+{% endfor %}

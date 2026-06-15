@@ -28,21 +28,20 @@ def _as_list(value):
 
 @frappe.whitelist()
 def get_company_suppliers(company=None, txt=None):
-	"""Supplier options limited to suppliers with a submitted Purchase Invoice in the company."""
+	"""Supplier options scoped to the selected company via the supplier's custom_company."""
 	company = _as_list(company)
 	like = f"%{(txt or '').strip()}%"
-	conditions = ["pi.docstatus = 1", "(pi.supplier LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
+	conditions = ["(sup.name LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
 	values = {"txt": like}
 	if company:
-		conditions.append("pi.company IN %(company)s")
+		conditions.append("(sup.custom_company IN %(company)s OR COALESCE(sup.custom_company, '') = '')")
 		values["company"] = tuple(company)
 	where = " AND ".join(conditions)
 
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT pi.supplier AS value, sup.supplier_name AS description
-		FROM `tabPurchase Invoice` pi
-		LEFT JOIN `tabSupplier` sup ON sup.name = pi.supplier
+		SELECT sup.name AS value, sup.supplier_name AS description
+		FROM `tabSupplier` sup
 		WHERE {where}
 		ORDER BY sup.supplier_name
 		LIMIT 50

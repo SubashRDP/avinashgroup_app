@@ -151,6 +151,15 @@ def get_data(filters):
 		conditions += " AND gle.party IN %(allowed)s"
 		params["allowed"] = tuple(allowed)
 
+	# Restrict to parties of THIS company (custom_company). Drops parties explicitly assigned
+	# to a different company even if they have stray GL entries here; parties with none set stay.
+	if frappe.db.has_column(party_type, "custom_company"):
+		conditions += f""" AND EXISTS (
+			SELECT 1 FROM `tab{party_type}` pc
+			WHERE pc.name = gle.party
+			  AND (pc.custom_company = %(company)s OR COALESCE(pc.custom_company, '') = '')
+		)"""
+
 	# Opening matches ERPNext General Ledger: everything before the From Date PLUS any
 	# opening-balance entries (is_opening = 'Yes') regardless of posting date. Those
 	# opening entries are excluded from the period debit/credit so they aren't counted twice.
@@ -321,7 +330,7 @@ def _build_group_wise(records, party_type):
 @frappe.whitelist()
 @frappe.whitelist()
 def get_company_party_groups(party_type, company, txt=None):
-	"""Party groups that actually have parties transacting in the selected company."""
+	"""Party groups of parties assigned to the selected company (via custom_company)."""
 	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
 	if not company:
 		return []
@@ -331,6 +340,12 @@ def get_company_party_groups(party_type, company, txt=None):
 	group_name_field = "customer_group_name" if party_type == "Customer" else "supplier_group_name"
 	like = f"%{(txt or '').strip()}%"
 
+	# Scope groups to parties of THIS company (custom_company) — or with none set — and drop
+	# those explicitly assigned to a different company.
+	company_scope = ""
+	if frappe.db.has_column(party_type, "custom_company"):
+		company_scope = " AND (p.custom_company = %(company)s OR COALESCE(p.custom_company, '') = '')"
+
 	# value = group id (used by the report filter); description = readable group name.
 	return frappe.db.sql(
 		f"""
@@ -339,13 +354,7 @@ def get_company_party_groups(party_type, company, txt=None):
 		JOIN `tab{group_doctype}` g ON g.name = p.`{group_field}`
 		WHERE p.`{group_field}` IS NOT NULL
 		  AND (p.`{group_field}` LIKE %(txt)s OR g.`{group_name_field}` LIKE %(txt)s)
-		  AND EXISTS (
-			SELECT 1 FROM `tabGL Entry` gle
-			WHERE gle.party = p.name
-			  AND gle.party_type = %(party_type)s
-			  AND gle.company = %(company)s
-			  AND gle.is_cancelled = 0
-		  )
+		  {company_scope}
 		ORDER BY g.`{group_name_field}`
 		LIMIT 50
 		""",
@@ -363,18 +372,18 @@ def get_company_parties(party_type, company, txt=None):
 	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
 	like = f"%{(txt or '').strip()}%"
 
+	# Keep parties assigned to THIS company (custom_company) — or with none set — and drop
+	# those explicitly assigned to a different company, even if they have stray GL entries here.
+	company_scope = ""
+	if frappe.db.has_column(party_type, "custom_company"):
+		company_scope = " AND (p.custom_company = %(company)s OR COALESCE(p.custom_company, '') = '')"
+
 	return frappe.db.sql(
 		f"""
 		SELECT p.name AS value, p.`{name_field}` AS description
 		FROM `tab{party_type}` p
 		WHERE (p.name LIKE %(txt)s OR p.`{name_field}` LIKE %(txt)s)
-		  AND EXISTS (
-			SELECT 1 FROM `tabGL Entry` gle
-			WHERE gle.party = p.name
-			  AND gle.party_type = %(party_type)s
-			  AND gle.company = %(company)s
-			  AND gle.is_cancelled = 0
-		  )
+		  {company_scope}
 		ORDER BY p.`{name_field}`
 		LIMIT 50
 		""",

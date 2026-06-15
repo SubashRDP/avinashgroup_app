@@ -28,21 +28,20 @@ def _as_list(value):
 
 @frappe.whitelist()
 def get_company_customers(company=None, txt=None):
-	"""Customer options limited to customers with a submitted Sales Invoice in the company."""
+	"""Customer options scoped to the selected company via the customer's custom_company."""
 	company = _as_list(company)
 	like = f"%{(txt or '').strip()}%"
-	conditions = ["si.docstatus = 1", "(si.customer LIKE %(txt)s OR cust.customer_name LIKE %(txt)s)"]
+	conditions = ["(cust.name LIKE %(txt)s OR cust.customer_name LIKE %(txt)s)"]
 	values = {"txt": like}
 	if company:
-		conditions.append("si.company IN %(company)s")
+		conditions.append("(cust.custom_company IN %(company)s OR COALESCE(cust.custom_company, '') = '')")
 		values["company"] = tuple(company)
 	where = " AND ".join(conditions)
 
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT si.customer AS value, cust.customer_name AS description
-		FROM `tabSales Invoice` si
-		LEFT JOIN `tabCustomer` cust ON cust.name = si.customer
+		SELECT cust.name AS value, cust.customer_name AS description
+		FROM `tabCustomer` cust
 		WHERE {where}
 		ORDER BY cust.customer_name
 		LIMIT 50
@@ -171,11 +170,14 @@ def get_data(filters, include_return):
 	)
 
 	data = []
-	# Total row mirrors the sample: only the value columns are totalled (qty left blank).
+	# Total row: sum the quantity columns and the value columns.
 	total = {
 		"customer_name": _("Total of Reported Sales and Returns"),
+		"sales_qty": 0,
 		"gross_value": 0,
+		"return_qty": 0,
 		"return_value": 0,
+		"net_sales_qty": 0,
 		"net_sales_value": 0,
 		"bold": 1,
 	}
@@ -188,8 +190,11 @@ def get_data(filters, include_return):
 		row.net_sales_qty = row.sales_qty - row.return_qty
 		row.net_sales_value = row.gross_value - row.return_value
 
+		total["sales_qty"] += row.sales_qty
 		total["gross_value"] += row.gross_value
+		total["return_qty"] += row.return_qty
 		total["return_value"] += row.return_value
+		total["net_sales_qty"] += row.net_sales_qty
 		total["net_sales_value"] += row.net_sales_value
 
 		data.append(row)

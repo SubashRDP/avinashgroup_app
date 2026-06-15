@@ -79,19 +79,54 @@ frappe.query_reports["Receipt Register"] = {
 		},
 	],
 
-	onload: function () {
-		// Inject the customer-header banner CSS once. The first data cell's content is
-		// allowed to overflow across the row (other header cells are empty + same shade),
-		// giving a merged-row look without touching column widths.
-		if (document.getElementById("rr-cust-header-style")) return;
-		const style = document.createElement("style");
-		style.id = "rr-cust-header-style";
-		style.textContent = `
-			.rr-cust-header-row .dt-cell { background: #f2f2f2 !important; overflow: visible !important; }
-			.rr-cust-header-row .dt-cell__content { overflow: visible !important; }
-			.rr-cust-header-row .dt-cell__content--col-1 { white-space: nowrap; font-weight: bold; position: relative; z-index: 10; }
-		`;
-		document.head.appendChild(style);
+	onload: function (report) {
+		// Inject the customer-header banner CSS once (on-screen merged-row look).
+		if (!document.getElementById("rr-cust-header-style")) {
+			const style = document.createElement("style");
+			style.id = "rr-cust-header-style";
+			style.textContent = `
+				.rr-cust-header-row .dt-cell { background: #f2f2f2 !important; overflow: visible !important; }
+				.rr-cust-header-row .dt-cell__content { overflow: visible !important; }
+				.rr-cust-header-row .dt-cell__content--col-1 { white-space: nowrap; font-weight: bold; position: relative; z-index: 10; }
+			`;
+			document.head.appendChild(style);
+		}
+
+		const PDF_METHOD =
+			"/api/method/avinashgroup_app.avinash_group_app.report.receipt_register.receipt_register.download_pdf";
+		// Date Wise is wide → Landscape; the others fit Portrait.
+		const orientationFor = function (filters) {
+			return filters.view === "Customer - Date Wise" ? "Landscape" : "Portrait";
+		};
+
+		report.page.add_inner_button(__("Download PDF"), function () {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.company || !filters.from_date || !filters.to_date) {
+				frappe.msgprint(__("Please set Company, From Date and To Date"));
+				return;
+			}
+			window.open(
+				PDF_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=" + encodeURIComponent(orientationFor(filters))
+			);
+		});
+
+		// Native Print opens the same wkhtmltopdf PDF (inline), like the other reports.
+		report.print_report = function (print_settings) {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!filters.company || !filters.from_date || !filters.to_date) {
+				frappe.msgprint(__("Please set Company, From Date and To Date"));
+				return;
+			}
+			const orientation = (print_settings && print_settings.orientation) || orientationFor(filters);
+			window.open(
+				PDF_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=" + encodeURIComponent(orientation) +
+					"&view=1"
+			);
+		};
 	},
 
 	get_datatable_options(options) {

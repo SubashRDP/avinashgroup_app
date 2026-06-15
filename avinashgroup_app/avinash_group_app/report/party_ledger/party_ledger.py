@@ -242,10 +242,11 @@ def _normalize_multiselect(value):
 
 @frappe.whitelist()
 def get_company_parties(party_type, company, txt=None):
-	"""Party options limited to those that actually transact in the selected company.
+	"""Party options scoped to the selected company via the party's custom_company field.
 
-	Customer/Supplier are global in ERPNext, so we scope the list by checking for any
-	GL Entry of that party in the company. Keeps the dropdown relevant per company.
+	Customer/Supplier are global in ERPNext, so we scope the list by the party's assigned
+	company (custom_company): keep parties of this company OR with none set; drop those
+	explicitly assigned to a different company. Keeps the dropdown relevant per company.
 	"""
 	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
 	if not company:
@@ -254,18 +255,16 @@ def get_company_parties(party_type, company, txt=None):
 	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
 	like = f"%{(txt or '').strip()}%"
 
+	company_scope = ""
+	if frappe.db.has_column(party_type, "custom_company"):
+		company_scope = " AND (p.custom_company = %(company)s OR COALESCE(p.custom_company, '') = '')"
+
 	return frappe.db.sql(
 		f"""
 		SELECT p.name AS value, p.`{name_field}` AS description
 		FROM `tab{party_type}` p
 		WHERE (p.name LIKE %(txt)s OR p.`{name_field}` LIKE %(txt)s)
-		  AND EXISTS (
-			SELECT 1 FROM `tabGL Entry` gle
-			WHERE gle.party = p.name
-			  AND gle.party_type = %(party_type)s
-			  AND gle.company = %(company)s
-			  AND gle.is_cancelled = 0
-		  )
+		  {company_scope}
 		ORDER BY p.`{name_field}`
 		LIMIT 50
 		""",
