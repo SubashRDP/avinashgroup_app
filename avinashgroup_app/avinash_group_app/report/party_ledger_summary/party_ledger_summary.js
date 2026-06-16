@@ -100,6 +100,17 @@ frappe.query_reports["Party Ledger Summary"] = {
 			},
 		},
 		{
+			// Blank → show all; "DB" → only debit closing balances; "CR" → only credit ones.
+			fieldname: "closing_drcr",
+			label: __("Closing DB/CR"),
+			fieldtype: "Select",
+			options: "\nDB\nCR",
+			default: "",
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "fit_columns",
 			label: __("Fit Columns"),
 			fieldtype: "Check",

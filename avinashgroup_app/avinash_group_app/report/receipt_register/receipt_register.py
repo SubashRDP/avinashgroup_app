@@ -76,7 +76,7 @@ def get_receipts(filters):
 			pe.paid_to              AS bank_account,
 			pe.reference_no         AS cheque_no,
 			pe.received_amount      AS net_amount,
-			pe.remarks              AS remarks
+			pe.custom_remark        AS remarks
 		FROM `tabPayment Entry` pe
 		WHERE {where}
 		ORDER BY pe.posting_date ASC, pe.name ASC
@@ -181,6 +181,7 @@ def build_customer_wise(rows):
 
 	data = []
 	cust_no = 0
+	grand_total = 0.0
 	for (code, name), recs in ordered:
 		# Customer header: S.N. numbers the customer; Code + Name merged into one cell.
 		cust_no += 1
@@ -191,6 +192,7 @@ def build_customer_wise(rows):
 		for r in recs:
 			net = flt(r.get("net_amount"))
 			total += net
+			grand_total += net
 			data.append({
 				"date":         r.get("date"),
 				"miti":         r.get("miti"),
@@ -202,6 +204,9 @@ def build_customer_wise(rows):
 			data.append({"bank_account": r.get("remarks") or "", "is_sub": 1})
 
 		data.append({"voucher_no": _("Total"), "net_amount": round(total, 2), "is_total": 1, "bold": 1})
+
+	# Grand total across all customers.
+	data.append({"voucher_no": _("Grand Total"), "net_amount": round(grand_total, 2), "is_total": 1, "is_grand": 1, "bold": 1})
 
 	return data
 

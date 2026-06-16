@@ -101,7 +101,7 @@ def get_columns(filters=None):
 		# formatter renders it as a clickable link to the Customer/Supplier master.
 		{"label": code_label,      "fieldname": "party",      "fieldtype": "Data",     "width": 120},
 		{"label": name_label,      "fieldname": "party_name", "fieldtype": "Data",     "width": 280, "align": "left"},
-		{"label": _("Vat/Pan No"), "fieldname": "tax_id",     "fieldtype": "Data",     "width": 130},
+		{"label": _("VAT/PAN"), "fieldname": "tax_id",     "fieldtype": "Data",     "width": 130},
 		{"label": _("Opening"),  "fieldname": "opening",    "fieldtype": "Currency", "width": 150},
 		{"label": _("Debit"),    "fieldname": "debit",      "fieldtype": "Currency", "width": 140},
 		{"label": _("Credit"),   "fieldname": "credit",     "fieldtype": "Currency", "width": 140},
@@ -118,6 +118,7 @@ def get_data(filters):
 	parties      = _normalize_multiselect(filters.get("party"))
 	party_groups = _normalize_multiselect(filters.get("party_group"))
 	show_zero    = bool(filters.get("show_zero_balance"))
+	closing_drcr = (filters.get("closing_drcr") or "").strip()
 
 	group_field = "customer_group" if party_type == "Customer" else "supplier_group"
 	name_field  = "customer_name"  if party_type == "Customer" else "supplier_name"
@@ -231,6 +232,13 @@ def get_data(filters):
 
 		# Hide net-zero parties unless Show Zero Balance is on
 		if not show_zero and round(closing, 2) == 0:
+			continue
+
+		# Closing DB/CR filter: DB → debit closing (closing > 0), CR → credit closing (< 0).
+		# Blank shows everything. Totals below recompute from the kept records.
+		if closing_drcr == "DB" and closing <= 0:
+			continue
+		if closing_drcr == "CR" and closing >= 0:
 			continue
 
 		m = info.get(pid) or {}
