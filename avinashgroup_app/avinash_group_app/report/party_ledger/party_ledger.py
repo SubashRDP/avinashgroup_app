@@ -50,8 +50,8 @@ def _bal_str(v):
 
 
 _PL_CAPACITY = {
-	'Portrait':  {False: 64, True: 48},
-	'Landscape': {False: 23, True: 26},
+	'Portrait':  {False: 64, True: 51},
+	'Landscape': {False: 23, True: 23},
 }
 _PL_CHARS_PER_LINE = {'Portrait': 55, 'Landscape': 90}  # remark chars before it wraps to another line
 
@@ -63,6 +63,12 @@ def _pl_block_height(block, show_remarks, chars_per_line):
 			h += 0.85   # detail rows use a smaller font (10px) so they're shorter
 		elif r.get('is_separator'):
 			h += 0.4
+		elif r.get('is_customer_header'):
+			# The customer name + (VAT/PAN: ...) sits in a narrow column and wraps to
+			# several physical lines — count them so header-heavy pages don't overflow.
+			label = r.get('cust_label') or ''
+			header_chars = max(8, chars_per_line // 4)
+			h += max(1.0, math.ceil(len(label) / header_chars))
 		else:
 			h += 1.0  # main row or summary row
 		rem = r.get('remarks') or ''
@@ -105,6 +111,16 @@ def _pl_paginate(data, orientation, show_remarks, detailed, party_names=None, ca
 			continue
 		block = [r]
 		i += 1
+		# Keep a customer header attached to the summary rows that follow it (its Opening,
+		# and for a customer with no period activity also For-the-Periods + Closing) so the
+		# header is never orphaned at the bottom of a page, split from its balances.
+		if r.get('is_customer_header'):
+			while i < n and data[i].get('is_summary') and not data[i].get('is_customer_header'):
+				block.append(data[i])
+				i += 1
+				while i < n and (data[i].get('is_detail') or data[i].get('is_separator') or data[i].get('is_remark')):
+					block.append(data[i])
+					i += 1
 		while i < n and (data[i].get('is_detail') or data[i].get('is_separator')):
 			block.append(data[i])
 			i += 1
@@ -269,6 +285,55 @@ def get_company_parties(party_type, company, txt=None):
 		LIMIT 50
 		""",
 		{"txt": like, "party_type": party_type, "company": company},
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_report_accounts(company, party_type=None, party=None, from_date=None, to_date=None, txt=None):
+	"""Account options limited to the accounts the ledger actually posts to for the current
+	Company / Party Type / Party / date range — i.e. only accounts that show up in the
+	generated report, not every account in the company. Mirrors the period-row conditions
+	in get_data so the dropdown matches what the report displays."""
+	if not company:
+		return []
+
+	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
+	parties = _normalize_multiselect(party)
+	like = f"%{(txt or '').strip()}%"
+
+	conditions = (
+		"gle.is_cancelled = 0 AND gle.company = %(company)s "
+		"AND gle.party_type = %(party_type)s AND gle.account LIKE %(txt)s"
+	)
+	params = {"company": company, "party_type": party_type, "txt": like}
+
+	if parties:
+		if len(parties) == 1:
+			conditions += " AND gle.party = %(party)s"
+			params["party"] = parties[0]
+		else:
+			conditions += " AND gle.party in %(party)s"
+			params["party"] = tuple(parties)
+
+	# Only accounts with actual period entries in the selected window (same filter the
+	# report's visible rows use — excludes pure opening-balance entries).
+	if from_date and to_date:
+		conditions += " AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s"
+		conditions += " AND COALESCE(gle.is_opening, 'No') != 'Yes'"
+		params["from_date"] = from_date
+		params["to_date"] = to_date
+
+	return frappe.db.sql(
+		f"""
+		SELECT gle.account AS value, gle.account AS description
+		FROM `tabGL Entry` gle
+		WHERE {conditions}
+		GROUP BY gle.account
+		ORDER BY gle.account
+		LIMIT 50
+		""",
+		params,
 		as_dict=True,
 	)
 
@@ -611,10 +676,10 @@ def _party_info_map(party_type, party_ids):
 
 
 def _customer_header_label(info, party):
-	"""'<Customer Name> (VAT/PAN No.: <tax_id>)' — tax id omitted when missing."""
+	"""'<Customer Name> (VAT/PAN: <tax_id>)' — tax id omitted when missing."""
 	name = (info or {}).get("name") or party
 	tax_id = (info or {}).get("tax_id")
-	return f"{name} (VAT/PAN No.: {tax_id})" if tax_id else name
+	return f"{name} (VAT/PAN: {tax_id})" if tax_id else name
 
 
 def _build_grouped_data(entries, opening_by_party, party_type, detail_data,

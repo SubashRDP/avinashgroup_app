@@ -3,8 +3,6 @@
 #
 # Override of frappe.desk.query_report.get_data_for_custom_field — the server method
 # behind a report's "Add Column" dialog.
-#
-# Stock behaviour returns the field's raw value, so adding a Link field (e.g. a
 # Customer's "Customer Group") shows the linked record's *id* (here a code like
 # "NGK-CGR-0002"). This override resolves Link values to the linked record's display
 # name (its title field, or a "<doctype>_name" field) so "Add Column" shows the name

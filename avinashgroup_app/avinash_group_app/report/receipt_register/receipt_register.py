@@ -136,9 +136,12 @@ def build_date_wise(rows):
 			})
 			# Sub-line: Cheque No (under Voucher No), Remarks (under Customer Name).
 			cheque = (r.get("cheque_no") or "").strip()
+			# A cheque no of "1" is a placeholder (e.g. cash receipts) — don't show it.
+			if cheque == "1":
+				cheque = ""
 			data.append({
-				"voucher_no":    ("Chq No: " + cheque) if cheque else "",
-				"customer_name": "Remarks: " + (r.get("remarks") or ""),
+				"voucher_no":    cheque,
+				"customer_name": r.get("remarks") or "",
 				"is_sub":        1,
 			})
 			first = False
@@ -196,7 +199,7 @@ def build_customer_wise(rows):
 				"bank_account": r.get("bank_account"),
 				"net_amount":   round(net, 2),
 			})
-			data.append({"bank_account": "Remarks: " + (r.get("remarks") or ""), "is_sub": 1})
+			data.append({"bank_account": r.get("remarks") or "", "is_sub": 1})
 
 		data.append({"voucher_no": _("Total"), "net_amount": round(total, 2), "is_total": 1, "bold": 1})
 

@@ -47,10 +47,23 @@ frappe.query_reports["Party Ledger"] = {
 			fieldtype: "MultiSelectList",
 			options: "Account",
 			get_data: function (txt) {
+				// Only offer accounts that actually appear in the report for the current
+				// Company / Party / date range (not every account in the company).
 				const company = frappe.query_report.get_filter_value("company");
-				const filters = { is_group: 0 };
-				if (company) filters.company = company;
-				return frappe.db.get_link_options("Account", txt, filters);
+				if (!company) return [];
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.get_report_accounts",
+						args: {
+							company,
+							party_type: frappe.query_report.get_filter_value("party_type"),
+							party: JSON.stringify(frappe.query_report.get_filter_value("party") || []),
+							from_date: frappe.query_report.get_filter_value("from_date"),
+							to_date: frappe.query_report.get_filter_value("to_date"),
+							txt,
+						},
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

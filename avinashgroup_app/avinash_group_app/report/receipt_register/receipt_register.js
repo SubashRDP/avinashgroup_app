@@ -88,6 +88,8 @@ frappe.query_reports["Receipt Register"] = {
 				.rr-cust-header-row .dt-cell { background: #f2f2f2 !important; overflow: visible !important; }
 				.rr-cust-header-row .dt-cell__content { overflow: visible !important; }
 				.rr-cust-header-row .dt-cell__content--col-1 { white-space: nowrap; font-weight: bold; position: relative; z-index: 10; }
+				.rr-sub-row .dt-cell { overflow: visible !important; }
+				.rr-sub-row .dt-cell__content { overflow: visible !important; white-space: nowrap; position: relative; z-index: 5; }
 			`;
 			document.head.appendChild(style);
 		}
@@ -142,6 +144,7 @@ frappe.query_reports["Receipt Register"] = {
 		setTimeout(function () {
 			if (fit) me.autoFitColumns(dt);
 			me.mergeCustomerHeaders(dt);
+			me.bindHeaderRescan(dt);
 		}, 100);
 	},
 
@@ -176,9 +179,34 @@ frappe.query_reports["Receipt Register"] = {
 		const container = dt && dt.bodyScrollable;
 		if (!container) return;
 		data.forEach(function (row, i) {
-			if (!row || !row.is_customer_header) return;
+			if (!row) return;
 			const rowEl = container.querySelector(".dt-row-" + i);
-			if (rowEl) rowEl.classList.add("rr-cust-header-row");
+			if (!rowEl) return;
+			// Customer header → full-width grey banner.
+			if (row.is_customer_header) rowEl.classList.add("rr-cust-header-row");
+			// Remarks sub-line → let the remark spill across the empty cell(s) to its right
+			// (Net Amount is blank on these rows) so the full text is readable, not truncated.
+			else if (row.is_sub) rowEl.classList.add("rr-sub-row");
+		});
+	},
+
+	bindHeaderRescan: function (dt) {
+		// frappe-datatable virtualizes rows (clusterize): only the rows near the viewport
+		// exist in the DOM, and scrolling destroys/recreates row elements — wiping the
+		// banner class off every header row except the first few. Re-tag on each scroll so
+		// the grey banner follows the customer-header rows down the whole report.
+		const me = this;
+		const container = dt && dt.bodyScrollable;
+		if (!container || container._rrHeaderScanBound) return;
+		container._rrHeaderScanBound = true;
+		let scheduled = false;
+		container.addEventListener("scroll", function () {
+			if (scheduled) return;
+			scheduled = true;
+			window.requestAnimationFrame(function () {
+				scheduled = false;
+				me.mergeCustomerHeaders(dt);
+			});
 		});
 	},
 
