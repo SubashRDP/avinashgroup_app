@@ -40,10 +40,64 @@ def get_company_customers(company=None, txt=None):
 
 	return frappe.db.sql(
 		f"""
-		SELECT cust.name AS value, cust.customer_name AS description
+		SELECT cust.name AS value, cust.customer_name AS label, cust.name AS description
 		FROM `tabCustomer` cust
 		WHERE {where}
 		ORDER BY cust.customer_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_company_customer_groups(company=None, txt=None):
+	"""Customer Group options scoped to the selected company via custom_company when present."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["(cg.name LIKE %(txt)s OR cg.customer_group_name LIKE %(txt)s)"]
+	values = {"txt": like}
+
+	if company and frappe.db.has_column("Customer Group", "custom_company"):
+		conditions.append("(cg.custom_company IN %(company)s OR COALESCE(cg.custom_company, '') = '')")
+		values["company"] = tuple(company)
+
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT cg.name AS value, cg.customer_group_name AS label, cg.name AS description
+		FROM `tabCustomer Group` cg
+		WHERE {where}
+		ORDER BY cg.customer_group_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_company_items(company=None, txt=None):
+	"""Item options scoped to the selected company via custom_company when present."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["(it.name LIKE %(txt)s OR it.item_name LIKE %(txt)s)"]
+	values = {"txt": like}
+
+	if company and frappe.db.has_column("Item", "custom_company"):
+		conditions.append("(it.custom_company IN %(company)s OR COALESCE(it.custom_company, '') = '')")
+		values["company"] = tuple(company)
+
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT it.name AS value, it.item_name AS label, it.name AS description
+		FROM `tabItem` it
+		WHERE {where}
+		ORDER BY it.item_name
 		LIMIT 50
 		""",
 		values,
@@ -146,6 +200,14 @@ def get_data(filters, include_return):
 		conditions.append("si.customer IN %(customer)s")
 		values["customer"] = tuple(filters.get("customer"))
 
+	if filters.get("customer_group"):
+		conditions.append("cust.customer_group IN %(customer_group)s")
+		values["customer_group"] = tuple(filters.get("customer_group"))
+
+	if filters.get("item_code"):
+		conditions.append("sii.item_code IN %(item_code)s")
+		values["item_code"] = tuple(filters.get("item_code"))
+
 	where = " AND ".join(conditions)
 
 	# Returns are stored with negative qty/value, so negate them to show positives.
@@ -155,11 +217,32 @@ def get_data(filters, include_return):
 			si.customer AS customer_code,
 			cust.customer_name AS customer_name,
 			cust.tax_id AS tax_id,
-			SUM(CASE WHEN si.is_return = 0 THEN si.total_qty ELSE 0 END) AS sales_qty,
-			SUM(CASE WHEN si.is_return = 0 THEN si.custom_total_amount_including_excise ELSE 0 END) AS gross_value,
-			-SUM(CASE WHEN si.is_return = 1 THEN si.total_qty ELSE 0 END) AS return_qty,
-			-SUM(CASE WHEN si.is_return = 1 THEN si.custom_total_amount_including_excise ELSE 0 END) AS return_value
+			SUM(
+				CASE
+					WHEN si.is_return = 0 THEN sii.qty
+					ELSE 0
+				END
+			) AS sales_qty,
+			SUM(
+				CASE
+					WHEN si.is_return = 0 THEN sii.amount + COALESCE(sii.custom_excise_value, 0)
+					ELSE 0
+				END
+			) AS gross_value,
+			-SUM(
+				CASE
+					WHEN si.is_return = 1 THEN sii.qty
+					ELSE 0
+				END
+			) AS return_qty,
+			-SUM(
+				CASE
+					WHEN si.is_return = 1 THEN sii.amount + COALESCE(sii.custom_excise_value, 0)
+					ELSE 0
+				END
+			) AS return_value
 		FROM `tabSales Invoice` si
+		JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
 		LEFT JOIN `tabCustomer` cust ON cust.name = si.customer
 		WHERE {where}
 		GROUP BY si.customer, cust.customer_name, cust.tax_id

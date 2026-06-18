@@ -10,6 +10,9 @@ frappe.query_reports["Sales Analysis Customer wise Summary"] = {
 			get_data: function (txt) {
 				return frappe.db.get_link_options("Company", txt);
 			},
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
 		},
 		{
 			fieldname: "from_date",
@@ -35,6 +38,34 @@ frappe.query_reports["Sales Analysis Customer wise Summary"] = {
 				return frappe
 					.call({
 						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_customer_wise_summary.sales_analysis_customer_wise_summary.get_company_customers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
+			fieldname: "customer_group",
+			label: __("Customer Group"),
+			fieldtype: "MultiSelectList",
+			get_data: function (txt) {
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_customer_wise_summary.sales_analysis_customer_wise_summary.get_company_customer_groups",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
+			fieldname: "item_code",
+			label: __("Item"),
+			fieldtype: "MultiSelectList",
+			get_data: function (txt) {
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_analysis_customer_wise_summary.sales_analysis_customer_wise_summary.get_company_items",
 						args: { company: company, txt: txt },
 					})
 					.then((r) => r.message || []);

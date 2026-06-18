@@ -277,7 +277,7 @@ def get_company_parties(party_type, company, txt=None):
 
 	return frappe.db.sql(
 		f"""
-		SELECT p.name AS value, p.`{name_field}` AS description
+		SELECT p.name AS value, p.`{name_field}` AS label, p.name AS description
 		FROM `tab{party_type}` p
 		WHERE (p.name LIKE %(txt)s OR p.`{name_field}` LIKE %(txt)s)
 		  {company_scope}

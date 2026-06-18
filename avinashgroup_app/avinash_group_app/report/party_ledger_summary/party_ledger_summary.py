@@ -357,7 +357,7 @@ def get_company_party_groups(party_type, company, txt=None):
 	# value = group id (used by the report filter); description = readable group name.
 	return frappe.db.sql(
 		f"""
-		SELECT DISTINCT p.`{group_field}` AS value, g.`{group_name_field}` AS description
+		SELECT DISTINCT p.`{group_field}` AS value, g.`{group_name_field}` AS label, g.name AS description
 		FROM `tab{party_type}` p
 		JOIN `tab{group_doctype}` g ON g.name = p.`{group_field}`
 		WHERE p.`{group_field}` IS NOT NULL
@@ -388,7 +388,7 @@ def get_company_parties(party_type, company, txt=None):
 
 	return frappe.db.sql(
 		f"""
-		SELECT p.name AS value, p.`{name_field}` AS description
+		SELECT p.name AS value, p.`{name_field}` AS label, p.name AS description
 		FROM `tab{party_type}` p
 		WHERE (p.name LIKE %(txt)s OR p.`{name_field}` LIKE %(txt)s)
 		  {company_scope}

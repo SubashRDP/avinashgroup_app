@@ -40,7 +40,7 @@ def get_company_suppliers(company=None, txt=None):
 
 	return frappe.db.sql(
 		f"""
-		SELECT sup.name AS value, sup.supplier_name AS description
+		SELECT sup.name AS value, sup.supplier_name AS label, sup.name AS description
 		FROM `tabSupplier` sup
 		WHERE {where}
 		ORDER BY sup.supplier_name

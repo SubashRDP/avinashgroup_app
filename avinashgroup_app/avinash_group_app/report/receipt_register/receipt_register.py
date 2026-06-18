@@ -277,7 +277,7 @@ def get_company_customers(company=None, txt=None):
 
 	return frappe.db.sql(
 		f"""
-		SELECT cust.name AS value, cust.customer_name AS description
+		SELECT cust.name AS value, cust.customer_name AS label, cust.name AS description
 		FROM `tabCustomer` cust
 		WHERE {where}
 		ORDER BY cust.customer_name
