@@ -655,7 +655,8 @@ def _build_section_rows(entries, opening_debit, opening_credit, detail_data,
 
 
 def _party_info_map(party_type, party_ids):
-	"""Map party id → {"name": display name, "tax_id": VAT/PAN}. Name falls back to the id."""
+	"""Map party id → {"name": display name, "tax_id": 
+	/PAN}. Name falls back to the id."""
 	party_ids = [p for p in party_ids if p]
 	if not party_ids:
 		return {}
