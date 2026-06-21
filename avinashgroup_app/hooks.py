@@ -243,4 +243,18 @@ fixtures = [
             ]]
         ],
     },
+    {
+        "dt": "Print Format",
+        "filters": [
+            ["name", "in", [
+                "Avinash Purchase Order",
+                "Avinash Journal Entry",
+                "Avinash Sales/Return Invoice",
+                "Avinash Sales Return",
+                "Avinash Sales invoice",
+                "Avinash Purchase Invoice",
+                "A5 Avinash Purchase Invoice",
+            ]]
+        ],
+    },
 ]
