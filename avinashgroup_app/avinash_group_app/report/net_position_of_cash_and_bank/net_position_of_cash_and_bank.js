@@ -33,7 +33,6 @@ frappe.query_reports["Net Position of Cash and Bank"] = {
 				if (!company) return [];
 				return frappe.db.get_link_options("Account", txt, {
 					company: company,
-					account_type: ["in", ["Cash", "Bank"]],
 					is_group: 0,
 					disabled: 0,
 				});

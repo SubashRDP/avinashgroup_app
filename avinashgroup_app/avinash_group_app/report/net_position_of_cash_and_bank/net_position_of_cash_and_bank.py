@@ -1,8 +1,8 @@
 """Net Position of Cash and Bank.
 
-Lists every leaf account whose `account_type` is Cash or Bank for the
-selected company and reports four numbers per account over the chosen
-period:
+Lists every leaf account that is a descendant of the company's
+"Cash and Cash Equivalent" group account and reports four numbers per
+account over the chosen period:
 
     Opening   = closing balance one day before `from_date`
     Receipts  = sum of debits between `from_date` and `to_date`
@@ -171,15 +171,43 @@ def _build_data(filters):
 # ---------- queries ----------
 
 
+PARENT_ACCOUNT_NAME = "Cash and Cash Equivalent"
+
+
+def _cash_and_bank_parent(company):
+	"""Return the company's "Cash and Cash Equivalent" group account.
+
+	Matched by account_name (the account_number / company suffix varies between
+	sites), normalising "&" to "and" so "Cash & Cash Equivalent" also matches.
+	Returns the account dict or None if the company has no such group."""
+	rows = frappe.db.sql(
+		"""SELECT name, lft, rgt
+		   FROM `tabAccount`
+		   WHERE company = %(company)s
+		     AND is_group = 1
+		     AND REPLACE(LOWER(account_name), ' & ', ' and ') = %(parent)s
+		   ORDER BY lft
+		   LIMIT 1""",
+		{"company": company, "parent": PARENT_ACCOUNT_NAME.lower()},
+		as_dict=True,
+	)
+	return rows[0] if rows else None
+
+
 def _cash_and_bank_accounts(company, code_filter):
-	"""All leaf accounts of type Cash or Bank for the company."""
+	"""All leaf accounts under the company's "Cash and Cash Equivalent" group."""
+	parent = _cash_and_bank_parent(company)
+	if not parent:
+		return []
+
 	where = [
 		"company = %(company)s",
-		"account_type IN ('Cash', 'Bank')",
+		"lft > %(lft)s",
+		"rgt < %(rgt)s",
 		"is_group = 0",
 		"disabled = 0",
 	]
-	params = {"company": company}
+	params = {"company": company, "lft": parent.lft, "rgt": parent.rgt}
 	if code_filter:
 		if isinstance(code_filter, str):
 			code_filter = [c.strip() for c in code_filter.split(",") if c.strip()]
@@ -190,7 +218,7 @@ def _cash_and_bank_accounts(company, code_filter):
 		f"""SELECT name, account_name, account_number, account_currency, account_type
 		    FROM `tabAccount`
 		    WHERE {' AND '.join(where)}
-		    ORDER BY COALESCE(account_number, ''), name""",
+		    ORDER BY lft, COALESCE(account_number, ''), name""",
 		params,
 		as_dict=True,
 	)
