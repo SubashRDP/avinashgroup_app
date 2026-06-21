@@ -225,36 +225,3 @@ override_whitelisted_methods = {
     # Report "Add Column": show a Link field's name instead of its id.
     "frappe.desk.query_report.get_data_for_custom_field": "avinashgroup_app.custom_code.Override.query_report.get_data_for_custom_field",
 }
-
-fixtures = [
-    {"dt": "Company Filter Config"},
-    {"dt": "Company Filter Field"},
-    {
-        "dt": "Custom Field",
-        "filters": [
-            ["name", "in", [
-                "Attendance-custom_shift_deviation_section",
-                "Attendance-custom_late_entry",
-                "Attendance-custom_early_entry",
-                "Attendance-custom_col_break_deviation",
-                "Attendance-custom_early_exit",
-                "Attendance-custom_late_exit",
-                "Shift Type-custom_late_arrival_cutoff_time",
-            ]]
-        ],
-    },
-    {
-        "dt": "Print Format",
-        "filters": [
-            ["name", "in", [
-                "Avinash Purchase Order",
-                "Avinash Journal Entry",
-                "Avinash Sales/Return Invoice",
-                "Avinash Sales Return",
-                "Avinash Sales invoice",
-                "Avinash Purchase Invoice",
-                "A5 Avinash Purchase Invoice",
-            ]]
-        ],
-    },
-]
