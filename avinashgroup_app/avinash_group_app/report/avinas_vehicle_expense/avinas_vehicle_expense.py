@@ -149,10 +149,6 @@ def build_conditions(filter_values, doc_prefix, child_prefix):
     if filter_values.get("company"):
         conditions += " AND acc.company = %(company)s"
 
-    # Department (e.g. O/O, S/D, F/P) is stored on the Account itself.
-    if filter_values.get("department"):
-        conditions += " AND acc.custom_department = %(department)s"
-
     if filter_values.get("fiscal_start"):
         conditions += f" AND {doc_prefix}.posting_date >= %(fiscal_start)s"
         conditions += f" AND {doc_prefix}.posting_date <= %(fiscal_end)s"

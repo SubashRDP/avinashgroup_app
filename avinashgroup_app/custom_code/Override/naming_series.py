@@ -745,14 +745,28 @@ def set_auto_document_no(doc):
     name_pattern = f"{company_abbr}-{prefix}-%-{fiscal_year}%"
 
     if getattr(doc, "custom_document_no", None):
+        # A collision is only another *active* (draft/submitted) document that
+        # shares the same number in the same scope. Cancelled documents
+        # (docstatus = 2) must be ignored so an amendment can keep the same
+        # custom_document_no as the cancelled original it replaces — the
+        # -1/-2 amendment suffix lives on custom_name (Voucher No), not here.
+        filters = {
+            "custom_document_no": doc.custom_document_no,
+            "custom_name": ["like", name_pattern],
+            "docstatus": ["<", 2],
+        }
+        # Exclude the document itself (e.g. re-saving an amended draft that
+        # already has a name like …-00015-1).
+        doc_name = getattr(doc, "name", None)
+        if doc_name:
+            filters["name"] = ["!=", doc_name]
+
         similar_docs = frappe.db.get_value(
             doctype,
-            filters={"custom_document_no": doc.custom_document_no,
-                     "custom_name": ["like", name_pattern]},
+            filters=filters,
             fieldname="name"
-            
         )
-        if similar_docs:           
+        if similar_docs:
             frappe.throw(
                 f"Document number {doc.custom_document_no} already exists for the {similar_docs}. Please enter a different number.",
                 title="Duplicate Document Number"

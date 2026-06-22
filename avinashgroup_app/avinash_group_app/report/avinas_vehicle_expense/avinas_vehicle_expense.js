@@ -51,23 +51,6 @@ function get_filters() {
             reqd: 0,
             depends_on: "eval:doc.date_filter_type=='Date Range'"
         },
-        {
-            fieldname: "department",
-            label: __("Department"),
-            fieldtype: "Link",
-            options: "Department",
-            reqd: 0,
-            get_query: function () {
-                let company = frappe.query_report.get_filter_value("company");
-                if (company) {
-                    return {
-                        filters: {
-                            company: company
-                        }
-                    };
-                }
-            }
-        },
     ];
     return filters;
 }
@@ -80,22 +63,6 @@ frappe.query_reports["Avinas Vehicle Expense"] = {
     },
     
     onload: function (report) {
-        // Set up company filter change handler
-        report.page.fields_dict.company.df.onchange = function() {
-            let company = report.get_filter_value("company");
-            
-            // Clear department when company changes
-            if (company) {
-                report.set_filter_value("department", "");
-                
-                // Refresh department field to apply new query
-                let dept_field = report.page.fields_dict.department;
-                if (dept_field) {
-                    dept_field.refresh();
-                }
-            }
-        };
-        
         // Set up date filter type change handler
         report.page.fields_dict.date_filter_type.df.onchange = function() {
             let filter_type = report.get_filter_value("date_filter_type");
