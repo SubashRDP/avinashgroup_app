@@ -25,7 +25,7 @@
 
 (function () {
 
-	const PRINT_PORTRAIT_CSS = "/assets/avinashgroup_app/css/report_print_portrait.css?v=4";
+	const PRINT_PORTRAIT_CSS = "/assets/avinashgroup_app/css/report_print_portrait.css?v=6";
 	const PORTRAIT_CSS_ID    = "rdp-portrait-print-css";
 
 	// ─────────────────────────────────────────────────────────────────
@@ -192,6 +192,48 @@
 		}
 		return w;
 	};
+
+	// ─────────────────────────────────────────────────────────────────
+	// 1b) frappe.render_pdf shim — the server PDF (wkhtmltopdf) does NOT
+	//     load report_print_portrait.css, so its table renders with the
+	//     faint Bootstrap grid. Inline a minimal black-grid + black-header
+	//     style into the HTML before it is posted to the PDF endpoint.
+	//     Orientation-agnostic and not @media-gated so wkhtmltopdf applies
+	//     it for both portrait and landscape.
+	// ─────────────────────────────────────────────────────────────────
+
+	const PDF_BLACK_GRID_CSS =
+		"<style>" +
+		"table,thead th,table th,tbody td,table td{border:1px solid #000 !important;}" +
+		"thead th,table th{color:#000 !important;font-weight:bold !important;}" +
+		"</style>";
+
+	function injectPdfGridCss(html) {
+		if (typeof html !== "string") return html;
+		if (html.indexOf("</head>") !== -1) {
+			return html.replace("</head>", PDF_BLACK_GRID_CSS + "</head>");
+		}
+		return PDF_BLACK_GRID_CSS + html;
+	}
+
+	function installRenderPdfHook() {
+		if (!frappe || typeof frappe.render_pdf !== "function") return false;
+		if (frappe._rdpRenderPdfHooked) return true;
+		const _origRenderPdf = frappe.render_pdf;
+		frappe.render_pdf = function (html, options) {
+			if (isReportRoute()) html = injectPdfGridCss(html);
+			return _origRenderPdf.call(this, html, options);
+		};
+		frappe._rdpRenderPdfHooked = true;
+		return true;
+	}
+
+	if (!installRenderPdfHook()) {
+		const retryPdf = setInterval(function () {
+			if (installRenderPdfHook()) clearInterval(retryPdf);
+		}, 200);
+		setTimeout(function () { clearInterval(retryPdf); }, 15000);
+	}
 
 	// ─────────────────────────────────────────────────────────────────
 	// 2) Global hook — wrap any "Download PDF" inner button

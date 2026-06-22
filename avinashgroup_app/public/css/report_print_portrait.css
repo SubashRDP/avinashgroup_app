@@ -70,6 +70,21 @@
 		overflow-wrap: break-word !important;
 	}
 
+	/* Solid black grid lines + black header text — was faint Bootstrap grey */
+	table,
+	thead th,
+	table th,
+	tbody td,
+	table td {
+		border: 1px solid #000 !important;
+	}
+
+	thead th,
+	table th {
+		color: #000 !important;
+		font-weight: bold !important;
+	}
+
 	colgroup col {
 		width: auto !important;
 	}
@@ -240,6 +255,21 @@ body:has(> .print-format:not(.landscape)) {
 	overflow-wrap: break-word !important;
 }
 
+/* Solid black grid lines + black header text — was faint Bootstrap grey */
+.print-format:not(.landscape) table,
+.print-format:not(.landscape) thead th,
+.print-format:not(.landscape) table th,
+.print-format:not(.landscape) tbody td,
+.print-format:not(.landscape) table td {
+	border: 1px solid #000 !important;
+}
+
+.print-format:not(.landscape) thead th,
+.print-format:not(.landscape) table th {
+	color: #000 !important;
+	font-weight: bold !important;
+}
+
 .print-format:not(.landscape) td.r,
 .print-format:not(.landscape) th.r,
 .print-format:not(.landscape) td.text-right,
@@ -311,4 +341,43 @@ body:has(> .print-format:not(.landscape)) {
 .print-format:not(.landscape) tr.pl-row-period td {
 	font-weight: bold !important;
 	padding: 4px 5px !important;
+}
+
+
+/* ─────────────────────────────────────────────
+ * SCOPE 3 — Black grid + header for LANDSCAPE
+ * Only borders/header colour — landscape font sizing is left untouched.
+ * ───────────────────────────────────────────── */
+
+/* In-page preview, landscape */
+.print-format.landscape table,
+.print-format.landscape thead th,
+.print-format.landscape table th,
+.print-format.landscape tbody td,
+.print-format.landscape table td {
+	border: 1px solid #000 !important;
+}
+
+.print-format.landscape thead th,
+.print-format.landscape table th {
+	color: #000 !important;
+	font-weight: bold !important;
+}
+
+/* Actual print, landscape orientation */
+@media print and (orientation: landscape) {
+
+	table,
+	thead th,
+	table th,
+	tbody td,
+	table td {
+		border: 1px solid #000 !important;
+	}
+
+	thead th,
+	table th {
+		color: #000 !important;
+		font-weight: bold !important;
+	}
 }
