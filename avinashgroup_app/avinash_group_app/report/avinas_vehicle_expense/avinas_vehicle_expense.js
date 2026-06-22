@@ -59,7 +59,14 @@ frappe.query_reports["Avinas Vehicle Expense"] = {
     filters: get_filters(),
     
     formatter: function (value, row, column, data, default_formatter) {
-        return default_formatter(value, row, column, data);
+        let formatted = default_formatter(value, row, column, data);
+
+        // Vehicle No -> centered & bold (the "in the middle" look)
+        if (column.fieldname === "vehicle_no") {
+            return `<div style="text-align:center;font-weight:600;letter-spacing:0.3px;">${formatted}</div>`;
+        }
+
+        return formatted;
     },
     
     onload: function (report) {
