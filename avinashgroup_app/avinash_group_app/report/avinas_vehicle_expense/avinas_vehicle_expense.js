@@ -12,14 +12,7 @@ function get_filters() {
             fieldname: "vehicle_no",
             label: __("Vehicle No"),
             fieldtype: "Link",
-            options: "Sub-Ledger Category",
-            get_query: function () {
-                return {
-                    filters: {
-                        parent_sub_ledger_category: "Vehicle"
-                    }
-                };
-            }
+            options: "Vehicle",
         },
         {
             fieldname: "date_filter_type",
@@ -61,9 +54,13 @@ frappe.query_reports["Avinas Vehicle Expense"] = {
     formatter: function (value, row, column, data, default_formatter) {
         let formatted = default_formatter(value, row, column, data);
 
-        // Vehicle No -> centered & bold (the "in the middle" look)
+        // Vehicle No -> license plate, linked to the Vehicle record, centered & bold
         if (column.fieldname === "vehicle_no") {
-            return `<div style="text-align:center;font-weight:600;letter-spacing:0.3px;">${formatted}</div>`;
+            let label = frappe.utils.escape_html(value || "");
+            if (data && data.vehicle) {
+                label = `<a href="/app/vehicle/${encodeURIComponent(data.vehicle)}">${label}</a>`;
+            }
+            return `<div style="text-align:center;font-weight:600;letter-spacing:0.3px;">${label}</div>`;
         }
 
         return formatted;

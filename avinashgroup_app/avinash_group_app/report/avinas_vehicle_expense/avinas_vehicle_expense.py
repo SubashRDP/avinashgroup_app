@@ -15,8 +15,7 @@ def get_columns():
         {
             "fieldname": "vehicle_no",
             "label": _("Vehicle No"),
-            "fieldtype": "Link",
-            "options": "Sub-Ledger Category",
+            "fieldtype": "Data",
             "width": 180
         },
         {
@@ -54,14 +53,15 @@ def get_data(filters):
     
     query = """
         SELECT
-            vehicle_no,
-            SUM(fuel) AS fuel,
-            SUM(repair) AS repair,
-            SUM(others) AS others
+            combined.vehicle AS vehicle,
+            COALESCE(v.license_plate, combined.vehicle) AS vehicle_no,
+            SUM(combined.fuel) AS fuel,
+            SUM(combined.repair) AS repair,
+            SUM(combined.others) AS others
         FROM (
             -- Purchase Invoice Expenses
             SELECT
-                pic.custom_subtype AS vehicle_no,
+                pic.custom_subtype AS vehicle,
                 SUM(CASE WHEN acc.account_name LIKE '%%Fuel Expenses%%'
                         THEN pic.amount ELSE 0 END) AS fuel,
                 SUM(CASE WHEN acc.account_name LIKE '%%R & M - Vehicles%%'
@@ -86,7 +86,7 @@ def get_data(filters):
 
             -- Journal Entry Expenses
             SELECT
-                jea.custom_subtype AS vehicle_no,
+                jea.custom_subtype AS vehicle,
                 SUM(CASE WHEN acc.account_name LIKE '%%Fuel Expenses%%'
                         THEN jea.debit - jea.credit ELSE 0 END) AS fuel,
                 SUM(CASE WHEN acc.account_name LIKE '%%R & M - Vehicles%%'
@@ -107,8 +107,9 @@ def get_data(filters):
                 {conditions_je}
             GROUP BY jea.custom_subtype
         ) AS combined
-        WHERE vehicle_no IS NOT NULL AND vehicle_no != ''
-        GROUP BY vehicle_no
+        LEFT JOIN `tabVehicle` v ON v.name = combined.vehicle
+        WHERE combined.vehicle IS NOT NULL AND combined.vehicle != ''
+        GROUP BY combined.vehicle, COALESCE(v.license_plate, combined.vehicle)
         ORDER BY vehicle_no
     """.format(conditions_pi=conditions_pi, conditions_je=conditions_je)
 

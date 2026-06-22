@@ -45,8 +45,17 @@ company-abbreviation suffixes.
 - `jea.debit - jea.credit` → the value added to the bucket
 - `je.docstatus = 1`, dates from `je.posting_date`
 
-Both sides are combined with `UNION ALL`, then grouped by vehicle. Blank
-vehicles (`vehicle_no IS NULL OR = ''`) are excluded.
+Both sides are combined with `UNION ALL`, then `LEFT JOIN`ed to `tabVehicle`
+(`v.name = combined.vehicle`) so the displayed value is the vehicle's
+**`license_plate`** (e.g. `Ba 21 Cha 860`) rather than its docname
+(`NGG-VEH-00011`). Rows are grouped by `COALESCE(license_plate, vehicle)` so a
+vehicle with no plate still falls back to its docname. Blank vehicles
+(`combined.vehicle IS NULL OR = ''`) are excluded.
+
+The displayed title is **"Nepal Gas Vehicle Expense"** (relabelled via
+`avinashgroup_app/translations/en.csv`); the internal report name stays
+`Avinas Vehicle Expense`. The Vehicle No filter and column link to the
+`Vehicle` doctype (previously mis-declared as `Sub-Ledger Category`).
 
 ## Filters
 
