@@ -816,7 +816,7 @@ def set_custom_name_field(doc):
 
     doc_no = format_document_number(doc)
 
-    fiscal_year = "82/83"
+    fiscal_year = ""
     if hasattr(doc, 'custom_fiscal_year') and doc.custom_fiscal_year:
         fiscal_year = doc.custom_fiscal_year
     else:
@@ -834,6 +834,45 @@ def set_custom_name_field(doc):
     base_custom_name = f"{company_code}-{p_type}-{doc_no}-{fiscal_year}"
     amendment_suffix = get_amendment_suffix(doc)
     doc.custom_name = f"{base_custom_name}{amendment_suffix}"
+
+
+def validate_custom_name_unique(doc):
+    """
+    Guard against duplicate custom_name / custom_document_no.
+
+    Runs for EVERY document that has a non-empty custom_name, regardless of
+    whether its type is listed in AUTO_NUMBER_CONFIG. The auto-number path in
+    set_auto_document_no() only validates the small set of auto-numbered types
+    (e.g. Purchase Return), so manually-numbered documents — like a normal
+    Purchase Invoice — would otherwise save duplicate custom_document_no values
+    that collapse into an identical custom_name. This closes that gap.
+
+    Cancelled documents (docstatus = 2) are ignored so an amendment can reuse
+    the original number; the -1/-2 amendment suffix already makes the amended
+    custom_name distinct anyway. The document itself is excluded by name.
+    """
+    if not hasattr(doc, "custom_name"):
+        return
+
+    custom_name = getattr(doc, "custom_name", None)
+    if not custom_name:
+        return
+
+    filters = {
+        "custom_name": custom_name,
+        "docstatus": ["<", 2],
+    }
+    doc_name = getattr(doc, "name", None)
+    if doc_name:
+        filters["name"] = ["!=", doc_name]
+
+    existing = frappe.db.get_value(doc.doctype, filters=filters, fieldname="name")
+    if existing:
+        frappe.throw(
+            f"Document number {getattr(doc, 'custom_document_no', '')} already exists "
+            f"({existing} → {custom_name}). Please enter a different number.",
+            title="Duplicate Document Number",
+        )
 
 
 def naming_requirements_before_insert(doc):
@@ -992,6 +1031,7 @@ def handle_validate(doc, method=None):
     if doc.is_new():
         set_auto_document_no(doc)
     set_custom_name_field(doc)
+    validate_custom_name_unique(doc)
     set_custom_branch_name(doc)
 
 
@@ -1003,6 +1043,7 @@ def handle_before_save(doc, method=None):
     if doc.is_new():
         set_auto_document_no(doc)
     set_custom_name_field(doc)
+    validate_custom_name_unique(doc)
     set_custom_branch_name(doc)
 
 
