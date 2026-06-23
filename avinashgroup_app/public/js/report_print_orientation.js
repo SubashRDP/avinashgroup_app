@@ -169,12 +169,52 @@
 		}
 	}
 
+	// ── Optional per-report print footer (e.g. signature block) ──────────
+	// A report registers window.__rdpPrintFooter = { report, html }. We inject
+	// that HTML at the foot of the printed page / PDF only, never on the grid.
+	function getReportPrintFooter() {
+		const f = window.__rdpPrintFooter;
+		if (!f || !f.html) return null;
+		const route = frappe.get_route && frappe.get_route();
+		const reportName = route && route[1];
+		if (f.report && f.report !== reportName) return null;
+		return f.html;
+	}
+
+	function appendPrintFooterToPopup(win) {
+		try {
+			const footer = getReportPrintFooter();
+			if (!footer || !win || !win.document) return;
+			const doc = win.document;
+			if (doc.querySelector(".rdp-print-footer")) return;
+			const host = doc.querySelector(".print-format") || doc.body;
+			if (!host) return;
+			const div = doc.createElement("div");
+			div.className = "rdp-print-footer";
+			div.innerHTML = footer;
+			host.appendChild(div);
+		} catch (e) {
+			// cross-origin / access error — ignore
+		}
+	}
+
+	function injectPdfFooter(html) {
+		const footer = getReportPrintFooter();
+		if (!footer || typeof html !== "string") return html;
+		const block = '<div class="rdp-print-footer">' + footer + "</div>";
+		if (html.indexOf("</body>") !== -1) {
+			return html.replace("</body>", block + "</body>");
+		}
+		return html + block;
+	}
+
 	function processPopup(win) {
 		// Don't touch popups opened from a non-report context — those are
 		// doctype print previews and must render with their own format.
 		if (!isReportRoute()) return;
 		injectPrintCss(win);
 		fitContentToPage(win);
+		appendPrintFooterToPopup(win);
 	}
 
 	const _origOpen = window.open;
@@ -221,7 +261,10 @@
 		if (frappe._rdpRenderPdfHooked) return true;
 		const _origRenderPdf = frappe.render_pdf;
 		frappe.render_pdf = function (html, options) {
-			if (isReportRoute()) html = injectPdfGridCss(html);
+			if (isReportRoute()) {
+				html = injectPdfGridCss(html);
+				html = injectPdfFooter(html);
+			}
 			return _origRenderPdf.call(this, html, options);
 		};
 		frappe._rdpRenderPdfHooked = true;
