@@ -1,4 +1,5 @@
 
+
 frappe.ui.form.on("Sales Invoice", {
 
     onload: function(frm) {
