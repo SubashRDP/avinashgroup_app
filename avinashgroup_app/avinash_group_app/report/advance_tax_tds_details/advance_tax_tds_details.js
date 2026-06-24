@@ -99,15 +99,22 @@ frappe.query_reports["Advance Tax TDS Details"] = {
 		if (fit) {
 			setTimeout(() => this.autoFitColumns(dt), 100);
 		}
+		// logged-in user's full name, shown above the "Prepared By" line
+		const preparedByName = frappe.utils.escape_html(
+			(frappe.session && frappe.session.user_fullname) || ""
+		);
 		window.__rdpPrintFooter = {
 			report: "Advance Tax TDS Details",
 			html:
 				// hide the print template's built-in "#" column (we have our own क्र.सं.)
 				"<style>.print-format table th:first-child,.print-format table td:first-child{display:none !important;}</style>" +
-				'<div style="margin-top:55px;display:flex;justify-content:space-between;padding:0 30px;">' +
-				'<div style="border-top:1px solid #000;padding-top:4px;min-width:150px;">Prepared By:</div>' +
-				'<div style="border-top:1px solid #000;padding-top:4px;min-width:150px;">Checked By:</div>' +
-				'<div style="border-top:1px solid #000;padding-top:4px;min-width:150px;">Verified By:</div>' +
+				'<div style="margin-top:55px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 30px;">' +
+				'<div style="min-width:150px;">' +
+				'<div style="margin-bottom:3px;">' + preparedByName + "</div>" +
+				'<div style="border-top:1px solid #000;padding-top:4px;">Prepared By</div>' +
+				"</div>" +
+				'<div style="min-width:150px;border-top:1px solid #000;padding-top:4px;">Checked By</div>' +
+				'<div style="min-width:150px;border-top:1px solid #000;padding-top:4px;">Verified By</div>' +
 				"</div>",
 		};
 	},
