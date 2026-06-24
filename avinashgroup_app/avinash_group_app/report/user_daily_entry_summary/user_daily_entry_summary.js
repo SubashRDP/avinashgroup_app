@@ -2,6 +2,11 @@
 // For license information, please see license.txt
 
 frappe.query_reports["User Daily Entry Summary"] = {
+	// Always run fresh — never serve a previously generated/cached (prepared) report.
+	onload: function (report) {
+		report.ignore_prepared_report = true;
+	},
+
 	filters: [
 		{
 			fieldname: "user",
