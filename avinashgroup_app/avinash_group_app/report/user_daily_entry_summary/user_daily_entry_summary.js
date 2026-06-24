@@ -68,8 +68,12 @@ frappe.query_reports["User Daily Entry Summary"] = {
 				};
 			}
 
+			// Scalar equality values (owner / modified_by) must go in raw — JSON
+			// stringifying them adds literal quotes (owner="x"), which the list
+			// view treats as part of the value and matches nothing. Only the
+			// operator filters (["between", ...]) need JSON encoding.
 			const params = Object.entries(filters)
-				.map(([k, v]) => `${k}=${encodeURIComponent(JSON.stringify(v))}`)
+				.map(([k, v]) => `${k}=${encodeURIComponent(Array.isArray(v) ? JSON.stringify(v) : v)}`)
 				.join("&");
 			const href = `/app/${slug}/view/list?${params}`;
 			return `<a href="${href}">${value}</a>`;
