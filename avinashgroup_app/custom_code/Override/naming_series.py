@@ -817,6 +817,41 @@ def set_custom_name_field(doc):
     doc.custom_name = f"{base_custom_name}{amendment_suffix}"
 
 
+def validate_document_no(doc):
+    """
+    Document No. (custom_document_no) must be a whole number greater than zero
+    — no decimals, no letters, no negatives. The letter part of a voucher
+    number always lives in custom_document_word, never here, so the number
+    itself is a plain positive integer for every doctype that carries the field
+    (Payment Entry, Journal Entry, Purchase Invoice, Purchase Receipt, and any
+    future doctype that adds custom_document_no).
+
+    Empty is allowed on purpose: auto-numbered types fill it with
+    "highest + 1" via set_auto_document_no(), so only a *non-empty* value is
+    checked here. Companies/doctypes that skip custom_name — e.g. Grihalaxmi
+    Metal Industries, where set_custom_name_field() blanks it — are exempt.
+    """
+    if not getattr(doc, "custom_name", ""):
+        return
+
+    if not hasattr(doc, "custom_document_no"):
+        return
+
+    raw = getattr(doc, "custom_document_no", None)
+    s = "" if raw is None else str(raw).strip()
+
+    # Empty / 0 == "not entered" → left to the highest-number+1 auto-assign.
+    if s in ("", "0"):
+        return
+
+    if not re.fullmatch(r"\d+", s) or int(s) <= 0:
+        frappe.throw(
+            f"Document No. must be a whole number greater than zero "
+            f"(no decimals or letters). Got: {raw}",
+            title="Invalid Document Number",
+        )
+
+
 def validate_custom_name_unique(doc):
     """
     Guard against duplicate custom_name / custom_document_no.
@@ -1012,6 +1047,7 @@ def handle_validate(doc, method=None):
     if doc.is_new():
         set_auto_document_no(doc)
     set_custom_name_field(doc)
+    validate_document_no(doc)
     validate_custom_name_unique(doc)
     set_custom_branch_name(doc)
 
@@ -1024,6 +1060,7 @@ def handle_before_save(doc, method=None):
     if doc.is_new():
         set_auto_document_no(doc)
     set_custom_name_field(doc)
+    validate_document_no(doc)
     validate_custom_name_unique(doc)
     set_custom_branch_name(doc)
 
