@@ -7,20 +7,23 @@
 Only the document types configured in **User Daily Entry Summary Settings** are
 scanned — this keeps the report fast instead of looping every audited doctype.
 
-  * "Created" -> each tracked doctype, counted by custom_created_by + creation date.
-  * "Modified" -> Frappe's Version table (owner = the user who saved); distinct
-                  docnames per ref_doctype, so a doc with child-row edits counts once.
+Counting reads each doctype's own table using standard, indexed timestamp columns
+(no `tabVersion` scan):
 
-Child-table rows are never counted — both sources are inherently parent-level.
-Only doctypes the *running* user can read are surfaced.
+  * "Created"  -> owner = user AND creation within the day.
+  * "Modified" -> modified_by = user AND modified within the day, excluding rows
+                  that were only inserted (modified == creation) so a freshly
+                  created document is not also counted as modified.
+
+Both sources are parent-level, so child-table rows are never counted. Only
+doctypes the *running* user can read are surfaced. The `creation` index added by
+`add_creation_index_daily_entry` keeps the Created lookup fast; `modified` is
+already indexed by Frappe.
 """
-
-import json
 
 import frappe
 from frappe import _
 
-CREATED_BY_FIELD = "custom_created_by"
 SETTINGS_DOCTYPE = "User Daily Entry Summary Settings"
 
 
@@ -57,22 +60,14 @@ def execute(filters=None):
 
 	readable = [dt for dt in doctypes if frappe.db.exists("DocType", dt) and can_read(dt)]
 
-	created = (
-		_created_counts(filters.user, from_dt, to_dt, readable)
-		if action in ("Both", "Created")
-		else {}
-	)
-	modified = (
-		_modified_counts(filters.user, from_dt, to_dt, readable)
-		if action in ("Both", "Modified")
-		else {}
-	)
+	want_created = action in ("Both", "Created")
+	want_modified = action in ("Both", "Modified")
+	created, modified = _entry_counts(filters.user, from_dt, to_dt, readable, want_created, want_modified)
 
 	rows = []
 	for dt in sorted(set(created) | set(modified)):
 		c = created.get(dt, 0)
-		mod_names = modified.get(dt, [])
-		m = len(mod_names)
+		m = modified.get(dt, 0)
 		if not c and not m:
 			continue
 		rows.append(
@@ -81,9 +76,6 @@ def execute(filters=None):
 				"created": c,
 				"modified": m,
 				"total": c + m,
-				# Carried for the JS formatter so the Modified cell can link to the
-				# exact documents (Version rows have no doctype field to filter on).
-				"modified_names": json.dumps(mod_names),
 			}
 		)
 
@@ -117,60 +109,47 @@ def _scope_doctypes(document_type, tracked):
 	return [d for d in tracked if d in selected]
 
 
-def _created_counts(user, from_dt, to_dt, doctypes):
-	"""{doctype: number of parent docs created by `user` on the day}."""
-	counts = {}
-	for dt in doctypes:
-		# Doctype may not (yet) carry the audit field — skip cleanly.
-		if not frappe.get_meta(dt).has_field(CREATED_BY_FIELD):
-			continue
-		try:
-			n = frappe.db.count(
-				dt,
-				{
-					CREATED_BY_FIELD: user,
-					"creation": ["between", [from_dt, to_dt]],
-				},
-			)
-		except Exception:
-			# Defensive: any doctype-specific query issue shouldn't break the report.
-			continue
-		if n:
-			counts[dt] = n
-	return counts
+def _entry_counts(user, from_dt, to_dt, doctypes, want_created, want_modified):
+	"""Per-doctype counts read straight from each doctype's own table.
 
-
-def _modified_counts(user, from_dt, to_dt, doctypes):
-	"""{doctype: [distinct parent docnames `user` modified on the day]}.
-
-	One grouped query over the Version table; GROUP BY (ref_doctype, docname) so
-	multiple edits to the same document (or several child-row changes) yield the
-	document once. The names let the report link the count to those exact docs.
+	One indexed range scan per metric per doctype:
+	  * Created  uses the `creation` index (added by the daily-entry patch).
+	  * Modified uses Frappe's built-in `modified` index, and excludes rows where
+	    `modified == creation` (a pure insert) so a same-day creation is not also
+	    counted as a modification.
 	"""
-	if not doctypes:
-		return {}
+	created, modified = {}, {}
+	params = {"user": user, "from_dt": from_dt, "to_dt": to_dt}
 
-	rows = frappe.db.sql(
-		"""
-		SELECT ref_doctype AS dt, docname
-		FROM `tabVersion`
-		WHERE owner = %(user)s
-		  AND creation BETWEEN %(from_dt)s AND %(to_dt)s
-		  AND ref_doctype IN %(doctypes)s
-		GROUP BY ref_doctype, docname
-		""",
-		{
-			"user": user,
-			"from_dt": from_dt,
-			"to_dt": to_dt,
-			"doctypes": tuple(doctypes),
-		},
-		as_dict=True,
-	)
-	result = {}
-	for r in rows:
-		result.setdefault(r.dt, []).append(r.docname)
-	return result
+	for dt in doctypes:
+		table = f"tab{dt}"
+
+		if want_created:
+			c = frappe.db.sql(
+				f"""
+				SELECT COUNT(*) FROM `{table}`
+				WHERE owner = %(user)s
+				  AND creation BETWEEN %(from_dt)s AND %(to_dt)s
+				""",
+				params,
+			)[0][0]
+			if c:
+				created[dt] = c
+
+		if want_modified:
+			m = frappe.db.sql(
+				f"""
+				SELECT COUNT(*) FROM `{table}`
+				WHERE modified_by = %(user)s
+				  AND modified BETWEEN %(from_dt)s AND %(to_dt)s
+				  AND modified > creation
+				""",
+				params,
+			)[0][0]
+			if m:
+				modified[dt] = m
+
+	return created, modified
 
 
 def _columns(action):

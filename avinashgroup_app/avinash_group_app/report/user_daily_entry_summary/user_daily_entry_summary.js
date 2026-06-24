@@ -44,32 +44,28 @@ frappe.query_reports["User Daily Entry Summary"] = {
 		},
 	],
 
-	// Turn the Created / Modified counts into links that open the exact documents
-	// behind the number in the target doctype's list view.
+	// Turn the Created / Modified counts into links that open the documents behind
+	// the number in the target doctype's list view, using the same standard
+	// owner/creation and modified_by/modified columns the report counts on.
 	formatter: function (value, row, column, data, default_formatter) {
 		const fieldname = column.fieldname;
 		if ((fieldname === "created" || fieldname === "modified") && data && data.document_type && value) {
 			const slug = frappe.router.slug(data.document_type);
+			const user = frappe.query_report.get_filter_value("user");
+			const date = frappe.query_report.get_filter_value("date");
+			const range = [date + " 00:00:00", date + " 23:59:59"];
 			let filters;
 
 			if (fieldname === "created") {
-				const user = frappe.query_report.get_filter_value("user");
-				const date = frappe.query_report.get_filter_value("date");
 				filters = {
-					custom_created_by: user,
-					creation: ["between", [date + " 00:00:00", date + " 23:59:59"]],
+					owner: user,
+					creation: ["between", range],
 				};
 			} else {
-				let names = [];
-				try {
-					names = JSON.parse(data.modified_names || "[]");
-				} catch (e) {
-					names = [];
-				}
-				if (!names.length) {
-					return default_formatter(value, row, column, data);
-				}
-				filters = { name: ["in", names] };
+				filters = {
+					modified_by: user,
+					modified: ["between", range],
+				};
 			}
 
 			const params = Object.entries(filters)
