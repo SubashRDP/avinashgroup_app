@@ -226,21 +226,27 @@ def build_rows(filters, include_return, include_agent=True):
 			sales = [r for r in crows if not r.is_return]
 			returns = [r for r in crows if r.is_return]
 
+			# Customer Sales — the Invoice sub-section shows only when there are sales,
+			# but the Customer Sales total row always appears.
+			cust_sales = _zero()
 			if sales:
 				data.append({"miti": _("Invoice"), "is_section": 1})
-				cust_sales = _zero()
 				for r in sales:
 					data.append(_invoice_row(r))
 					_add(cust_sales, r)
-				data.append(_summary_row(_("Customer Sales"), cust_sales, kind="cust"))
-				_add(prod_sales, cust_sales)
+			data.append(_summary_row(_("Customer Sales"), cust_sales, kind="cust"))
+			_add(prod_sales, cust_sales)
 
-			if include_return and returns:
-				data.append({"miti": _("Return"), "is_section": 1})
+			# Customer Returns — only when Include Return is on. The Return sub-section +
+			# rows show only when there are returns, but the Customer Returns total always
+			# appears (0.00 when the customer has no returns), matching the report format.
+			if include_return:
 				cust_ret = _zero()
-				for r in returns:
-					data.append(_invoice_row(r))
-					_add(cust_ret, r)
+				if returns:
+					data.append({"miti": _("Return"), "is_section": 1})
+					for r in returns:
+						data.append(_invoice_row(r))
+						_add(cust_ret, r)
 				data.append(_summary_row(_("Customer Returns"), cust_ret, kind="cust"))
 				_add(prod_returns, cust_ret)
 
