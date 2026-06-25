@@ -1,6 +1,9 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
+// docstatus value behind each status column, for the drill-down links.
+const STATUS_DOCSTATUS = { draft: 0, submitted: 1, cancelled: 2 };
+
 frappe.query_reports["User Daily Entry Summary"] = {
 	// Always run fresh — never serve a previously generated/cached (prepared) report.
 	onload: function (report) {
@@ -23,13 +26,6 @@ frappe.query_reports["User Daily Entry Summary"] = {
 			reqd: 1,
 		},
 		{
-			fieldname: "action",
-			label: __("Action"),
-			fieldtype: "Select",
-			options: "Both\nCreated\nModified",
-			default: "Both",
-		},
-		{
 			fieldname: "document_type",
 			label: __("Document Type"),
 			fieldtype: "MultiSelectList",
@@ -44,31 +40,22 @@ frappe.query_reports["User Daily Entry Summary"] = {
 		},
 	],
 
-	// Turn the Created / Modified counts into links that open the documents behind
-	// the number in the target doctype's list view, using the same standard
-	// owner/creation and modified_by/modified columns the report counts on.
+	// Turn each status count into a link that opens the documents behind it: docs
+	// the selected user created on the day, filtered to that docstatus.
 	formatter: function (value, row, column, data, default_formatter) {
 		const fieldname = column.fieldname;
-		if ((fieldname === "created" || fieldname === "modified") && data && data.document_type && value) {
+		if (fieldname in STATUS_DOCSTATUS && data && data.document_type && value) {
 			const slug = frappe.router.slug(data.document_type);
 			const user = frappe.query_report.get_filter_value("user");
 			const date = frappe.query_report.get_filter_value("date");
 			const range = [date + " 00:00:00", date + " 23:59:59"];
-			let filters;
+			const filters = {
+				owner: user,
+				creation: ["between", range],
+				docstatus: STATUS_DOCSTATUS[fieldname],
+			};
 
-			if (fieldname === "created") {
-				filters = {
-					owner: user,
-					creation: ["between", range],
-				};
-			} else {
-				filters = {
-					modified_by: user,
-					modified: ["between", range],
-				};
-			}
-
-			// Scalar equality values (owner / modified_by) must go in raw — JSON
+			// Scalar equality values (owner / docstatus) must go in raw — JSON
 			// stringifying them adds literal quotes (owner="x"), which the list
 			// view treats as part of the value and matches nothing. Only the
 			// operator filters (["between", ...]) need JSON encoding.

@@ -1,28 +1,21 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
-"""User Daily Entry Summary — for a chosen user and a single day, count how many
-*parent* documents that user created and/or modified, broken down by document type.
+"""User Daily Entry Summary — for a chosen user and a single day, count the
+documents that user created, broken down by document type and current status:
+Draft / Submitted / Cancelled.
 
 Only the document types configured in **User Daily Entry Summary Settings** are
-scanned — this keeps the report fast instead of looping every audited doctype.
-
-Counting reads each doctype's own table using standard, indexed timestamp columns
-(no `tabVersion` scan):
-
-  * "Created"  -> owner = user AND creation within the day.
-  * "Modified" -> modified_by = user AND modified within the day, excluding rows
-                  that were only inserted (modified == creation) so a freshly
-                  created document is not also counted as modified.
-
-Both sources are parent-level, so child-table rows are never counted. Only
-doctypes the *running* user can read are surfaced. The `creation` index added by
-`add_creation_index_daily_entry` keeps the Created lookup fast; `modified` is
-already indexed by Frappe.
+scanned. Counting reads each doctype's own table with one indexed query per
+doctype — owner = user AND creation within the day, aggregated by docstatus.
+The composite (owner, creation) index added by `add_creation_index_daily_entry`
+keeps it fast. Non-submittable doctypes only ever have a Draft (docstatus 0)
+state, so their counts land in the Draft column.
 """
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 SETTINGS_DOCTYPE = "User Daily Entry Summary Settings"
 
@@ -35,7 +28,6 @@ def execute(filters=None):
 	if not filters.get("date"):
 		frappe.throw(_("Please select a Date."))
 
-	action = filters.get("action") or "Both"
 	from_dt = f"{filters.date} 00:00:00"
 	to_dt = f"{filters.date} 23:59:59"
 
@@ -46,7 +38,7 @@ def execute(filters=None):
 				frappe.utils.get_link_to_form("User Daily Entry Summary Settings", SETTINGS_DOCTYPE)
 			)
 		)
-		return _columns(action), []
+		return _columns(), []
 
 	doctypes = _scope_doctypes(filters.get("document_type"), tracked)
 
@@ -60,29 +52,26 @@ def execute(filters=None):
 
 	readable = [dt for dt in doctypes if frappe.db.exists("DocType", dt) and can_read(dt)]
 
-	want_created = action in ("Both", "Created")
-	want_modified = action in ("Both", "Modified")
-	created, modified = _entry_counts(filters.user, from_dt, to_dt, readable, want_created, want_modified)
-
 	rows = []
-	for dt in sorted(set(created) | set(modified)):
-		c = created.get(dt, 0)
-		m = modified.get(dt, 0)
-		if not c and not m:
+	for dt, counts in _status_counts(filters.user, from_dt, to_dt, readable).items():
+		draft, submitted, cancelled = counts
+		total = draft + submitted + cancelled
+		if not total:
 			continue
 		rows.append(
 			{
 				"document_type": dt,
-				"created": c,
-				"modified": m,
-				"total": c + m,
+				"draft": draft,
+				"submitted": submitted,
+				"cancelled": cancelled,
+				"total": total,
 			}
 		)
 
 	# Busiest doctype first, then alphabetical for stable ordering.
 	rows.sort(key=lambda r: (-r["total"], r["document_type"]))
 
-	return _columns(action), rows
+	return _columns(), rows
 
 
 def _tracked_doctypes():
@@ -109,66 +98,49 @@ def _scope_doctypes(document_type, tracked):
 	return [d for d in tracked if d in selected]
 
 
-def _entry_counts(user, from_dt, to_dt, doctypes, want_created, want_modified):
-	"""Per-doctype counts read straight from each doctype's own table.
+def _status_counts(user, from_dt, to_dt, doctypes):
+	"""{doctype: (draft, submitted, cancelled)} for docs the user created in the day.
 
-	One indexed range scan per metric per doctype:
-	  * Created  uses the `creation` index (added by the daily-entry patch).
-	  * Modified uses Frappe's built-in `modified` index, and excludes rows where
-	    `modified == creation` (a pure insert) so a same-day creation is not also
-	    counted as a modification.
+	One conditional-aggregate query per doctype, riding the (owner, creation)
+	index for the date range and counting each docstatus in a single pass.
 	"""
-	created, modified = {}, {}
+	result = {}
 	params = {"user": user, "from_dt": from_dt, "to_dt": to_dt}
 
 	for dt in doctypes:
 		table = f"tab{dt}"
+		row = frappe.db.sql(
+			f"""
+			SELECT
+				SUM(docstatus = 0) AS draft,
+				SUM(docstatus = 1) AS submitted,
+				SUM(docstatus = 2) AS cancelled
+			FROM `{table}`
+			WHERE owner = %(user)s
+			  AND creation BETWEEN %(from_dt)s AND %(to_dt)s
+			""",
+			params,
+			as_dict=True,
+		)[0]
+		result[dt] = (cint(row.draft), cint(row.submitted), cint(row.cancelled))
 
-		if want_created:
-			c = frappe.db.sql(
-				f"""
-				SELECT COUNT(*) FROM `{table}`
-				WHERE owner = %(user)s
-				  AND creation BETWEEN %(from_dt)s AND %(to_dt)s
-				""",
-				params,
-			)[0][0]
-			if c:
-				created[dt] = c
-
-		if want_modified:
-			m = frappe.db.sql(
-				f"""
-				SELECT COUNT(*) FROM `{table}`
-				WHERE modified_by = %(user)s
-				  AND modified BETWEEN %(from_dt)s AND %(to_dt)s
-				  AND modified > creation
-				""",
-				params,
-			)[0][0]
-			if m:
-				modified[dt] = m
-
-	return created, modified
+	return result
 
 
-def _columns(action):
-	doc_col = {
-		"label": _("Document Type"),
-		"fieldname": "document_type",
-		"fieldtype": "Link",
-		"options": "DocType",
-		"width": 240,
-	}
-	created_col = {"label": _("Created"), "fieldname": "created", "fieldtype": "Int", "width": 120}
-	modified_col = {"label": _("Modified"), "fieldname": "modified", "fieldtype": "Int", "width": 120}
-	total_col = {"label": _("Total"), "fieldname": "total", "fieldtype": "Int", "width": 120}
-
-	if action == "Created":
-		return [doc_col, created_col]
-	if action == "Modified":
-		return [doc_col, modified_col]
-	return [doc_col, created_col, modified_col, total_col]
+def _columns():
+	return [
+		{
+			"label": _("Document Type"),
+			"fieldname": "document_type",
+			"fieldtype": "Link",
+			"options": "DocType",
+			"width": 240,
+		},
+		{"label": _("Draft"), "fieldname": "draft", "fieldtype": "Int", "width": 110},
+		{"label": _("Submitted"), "fieldname": "submitted", "fieldtype": "Int", "width": 110},
+		{"label": _("Cancelled"), "fieldname": "cancelled", "fieldtype": "Int", "width": 110},
+		{"label": _("Total"), "fieldname": "total", "fieldtype": "Int", "width": 110},
+	]
 
 
 @frappe.whitelist()
