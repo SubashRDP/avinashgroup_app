@@ -89,9 +89,6 @@ frappe.query_reports["Sales Analysis Product wise Invoice Details"] = {
 		}
 	},
 
-	// One continuous bold line above the grand-total block. Drawn as a top border on
-	// every CELL of that row (cells are adjacent → the borders join into one full-width
-	// line with no gaps), not on the cell content (which boxed the text before).
 	applyGrandDivider: function (dt) {
 		const container = (dt && dt.bodyScrollable) || document;
 		const data = frappe.query_report.data || [];
@@ -168,8 +165,6 @@ frappe.query_reports["Sales Analysis Product wise Invoice Details"] = {
 
 	formatter: function (value, row, column, data, default_formatter) {
 		// Title/header rows (product, customer, section) carry no amounts — leave the
-		// numeric columns blank instead of rendering 0.000 / Rs 0.00. Real amount rows
-		// (invoices, subtotals) still show 0 when the value is genuinely zero.
 		const numeric = ["qty", "value", "vat", "total_incl_vat"];
 		if (data && (data.is_product_header || data.is_customer_header || data.is_section || data.is_agent_group)) {
 			if (numeric.includes(column.fieldname)) {

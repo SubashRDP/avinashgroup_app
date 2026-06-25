@@ -1,0 +1,315 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Product Wise Invoice Details{% endblock %}
+
+{% block script %}
+<link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
+<script src="/assets/rdp_common_app/js/nepali.datepicker.v5.0.4.min.js"></script>
+<script>
+window.pwid_ctx = {
+	company_list: {{ company_list | tojson }},
+	customer_list: {{ customer_list | tojson }},
+	default_company: {{ default_company | tojson }},
+	from_date: {{ from_date | tojson }},
+	to_date: {{ to_date | tojson }},
+};
+
+$(document).ready(function () {
+	new ProductWiseInvoiceDetails().init();
+});
+
+class ProductWiseInvoiceDetails {
+	init() {
+		this.ctx = window.pwid_ctx;
+		$("#pw-from-date").val(this.ctx.from_date);
+		$("#pw-to-date").val(this.ctx.to_date);
+		this.bind_company();
+		this.bind_customer_ms();
+		this.filter_customers_by_company();
+		this.setup_bs_dates();
+		this.bind_dates();
+		$("#pw-include-return").on("change", () => this.schedule_reload());
+		this.load();
+	}
+
+	bind_company() {
+		$("#pw-company").on("change", () => { this.filter_customers_by_company(); this.schedule_reload(); });
+	}
+	selected_company() { return $("#pw-company").val() || ""; }
+	include_return() { return $("#pw-include-return").is(":checked") ? 1 : 0; }
+
+	// Customer — collapsible multi-select (button + panel), scoped to the chosen company.
+	bind_customer_ms() {
+		var me = this;
+		const $btn = $("#pw-customer-btn");
+		const $panel = $("#pw-customer-panel");
+		$btn.on("click", function (e) { e.stopPropagation(); $panel.toggle(); });
+		$panel.on("click", function (e) { e.stopPropagation(); });
+		$(document).on("click", function () { $panel.hide(); });
+		$panel.on("change", ".pw-customer-cb", function () { me.update_customer_label(); me.schedule_reload(); });
+	}
+	filter_customers_by_company() {
+		const company = this.selected_company();
+		$(".pw-customer-cb").each(function () {
+			const match = ($(this).data("company") || "") === company;
+			$(this).closest("label").toggle(match);
+			if (!match) this.checked = false;   // only company-matching customers stay selected
+		});
+		this.update_customer_label();
+	}
+	checked_customers() { return $(".pw-customer-cb:checked").map(function () { return this.value; }).get(); }
+	update_customer_label() {
+		const $visible = $(".pw-customer-cb").filter(function () { return $(this).closest("label").is(":visible"); });
+		const sel = this.checked_customers();
+		const $btn = $("#pw-customer-btn");
+		// No selectable list (e.g. non-portal user) OR none/all ticked → "All customers"
+		// (the server treats an empty selection as "all" customers in scope, like the desk report).
+		if (!$visible.length || sel.length === 0 || sel.length === $visible.length) $btn.text("All customers");
+		else if (sel.length === 1) $btn.text($('.pw-customer-cb[value="' + sel[0] + '"]').closest("label").text().trim());
+		else $btn.text(sel.length + " customers selected");
+	}
+
+	// ── Dual AD + BS date filter (AD is the source of truth) ──────────────
+	nepali_ready() {
+		const el = document.getElementById("pw-from-miti");
+		return typeof window.NepaliFunctions !== "undefined"
+			&& el && typeof el.NepaliDatePicker === "function";
+	}
+	setup_bs_dates() {
+		var me = this;
+		if (!this.nepali_ready()) { $(".pw-bs-col").hide(); return; }
+		this._bs_ready = false;
+		["from", "to"].forEach(function (which) {
+			document.getElementById(`pw-${which}-miti`).NepaliDatePicker({
+				dateFormat: "YYYY-MM-DD",
+				closeOnDateSelect: true,
+				onSelect: function () { if (me._bs_ready) me.bs_to_ad(which, $(`#pw-${which}-miti`).val()); }
+			});
+		});
+		setTimeout(function () {
+			me.ad_to_bs("from", $("#pw-from-date").val());
+			me.ad_to_bs("to", $("#pw-to-date").val());
+			me._bs_ready = true;
+		}, 300);
+	}
+	ad_to_bs(which, adStr) {
+		if (!adStr || !this.nepali_ready() || this._syncing) return;
+		try { this._syncing = true; $(`#pw-${which}-miti`).val(window.NepaliFunctions.AD2BS(adStr, "YYYY-MM-DD")); }
+		catch (e) { console.error("AD->BS failed:", e); }
+		finally { this._syncing = false; }
+	}
+	bs_to_ad(which, bsStr) {
+		if (!bsStr || !this.nepali_ready() || this._syncing) return;
+		try { this._syncing = true; $(`#pw-${which}-date`).val(window.NepaliFunctions.BS2AD(bsStr, "YYYY-MM-DD")); }
+		catch (e) { console.error("BS->AD failed:", e); }
+		finally { this._syncing = false; }
+		this.schedule_reload();
+	}
+	bind_dates() {
+		var me = this;
+		$("#pw-from-date").on("change", function () { me.ad_to_bs("from", this.value); me.schedule_reload(); });
+		$("#pw-to-date").on("change", function () { me.ad_to_bs("to", this.value); me.schedule_reload(); });
+	}
+
+	// ── Load + render ─────────────────────────────────────────────────────
+	schedule_reload() {
+		clearTimeout(this._reload_timer);
+		this._reload_timer = setTimeout(() => this.load(), 350);
+	}
+	load() {
+		var me = this;
+		const company = this.selected_company();
+		const from_date = $("#pw-from-date").val();
+		const to_date = $("#pw-to-date").val();
+		if (!company || !from_date || !to_date) {
+			if (!company) $("#pw-result").html('<p class="text-muted">Select a company.</p>');
+			return;
+		}
+
+		$("#pw-loading").show();
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.product_wise_invoice_details.get_data",
+			args: {
+				company: company,
+				// checked customers, or "[]" → server scopes to the user's own customers
+				customers: JSON.stringify(me.checked_customers()),
+				from_date: from_date,
+				to_date: to_date,
+				include_return: this.include_return(),
+			},
+			callback: function (r) {
+				$("#pw-loading").hide();
+				if (!r || !r.message) { $("#pw-result").html('<p class="text-danger">No response from server.</p>'); return; }
+				try { me.render(r.message); }
+				catch (e) { console.error(e); $("#pw-result").html('<p class="text-danger">Render error: ' + (e && e.message) + '</p>'); }
+			},
+			error: function (xhr) {
+				$("#pw-loading").hide();
+				$("#pw-result").html('<p class="text-danger">Call failed (status ' + (xhr && xhr.status) + ').</p>');
+			}
+		});
+	}
+
+	render(res) {
+		const $wrap = $("#pw-result").empty();
+		const rows = res.rows || [];
+		if (!rows.length) { $wrap.append('<p class="text-muted">No invoices found for the selected filters.</p>'); return; }
+
+		// Header
+		const $hdr = $('<div class="pw-head">').appendTo($wrap);
+		$('<div class="pw-company">').text(res.company).appendTo($hdr);
+		$('<div class="pw-meta">')
+			.append($('<span>').append(document.createTextNode("From ")).append($('<b>').text(res.from_date_disp)).append(document.createTextNode("  To ")).append($('<b>').text(res.to_date_disp)))
+			.append($('<span>').text("Amount in Nepalese Rupee ( NPR )"))
+			.appendTo($hdr);
+
+		const $t = $('<table class="pw-table">').appendTo($wrap);
+		$t.append(
+			'<thead><tr>' +
+			'<th class="l">Product / Customer Code</th><th>Invoice Miti</th><th>Invoice Number</th>' +
+			'<th class="r">Qty</th><th class="r">Value</th><th class="r">VAT 13%</th><th class="r">Total Incl. VAT</th>' +
+			'</tr></thead>'
+		);
+		const $b = $('<tbody>').appendTo($t);
+
+		rows.forEach(function (row) {
+			let $tr = $('<tr>');
+			if (row.type === "product") {
+				$tr.addClass("pw-product")
+				   .append($('<td>').text(row.code))
+				   .append($('<td colspan="2">').text(row.name))
+				   .append($('<td>')).append($('<td>')).append($('<td>')).append($('<td>'));
+			} else if (row.type === "customer") {
+				$tr.addClass("pw-customer")
+				   .append($('<td>').text(row.code))
+				   .append($('<td colspan="2">').text(row.name))
+				   .append($('<td>')).append($('<td>')).append($('<td>')).append($('<td>'));
+			} else if (row.type === "section") {
+				// Label sits in the Invoice Number column, heading the invoice list.
+				$tr.addClass("pw-section")
+				   .append($('<td class="l">').text(""))
+				   .append($('<td>').text(""))
+				   .append($('<td>').text(row.text))
+				   .append($('<td>').text("")).append($('<td>').text(""))
+				   .append($('<td>').text("")).append($('<td>').text(""));
+			} else if (row.type === "invoice") {
+				$tr.append($('<td class="l">').text(""))
+				   .append($('<td>').text(row.miti))
+				   .append($('<td>').text(row.invoice_no))
+				   .append($('<td class="r">').text(row.qty))
+				   .append($('<td class="r">').text(row.value))
+				   .append($('<td class="r">').text(row.vat))
+				   .append($('<td class="r">').text(row.total));
+			} else if (row.type === "summary") {
+				$tr.addClass("pw-summary pw-" + row.kind);
+				if (row.bold) $tr.addClass("pw-bold");
+				$tr.append($('<td class="l">').text(""))
+				   .append($('<td>').text(""))
+				   .append($('<td>').text(row.label))
+				   .append($('<td class="r">').text(row.qty))
+				   .append($('<td class="r">').text(row.value))
+				   .append($('<td class="r">').text(row.vat))
+				   .append($('<td class="r">').text(row.total));
+			} else { return; }
+			$b.append($tr);
+		});
+	}
+}
+</script>
+
+<style>
+	.pw-filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
+	.pw-filters .pw-field { display: flex; flex-direction: column; }
+	.pw-filters label { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #000; }
+	.pw-filters input:not([type="checkbox"]), .pw-filters select { min-width: 200px; color: #000; }
+	.pw-inline { flex-direction: row !important; align-items: center; gap: 6px; }
+	#pw-include-return {
+		-webkit-appearance: checkbox; -moz-appearance: checkbox; appearance: auto;
+		width: 16px; height: 16px; min-width: 16px; margin: 0; cursor: pointer;
+		accent-color: #000;   /* checked fill = black instead of browser blue */
+	}
+	.pw-checkbox-group {
+		display: flex; flex-direction: column; gap: 2px; min-width: 240px;
+		max-height: 120px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px;
+		padding: 6px 8px; background: #fff;
+	}
+	.pw-chk { font-weight: 400; font-size: 12px; margin: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #000; }
+	.pw-chk input { accent-color: #000; width: 14px; height: 14px; }
+	/* Customer collapsible multi-select (button + dropdown panel) */
+	.pw-ms { position: relative; min-width: 240px; }
+	.pw-ms-btn { text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000; width: 100%; }
+	.pw-ms-panel { display: none; position: absolute; z-index: 1000; background: #fff; border: 1px solid #ddd;
+		border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); min-width: 100%;
+		max-height: 260px; overflow-y: auto; padding: 4px 0; margin-top: 2px; }
+	.pw-ms-opt { display: block; padding: 5px 12px; margin: 0; cursor: pointer; font-weight: 400; white-space: nowrap; color: #000; }
+	.pw-ms-opt:hover { background: #f0f0f0; }
+	.pw-ms-opt input { margin-right: 8px; accent-color: #000; }
+	.pw-head { margin: 6px 0 10px; }
+	.pw-company { font-weight: 700; font-size: 15px; }
+	.pw-meta { display: flex; justify-content: space-between; font-size: 12px; color: #000; margin-top: 2px; }
+	.pw-table { width: 100%; border-collapse: collapse; font-size: 12px; color: #000; }
+	.pw-table td { color: #000; }
+	.pw-table th { background: #6c757d; color: #fff; padding: 6px 8px; text-align: left; }
+	.pw-table td { padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+	.pw-table th.r, .pw-table td.r { text-align: right; }
+	.pw-table th.l, .pw-table td.l { width: 150px; white-space: nowrap; }
+	/* Gap above each product block (white border) so products don't blend together. */
+	.pw-product td { background: #e2e6ea; font-weight: 700; border-top: 12px solid #fff; padding-top: 7px; padding-bottom: 7px; }
+	/* Customer header sits just under its product — lighter, plain white, so the two read as separate rows. */
+	.pw-customer td { background: #fff; font-weight: 600; border-bottom: 1px solid #ddd; }
+	.pw-section td { color: #000; font-weight: 600; }
+	.pw-summary td { font-weight: 600; }
+	.pw-product.pw-bold td, .pw-summary.pw-bold td { font-weight: 700; }
+	.pw-grand td { border-top: 1px solid #999; }
+	#pw-loading { display: none; color: #888; font-size: 12px; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<h1>Product Wise Invoice Details</h1>
+
+<div class="pw-filters">
+	<div class="pw-field">
+		<label for="pw-company">Company *</label>
+		<select id="pw-company" class="form-control">
+			{% for c in company_list %}
+			<option value="{{ c }}" {% if c == default_company %}selected{% endif %}>{{ c }}</option>
+			{% endfor %}
+		</select>
+	</div>
+	<div class="pw-field">
+		<label>Customer</label>
+		<div class="pw-ms">
+			<button type="button" class="form-control pw-ms-btn" id="pw-customer-btn">All customers</button>
+			<div class="pw-ms-panel" id="pw-customer-panel">
+				{% for c in customer_list %}
+				<label class="pw-ms-opt"><input type="checkbox" class="pw-customer-cb" value="{{ c.name }}" data-company="{{ c.company }}" checked>{{ c.name }} — {{ c.customer_name }}</label>
+				{% endfor %}
+			</div>
+		</div>
+	</div>
+	<div class="pw-field">
+		<label for="pw-from-date">From Date (AD) *</label>
+		<input type="text" id="pw-from-date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+	</div>
+	<div class="pw-field pw-bs-col">
+		<label for="pw-from-miti">From Miti (BS)</label>
+		<input type="text" id="pw-from-miti" class="form-control" autocomplete="off">
+	</div>
+	<div class="pw-field">
+		<label for="pw-to-date">To Date (AD) *</label>
+		<input type="text" id="pw-to-date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+	</div>
+	<div class="pw-field pw-bs-col">
+		<label for="pw-to-miti">To Miti (BS)</label>
+		<input type="text" id="pw-to-miti" class="form-control" autocomplete="off">
+	</div>
+	<div class="pw-field pw-inline">
+		<input type="checkbox" id="pw-include-return" checked>
+		<label for="pw-include-return" style="margin-bottom:0;">Include Return</label>
+	</div>
+</div>
+
+<div id="pw-loading">Loading…</div>
+<div id="pw-result"></div>
+{% endblock %}
