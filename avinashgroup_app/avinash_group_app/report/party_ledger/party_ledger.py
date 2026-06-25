@@ -442,6 +442,24 @@ def get_data(filters):
 		)"""
 		params["exclude_jv_type"] = "Contract Form"
 
+	# Exclude GL lines posted to specific accounts (by account name pattern), when the
+	# caller passes `exclude_account_patterns`. Matching on account_name (not the full
+	# account id) makes it company-agnostic — each company's variant of the account is
+	# dropped. Applied to the shared conditions so opening + period rows drop them
+	# together (keeps the running balance consistent). The desk report never sets this;
+	# the customer_statement portal uses it to hide deposit/security accounts.
+	exclude_account_patterns = filters.get("exclude_account_patterns")
+	if exclude_account_patterns:
+		like_clauses = []
+		for i, pattern in enumerate(exclude_account_patterns):
+			key = f"exclude_acc_{i}"
+			like_clauses.append(f"acc.account_name LIKE %({key})s")
+			params[key] = pattern
+		conditions += (
+			" AND NOT EXISTS (SELECT 1 FROM `tabAccount` acc"
+			" WHERE acc.name = gle.account AND (" + " OR ".join(like_clauses) + "))"
+		)
+
 	# ── Opening balance ────────────────────────────────────────────────────────
 	# Match ERPNext General Ledger: opening = everything before the From Date PLUS any
 	# opening-balance entries (is_opening = 'Yes') regardless of their posting date.

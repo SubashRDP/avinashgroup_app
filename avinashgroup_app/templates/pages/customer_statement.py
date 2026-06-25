@@ -11,6 +11,15 @@ from avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger import 
 	_bal_str,
 )
 
+# Deposit / security accounts that must never appear on a customer-facing statement.
+# Matched against Account.account_name (LIKE patterns) so every company's variant is
+# excluded regardless of its number/abbr suffix.
+EXCLUDE_ACCOUNT_PATTERNS = [
+	"Deposit Customers Cylinders%",      # 313101 Deposit Customers Cylinders (I)
+	"Record of Deposit Cylinders%",      # 313102 Record of Deposit Cylinders (1013)
+	"%Security Deposit%Dealer%",         # 313201 Security Deposit from Dealers (live server)
+]
+
 
 def _get_portal_customers():
 	"""Customers linked to the logged-in user via the Portal User child table"""
@@ -243,6 +252,7 @@ def get_statement(company=None, customers=None, from_date=None, to_date=None):
 		"to_date": to_date,
 		"detailed_mapping": 0,
 		"show_remarks": 0,
+		"exclude_account_patterns": EXCLUDE_ACCOUNT_PATTERNS,
 	})
 	_columns, data = party_ledger_execute(filters)
 
@@ -312,6 +322,7 @@ def download_pdf(company=None, customers=None, from_date=None, to_date=None):
 		"to_date": to_date,
 		"detailed_mapping": 0,
 		"show_remarks": 0,
+		"exclude_account_patterns": EXCLUDE_ACCOUNT_PATTERNS,
 	})
 
 	# Always Portrait for a customer-facing statement; page numbers are rendered in the
