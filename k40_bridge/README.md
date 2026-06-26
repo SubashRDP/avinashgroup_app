@@ -1,6 +1,10 @@
 # K40 Bridge
 
-A Windows application that syncs attendance punches from one or more ZKTeco K40 devices to one or more ERPNext sites.
+A Windows application that syncs attendance punches to one or more ERPNext sites from:
+
+- **ZKTeco** devices (K40, K20, F18, MB360, eSSL…) — network poll over port 4370 (`type: zkteco`)
+- **Hikvision** access devices — ISAPI HTTP (`type: hikvision`)
+- **HTMS-86 / HAMS** software (HUNDURE/Chiyu HTA controllers) — reads punches straight from the HAMS Access `.mdb` files, no network device to poll (`type: htms`). See **[SETUP.md → Part B-HTMS](SETUP.md)**.
 
 > **For a full end-to-end setup walkthrough (ERPNext side + device side + bridge install),** see [SETUP.md](SETUP.md). This README is the reference for the bridge itself.
 

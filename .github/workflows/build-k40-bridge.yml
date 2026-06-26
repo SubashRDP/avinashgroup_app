@@ -21,6 +21,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          # 32-bit build so the HTMS DB reader can use the Jet OLEDB 4.0 provider
+          # that ships with every Windows (the same one HTMS-86 itself uses),
+          # without requiring the Access Database Engine redistributable.
+          architecture: 'x86'
 
       - name: Install dependencies
         run: |
@@ -34,6 +38,10 @@ jobs:
             --collect-all PIL `
             --hidden-import=pystray._win32 `
             --hidden-import=PIL._imaging `
+            --hidden-import=win32com `
+            --hidden-import=win32com.client `
+            --hidden-import=pythoncom `
+            --hidden-import=pywintypes `
             k40_bridge/k40_bridge.py
 
       - name: Build Installer (Inno Setup)

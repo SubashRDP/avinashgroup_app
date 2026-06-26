@@ -84,6 +84,74 @@ If ping fails, the bridge cannot reach the device — fix the LAN before continu
 
 ---
 
+## Part B-HTMS — HTMS-86 / HAMS sources (HUNDURE / Chiyu controllers)
+
+Some sites use **HTMS-86** (a.k.a. HAMS) access-control software driving HUNDURE
+HTA-series controllers (`HTA-640PE`, `HTA-860PEF`, …). These controllers **do not
+speak the ZK protocol**, so there's no device to poll on port 4370. Instead HTMS-86
+writes every punch into Microsoft Access databases, and the bridge reads those
+directly.
+
+```
+┌─────────────┐  writes  ┌──────────────┐   reads   ┌────────────┐  HTTPS  ┌─────────┐
+│ HUNDURE HTA │ ───────▶ │  HTMS-86     │ ◀──────── │ k40_bridge │ ──────▶ │ ERPNext │
+│ controllers │  punches │  HAMS_*.mdb  │  (ADO/Jet)│ (same host)│  punch  │ (site)  │
+└─────────────┘          └──────────────┘           └────────────┘         └─────────┘
+```
+
+**Run the bridge on the same Windows machine that runs HTMS-86** (or any machine
+that can see the HTMS-86 folder), so it can read the `.mdb` files locally.
+
+### How the data maps
+
+| HTMS-86 | → | ERPNext |
+|---|---|---|
+| `PubEvent.personID` (e.g. `0000000116`) | join via `Emp` table | — |
+| `Emp.Emp_no` (e.g. `124`) | **sent as user_id** | `Employee.attendance_device_id` |
+| `PubEvent.eventDate` + `eventTime` | combined | checkin time |
+
+So set each Employee's **Attendance Device ID** to their HTMS **Emp_no (work
+number)** — **exactly as stored, including any leading zeros** (HTMS stores
+`003`, `077`, `01`, etc.). Look it up in HTMS under the employee's profile, or in
+the `Emp` table.
+
+### Setup steps
+
+1. **ERPNext side:** do Part A as usual, but in **A.3** set `Attendance Device ID`
+   to the HTMS `Emp_no` (not a ZK user id). In **A.4** create a **Biometric
+   Device** record whose **Serial** is any stable identifier you choose for this
+   HTMS feed (e.g. `HTMS-NGI-01`) and `enabled = 1` — the bridge must send a
+   registered serial or the server rejects with 403.
+2. **Bridge side:** in the wizard's **Devices** table add a row with:
+
+   | Column | Value |
+   |---|---|
+   | Name | `HTMS Filling Plant` (any label) |
+   | Type | **`htms`** |
+   | IP / DB Folder | the **HTMS-86 folder path**, e.g. `C:\Users\User\Desktop\HTMS-86` (the folder containing `HAMS.mdb` and `HAMS_<year>.mdb`) |
+   | Port | leave `0` (ignored) |
+   | Serial | the Biometric Device serial from step 1, e.g. `HTMS-NGI-01` |
+   | User / Pass | leave blank |
+
+3. Click **Test** on the row — it verifies the folder + `HAMS.mdb` exist and
+   counts today's punches. Then **Save & Start**.
+
+### Notes
+
+- Punches live in per-year files `HAMS_<year>.mdb`; employee work-numbers live in
+  the master `HAMS.mdb`. The bridge reads whichever yearly files cover the sync
+  window (all of them on the first/full sync).
+- One HTMS source collapses **all** of that install's controllers into a single
+  feed — attendance only needs *who* and *when*, so the individual door/reader is
+  not distinguished. Door/alarm rows (no person) are ignored automatically.
+- Reading uses the **Jet OLEDB** provider that ships with Windows (the same one
+  HTMS-86 uses), so no extra database driver is needed on a 32-bit build. If you
+  run a 64-bit build against a machine without 64-bit Access drivers, install the
+  **Microsoft Access Database Engine redistributable** matching the bridge's
+  bitness.
+
+---
+
 ## Part C — Windows host (bridge installation)
 
 ### C.1 Download the installer
@@ -118,8 +186,9 @@ For each device row:
 | Column | Example |
 |---|---|
 | Name | `Main Office` |
-| IP | `192.168.18.200` |
-| Port | `4370` |
+| Type | `zkteco` (K40 etc.), `hikvision`, or `htms` (HTMS-86 Access DB — see **Part B-HTMS**) |
+| IP | `192.168.18.200` (for `htms`, the HTMS-86 **folder path** instead) |
+| Port | `4370` (ignored for `htms`) |
 | Serial | `A6F5215360564` |
 
 Click **Test Connection** — both the device probe (LAN) and the API auth (ERPNext) should turn green. If either is red, see Troubleshooting below.
@@ -156,7 +225,9 @@ If the auto-attendance is configured on the Shift Type, an **Attendance** record
 | Symptom | Most likely cause |
 |---|---|
 | `AUTH FAIL` in bridge | Wrong API Key/Secret, or the user is disabled. Test with `curl -H "Authorization: token KEY:SECRET" https://your-site/api/method/frappe.auth.get_logged_user` |
-| `UNREACHABLE` | Windows host cannot reach device IP on port 4370. Check firewall / cable / device IP setting. |
+| `UNREACHABLE` | **ZK/Hikvision:** Windows host cannot reach device IP on port 4370 — check firewall / cable / device IP. **HTMS:** the configured folder or its `HAMS.mdb` doesn't exist — check the folder path. |
+| HTMS syncs but no checkins appear | `Attendance Device ID` must equal the HTMS **Emp_no** *exactly*, including leading zeros (`003`, not `3`). |
+| HTMS: `no usable Access OLEDB provider` | 64-bit build on a machine with no 64-bit Access driver. Use the 32-bit bridge build, or install the Microsoft Access Database Engine redistributable. |
 | Bridge syncs but no checkins appear | Employee's `Attendance Device ID` doesn't match the User ID on the device. Open Error Log in ERPNext — there'll be a `Biometric Processing Error` row saying `Employee not found for device ID: X`. |
 | HTTP 404 from ERPNext | `avinashgroup_app` not installed on that site (or you typed the URL wrong). Check `bench --site X list-apps`. |
 | Checkins appear but `Log Type` is wrong | The bridge always sends raw timestamps; the **server** assigns IN/OUT by chronological position (1st of day → IN, 2nd → OUT, …). If you want all-IN or all-OUT instead, that's a server-side code change, not a config one. |

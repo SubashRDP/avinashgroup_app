@@ -5,6 +5,7 @@ import logging
 import logging.handlers
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
@@ -42,7 +43,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.0.5"
+VERSION = "1.1.0"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -673,9 +674,184 @@ class HikvisionClient(_BaseClient):
             return [], f"ERROR: {e}"
 
 
+class HtmsClient(_BaseClient):
+    """HTMS-86 / HAMS access-control software (HUNDURE/Chiyu HTA controllers).
+
+    These controllers don't speak the ZK protocol, so there's nothing to poll
+    over port 4370. Instead HTMS-86 writes every punch into Microsoft Access
+    (.mdb) databases, and we read those directly:
+
+      • Punch rows live in table ``PubEvent`` inside per-year files
+        ``HAMS_<year>.mdb`` (e.g. HAMS_2026.mdb). Each row carries
+        ``personID`` (HTMS internal, zero-padded), ``eventDate`` and
+        ``eventTime``.
+      • The human work-number lives in the master ``HAMS.mdb`` ``Emp`` table:
+        ``Emp_Id`` (== PubEvent.personID) maps to ``Emp_no``.
+
+    We send ``Emp_no`` as the user_id so it matches Employee.attendance_device_id
+    in ERPNext (the same convention the ZK path relies on).
+
+    The config row uses ``db_folder`` (the HTMS-86 install folder) in place of
+    ip/port. Reading is done through ADO/OLEDB on Windows — the same Jet
+    provider HTMS itself uses — so no extra database driver is required on a
+    32-bit build.
+    """
+
+    # OLEDB providers tried in order. ACE matches modern (often 64-bit) Office
+    # installs; Jet 4.0 ships with every 32-bit Windows and is what HTMS uses.
+    _PROVIDERS = (
+        "Microsoft.ACE.OLEDB.16.0",
+        "Microsoft.ACE.OLEDB.12.0",
+        "Microsoft.Jet.OLEDB.4.0",
+    )
+
+    def _folder(self):
+        return (self.device.get("db_folder") or self.device.get("ip") or "").strip()
+
+    def _master_db(self):
+        return os.path.join(self._folder(), "HAMS.mdb")
+
+    def probe_network(self):
+        # "Reachable" == the HTMS folder and its master DB exist on disk.
+        folder = self._folder()
+        return bool(folder) and os.path.isdir(folder) and os.path.isfile(self._master_db())
+
+    def _connect(self, db_path):
+        import pythoncom
+        import win32com.client
+
+        pythoncom.CoInitialize()
+        last_err = None
+        for prov in self._PROVIDERS:
+            try:
+                conn = win32com.client.Dispatch("ADODB.Connection")
+                conn.Open(f"Provider={prov};Data Source={db_path};")
+                return conn
+            except Exception as e:
+                last_err = e
+        raise RuntimeError(
+            f"no usable Access OLEDB provider (tried {', '.join(self._PROVIDERS)}); "
+            f"install the Microsoft Access Database Engine redistributable matching "
+            f"this app's bitness — last error: {last_err}"
+        )
+
+    def _query(self, db_path, sql):
+        conn = self._connect(db_path)
+        try:
+            rs = conn.Execute(sql)[0]
+            ncols = rs.Fields.Count
+            rows = []
+            while not rs.EOF:
+                rows.append([rs.Fields.Item(i).Value for i in range(ncols)])
+                rs.MoveNext()
+            rs.Close()
+            return rows
+        finally:
+            conn.Close()
+
+    def _emp_map(self):
+        """Emp_Id (== PubEvent.personID) -> Emp_no, from the master HAMS.mdb."""
+        rows = self._query(self._master_db(), "SELECT Emp_Id, Emp_no FROM Emp")
+        mp = {}
+        for emp_id, emp_no in rows:
+            key = ("" if emp_id is None else str(emp_id)).strip()
+            no = ("" if emp_no is None else str(emp_no)).strip()
+            if key and no:
+                mp[key] = no
+        return mp
+
+    def _year_files(self, date_from, date_to):
+        """HAMS_<year>.mdb paths covering [date_from..date_to]. With no
+        date_from, return every yearly file present (first/full sync)."""
+        folder = self._folder()
+        present = {}
+        for fn in os.listdir(folder):
+            m = re.match(r"^HAMS_(\d{4})\.mdb$", fn, re.IGNORECASE)
+            if m:
+                present[int(m.group(1))] = os.path.join(folder, fn)
+        if not present:
+            return []
+        if date_from is None:
+            years = set(present)
+        else:
+            y1 = (date_to.year if date_to else max(present))
+            years = {y for y in range(date_from.year, y1 + 1) if y in present}
+            # Always include the newest file: a device clock running into the
+            # next year must not be silently dropped.
+            years.add(max(present))
+        return [present[y] for y in sorted(years)]
+
+    def fetch_attendance(self, date_from=None, date_to=None):
+        if not self.probe_network():
+            return [], "UNREACHABLE"
+        try:
+            emp_map = self._emp_map()
+        except Exception as e:
+            return [], f"ERROR: reading Emp table: {e}"
+
+        records = []
+        for db_path in self._year_files(date_from, date_to):
+            try:
+                rows = self._query(
+                    db_path, "SELECT personID, eventDate, eventTime FROM PubEvent"
+                )
+            except Exception as e:
+                return [], f"ERROR: reading {os.path.basename(db_path)}: {e}"
+
+            for person_id, ev_date, ev_time in rows:
+                pid = ("" if person_id is None else str(person_id)).strip()
+                # Skip non-person rows (door/alarm events have empty/zero personID)
+                # and punches whose employee has no work-number / was removed.
+                if not pid or not pid.strip("0"):
+                    continue
+                emp_no = emp_map.get(pid)
+                if not emp_no:
+                    continue
+                ts = self._parse_dt(ev_date, ev_time)
+                if ts is None:
+                    continue
+                d = ts.date()
+                if date_from and d < date_from:
+                    continue
+                if date_to and d > date_to:
+                    continue
+                records.append(_AttRecord(emp_no, ts))
+
+        return records, "OK"
+
+    @staticmethod
+    def _parse_dt(ev_date, ev_time):
+        """Combine HTMS eventDate + eventTime into a naive datetime. ADO returns
+        text columns as str and date/time columns as datetime-like objects, so
+        handle both."""
+        if ev_date is None:
+            return None
+        if hasattr(ev_date, "year") and not isinstance(ev_date, str):
+            d = datetime(ev_date.year, ev_date.month, ev_date.day)
+        else:
+            ds = str(ev_date).strip().replace("-", "/").split(" ")[0]
+            try:
+                d = datetime.strptime(ds, "%Y/%m/%d")
+            except ValueError:
+                return None
+
+        if ev_time is not None and hasattr(ev_time, "hour") and not isinstance(ev_time, str):
+            return d.replace(hour=ev_time.hour, minute=ev_time.minute, second=ev_time.second)
+
+        ts_str = ("" if ev_time is None else str(ev_time).strip()).split(" ")[-1]
+        for fmt in ("%H:%M:%S", "%H:%M"):
+            try:
+                t = datetime.strptime(ts_str, fmt)
+                return d.replace(hour=t.hour, minute=t.minute, second=t.second)
+            except ValueError:
+                continue
+        return d
+
+
 DEVICE_TYPES = {
     "zkteco": ZKTecoClient,
     "hikvision": HikvisionClient,
+    "htms": HtmsClient,
 }
 
 
@@ -683,6 +859,14 @@ def make_device_client(device, timeout=5, retries=3):
     dtype = (device.get("type") or "zkteco").lower()
     cls = DEVICE_TYPES.get(dtype, ZKTecoClient)
     return cls(device, timeout=timeout, retries=retries)
+
+
+def device_address(device):
+    """Human-readable source address for logs and the control-panel table:
+    a DB folder for HTMS sources, host:port for network devices."""
+    if (device.get("type") or "").lower() == "htms":
+        return device.get("db_folder") or device.get("ip") or "(no path)"
+    return f"{device.get('ip', '')}:{device.get('port', 4370)}"
 
 
 # Backwards-compat alias (old code used DeviceClient directly)
@@ -1099,13 +1283,19 @@ class SyncEngine:
         attendances, status = client.fetch_attendance(date_from=date_from, date_to=None)
 
         if status == "UNREACHABLE":
-            self.logger.warning(
-                f"[{name}] device unreachable: "
-                f"{device['ip']}:{device.get('port', 4370)} "
-                f"(timeout after {self.config.get('device_timeout_seconds', 5)}s "
-                f"x {self.config.get('network_probe_retries', 3)} retries)"
-            )
-            self.status_callback(name, "unreachable", f"{device['ip']} not on network")
+            if (device.get("type") or "").lower() == "htms":
+                self.logger.warning(
+                    f"[{name}] HTMS source unreachable: {device_address(device)} "
+                    f"(folder or HAMS.mdb missing)"
+                )
+                self.status_callback(name, "unreachable", f"{device_address(device)} not found")
+            else:
+                self.logger.warning(
+                    f"[{name}] device unreachable: {device_address(device)} "
+                    f"(timeout after {self.config.get('device_timeout_seconds', 5)}s "
+                    f"x {self.config.get('network_probe_retries', 3)} retries)"
+                )
+                self.status_callback(name, "unreachable", f"{device['ip']} not on network")
             return
 
         if status != "OK":
@@ -1266,8 +1456,8 @@ class SyncEngine:
                 )
                 ok = client.probe_network()
                 if ok:
-                    return "Done", f"device {device.get('ip')}:{device.get('port', 4370)} reachable"
-                return "Failed", f"device {device.get('ip')}:{device.get('port', 4370)} unreachable"
+                    return "Done", f"device {device_address(device)} reachable"
+                return "Failed", f"device {device_address(device)} unreachable"
 
             return "Failed", f"unsupported command_type {cmd_type!r}"
         except Exception as e:
@@ -1339,7 +1529,7 @@ class SetupWizard:
             [
                 ("Name", 14),
                 ("Type", 10),
-                ("Device IP", 14),
+                ("IP / DB Folder", 14),
                 ("Port", 6),
                 ("Serial/ID", 16),
                 ("User", 10),
@@ -1467,13 +1657,19 @@ class SetupWizard:
 
         # Auto-adjust port when type is changed
         def on_type_change(*_):
+            t = type_var.get()
             current_port = entries["port"].get().strip()
-            if type_var.get() == "hikvision" and current_port in ("4370", ""):
+            if t == "hikvision" and current_port in ("4370", "", "0"):
                 entries["port"].delete(0, "end")
                 entries["port"].insert(0, "80")
-            elif type_var.get() == "zkteco" and current_port in ("80", "443", ""):
+            elif t == "zkteco" and current_port in ("80", "443", "", "0"):
                 entries["port"].delete(0, "end")
                 entries["port"].insert(0, "4370")
+            elif t == "htms":
+                # No network port for an HTMS DB source; the "IP" cell holds the
+                # HTMS-86 folder path instead.
+                entries["port"].delete(0, "end")
+                entries["port"].insert(0, "0")
 
         type_var.trace_add("write", on_type_change)
 
@@ -1501,7 +1697,10 @@ class SetupWizard:
         ip = entries["ip"].get().strip()
         dtype = entries["type"].get().strip().lower() or "zkteco"
         if not ip:
-            messagebox.showwarning("Device Test", "IP address is required.")
+            messagebox.showwarning(
+                "Device Test",
+                "DB folder path is required." if dtype == "htms" else "IP address is required.",
+            )
             return
 
         try:
@@ -1509,11 +1708,13 @@ class SetupWizard:
         except ValueError:
             port = 80 if dtype == "hikvision" else 4370
 
-        # Build a temporary device dict
+        # Build a temporary device dict. For HTMS the "IP" cell holds the
+        # HTMS-86 folder path, which the client reads as db_folder.
         dev = {
             "name": name,
             "type": dtype,
             "ip": ip,
+            "db_folder": ip if dtype == "htms" else "",
             "port": port,
             "serial": entries["serial"].get().strip(),
             "username": entries["username"].get().strip(),
@@ -1546,7 +1747,9 @@ class SetupWizard:
         elif status == "UNREACHABLE":
             messagebox.showerror(
                 "Device Test",
-                f"✗ {name}\n\nUnreachable on the network. Check IP / port / cable.",
+                f"✗ {name}\n\nHTMS-86 folder or HAMS.mdb not found. Check the folder path."
+                if dtype == "htms"
+                else f"✗ {name}\n\nUnreachable on the network. Check IP / port / cable.",
             )
         elif status == "AUTH_FAIL":
             messagebox.showerror(
@@ -1577,6 +1780,27 @@ class SetupWizard:
                 port = int(r["port"].get().strip() or (80 if dtype == "hikvision" else 4370))
             except ValueError:
                 port = 80 if dtype == "hikvision" else 4370
+
+            # HTMS sources read an Access DB folder instead of a network device.
+            # The "IP" cell holds the HTMS-86 folder path; serial is still the
+            # registered Biometric Device the server matches against.
+            if dtype == "htms":
+                if not (name and ip and serial):
+                    continue
+                devices.append({
+                    "name": name,
+                    "type": "htms",
+                    "db_folder": ip,
+                    "ip": "",
+                    "port": 0,
+                    "serial": serial,
+                    "erpnext_url": url,
+                    "api_key": key,
+                    "api_secret": secret,
+                    "latitude": 27.7228,
+                    "longitude": 85.3211,
+                })
+                continue
 
             # Serial is required for every device type: it's the dedup key, the
             # heartbeat/command-tunnel identity, and the key the server matches
@@ -1786,7 +2010,7 @@ class ControlPanel:
         cols = ("name", "ip", "last_sync", "status")
         self.tree = ttk.Treeview(self.root, columns=cols, show="headings", height=10)
         self.tree.heading("name", text="Name")
-        self.tree.heading("ip", text="IP : Port")
+        self.tree.heading("ip", text="Address")
         self.tree.heading("last_sync", text="Last Sync")
         self.tree.heading("status", text="Status")
         self.tree.column("name", width=180)
@@ -1826,7 +2050,7 @@ class ControlPanel:
                 "",
                 "end",
                 iid=d["name"],
-                values=(d["name"], f"{d['ip']}:{d.get('port', 4370)}", "—", "pending"),
+                values=(d["name"], device_address(d), "—", "pending"),
             )
 
     def _on_status(self, name, state, msg):
@@ -1837,7 +2061,7 @@ class ControlPanel:
             return
         last_sync = self.engine.last_sync_per_device.get(name, "—")
         device = next((d for d in self.config["devices"] if d["name"] == name), None)
-        ip_port = f"{device['ip']}:{device.get('port', 4370)}" if device else ""
+        ip_port = device_address(device) if device else ""
 
         label = {
             "syncing": "⟳ syncing…",
