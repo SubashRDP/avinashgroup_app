@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta as _timedelta
-from tkinter import StringVar, Tk, Toplevel, messagebox, ttk
+from tkinter import StringVar, Tk, Toplevel, filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import requests
@@ -43,7 +43,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -848,11 +848,72 @@ class HtmsClient(_BaseClient):
         return d
 
 
-DEVICE_TYPES = {
-    "zkteco": ZKTecoClient,
-    "hikvision": HikvisionClient,
-    "htms": HtmsClient,
+# ============================================
+# INTEGRATION REGISTRY
+# ============================================
+# Single source of truth for every punch source the bridge supports. Each entry
+# declares:
+#   category : "device"   → a physical unit polled over the network
+#              "software"  → attendance software we read a database/export from
+#   client   : the _BaseClient subclass that does the fetching
+#   label    : human name shown in the wizard dropdown
+#   help     : one-line hint shown under the row's section
+#   fields   : the per-source inputs the wizard renders automatically. Each
+#              field spec: {key, label, width, default, secret, kind, optional,
+#              browse}. "kind":"int" stores an int; "secret" masks input;
+#              "optional" makes it non-required; "browse":"dir" adds a folder
+#              picker button.
+#
+# Adding a NEW software integration is therefore: write a _BaseClient subclass
+# that returns _AttRecord objects from its data store, then add one entry here.
+# The wizard, save/load, testing, logging and control panel all adapt with no
+# further GUI code.
+INTEGRATIONS = {
+    "zkteco": {
+        "category": "device",
+        "client": ZKTecoClient,
+        "label": "ZKTeco (K40 / K20 / F18 / eSSL…)",
+        "help": "Biometric device's LAN IP (Menu → Comm. → Ethernet). Comm Key is 0 unless set on the device.",
+        "fields": [
+            {"key": "ip", "label": "Device IP", "width": 15},
+            {"key": "port", "label": "Port", "width": 6, "default": "4370", "kind": "int", "optional": True},
+            {"key": "comm_key", "label": "Comm Key", "width": 9, "default": "0", "kind": "int", "secret": True, "optional": True},
+        ],
+    },
+    "hikvision": {
+        "category": "device",
+        "client": HikvisionClient,
+        "label": "Hikvision (ISAPI HTTP)",
+        "help": "Device IP and the ISAPI HTTP port (usually 80). Username/password are the device admin login.",
+        "fields": [
+            {"key": "ip", "label": "Device IP", "width": 15},
+            {"key": "port", "label": "Port", "width": 6, "default": "80", "kind": "int", "optional": True},
+            {"key": "username", "label": "Username", "width": 12},
+            {"key": "password", "label": "Password", "width": 12, "secret": True},
+        ],
+    },
+    "htms": {
+        "category": "software",
+        "client": HtmsClient,
+        "label": "HTMS-86 / HAMS (Access DB)",
+        "help": r"Folder containing HAMS.mdb and HAMS_<year>.mdb (the HTMS-86 install folder, e.g. E:\HTMS-86).",
+        "fields": [
+            {"key": "db_folder", "label": "HTMS-86 Folder", "width": 38, "browse": "dir"},
+        ],
+    },
 }
+
+# type → client map (kept for make_device_client and any older callers).
+DEVICE_TYPES = {key: meta["client"] for key, meta in INTEGRATIONS.items()}
+
+
+def integration_meta(dtype):
+    return INTEGRATIONS.get((dtype or "").lower())
+
+
+def integrations_in(category):
+    """[(type_key, meta), …] for one category, in registry order."""
+    return [(k, m) for k, m in INTEGRATIONS.items() if m["category"] == category]
 
 
 def make_device_client(device, timeout=5, retries=3):
@@ -863,9 +924,15 @@ def make_device_client(device, timeout=5, retries=3):
 
 def device_address(device):
     """Human-readable source address for logs and the control-panel table:
-    a DB folder for HTMS sources, host:port for network devices."""
-    if (device.get("type") or "").lower() == "htms":
-        return device.get("db_folder") or device.get("ip") or "(no path)"
+    the primary configured field (e.g. DB folder) for software sources,
+    host:port for network devices."""
+    meta = integration_meta(device.get("type"))
+    if meta and meta["category"] == "software":
+        for f in meta["fields"]:
+            val = device.get(f["key"])
+            if val:
+                return str(val)
+        return "(not configured)"
     return f"{device.get('ip', '')}:{device.get('port', 4370)}"
 
 
@@ -1480,7 +1547,10 @@ class SetupWizard:
         self.window.geometry("780x640")
         self.window.minsize(680, 540)
 
+        # One list of row-widget dicts per section; both feed the same flat
+        # config["devices"] list, discriminated by each entry's "type".
         self.device_rows = []
+        self.software_rows = []
         self._build()
 
     def _build(self):
@@ -1504,46 +1574,40 @@ class SetupWizard:
         self.test_label = ttk.Label(f1, text="")
         self.test_label.grid(row=4, column=1, sticky="w", padx=6, pady=3)
 
-        # ── Step 2: Devices ──
-        f2 = ttk.LabelFrame(self.window, text="Step 2: Devices")
-        f2.pack(fill="both", expand=True, padx=10, pady=6)
-
-        # Plain-English description so installers don't confuse the device IP
-        # with this PC's IP. The bridge always runs on a PC inside the LAN;
-        # what we ask for here is the FINGERPRINT DEVICE's address.
+        # ── Step 2a: Direct device connections ──
+        f2 = ttk.LabelFrame(self.window, text="Step 2a: Direct Device Connection (polled over the LAN)")
+        f2.pack(fill="both", expand=True, padx=10, pady=(6, 3))
         ttk.Label(
             f2,
             text=(
-                "Enter the biometric device's LAN address (not this PC). "
-                "Find it on the device: Menu → Comm. → Ethernet → IP. "
-                "Default port is 4370 for ZKTeco/K40, 80 for Hikvision."
+                "Biometric units the bridge reaches over the network. Enter the "
+                "DEVICE's LAN address (not this PC) — find it on the device under "
+                "Menu → Comm. → Ethernet → IP."
             ),
-            foreground="gray",
-            wraplength=720,
-            justify="left",
-        ).pack(fill="x", padx=8, pady=(4, 6))
-
-        header = ttk.Frame(f2)
-        header.pack(fill="x", padx=6, pady=(4, 2))
-        for i, (text, width) in enumerate(
-            [
-                ("Name", 14),
-                ("Type", 10),
-                ("IP / DB Folder", 14),
-                ("Port", 6),
-                ("Serial/ID", 16),
-                ("User", 10),
-                ("Pass / Key", 10),
-                ("Test", 7),
-                ("", 3),
-            ]
-        ):
-            ttk.Label(header, text=text, width=width, anchor="w").grid(row=0, column=i, padx=2)
+            foreground="gray", wraplength=720, justify="left",
+        ).pack(fill="x", padx=8, pady=(4, 4))
 
         self.devices_frame = ttk.Frame(f2)
         self.devices_frame.pack(fill="both", expand=True, padx=6)
+        ttk.Button(f2, text="+ Add Device", command=lambda: self._add_row("device")).pack(pady=4)
 
-        ttk.Button(f2, text="+ Add Device", command=lambda: self._add_row()).pack(pady=4)
+        # ── Step 2b: Attendance software / database sources ──
+        f2b = ttk.LabelFrame(self.window, text="Step 2b: Attendance Software / Database")
+        f2b.pack(fill="both", expand=True, padx=10, pady=(3, 6))
+        ttk.Label(
+            f2b,
+            text=(
+                "Read punches from attendance software's own database/export "
+                "(for controllers that don't speak a network protocol). Pick the "
+                "software and point it at its data folder."
+            ),
+            foreground="gray", wraplength=720, justify="left",
+        ).pack(fill="x", padx=8, pady=(4, 4))
+
+        self.software_frame = ttk.Frame(f2b)
+        self.software_frame.pack(fill="both", expand=True, padx=6)
+        ttk.Button(f2b, text="+ Add Software Source",
+                   command=lambda: self._add_row("software")).pack(pady=4)
 
         # ── Step 3: Sync Frequency ──
         f3 = ttk.LabelFrame(self.window, text="Step 3: Sync Frequency")
@@ -1579,99 +1643,115 @@ class SetupWizard:
             self.key_entry.insert(0, first.get("api_key", ""))
             self.secret_entry.insert(0, first.get("api_secret", ""))
             for d in existing:
-                self._add_row(d)
+                meta = integration_meta(d.get("type")) or INTEGRATIONS["zkteco"]
+                self._add_row(meta["category"], d)
             mins = int(self.config.get("sync_interval_minutes", 1440))
             for name, m in INTERVAL_OPTIONS:
                 if m == mins:
                     self.interval_var.set(name)
                     break
         else:
-            self._add_row()
+            # Fresh setup: offer one empty device row to start with.
+            self._add_row("device")
 
-    def _add_row(self, device=None):
-        device = device or {"name": "", "type": "zkteco", "ip": "", "port": 4370, "serial": ""}
-        row = ttk.Frame(self.devices_frame)
-        row.pack(fill="x", pady=1)
+    def _add_row(self, category, device=None):
+        """Add one source row to the given section ("device"|"software"). Fields
+        are rendered from the selected integration's schema, so the row reshapes
+        itself when the Type dropdown changes."""
+        choices = integrations_in(category)
+        default_type = device.get("type") if device else choices[0][0]
+        device = device or {"type": default_type}
+        rows_list = self.device_rows if category == "device" else self.software_rows
+        parent = self.devices_frame if category == "device" else self.software_frame
 
-        entries = {}
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        entries = {"frame": row, "category": category, "field_entries": {}}
 
-        # Name
-        e = ttk.Entry(row, width=14)
-        e.insert(0, device.get("name", ""))
-        e.grid(row=0, column=0, padx=2)
-        entries["name"] = e
+        # Name + Type (fixed leading widgets)
+        ttk.Label(row, text="Name").grid(row=0, column=0, padx=(2, 1))
+        name_e = ttk.Entry(row, width=14)
+        name_e.insert(0, device.get("name", ""))
+        name_e.grid(row=0, column=1, padx=(0, 6))
+        entries["name"] = name_e
 
-        # Type dropdown
-        type_var = StringVar(value=device.get("type", "zkteco"))
-        type_cb = ttk.Combobox(
-            row, textvariable=type_var,
-            values=list(DEVICE_TYPES.keys()),
-            state="readonly", width=10,
-        )
-        type_cb.grid(row=0, column=1, padx=2)
+        type_var = StringVar(value=default_type)
         entries["type"] = type_var
+        ttk.Combobox(
+            row, textvariable=type_var,
+            values=[f"{k}" for k, _ in choices],
+            state="readonly", width=11,
+        ).grid(row=0, column=2, padx=(0, 6))
 
-        # IP
-        e = ttk.Entry(row, width=14)
-        e.insert(0, device.get("ip", ""))
-        e.grid(row=0, column=2, padx=2)
-        entries["ip"] = e
+        # Container the dynamic per-type fields get re-rendered into.
+        fields_frame = ttk.Frame(row)
+        fields_frame.grid(row=0, column=3, padx=2)
+        entries["fields_frame"] = fields_frame
 
-        # Port
-        e = ttk.Entry(row, width=6)
-        e.insert(0, str(device.get("port", 4370)))
-        e.grid(row=0, column=3, padx=2)
-        entries["port"] = e
+        # Serial + Test + remove (fixed trailing widgets)
+        ttk.Label(row, text="Serial").grid(row=0, column=4, padx=(6, 1))
+        serial_e = ttk.Entry(row, width=15)
+        serial_e.insert(0, device.get("serial", ""))
+        serial_e.grid(row=0, column=5, padx=(0, 6))
+        entries["serial"] = serial_e
 
-        # Serial / Device ID
-        e = ttk.Entry(row, width=16)
-        e.insert(0, device.get("serial", ""))
-        e.grid(row=0, column=4, padx=2)
-        entries["serial"] = e
-
-        # Username (Hikvision)
-        e = ttk.Entry(row, width=10)
-        e.insert(0, device.get("username", ""))
-        e.grid(row=0, column=5, padx=2)
-        entries["username"] = e
-
-        # Password (Hikvision) / Comm Key (ZKTeco)
-        e = ttk.Entry(row, width=10, show="*")
-        e.insert(0, str(device.get("password", "") or device.get("comm_key", "")))
-        e.grid(row=0, column=6, padx=2)
-        entries["password"] = e
-
-        # Test button for this device
         test_btn = ttk.Button(row, text="Test", width=7,
                               command=lambda: self._test_device(entries))
-        test_btn.grid(row=0, column=7, padx=2)
+        test_btn.grid(row=0, column=6, padx=2)
         entries["test_btn"] = test_btn
 
         def remove():
             row.destroy()
-            self.device_rows[:] = [r for r in self.device_rows if r["frame"] is not row]
+            rows_list[:] = [r for r in rows_list if r["frame"] is not row]
 
-        ttk.Button(row, text="X", width=3, command=remove).grid(row=0, column=8, padx=2)
-        entries["frame"] = row
-        self.device_rows.append(entries)
+        ttk.Button(row, text="X", width=3, command=remove).grid(row=0, column=7, padx=2)
 
-        # Auto-adjust port when type is changed
-        def on_type_change(*_):
-            t = type_var.get()
-            current_port = entries["port"].get().strip()
-            if t == "hikvision" and current_port in ("4370", "", "0"):
-                entries["port"].delete(0, "end")
-                entries["port"].insert(0, "80")
-            elif t == "zkteco" and current_port in ("80", "443", "", "0"):
-                entries["port"].delete(0, "end")
-                entries["port"].insert(0, "4370")
-            elif t == "htms":
-                # No network port for an HTMS DB source; the "IP" cell holds the
-                # HTMS-86 folder path instead.
-                entries["port"].delete(0, "end")
-                entries["port"].insert(0, "0")
+        # Initial field render + re-render on type change. _prev_device carries
+        # the saved values into the first render; later renders use field
+        # defaults so switching type doesn't show the previous type's data.
+        self._render_fields(entries, device)
+        type_var.trace_add("write", lambda *_: self._render_fields(entries, None))
 
-        type_var.trace_add("write", on_type_change)
+        rows_list.append(entries)
+
+    def _render_fields(self, entries, device):
+        """(Re)build the dynamic field widgets for a row from its integration's
+        schema. device=None means use schema defaults (after a type switch)."""
+        frame = entries["fields_frame"]
+        for child in frame.winfo_children():
+            child.destroy()
+        entries["field_entries"] = {}
+
+        meta = integration_meta(entries["type"].get()) or INTEGRATIONS["zkteco"]
+        col = 0
+        for spec in meta["fields"]:
+            ttk.Label(frame, text=spec["label"]).grid(row=0, column=col, padx=(2, 1))
+            col += 1
+            ent = ttk.Entry(frame, width=spec.get("width", 12),
+                            show="*" if spec.get("secret") else "")
+            value = ""
+            if device is not None:
+                value = device.get(spec["key"], "")
+            if value in ("", None):
+                value = spec.get("default", "")
+            ent.insert(0, str(value))
+            ent.grid(row=0, column=col, padx=(0, 6))
+            col += 1
+            entries["field_entries"][spec["key"]] = (ent, spec)
+
+            if spec.get("browse") == "dir":
+                def pick(e=ent):
+                    d = filedialog.askdirectory(title="Select the data folder")
+                    if d:
+                        e.delete(0, "end")
+                        e.insert(0, d)
+                ttk.Button(frame, text="…", width=3, command=pick).grid(row=0, column=col, padx=(0, 4))
+                col += 1
+
+        # Hint line for this integration, under the fields.
+        ttk.Label(frame, text=meta.get("help", ""), foreground="gray",
+                  wraplength=520, justify="left").grid(
+            row=1, column=0, columnspan=col, sticky="w", pady=(1, 0))
 
     def _test(self):
         url = self.url_entry.get().strip()
@@ -1691,40 +1771,50 @@ class SetupWizard:
         else:
             self.test_label.config(text=f"● Failed: {msg[:80]}", foreground="red")
 
-    def _test_device(self, entries):
-        """Test connection to a single device row. Shows result via messagebox."""
-        name = entries["name"].get().strip() or "(unnamed)"
-        ip = entries["ip"].get().strip()
-        dtype = entries["type"].get().strip().lower() or "zkteco"
-        if not ip:
-            messagebox.showwarning(
-                "Device Test",
-                "DB folder path is required." if dtype == "htms" else "IP address is required.",
-            )
-            return
-
-        try:
-            port = int(entries["port"].get().strip() or (80 if dtype == "hikvision" else 4370))
-        except ValueError:
-            port = 80 if dtype == "hikvision" else 4370
-
-        # Build a temporary device dict. For HTMS the "IP" cell holds the
-        # HTMS-86 folder path, which the client reads as db_folder.
+    def _row_to_device(self, entries, url="", key="", secret=""):
+        """Build a device-config dict from a row's widgets, applying each
+        field's kind/default. Returns (device_dict, missing_required_labels)."""
+        dtype = entries["type"].get().strip().lower()
+        meta = integration_meta(dtype) or INTEGRATIONS["zkteco"]
         dev = {
-            "name": name,
+            "name": entries["name"].get().strip(),
             "type": dtype,
-            "ip": ip,
-            "db_folder": ip if dtype == "htms" else "",
-            "port": port,
             "serial": entries["serial"].get().strip(),
-            "username": entries["username"].get().strip(),
-            "password": entries["password"].get().strip(),
+            "erpnext_url": url,
+            "api_key": key,
+            "api_secret": secret,
+            "latitude": 27.7228,
+            "longitude": 85.3211,
         }
-        if dtype == "zkteco":
-            try:
-                dev["comm_key"] = int(dev["password"]) if dev["password"] else 0
-            except ValueError:
-                dev["comm_key"] = 0
+        missing = []
+        if not dev["name"]:
+            missing.append("Name")
+        if not dev["serial"]:
+            missing.append("Serial")
+        for fkey, (widget, spec) in entries["field_entries"].items():
+            raw = widget.get().strip()
+            if not raw and not spec.get("optional"):
+                missing.append(spec["label"])
+            if spec.get("kind") == "int":
+                try:
+                    dev[fkey] = int(raw) if raw else int(spec.get("default") or 0)
+                except ValueError:
+                    dev[fkey] = int(spec.get("default") or 0)
+            else:
+                dev[fkey] = raw
+        return dev, missing
+
+    def _test_device(self, entries):
+        """Test one source row. Shows result via messagebox."""
+        dev, missing = self._row_to_device(entries)
+        name = dev["name"] or "(unnamed)"
+        dtype = dev["type"]
+        # For a test we don't require the serial (that's an ERPNext-side check),
+        # only the connection inputs.
+        missing = [m for m in missing if m != "Serial"]
+        if missing:
+            messagebox.showwarning("Test", f"Fill in: {', '.join(missing)}")
+            return
 
         entries["test_btn"].config(text="...")
         self.window.update_idletasks()
@@ -1745,10 +1835,12 @@ class SetupWizard:
                 f"✓ {name} ({dtype})\n\nConnected successfully.\nFound {count} record(s) for today.",
             )
         elif status == "UNREACHABLE":
+            meta = integration_meta(dtype)
+            is_software = bool(meta and meta["category"] == "software")
             messagebox.showerror(
                 "Device Test",
-                f"✗ {name}\n\nHTMS-86 folder or HAMS.mdb not found. Check the folder path."
-                if dtype == "htms"
+                f"✗ {name}\n\nData source not found — check the folder/path."
+                if is_software
                 else f"✗ {name}\n\nUnreachable on the network. Check IP / port / cable.",
             )
         elif status == "AUTH_FAIL":
@@ -1768,74 +1860,33 @@ class SetupWizard:
             messagebox.showerror("Missing fields", "Please fill ERPNext URL, API Key, and API Secret.")
             return
 
+        # Serial is required for every source: it's the dedup key, the
+        # heartbeat/command-tunnel identity, and the key the server matches
+        # against a registered+enabled Biometric Device (unknown → 403).
         devices = []
-        for r in self.device_rows:
-            name = r["name"].get().strip()
-            dtype = (r["type"].get() if hasattr(r["type"], "get") else r["type"]).strip().lower() or "zkteco"
-            ip = r["ip"].get().strip()
-            serial = r["serial"].get().strip()
-            username = r["username"].get().strip()
-            password = r["password"].get().strip()
-            try:
-                port = int(r["port"].get().strip() or (80 if dtype == "hikvision" else 4370))
-            except ValueError:
-                port = 80 if dtype == "hikvision" else 4370
-
-            # HTMS sources read an Access DB folder instead of a network device.
-            # The "IP" cell holds the HTMS-86 folder path; serial is still the
-            # registered Biometric Device the server matches against.
-            if dtype == "htms":
-                if not (name and ip and serial):
-                    continue
-                devices.append({
-                    "name": name,
-                    "type": "htms",
-                    "db_folder": ip,
-                    "ip": "",
-                    "port": 0,
-                    "serial": serial,
-                    "erpnext_url": url,
-                    "api_key": key,
-                    "api_secret": secret,
-                    "latitude": 27.7228,
-                    "longitude": 85.3211,
-                })
+        problems = []
+        for r in self.device_rows + self.software_rows:
+            # An untouched, entirely-blank row is skipped silently.
+            blank = (not r["name"].get().strip() and not r["serial"].get().strip()
+                     and all(not w.get().strip() for w, _ in r["field_entries"].values()))
+            if blank:
                 continue
-
-            # Serial is required for every device type: it's the dedup key, the
-            # heartbeat/command-tunnel identity, and the key the server matches
-            # against a registered+enabled Biometric Device (unknown → 403).
-            if not (name and ip and serial):
+            dev, missing = self._row_to_device(r, url, key, secret)
+            if missing:
+                label = dev["name"] or f"({dev['type']} row)"
+                problems.append(f"• {label}: missing {', '.join(missing)}")
                 continue
-            if dtype == "hikvision" and not username:
-                continue
+            devices.append(dev)
 
-            entry = {
-                "name": name,
-                "type": dtype,
-                "ip": ip,
-                "port": port,
-                "serial": serial,
-                "erpnext_url": url,
-                "api_key": key,
-                "api_secret": secret,
-                "latitude": 27.7228,
-                "longitude": 85.3211,
-            }
-            if dtype == "zkteco":
-                # ZKTeco "Password" field is the numeric Comm Key (default 0)
-                try:
-                    entry["comm_key"] = int(password) if password else 0
-                except ValueError:
-                    entry["comm_key"] = 0
-            else:
-                entry["username"] = username
-                entry["password"] = password
-
-            devices.append(entry)
-
+        if problems:
+            messagebox.showerror("Incomplete rows", "\n".join(problems))
+            return
         if not devices:
-            messagebox.showerror("No devices", "Add at least one device with name, IP, and serial.")
+            messagebox.showerror(
+                "No sources",
+                "Add at least one device or software source with a Name, Serial, "
+                "and its connection details.",
+            )
             return
 
         interval_min = 1440

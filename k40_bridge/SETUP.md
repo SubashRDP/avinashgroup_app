@@ -122,16 +122,15 @@ the `Emp` table.
    Device** record whose **Serial** is any stable identifier you choose for this
    HTMS feed (e.g. `HTMS-NGI-01`) and `enabled = 1` — the bridge must send a
    registered serial or the server rejects with 403.
-2. **Bridge side:** in the wizard's **Devices** table add a row with:
+2. **Bridge side:** in the wizard under **Step 2b — Attendance Software /
+   Database**, click **+ Add Software Source** and fill:
 
-   | Column | Value |
+   | Field | Value |
    |---|---|
    | Name | `HTMS Filling Plant` (any label) |
    | Type | **`htms`** |
-   | IP / DB Folder | the **HTMS-86 folder path**, e.g. `C:\Users\User\Desktop\HTMS-86` (the folder containing `HAMS.mdb` and `HAMS_<year>.mdb`) |
-   | Port | leave `0` (ignored) |
+   | HTMS-86 Folder | the folder containing `HAMS.mdb` and `HAMS_<year>.mdb`, e.g. `E:\HTMS-86` (use the **…** button to browse to it) |
    | Serial | the Biometric Device serial from step 1, e.g. `HTMS-NGI-01` |
-   | User / Pass | leave blank |
 
 3. Click **Test** on the row — it verifies the folder + `HAMS.mdb` exist and
    counts today's punches. Then **Save & Start**.
@@ -181,17 +180,24 @@ The wizard appears on first launch. Fill in:
 | **Sync Frequency** | `2 minutes` | For near-real-time. Use `1 day` for once-daily. |
 | **Devices** table | one row per K40 | |
 
-For each device row:
+The devices step has **two sections** — add each source under the one that fits:
 
-| Column | Example |
+**Step 2a — Direct Device Connection** (network-polled units): click **+ Add Device** and fill the fields the chosen Type asks for.
+
+| Type | Fields shown |
 |---|---|
-| Name | `Main Office` |
-| Type | `zkteco` (K40 etc.), `hikvision`, or `htms` (HTMS-86 Access DB — see **Part B-HTMS**) |
-| IP | `192.168.18.200` (for `htms`, the HTMS-86 **folder path** instead) |
-| Port | `4370` (ignored for `htms`) |
-| Serial | `A6F5215360564` |
+| `zkteco` (K40/K20/F18…) | Device IP, Port (`4370`), Comm Key (`0` unless set) |
+| `hikvision` | Device IP, Port (`80`), Username, Password |
 
-Click **Test Connection** — both the device probe (LAN) and the API auth (ERPNext) should turn green. If either is red, see Troubleshooting below.
+**Step 2b — Attendance Software / Database** (read from software's own data store): click **+ Add Software Source**.
+
+| Type | Fields shown |
+|---|---|
+| `htms` (HTMS-86 / HAMS) | HTMS-86 Folder (use the **…** button to browse) — see **Part B-HTMS** |
+
+Every row, in either section, also needs a **Name** and a **Serial** (the registered Biometric Device the server matches against).
+
+Click **Test** on the row (probes the device / data folder), then **Test Connection** for ERPNext auth — both the device probe (LAN) and the API auth (ERPNext) should turn green. If either is red, see Troubleshooting below.
 
 Click **Save & Start**.
 
