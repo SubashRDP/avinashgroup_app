@@ -179,7 +179,7 @@ frappe.query_reports["Sales Analysis Product wise Invoice Details"] = {
 		if (data.bold) {
 			value = `<strong>${value}</strong>`;
 		}
-		if (data.is_product_header || data.is_customer_header) {
+		if (data.is_product_header || data.is_customer_header || data.is_section) {
 			value = `<strong>${value}</strong>`;
 		}
 		// Note: the divider line above the grand-total block is drawn on the row element

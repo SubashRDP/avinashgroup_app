@@ -157,6 +157,14 @@ def get_data(company=None, customers=None, from_date=None, to_date=None, include
 	# include_agent=False → drop the No Agent / Agent Sales/Returns/Net rows.
 	data = build_rows(filters, inc, include_agent=False)
 
+	# Single customer in scope: the per-product "Product Total Sales" and "Return Totals"
+	# rows just repeat that customer's own Customer Sales / Customer Returns, so drop them
+	# (keep "Product Net Sales", which carries the net). Identified by the product-summary
+	# flags (Product Net Sales is the only product-kind row with product_end), so it's
+	# translation-proof. Desk report is untouched — this is portal-only.
+	if len(customers) == 1:
+		data = [d for d in data if not (d.get("summary_kind") == "product" and not d.get("product_end"))]
+
 	return {
 		"company": ", ".join(companies),
 		"include_return": inc,
