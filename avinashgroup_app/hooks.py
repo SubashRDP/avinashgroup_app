@@ -171,6 +171,12 @@ _add_doc_event(
     "avinashgroup_app.biometric.attendance_override.reconcile_with_existing_attendance",
 )
 
+_add_doc_event(
+    "Employee",
+    "validate",
+    "avinashgroup_app.biometric.employee.validate_unique_device_id",
+)
+
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)
