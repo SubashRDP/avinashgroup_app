@@ -28,8 +28,8 @@ class FakeHtms(kb.HtmsClient):
     def _year_files(self, date_from, date_to):
         return ["/fake/HAMS_2026.mdb"]
 
-    def _query(self, db_path, sql, retries=3):
-        return self._emp_rows if "FROM Emp" in sql else self._pub_rows
+    def _read_table(self, db_path, table, columns):
+        return self._emp_rows if table == "Emp" else self._pub_rows
 
 
 EMP = [

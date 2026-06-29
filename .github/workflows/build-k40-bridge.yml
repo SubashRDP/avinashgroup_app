@@ -36,6 +36,7 @@ jobs:
           pyinstaller --onefile --noconsole --name k40_bridge `
             --collect-all pystray `
             --collect-all PIL `
+            --collect-all sv_ttk `
             --hidden-import=pystray._win32 `
             --hidden-import=PIL._imaging `
             --hidden-import=win32com `

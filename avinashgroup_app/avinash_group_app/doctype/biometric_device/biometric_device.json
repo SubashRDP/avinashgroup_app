@@ -10,6 +10,7 @@
   "device_information_section",
   "device_name",
   "device_serial",
+  "company",
   "device_ip",
   "device_port",
   "column_break_1",
@@ -57,6 +58,14 @@
    "label": "Device Serial",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
   },
   {
    "description": "Optional. IP address of the biometric device — informational only (the bridge holds the real address and identifies itself by serial). Leave blank for software/database sources like HTMS-86.",

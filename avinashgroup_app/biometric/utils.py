@@ -87,6 +87,15 @@ def process_attendance_records(attendance_data, device_identifier=None):
     grouped = defaultdict(list)
     record_ids_by_group = defaultdict(list)
 
+    # Company of the sending device — a punch maps only to an employee of this
+    # company, so the same work-number (attendance_device_id) can be reused
+    # across companies. None (legacy device with no company) = no company filter.
+    device_company = None
+    if device_identifier:
+        device_company = frappe.db.get_value(
+            "Biometric Device", {"device_serial": device_identifier}, "company"
+        )
+
     for record in attendance_data:
         user_id = str(record.get("user_id", "")).strip()
         timestamp_str = str(record.get("timestamp", "")).strip()
@@ -119,19 +128,26 @@ def process_attendance_records(attendance_data, device_identifier=None):
         try:
             frappe.db.savepoint(savepoint)
 
+            emp_filters = {"attendance_device_id": user_id}
+            if device_company:
+                emp_filters["company"] = device_company
             employee = frappe.db.get_value(
                 "Employee",
-                {"attendance_device_id": user_id},
+                emp_filters,
                 ["name", "employee_name", "company", "default_shift"],
                 as_dict=True,
             )
 
             if not employee:
-                # No Employee maps to this device user_id. Not our error and
-                # not retryable until someone registers the employee — skip.
+                # No Employee maps to this device user_id (within the device's
+                # company). Not our error and not retryable until someone
+                # registers the employee — skip.
                 frappe.db.rollback(save_point=savepoint)
                 skipped += len(group_record_ids)
-                error_details.append(f"Employee not found having ID: {user_id} in device {device_identifier}")
+                where = f" (company {device_company})" if device_company else ""
+                error_details.append(
+                    f"Employee not found having ID: {user_id}{where} in device {device_identifier}"
+                )
                 skipped_punches.extend(group_record_ids)
                 continue
 

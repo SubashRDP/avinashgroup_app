@@ -3,4 +3,5 @@ requests
 pyinstaller
 pystray
 Pillow
+sv-ttk
 pywin32; sys_platform == "win32"

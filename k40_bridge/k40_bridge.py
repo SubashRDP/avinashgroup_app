@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta as _timedelta
-from tkinter import StringVar, Tk, Toplevel, filedialog, messagebox, ttk
+from tkinter import Canvas, StringVar, Tk, Toplevel, filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import requests
@@ -43,7 +43,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -424,6 +424,30 @@ def setup_logging(config, gui_callback=None):
 
 
 # ============================================
+# THEME
+# ============================================
+def apply_modern_theme(root, mode="light"):
+    """Give the app a flat, modern look via the optional Sun Valley (sv-ttk)
+    theme. Falls back to the tidiest built-in theme ('clam') — and defines a
+    bordered "Card.TFrame" by hand — so the bridge still looks clean if sv-ttk
+    isn't bundled. Safe to call once per top-level window."""
+    try:
+        import sv_ttk
+        sv_ttk.set_theme(mode)
+        return
+    except Exception:
+        pass
+    try:
+        style = ttk.Style(root)
+        style.theme_use("clam")
+        # sv-ttk styles Card.TFrame for us; under the fallback theme give it a
+        # light bordered look so the device cards still read as cards.
+        style.configure("Card.TFrame", background="#ffffff", relief="solid", borderwidth=1)
+    except Exception:
+        pass
+
+
+# ============================================
 # DEDUP STATE (one file shared across all devices)
 # ============================================
 class DedupStore:
@@ -768,7 +792,35 @@ class HtmsClient(_BaseClient):
     # no provider) is a hard error and re-raised immediately.
     _TRANSIENT_HINTS = ("lock", "in use", "being used", "share", "denied", "exclusively")
 
-    def _query(self, db_path, sql, retries=3):
+    @staticmethod
+    def _has_win32com():
+        try:
+            import win32com.client  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _mdbtools_available():
+        import shutil
+        return shutil.which("mdb-export") is not None
+
+    def _read_table(self, db_path, table, columns):
+        """Return rows (lists of the requested column values) from an Access
+        table. Uses the OLEDB/Jet provider on Windows — the same one HTMS-86
+        uses — and falls back to the `mdbtools` CLI on Linux/macOS so the source
+        also works off-Windows (dev boxes, Linux hosts)."""
+        if self._has_win32com():
+            return self._read_oledb(db_path, table, columns)
+        if self._mdbtools_available():
+            return self._read_mdbtools(db_path, table, columns)
+        raise RuntimeError(
+            "no Access .mdb reader available — install pywin32 (Windows) or "
+            "mdbtools (Linux/macOS)"
+        )
+
+    def _read_oledb(self, db_path, table, columns, retries=3):
+        sql = f"SELECT {', '.join(columns)} FROM {table}"
         last_err = None
         for attempt in range(retries):
             try:
@@ -793,6 +845,24 @@ class HtmsClient(_BaseClient):
                 raise
         raise last_err
 
+    def _read_mdbtools(self, db_path, table, columns):
+        import csv
+        import io
+        import subprocess
+        proc = subprocess.run(
+            ["mdb-export", db_path, table],
+            capture_output=True, text=True,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"mdb-export {table} failed: {(proc.stderr or '').strip()[:200]}"
+            )
+        rows = []
+        for r in csv.DictReader(io.StringIO(proc.stdout)):
+            rows.append([r.get(c) for c in columns])
+        return rows
+
     def _emp_map(self):
         """Emp_Id (== PubEvent.personID) -> Emp_no, from the master HAMS.mdb.
 
@@ -803,7 +873,7 @@ class HtmsClient(_BaseClient):
         attendance (the value may legitimately repeat across active + deleted
         re-enrollments of the same person, so this is a heads-up, not a hard
         error)."""
-        rows = self._query(self._master_db(), "SELECT Emp_Id, Emp_no FROM Emp")
+        rows = self._read_table(self._master_db(), "Emp", ["Emp_Id", "Emp_no"])
         mp = {}
         ids_by_no = {}
         for emp_id, emp_no in rows:
@@ -847,21 +917,22 @@ class HtmsClient(_BaseClient):
         if not self.probe_network():
             return [], "UNREACHABLE"
 
-        # COM must be initialized on the calling (sync) thread before any ADODB
-        # call, and balanced with CoUninitialize so repeated daily syncs don't
-        # leak apartment-init counts. Wrap the whole read once, not per query.
-        try:
+        # The OLEDB (Windows) backend needs COM initialized on the calling (sync)
+        # thread, balanced with CoUninitialize so repeated daily syncs don't leak
+        # apartment-init counts. The mdbtools backend needs none of that.
+        if self._has_win32com():
             import pythoncom
-        except ImportError:
-            return [], (
-                "ERROR: pywin32 not installed — HTMS sources need win32com/"
-                "pythoncom to read Access .mdb files"
-            )
-        pythoncom.CoInitialize()
-        try:
+            pythoncom.CoInitialize()
+            try:
+                return self._fetch_attendance(date_from, date_to)
+            finally:
+                pythoncom.CoUninitialize()
+        if self._mdbtools_available():
             return self._fetch_attendance(date_from, date_to)
-        finally:
-            pythoncom.CoUninitialize()
+        return [], (
+            "ERROR: no Access reader — install pywin32 (Windows) or mdbtools "
+            "(Linux/macOS) to read HTMS .mdb files"
+        )
 
     def _fetch_attendance(self, date_from=None, date_to=None):
         try:
@@ -872,8 +943,8 @@ class HtmsClient(_BaseClient):
         records = []
         for db_path in self._year_files(date_from, date_to):
             try:
-                rows = self._query(
-                    db_path, "SELECT personID, eventDate, eventTime FROM PubEvent"
+                rows = self._read_table(
+                    db_path, "PubEvent", ["personID", "eventDate", "eventTime"]
                 )
             except Exception as e:
                 return [], f"ERROR: reading {os.path.basename(db_path)}: {e}"
@@ -1634,9 +1705,10 @@ class SetupWizard:
         self.parent = parent
 
         self.window = Toplevel(parent) if parent.winfo_exists() else Tk()
+        apply_modern_theme(self.window)
         self.window.title("K40 Bridge Setup")
-        self.window.geometry("780x640")
-        self.window.minsize(680, 540)
+        self.window.geometry("880x740")
+        self.window.minsize(780, 600)
 
         # One list of row-widget dicts per section; both feed the same flat
         # config["devices"] list, discriminated by each entry's "type".
@@ -1645,86 +1717,111 @@ class SetupWizard:
         self._build()
 
     def _build(self):
-        # ── Step 1: ERPNext Connection ──
-        f1 = ttk.LabelFrame(self.window, text="Step 1: ERPNext Connection (used by all devices below)")
-        f1.pack(fill="x", padx=10, pady=6)
+        # The wizard is a Toplevel, where sv-ttk leaves ttk.Labels classic-grey;
+        # plain frames match that grey (no "chips"), so everything sits on plain
+        # frames. Devices and Software live on separate Notebook tabs, each with
+        # its "+ Add" button pinned above a scrollable list so nothing is ever
+        # cut off. The whole thing is centered in a max-width column.
+        content = ttk.Frame(self.window, padding=(18, 12))
+        content.pack(fill="both", expand=True)
+        content.columnconfigure(0, weight=1)  # fields stretch to the full width
+        content.rowconfigure(2, weight=1)      # the notebook row grows
 
-        ttk.Label(f1, text="ERPNext URL:").grid(row=0, column=0, sticky="e", padx=6, pady=3)
-        self.url_entry = ttk.Entry(f1, width=58)
-        self.url_entry.grid(row=0, column=1, sticky="ew", padx=6, pady=3)
+        # ── ERPNext Connection (shared, always visible) ──
+        top = ttk.Frame(content)
+        top.grid(row=0, column=0, sticky="ew")
+        top.columnconfigure(1, weight=1)
+        ttk.Label(top, text="ERPNext Connection",
+                  font=("TkDefaultFont", 12, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
+        ttk.Label(top, text="Used by every device & software source below.",
+                  foreground="#6e7781").grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        ttk.Label(top, text="ERPNext URL").grid(row=2, column=0, sticky="e", padx=(0, 10), pady=4)
+        self.url_entry = ttk.Entry(top, width=52)
+        self.url_entry.grid(row=2, column=1, sticky="ew", pady=4)
+        ttk.Label(top, text="API Key").grid(row=3, column=0, sticky="e", padx=(0, 10), pady=4)
+        self.key_entry = ttk.Entry(top, width=52)
+        self.key_entry.grid(row=3, column=1, sticky="ew", pady=4)
+        ttk.Label(top, text="API Secret").grid(row=4, column=0, sticky="e", padx=(0, 10), pady=4)
+        self.secret_entry = ttk.Entry(top, width=52, show="*")
+        self.secret_entry.grid(row=4, column=1, sticky="ew", pady=4)
+        trow = ttk.Frame(top)
+        trow.grid(row=5, column=1, sticky="w", pady=(4, 0))
+        ttk.Button(trow, text="Test Connection", command=self._test).pack(side="left")
+        self.test_label = ttk.Label(trow, text="")
+        self.test_label.pack(side="left", padx=10)
 
-        ttk.Label(f1, text="API Key:").grid(row=1, column=0, sticky="e", padx=6, pady=3)
-        self.key_entry = ttk.Entry(f1, width=58)
-        self.key_entry.grid(row=1, column=1, sticky="ew", padx=6, pady=3)
+        ttk.Separator(content).grid(row=1, column=0, sticky="ew", pady=12)
 
-        ttk.Label(f1, text="API Secret:").grid(row=2, column=0, sticky="e", padx=6, pady=3)
-        self.secret_entry = ttk.Entry(f1, width=58, show="*")
-        self.secret_entry.grid(row=2, column=1, sticky="ew", padx=6, pady=3)
+        # ── Devices | Software tabs ──
+        nb = ttk.Notebook(content)
+        nb.grid(row=2, column=0, sticky="nsew")
 
-        ttk.Button(f1, text="Test Connection", command=self._test).grid(row=3, column=1, sticky="w", padx=6, pady=3)
-        self.test_label = ttk.Label(f1, text="")
-        self.test_label.grid(row=4, column=1, sticky="w", padx=6, pady=3)
+        dev_tab = ttk.Frame(nb, padding=10)
+        nb.add(dev_tab, text="   Biometric Devices   ")
+        ttk.Label(dev_tab,
+                  text="Units the bridge polls over the LAN. Enter each DEVICE's own LAN IP "
+                       "(Menu → Comm. → Ethernet) — not this PC.",
+                  foreground="#6e7781", wraplength=680, justify="left").pack(anchor="w", pady=(0, 6))
+        ttk.Button(dev_tab, text="+  Add Device",
+                   command=lambda: self._add_row("device")).pack(anchor="w", pady=(0, 8))
+        self.devices_frame = self._scroll_area(dev_tab)
 
-        # ── Step 2a: Direct device connections ──
-        f2 = ttk.LabelFrame(self.window, text="Step 2a: Direct Device Connection (polled over the LAN)")
-        f2.pack(fill="both", expand=True, padx=10, pady=(6, 3))
-        ttk.Label(
-            f2,
-            text=(
-                "Biometric units the bridge reaches over the network. Enter the "
-                "DEVICE's LAN address (not this PC) — find it on the device under "
-                "Menu → Comm. → Ethernet → IP."
-            ),
-            foreground="gray", wraplength=720, justify="left",
-        ).pack(fill="x", padx=8, pady=(4, 4))
+        sw_tab = ttk.Frame(nb, padding=10)
+        nb.add(sw_tab, text="   Attendance Software   ")
+        ttk.Label(sw_tab,
+                  text="Read punches from attendance software's own database/export "
+                       "(controllers that don't speak a network protocol), e.g. HTMS-86.",
+                  foreground="#6e7781", wraplength=680, justify="left").pack(anchor="w", pady=(0, 6))
+        ttk.Button(sw_tab, text="+  Add Software Source",
+                   command=lambda: self._add_row("software")).pack(anchor="w", pady=(0, 8))
+        self.software_frame = self._scroll_area(sw_tab)
 
-        self.devices_frame = ttk.Frame(f2)
-        self.devices_frame.pack(fill="both", expand=True, padx=6)
-        ttk.Button(f2, text="+ Add Device", command=lambda: self._add_row("device")).pack(pady=4)
+        ttk.Separator(content).grid(row=3, column=0, sticky="ew", pady=12)
 
-        # ── Step 2b: Attendance software / database sources ──
-        f2b = ttk.LabelFrame(self.window, text="Step 2b: Attendance Software / Database")
-        f2b.pack(fill="both", expand=True, padx=10, pady=(3, 6))
-        ttk.Label(
-            f2b,
-            text=(
-                "Read punches from attendance software's own database/export "
-                "(for controllers that don't speak a network protocol). Pick the "
-                "software and point it at its data folder."
-            ),
-            foreground="gray", wraplength=720, justify="left",
-        ).pack(fill="x", padx=8, pady=(4, 4))
-
-        self.software_frame = ttk.Frame(f2b)
-        self.software_frame.pack(fill="both", expand=True, padx=6)
-        ttk.Button(f2b, text="+ Add Software Source",
-                   command=lambda: self._add_row("software")).pack(pady=4)
-
-        # ── Step 3: Sync Frequency ──
-        f3 = ttk.LabelFrame(self.window, text="Step 3: Sync Frequency")
-        f3.pack(fill="x", padx=10, pady=6)
-        ttk.Label(f3, text="Sync every:").grid(row=0, column=0, sticky="e", padx=6, pady=3)
+        # ── Sync frequency + actions ──
+        bottom = ttk.Frame(content)
+        bottom.grid(row=4, column=0, sticky="ew")
+        ttk.Label(bottom, text="Sync every").pack(side="left", padx=(0, 10))
         self.interval_var = StringVar(value="1 day")
-        ttk.Combobox(
-            f3,
-            textvariable=self.interval_var,
-            values=[name for name, _ in INTERVAL_OPTIONS],
-            state="readonly",
-            width=16,
-        ).grid(row=0, column=1, sticky="w", padx=6, pady=3)
-        ttk.Label(
-            f3,
-            text="(Use the Force Sync Now button for ad-hoc real-time data.)",
-            foreground="gray",
-        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=6, pady=2)
-
-        # ── Buttons ──
-        btns = ttk.Frame(self.window)
-        btns.pack(fill="x", padx=10, pady=8)
-        ttk.Button(btns, text="Save & Start", command=self._save).pack(side="right", padx=4)
-        ttk.Button(btns, text="Cancel", command=self.window.destroy).pack(side="right", padx=4)
+        ttk.Combobox(bottom, textvariable=self.interval_var,
+                     values=[name for name, _ in INTERVAL_OPTIONS],
+                     state="readonly", width=14).pack(side="left")
+        ttk.Button(bottom, text="Save & Start", command=self._save,
+                   style="Accent.TButton").pack(side="right")
+        ttk.Button(bottom, text="Cancel", command=self.window.destroy).pack(side="right", padx=(0, 8))
 
         self._populate_from_config()
+
+    def _scroll_area(self, parent):
+        """A vertically scrollable region. Returns the inner frame to add rows to,
+        so a long list of devices/sources never overflows the window."""
+        canvas = Canvas(parent, highlightthickness=0, borderwidth=0,
+                        background=self.window.cget("background"))
+        vsb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+        inner = ttk.Frame(canvas)
+        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(win_id, width=e.width))
+
+        # Mouse-wheel scrolling while the pointer is over this area.
+        def _wheel(e):
+            down = getattr(e, "num", 0) == 5 or getattr(e, "delta", 0) < 0
+            canvas.yview_scroll(1 if down else -1, "units")
+
+        def _bind(_):
+            for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                canvas.bind_all(seq, _wheel)
+
+        def _unbind(_):
+            for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+                canvas.unbind_all(seq)
+
+        canvas.bind("<Enter>", _bind)
+        canvas.bind("<Leave>", _unbind)
+        return inner
 
     def _populate_from_config(self):
         existing = self.config.get("devices", [])
@@ -1755,51 +1852,72 @@ class SetupWizard:
         rows_list = self.device_rows if category == "device" else self.software_rows
         parent = self.devices_frame if category == "device" else self.software_frame
 
-        row = ttk.Frame(parent)
-        row.pack(fill="x", pady=2)
-        entries = {"frame": row, "category": category, "field_entries": {}}
+        # Each source is a padded "card" so rows breathe instead of running
+        # together. Top line = identity (Name / Type … Serial / Test / remove);
+        # second line = the type-specific fields; third = a muted help hint.
+        card = ttk.Frame(parent, padding=(2, 10))
+        card.pack(fill="x")
+        entries = {"frame": card, "category": category, "field_entries": {}}
 
-        # Name + Type (fixed leading widgets)
-        ttk.Label(row, text="Name").grid(row=0, column=0, padx=(2, 1))
-        name_e = ttk.Entry(row, width=14)
+        head = ttk.Frame(card)
+        head.pack(fill="x")
+
+        def remove():
+            card.destroy()
+            rows_list[:] = [r for r in rows_list if r["frame"] is not card]
+
+        # Test / remove pinned to the far right of the card header.
+        btnbox = ttk.Frame(head)
+        btnbox.pack(side="right")
+        ttk.Button(btnbox, text="✕", width=3, command=remove).pack(side="right", padx=(8, 0))
+        test_btn = ttk.Button(btnbox, text="Test", width=8,
+                              command=lambda: self._test_device(entries))
+        test_btn.pack(side="right")
+        entries["test_btn"] = test_btn
+
+        # A tidy 2×2 form — Name / Type on top, Company / Serial below — that
+        # stretches to fill the row width (so it scales from a laptop to a 27").
+        form = ttk.Frame(head)
+        form.pack(side="left", fill="x", expand=True)
+        form.columnconfigure(1, weight=1)
+        form.columnconfigure(3, weight=1)
+
+        def _field(label, row, col, widget):
+            ttk.Label(form, text=label).grid(row=row, column=col, sticky="w", padx=(0, 6), pady=5)
+            widget.grid(row=row, column=col + 1, sticky="ew", padx=(0, 24), pady=5)
+
+        name_e = ttk.Entry(form, width=18)
         name_e.insert(0, device.get("name", ""))
-        name_e.grid(row=0, column=1, padx=(0, 6))
+        _field("Name", 0, 0, name_e)
         entries["name"] = name_e
 
         type_var = StringVar(value=default_type)
         entries["type"] = type_var
-        ttk.Combobox(
-            row, textvariable=type_var,
-            values=[f"{k}" for k, _ in choices],
-            state="readonly", width=11,
-        ).grid(row=0, column=2, padx=(0, 6))
+        type_cb = ttk.Combobox(form, textvariable=type_var, values=[k for k, _ in choices],
+                               state="readonly", width=15)
+        _field("Type", 0, 2, type_cb)
 
-        # Container the dynamic per-type fields get re-rendered into.
-        fields_frame = ttk.Frame(row)
-        fields_frame.grid(row=0, column=3, padx=2)
-        entries["fields_frame"] = fields_frame
+        company_e = ttk.Entry(form, width=18)
+        company_e.insert(0, device.get("company", ""))
+        _field("Company", 1, 0, company_e)
+        entries["company"] = company_e
 
-        # Serial + Test + remove (fixed trailing widgets)
-        ttk.Label(row, text="Serial").grid(row=0, column=4, padx=(6, 1))
-        serial_e = ttk.Entry(row, width=15)
+        serial_e = ttk.Entry(form, width=18)
         serial_e.insert(0, device.get("serial", ""))
-        serial_e.grid(row=0, column=5, padx=(0, 6))
+        _field("Serial", 1, 2, serial_e)
         entries["serial"] = serial_e
 
-        test_btn = ttk.Button(row, text="Test", width=7,
-                              command=lambda: self._test_device(entries))
-        test_btn.grid(row=0, column=6, padx=2)
-        entries["test_btn"] = test_btn
+        # Container the dynamic per-type fields + help hint get rendered into.
+        fields_frame = ttk.Frame(card)
+        fields_frame.pack(fill="x", pady=(8, 0))
+        entries["fields_frame"] = fields_frame
 
-        def remove():
-            row.destroy()
-            rows_list[:] = [r for r in rows_list if r["frame"] is not row]
+        # Divider to the next source (inside the card so it's removed with it).
+        ttk.Separator(card, orient="horizontal").pack(fill="x", pady=(12, 0))
 
-        ttk.Button(row, text="X", width=3, command=remove).grid(row=0, column=7, padx=2)
-
-        # Initial field render + re-render on type change. _prev_device carries
-        # the saved values into the first render; later renders use field
-        # defaults so switching type doesn't show the previous type's data.
+        # Initial field render + re-render on type change. device carries saved
+        # values into the first render; later renders use schema defaults so
+        # switching type doesn't show the previous type's data.
         self._render_fields(entries, device)
         type_var.trace_add("write", lambda *_: self._render_fields(entries, None))
 
@@ -1814,11 +1932,12 @@ class SetupWizard:
         entries["field_entries"] = {}
 
         meta = integration_meta(entries["type"].get()) or INTEGRATIONS["zkteco"]
-        col = 0
+
+        fields_row = ttk.Frame(frame)
+        fields_row.pack(fill="x")
         for spec in meta["fields"]:
-            ttk.Label(frame, text=spec["label"]).grid(row=0, column=col, padx=(2, 1))
-            col += 1
-            ent = ttk.Entry(frame, width=spec.get("width", 12),
+            ttk.Label(fields_row, text=spec["label"]).pack(side="left", padx=(0, 4))
+            ent = ttk.Entry(fields_row, width=spec.get("width", 12),
                             show="*" if spec.get("secret") else "")
             value = ""
             if device is not None:
@@ -1826,8 +1945,12 @@ class SetupWizard:
             if value in ("", None):
                 value = spec.get("default", "")
             ent.insert(0, str(value))
-            ent.grid(row=0, column=col, padx=(0, 6))
-            col += 1
+            # Wide fields (folder paths, etc.) stretch to fill the row width;
+            # small fields (Port, Comm Key) stay their natural size.
+            if spec.get("browse") == "dir" or spec.get("width", 12) >= 30:
+                ent.pack(side="left", fill="x", expand=True, padx=(0, 8))
+            else:
+                ent.pack(side="left", padx=(0, 14))
             entries["field_entries"][spec["key"]] = (ent, spec)
 
             if spec.get("browse") == "dir":
@@ -1836,13 +1959,12 @@ class SetupWizard:
                     if d:
                         e.delete(0, "end")
                         e.insert(0, d)
-                ttk.Button(frame, text="…", width=3, command=pick).grid(row=0, column=col, padx=(0, 4))
-                col += 1
+                ttk.Button(fields_row, text="…", width=3, command=pick).pack(
+                    side="left", padx=(0, 14))
 
-        # Hint line for this integration, under the fields.
-        ttk.Label(frame, text=meta.get("help", ""), foreground="gray",
-                  wraplength=520, justify="left").grid(
-            row=1, column=0, columnspan=col, sticky="w", pady=(1, 0))
+        # Muted help hint for this integration, on its own line under the fields.
+        ttk.Label(frame, text=meta.get("help", ""), foreground="#6e7781",
+                  wraplength=720, justify="left").pack(anchor="w", pady=(8, 0))
 
     def _test(self):
         url = self.url_entry.get().strip()
@@ -1871,6 +1993,7 @@ class SetupWizard:
             "name": entries["name"].get().strip(),
             "type": dtype,
             "serial": entries["serial"].get().strip(),
+            "company": entries["company"].get().strip(),
             "erpnext_url": url,
             "api_key": key,
             "api_secret": secret,
@@ -1954,12 +2077,21 @@ class SetupWizard:
         # Serial is required for every source: it's the dedup key, the
         # heartbeat/command-tunnel identity, and the key the server matches
         # against a registered+enabled Biometric Device (unknown → 403).
+        # A row counts as "untouched" (skip it silently) when it has no name,
+        # serial or company and every dynamic field is still at its schema
+        # default — e.g. the empty device row the wizard seeds, whose Port still
+        # reads the default 4370.
+        def _at_default(widget, spec):
+            v = widget.get().strip()
+            return not v or v == str(spec.get("default", "")).strip()
+
         devices = []
         problems = []
         for r in self.device_rows + self.software_rows:
-            # An untouched, entirely-blank row is skipped silently.
-            blank = (not r["name"].get().strip() and not r["serial"].get().strip()
-                     and all(not w.get().strip() for w, _ in r["field_entries"].values()))
+            blank = (not r["name"].get().strip()
+                     and not r["serial"].get().strip()
+                     and not r["company"].get().strip()
+                     and all(_at_default(w, spec) for w, spec in r["field_entries"].values()))
             if blank:
                 continue
             dev, missing = self._row_to_device(r, url, key, secret)
@@ -2045,6 +2177,7 @@ class ControlPanel:
         # "show the window" requests when the user opens the app again.
         self.primary_sock = primary_sock
         self.root = Tk()
+        apply_modern_theme(self.root)
         self.root.title(f"K40 Bridge  v{VERSION}")
         self.root.geometry("960x640")
         self.root.minsize(820, 520)
@@ -2158,16 +2291,18 @@ class ControlPanel:
         ttk.Button(top, text="Edit Config", command=self._edit_config).pack(side="right", padx=2)
         ttk.Button(top, text="Check Updates", command=self._check_update_manual).pack(side="right", padx=2)
 
-        cols = ("name", "ip", "last_sync", "status")
+        cols = ("name", "company", "ip", "last_sync", "status")
         self.tree = ttk.Treeview(self.root, columns=cols, show="headings", height=10)
         self.tree.heading("name", text="Name")
+        self.tree.heading("company", text="Company")
         self.tree.heading("ip", text="Address")
         self.tree.heading("last_sync", text="Last Sync")
         self.tree.heading("status", text="Status")
-        self.tree.column("name", width=180)
-        self.tree.column("ip", width=170)
-        self.tree.column("last_sync", width=110)
-        self.tree.column("status", width=440)
+        self.tree.column("name", width=150)
+        self.tree.column("company", width=150)
+        self.tree.column("ip", width=150)
+        self.tree.column("last_sync", width=100)
+        self.tree.column("status", width=380)
 
         # Color each row by health so the table reads at a glance: green = ok,
         # blue = actively syncing, orange = unreachable, red = error/auth,
@@ -2191,7 +2326,8 @@ class ControlPanel:
 
         btns = ttk.Frame(self.root)
         btns.pack(fill="x", padx=10, pady=4)
-        ttk.Button(btns, text="Force Sync All", command=self._force_all).pack(side="left", padx=2)
+        ttk.Button(btns, text="Force Sync All", command=self._force_all,
+                   style="Accent.TButton").pack(side="left", padx=2)
         ttk.Button(btns, text="Force Sync Selected", command=self._force_selected).pack(side="left", padx=2)
         ttk.Button(btns, text="Sync from Date…", command=self._sync_from_date).pack(side="left", padx=2)
 
@@ -2223,7 +2359,8 @@ class ControlPanel:
                 "",
                 "end",
                 iid=d["name"],
-                values=(d["name"], device_address(d), "—", "○ Idle — waiting for first sync"),
+                values=(d["name"], d.get("company") or "—", device_address(d), "—",
+                        "○ Idle — waiting for first sync"),
                 tags=("pending",),
             )
         self._refresh_summary()
@@ -2254,7 +2391,8 @@ class ControlPanel:
 
         self._device_state[name] = state
         tag = state if state in self._STATE_GLYPHS else "pending"
-        self.tree.item(name, values=(name, ip_port, last_sync, label), tags=(tag,))
+        company = (device.get("company") if device else "") or "—"
+        self.tree.item(name, values=(name, company, ip_port, last_sync, label), tags=(tag,))
         self._refresh_summary()
 
     def _refresh_summary(self):
@@ -2796,6 +2934,7 @@ def main():
         # Nothing configured yet → must set up interactively, no matter how we
         # were launched. Show the wizard, then the visible control panel.
         boot = Tk()
+        apply_modern_theme(boot)
         boot.withdraw()
         wizard_completed = {"value": False, "config": None}
 
