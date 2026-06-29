@@ -42,6 +42,9 @@ doctype_js = {
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
     "Payroll Entry": "public/js/payroll_entry.js",
+    "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
+    "Supplier": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
+    "Item": "public/js/item_default_account.js",
 }
 
 purchase_invoice_specific_events = {

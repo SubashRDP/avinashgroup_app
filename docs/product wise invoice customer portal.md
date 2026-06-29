@@ -125,3 +125,31 @@ Agent rows**.
   workers reloaded — auto on the dev server; **`bench restart`** on live.
 - JS change (party_ledger.js) — hard-refresh the browser.
 - No schema/migration changes.
+
+---
+
+## 2026-06-28 update — report layout reorder (Sales Analysis Product wise Invoice Details)
+
+**What & why:** Tidy the per-customer block of the **Sales Analysis Product wise Invoice Details**
+report (which this portal page reuses) so the sub-sections and summary read cleanly.
+
+**How it works:**
+- `build_rows` now emits, per customer: **Invoice** rows first → **Return** rows next → then the
+  **summary block** (Customer Sales row directly above Customer Returns). Previously the Return
+  rows were interleaved with the summary. Totals (`cust_sales`, `cust_ret`, product rollups) are
+  unchanged; only the row order moved. Customer Returns still shows `0.00` when Include Return is
+  on and there are none.
+- JS: section header rows (`is_section` — the "Invoice"/"Return" labels) now render **bold**,
+  matching the product/customer headers.
+
+**Files:**
+- `report/sales_analysis_product_wise_invoice_details/sales_analysis_product_wise_invoice_details.py`
+  — reordered Invoice/Return/summary blocks in `build_rows`.
+- `report/sales_analysis_product_wise_invoice_details/sales_analysis_product_wise_invoice_details.js`
+  — bold `is_section` rows.
+
+**How to test:** Open the desk report (or `/product_wise_invoice_details`) with returns present →
+per customer you see Invoice rows, then Return rows, then Customer Sales above Customer Returns;
+the "Invoice"/"Return" labels are bold.
+
+> Committed as `c3efef4` ("Add a new page in customer portal for product wise invoice details").
