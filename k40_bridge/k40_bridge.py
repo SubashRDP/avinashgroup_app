@@ -43,7 +43,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -355,7 +355,26 @@ def load_config():
         for k, v in DEFAULT_CONFIG.items():
             cfg.setdefault(k, v)
         return cfg
-    except Exception:
+    except Exception as e:
+        # A corrupt/unreadable config would otherwise be silently discarded,
+        # dropping the user back into the setup wizard with all their devices
+        # and credentials gone. Preserve the bad file and leave a breadcrumb so
+        # it can be recovered. Logging isn't configured yet (it's built FROM the
+        # config), so write directly to the log file.
+        try:
+            import shutil
+            backup = CONFIG_FILE + ".corrupt"
+            shutil.copy2(CONFIG_FILE, backup)
+        except Exception:
+            backup = "(backup failed)"
+        try:
+            with open(LOG_FILE, "a", encoding="utf-8") as lf:
+                lf.write(
+                    f"{datetime.now():%Y-%m-%d %H:%M:%S} ERROR config.json "
+                    f"unreadable ({e}); preserved a copy at {backup}\n"
+                )
+        except Exception:
+            pass
         return None
 
 
@@ -717,10 +736,18 @@ class HtmsClient(_BaseClient):
         return bool(folder) and os.path.isdir(folder) and os.path.isfile(self._master_db())
 
     def _connect(self, db_path):
-        import pythoncom
-        import win32com.client
+        try:
+            import win32com.client
+        except ImportError as e:
+            raise RuntimeError(
+                "pywin32 is not installed — HTMS/HAMS sources need the win32com "
+                "package to read Access .mdb files. Install pywin32, or use the "
+                "official Windows build of the bridge."
+            ) from e
 
-        pythoncom.CoInitialize()
+        # NOTE: COM is initialized once per fetch in fetch_attendance() (and
+        # balanced with CoUninitialize there), not here — so this can be called
+        # repeatedly (master DB + each year file) without nesting init counts.
         last_err = None
         for prov in self._PROVIDERS:
             try:
@@ -735,29 +762,64 @@ class HtmsClient(_BaseClient):
             f"this app's bitness — last error: {last_err}"
         )
 
-    def _query(self, db_path, sql):
-        conn = self._connect(db_path)
-        try:
-            rs = conn.Execute(sql)[0]
-            ncols = rs.Fields.Count
-            rows = []
-            while not rs.EOF:
-                rows.append([rs.Fields.Item(i).Value for i in range(ncols)])
-                rs.MoveNext()
-            rs.Close()
-            return rows
-        finally:
-            conn.Close()
+    # Substrings that mark a *transient* Access/Jet failure — the .mdb is
+    # momentarily locked or held exclusively (often by HTMS-86 itself writing a
+    # punch). These are worth retrying; anything else (missing table, bad SQL,
+    # no provider) is a hard error and re-raised immediately.
+    _TRANSIENT_HINTS = ("lock", "in use", "being used", "share", "denied", "exclusively")
+
+    def _query(self, db_path, sql, retries=3):
+        last_err = None
+        for attempt in range(retries):
+            try:
+                conn = self._connect(db_path)
+                try:
+                    rs = conn.Execute(sql)[0]
+                    ncols = rs.Fields.Count
+                    rows = []
+                    while not rs.EOF:
+                        rows.append([rs.Fields.Item(i).Value for i in range(ncols)])
+                        rs.MoveNext()
+                    rs.Close()
+                    return rows
+                finally:
+                    conn.Close()
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                if any(h in msg for h in self._TRANSIENT_HINTS) and attempt < retries - 1:
+                    time.sleep(min(2 ** attempt, 4))
+                    continue
+                raise
+        raise last_err
 
     def _emp_map(self):
-        """Emp_Id (== PubEvent.personID) -> Emp_no, from the master HAMS.mdb."""
+        """Emp_Id (== PubEvent.personID) -> Emp_no, from the master HAMS.mdb.
+
+        Also warns when several employees share one Emp_no. That work-number is
+        what we send to ERPNext as the user_id, so a shared value silently
+        collapses those people's punches onto a single Employee. A log warning is
+        the only place ops can catch a HAMS data-entry mistake before it skews
+        attendance (the value may legitimately repeat across active + deleted
+        re-enrollments of the same person, so this is a heads-up, not a hard
+        error)."""
         rows = self._query(self._master_db(), "SELECT Emp_Id, Emp_no FROM Emp")
         mp = {}
+        ids_by_no = {}
         for emp_id, emp_no in rows:
             key = ("" if emp_id is None else str(emp_id)).strip()
             no = ("" if emp_no is None else str(emp_no)).strip()
             if key and no:
                 mp[key] = no
+                ids_by_no.setdefault(no, []).append(key)
+        shared = {no: ids for no, ids in ids_by_no.items() if len(ids) > 1}
+        if shared:
+            preview = "; ".join(f"{no}->{ids}" for no, ids in list(shared.items())[:8])
+            logging.getLogger("k40_bridge").warning(
+                "HTMS HAMS.mdb has %d Emp_no value(s) shared by multiple employees; "
+                "their punches collapse onto one ERPNext employee — fix in HAMS. "
+                "Examples (Emp_no->Emp_Ids): %s", len(shared), preview
+            )
         return mp
 
     def _year_files(self, date_from, date_to):
@@ -784,6 +846,24 @@ class HtmsClient(_BaseClient):
     def fetch_attendance(self, date_from=None, date_to=None):
         if not self.probe_network():
             return [], "UNREACHABLE"
+
+        # COM must be initialized on the calling (sync) thread before any ADODB
+        # call, and balanced with CoUninitialize so repeated daily syncs don't
+        # leak apartment-init counts. Wrap the whole read once, not per query.
+        try:
+            import pythoncom
+        except ImportError:
+            return [], (
+                "ERROR: pywin32 not installed — HTMS sources need win32com/"
+                "pythoncom to read Access .mdb files"
+            )
+        pythoncom.CoInitialize()
+        try:
+            return self._fetch_attendance(date_from, date_to)
+        finally:
+            pythoncom.CoUninitialize()
+
+    def _fetch_attendance(self, date_from=None, date_to=None):
         try:
             emp_map = self._emp_map()
         except Exception as e:
@@ -1315,7 +1395,7 @@ class SyncEngine:
 
     def _sync_one(self, device, from_date_override=None):
         name = device["name"]
-        self.status_callback(name, "syncing", None)
+        self.status_callback(name, "syncing", "connecting…")
         self.logger.info(f"[{name}] sync_cycle: starting")
 
         client = make_device_client(
@@ -1371,6 +1451,9 @@ class SyncEngine:
             return
 
         self.logger.info(f"[{name}] fetched {len(attendances)} records")
+        self.status_callback(
+            name, "syncing", f"fetched {len(attendances)} record(s) — checking for new…"
+        )
 
         erpnext = ErpnextClient(device)
 
@@ -1395,6 +1478,10 @@ class SyncEngine:
                 continue
             to_send.append((key, {"user_id": att.user_id, "timestamp_str": ts_str}))
 
+        total_new = len(to_send)
+        if total_new:
+            self.status_callback(name, "syncing", f"pushing {total_new} new punch(es)…")
+
         synced = errors = 0
         last_err = None
 
@@ -1406,6 +1493,10 @@ class SyncEngine:
             keys = [k for (k, _) in batch]
             records = [r for (_, r) in batch]
 
+            self.status_callback(
+                name, "syncing",
+                f"pushing {min(batch_start + BATCH_SIZE, total_new)}/{total_new}…",
+            )
             results, err = erpnext.push_batch(records)
 
             if results == "auth_fail":
@@ -2038,12 +2129,21 @@ class ControlPanel:
                     pass
 
     def _build(self):
+        # Per-device latest state — drives the health summary and the colored
+        # status rows so the operator can tell at a glance what's happening.
+        self._device_state = {}
+
         top = ttk.Frame(self.root)
         top.pack(fill="x", padx=10, pady=6)
 
-        self.status_label = ttk.Label(top, text="● Running", foreground="green", font=("TkDefaultFont", 10, "bold"))
+        self.status_label = ttk.Label(top, text="● Running", foreground="#1a7f37",
+                                      font=("TkDefaultFont", 11, "bold"))
         self.status_label.pack(side="left")
-        self.countdown_label = ttk.Label(top, text="")
+        # Live health roll-up (✓ ok · ⚠ unreachable · ✗ error). Filled by
+        # _refresh_summary() whenever a device reports in.
+        self.summary_label = ttk.Label(top, text="", foreground="#57606a")
+        self.summary_label.pack(side="left", padx=12)
+        self.countdown_label = ttk.Label(top, text="", foreground="#57606a")
         self.countdown_label.pack(side="left", padx=12)
 
         self.update_label = ttk.Label(top, text="", foreground="blue", cursor="hand2")
@@ -2068,7 +2168,24 @@ class ControlPanel:
         self.tree.column("ip", width=170)
         self.tree.column("last_sync", width=110)
         self.tree.column("status", width=440)
+
+        # Color each row by health so the table reads at a glance: green = ok,
+        # blue = actively syncing, orange = unreachable, red = error/auth,
+        # gray = idle/pending. Row tags carry both a foreground and a light tint.
+        self.tree.tag_configure("ok",          foreground="#0a5d2a", background="#e6f4ea")
+        self.tree.tag_configure("syncing",     foreground="#0a4fa0", background="#ddf4ff")
+        self.tree.tag_configure("error",       foreground="#a40e26", background="#ffebe9")
+        self.tree.tag_configure("auth_fail",   foreground="#a40e26", background="#ffebe9")
+        self.tree.tag_configure("unreachable", foreground="#8a3800", background="#fff1e5")
+        self.tree.tag_configure("pending",     foreground="#57606a")
         self.tree.pack(fill="both", expand=True, padx=10, pady=6)
+
+        # One-line legend so the glyphs/colors are self-explanatory.
+        ttk.Label(
+            self.root,
+            text="Legend:   ● OK     ⟳ Syncing     ● Unreachable     ● Error / Auth     ○ Idle",
+            foreground="#57606a", font=("TkDefaultFont", 8),
+        ).pack(anchor="w", padx=12)
 
         self._populate_tree()
 
@@ -2091,21 +2208,39 @@ class ControlPanel:
 
         ttk.Label(self.root, text="Recent log:").pack(anchor="w", padx=10, pady=(6, 0))
         self.log_text = ScrolledText(self.root, height=10, state="disabled", font=("Courier", 9))
+        # Tint log lines by severity so warnings/errors jump out of the stream.
+        self.log_text.tag_configure("ERROR", foreground="#a40e26")
+        self.log_text.tag_configure("WARN", foreground="#8a3800")
+        self.log_text.tag_configure("OK", foreground="#0a5d2a")
         self.log_text.pack(fill="both", expand=True, padx=10, pady=6)
 
     def _populate_tree(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
         for d in self.config.get("devices", []):
+            self._device_state[d["name"]] = "pending"
             self.tree.insert(
                 "",
                 "end",
                 iid=d["name"],
-                values=(d["name"], device_address(d), "—", "pending"),
+                values=(d["name"], device_address(d), "—", "○ Idle — waiting for first sync"),
+                tags=("pending",),
             )
+        self._refresh_summary()
 
     def _on_status(self, name, state, msg):
         self.root.after(0, lambda: self._update_status(name, state, msg))
+
+    # Glyph + human label per state. The glyph shape (not just color) carries the
+    # meaning so the table still reads in greyscale / for color-blind users.
+    _STATE_GLYPHS = {
+        "syncing":     "⟳ Syncing…",
+        "ok":          "● OK",
+        "unreachable": "● Unreachable",
+        "error":       "● Error",
+        "auth_fail":   "● Auth failed",
+        "pending":     "○ Idle",
+    }
 
     def _update_status(self, name, state, msg):
         if not self.tree.exists(name):
@@ -2114,23 +2249,66 @@ class ControlPanel:
         device = next((d for d in self.config["devices"] if d["name"] == name), None)
         ip_port = device_address(device) if device else ""
 
-        label = {
-            "syncing": "⟳ syncing…",
-            "ok": f"● OK — {msg or ''}",
-            "unreachable": f"● UNREACHABLE — {msg or ''}",
-            "error": f"● ERROR — {msg or ''}",
-            "auth_fail": f"● AUTH FAIL — {msg or ''}",
-            "pending": "pending",
-        }.get(state, state)
+        glyph = self._STATE_GLYPHS.get(state, state)
+        label = f"{glyph} — {msg}" if msg else glyph
 
-        self.tree.item(name, values=(name, ip_port, last_sync, label))
+        self._device_state[name] = state
+        tag = state if state in self._STATE_GLYPHS else "pending"
+        self.tree.item(name, values=(name, ip_port, last_sync, label), tags=(tag,))
+        self._refresh_summary()
+
+    def _refresh_summary(self):
+        """Roll up per-device states into the header: a one-glance health line
+        plus an activity-aware main status label."""
+        states = list(self._device_state.values())
+        total = len(states)
+        ok = states.count("ok")
+        err = states.count("error") + states.count("auth_fail")
+        unr = states.count("unreachable")
+        syncing = states.count("syncing")
+        idle = total - ok - err - unr - syncing
+
+        parts = []
+        if ok:
+            parts.append(f"✓ {ok} ok")
+        if syncing:
+            parts.append(f"⟳ {syncing} syncing")
+        if unr:
+            parts.append(f"⚠ {unr} unreachable")
+        if err:
+            parts.append(f"✗ {err} error")
+        if idle:
+            parts.append(f"○ {idle} idle")
+        self.summary_label.config(
+            text=("   ·   ".join(parts) + f"      ({total} sources)") if total else ""
+        )
+
+        # Main label reflects live activity — unless paused, which owns the label.
+        if self.engine.paused:
+            return
+        if syncing:
+            self.status_label.config(text="⟳ Syncing…", foreground="#0a4fa0")
+        elif err:
+            self.status_label.config(text="● Running (with errors)", foreground="#8a3800")
+        else:
+            self.status_label.config(text="● Running", foreground="#1a7f37")
 
     def _on_log(self, line):
         self.root.after(0, lambda: self._append_log(line))
 
     def _append_log(self, line):
         self.log_text.config(state="normal")
-        self.log_text.insert("end", line + "\n")
+        # Tag by severity token in the formatted line ("… ERROR …" / "… WARNING …")
+        # or a successful sync summary, so the eye lands on what matters.
+        if " ERROR " in line:
+            tag = ("ERROR",)
+        elif " WARNING " in line or " WARN " in line:
+            tag = ("WARN",)
+        elif "synced=" in line:
+            tag = ("OK",)
+        else:
+            tag = ()
+        self.log_text.insert("end", line + "\n", tag)
         # cap to last 300 lines
         lines = int(self.log_text.index("end-1c").split(".")[0])
         if lines > 300:

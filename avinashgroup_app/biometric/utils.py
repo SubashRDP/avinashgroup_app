@@ -110,7 +110,15 @@ def process_attendance_records(attendance_data, device_identifier=None):
     for (user_id, punch_date), new_timestamps in grouped.items():
         group_record_ids = record_ids_by_group[(user_id, punch_date)]
 
+        # Each (employee, date) group is independent. Wrap it in a savepoint so a
+        # failure partway through reconciliation (e.g. the 3rd of 5 check-in
+        # inserts throws) rolls back just this group's partial writes instead of
+        # leaving them to be committed by the final commit() — otherwise a group
+        # could land half its punches and still be reported as failed/retryable.
+        savepoint = "biometric_group"
         try:
+            frappe.db.savepoint(savepoint)
+
             employee = frappe.db.get_value(
                 "Employee",
                 {"attendance_device_id": user_id},
@@ -121,6 +129,7 @@ def process_attendance_records(attendance_data, device_identifier=None):
             if not employee:
                 # No Employee maps to this device user_id. Not our error and
                 # not retryable until someone registers the employee — skip.
+                frappe.db.rollback(save_point=savepoint)
                 skipped += len(group_record_ids)
                 error_details.append(f"Employee not found having ID: {user_id} in device {device_identifier}")
                 skipped_punches.extend(group_record_ids)
@@ -139,6 +148,11 @@ def process_attendance_records(attendance_data, device_identifier=None):
             )
 
         except Exception as e:
+            # Undo any partial writes from this group, then record it as failed.
+            try:
+                frappe.db.rollback(save_point=savepoint)
+            except Exception:
+                pass
             errors += 1
             error_details.append(f"{user_id}: {str(e)[:100]}")
             failed_punches.extend(group_record_ids)
