@@ -1,6 +1,10 @@
 pyzk
 requests
-cryptography
+# Pinned: cryptography 49+ dropped 32-bit Windows wheels, so on the x86 build
+# runner pip would try to compile it from Rust source and fail — aborting the
+# whole install. 48.0.1 ships a win32 abi3 wheel. Keep <49 until the build
+# moves to x64 (which would need the Access DB Engine for the HTMS reader).
+cryptography==48.0.1
 pyinstaller
 pystray
 Pillow

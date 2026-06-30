@@ -27,28 +27,21 @@ jobs:
           architecture: 'x86'
 
       - name: Install dependencies
-        # Use `python -m pip` (not bare `pip`) so packages install into the
-        # SAME interpreter PyInstaller runs under. A bare `pip` can resolve to a
-        # different Python on the runner, leaving PyInstaller to build against an
-        # environment without requests/cryptography/zk — which silently produces
-        # an exe that crashes at startup with ModuleNotFoundError.
+        # `python -m pip` so packages land in the same interpreter PyInstaller
+        # uses. CRITICAL: PowerShell does NOT fail a step when a non-final native
+        # command exits non-zero, so a failed `pip install -r` here would be
+        # silently swallowed (it was — every exe shipped with no third-party
+        # deps). Check $LASTEXITCODE after the requirements install so a failure
+        # actually fails the build instead of producing a depless exe.
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r k40_bridge/requirements.txt
+          if ($LASTEXITCODE -ne 0) { Write-Error "requirements install failed"; exit 1 }
           python -m pip install pyinstaller
+          if ($LASTEXITCODE -ne 0) { Write-Error "pyinstaller install failed"; exit 1 }
 
-      - name: Diagnose dependencies (writes depcheck.txt)
+      - name: Verify dependencies are importable (fail fast)
         run: python k40_bridge/ci_check_deps.py
-
-      - name: Publish dep diagnostic (readable without auth)
-        if: always()
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: k40-diag
-          name: K40 dependency diagnostic
-          files: depcheck.txt
-          make_latest: 'false'
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build EXE
         # Run PyInstaller via `python -m` (same interpreter as above) and
@@ -63,6 +56,8 @@ jobs:
             --collect-all certifi `
             --collect-all charset_normalizer `
             --collect-all idna `
+            --collect-all cryptography `
+            --collect-all cffi `
             --collect-submodules zk `
             --collect-all pystray `
             --collect-all PIL `
