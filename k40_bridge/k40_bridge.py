@@ -15,7 +15,7 @@ import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta as _timedelta
-from tkinter import Canvas, StringVar, Tk, Toplevel, filedialog, messagebox, ttk
+from tkinter import BooleanVar, Canvas, StringVar, Tk, Toplevel, filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import requests
@@ -45,7 +45,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -695,6 +695,33 @@ class DedupStore:
         with self._lock:
             self.synced.add(key)
 
+    def clear_all(self):
+        """Forget every synced punch so the next cycle re-sends them all. Used
+        when ERPNext data was wiped and must be fully repopulated. Returns the
+        number of keys dropped."""
+        with self._lock:
+            n = len(self.synced)
+            self.synced = set()
+        self.save()
+        return n
+
+    def clear_from_date(self, from_date):
+        """Forget synced punches whose date is on/after `from_date` (a date), so
+        only that window re-sends. Keys we can't parse are kept. Returns the
+        number dropped."""
+        with self._lock:
+            kept = set()
+            removed = 0
+            for k in self.synced:
+                ts = _parse_key_timestamp(k)
+                if ts is not None and ts.date() >= from_date:
+                    removed += 1
+                else:
+                    kept.add(k)
+            self.synced = kept
+        self.save()
+        return removed
+
     def save(self):
         with self._lock:
             self._prune()
@@ -821,6 +848,22 @@ class SyncLogStore:
         whole batch."""
         for r in rows:
             self.record(**r)
+
+    def clear(self, from_date=None):
+        """Delete sync-log rows — all of them, or only those on/after
+        `from_date` (a 'YYYY-MM-DD' string). Returns the number deleted."""
+        if not self._ok:
+            return 0
+        try:
+            with self._lock, self._connect() as conn:
+                if from_date:
+                    cur = conn.execute(
+                        "DELETE FROM sync_log WHERE event_date >= ?", (from_date,))
+                else:
+                    cur = conn.execute("DELETE FROM sync_log")
+                return cur.rowcount if cur.rowcount is not None else 0
+        except Exception:
+            return 0
 
     def summary(self, device_name=None):
         """Return {outcome: count} totals, optionally scoped to one device."""
@@ -2862,6 +2905,7 @@ class ControlPanel:
         ttk.Button(btns, text="Force Sync Selected", command=self._force_selected).pack(side="left", padx=2)
         ttk.Button(btns, text="Sync from Date…", command=self._sync_from_date).pack(side="left", padx=2)
         ttk.Button(btns, text="View Sync Log", command=self._open_sync_log).pack(side="left", padx=2)
+        ttk.Button(btns, text="Reset Sync Data…", command=self._reset_sync_data).pack(side="left", padx=2)
 
         # Auto-start button (Windows only)
         if IS_WINDOWS:
@@ -3053,6 +3097,107 @@ class ControlPanel:
 
         ent.focus_set()
         ent.select_range(0, "end")
+
+    def _reset_sync_data(self):
+        """Clear the bridge's 'already synced' memory (and optionally the local
+        sync log) so punches re-sync to ERPNext. Use after deleting records in
+        ERPNext — the bridge otherwise thinks they're still synced and skips
+        them. Operates on the live engine objects, so no restart is needed."""
+        dlg = Toplevel(self.root)
+        dlg.title("Reset Sync Data")
+        dlg.geometry("460x340")
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        ttk.Label(
+            dlg,
+            text=("Deleted records in ERPNext? The bridge still remembers them as "
+                  "“synced” and won’t resend. Clear that memory here and they’ll "
+                  "re-sync on the next cycle."),
+            wraplength=420, justify="left",
+        ).pack(padx=14, pady=(14, 8), anchor="w")
+
+        scope = StringVar(value="date")
+        date_var = StringVar(value=date.today().strftime("%Y-%m-%d"))
+
+        rowd = ttk.Frame(dlg); rowd.pack(fill="x", padx=14, pady=2)
+        ttk.Radiobutton(rowd, text="From date:", variable=scope, value="date").pack(side="left")
+        ent = ttk.Entry(rowd, textvariable=date_var, width=14)
+        ent.pack(side="left", padx=(6, 0))
+        ttk.Label(rowd, text="(YYYY-MM-DD, onward)", foreground="gray").pack(side="left", padx=6)
+
+        ttk.Radiobutton(
+            dlg, text="ALL sync data (re-sends the entire device history)",
+            variable=scope, value="all",
+        ).pack(anchor="w", padx=14, pady=2)
+
+        also_log = BooleanVar(value=True)
+        ttk.Checkbutton(dlg, text="Also clear the local sync log",
+                        variable=also_log).pack(anchor="w", padx=14, pady=(6, 2))
+
+        resync = BooleanVar(value=True)
+        ttk.Checkbutton(dlg, text="Resync now (otherwise waits for next cycle)",
+                        variable=resync).pack(anchor="w", padx=14, pady=2)
+
+        def go():
+            all_scope = scope.get() == "all"
+            from_date = None
+            if not all_scope:
+                s = date_var.get().strip()
+                try:
+                    from_date = datetime.strptime(s, "%Y-%m-%d").date()
+                except ValueError:
+                    messagebox.showerror("Invalid date",
+                                         f"'{s}' is not a valid date.\nUse YYYY-MM-DD.",
+                                         parent=dlg)
+                    return
+
+            if all_scope:
+                if not messagebox.askyesno(
+                    "Re-send everything?",
+                    "This forgets ALL synced punches and re-sends the entire device "
+                    "history to ERPNext (can be tens of thousands of records).\n\n"
+                    "Continue?", parent=dlg):
+                    return
+
+            # Operate on the LIVE engine objects so the running sync thread sees
+            # the change immediately (editing the file alone would be overwritten).
+            if all_scope:
+                removed = self.engine.dedup.clear_all()
+                log_removed = self.engine.synclog.clear() if also_log.get() else 0
+            else:
+                removed = self.engine.dedup.clear_from_date(from_date)
+                log_removed = (self.engine.synclog.clear(from_date.strftime("%Y-%m-%d"))
+                               if also_log.get() else 0)
+
+            self.logger.info(
+                f"Reset Sync Data: scope={'ALL' if all_scope else from_date}, "
+                f"dedup_cleared={removed}, log_cleared={log_removed}, "
+                f"resync={resync.get()}"
+            )
+
+            if resync.get():
+                # Force an immediate resync; pull from the chosen date (or the
+                # whole history for ALL) so the cleared punches are re-fetched.
+                rfrom = date(2000, 1, 1) if all_scope else from_date
+                self.engine.force_sync(from_date=rfrom)
+
+            dlg.destroy()
+            messagebox.showinfo(
+                "Sync data reset",
+                f"Forgot {removed} synced punch(es)"
+                + (f" and {log_removed} sync-log row(s)" if also_log.get() else "")
+                + ".\n\n" + ("Re-syncing now…" if resync.get()
+                             else "They will re-sync on the next cycle."),
+                parent=self.root,
+            )
+
+        btns = ttk.Frame(dlg)
+        btns.pack(pady=14)
+        ttk.Button(btns, text="Clear & Resync", command=go,
+                   style="Accent.TButton").pack(side="left", padx=4)
+        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side="left", padx=4)
+        ent.focus_set()
 
     def _toggle_pause(self):
         if self.engine.paused:

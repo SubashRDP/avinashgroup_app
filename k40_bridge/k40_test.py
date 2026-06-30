@@ -123,6 +123,7 @@ def _temp_env():
     kb.CONFIG_FILE = os.path.join(d, "config.json")
     kb.KEY_FILE = os.path.join(d, "secret.key")
     kb.SYNC_DB_FILE = os.path.join(d, "k40_sync_log.db")
+    kb.SYNCED_RECORDS_FILE = os.path.join(d, "k40_synced.json")
     kb._fernet_cache = None
     return d
 
@@ -228,6 +229,35 @@ def test_synclog_upsert_updates_outcome():
     assert store.summary() == {"synced": 1}
     rows = store.recent()
     assert len(rows) == 1 and rows[0]["outcome"] == "synced"
+
+
+def test_dedup_clear_from_date_and_all():
+    _temp_env()
+    from datetime import date as _date
+    d = kb.DedupStore()
+    d.mark("htms_84_003_2026-06-30 06:01:00")
+    d.mark("htms_84_004_2026-06-30 19:02:00")
+    d.mark("htms_84_005_2026-05-20 08:00:00")   # older — should survive a date clear
+    removed = d.clear_from_date(_date(2026, 6, 30))
+    assert removed == 2, removed
+    assert d.is_synced("htms_84_005_2026-05-20 08:00:00")
+    assert not d.is_synced("htms_84_003_2026-06-30 06:01:00")
+    # a fresh store reads the persisted file — the clear must have been saved
+    assert not kb.DedupStore().is_synced("htms_84_004_2026-06-30 19:02:00")
+    # clear_all forgets the rest
+    assert d.clear_all() == 1
+    assert not d.is_synced("htms_84_005_2026-05-20 08:00:00")
+
+
+def test_synclog_clear_by_date_and_all():
+    _temp_env()
+    s = kb.SyncLogStore(db_path=kb.SYNC_DB_FILE)
+    s.record("k1", "htms_84", "d", "005", "2026-06-30 06:01:00", "synced")
+    s.record("k2", "htms_84", "d", "006", "2026-05-20 08:00:00", "synced")
+    assert s.clear("2026-06-30") == 1          # only on/after that date
+    assert sum(s.summary().values()) == 1
+    assert s.clear() == 1                       # everything else
+    assert s.summary() == {}
 
 
 class _CaptureHandler(logging.Handler):
