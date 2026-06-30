@@ -111,6 +111,17 @@ frappe.query_reports["Consolidated Financial Statement Hierarchy"] = {
 			reqd: 1,
 		},
 		{
+			// Reference set for the shared-account collapse (P&L / Balance Sheet only):
+			//   Selected Companies -> account must exist in every selected company (default)
+			//   All Companies      -> account must exist in every company in the system
+			fieldname: "common_accounts_scope",
+			label: __("Common Accounts"),
+			fieldtype: "Select",
+			options: ["Selected Companies", "All Companies"],
+			default: "Selected Companies",
+			reqd: 1,
+		},
+		{
 			fieldname: "presentation_currency",
 			label: __("Currency"),
 			fieldtype: "Select",
@@ -144,14 +155,44 @@ frappe.query_reports["Consolidated Financial Statement Hierarchy"] = {
 		},
 	],
 	formatter: function (value, row, column, data, default_formatter) {
+		// Money columns (per-company columns + the Total column).
+		// Applies to all three report types (P&L / Balance Sheet / Cash Flow).
+		//   - zero / empty amounts are shown blank
+		//   - negative amounts are shown as "<absolute amount> Cr"
+		const is_value_col = column.fieldtype === "Currency";
+
+		if (data && is_value_col) {
+			const raw = data[column.fieldname];
+
+			// don't show zero / empty values
+			if (raw === null || raw === undefined || raw === "" || Math.abs(flt(raw)) < 0.005) {
+				return "";
+			}
+
+			// resolve currency the same way erpnext does for company columns
+			const currency = column.apply_currency_formatter
+				? erpnext.get_currency(column.company_name)
+				: data.currency;
+
+			let text = format_currency(Math.abs(flt(raw)), currency);
+			if (flt(raw) < 0) {
+				// negative -> credit notation
+				text = text + " Cr";
+			}
+
+			let $value = $(`<span>${text}</span>`);
+			if (!data.parent_account && !data.parent_section) {
+				$value = $value.css("font-weight", "bold");
+			}
+			return $value.wrap("<p></p>").parent().html();
+		}
+
+		// Account / section name column and anything else -> default rendering
 		if (data && column.fieldname == "account") {
 			value = data.account_name || value;
 			column.link_onclick =
 				"erpnext.financial_statements.open_general_ledger(" + JSON.stringify(data) + ")";
 			column.is_tree = true;
-		}
-		if (data && data.account && column.apply_currency_formatter) {
-			data.currency = erpnext.get_currency(column.company_name);
 		}
 		value = default_formatter(value, row, column, data);
 		if (data && !data.parent_account) {

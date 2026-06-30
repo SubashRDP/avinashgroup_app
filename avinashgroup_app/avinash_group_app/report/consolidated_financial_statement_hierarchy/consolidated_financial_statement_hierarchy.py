@@ -33,8 +33,17 @@ def execute(filters=None):
 	# Collapses only apply to account-tree reports (P&L / Balance Sheet), not Cash Flow.
 	report_type = filters.get("report", "Balance Sheet")
 	if report_type != "Cash Flow":
-		# 1) Drop accounts not shared by every selected company (folded into parent).
-		shared_keys = get_shared_account_keys(selected, report_type)
+		# 1) Drop accounts not shared across the chosen reference set (folded into parent).
+		#    "Common Accounts" scope decides that reference set:
+		#      - Selected Companies (default): account must exist in every selected company.
+		#      - All Companies: account must exist in every company in the system.
+		scope = filters.get("common_accounts_scope") or "Selected Companies"
+		if scope == "All Companies":
+			compare_companies = frappe.get_all("Company", pluck="name", order_by="lft")
+		else:
+			compare_companies = selected
+
+		shared_keys = get_shared_account_keys(compare_companies, report_type)
 		data = filter_shared_accounts(data, shared_keys)
 
 		# 2) Optionally cap the (remaining) hierarchy at a chosen level.
@@ -43,7 +52,45 @@ def execute(filters=None):
 			company_keys = [col.get("fieldname") for col in columns[2:] if col.get("fieldname")]
 			data = apply_account_level_filter(data, account_level, company_keys)
 
+	# add a "Total" column = sum of all the company columns in each row
+	add_row_total_column(columns, data)
+
 	return columns, data, message, chart, report_summary
+
+
+def add_row_total_column(columns, data):
+	"""Add a separate 'Total' column = sum of every company column in each row.
+
+	The consolidated report renders one column per selected company; this adds a
+	final Total column holding the row-wise sum across those companies. Rows that
+	were blanked (e.g. by the account-level filter) keep an empty Total.
+	"""
+	# company columns are everything after `account` (0) and hidden `currency` (1)
+	company_keys = [col.get("fieldname") for col in columns[2:] if col.get("fieldname")]
+
+	for row in data:
+		if not row:
+			# blank separator rows
+			continue
+
+		values = [row.get(key) for key in company_keys if key in row]
+		if values and all(v is None for v in values):
+			# row intentionally blanked -> keep Total empty too
+			row["total"] = None
+		else:
+			row["total"] = flt(sum(flt(v) for v in values if v is not None), 3)
+
+	# append the Total column once, at the end
+	if not any(col.get("fieldname") == "total" for col in columns):
+		columns.append(
+			{
+				"fieldname": "total",
+				"label": _("Total"),
+				"fieldtype": "Currency",
+				"options": "currency",
+				"width": 150,
+			}
+		)
 
 
 def resolve_companies(filters) -> list[str]:
