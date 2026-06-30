@@ -37,11 +37,18 @@ jobs:
           python -m pip install -r k40_bridge/requirements.txt
           python -m pip install pyinstaller
 
-      - name: Verify dependencies are importable (fail fast)
-        # Run a committed script (not an inline `python -c "..."`, which
-        # PowerShell mangles on the Windows runner) in the default shell, so it
-        # uses the same setup-python interpreter as Install/Build.
+      - name: Diagnose dependencies (writes depcheck.txt)
         run: python k40_bridge/ci_check_deps.py
+
+      - name: Publish dep diagnostic (readable without auth)
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: k40-diag
+          name: K40 dependency diagnostic
+          files: depcheck.txt
+          make_latest: 'false'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build EXE
         # Run PyInstaller via `python -m` (same interpreter as above) and
