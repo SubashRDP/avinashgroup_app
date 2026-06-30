@@ -43,8 +43,13 @@ jobs:
         # PowerShell, the same shell as Install/Build, so `python` resolves to the
         # setup-python interpreter the deps were installed into. (A `shell: bash`
         # step would use Git Bash's unrelated `python` and falsely fail.)
+        # cryptography is intentionally NOT gated here: it's a binary pkg whose
+        # 32-bit Rust wheel can fail to import on the x86 runner, yet the bridge
+        # degrades gracefully without it (CRYPTO_AVAILABLE → plaintext fallback).
+        # The crash we must prevent is a missing *requests*, so gate the pure-
+        # Python runtime deps that must always be importable/bundled.
         run: |
-          python -c "import requests, urllib3, certifi, charset_normalizer, idna, cryptography, zk; print('critical deps OK')"
+          python -c "import requests, urllib3, certifi, charset_normalizer, idna, zk; print('critical deps OK')"
 
       - name: Build EXE
         # Run PyInstaller via `python -m` (same interpreter as above) and
@@ -59,8 +64,6 @@ jobs:
             --collect-all certifi `
             --collect-all charset_normalizer `
             --collect-all idna `
-            --collect-all cryptography `
-            --collect-all cffi `
             --collect-submodules zk `
             --collect-all pystray `
             --collect-all PIL `
