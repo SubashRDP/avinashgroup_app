@@ -27,16 +27,44 @@ jobs:
           architecture: 'x86'
 
       - name: Install dependencies
+        # Use `python -m pip` (not bare `pip`) so packages install into the
+        # SAME interpreter PyInstaller runs under. A bare `pip` can resolve to a
+        # different Python on the runner, leaving PyInstaller to build against an
+        # environment without requests/cryptography/zk — which silently produces
+        # an exe that crashes at startup with ModuleNotFoundError.
         run: |
-          pip install -r k40_bridge/requirements.txt
-          pip install pyinstaller
+          python -m pip install --upgrade pip
+          python -m pip install -r k40_bridge/requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Verify dependencies are importable (fail fast)
+        # Hard gate: if the third-party deps aren't importable in THIS Python,
+        # the bundle would be broken — fail the build now instead of shipping a
+        # crashing exe.
+        run: |
+          python -c "import requests, urllib3, certifi, charset_normalizer, idna, cryptography, zk, pystray, PIL, sv_ttk; print('all deps import OK')"
 
       - name: Build EXE
+        # Run PyInstaller via `python -m` (same interpreter as above) and
+        # explicitly collect every third-party package. requests/zk are pure
+        # Python (auto-detected once installed) but we collect them anyway as a
+        # belt-and-suspenders guard; cryptography/cffi/certifi carry binaries and
+        # data files PyInstaller can miss without --collect-all.
         run: |
-          pyinstaller --onefile --noconsole --name k40_bridge `
+          python -m PyInstaller --onefile --noconsole --name k40_bridge `
+            --collect-all requests `
+            --collect-all urllib3 `
+            --collect-all certifi `
+            --collect-all charset_normalizer `
+            --collect-all idna `
+            --collect-all cryptography `
+            --collect-all cffi `
+            --collect-submodules zk `
             --collect-all pystray `
             --collect-all PIL `
             --collect-all sv_ttk `
+            --hidden-import=requests `
+            --hidden-import=zk `
             --hidden-import=pystray._win32 `
             --hidden-import=PIL._imaging `
             --hidden-import=win32com `
@@ -44,6 +72,20 @@ jobs:
             --hidden-import=pythoncom `
             --hidden-import=pywintypes `
             k40_bridge/k40_bridge.py
+
+      - name: Verify the built exe bundled the deps (fail fast)
+        # Inspect the PyInstaller archive and confirm the key third-party modules
+        # are actually inside the PYZ. Catches a depless build before release.
+        shell: bash
+        run: |
+          python -m PyInstaller.utils.cliutils.archive_viewer -l -r dist/k40_bridge.exe > arch.txt 2>/dev/null || true
+          for mod in requests cryptography zk urllib3 certifi; do
+            if grep -qi "'$mod" arch.txt; then
+              echo "bundled: $mod"
+            else
+              echo "::error::$mod is NOT bundled in the exe — aborting release"; exit 1
+            fi
+          done
 
       - name: Build Installer (Inno Setup)
         run: |

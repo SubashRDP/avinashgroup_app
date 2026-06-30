@@ -1,5 +1,6 @@
 pyzk
 requests
+cryptography
 pyinstaller
 pystray
 Pillow

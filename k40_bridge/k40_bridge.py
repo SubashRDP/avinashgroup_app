@@ -1,5 +1,6 @@
 
 
+import copy
 import json
 import logging
 import logging.handlers
@@ -7,13 +8,14 @@ import os
 import platform
 import re
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta as _timedelta
-from tkinter import Canvas, StringVar, Tk, Toplevel, filedialog, messagebox, ttk
+from tkinter import BooleanVar, Canvas, StringVar, Tk, Toplevel, filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 import requests
@@ -43,7 +45,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.4.0"
+VERSION = "1.6.1"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -131,6 +133,13 @@ SYNCED_RECORDS_FILE = os.path.join(APP_DIR, "k40_synced.json")
 NEXT_SYNC_FILE = os.path.join(APP_DIR, "next_sync.json")
 LAST_SYNC_DATES_FILE = os.path.join(APP_DIR, "last_sync_dates.json")
 LOG_FILE = os.path.join(APP_DIR, "k40_bridge.log")
+# Symmetric key that encrypts the secrets in config.json (api_key, api_secret,
+# device password). Lives beside the config, locked to the owner (0600).
+KEY_FILE = os.path.join(APP_DIR, "secret.key")
+# HTMS-style local database of every punch we pushed and what the server did
+# with it (synced / skipped / error). Lets you verify a sync without trawling
+# the log — open it with any SQLite tool, or run `k40_bridge.py --synclog`.
+SYNC_DB_FILE = os.path.join(APP_DIR, "k40_sync_log.db")
 
 # One-time migration: if old config sits next to the exe, copy it into APP_DIR
 def _migrate_old_config():
@@ -324,6 +333,107 @@ def check_for_update():
 # ============================================
 # CONFIG I/O
 # ============================================
+# ── Credential encryption ──────────────────────────────────────────────
+# The API key/secret and any device password are encrypted at rest in
+# config.json so a stray backup or screen-share doesn't leak live ERPNext
+# credentials. Encryption is transparent: load_config() returns plaintext to
+# the rest of the app, save_config() writes ciphertext. Encrypted values carry
+# an "enc:" prefix so plaintext (older configs) is detected and migrated on the
+# next save. The Fernet key lives in secret.key (0600); lose it and you simply
+# re-enter the credentials in the setup wizard.
+ENC_PREFIX = "enc:"
+SECRET_FIELDS = ("api_key", "api_secret", "password")
+
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+    CRYPTO_AVAILABLE = True
+except Exception:  # pragma: no cover - only if the dependency is missing
+    CRYPTO_AVAILABLE = False
+
+    class InvalidToken(Exception):
+        pass
+
+_fernet_cache = None
+
+
+def _get_fernet():
+    """Return a cached Fernet built from KEY_FILE, creating the key on first
+    use. Returns None if cryptography isn't available (graceful plaintext
+    fallback — the bridge must never refuse to run over a missing optional
+    dependency)."""
+    global _fernet_cache
+    if not CRYPTO_AVAILABLE:
+        return None
+    if _fernet_cache is not None:
+        return _fernet_cache
+    try:
+        if os.path.exists(KEY_FILE):
+            with open(KEY_FILE, "rb") as f:
+                key = f.read().strip()
+        else:
+            key = Fernet.generate_key()
+            fd = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as f:
+                f.write(key)
+        try:
+            os.chmod(KEY_FILE, 0o600)
+        except OSError:
+            pass
+        _fernet_cache = Fernet(key)
+        return _fernet_cache
+    except Exception:
+        return None
+
+
+def encrypt_secret(value):
+    """Encrypt a single secret string -> 'enc:<token>'. Empty/None and
+    already-encrypted values pass through untouched."""
+    if not value or not isinstance(value, str) or value.startswith(ENC_PREFIX):
+        return value
+    f = _get_fernet()
+    if f is None:
+        return value  # plaintext fallback
+    return ENC_PREFIX + f.encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def decrypt_secret(value):
+    """Inverse of encrypt_secret. Plaintext (no prefix) passes through so old
+    configs keep working; an undecryptable token (wrong/lost key) returns an
+    empty string rather than a bogus credential."""
+    if not value or not isinstance(value, str) or not value.startswith(ENC_PREFIX):
+        return value
+    f = _get_fernet()
+    if f is None:
+        return ""
+    try:
+        return f.decrypt(value[len(ENC_PREFIX):].encode("ascii")).decode("utf-8")
+    except (InvalidToken, Exception):
+        return ""
+
+
+def _transform_secrets(config, fn):
+    """Return a deep copy of `config` with fn() applied to every secret field
+    of every device. Used to encrypt on the way out and decrypt on the way in
+    without mutating the caller's dict."""
+    out = copy.deepcopy(config)
+    for device in out.get("devices", []) or []:
+        for field in SECRET_FIELDS:
+            if field in device and device[field] not in (None, ""):
+                device[field] = fn(device[field])
+    return out
+
+
+def _config_has_plaintext_secret(config):
+    """True if any device still stores a secret in the clear — triggers a
+    one-time re-save to encrypt legacy configs."""
+    for device in config.get("devices", []) or []:
+        for field in SECRET_FIELDS:
+            v = device.get(field)
+            if isinstance(v, str) and v and not v.startswith(ENC_PREFIX):
+                return True
+    return False
+
+
 def _atomic_write_json(path, obj, indent=None):
     """Write JSON to `path` atomically: serialize to a temp file in the same
     directory, fsync, then os.replace over the target. A crash or power loss
@@ -354,7 +464,15 @@ def load_config():
             cfg = json.load(f)
         for k, v in DEFAULT_CONFIG.items():
             cfg.setdefault(k, v)
-        return cfg
+        # One-time migration: an older config with plaintext credentials is
+        # re-saved encrypted before we hand it out (save_config encrypts).
+        if CRYPTO_AVAILABLE and _config_has_plaintext_secret(cfg):
+            try:
+                save_config(cfg)
+            except Exception:
+                pass
+        # Hand the rest of the app plaintext secrets so nothing else changes.
+        return _transform_secrets(cfg, decrypt_secret)
     except Exception as e:
         # A corrupt/unreadable config would otherwise be silently discarded,
         # dropping the user back into the setup wizard with all their devices
@@ -379,7 +497,102 @@ def load_config():
 
 
 def save_config(config):
-    _atomic_write_json(CONFIG_FILE, config, indent=2)
+    # Encrypt secrets in a copy so the in-memory config the app holds stays
+    # plaintext and usable; only the on-disk file carries ciphertext.
+    _atomic_write_json(CONFIG_FILE, _transform_secrets(config, encrypt_secret), indent=2)
+
+
+# Marker so the one-time hardening below runs exactly once per install.
+SECURED_MARKER = os.path.join(APP_DIR, ".credentials_secured")
+
+
+def _secure_delete(path):
+    """Overwrite a file's bytes before unlinking so plaintext credentials can't
+    be trivially recovered from the freed blocks, then remove it. Best-effort —
+    any failure just falls back to a plain unlink."""
+    try:
+        if os.path.isfile(path):
+            size = os.path.getsize(path)
+            with open(path, "r+b") as f:
+                f.write(os.urandom(size) if size else b"")
+                f.flush()
+                os.fsync(f.fileno())
+    except Exception:
+        pass
+    try:
+        os.remove(path)
+        return True
+    except OSError:
+        return False
+
+
+def secure_existing_install(logger=None):
+    """One-time migration for installs configured before encryption existed:
+    encrypt the credentials in config.json, verify they're no longer plaintext,
+    and securely delete any leftover files that still hold them in the clear
+    (the legacy copy next to the exe, and any preserved .corrupt backup).
+
+    Idempotent: a marker file makes it a no-op on every later launch. Never
+    raises — hardening must not block startup."""
+    def _log(msg):
+        if logger:
+            try:
+                logger.info(msg)
+            except Exception:
+                pass
+
+    try:
+        if os.path.exists(SECURED_MARKER):
+            return False  # already hardened on a previous launch
+        if not CRYPTO_AVAILABLE:
+            return False  # nothing to do without the crypto layer
+
+        # load_config() encrypts in place (its migration path calls save_config)
+        # whenever it finds plaintext secrets, and returns plaintext to us.
+        cfg = load_config()
+
+        # Verify the on-disk file no longer carries a plaintext secret.
+        still_plaintext = False
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE) as f:
+                    disk = json.load(f)
+                still_plaintext = _config_has_plaintext_secret(disk)
+            except Exception:
+                still_plaintext = True
+        if still_plaintext:
+            _log("Credential hardening deferred: config.json still has plaintext "
+                 "secrets (will retry next launch)")
+            return False  # don't mark done — try again next time
+
+        if cfg and cfg.get("devices"):
+            _log("Credentials encrypted at rest (Fernet); key in secret.key (0600)")
+
+        # Securely delete any other on-disk copy that still holds plaintext
+        # credentials: the pre-APP_DIR config that lived next to the exe, and
+        # any preserved corrupt backup.
+        removed = []
+        legacy = os.path.join(EXE_DIR, "config.json")
+        if os.path.abspath(legacy) != os.path.abspath(CONFIG_FILE) and os.path.exists(legacy):
+            if _secure_delete(legacy):
+                removed.append(legacy)
+        corrupt = CONFIG_FILE + ".corrupt"
+        if os.path.exists(corrupt):
+            if _secure_delete(corrupt):
+                removed.append(corrupt)
+        for r in removed:
+            _log(f"Removed leftover plaintext credential file: {r}")
+
+        # Drop the marker so this whole routine is skipped from now on.
+        try:
+            with open(SECURED_MARKER, "w") as f:
+                f.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S\n"))
+        except Exception:
+            pass
+        return True
+    except Exception:
+        # Hardening is best-effort; a failure must never stop the bridge.
+        return False
 
 
 # ============================================
@@ -482,6 +695,33 @@ class DedupStore:
         with self._lock:
             self.synced.add(key)
 
+    def clear_all(self):
+        """Forget every synced punch so the next cycle re-sends them all. Used
+        when ERPNext data was wiped and must be fully repopulated. Returns the
+        number of keys dropped."""
+        with self._lock:
+            n = len(self.synced)
+            self.synced = set()
+        self.save()
+        return n
+
+    def clear_from_date(self, from_date):
+        """Forget synced punches whose date is on/after `from_date` (a date), so
+        only that window re-sends. Keys we can't parse are kept. Returns the
+        number dropped."""
+        with self._lock:
+            kept = set()
+            removed = 0
+            for k in self.synced:
+                ts = _parse_key_timestamp(k)
+                if ts is not None and ts.date() >= from_date:
+                    removed += 1
+                else:
+                    kept.add(k)
+            self.synced = kept
+        self.save()
+        return removed
+
     def save(self):
         with self._lock:
             self._prune()
@@ -516,6 +756,150 @@ def _parse_key_timestamp(key):
         return datetime.strptime(tail, "%Y-%m-%d %H:%M:%S")
     except ValueError:
         return None
+
+
+# ============================================
+# SYNC RESPONSE LOG (HTMS-style local database)
+# ============================================
+class SyncLogStore:
+    """SQLite record of every punch the bridge pushed and the server's verdict.
+
+    HTMS keeps its punches in an Access database (the PubEvent table); this is
+    the mirror on our side — one row per punch, with the same date/time/person
+    fields plus the sync outcome — so "did it sync or not?" is a single query
+    instead of grepping the log. The file is plain SQLite (k40_sync_log.db) and
+    opens in any DB viewer; `k40_bridge.py --synclog` dumps it from the CLI.
+
+    Keyed by punch_key (serial_user_id_timestamp) so a re-push of the same
+    punch updates its row in place instead of duplicating it.
+    """
+
+    def __init__(self, db_path=SYNC_DB_FILE):
+        self.db_path = db_path
+        self._lock = threading.Lock()
+        self._ok = False
+        try:
+            self._init_db()
+            self._ok = True
+        except Exception:
+            # A logging store must never take the sync path down with it.
+            self._ok = False
+
+    def _connect(self):
+        # check_same_thread=False: the engine writes from the sync thread and
+        # reads from the CLI/GUI; the _lock below serializes all access.
+        conn = sqlite3.connect(self.db_path, timeout=10, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        return conn
+
+    def _init_db(self):
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sync_log (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    punch_key   TEXT UNIQUE,
+                    serial      TEXT,
+                    device_name TEXT,
+                    emp_no      TEXT,
+                    event_date  TEXT,
+                    event_time  TEXT,
+                    outcome     TEXT,
+                    message     TEXT,
+                    synced_at   TEXT
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sync_log_date ON sync_log(event_date)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sync_log_emp ON sync_log(emp_no)"
+            )
+
+    def record(self, punch_key, serial, device_name, emp_no, timestamp_str,
+               outcome, message=None):
+        """Upsert one punch outcome. timestamp_str is 'YYYY-MM-DD HH:MM:SS'."""
+        if not self._ok:
+            return
+        ev_date, _, ev_time = (timestamp_str or "").partition(" ")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            with self._lock, self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO sync_log
+                        (punch_key, serial, device_name, emp_no,
+                         event_date, event_time, outcome, message, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(punch_key) DO UPDATE SET
+                        outcome=excluded.outcome,
+                        message=excluded.message,
+                        synced_at=excluded.synced_at
+                    """,
+                    (punch_key, serial, device_name, str(emp_no),
+                     ev_date, ev_time, outcome, (message or "")[:500], now),
+                )
+        except Exception:
+            pass
+
+    def record_many(self, rows):
+        """rows: iterable of dicts with the record() kwargs. Convenience for a
+        whole batch."""
+        for r in rows:
+            self.record(**r)
+
+    def clear(self, from_date=None):
+        """Delete sync-log rows — all of them, or only those on/after
+        `from_date` (a 'YYYY-MM-DD' string). Returns the number deleted."""
+        if not self._ok:
+            return 0
+        try:
+            with self._lock, self._connect() as conn:
+                if from_date:
+                    cur = conn.execute(
+                        "DELETE FROM sync_log WHERE event_date >= ?", (from_date,))
+                else:
+                    cur = conn.execute("DELETE FROM sync_log")
+                return cur.rowcount if cur.rowcount is not None else 0
+        except Exception:
+            return 0
+
+    def summary(self, device_name=None):
+        """Return {outcome: count} totals, optionally scoped to one device."""
+        if not self._ok:
+            return {}
+        q = "SELECT outcome, COUNT(*) FROM sync_log"
+        params = ()
+        if device_name:
+            q += " WHERE device_name=?"
+            params = (device_name,)
+        q += " GROUP BY outcome"
+        try:
+            with self._lock, self._connect() as conn:
+                return {row[0]: row[1] for row in conn.execute(q, params)}
+        except Exception:
+            return {}
+
+    def recent(self, limit=50, outcome=None):
+        """Return the most recent rows as dicts (newest first)."""
+        if not self._ok:
+            return []
+        q = ("SELECT serial, device_name, emp_no, event_date, event_time, "
+             "outcome, message, synced_at FROM sync_log")
+        params = []
+        if outcome:
+            q += " WHERE outcome=?"
+            params.append(outcome)
+        q += " ORDER BY id DESC LIMIT ?"
+        params.append(int(limit))
+        cols = ["serial", "device_name", "emp_no", "event_date", "event_time",
+                "outcome", "message", "synced_at"]
+        try:
+            with self._lock, self._connect() as conn:
+                return [dict(zip(cols, row)) for row in conn.execute(q, params)]
+        except Exception:
+            return []
 
 
 # ============================================
@@ -1275,6 +1659,7 @@ class SyncEngine:
         self.logger = logger
         self.status_callback = status_callback  # fn(device_name, state, msg)
         self.dedup = DedupStore()
+        self.synclog = SyncLogStore()
         self.paused = False
         self.stop_event = threading.Event()
         self.force_event = threading.Event()
@@ -1546,6 +1931,15 @@ class SyncEngine:
             key = f"{serial}_{att.user_id}_{ts_str}"
             if self.dedup.is_synced(key):
                 skipped += 1
+                # Already confirmed synced in a prior cycle (dedup only holds
+                # server-accepted punches). Record it so the sync log shows the
+                # full picture — not just punches pushed in this session. Upsert
+                # by punch_key keeps this idempotent across cycles.
+                self.synclog.record(
+                    punch_key=key, serial=serial, device_name=name,
+                    emp_no=att.user_id, timestamp_str=ts_str,
+                    outcome="synced", message="already synced",
+                )
                 continue
             to_send.append((key, {"user_id": att.user_id, "timestamp_str": ts_str}))
 
@@ -1561,7 +1955,6 @@ class SyncEngine:
                 self.dedup.save()
                 return
             batch = to_send[batch_start:batch_start + BATCH_SIZE]
-            keys = [k for (k, _) in batch]
             records = [r for (_, r) in batch]
 
             self.status_callback(
@@ -1587,7 +1980,19 @@ class SyncEngine:
                 )
                 continue
 
-            for k, outcome in zip(keys, results):
+            for (k, rec), outcome in zip(batch, results):
+                # Record the verdict in the HTMS-style local DB so a sync can be
+                # verified later without reading the log. Best-effort: a logging
+                # failure must not affect dedup/sync bookkeeping.
+                self.synclog.record(
+                    punch_key=k,
+                    serial=serial,
+                    device_name=name,
+                    emp_no=rec["user_id"],
+                    timestamp_str=rec["timestamp_str"],
+                    outcome=outcome,
+                    message=(err if outcome == "error" else None),
+                )
                 if outcome == "synced":
                     synced += 1
                     self.dedup.mark(k)
@@ -2169,6 +2574,175 @@ def signal_existing_instance():
 # ============================================
 # CONTROL PANEL
 # ============================================
+class SyncLogViewer:
+    """A clean, filterable window over the sync-response DB so an operator can
+    answer "did this punch sync?" at a glance — color-coded outcomes, summary
+    chips, live refresh and CSV export. Reads the same SyncLogStore the engine
+    writes, so it always shows the latest verdicts."""
+
+    # outcome -> (foreground, light background tint), matching the main table.
+    OUTCOME_TAGS = {
+        "synced":  ("#0a5d2a", "#e6f4ea"),
+        "skipped": ("#8a3800", "#fff1e5"),
+        "error":   ("#a40e26", "#ffebe9"),
+    }
+
+    def __init__(self, parent, store):
+        self.store = store
+        self.parent = parent
+        self.win = Toplevel(parent)
+        self.win.title("Sync Log — punch verification")
+        self.win.geometry("920x580")
+        self.win.minsize(720, 420)
+        self.filter_var = StringVar(value="All")
+        self.limit_var = StringVar(value="200")
+        self._rows = []
+        self._last_total = -1
+        self._auto_job = None
+        self._build()
+        self.refresh()
+        # Closing the window (X button, the in-app Back button, or Esc) always
+        # returns to the main bridge panel rather than leaving the user stuck.
+        self.win.protocol("WM_DELETE_WINDOW", self._close)
+        self.win.bind("<Escape>", lambda e: self._close())
+        # Live updates: re-poll the DB every few seconds so punches appear as
+        # they sync, without the user having to hit Refresh. The tree is only
+        # rebuilt when the row count actually changed, so scrolling isn't
+        # disturbed while nothing new is arriving.
+        self._auto_refresh()
+        self.win.lift()
+        self.win.focus_force()
+
+    def _auto_refresh(self):
+        if not self.win.winfo_exists():
+            return
+        try:
+            total = sum(self.store.summary().values())
+            if total != self._last_total:
+                self.refresh()
+        except Exception:
+            pass
+        self._auto_job = self.win.after(4000, self._auto_refresh)
+
+    def _close(self):
+        """Close the log window and bring the main bridge panel back to front."""
+        if self._auto_job is not None:
+            try:
+                self.win.after_cancel(self._auto_job)
+            except Exception:
+                pass
+            self._auto_job = None
+        try:
+            self.win.destroy()
+        except Exception:
+            pass
+        try:
+            self.parent.deiconify()
+            self.parent.lift()
+            self.parent.focus_force()
+        except Exception:
+            pass
+
+    def _build(self):
+        head = ttk.Frame(self.win)
+        head.pack(fill="x", padx=14, pady=(14, 4))
+        ttk.Button(head, text="← Back to Bridge", command=self._close).pack(side="left")
+        ttk.Label(head, text="Sync Log", font=("TkDefaultFont", 15, "bold")).pack(side="left", padx=(12, 0))
+        self.summary_lbl = ttk.Label(head, text="", font=("TkDefaultFont", 10))
+        self.summary_lbl.pack(side="left", padx=18)
+
+        ctl = ttk.Frame(self.win)
+        ctl.pack(fill="x", padx=14, pady=6)
+        ttk.Label(ctl, text="Show:").pack(side="left")
+        cmb = ttk.Combobox(ctl, textvariable=self.filter_var, width=10, state="readonly",
+                           values=["All", "synced", "skipped", "error"])
+        cmb.pack(side="left", padx=(4, 14))
+        cmb.bind("<<ComboboxSelected>>", lambda e: self.refresh())
+        ttk.Label(ctl, text="Rows:").pack(side="left")
+        ttk.Combobox(ctl, textvariable=self.limit_var, width=7, state="readonly",
+                     values=["50", "100", "200", "500", "2000"]).pack(side="left", padx=(4, 14))
+        ttk.Button(ctl, text="↻ Refresh", command=self.refresh,
+                   style="Accent.TButton").pack(side="left", padx=2)
+        ttk.Button(ctl, text="Export CSV…", command=self._export).pack(side="left", padx=2)
+
+        cols = ("emp_no", "date", "time", "outcome", "device", "message")
+        headings = {"emp_no": "Emp No", "date": "Date", "time": "Time",
+                    "outcome": "Outcome", "device": "Device", "message": "Message"}
+        widths = {"emp_no": 80, "date": 100, "time": 90, "outcome": 90,
+                  "device": 150, "message": 360}
+        wrap = ttk.Frame(self.win)
+        wrap.pack(fill="both", expand=True, padx=14, pady=6)
+        self.tree = ttk.Treeview(wrap, columns=cols, show="headings")
+        vsb = ttk.Scrollbar(wrap, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        for c in cols:
+            self.tree.heading(c, text=headings[c])
+            self.tree.column(c, width=widths[c], anchor="w")
+        for name, (fg, bg) in self.OUTCOME_TAGS.items():
+            self.tree.tag_configure(name, foreground=fg, background=bg)
+        vsb.pack(side="right", fill="y")
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        self.footer = ttk.Label(self.win, text="", foreground="#57606a",
+                                font=("TkDefaultFont", 8))
+        self.footer.pack(anchor="w", padx=14, pady=(0, 10))
+
+    def _current_outcome(self):
+        v = self.filter_var.get()
+        return None if v == "All" else v
+
+    def refresh(self):
+        try:
+            limit = int(self.limit_var.get())
+        except ValueError:
+            limit = 200
+        rows = self.store.recent(limit=limit, outcome=self._current_outcome())
+        self._rows = rows
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for r in rows:
+            self.tree.insert(
+                "", "end",
+                values=(r["emp_no"], r["event_date"], r["event_time"], r["outcome"],
+                        r["device_name"] or "", r["message"] or ""),
+                tags=(r["outcome"],),
+            )
+        s = self.store.summary()
+        self._last_total = sum(s.values())
+        self.summary_lbl.config(
+            text=(f"✓ {s.get('synced', 0)} synced      "
+                  f"⤼ {s.get('skipped', 0)} skipped      "
+                  f"✗ {s.get('error', 0)} error")
+        )
+        self.footer.config(
+            text=(f"{len(rows)} of {self._last_total} row(s) shown "
+                  f"(newest first) · auto-refreshing · DB: {SYNC_DB_FILE}")
+        )
+
+    def _export(self):
+        path = filedialog.asksaveasfilename(
+            parent=self.win, defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")], initialfile="k40_sync_log.csv",
+        )
+        if not path:
+            return
+        import csv
+        try:
+            rows = self.store.recent(limit=1000000, outcome=self._current_outcome())
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["emp_no", "date", "time", "outcome", "device",
+                            "message", "synced_at"])
+                for r in rows:
+                    w.writerow([r["emp_no"], r["event_date"], r["event_time"],
+                                r["outcome"], r["device_name"], r["message"],
+                                r["synced_at"]])
+            messagebox.showinfo("Export complete", f"Saved {len(rows)} row(s) to:\n{path}",
+                                parent=self.win)
+        except Exception as e:
+            messagebox.showerror("Export failed", str(e), parent=self.win)
+
+
 class ControlPanel:
     def __init__(self, config, primary_sock=None, start_hidden=False):
         self.config = config
@@ -2330,6 +2904,8 @@ class ControlPanel:
                    style="Accent.TButton").pack(side="left", padx=2)
         ttk.Button(btns, text="Force Sync Selected", command=self._force_selected).pack(side="left", padx=2)
         ttk.Button(btns, text="Sync from Date…", command=self._sync_from_date).pack(side="left", padx=2)
+        ttk.Button(btns, text="View Sync Log", command=self._open_sync_log).pack(side="left", padx=2)
+        ttk.Button(btns, text="Reset Sync Data…", command=self._reset_sync_data).pack(side="left", padx=2)
 
         # Auto-start button (Windows only)
         if IS_WINDOWS:
@@ -2522,6 +3098,107 @@ class ControlPanel:
         ent.focus_set()
         ent.select_range(0, "end")
 
+    def _reset_sync_data(self):
+        """Clear the bridge's 'already synced' memory (and optionally the local
+        sync log) so punches re-sync to ERPNext. Use after deleting records in
+        ERPNext — the bridge otherwise thinks they're still synced and skips
+        them. Operates on the live engine objects, so no restart is needed."""
+        dlg = Toplevel(self.root)
+        dlg.title("Reset Sync Data")
+        dlg.geometry("460x340")
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        ttk.Label(
+            dlg,
+            text=("Deleted records in ERPNext? The bridge still remembers them as "
+                  "“synced” and won’t resend. Clear that memory here and they’ll "
+                  "re-sync on the next cycle."),
+            wraplength=420, justify="left",
+        ).pack(padx=14, pady=(14, 8), anchor="w")
+
+        scope = StringVar(value="date")
+        date_var = StringVar(value=date.today().strftime("%Y-%m-%d"))
+
+        rowd = ttk.Frame(dlg); rowd.pack(fill="x", padx=14, pady=2)
+        ttk.Radiobutton(rowd, text="From date:", variable=scope, value="date").pack(side="left")
+        ent = ttk.Entry(rowd, textvariable=date_var, width=14)
+        ent.pack(side="left", padx=(6, 0))
+        ttk.Label(rowd, text="(YYYY-MM-DD, onward)", foreground="gray").pack(side="left", padx=6)
+
+        ttk.Radiobutton(
+            dlg, text="ALL sync data (re-sends the entire device history)",
+            variable=scope, value="all",
+        ).pack(anchor="w", padx=14, pady=2)
+
+        also_log = BooleanVar(value=True)
+        ttk.Checkbutton(dlg, text="Also clear the local sync log",
+                        variable=also_log).pack(anchor="w", padx=14, pady=(6, 2))
+
+        resync = BooleanVar(value=True)
+        ttk.Checkbutton(dlg, text="Resync now (otherwise waits for next cycle)",
+                        variable=resync).pack(anchor="w", padx=14, pady=2)
+
+        def go():
+            all_scope = scope.get() == "all"
+            from_date = None
+            if not all_scope:
+                s = date_var.get().strip()
+                try:
+                    from_date = datetime.strptime(s, "%Y-%m-%d").date()
+                except ValueError:
+                    messagebox.showerror("Invalid date",
+                                         f"'{s}' is not a valid date.\nUse YYYY-MM-DD.",
+                                         parent=dlg)
+                    return
+
+            if all_scope:
+                if not messagebox.askyesno(
+                    "Re-send everything?",
+                    "This forgets ALL synced punches and re-sends the entire device "
+                    "history to ERPNext (can be tens of thousands of records).\n\n"
+                    "Continue?", parent=dlg):
+                    return
+
+            # Operate on the LIVE engine objects so the running sync thread sees
+            # the change immediately (editing the file alone would be overwritten).
+            if all_scope:
+                removed = self.engine.dedup.clear_all()
+                log_removed = self.engine.synclog.clear() if also_log.get() else 0
+            else:
+                removed = self.engine.dedup.clear_from_date(from_date)
+                log_removed = (self.engine.synclog.clear(from_date.strftime("%Y-%m-%d"))
+                               if also_log.get() else 0)
+
+            self.logger.info(
+                f"Reset Sync Data: scope={'ALL' if all_scope else from_date}, "
+                f"dedup_cleared={removed}, log_cleared={log_removed}, "
+                f"resync={resync.get()}"
+            )
+
+            if resync.get():
+                # Force an immediate resync; pull from the chosen date (or the
+                # whole history for ALL) so the cleared punches are re-fetched.
+                rfrom = date(2000, 1, 1) if all_scope else from_date
+                self.engine.force_sync(from_date=rfrom)
+
+            dlg.destroy()
+            messagebox.showinfo(
+                "Sync data reset",
+                f"Forgot {removed} synced punch(es)"
+                + (f" and {log_removed} sync-log row(s)" if also_log.get() else "")
+                + ".\n\n" + ("Re-syncing now…" if resync.get()
+                             else "They will re-sync on the next cycle."),
+                parent=self.root,
+            )
+
+        btns = ttk.Frame(dlg)
+        btns.pack(pady=14)
+        ttk.Button(btns, text="Clear & Resync", command=go,
+                   style="Accent.TButton").pack(side="left", padx=4)
+        ttk.Button(btns, text="Cancel", command=dlg.destroy).pack(side="left", padx=4)
+        ent.focus_set()
+
     def _toggle_pause(self):
         if self.engine.paused:
             self.engine.resume()
@@ -2543,6 +3220,14 @@ class ControlPanel:
         # Recompute next sync based on (possibly new) interval and wake the
         # sleeping thread so the change is immediate, not after old timeout.
         self.engine.reschedule()
+
+    def _open_sync_log(self):
+        """Open the polished sync-response viewer over the engine's live store."""
+        try:
+            SyncLogViewer(self.root, self.engine.synclog)
+        except Exception as e:
+            messagebox.showerror("Sync Log",
+                                 f"Could not open the sync log:\n{e}", parent=self.root)
 
     def _open_log_folder(self):
         if sys.platform == "win32":
@@ -2916,7 +3601,50 @@ class ControlPanel:
 # ============================================
 # MAIN
 # ============================================
+def _print_synclog(args):
+    """`--synclog [N]` / `--synclog-summary`: dump the local sync-response DB so
+    a sync can be verified from the terminal without opening a DB viewer."""
+    store = SyncLogStore()
+    if "--synclog-summary" in args:
+        totals = store.summary()
+        if not totals:
+            print("Sync log is empty (no punches recorded yet).")
+            return
+        width = max(len(k) for k in totals)
+        print("Sync outcome totals:")
+        for outcome, count in sorted(totals.items()):
+            print(f"  {outcome.ljust(width)}  {count}")
+        print(f"  {'TOTAL'.ljust(width)}  {sum(totals.values())}")
+        return
+    # --synclog [N]: most recent N rows (default 50).
+    limit = 50
+    for a in args:
+        if a.isdigit():
+            limit = int(a)
+            break
+    rows = store.recent(limit=limit)
+    if not rows:
+        print("Sync log is empty (no punches recorded yet).")
+        return
+    print(f"{'emp_no':<8} {'date':<11} {'time':<9} {'outcome':<8} device")
+    print("-" * 60)
+    for r in rows:
+        print(f"{r['emp_no']:<8} {r['event_date']:<11} {r['event_time']:<9} "
+              f"{r['outcome']:<8} {r['device_name'] or ''}")
+    print(f"\n{len(rows)} row(s) shown (newest first). DB: {SYNC_DB_FILE}")
+
+
 def main():
+    # CLI verification helpers — print the sync-response DB and exit, no GUI.
+    if "--synclog" in sys.argv or "--synclog-summary" in sys.argv:
+        _print_synclog(sys.argv[1:])
+        return
+
+    # One-time hardening for installs configured before encryption existed:
+    # encrypt credentials at rest and wipe any leftover plaintext copies. No-op
+    # after the first successful run (guarded by a marker file).
+    secure_existing_install()
+
     # One bridge per machine. If we're not the primary, the user double-clicked
     # the exe while it's already running in the background → tell the running
     # instance to show its window, then exit. (If nobody answers, the port is
