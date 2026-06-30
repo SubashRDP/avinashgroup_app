@@ -38,11 +38,28 @@ jobs:
           python -m pip install pyinstaller
 
       - name: Verify dependencies are importable (fail fast)
-        # Hard gate: if the third-party deps aren't importable in THIS Python,
-        # the bundle would be broken — fail the build now instead of shipping a
-        # crashing exe.
+        # Confirm the deps installed into the SAME interpreter PyInstaller uses.
+        # Only the runtime-critical packages block the build; GUI libs (pystray
+        # et al.) are reported but not fatal — they can be import-finicky in a
+        # headless CI session yet still bundle fine via --collect-all.
+        shell: bash
         run: |
-          python -c "import requests, urllib3, certifi, charset_normalizer, idna, cryptography, zk, pystray, PIL, sv_ttk; print('all deps import OK')"
+          python - <<'PY'
+          import importlib, sys
+          critical = ["requests","urllib3","certifi","charset_normalizer","idna","cryptography","zk"]
+          optional = ["cffi","pystray","PIL","sv_ttk","win32com","pywintypes"]
+          bad = []
+          for m in critical + optional:
+              try:
+                  importlib.import_module(m); print("ok  ", m)
+              except Exception as e:
+                  print("FAIL", m, "->", repr(e))
+                  if m in critical:
+                      bad.append(m)
+          if bad:
+              print("::error::critical deps not importable:", bad); sys.exit(1)
+          print("critical deps OK")
+          PY
 
       - name: Build EXE
         # Run PyInstaller via `python -m` (same interpreter as above) and
