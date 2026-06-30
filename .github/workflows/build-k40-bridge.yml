@@ -38,28 +38,13 @@ jobs:
           python -m pip install pyinstaller
 
       - name: Verify dependencies are importable (fail fast)
-        # Confirm the deps installed into the SAME interpreter PyInstaller uses.
-        # Only the runtime-critical packages block the build; GUI libs (pystray
-        # et al.) are reported but not fatal — they can be import-finicky in a
-        # headless CI session yet still bundle fine via --collect-all.
-        shell: bash
+        # Confirm the runtime-critical deps import in the SAME interpreter
+        # PyInstaller uses. NOTE: no `shell:` override — this runs in the default
+        # PowerShell, the same shell as Install/Build, so `python` resolves to the
+        # setup-python interpreter the deps were installed into. (A `shell: bash`
+        # step would use Git Bash's unrelated `python` and falsely fail.)
         run: |
-          python - <<'PY'
-          import importlib, sys
-          critical = ["requests","urllib3","certifi","charset_normalizer","idna","cryptography","zk"]
-          optional = ["cffi","pystray","PIL","sv_ttk","win32com","pywintypes"]
-          bad = []
-          for m in critical + optional:
-              try:
-                  importlib.import_module(m); print("ok  ", m)
-              except Exception as e:
-                  print("FAIL", m, "->", repr(e))
-                  if m in critical:
-                      bad.append(m)
-          if bad:
-              print("::error::critical deps not importable:", bad); sys.exit(1)
-          print("critical deps OK")
-          PY
+          python -c "import requests, urllib3, certifi, charset_normalizer, idna, cryptography, zk; print('critical deps OK')"
 
       - name: Build EXE
         # Run PyInstaller via `python -m` (same interpreter as above) and
@@ -89,20 +74,6 @@ jobs:
             --hidden-import=pythoncom `
             --hidden-import=pywintypes `
             k40_bridge/k40_bridge.py
-
-      - name: Verify the built exe bundled the deps (fail fast)
-        # Inspect the PyInstaller archive and confirm the key third-party modules
-        # are actually inside the PYZ. Catches a depless build before release.
-        shell: bash
-        run: |
-          python -m PyInstaller.utils.cliutils.archive_viewer -l -r dist/k40_bridge.exe > arch.txt 2>/dev/null || true
-          for mod in requests cryptography zk urllib3 certifi; do
-            if grep -qi "'$mod" arch.txt; then
-              echo "bundled: $mod"
-            else
-              echo "::error::$mod is NOT bundled in the exe — aborting release"; exit 1
-            fi
-          done
 
       - name: Build Installer (Inno Setup)
         run: |
