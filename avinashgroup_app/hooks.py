@@ -234,3 +234,18 @@ override_whitelisted_methods = {
     # Report "Add Column": show a Link field's name instead of its id.
     "frappe.desk.query_report.get_data_for_custom_field": "avinashgroup_app.custom_code.Override.query_report.get_data_for_custom_field",
 }
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+# Document Generator templates (Inputs / Data Sources / Companies child rows
+# travel inside the parent record). Restrict to the balance-confirmation
+# templates so unrelated, site-specific templates aren't exported.
+fixtures = [
+    {
+        "dt": "Document Template",
+        "filters": {
+            "name": ["in", ["Customer Balance Confirmation", "Vendor Balance Confirmation"]]
+        },
+    },
+]
