@@ -140,6 +140,7 @@ class AuditBase:
         "Manufacturer",
         "Prospect",
         "Shift Type",
+        "Item Price",
         # "BOM Template"
     ]
     
