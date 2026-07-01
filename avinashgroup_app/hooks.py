@@ -76,6 +76,11 @@ sales_invoice_specific_events = {
     "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
 }
 
+cbms_sales_invoice_events = {
+    "on_submit": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.on_submit",
+    "before_cancel": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.before_cancel",
+}
+
 quotation_events = {
     "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_quotation",
     "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_quotation",
@@ -145,6 +150,9 @@ for _event, _handler in supplier_quotation_events.items():
     _add_doc_event("Supplier Quotation", _event, _handler)
 
 for _event, _handler in sales_invoice_specific_events.items():
+    _add_doc_event("Sales Invoice", _event, _handler)
+
+for _event, _handler in cbms_sales_invoice_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
 
 for _event, _handler in quotation_events.items():
@@ -219,6 +227,12 @@ scheduler_events = {
     "hourly": [
         "avinashgroup_app.biometric.heartbeat.check_bridge_heartbeats",
     ],
+    "cron": {
+        "*/5 * * * *": [
+            "avinashgroup_app.custom_code.CBMS.scheduler.retry_failed_cbms_syncs",
+            "avinashgroup_app.custom_code.CBMS.scheduler.reconcile_missing_cbms_bills",
+        ],
+    },
 }
 
 before_request = [

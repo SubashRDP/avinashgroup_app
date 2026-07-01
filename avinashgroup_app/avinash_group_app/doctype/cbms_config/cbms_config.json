@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "autoname": "field:company",
+ "creation": "2026-07-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "enable_cbms",
+  "enable_from_date",
+  "column_break_creds",
+  "username",
+  "password",
+  "retry_settings_section",
+  "bill_retry_batch_size",
+  "column_break_retry",
+  "return_retry_batch_size"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_cbms",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enable CBMS Sync"
+  },
+  {
+   "description": "Sales Invoices/Returns posted before this date are never sent to CBMS — only invoices on or after this go-live date are in scope. Required whenever CBMS Sync is enabled.",
+   "fieldname": "enable_from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Send From Date",
+   "mandatory_depends_on": "eval:doc.enable_cbms"
+  },
+  {
+   "fieldname": "column_break_creds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "username",
+   "fieldtype": "Data",
+   "label": "Username",
+   "reqd": 1
+  },
+  {
+   "fieldname": "password",
+   "fieldtype": "Password",
+   "label": "Password",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "retry_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Retry Settings"
+  },
+  {
+   "default": "50",
+   "description": "Max failed Sales Invoices retried per scheduler run for this company.",
+   "fieldname": "bill_retry_batch_size",
+   "fieldtype": "Int",
+   "label": "Bill Retry Batch Size",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_retry",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "50",
+   "description": "Max failed Sales Returns retried per scheduler run for this company.",
+   "fieldname": "return_retry_batch_size",
+   "fieldtype": "Int",
+   "label": "Return Retry Batch Size",
+   "non_negative": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "CBMS Config",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
