@@ -8,6 +8,8 @@ so a bill is never silently lost even if this hook itself misbehaves.
 """
 
 import frappe
+from frappe.utils import flt
+from frappe.utils.nestedset import get_ancestors_of
 
 from avinashgroup_app.custom_code.CBMS import utils
 from avinashgroup_app.custom_code.CBMS.api_client import send_bill_to_cbms, send_return_to_cbms
@@ -27,15 +29,85 @@ def in_cbms_scope(config, posting_date):
 	return frappe.utils.getdate(posting_date) >= frappe.utils.getdate(config.enable_from_date)
 
 
+def is_export_invoice(sales_invoice):
+	"""Export per the IRD mapping spec: customer territory outside Nepal, or invoice
+	currency other than NPR."""
+	if (sales_invoice.currency or "NPR") != "NPR":
+		return True
+	territory = frappe.db.get_value("Customer", sales_invoice.customer, "territory")
+	# No territory / the "All Territories" root = unspecified, treated as domestic.
+	if not territory or territory in ("Nepal", "All Territories"):
+		return False
+	return "Nepal" not in (get_ancestors_of("Territory", territory) or [])
+
+
+def _line_value(item):
+	"""A line's sales value in company currency: custom_total (net + excise) when the
+	selling-taxes handler has computed it, else base_net_amount. VAT here is levied on
+	net + excise, so this is the base the taxable/exempt split must use for the
+	reported components to reconcile with grand_total."""
+	return flt(item.get("custom_total")) or flt(item.base_net_amount)
+
+
+def _booked_vat(sales_invoice):
+	"""The VAT actually booked on the invoice — custom_total_vat_amount (maintained by
+	salesinvoice_taxes on every save), falling back to the VAT-account tax rows for any
+	document that predates that handler."""
+	booked = flt(sales_invoice.get("custom_total_vat_amount"))
+	if booked:
+		return abs(booked)
+	return abs(
+		sum(
+			flt(row.base_tax_amount)
+			for row in (sales_invoice.taxes or [])
+			if (row.account_head or "").upper().startswith("VAT")
+		)
+	)
+
+
 def build_cbms_fields(sales_invoice):
-	"""Field mapping shared by CBMS Bill and CBMS Bill Return, from a submitted Sales Invoice."""
+	"""Field mapping shared by CBMS Bill and CBMS Bill Return, from a submitted Sales
+	Invoice, per the IRD mapping spec:
+
+	- tax_exempted_sales: line values where VAT Apply On = "VAT 0%"
+	- taxable_sales_vat:  line values of every other line
+	- vat:                the VAT amount booked on the invoice (not derived)
+	- total_sales:        grand total excluding the VAT-0% (exempt) line values
+	- export_sales:       whole sales value when territory ≠ Nepal or currency ≠ NPR
+	- discount:           additional discount amount when applied on Net Total
+	                      (recorded on the CBMS doc only; the IRD API has no such field)
+	"""
 	customer_pan = frappe.db.get_value("Customer", sales_invoice.customer, "tax_id")
 	seller_pan = frappe.get_cached_value("Company", sales_invoice.company, "tax_id")
 
-	total_sales = abs(sales_invoice.grand_total)
-	has_vat = any((row.rate or 0) > 0 for row in sales_invoice.taxes)
-	taxable_sales_vat = abs(sales_invoice.base_net_total) if has_vat else 0
-	vat = (total_sales - taxable_sales_vat) if has_vat else 0
+	exempt_sales = abs(
+		sum(
+			_line_value(item)
+			for item in sales_invoice.items
+			if item.get("custom_vat_apply_on") == "VAT 0%"
+		)
+	)
+	taxable_sales = abs(
+		sum(
+			_line_value(item)
+			for item in sales_invoice.items
+			if item.get("custom_vat_apply_on") != "VAT 0%"
+		)
+	)
+	vat = _booked_vat(sales_invoice)
+
+	if is_export_invoice(sales_invoice):
+		# Exports are zero-rated: the whole sales value goes in export_sales.
+		export_sales = taxable_sales + exempt_sales
+		taxable_sales = exempt_sales = 0
+		total_sales = abs(sales_invoice.base_grand_total)
+	else:
+		export_sales = 0
+		total_sales = abs(sales_invoice.base_grand_total) - exempt_sales
+
+	discount = 0
+	if sales_invoice.apply_discount_on == "Net Total":
+		discount = abs(flt(sales_invoice.base_discount_amount))
 
 	return {
 		"company": sales_invoice.company,
@@ -44,9 +116,12 @@ def build_cbms_fields(sales_invoice):
 		"buyer_pan": customer_pan or "",
 		"seller_pan": seller_pan or "",
 		"fiscal_year": utils.cbms_fiscal_year(sales_invoice.posting_date),
-		"total_sales": total_sales,
-		"taxable_sales_vat": taxable_sales_vat,
-		"vat": vat,
+		"total_sales": flt(total_sales, 2),
+		"taxable_sales_vat": flt(taxable_sales, 2),
+		"vat": flt(vat, 2),
+		"tax_exempted_sales": flt(exempt_sales, 2),
+		"export_sales": flt(export_sales, 2),
+		"discount": flt(discount, 2),
 		"datetime_client": frappe.utils.now_datetime(),
 	}
 

@@ -7,11 +7,13 @@ fiscal year names ("82/83").
 """
 
 import nepali_datetime
+from frappe.utils import getdate
 
 
 def to_bs_date(ad_date):
-	"""Convert a Gregorian date/datetime to a nepali_datetime.date."""
-	return nepali_datetime.date.from_datetime_date(ad_date)
+	"""Convert a Gregorian date (date, datetime or "YYYY-MM-DD" string — doc fields can
+	be any of these depending on where the doc came from) to a nepali_datetime.date."""
+	return nepali_datetime.date.from_datetime_date(getdate(ad_date))
 
 
 def bs_date_str(ad_date, sep="-"):

@@ -35,7 +35,9 @@ RETURN_ERRORS = {
 }
 
 
-def _zero_rated_fields(doc):
+def _other_sales_fields(doc):
+	"""Excise/HST/ESF stay 0 for this business; export_sales and tax_exempted_sales
+	are computed on the CBMS doc by build_cbms_fields."""
 	return {
 		"excisable_amount": doc.excisable_amount or 0,
 		"excise": doc.excise or 0,
@@ -61,10 +63,17 @@ def _build_bill_payload(bill, config):
 		"total_sales": float(bill.total_sales or 0),
 		"taxable_sales_vat": float(bill.taxable_sales_vat or 0),
 		"vat": float(bill.vat or 0),
-		**_zero_rated_fields(bill),
+		**_other_sales_fields(bill),
 		"isrealtime": True,
 		"datetimeClient": bill.datetime_client.strftime("%Y-%m-%dT%H:%M:%S"),
 	}
+
+
+def _buyer_pan_decimal(pan):
+	"""/api/billreturn declares buyer_pan as a nullable decimal — any string (even "")
+	fails its JSON model binding with a 400, unlike /api/bill which takes a string."""
+	pan = (pan or "").strip()
+	return int(pan) if pan.isdigit() else None
 
 
 def _build_return_payload(bill_return, config):
@@ -72,7 +81,7 @@ def _build_return_payload(bill_return, config):
 		"username": config.username,
 		"password": config.get_password("password"),
 		"seller_pan": bill_return.seller_pan,
-		"buyer_pan": bill_return.buyer_pan or "",
+		"buyer_pan": _buyer_pan_decimal(bill_return.buyer_pan),
 		"buyer_name": bill_return.buyer_name or "",
 		"fiscal_year": bill_return.fiscal_year,
 		"ref_invoice_number": bill_return.ref_invoice_number,
@@ -82,7 +91,7 @@ def _build_return_payload(bill_return, config):
 		"total_sales": float(bill_return.total_sales or 0),
 		"taxable_sales_vat": float(bill_return.taxable_sales_vat or 0),
 		"vat": float(bill_return.vat or 0),
-		**_zero_rated_fields(bill_return),
+		**_other_sales_fields(bill_return),
 		"isrealtime": True,
 		"datetimeClient": bill_return.datetime_client.strftime("%Y-%m-%dT%H:%M:%S"),
 	}
@@ -106,7 +115,7 @@ def _record_result(doctype, name, sync_status, sync_response):
 		name,
 		{
 			"sync_status": sync_status,
-			"sync_response": (sync_response or "")[:140],
+			"sync_response": (sync_response or "")[:500],
 			"attempt_count": attempt_count + 1,
 			"last_attempt": frappe.utils.now_datetime(),
 		},

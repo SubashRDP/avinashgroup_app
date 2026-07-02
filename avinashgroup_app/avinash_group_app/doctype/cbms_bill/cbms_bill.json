@@ -18,6 +18,7 @@
   "total_sales",
   "taxable_sales_vat",
   "vat",
+  "discount",
   "column_break_amounts",
   "excisable_amount",
   "excise",
@@ -138,6 +139,13 @@
    "read_only": 1
   },
   {
+   "description": "Additional discount (Apply Discount On = Net Total). Recorded locally only; not part of the IRD payload.",
+   "fieldname": "discount",
+   "fieldtype": "Currency",
+   "label": "Discount",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_amounts",
    "fieldtype": "Column Break"
   },
@@ -189,14 +197,16 @@
    "fieldname": "export_sales",
    "fieldtype": "Float",
    "label": "Export Sales",
-   "read_only": 1
+   "read_only": 1,
+   "description": "Whole sales value when the customer territory is outside Nepal or the invoice currency is not NPR (zero-rated export)."
   },
   {
    "default": "0",
    "fieldname": "tax_exempted_sales",
    "fieldtype": "Float",
    "label": "Tax Exempted Sales",
-   "read_only": 1
+   "read_only": 1,
+   "description": "Total of line items with VAT Apply On = \"VAT 0%\". Excluded from total_sales."
   },
   {
    "fieldname": "sync_section",
@@ -234,7 +244,7 @@
   },
   {
    "fieldname": "sync_response",
-   "fieldtype": "Data",
+   "fieldtype": "Small Text",
    "label": "Last Response",
    "read_only": 1
   },
