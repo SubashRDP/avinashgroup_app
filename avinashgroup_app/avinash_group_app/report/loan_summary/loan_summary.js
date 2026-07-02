@@ -43,6 +43,41 @@ frappe.query_reports["Loan Summary"] = {
 	// report instance only — no change to other reports.
 	onload: function (report) {
 		const GROUP_NAME = "Nepal Gas Group";
+
+		// Standalone-HTML print/PDF (matches the on-screen grid) — the datatable
+		// itself doesn't survive browser Ctrl+P, so Print opens the rendered page.
+		const PDF_METHOD =
+			"/api/method/avinashgroup_app.avinash_group_app.report.loan_summary.loan_summary.download_pdf";
+		const requireDates = function (filters) {
+			if (!filters.to_date) {
+				frappe.msgprint(__("Please set To Date"));
+				return false;
+			}
+			return true;
+		};
+
+		report.page.add_inner_button(__("Download PDF"), function () {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!requireDates(filters)) return;
+			window.open(
+				PDF_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=Landscape"
+			);
+		});
+
+		report.print_report = function (print_settings) {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!requireDates(filters)) return;
+			const orientation = (print_settings && print_settings.orientation) || "Landscape";
+			window.open(
+				PDF_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=" + encodeURIComponent(orientation) +
+					"&view=1"
+			);
+		};
+
 		report.get_filters_html_for_print = function () {
 			return (report.filters || [])
 				.map((filter) => {

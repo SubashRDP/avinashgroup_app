@@ -38,6 +38,11 @@ section as a reference. Everything below reflects the current code.
   `custom_nepali_miti`, `custom_posting_miti`), usually `SUBSTRING_INDEX(..., ' ', 1)`.
 - **Numbers:** `_fmt_inr` = Indian lakh/crore grouping (`en_IN`, fallback `{:,.2f}`);
   `_fmt_qty` = 3 dp; currency labelled NPR.
+- **Console / setup commands:** some features are applied **manually per site** (not by migrate).
+  Where relevant, the feature's entry has a **Setup / Backfill (console)** block. Run it with
+  `bench --site <site> console` (paste the import + call) or, for an arg-less function,
+  `bench --site <site> execute <dotted.path.to.function>`. Each function commits itself; re-run on
+  every site (dev/live), and `bench restart` on live if it changes forms.
 
 ### PDF / Print — three patterns
 | Pattern | Used by | How it works |
@@ -275,8 +280,58 @@ section as a reference. Everything below reflects the current code.
 **Purpose:** Human-facing `custom_document_no` + composite `custom_name` (e.g. `SGU-RC-000006-82/83`), auto or manual per transaction type.
 **How it works:** `AUTO_NUMBER_CONFIG` (discriminator field + qualifying types) decides auto vs manual. Next number = `max(matching custom_document_no) + 1`, matched by a `custom_name` LIKE pattern. Zero-pad width from **Voucher Number Settings Item** (`doctype_name → voucher_no_digits`, default 6). Client (`auto_update_document_no.js`) previews via whitelisted `get_next_custom_document_no`; server re-runs authoritatively via `audit_file_manager` dispatchers.
 **Files:** `custom_code/Override/naming_series.py` · `public/js/auto_update_document_no.js` · `utils/audit_file_manager.py` · doctype `Voucher Number Settings` (+ child `Item`).
+**Backfill (console) — rebuild `custom_name` on existing records after the rules change:**
+```python
+from avinashgroup_app.custom_code.voucher_no_console import (
+    update_purchase_invoice_custom_names, update_journal_entry_custom_names,
+    list_payment_entries_empty_custom_name,
+)
+update_purchase_invoice_custom_names()   # Purchase Invoice
+update_journal_entry_custom_names()      # Journal Entry
+list_payment_entries_empty_custom_name() # report PEs missing custom_name
+```
 
 #### Workflow Reject Reason
 **Purpose:** Force a written reason on the workflow **Reject** action (audit trail).
 **How it works:** `before_workflow_action` opens a mandatory "Rejection Reason" dialog only for Reject; on submit calls whitelisted `set_reject_reason` → writes `custom_reason` (if the field exists, e.g. Purchase Order) else a document comment. `approval_workflow_auto.js` auto-binds it to any Dynamic-Approval doctype.
 **Files:** `custom_code/workflow.py`, `workflow_material_request.py` · `public/js/approval_workflow_common.js`, `approval_workflow_auto.js` · `custom/purchase_order.json` (`custom_reason`).
+**Setup (console):** install/refresh the app's workflows — `from avinashgroup_app.custom_code import update_workflows; update_workflows.run()`.
+
+#### Audit Fields — Company / Naming Series / Created-Modified
+**Purpose:** Stamp a consistent audit block on records: an **Audit** section + `custom_created_by` / `custom_created_on` / `custom_modified_by`; **`custom_company`** when the doctype has no company field; and for **master** doctypes also `custom_naming_series`. Filled automatically on save via the `set_audit_fields` doc_events.
+**How it works:** `AuditFieldsManager` (target list `AuditBase.doctypes` in `utils/audit_file_manager.py`; masters in `AuditBase.master_doctypes`) creates/removes the fields. `AuditEventMapper.get_doc_events()` wires the per-save handlers in `hooks.py`.
+**Files:** `utils/audit_file_manager.py` · `hooks.py` (`doc_events`).
+**Setup (console) — apply / verify / remove for specific doctype(s):**
+```python
+from avinashgroup_app.utils.audit_file_manager import AuditFieldsManager, update_custom_company_reqd
+AuditFieldsManager(["Item Price"]).create_fields()   # apply (Company + Naming Series + audit fields)
+AuditFieldsManager(["Item Price"]).verify_fields()   # check what exists
+AuditFieldsManager(["Item Price"]).remove_fields()   # remove them again
+update_custom_company_reqd()                          # make custom_company mandatory across the set
+```
+> ⚠️ `AuditFieldsManager()` **with no list touches ~80 doctypes** — always pass an explicit list (e.g. `["Item Price"]`). `remove_fields()` deletes `audit_tab`, `custom_created_by/on`, `custom_modified_by`, `custom_company`, `custom_naming_series` — use it to undo fields a doctype picked up by mistake. Per-site: run on each site; `bench restart` on live.
+**Created By/On — alt installer + backfill existing rows (console):**
+```python
+from avinashgroup_app.custom_code import api
+api.create_created_by_and_created_on_fields()   # add the fields
+api.populate_created_by_and_created_on()        # backfill existing rows
+```
+
+#### Company-field Lock
+**Purpose:** Make `company` / `custom_company` read-only once a record is saved, so it can't be changed after creation.
+**How it works:** Sets `read_only_depends_on = eval:!doc.__islocal` on the company field across a configured set of doctypes.
+**Files:** `custom_code/Override/setup_company_lock.py`, `company_field_lock.py`.
+**Setup (console):**
+```python
+from avinashgroup_app.custom_code.Override import setup_company_lock
+setup_company_lock.quick_setup()                  # apply to the configured set
+setup_company_lock.verify_setup()                 # check status
+setup_company_lock.fix_specific_doctype("Customer")
+setup_company_lock.show_help()                    # prints usage
+```
+
+#### Regional Document-Deletion Guard
+**Purpose:** Block deletion of regionally-significant submitted documents (audit/compliance).
+**How it works:** `check_deletion_permission` (doc_event) enforces it; `apply_patch()` installs the guard.
+**Files:** `custom_code/regional_deletion_override.py`.
+**Setup (console):** `from avinashgroup_app.custom_code import regional_deletion_override; regional_deletion_override.apply_patch()`.

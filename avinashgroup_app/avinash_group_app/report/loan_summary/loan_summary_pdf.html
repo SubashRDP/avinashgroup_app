@@ -1,0 +1,80 @@
+{# Loan Summary print/PDF — standalone HTML that reproduces the on-screen grid,
+   with in-body "Page X of Y" (works on plain/unpatched wkhtmltopdf). #}
+<style>
+	* { box-sizing: border-box; }
+	body { font-family: Arial, sans-serif; color: #222; font-size: 17px; }
+	.ls-header { margin-bottom: 6px; }
+	.ls-company { font-size: 24px; font-weight: bold; }
+	.ls-title { font-size: 18px; font-weight: bold; margin-top: 1px; }
+	.ls-meta { font-size: 13.5px; color: #444; margin-top: 1px; }
+	.ls-divider { border: none; border-top: 1.2px solid #000; margin: 4px 0 0; }
+
+	table { width: 100%; border-collapse: collapse; }
+	thead { display: table-header-group; }
+	th {
+		text-align: left; font-size: 17px; font-weight: bold; color: #000;
+		background: #f2f2f2; border: 1px solid #b9b9b9; padding: 4px 6px;
+		white-space: nowrap;
+	}
+	td {
+		border: 1px solid #dcdcdc; padding: 3px 6px; vertical-align: top;
+	}
+	td.r, th.r { text-align: right; white-space: nowrap; }
+	td.c, th.c { text-align: center; }
+	/* only the Loan Type column wraps (long account names); amounts never wrap */
+	td.lt { white-space: normal; overflow-wrap: anywhere; }
+
+	tr { page-break-inside: avoid; }
+	tr.grp td { color: #000; }
+	tr.det td { color: #6b7280; }
+	tr.det td.lt { padding-left: 22px; }
+	tr.tot td { color: #000; font-weight: bold; border-top: 1px solid #999; }
+	tr.spacer td { height: 9px; border-left: 1px solid #dcdcdc; border-right: 1px solid #dcdcdc; border-top: none; border-bottom: none; }
+
+	.brk { page-break-after: always; }
+	.ls-pageno { text-align: center; font-size: 11px; color: #555; margin-top: 8px; }
+</style>
+
+{% for page_rows in pages %}
+<div class="ls-sheet{% if not loop.last %} brk{% endif %}">
+
+	<div class="ls-header">
+		<div class="ls-company">{{ company }}</div>
+		<div class="ls-title">Loan Summary</div>
+		<div class="ls-meta">
+			{% if filters.get('from_date') %}From <b>{{ fmtdate(filters.get('from_date')) }}</b> {% endif %}
+			To <b>{{ fmtdate(filters.get('to_date')) }}</b>
+			&nbsp;&nbsp;|&nbsp;&nbsp; Amount in Nepalese Rupee ( NPR )
+		</div>
+		<hr class="ls-divider">
+	</div>
+
+	<table>
+		<thead>
+			<tr>
+				{% for col in columns %}
+				<th class="{{ 'r' if col.get('align') == 'right' else 'l' }}"
+					style="width: {{ col.get('width') or 100 }}px;">{{ col.label }}</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+		{% for row in page_rows %}
+			{% if not row.get('loan_type') %}
+			<tr class="spacer">{% for col in columns %}<td></td>{% endfor %}</tr>
+			{% else %}
+			{%- set rcls = 'tot' if row.get('_bold') else ('det' if row.get('_detail') else 'grp') -%}
+			<tr class="{{ rcls }}">
+				{% for col in columns %}
+				{%- set v = row.get(col.fieldname) -%}
+				<td class="{{ 'r' if col.get('align') == 'right' else 'l' }}{% if col.fieldname == 'loan_type' %} lt{% endif %}">{{ v if v is not none else '' }}</td>
+				{% endfor %}
+			</tr>
+			{% endif %}
+		{% endfor %}
+		</tbody>
+	</table>
+
+	<div class="ls-pageno">Page {{ loop.index }} of {{ total_pages }}</div>
+</div>
+{% endfor %}

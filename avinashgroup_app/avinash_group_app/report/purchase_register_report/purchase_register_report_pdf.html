@@ -40,14 +40,14 @@ body {
 
 .pr-company-center {
   text-align: center;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: bold;
   margin-bottom: 2px;
 }
-.pr-title-l { font-size: 13px; font-weight: bold; margin-bottom: 1px; }
+.pr-title-l { font-size: 15px; font-weight: bold; margin-bottom: 1px; }
 
 .pr-filters {
-  font-size: 11px;
+  font-size: 14px;
   color: #333;
   margin-bottom: 4px;
 }
@@ -62,7 +62,7 @@ tr    { page-break-inside: avoid; }
 thead th {
   background: #f0f2f5;
   color: #222;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: bold;
   padding: 5px 5px;
   border-top: 1.5px solid #aaa;
@@ -150,7 +150,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 
 {# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ──
    row_limit = rows per physical page; tune per orientation if rows overflow the break. #}
-{% set row_limit = 56 if orientation == 'Portrait' else 16 %}
+{% set row_limit = 90 if orientation == 'Portrait' else 27 %}
 {% set total_rows = data | length %}
 {% set total_pages = (total_rows // row_limit) + (1 if total_rows % row_limit > 0 else 0) %}
 {% if total_pages < 1 %}{% set total_pages = 1 %}{% endif %}
@@ -165,7 +165,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
   <thead>
     <tr>
       <td colspan="19" style="padding:4px 0 0 0; border:none;">
-        <div style="text-align:right; font-size:13px; font-weight:bold;">Purchase Register</div>
+        <div style="text-align:right; font-size:15px; font-weight:bold;">Purchase Register</div>
         {% if company_label %}
         <div class="pr-company-center">{{ company_label }}</div>
         {% endif %}

@@ -32,8 +32,8 @@ body {
 }
 {% endif %}
 
-.sa-company-center { text-align: center; font-size: 14px; font-weight: bold; margin-bottom: 2px; }
-.sa-filters { font-size: 10.5px; color: #333; margin-bottom: 4px; }
+.sa-company-center { text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+.sa-filters { font-size: 14px; color: #333; margin-bottom: 4px; }
 .sa-filter-item  { display: inline-block; margin-right: 18px; }
 .sa-filter-label { font-weight: bold; }
 .sa-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
@@ -44,7 +44,7 @@ tr    { page-break-inside: avoid; }
 thead th {
   background: #f0f2f5;
   color: #222;
-  font-size: 10.5px;
+  font-size: 16px;
   font-weight: bold;
   padding: 5px 6px;
   border-top: 1.5px solid #aaa;
@@ -60,7 +60,7 @@ td { padding: 3px 6px; vertical-align: top; }
 
 /* Row variants */
 .prod-head td      { font-weight: bold; font-size: 11px; padding-top: 6px; }
-.cust-head td      { font-weight: bold; padding-top: 4px; }
+.cust-head td      { font-weight: bold; padding-top: 4px; border-top: 1px solid #cccccc; }
 .agent-group td    { color: #333; padding-top: 2px; }
 .section td        { font-style: italic; color: #444; }
 /* Customer/Agent subtotals are plain (no bold, no rule). */
@@ -87,7 +87,7 @@ td              { padding: 2px 3px !important; }
 <body>
 
 {# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ── #}
-{% set row_limit = 74 if orientation == 'Portrait' else 26 %}
+{% set row_limit = 81 if orientation == 'Portrait' else 31 %}
 {% set total_rows = data | length %}
 {% set total_pages = (total_rows // row_limit) + (1 if total_rows % row_limit > 0 else 0) %}
 {% if total_pages < 1 %}{% set total_pages = 1 %}{% endif %}
@@ -102,7 +102,7 @@ td              { padding: 2px 3px !important; }
   <thead>
     <tr>
       <td colspan="8" style="padding:4px 0 0 0; border:none;">
-        <div style="text-align:right; font-size:13px; font-weight:bold;">
+        <div style="text-align:right; font-size:15px; font-weight:bold;">
           Sales Analysis Product Wise{% if include_return %} Include Return{% endif %} Invoice Details
         </div>
         {% if company_label %}

@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import os
 import re
 
 import frappe
@@ -274,3 +275,99 @@ def _as_list(value):
 	if isinstance(value, (list, tuple, set)):
 		return [v for v in value if v]
 	return [value]
+
+
+# ── Print / PDF ──────────────────────────────────────────────────────────────
+# Standalone HTML render so browser Print (Ctrl+P) and Download PDF give the same
+# full-content output as the on-screen grid (the datatable itself can't print).
+
+GROUP_NAME = "Nepal Gas Group"
+
+# Per-page capacity in "line units" (a wrapped Loan-Type name counts as 2+). In-body
+# pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf.
+_PAGE_CAP = {"Portrait": 40.0, "Landscape": 30.0}
+_LT_CHARS_PER_LINE = 26
+
+
+def _row_units(row):
+	import math
+
+	lt = row.get("loan_type") or ""
+	if not lt:
+		return 1.0
+	return float(max(1, math.ceil(len(lt) / _LT_CHARS_PER_LINE)))
+
+
+def _paginate(rows, orientation):
+	cap = _PAGE_CAP.get(orientation, 20.0)
+	pages, cur, used = [], [], 0.0
+	for row in rows:
+		h = _row_units(row)
+		if cur and used + h > cap:
+			pages.append(cur)
+			cur, used = [], 0.0
+		cur.append(row)
+		used += h
+	if cur:
+		pages.append(cur)
+	return pages or [[]]
+
+
+def _company_label(filters):
+	"""Header company line: the one selected company, else the group name."""
+	selected = _as_list(filters.get("company"))
+	if len(selected) == 1:
+		return selected[0]
+	if len(selected) > 1:
+		return ", ".join(selected)
+	return GROUP_NAME
+
+
+def _render(filters, orientation):
+	columns, data = execute(filters)
+	# continuous serial numbers (match the on-screen "#" column) before paging
+	for i, row in enumerate(data, 1):
+		row["_sn"] = i
+	pages = _paginate(data, orientation)
+	template_path = os.path.join(os.path.dirname(__file__), "loan_summary_pdf.html")
+	with open(template_path) as f:
+		template = f.read()
+	return frappe.render_template(
+		template,
+		{
+			"columns": columns,
+			"pages": pages,
+			"total_pages": len(pages) or 1,
+			"company": _company_label(filters),
+			"filters": filters,
+			"fmtdate": frappe.utils.formatdate,
+		},
+	)
+
+
+@frappe.whitelist()
+def download_pdf(filters, orientation=None, view=None):
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+	orientation = orientation if orientation in ("Portrait", "Landscape") else "Landscape"
+
+	html = _render(filters, orientation)
+
+	options = {
+		"page-size": "A4",
+		"orientation": orientation,
+		"margin-top": "10mm",
+		"margin-right": "8mm",
+		"margin-bottom": "12mm",
+		"margin-left": "8mm",
+		"encoding": "UTF-8",
+		"enable-local-file-access": None,
+	}
+	pdf_data = get_pdf(html, options)
+
+	frappe.response.filename = "loan_summary.pdf"
+	frappe.response.filecontent = pdf_data
+	# view=1 (Print) → open inline in a new tab; otherwise download.
+	frappe.response.type = "pdf" if frappe.utils.cint(view) else "download"

@@ -342,7 +342,11 @@ def _fmt_inr(v):
 # Per-page capacity in "line units" (after the repeated header band) and the chars that
 # fit on one wrapped line of a remark / wide cell. Conservative — better an under-filled
 # page than content spilling onto the next physical page.
-_PAGE_CAP = {"Portrait": 66.0, "Landscape": 30.0}
+_PAGE_CAP = {"Portrait": 117.0, "Landscape": 72.0}
+# Summary view packs one row per customer (no sub-lines), so it needs a lower budget.
+_PAGE_CAP_SUMMARY = {"Portrait": 69.0, "Landscape": 44.0}
+# Date Wise has its own budget so it can be tuned independently of Customer Wise.
+_PAGE_CAP_DATE_WISE = {"Portrait": 136.0, "Landscape": 72.0}
 _CHARS_PER_LINE = 45
 
 
@@ -362,12 +366,18 @@ def _row_line_units(row):
 	return height
 
 
-def _paginate(data, orientation):
+def _paginate(data, orientation, view=None):
 	"""Split rows into pages by estimated height (not a flat row count), keeping each
 	receipt's main row + its Remarks sub-line together on one page."""
 	if not data:
 		return []
-	cap = _PAGE_CAP.get(orientation, 40.0)
+	if view == VIEW_SUMMARY:
+		cap_table = _PAGE_CAP_SUMMARY
+	elif view == VIEW_DATE_WISE:
+		cap_table = _PAGE_CAP_DATE_WISE
+	else:
+		cap_table = _PAGE_CAP
+	cap = cap_table.get(orientation, 40.0)
 
 	# Atomic blocks: a primary row plus the is_sub row(s) that immediately follow it.
 	blocks = []
@@ -395,7 +405,7 @@ def _paginate(data, orientation):
 
 def _render(filters, orientation):
 	columns, data = execute(filters)
-	pages = _paginate(data, orientation)
+	pages = _paginate(data, orientation, filters.get("view") or VIEW_DATE_WISE)
 	template_path = os.path.join(os.path.dirname(__file__), "receipt_register_pdf.html")
 	with open(template_path) as f:
 		template = f.read()

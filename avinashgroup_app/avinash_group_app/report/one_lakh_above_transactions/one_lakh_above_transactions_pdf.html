@@ -1,0 +1,74 @@
+{# One Lakh Above Transactions print/PDF — standalone HTML reproducing the grid,
+   with in-body "Page X of Y" (works on plain/unpatched wkhtmltopdf). #}
+<style>
+	* { box-sizing: border-box; }
+	body { font-family: Arial, sans-serif; color: #222; font-size: 11px; }
+	.ol-header { margin-bottom: 6px; }
+	.ol-company { font-size: 23px; font-weight: bold; }
+	.ol-title { font-size: 17px; font-weight: bold; margin-top: 1px; }
+	.ol-meta { font-size: 12px; color: #444; margin-top: 1px; }
+	.ol-divider { border: none; border-top: 1.2px solid #000; margin: 4px 0 0; }
+
+	table { width: 100%; border-collapse: collapse; }
+	thead { display: table-header-group; }
+	th {
+		text-align: left; font-size: 13px; font-weight: bold; color: #000;
+		background: #f2f2f2; border: 1px solid #b9b9b9; padding: 4px 6px;
+		white-space: nowrap;
+	}
+	td {
+		border: 1px solid #dcdcdc; padding: 3px 6px; vertical-align: top;
+		color: #000; font-size: 9px;
+	}
+	td.r, th.r { text-align: right; white-space: nowrap; }
+	td.c, th.c { text-align: center; }
+	/* name/PAN can wrap; amounts never wrap */
+	td.wrap { white-space: normal; overflow-wrap: anywhere; }
+
+	tr { page-break-inside: avoid; }
+	.brk { page-break-after: always; }
+	.ol-pageno { text-align: center; font-size: 11px; color: #555; margin-top: 8px; }
+</style>
+
+{% for page_rows in pages %}
+<div class="ol-sheet{% if not loop.last %} brk{% endif %}">
+
+	<div class="ol-header">
+		<div class="ol-company">{{ company }}</div>
+		<div class="ol-title">One Lakh Above Transactions</div>
+		<div class="ol-meta">
+			{% if filters.get('from_date') %}From <b>{{ fmtdate(filters.get('from_date')) }}</b> {% endif %}
+			To <b>{{ fmtdate(filters.get('to_date')) }}</b>
+			&nbsp;&nbsp;|&nbsp;&nbsp; Amount in Nepalese Rupee ( NPR )
+		</div>
+		<hr class="ol-divider">
+	</div>
+
+	<table>
+		<thead>
+			<tr>
+				{% for col in columns %}
+				<th class="{{ 'r' if col.fieldtype == 'Currency' else 'l' }}"
+					style="width: {{ col.get('width') or 100 }}px;">{{ col.label }}</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+		{% for row in page_rows %}
+			<tr>
+				{% for col in columns %}
+				{%- set v = row.get(col.fieldname) -%}
+				{%- if col.fieldtype == 'Currency' -%}
+				<td class="r">{{ fmt(v) }}</td>
+				{%- else -%}
+				<td class="l wrap">{{ v if v is not none else '' }}</td>
+				{%- endif -%}
+				{% endfor %}
+			</tr>
+		{% endfor %}
+		</tbody>
+	</table>
+
+	<div class="ol-pageno">Page {{ loop.index }} of {{ total_pages }}</div>
+</div>
+{% endfor %}

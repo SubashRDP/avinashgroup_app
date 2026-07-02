@@ -147,15 +147,17 @@ def _fetch(filters, include_return):
 
 	# One row per (product, uom, customer, invoice, sales/return).
 	# Value = item amount + excise; VAT = custom_vat_amount. Returns are stored negative.
-	return frappe.db.sql(
+	#
+	# The Item/Customer names are NOT joined here: on a large result set (tens of
+	# thousands of rows) those joins repeat the same strings on every row and force a
+	# filesort. Instead we fetch item_name / customer_name / tax_id in two small lookups
+	# below and sort in Python — this keeps the heavy query lean and well-indexed.
+	rows = frappe.db.sql(
 		f"""
 		SELECT
 			sii.item_code                                    AS item_code,
-			it.item_name                                     AS item_name,
 			sii.uom                                          AS uom,
 			si.customer                                      AS customer_code,
-			cust.customer_name                               AS customer_name,
-			cust.tax_id                                      AS tax_id,
 			si.name                                          AS invoice_no,
 			si.posting_date                                  AS posting_date,
 			SUBSTRING_INDEX(si.custom_invoice_miti, ' ', 1)  AS miti,
@@ -165,15 +167,51 @@ def _fetch(filters, include_return):
 			SUM(sii.custom_vat_amount)                       AS vat
 		FROM `tabSales Invoice Item` sii
 		JOIN `tabSales Invoice` si ON si.name = sii.parent
-		JOIN `tabItem` it ON it.name = sii.item_code
-		LEFT JOIN `tabCustomer` cust ON cust.name = si.customer
 		WHERE {where}
 		GROUP BY sii.item_code, sii.uom, si.customer, si.name, si.is_return
-		ORDER BY it.item_name, sii.uom, cust.customer_name, si.posting_date, si.name
 		""",
 		values,
 		as_dict=True,
 	)
+	if not rows:
+		return rows
+
+	# Attach display names from small IN-lookups (one row per distinct item / customer).
+	item_codes = {r.item_code for r in rows if r.item_code}
+	customer_codes = {r.customer_code for r in rows if r.customer_code}
+
+	item_names = dict(
+		frappe.db.sql(
+			"SELECT name, item_name FROM `tabItem` WHERE name IN %(items)s",
+			{"items": tuple(item_codes)},
+		)
+	) if item_codes else {}
+
+	cust_info = {}
+	if customer_codes:
+		for name, cname, pan in frappe.db.sql(
+			"SELECT name, customer_name, tax_id FROM `tabCustomer` WHERE name IN %(c)s",
+			{"c": tuple(customer_codes)},
+		):
+			cust_info[name] = (cname, pan)
+
+	for r in rows:
+		r.item_name = item_names.get(r.item_code)
+		cname, pan = cust_info.get(r.customer_code, (None, None))
+		r.customer_name = cname
+		r.tax_id = pan
+
+	# Same ordering the SQL used to do (product → uom → customer → date → invoice).
+	rows.sort(
+		key=lambda r: (
+			(r.item_name or "").lower(),
+			r.uom or "",
+			(r.customer_name or "").lower(),
+			r.posting_date or "",
+			r.invoice_no or "",
+		)
+	)
+	return rows
 
 
 def build_rows(filters, include_return, include_agent=True):

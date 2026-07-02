@@ -40,6 +40,42 @@ frappe.query_reports["One Lakh Above Transactions"] = {
 		},
 	],
 
+	// Standalone-HTML print/PDF (matches the grid, cleanly paginated) — the raw
+	// datatable doesn't survive browser Ctrl+P, so Print opens the rendered page.
+	onload: function (report) {
+		const PDF_METHOD =
+			"/api/method/avinashgroup_app.avinash_group_app.report.one_lakh_above_transactions.one_lakh_above_transactions.download_pdf";
+		const requireFilters = function (filters) {
+			if (!filters.company || !filters.from_date || !filters.to_date) {
+				frappe.msgprint(__("Please set Company, From Date and To Date"));
+				return false;
+			}
+			return true;
+		};
+
+		report.page.add_inner_button(__("Download PDF"), function () {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!requireFilters(filters)) return;
+			window.open(
+				PDF_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=Portrait"
+			);
+		});
+
+		report.print_report = function (print_settings) {
+			const filters = frappe.query_report.get_filter_values(true);
+			if (!requireFilters(filters)) return;
+			const orientation = (print_settings && print_settings.orientation) || "Portrait";
+			window.open(
+				PDF_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=" + encodeURIComponent(orientation) +
+					"&view=1"
+			);
+		};
+	},
+
 	get_datatable_options(options) {
 		return Object.assign(options, { serialNoColumn: false, layout: "fixed" });
 	},

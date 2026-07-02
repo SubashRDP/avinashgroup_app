@@ -2,9 +2,11 @@
 # For license information, please see license.txt
 
 import json
+import os
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 THRESHOLD = 100000
@@ -114,6 +116,100 @@ def _fetch_sales_rows(filters):
 		values,
 		as_dict=True,
 	)
+
+
+# ── Print / PDF ──────────────────────────────────────────────────────────────
+# Standalone HTML render so browser Print (Ctrl+P) and Download PDF give the same
+# full-content, cleanly-paginated output (the datatable itself can't print).
+
+GROUP_NAME = "Nepal Gas Group"
+_PAGE_CAP = {"Portrait": 59.0, "Landscape": 37.0}
+_NAME_CHARS_PER_LINE = 40
+
+
+def _fmt_amt(value):
+	value = flt(value)
+	if abs(value) < 0.005:
+		return "-"
+	return "{:,.2f}".format(value)
+
+
+def _company_label(filters):
+	selected = _as_list(filters.get("company"))
+	if len(selected) == 1:
+		return selected[0]
+	if len(selected) > 1:
+		return ", ".join(selected)
+	return GROUP_NAME
+
+
+def _row_units(row):
+	import math
+
+	name = row.get("name_of_tax_payer") or ""
+	return float(max(1, math.ceil(len(name) / _NAME_CHARS_PER_LINE)))
+
+
+def _paginate(rows, orientation):
+	cap = _PAGE_CAP.get(orientation, 20.0)
+	pages, cur, used = [], [], 0.0
+	for row in rows:
+		h = _row_units(row)
+		if cur and used + h > cap:
+			pages.append(cur)
+			cur, used = [], 0.0
+		cur.append(row)
+		used += h
+	if cur:
+		pages.append(cur)
+	return pages or [[]]
+
+
+def _render(filters, orientation):
+	columns, data = execute(filters)
+	pages = _paginate(data, orientation)
+	template_path = os.path.join(os.path.dirname(__file__), "one_lakh_above_transactions_pdf.html")
+	with open(template_path) as f:
+		template = f.read()
+	return frappe.render_template(
+		template,
+		{
+			"columns": columns,
+			"pages": pages,
+			"total_pages": len(pages) or 1,
+			"company": _company_label(filters),
+			"filters": filters,
+			"fmt": _fmt_amt,
+			"fmtdate": frappe.utils.formatdate,
+		},
+	)
+
+
+@frappe.whitelist()
+def download_pdf(filters, orientation=None, view=None):
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+	orientation = orientation if orientation in ("Portrait", "Landscape") else "Portrait"
+
+	html = _render(filters, orientation)
+
+	options = {
+		"page-size": "A4",
+		"orientation": orientation,
+		"margin-top": "10mm",
+		"margin-right": "8mm",
+		"margin-bottom": "12mm",
+		"margin-left": "8mm",
+		"encoding": "UTF-8",
+		"enable-local-file-access": None,
+	}
+	pdf_data = get_pdf(html, options)
+
+	frappe.response.filename = "one_lakh_above_transactions.pdf"
+	frappe.response.filecontent = pdf_data
+	frappe.response.type = "pdf" if frappe.utils.cint(view) else "download"
 
 
 def _fetch_purchase_rows(filters):
