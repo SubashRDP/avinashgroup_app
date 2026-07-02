@@ -3,26 +3,10 @@ import frappe
 from frappe.model.naming import make_autoname, getseries
 from frappe.model.document import Document
 
-BRANCH_NAME_COMPANY = "Grishma Enterprises Pvt. Ltd."
-
-# branch_code per doctype per branch (normal and return)
-BRANCH_CODE_CONFIG = {
-    "Sales Invoice": {
-        "GEPL-Branch-00001": {"normal": "INV", "return": "RT"},
-        "GEPL-Branch-00002":     {"normal": "SB",  "return": "BSR"},
-        "GEPL-Branch-00003":    {"normal": "GEP", "return": "RTN"},
-    },
-    "Purchase Receipt": {
-        "GEPL-Branch-00001": {"normal": "AN"},
-        "GEPL-Branch-00002":     {"normal": "BRC"},
-        "GEPL-Branch-00003":    {"normal": "RC"},
-    },
-    "Purchase Invoice": {
-        "GEPL-Branch-00001": {"normal": "PBA"},
-        "GEPL-Branch-00002":     {"normal": "PBB"},
-        "GEPL-Branch-00003":    {"normal": "PB"},
-    },
-}
+# NOTE: the old BRANCH_CODE_CONFIG / BRANCH_NAME_COMPANY hardcoded branch
+# numbering was migrated to seeded "Numbering Configuration" rules — see
+# avinashgroup_app/scripts/seed_numbering_rules.py (identical formats and
+# tabSeries keys, so sequences continue unchanged).
 
 ## "Item", "Salary Structure", "Contact"
 NAMING_CONFIG = {
@@ -927,64 +911,314 @@ def naming_requirements_before_insert(doc):
             )
 
 
+# ---------------------------------------------------------------------------
+# Numbering Configuration engine
+#
+# A fully data-driven document numbering system. Each "Numbering Configuration"
+# rule is scoped by document_type (+ optional company/branch) and an optional
+# list of conditions (field == value, all must match). The most specific matching
+# rule wins and builds a number by joining an ordered list of SEGMENTS with a
+# configurable separator. Each segment is one of:
+#   Static Text | Document Field | Fetch from Link | Company Abbr | Fiscal Year | Number
+# Empty segments are skipped. The number is written to the rule's Target Field.
+# ---------------------------------------------------------------------------
+
+def _numbering_rules_for(doctype):
+    """All enabled Numbering Configuration rules for a doctype, with conditions + segments."""
+    rules = frappe.get_all(
+        "Numbering Configuration",
+        filters={"document_type": doctype, "enabled": 1},
+        fields=[
+            "name", "company", "branch", "target_field", "separator",
+            "valid_from", "valid_upto", "date_field",
+        ],
+    )
+    for r in rules:
+        r["conditions"] = frappe.get_all(
+            "Numbering Condition",
+            filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
+            fields=["field", "value"],
+            order_by="idx",
+        )
+        r["segments"] = frappe.get_all(
+            "Numbering Segment",
+            filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
+            fields=["segment_type", "static_value", "return_value", "field", "fetch_field", "number_length"],
+            order_by="idx",
+        )
+    return rules
+
+
+def _rule_date(doc, rule):
+    """The document date a rule's Valid From/Upto window is compared against."""
+    if rule.get("date_field"):
+        return doc.get(rule["date_field"])
+    return _doc_date(doc)
+
+
+def _rule_matches(doc, rule):
+    """True if the document satisfies the rule's company/branch scope, its
+    date window (Valid From/Upto vs the document's date) and ALL conditions."""
+    if rule.get("company") and rule["company"] != getattr(doc, "company", None):
+        return False
+    if rule.get("branch") and rule["branch"] != getattr(doc, "custom_branch", None):
+        return False
+
+    if rule.get("valid_from") or rule.get("valid_upto"):
+        doc_date = _rule_date(doc, rule)
+        if not doc_date:
+            return False  # window set but the document has no date to compare
+        doc_date = frappe.utils.getdate(doc_date)
+        if rule.get("valid_from") and doc_date < frappe.utils.getdate(rule["valid_from"]):
+            return False
+        if rule.get("valid_upto") and doc_date > frappe.utils.getdate(rule["valid_upto"]):
+            return False
+
+    for cond in rule.get("conditions", []):
+        if frappe.utils.cstr(doc.get(cond["field"])) != frappe.utils.cstr(cond["value"]):
+            return False
+    return True
+
+
+def _rule_specificity(rule):
+    """Higher = more specific: 1 for company, 1 for branch, 1 per condition,
+    1 for a date window (a dated rule beats an equally-scoped undated one)."""
+    return (
+        (1 if rule.get("company") else 0)
+        + (1 if rule.get("branch") else 0)
+        + (1 if (rule.get("valid_from") or rule.get("valid_upto")) else 0)
+        + len(rule.get("conditions", []))
+    )
+
+
+def _match_numbering_rule(doc):
+    """Return the most specific enabled rule matching the document, or None."""
+    matches = [r for r in _numbering_rules_for(doc.doctype) if _rule_matches(doc, r)]
+    if not matches:
+        return None
+    # most specific wins; deterministic tie-break by name
+    matches.sort(key=lambda r: (_rule_specificity(r), r["name"]), reverse=True)
+    return matches[0]
+
+
+def _doc_date(doc):
+    return (
+        (getattr(doc, "posting_date", None) if hasattr(doc, "posting_date") else None)
+        or (getattr(doc, "transaction_date", None) if hasattr(doc, "transaction_date") else None)
+    )
+
+
+def _link_target_doctype(doc, fieldname):
+    try:
+        df = doc.meta.get_field(fieldname)
+        return df.options if df else None
+    except Exception:
+        return None
+
+
+def _resolve_segment(doc, seg, sep):
+    """Resolve one non-Number segment to a string ('' if empty/not applicable)."""
+    stype = seg.get("segment_type")
+
+    if stype == "Static Text":
+        return (seg.get("static_value") or "").strip()
+
+    if stype == "Normal / Return Code":
+        # one segment, two codes: the return code applies when is_return == 1
+        if getattr(doc, "is_return", 0) and (seg.get("return_value") or "").strip():
+            return (seg.get("return_value") or "").strip()
+        return (seg.get("static_value") or "").strip()
+
+    if stype == "Company Abbr":
+        return get_company_abbr(doc) or ""
+
+    if stype == "Branch Abbr":
+        branch = getattr(doc, "custom_branch", None)
+        if not branch:
+            return ""
+        return frappe.utils.cstr(
+            frappe.db.get_value("Branch", branch, "custom_abbr") or ""
+        )
+
+    if stype == "Fiscal Year":
+        fy = get_fiscal_year_from_date(_doc_date(doc)) or ""
+        # avoid separator collision when the separator is '/'
+        return fy.replace("/", "-") if sep == "/" else fy
+
+    if stype == "Document Field":
+        return frappe.utils.cstr(doc.get(seg.get("field")))
+
+    if stype == "Fetch from Link":
+        link_field = seg.get("field")
+        link_value = doc.get(link_field) if link_field else None
+        if not link_value:
+            return ""
+        link_dt = _link_target_doctype(doc, link_field)
+        if not link_dt or not seg.get("fetch_field"):
+            return ""
+        return frappe.utils.cstr(
+            frappe.db.get_value(link_dt, link_value, seg.get("fetch_field")) or ""
+        )
+
+    return ""
+
+
+def _peek_series(key, digits):
+    """Next number for a series WITHOUT incrementing the counter (for previews)."""
+    row = frappe.db.sql("select current from `tabSeries` where name=%s", key)
+    current = row[0][0] if row and row[0][0] is not None else 0
+    return ("%0" + str(int(digits)) + "d") % (current + 1)
+
+
+def _resolve_segments(doc, rule, sep):
+    """Return an ordered list of resolved parts:
+       [{"num": True, "len": n} | {"num": False, "value": str}] and whether a Number exists.
+    """
+    resolved = []
+    has_number = False
+    for seg in rule.get("segments", []):
+        if seg.get("segment_type") == "Number":
+            resolved.append({"num": True, "len": int(seg.get("number_length") or 6)})
+            has_number = True
+        else:
+            resolved.append({"num": False, "value": _resolve_segment(doc, seg, sep)})
+    return resolved, has_number
+
+
+def _build_from_segments(doc, rule, commit_series=True):
+    """Build the number by joining resolved segments (in order) with the separator.
+
+    - Non-empty non-Number segments identify the series (the counter key).
+    - The Number segment is replaced by the running counter (getseries), or by the
+      next value without incrementing when commit_series is False (preview/test).
+    - The Number may sit anywhere in the order (supports e.g. code-number-year).
+    Returns None if there is no Number segment or nothing to show.
+    """
+    sep = rule.get("separator") or "/"
+    resolved, has_number = _resolve_segments(doc, rule, sep)
+    if not has_number:
+        return None
+
+    key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
+    series_key = sep.join(key_parts) + sep
+    number_len = next((r["len"] for r in resolved if r["num"]), 6)
+
+    seq = getseries(series_key, number_len) if commit_series else _peek_series(series_key, number_len)
+
+    display = []
+    for r in resolved:
+        if r["num"]:
+            display.append(seq)
+        elif r.get("value"):
+            display.append(r["value"])
+    return sep.join(display) if display else None
+
+
+def _rule_dict_from_config(cfg):
+    """Build the engine rule dict from a Numbering Configuration document (saved or not)."""
+    return {
+        "name": cfg.name,
+        "company": cfg.company,
+        "branch": cfg.branch,
+        "target_field": cfg.target_field,
+        "separator": cfg.separator,
+        "valid_from": cfg.get("valid_from"),
+        "valid_upto": cfg.get("valid_upto"),
+        "date_field": cfg.get("date_field"),
+        "conditions": [{"field": c.field, "value": c.value} for c in (cfg.conditions or [])],
+        "segments": [
+            {
+                "segment_type": s.segment_type,
+                "static_value": s.static_value,
+                "return_value": s.get("return_value"),
+                "field": s.field,
+                "fetch_field": s.fetch_field,
+                "number_length": s.number_length,
+            }
+            for s in (cfg.segments or [])
+        ],
+    }
+
+
+def _number_belongs_to_other_doc(doc, target):
+    """True if the target field holds a number already used by another document."""
+    value = doc.get(target)
+    if not value or value == doc.name:
+        return False
+
+    filters = {target: value, "docstatus": ["<", 2]}
+    if doc.name:
+        filters["name"] = ["!=", doc.name]
+    return bool(frappe.db.get_value(doc.doctype, filters, "name"))
+
+
+def _validate_unique_number(doc, target):
+    """No two documents of a doctype may share a generated number.
+
+    Cancelled documents (docstatus = 2) are ignored so an amendment can reuse
+    a freed number, mirroring validate_custom_name_unique above.
+    """
+    value = doc.get(target)
+    if not value or value == doc.name:
+        return
+
+    filters = {target: value, "docstatus": ["<", 2]}
+    if doc.name:
+        filters["name"] = ["!=", doc.name]
+
+    existing = frappe.db.get_value(doc.doctype, filters, "name")
+    if existing:
+        frappe.throw(
+            f"Number {value} is already used by {existing}. "
+            f"Leave the field empty to get the next number automatically.",
+            title="Duplicate Document Number",
+        )
+
+
 def set_custom_branch_name(doc):
     """
     Sets custom_branch_name field based on branch-wise naming.
-    Format: {company_abbr}-{branch_code}-{######}-{fiscal_year}
     Only generated once (skipped if already set).
-    For non-Grishma companies: custom_branch_name = doc.name
+
+    Precedence:
+      1. Numbering Configuration rule (generic engine, most-specific match)
+         -> writes the composed number to the rule's Target Field.
+      2. Otherwise custom_branch_name = doc.name (usual numbering, unchanged).
+
+    The old hardcoded BRANCH_CODE_CONFIG (Grishma) path was migrated to seeded
+    Numbering Configuration rules (avinashgroup_app/scripts/seed_numbering_rules.py)
+    which produce identical formats and series keys.
     """
+    # 1) Rule-driven numbering (Numbering Configuration) — generic engine.
+    rule = _match_numbering_rule(doc)
+    if rule:
+        target = rule.get("target_field") or "custom_branch_name"
+        if doc.meta.has_field(target):
+            # A NEW document arriving with another document's number means the
+            # value was carried over by a copy path that bypassed no_copy
+            # (server copy_doc, API, import). Clear it so a fresh number is
+            # generated — new data must never keep an old number.
+            if doc.is_new() and _number_belongs_to_other_doc(doc, target):
+                doc.set(target, None)
+
+            if not doc.get(target):
+                number = _build_from_segments(doc, rule)
+                if number:
+                    doc.set(target, number)
+
+            # existing documents stay guarded: hand-editing a saved document's
+            # number into a collision is blocked.
+            _validate_unique_number(doc, target)
+        return
+
+    # 2) No rule -> mirror the document's usual name (unchanged behavior).
     if not hasattr(doc, 'custom_branch_name'):
         return
 
     if doc.custom_branch_name:
         return
 
-    company_name = None
-    if hasattr(doc, 'company') and doc.company:
-        company_name = doc.company
-    elif hasattr(doc, 'custom_company') and doc.custom_company:
-        company_name = doc.custom_company
-
-    if not company_name or company_name != BRANCH_NAME_COMPANY:
-        doc.custom_branch_name = doc.name or ""
-        return
-
-    if doc.doctype not in BRANCH_CODE_CONFIG:
-        doc.custom_branch_name = doc.name or ""
-        return
-
-    branch = getattr(doc, 'custom_branch', None)
-    if not branch:
-        doc.custom_branch_name = doc.name or ""
-        return
-
-    branch_config = BRANCH_CODE_CONFIG[doc.doctype]
-    if branch not in branch_config:
-        doc.custom_branch_name = doc.name or ""
-        return
-
-    is_return = getattr(doc, 'is_return', 0)
-    if is_return:
-        branch_code = branch_config[branch].get("return", branch_config[branch]["normal"])
-    else:
-        branch_code = branch_config[branch]["normal"]
-
-    company_abbr = get_company_abbr(doc) or ""
-
-    fiscal_year = ""
-    date_field = None
-    if hasattr(doc, 'posting_date') and doc.posting_date:
-        date_field = doc.posting_date
-    elif hasattr(doc, 'transaction_date') and doc.transaction_date:
-        date_field = doc.transaction_date
-    if date_field:
-        fiscal_year = get_fiscal_year_from_date(date_field) or ""
-
-    series_key = f"{company_abbr}-{branch_code}-{fiscal_year}-"
-    seq_number = getseries(series_key, 6)
-
-    doc.custom_branch_name = f"{company_abbr}-{branch_code}-{seq_number}-{fiscal_year}"
+    doc.custom_branch_name = doc.name or ""
 
 
 def _revert_series_if_last(key, deleted_number):
@@ -1005,6 +1239,37 @@ def _revert_series_if_last(key, deleted_number):
         )
 
 
+def _revert_engine_series(doc, rule):
+    """Revert a Numbering Configuration engine series if this doc held its last number."""
+    target = rule.get("target_field") or "custom_branch_name"
+    number_str = doc.get(target) if doc.meta.has_field(target) else None
+    if not number_str or number_str == doc.name:
+        return
+
+    sep = rule.get("separator") or "/"
+    resolved, has_number = _resolve_segments(doc, rule, sep)
+    if not has_number:
+        return
+
+    key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
+    series_key = sep.join(key_parts) + sep
+
+    # locate the Number's index among the non-empty display parts
+    num_index, display_count = None, 0
+    for r in resolved:
+        if r["num"]:
+            num_index = display_count
+            display_count += 1
+        elif r.get("value"):
+            display_count += 1
+
+    parts = str(number_str).split(sep)
+    if num_index is None or len(parts) != display_count:
+        return
+    if parts[num_index].isdigit():
+        _revert_series_if_last(series_key, int(parts[num_index]))
+
+
 def revert_series_on_delete(doc, method=None):
     """
     Called on after_delete. Mirrors what frappe.model.delete_doc does for
@@ -1013,30 +1278,34 @@ def revert_series_on_delete(doc, method=None):
     Mid-series gaps are left alone, exactly like core.
     """
     doctype = doc.doctype
+
+    # 1) Numbering Configuration engine series — recompute the series key from the
+    #    rule's segments and revert if this document held the last number. The
+    #    Number segment may sit anywhere in the order, so it is located by position.
+    rule = _match_numbering_rule(doc)
+    if rule:
+        _revert_engine_series(doc, rule)
+
     if doctype not in NAMING_CONFIG:
         return
 
-    # Main name: series key is everything before the trailing digit run,
-    # e.g. GEPL-SB-82/83-00015 -> key "GEPL-SB-82/83-", number 15.
-    # Amended names (…-00015-1) derive a key that has no Series row, so
-    # they are skipped safely.
+    # 2) Main document name: series key is everything before the trailing digit
+    #    run, e.g. GEPL-SB-82/83-00015 -> key "GEPL-SB-82/83-", number 15.
+    #    Amended names (…-00015-1) derive a key with no Series row -> skipped.
     m = re.match(r"^(.+?)(\d+)$", str(doc.name or ""))
     if m:
         _revert_series_if_last(m.group(1), int(m.group(2)))
 
-    # Branch series: {abbr}-{branch_code}-{number}-{fiscal_year} counted via
-    # getseries("{abbr}-{branch_code}-{fiscal_year}-", 6).
-    branch_name = getattr(doc, "custom_branch_name", None)
-    if (
-        NAMING_CONFIG[doctype].get("has_branch_name", False)
-        and branch_name
-        and branch_name != doc.name
-    ):
-        m = re.match(r"^(.+)-(\d{6,})-(.+)$", str(branch_name))
-        if m:
-            _revert_series_if_last(
-                f"{m.group(1)}-{m.group(3)}-", int(m.group(2))
-            )
+    # 3) Legacy hardcoded BRANCH_CODE_CONFIG branch series (dash format), only
+    #    when no engine rule handled this document.
+    if not rule and NAMING_CONFIG[doctype].get("has_branch_name", False):
+        branch_name = getattr(doc, "custom_branch_name", None)
+        if branch_name and branch_name != doc.name:
+            m = re.match(r"^(.+)-(\d{6,})-(.+)$", str(branch_name))
+            if m:
+                _revert_series_if_last(
+                    f"{m.group(1)}-{m.group(3)}-", int(m.group(2))
+                )
 
 
 def handle_before_insert(doc, method=None):
