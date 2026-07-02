@@ -67,6 +67,9 @@ def execute(filters=None):
 
 	columns = get_columns(filters.periodicity, period_list, filters.accumulated_values, filters.company)
 
+	# add a "Total" column that holds the sum of all period values in each row
+	add_row_total_column(columns, data, period_list)
+
 	currency = filters.presentation_currency or frappe.get_cached_value(
 		"Company", filters.company, "default_currency"
 	)
@@ -83,6 +86,43 @@ def execute(filters=None):
 		compute_margin_view_data(data, period_list, filters.accumulated_values)
 
 	return columns, data, None, chart, report_summary, primitive_summary
+
+
+def add_row_total_column(columns, data, period_list):
+	"""Add a separate 'Total' column = sum of all period values in each row.
+
+	Unlike erpnext's default behaviour (which only shows a Total column when
+	values are not accumulated and the periodicity is not Yearly), this always
+	exposes a Total column so every row shows the row-wise sum of its periods.
+	Rows that were blanked (e.g. by the account-level filter) keep an empty
+	Total instead of showing 0.
+	"""
+
+	period_keys = [getattr(p, "key", p.get("key")) for p in period_list]
+
+	for row in data:
+		if not row:
+			# blank separator rows
+			continue
+
+		values = [row.get(key) for key in period_keys if key in row]
+		if values and all(v is None for v in values):
+			# row intentionally blanked -> keep Total empty too
+			row["total"] = None
+		else:
+			row["total"] = flt(sum(flt(v) for v in values if v is not None), 3)
+
+	# append the Total column once, at the end
+	if not any(col.get("fieldname") == "total" for col in columns):
+		columns.append(
+			{
+				"fieldname": "total",
+				"label": _("Total"),
+				"fieldtype": "Currency",
+				"options": "currency",
+				"width": 150,
+			}
+		)
 
 
 def get_account_level(filters) -> int | None:
@@ -138,3 +178,4 @@ def apply_account_level_filter(data, level: int, period_list):
 			row["has_value"] = False
 
 	return data
+

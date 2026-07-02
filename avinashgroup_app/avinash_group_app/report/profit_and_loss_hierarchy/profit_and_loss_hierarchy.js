@@ -41,3 +41,4 @@ frappe.query_reports["Profit and Loss Hierarchy"]["filters"].push(
 		reqd: 0,
 	}
 );
+
