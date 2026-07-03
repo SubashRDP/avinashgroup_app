@@ -73,10 +73,27 @@ class NumberingConfiguration(Document):
 			elif stype == "Fetch from Link" and not row.fetch_field:
 				frappe.throw(_("Segment row {0}: enter the Fetch Field to read on the linked record.").format(row.idx))
 
-		if number_segments != 1:
+		if number_segments > 1:
 			frappe.throw(
-				_("Add exactly one <b>Number</b> segment (found {0}).").format(number_segments),
-				title=_("Number Segment Required"),
+				_("Add at most one <b>Number</b> segment (found {0}).").format(number_segments),
+				title=_("Too Many Number Segments"),
+			)
+
+		if number_segments == 0:
+			if not (self.segments or []):
+				frappe.throw(_("Add at least one segment."), title=_("Segments Required"))
+			# no Number segment = pass-through rule (copies the segment values
+			# as-is, no counter) — valid, e.g. "Document Field: narration" for
+			# migrated legacy invoices. Warn so a plain counter rule isn't
+			# saved incomplete by accident.
+			frappe.msgprint(
+				_(
+					"No <b>Number</b> segment: this rule copies the segment values "
+					"directly (pass-through, no running counter). Intended for "
+					"cases like reading the legacy number from a document field."
+				),
+				indicator="orange",
+				alert=True,
 			)
 
 	def validate_condition_fields(self):

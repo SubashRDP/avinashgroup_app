@@ -1,199 +1,125 @@
-"""
-Seed Numbering Configuration rules for Sales Invoice.
+"""Seed the Sales Invoice numbering rules (migration cut-over + Grishma branches).
 
-Implements a multi-condition, multi-source numbering system that:
-  1. Preserves old invoice numbers from legacy ERP (migration mode)
-  2. Generates branch-specific numbers for companies with branches
-  3. Generates company-level numbers for companies without branches
-  4. Automatically detects is_return and uses return codes
+What this configures (all user-editable afterwards in Numbering Configuration):
 
-Idempotent: rules are skipped if they already exist.
+1. MIGRATION RULE (all companies) — a PASS-THROUGH rule:
+     Valid Upto = CUTOFF_DATE, single segment "Document Field: narration".
+     Backdated documents (posting_date <= cutoff) copy the legacy ERP invoice
+     number from narration into custom_branch_name. No counter is consumed.
+     If narration is empty the engine falls through to the next matching rule.
+
+2. GRISHMA BRANCH RULES — counter rules scoped company+branch with
+     Valid From = CUTOFF_DATE + 1 day, so they only number documents AFTER the
+     cut-over; before it, the migration rule wins.
+     Segments: Company Abbr / Normal-Return Code / Number(6) / Fiscal Year.
+
+Companies WITHOUT branches need no seeding here: create one rule in the form
+(Company Abbr + Static code + Number + Fiscal Year, Valid From = cutoff + 1),
+or rely on an existing all-company rule.
+
+The cutoff below is only the seeded DEFAULT — change it any time by editing
+Valid Upto / Valid From on the rules in the Numbering Configuration form.
+
+Idempotent: rules are matched by scope (doctype + company + branch), never by
+name (the doctype autonames with a hash, so name checks would always miss).
 
 Run:
-    bench --site <site> console
-    >>> from avinashgroup_app.scripts.seed_sales_invoice_numbering import seed
-    >>> seed()
+    bench --site <site> execute avinashgroup_app.scripts.seed_sales_invoice_numbering.seed
 """
 
 import frappe
 
+CUTOFF_DATE = "2026-06-30"          # narration applies up to and including this
+NEW_FORMAT_FROM = "2026-07-01"      # generated numbers apply from this date
+
+GRISHMA = "Grishma Enterprises Pvt. Ltd."
+
+# branch -> (normal code, return code) — legacy Grishma codes
+GRISHMA_BRANCH_CODES = {
+    "GEPL-Branch-00001": ("INV", "RT"),
+    "GEPL-Branch-00002": ("SB", "BSR"),
+    "GEPL-Branch-00003": ("GEP", "RTN"),
+}
+
 
 def seed(commit=True):
-    """Seed generic and company-specific Sales Invoice numbering rules."""
+    created, updated, skipped = [], [], []
 
-    created = []
-    skipped = []
-
-    # =========================================================================
-    # STEP 1: Create 3 Generic Rules (work for ALL companies)
-    # =========================================================================
-
-    # Rule 1: Migration Rule (Read from narration for old data)
-    rule1_name = "Sales Invoice - Legacy Data"
-    if frappe.db.exists("Numbering Configuration", rule1_name):
-        skipped.append(f"{rule1_name}: already exists")
+    # ------------------------------------------------------------------ 1
+    # Migration pass-through rule (all companies, all branches).
+    existing = frappe.get_all(
+        "Numbering Configuration",
+        filters={
+            "document_type": "Sales Invoice",
+            "company": ("is", "not set"),
+            "branch": ("is", "not set"),
+            "valid_upto": ("is", "set"),
+        },
+        pluck="name",
+    )
+    if existing:
+        skipped.append(f"migration rule already exists: {existing[0]}")
     else:
-        rule1 = frappe.new_doc("Numbering Configuration")
-        rule1.name = rule1_name
-        rule1.document_type = "Sales Invoice"
-        rule1.company = None  # Blank = all companies
-        rule1.branch = None   # Blank = all branches
-        rule1.enabled = 1
-        rule1.target_field = "custom_branch_name"
-        rule1.separator = "-"
-        rule1.valid_upto = "2026-06-30"  # Users can customize cutoff date
-        rule1.date_field = "posting_date"
-        rule1.append("segments", {"segment_type": "Document Field", "field": "narration"})
-        rule1.insert(ignore_permissions=True)
-        created.append(f"{rule1.name} (migration - reads narration)")
+        rule = frappe.new_doc("Numbering Configuration")
+        rule.document_type = "Sales Invoice"
+        rule.enabled = 1
+        rule.target_field = "custom_branch_name"
+        rule.separator = "-"
+        rule.valid_upto = CUTOFF_DATE
+        rule.date_field = "posting_date"
+        rule.append("segments", {"segment_type": "Document Field", "field": "narration"})
+        rule.insert(ignore_permissions=True)
+        created.append(f"{rule.name} (pass-through narration, upto {CUTOFF_DATE})")
 
-    # Rule 2: Branch-wise Rule (Generate for companies with branches)
-    rule2_name = "Sales Invoice - Branch-wise"
-    if frappe.db.exists("Numbering Configuration", rule2_name):
-        skipped.append(f"{rule2_name}: already exists")
-    else:
-        rule2 = frappe.new_doc("Numbering Configuration")
-        rule2.name = rule2_name
-        rule2.document_type = "Sales Invoice"
-        rule2.company = None
-        rule2.branch = None  # Users customize per-branch
-        rule2.enabled = 1
-        rule2.target_field = "custom_branch_name"
-        rule2.separator = "-"
-        rule2.valid_from = "2026-07-01"
-        rule2.date_field = "posting_date"
-        rule2.append("segments", {"segment_type": "Company Abbr"})
-        rule2.append("segments", {"segment_type": "Branch Abbr"})
-        rule2.append("segments", {
-            "segment_type": "Normal / Return Code",
-            "static_value": "SI",
-            "return_value": "SR"
-        })
-        rule2.append("segments", {"segment_type": "Number", "number_length": 6})
-        rule2.append("segments", {"segment_type": "Fiscal Year"})
-        rule2.insert(ignore_permissions=True)
-        created.append(f"{rule2.name} (generates with branch code)")
-
-    # Rule 3: Company-wise Rule (Generate for companies without branches)
-    rule3_name = "Sales Invoice - Company-wise"
-    if frappe.db.exists("Numbering Configuration", rule3_name):
-        skipped.append(f"{rule3_name}: already exists")
-    else:
-        rule3 = frappe.new_doc("Numbering Configuration")
-        rule3.name = rule3_name
-        rule3.document_type = "Sales Invoice"
-        rule3.company = None
-        rule3.branch = None
-        rule3.enabled = 1
-        rule3.target_field = "custom_branch_name"
-        rule3.separator = "-"
-        rule3.valid_from = "2026-07-01"
-        rule3.date_field = "posting_date"
-        rule3.append("segments", {"segment_type": "Company Abbr"})
-        rule3.append("segments", {"segment_type": "Static Text", "static_value": "SI"})
-        rule3.append("segments", {"segment_type": "Number", "number_length": 6})
-        rule3.append("segments", {"segment_type": "Fiscal Year"})
-        rule3.insert(ignore_permissions=True)
-        created.append(f"{rule3.name} (generates company-level, fallback)")
-
-    # =========================================================================
-    # STEP 2: Create Grishma-specific Rules (override generic for branches)
-    # =========================================================================
-
-    grishma = "Grishma Enterprises Pvt. Ltd."
-    branches = {
-        "GEPL-Branch-00001": ("INV", "RT"),
-        "GEPL-Branch-00002": ("SB", "BSR"),
-        "GEPL-Branch-00003": ("GEP", "RTN"),
-    }
-
-    for branch_id, (normal_code, return_code) in branches.items():
-        rule_name = f"Sales Invoice - Grishma - {branch_id.split('-')[-1]}"
-
-        if frappe.db.exists("Numbering Configuration", {"document_type": "Sales Invoice", "company": grishma, "branch": branch_id}):
-            skipped.append(f"Grishma {branch_id}: rule already exists")
+    # ------------------------------------------------------------------ 2
+    # Grishma branch rules, windowed to the new format period.
+    for branch, (normal_code, return_code) in GRISHMA_BRANCH_CODES.items():
+        if not frappe.db.exists("Branch", branch):
+            skipped.append(f"{branch}: branch master missing")
             continue
 
-        if not frappe.db.exists("Branch", branch_id):
-            skipped.append(f"Grishma {branch_id}: branch master missing")
+        name = frappe.db.get_value(
+            "Numbering Configuration",
+            {"document_type": "Sales Invoice", "company": GRISHMA, "branch": branch},
+        )
+        if name:
+            # rule exists (e.g. from the legacy migration seed) — just make
+            # sure it is scoped to the new-format window.
+            doc = frappe.get_doc("Numbering Configuration", name)
+            if not doc.valid_from:
+                doc.valid_from = NEW_FORMAT_FROM
+                doc.date_field = doc.date_field or "posting_date"
+                doc.save(ignore_permissions=True)
+                updated.append(f"{name}: set valid_from={NEW_FORMAT_FROM}")
+            else:
+                skipped.append(f"{name}: already windowed (from {doc.valid_from})")
             continue
 
         rule = frappe.new_doc("Numbering Configuration")
         rule.document_type = "Sales Invoice"
-        rule.company = grishma
-        rule.branch = branch_id
+        rule.company = GRISHMA
+        rule.branch = branch
         rule.enabled = 1
         rule.target_field = "custom_branch_name"
         rule.separator = "-"
-        rule.valid_from = "2026-07-01"
+        rule.valid_from = NEW_FORMAT_FROM
         rule.date_field = "posting_date"
         rule.append("segments", {"segment_type": "Company Abbr"})
-        rule.append("segments", {"segment_type": "Branch Abbr"})
         rule.append("segments", {
             "segment_type": "Normal / Return Code",
             "static_value": normal_code,
-            "return_value": return_code
+            "return_value": return_code,
         })
         rule.append("segments", {"segment_type": "Number", "number_length": 6})
         rule.append("segments", {"segment_type": "Fiscal Year"})
         rule.insert(ignore_permissions=True)
-        created.append(f"  {rule.name} ({normal_code}/{return_code})")
+        created.append(f"{rule.name} ({branch}: {normal_code}/{return_code})")
 
     if commit:
         frappe.db.commit()
 
-    # Print summary
-    print("\n" + "="*80)
-    print("SEEDED SALES INVOICE NUMBERING RULES")
-    print("="*80 + "\n")
-
-    if created:
-        print(f"✓ Created {len(created)} rules:")
-        for c in created:
-            print(f"  {c}")
-        print()
-
-    if skipped:
-        print(f"⊘ Skipped {len(skipped)} rules:")
-        for s in skipped:
-            print(f"  {s}")
-        print()
-
-    print("="*80 + "\n")
-    print("""
-HOW TO USE:
-
-1. CUSTOMIZING CUTOFF DATE (for migration):
-   - Go to: Numbering Configuration
-   - Edit: "Sales Invoice - Legacy Data"
-   - Change: Valid Upto = your cutoff date (default: 2026-06-30)
-   - Result: Invoices before this date use narration, after use generated numbers
-
-2. FOR COMPANIES WITH BRANCHES:
-   - Copy generic "Sales Invoice - Branch-wise" rule
-   - Set: Company = your company
-   - Set: Branch = your branch ID
-   - Customize: Normal/Return codes as needed
-   - Example (Grishma): GEPL-INV-000001-82/83
-
-3. FOR COMPANIES WITHOUT BRANCHES:
-   - Generic "Sales Invoice - Company-wise" rule applies automatically
-   - Customize: Static code as needed
-   - Example (Nepal Gas): NGI-SI-000001-82/83
-
-4. FOR MIGRATION (OLD ERP DATA):
-   - Import invoices with posting_date ≤ cutoff date
-   - Put old invoice number in narration field
-   - custom_branch_name will auto-populate from narration
-
-5. FOR NEW INVOICES (AFTER MIGRATION):
-   - Import invoices with posting_date ≥ cutoff date + 1
-   - Leave narration empty
-   - custom_branch_name will auto-generate with codes
-""")
-
+    for label, items in (("created", created), ("updated", updated), ("skipped", skipped)):
+        print(f"{label} {len(items)}:")
+        for item in items:
+            print(f"  - {item}")
     return created
-
-
-if __name__ == "__main__":
-    seed()

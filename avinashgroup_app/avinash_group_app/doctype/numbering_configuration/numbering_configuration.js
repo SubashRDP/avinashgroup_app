@@ -253,7 +253,7 @@ function render_preview(frm) {
 
 	let warn = "";
 	if (parts.length && !has_number) {
-		warn = `<div class="text-danger small">${__("Add a Number segment — every rule needs exactly one.")}</div>`;
+		warn = `<div class="text-muted small">${__("No Number segment: pass-through rule — copies the segment values as-is (e.g. legacy number from narration), no running counter.")}</div>`;
 	}
 
 	const conds = (frm.doc.conditions || [])

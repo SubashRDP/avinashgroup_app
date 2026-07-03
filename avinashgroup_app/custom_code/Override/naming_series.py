@@ -991,14 +991,18 @@ def _rule_specificity(rule):
     )
 
 
+def _matching_numbering_rules(doc):
+    """All enabled rules matching the document, most specific first
+    (deterministic tie-break by name)."""
+    matches = [r for r in _numbering_rules_for(doc.doctype) if _rule_matches(doc, r)]
+    matches.sort(key=lambda r: (_rule_specificity(r), r["name"]), reverse=True)
+    return matches
+
+
 def _match_numbering_rule(doc):
     """Return the most specific enabled rule matching the document, or None."""
-    matches = [r for r in _numbering_rules_for(doc.doctype) if _rule_matches(doc, r)]
-    if not matches:
-        return None
-    # most specific wins; deterministic tie-break by name
-    matches.sort(key=lambda r: (_rule_specificity(r), r["name"]), reverse=True)
-    return matches[0]
+    matches = _matching_numbering_rules(doc)
+    return matches[0] if matches else None
 
 
 def _doc_date(doc):
@@ -1092,12 +1096,18 @@ def _build_from_segments(doc, rule, commit_series=True):
     - The Number segment is replaced by the running counter (getseries), or by the
       next value without incrementing when commit_series is False (preview/test).
     - The Number may sit anywhere in the order (supports e.g. code-number-year).
-    Returns None if there is no Number segment or nothing to show.
+    - A rule with NO Number segment is a PASS-THROUGH rule: it just joins the
+      resolved segment values (e.g. a single "Document Field: narration" segment
+      copies the legacy invoice number as-is; no counter is consumed). Returns
+      None when the source values are empty, so a less specific rule can apply.
+    Returns None if nothing to show.
     """
     sep = rule.get("separator") or "/"
     resolved, has_number = _resolve_segments(doc, rule, sep)
     if not has_number:
-        return None
+        # pass-through: copy the resolved values directly, no counter involved
+        values = [r["value"] for r in resolved if r.get("value")]
+        return sep.join(values) if values else None
 
     key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
     series_key = sep.join(key_parts) + sep
@@ -1181,8 +1191,12 @@ def set_custom_branch_name(doc):
     Only generated once (skipped if already set).
 
     Precedence:
-      1. Numbering Configuration rule (generic engine, most-specific match)
-         -> writes the composed number to the rule's Target Field.
+      1. Numbering Configuration rules (generic engine), tried most-specific
+         first. A rule may be a normal counter rule (has a Number segment) or a
+         pass-through rule (no Number segment, e.g. a single "Document Field:
+         narration" segment for migrated legacy invoices). If the best rule
+         produces an empty value (e.g. narration is blank), the next matching
+         rule gets a chance.
       2. Otherwise custom_branch_name = doc.name (usual numbering, unchanged).
 
     The old hardcoded BRANCH_CODE_CONFIG (Grishma) path was migrated to seeded
@@ -1190,28 +1204,32 @@ def set_custom_branch_name(doc):
     which produce identical formats and series keys.
     """
     # 1) Rule-driven numbering (Numbering Configuration) — generic engine.
-    rule = _match_numbering_rule(doc)
-    if rule:
+    for rule in _matching_numbering_rules(doc):
         target = rule.get("target_field") or "custom_branch_name"
-        if doc.meta.has_field(target):
-            # A NEW document arriving with another document's number means the
-            # value was carried over by a copy path that bypassed no_copy
-            # (server copy_doc, API, import). Clear it so a fresh number is
-            # generated — new data must never keep an old number.
-            if doc.is_new() and _number_belongs_to_other_doc(doc, target):
-                doc.set(target, None)
+        if not doc.meta.has_field(target):
+            continue
 
-            if not doc.get(target):
-                number = _build_from_segments(doc, rule)
-                if number:
-                    doc.set(target, number)
+        # A NEW document arriving with another document's number means the
+        # value was carried over by a copy path that bypassed no_copy
+        # (server copy_doc, API, import). Clear it so a fresh number is
+        # generated — new data must never keep an old number.
+        if doc.is_new() and _number_belongs_to_other_doc(doc, target):
+            doc.set(target, None)
 
-            # existing documents stay guarded: hand-editing a saved document's
-            # number into a collision is blocked.
+        if doc.get(target):
+            # already numbered (generate once) — keep guarding collisions.
             _validate_unique_number(doc, target)
-        return
+            return
 
-    # 2) No rule -> mirror the document's usual name (unchanged behavior).
+        number = _build_from_segments(doc, rule)
+        if number:
+            doc.set(target, number)
+            _validate_unique_number(doc, target)
+            return
+        # rule matched but produced nothing (e.g. empty source field) ->
+        # fall through to the next matching rule.
+
+    # 2) No rule produced a value -> mirror the document's usual name.
     if not hasattr(doc, 'custom_branch_name'):
         return
 
