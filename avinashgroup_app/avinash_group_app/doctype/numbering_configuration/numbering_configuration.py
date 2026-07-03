@@ -25,14 +25,7 @@ class NumberingConfiguration(Document):
 	def validate(self):
 		self.validate_segments()
 		self.validate_condition_fields()
-		self.validate_date_window()
 		self.validate_legacy_cutover()
-
-	def validate_date_window(self):
-		if self.valid_from and self.valid_upto and frappe.utils.getdate(
-			self.valid_from
-		) > frappe.utils.getdate(self.valid_upto):
-			frappe.throw(_("Valid From cannot be after Valid Upto."))
 
 	def validate_legacy_cutover(self):
 		if not self.legacy_upto:
@@ -48,12 +41,6 @@ class NumberingConfiguration(Document):
 		if self.document_type and not frappe.get_meta(self.document_type).has_field(self.legacy_source_field):
 			frappe.throw(
 				_("'{0}' is not a field on {1}.").format(self.legacy_source_field, self.document_type)
-			)
-		if self.valid_from and frappe.utils.getdate(self.valid_from) > frappe.utils.getdate(self.legacy_upto):
-			frappe.msgprint(
-				_("Valid From is after the legacy cut-over date, so the legacy window will never apply — this rule does not match documents before Valid From."),
-				indicator="orange",
-				alert=True,
 			)
 
 	def on_update(self):

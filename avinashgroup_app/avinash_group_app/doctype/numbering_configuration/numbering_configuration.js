@@ -152,7 +152,7 @@ function load_field_options(frm, reset_default) {
 		frm.fields_dict.conditions.grid.update_docfield_property("field", "options", options);
 		frm.fields_dict.segments.grid.update_docfield_property("field", "options", options);
 
-		// "Date Field" -> date-like fields for the Valid From/Upto window.
+		// "Date Field" -> date-like fields for the legacy cut-over comparison.
 		const date_fields = (meta.fields || [])
 			.filter((f) => ["Date", "Datetime"].includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)
@@ -262,14 +262,6 @@ function render_preview(frm) {
 	const conds = (frm.doc.conditions || [])
 		.filter((c) => c.field)
 		.map((c) => `${c.field} = ${c.value ?? ""}`);
-	if (frm.doc.valid_from || frm.doc.valid_upto) {
-		const date_label = frm.doc.date_field || "posting date";
-		conds.push(
-			`${date_label} ${frm.doc.valid_from ? "≥ " + frm.doc.valid_from : ""}` +
-			`${frm.doc.valid_from && frm.doc.valid_upto ? " and " : ""}` +
-			`${frm.doc.valid_upto ? "≤ " + frm.doc.valid_upto : ""}`
-		);
-	}
 	const when = conds.length
 		? `<div class="text-muted small">${__("Applies only when")}: ${frappe.utils.escape_html(conds.join("  AND  "))}</div>`
 		: `<div class="text-muted small">${__("Applies as a default (no conditions).")}</div>`;

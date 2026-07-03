@@ -14,13 +14,9 @@
   "company_abbr",
   "conditions_section",
   "conditions",
-  "period_section",
-  "valid_from",
-  "valid_upto",
-  "column_break_period",
-  "date_field",
   "legacy_section",
   "legacy_upto",
+  "date_field",
   "column_break_legacy",
   "legacy_source_field",
   "segments_section",
@@ -95,30 +91,8 @@
    "options": "Numbering Condition"
   },
   {
-   "collapsible": 1,
-   "description": "Optional. The rule applies only when the document's date falls inside this window — useful for cut-over dates (old format before a date, new format after).",
-   "fieldname": "period_section",
-   "fieldtype": "Section Break",
-   "label": "Applies during … (date window)"
-  },
-  {
-   "description": "Rule applies from this date (based on the document's date). Leave blank for no lower bound.",
-   "fieldname": "valid_from",
-   "fieldtype": "Date",
-   "label": "Valid From"
-  },
-  {
-   "description": "Rule applies up to and including this date. Leave blank for no upper bound.",
-   "fieldname": "valid_upto",
-   "fieldtype": "Date",
-   "label": "Valid Upto"
-  },
-  {
-   "fieldname": "column_break_period",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Which date on the document to compare. Leave blank to use Posting/Transaction Date automatically.",
+   "depends_on": "legacy_upto",
+   "description": "Which date on the document to compare against the cut-over. Leave blank to use Posting/Transaction Date automatically.",
    "fieldname": "date_field",
    "fieldtype": "Select",
    "label": "Date Field"

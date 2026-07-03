@@ -930,8 +930,7 @@ def _numbering_rules_for(doctype):
         filters={"document_type": doctype, "enabled": 1},
         fields=[
             "name", "company", "branch", "target_field", "separator",
-            "valid_from", "valid_upto", "date_field",
-            "legacy_upto", "legacy_source_field",
+            "date_field", "legacy_upto", "legacy_source_field",
         ],
     )
     for r in rules:
@@ -951,29 +950,19 @@ def _numbering_rules_for(doctype):
 
 
 def _rule_date(doc, rule):
-    """The document date a rule's Valid From/Upto window is compared against."""
+    """The document date the rule's legacy cut-over is compared against."""
     if rule.get("date_field"):
         return doc.get(rule["date_field"])
     return _doc_date(doc)
 
 
 def _rule_matches(doc, rule):
-    """True if the document satisfies the rule's company/branch scope, its
-    date window (Valid From/Upto vs the document's date) and ALL conditions."""
+    """True if the document satisfies the rule's company/branch scope
+    and ALL conditions."""
     if rule.get("company") and rule["company"] != getattr(doc, "company", None):
         return False
     if rule.get("branch") and rule["branch"] != getattr(doc, "custom_branch", None):
         return False
-
-    if rule.get("valid_from") or rule.get("valid_upto"):
-        doc_date = _rule_date(doc, rule)
-        if not doc_date:
-            return False  # window set but the document has no date to compare
-        doc_date = frappe.utils.getdate(doc_date)
-        if rule.get("valid_from") and doc_date < frappe.utils.getdate(rule["valid_from"]):
-            return False
-        if rule.get("valid_upto") and doc_date > frappe.utils.getdate(rule["valid_upto"]):
-            return False
 
     for cond in rule.get("conditions", []):
         if frappe.utils.cstr(doc.get(cond["field"])) != frappe.utils.cstr(cond["value"]):
@@ -982,12 +971,10 @@ def _rule_matches(doc, rule):
 
 
 def _rule_specificity(rule):
-    """Higher = more specific: 1 for company, 1 for branch, 1 per condition,
-    1 for a date window (a dated rule beats an equally-scoped undated one)."""
+    """Higher = more specific: 1 for company, 1 for branch, 1 per condition."""
     return (
         (1 if rule.get("company") else 0)
         + (1 if rule.get("branch") else 0)
-        + (1 if (rule.get("valid_from") or rule.get("valid_upto")) else 0)
         + len(rule.get("conditions", []))
     )
 
@@ -1142,8 +1129,6 @@ def _rule_dict_from_config(cfg):
         "branch": cfg.branch,
         "target_field": cfg.target_field,
         "separator": cfg.separator,
-        "valid_from": cfg.get("valid_from"),
-        "valid_upto": cfg.get("valid_upto"),
         "date_field": cfg.get("date_field"),
         "legacy_upto": cfg.get("legacy_upto"),
         "legacy_source_field": cfg.get("legacy_source_field"),
