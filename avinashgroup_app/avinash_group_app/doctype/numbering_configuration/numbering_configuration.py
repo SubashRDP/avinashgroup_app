@@ -115,6 +115,8 @@ class NumberingConfiguration(Document):
 				frappe.throw(_("Segment row {0}: pick a Field.").format(row.idx))
 			elif stype == "Fetch from Link" and not row.fetch_field:
 				frappe.throw(_("Segment row {0}: enter the Fetch Field to read on the linked record.").format(row.idx))
+			elif stype == "Fetch from Link":
+				self.warn_bad_fetch_field(row)
 
 		if number_segments > 1:
 			frappe.throw(
@@ -137,6 +139,30 @@ class NumberingConfiguration(Document):
 				),
 				indicator="orange",
 				alert=True,
+			)
+
+	def warn_bad_fetch_field(self, row):
+		"""A Fetch from Link segment whose Fetch Field doesn't exist on the
+		linked doctype resolves to empty and silently drops out of the number
+		— warn loudly instead of failing quietly at save time."""
+		if not self.document_type:
+			return
+		link_df = frappe.get_meta(self.document_type).get_field(row.field)
+		if not link_df or link_df.fieldtype != "Link" or not link_df.options:
+			frappe.msgprint(
+				_("Segment row {0}: '{1}' is not a Link field on {2} — this segment will always be empty.").format(
+					row.idx, row.field, self.document_type
+				),
+				indicator="orange", alert=True,
+			)
+			return
+		if not frappe.get_meta(link_df.options).has_field(row.fetch_field):
+			frappe.msgprint(
+				_("Segment row {0}: '{1}' is not a field on {2} — this segment will always be empty. "
+				"Check the fieldname on the {2} doctype.").format(
+					row.idx, row.fetch_field, link_df.options
+				),
+				indicator="orange", alert=True,
 			)
 
 	def validate_condition_fields(self):
