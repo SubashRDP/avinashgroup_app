@@ -45,6 +45,7 @@ class NumberingConfiguration(Document):
 
 	def on_update(self):
 		self.ensure_target_field_no_copy()
+		self.ensure_target_field_indexed()
 
 	def ensure_target_field_no_copy(self):
 		"""Generated numbers must not survive Duplicate/Amend — mark the target
@@ -69,6 +70,22 @@ class NumberingConfiguration(Document):
 					self.document_type, self.target_field, "no_copy", 1, "Check"
 				)
 				frappe.clear_cache(doctype=self.document_type)
+
+	def ensure_target_field_indexed(self):
+		"""The uniqueness check queries the target field on every save; without
+		a DB index that is a full table scan (seconds on large tables)."""
+		if not (self.document_type and self.target_field):
+			return
+
+		custom_field = frappe.db.get_value(
+			"Custom Field",
+			{"dt": self.document_type, "fieldname": self.target_field},
+			["name", "search_index"],
+			as_dict=True,
+		)
+		if custom_field and not custom_field.search_index:
+			frappe.db.set_value("Custom Field", custom_field.name, "search_index", 1)
+		frappe.db.add_index(self.document_type, [self.target_field])
 
 	def validate_segments(self):
 		number_segments = 0
