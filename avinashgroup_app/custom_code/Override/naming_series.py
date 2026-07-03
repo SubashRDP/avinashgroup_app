@@ -547,8 +547,17 @@ AUTO_NUMBER_CONFIG = {
 
 
 def get_fiscal_year_from_date(date_field):
+    """Get the fiscal year name for a date. Results cached per-request."""
     if not date_field:
         return None
+
+    # Per-request cache: avoid re-fetching the same fiscal year multiple times
+    if not hasattr(frappe.local, "_fiscal_year_cache"):
+        frappe.local._fiscal_year_cache = {}
+
+    date_key = frappe.utils.cstr(date_field)
+    if date_key in frappe.local._fiscal_year_cache:
+        return frappe.local._fiscal_year_cache[date_key]
 
     fiscal_year = frappe.db.get_value(
         "Fiscal Year",
@@ -559,6 +568,7 @@ def get_fiscal_year_from_date(date_field):
         "name"
     )
 
+    frappe.local._fiscal_year_cache[date_key] = fiscal_year
     return fiscal_year
 
 
