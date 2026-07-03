@@ -1,0 +1,310 @@
+{
+ "actions": [],
+ "creation": "2026-07-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "sales_invoice",
+  "ref_invoice_number",
+  "credit_note_number",
+  "credit_note_date",
+  "credit_note_date_bs",
+  "reason_for_return",
+  "fiscal_year",
+  "column_break_parties",
+  "buyer_name",
+  "buyer_pan",
+  "seller_pan",
+  "amounts_section",
+  "total_sales",
+  "taxable_sales_vat",
+  "vat",
+  "discount",
+  "column_break_amounts",
+  "excisable_amount",
+  "excise",
+  "taxable_sales_hst",
+  "hst",
+  "amount_for_esf",
+  "esf",
+  "export_sales",
+  "tax_exempted_sales",
+  "sync_section",
+  "sync_status",
+  "attempt_count",
+  "last_attempt",
+  "column_break_sync",
+  "sync_response",
+  "datetime_client"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Sales Invoice (Return)",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "The original invoice's branch-wise running number (must already be Synced in CBMS Bill).",
+   "fieldname": "ref_invoice_number",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Reference Invoice Number",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "Value sent to CBMS as credit_note_number — this return's own branch-wise running number.",
+   "fieldname": "credit_note_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Credit Note Number",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "credit_note_date",
+   "fieldtype": "Date",
+   "label": "Credit Note Date (AD)",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "credit_note_date_bs",
+   "fieldtype": "Data",
+   "label": "Credit Note Date (BS)",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Goods Returned",
+   "fieldname": "reason_for_return",
+   "fieldtype": "Data",
+   "label": "Reason for Return",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fiscal_year",
+   "fieldtype": "Data",
+   "label": "Fiscal Year",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_parties",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "buyer_name",
+   "fieldtype": "Data",
+   "label": "Buyer Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "buyer_pan",
+   "fieldtype": "Data",
+   "label": "Buyer PAN",
+   "read_only": 1
+  },
+  {
+   "fieldname": "seller_pan",
+   "fieldtype": "Data",
+   "label": "Seller PAN",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "amounts_section",
+   "fieldtype": "Section Break",
+   "label": "Amounts"
+  },
+  {
+   "fieldname": "total_sales",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Total Sales",
+   "non_negative": 1,
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "taxable_sales_vat",
+   "fieldtype": "Float",
+   "label": "Taxable Sales (VAT)",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "vat",
+   "fieldtype": "Float",
+   "label": "VAT",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "description": "Additional discount (Apply Discount On = Net Total). Recorded locally only; not part of the IRD payload.",
+   "fieldname": "discount",
+   "fieldtype": "Currency",
+   "label": "Discount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_amounts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Not used by this business — always 0.",
+   "fieldname": "excisable_amount",
+   "fieldtype": "Float",
+   "label": "Excisable Amount",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "excise",
+   "fieldtype": "Float",
+   "label": "Excise",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "taxable_sales_hst",
+   "fieldtype": "Float",
+   "label": "Taxable Sales (HST)",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "hst",
+   "fieldtype": "Float",
+   "label": "Health Service Tax",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "amount_for_esf",
+   "fieldtype": "Float",
+   "label": "Amount for ESF",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "esf",
+   "fieldtype": "Float",
+   "label": "Education Service Fee",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "export_sales",
+   "fieldtype": "Float",
+   "label": "Export Sales",
+   "read_only": 1,
+   "description": "Whole sales value when the customer territory is outside Nepal or the invoice currency is not NPR (zero-rated export)."
+  },
+  {
+   "default": "0",
+   "fieldname": "tax_exempted_sales",
+   "fieldtype": "Float",
+   "label": "Tax Exempted Sales",
+   "read_only": 1,
+   "description": "Total of line items with VAT Apply On = \"VAT 0%\". Excluded from total_sales."
+  },
+  {
+   "fieldname": "sync_section",
+   "fieldtype": "Section Break",
+   "label": "Sync Status"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "sync_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sync Status",
+   "options": "Pending\nSynced\nFailed",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "attempt_count",
+   "fieldtype": "Int",
+   "label": "Attempt Count",
+   "non_negative": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_attempt",
+   "fieldtype": "Datetime",
+   "label": "Last Attempt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_sync",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sync_response",
+   "fieldtype": "Small Text",
+   "label": "Last Response",
+   "read_only": 1
+  },
+  {
+   "fieldname": "datetime_client",
+   "fieldtype": "Datetime",
+   "label": "Client Datetime",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "CBMS Bill Return",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "credit_note_number",
+ "track_changes": 1
+}

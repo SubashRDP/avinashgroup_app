@@ -201,9 +201,11 @@ def update_taxes_table(doc):
         )
     
     position = 0
-    
 
-    if excise_account and total_excise != 0:
+
+    if excise_account and (total_excise != 0 or has_tax_row(doc, excise_account)):
+        # total 0 with an existing row: zero the stale row instead of leaving the old
+        # amount charged (e.g. all excise values cleared on an edited draft)
         update_or_create_tax_row(
             doc,
             account_head=excise_account,
@@ -216,7 +218,7 @@ def update_taxes_table(doc):
         position += 1
 
 
-    if vat_account and total_vat != 0:
+    if vat_account and (total_vat != 0 or has_tax_row(doc, vat_account)):
         update_or_create_tax_row(
             doc,
             account_head=vat_account,
@@ -227,6 +229,13 @@ def update_taxes_table(doc):
             add_deduct="Add"
         )
         position += 1
+
+
+def has_tax_row(doc, account_head, charge_type="Actual"):
+    return any(
+        row.account_head == account_head and row.charge_type == charge_type
+        for row in (doc.taxes or [])
+    )
 
 
 def find_account_by_prefix(company, prefix):
