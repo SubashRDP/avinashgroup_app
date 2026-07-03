@@ -931,6 +931,7 @@ def _numbering_rules_for(doctype):
         fields=[
             "name", "company", "branch", "target_field", "separator",
             "valid_from", "valid_upto", "date_field",
+            "legacy_upto", "legacy_source_field",
         ],
     )
     for r in rules:
@@ -1102,6 +1103,15 @@ def _build_from_segments(doc, rule, commit_series=True):
       None when the source values are empty, so a less specific rule can apply.
     Returns None if nothing to show.
     """
+    # ONE-RULE cut-over: up to Legacy Upto the number is COPIED from the
+    # rule's Legacy Source Field (the old ERP number) instead of generated.
+    # Empty source -> None, so the engine can fall through to another rule.
+    if rule.get("legacy_upto"):
+        doc_date = _rule_date(doc, rule)
+        if doc_date and frappe.utils.getdate(doc_date) <= frappe.utils.getdate(rule["legacy_upto"]):
+            source = rule.get("legacy_source_field")
+            return (frappe.utils.cstr(doc.get(source)).strip() or None) if source else None
+
     sep = rule.get("separator") or "/"
     resolved, has_number = _resolve_segments(doc, rule, sep)
     if not has_number:
@@ -1135,6 +1145,8 @@ def _rule_dict_from_config(cfg):
         "valid_from": cfg.get("valid_from"),
         "valid_upto": cfg.get("valid_upto"),
         "date_field": cfg.get("date_field"),
+        "legacy_upto": cfg.get("legacy_upto"),
+        "legacy_source_field": cfg.get("legacy_source_field"),
         "conditions": [{"field": c.field, "value": c.value} for c in (cfg.conditions or [])],
         "segments": [
             {
@@ -1263,6 +1275,13 @@ def _revert_engine_series(doc, rule):
     number_str = doc.get(target) if doc.meta.has_field(target) else None
     if not number_str or number_str == doc.name:
         return
+
+    # legacy window: the number was COPIED from a document field, no counter
+    # was consumed — never step a series back for it.
+    if rule.get("legacy_upto"):
+        doc_date = _rule_date(doc, rule)
+        if doc_date and frappe.utils.getdate(doc_date) <= frappe.utils.getdate(rule["legacy_upto"]):
+            return
 
     sep = rule.get("separator") or "/"
     resolved, has_number = _resolve_segments(doc, rule, sep)

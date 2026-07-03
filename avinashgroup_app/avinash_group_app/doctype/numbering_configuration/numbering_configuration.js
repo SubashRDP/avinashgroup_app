@@ -35,6 +35,8 @@ frappe.ui.form.on("Numbering Configuration", {
 		render_preview(frm);
 	},
 	separator(frm) { render_preview(frm); },
+	legacy_upto(frm) { render_preview(frm); },
+	legacy_source_field(frm) { render_preview(frm); },
 });
 
 frappe.ui.form.on("Numbering Condition", {
@@ -157,13 +159,14 @@ function load_field_options(frm, reset_default) {
 			.sort();
 		frm.set_df_property("date_field", "options", ["", ...date_fields].join("\n"));
 
-		// "Store Number In" -> text-like fields.
-		const text_types = ["Data", "Small Text", "Text", "Long Text"];
+		// "Store Number In" / "Legacy Source Field" -> text-like fields.
+		const text_types = ["Data", "Small Text", "Text", "Long Text", "Text Editor"];
 		const target_fields = (meta.fields || [])
 			.filter((f) => text_types.includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)
 			.sort();
 		frm.set_df_property("target_field", "options", ["", ...target_fields].join("\n"));
+		frm.set_df_property("legacy_source_field", "options", ["", ...target_fields].join("\n"));
 
 		if ((reset_default || !frm.doc.target_field) && target_fields.includes("custom_branch_name")) {
 			frm.set_value("target_field", "custom_branch_name");
@@ -271,10 +274,17 @@ function render_preview(frm) {
 		? `<div class="text-muted small">${__("Applies only when")}: ${frappe.utils.escape_html(conds.join("  AND  "))}</div>`
 		: `<div class="text-muted small">${__("Applies as a default (no conditions).")}</div>`;
 
+	let legacy = "";
+	if (frm.doc.legacy_upto) {
+		const src = frm.doc.legacy_source_field || "?";
+		legacy = `<div class="text-muted small">${__("Up to {0}: number is copied from <b>{1}</b> (legacy); after that, generated as above.",
+			[frappe.utils.escape_html(frm.doc.legacy_upto), frappe.utils.escape_html(src)])}</div>`;
+	}
+
 	const html = `
 		<div style="padding:10px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--subtle-fg)">
 			<div style="font-size:18px;font-family:var(--font-stack-monospace);font-weight:600">${sample}</div>
-			${warn}${when}
+			${warn}${when}${legacy}
 		</div>`;
 
 	const field = frm.get_field("preview");

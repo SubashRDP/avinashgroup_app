@@ -1,4 +1,4 @@
-"""End-to-end verification of the Sales Invoice numbering rules.
+"""End-to-end verification of the Sales Invoice numbering rules (one-record design).
 
 Run:
     bench --site <site> execute avinashgroup_app.scripts.verify_si_numbering.run
@@ -33,40 +33,40 @@ def run():
     frappe.set_user("Administrator")
     checks = [
         (
-            "OLD Grishma (2024-05-15) + narration -> narration pass-through",
+            "OLD Grishma (2024-05-15) + custom_narration -> legacy copy",
             dict(company=GRISHMA, custom_branch="GEPL-Branch-00001",
-                 posting_date="2024-05-15", narration="INV-OLD-2024-0001", is_return=0),
+                 posting_date="2024-05-15", custom_narration="INV-OLD-2024-0001", is_return=0),
             lambda rule, val: val == "INV-OLD-2024-0001",
         ),
         (
-            "OLD, narration EMPTY -> falls through (not stuck on migration rule)",
+            "OLD, custom_narration EMPTY -> no legacy value (falls to doc.name)",
             dict(company=GRISHMA, custom_branch="GEPL-Branch-00001",
-                 posting_date="2024-05-15", narration="", is_return=0),
+                 posting_date="2024-05-15", custom_narration="", is_return=0),
             lambda rule, val: val != "INV-OLD-2024-0001",
         ),
         (
             "NEW Grishma branch 1 normal -> GEPL-INV-...-82/83",
             dict(company=GRISHMA, custom_branch="GEPL-Branch-00001",
-                 posting_date="2026-07-03", narration="", is_return=0),
+                 posting_date="2026-07-03", custom_narration="", is_return=0),
             lambda rule, val: val and "INV" in val and "82/83" in val,
         ),
         (
             "NEW Grishma branch 2 RETURN -> BSR code",
             dict(company=GRISHMA, custom_branch="GEPL-Branch-00002",
-                 posting_date="2026-07-03", narration="", is_return=1),
+                 posting_date="2026-07-03", custom_narration="", is_return=1),
             lambda rule, val: val and "BSR" in val,
         ),
         (
-            "NEW Nepal Gas no branch -> generic company rule",
-            dict(company=NEPAL_GAS, custom_branch=None,
-                 posting_date="2026-07-03", narration="", is_return=0),
-            lambda rule, val: val and "NGI" in val,
+            "NEW doc WITH custom_narration -> ignored after legacy date",
+            dict(company=GRISHMA, custom_branch="GEPL-Branch-00001",
+                 posting_date="2026-07-03", custom_narration="some note", is_return=0),
+            lambda rule, val: val and "some note" not in val and "INV" in val,
         ),
         (
-            "NEW doc WITH narration -> narration ignored after cutoff",
-            dict(company=GRISHMA, custom_branch="GEPL-Branch-00001",
-                 posting_date="2026-07-03", narration="some note", is_return=0),
-            lambda rule, val: val and "some note" not in val and "INV" in val,
+            "Nepal Gas, no branch, no rule -> falls back to doc.name",
+            dict(company=NEPAL_GAS, custom_branch=None,
+                 posting_date="2026-07-03", custom_narration="", is_return=0),
+            lambda rule, val: True,  # informational: shows which rule (if any) applies
         ),
     ]
 

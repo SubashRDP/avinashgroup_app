@@ -19,6 +19,10 @@
   "valid_upto",
   "column_break_period",
   "date_field",
+  "legacy_section",
+  "legacy_upto",
+  "column_break_legacy",
+  "legacy_source_field",
   "segments_section",
   "segments",
   "output_section",
@@ -118,6 +122,31 @@
    "fieldname": "date_field",
    "fieldtype": "Select",
    "label": "Date Field"
+  },
+  {
+   "collapsible": 1,
+   "description": "Optional cut-over in ONE rule: documents dated up to the date below COPY their number from the chosen field (the old ERP number); documents after it get a generated number from the Segments. Leave blank if there is no legacy data.",
+   "fieldname": "legacy_section",
+   "fieldtype": "Section Break",
+   "label": "Legacy numbers (before cut-over)"
+  },
+  {
+   "description": "Up to and including this date, copy the number from the Legacy Source Field instead of generating one.",
+   "fieldname": "legacy_upto",
+   "fieldtype": "Date",
+   "label": "Copy Legacy Number Upto"
+  },
+  {
+   "fieldname": "column_break_legacy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "legacy_upto",
+   "description": "Field on the document that holds the old ERP number (e.g. custom_narration or remarks).",
+   "fieldname": "legacy_source_field",
+   "fieldtype": "Select",
+   "label": "Legacy Source Field",
+   "mandatory_depends_on": "legacy_upto"
   },
   {
    "description": "The number is built by joining these segments (in order) with the separator. Empty segments are skipped. Include exactly one Number segment.",
