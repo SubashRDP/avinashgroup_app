@@ -774,6 +774,10 @@ def get_next_custom_document_no(**kwargs):
 def set_custom_name_field(doc):
     if not hasattr(doc, 'custom_name'):
         return
+    if _engine_owns_field(doc, "custom_name"):
+        # a Numbering Configuration rule targets Voucher No. for this doc —
+        # the engine (set_custom_branch_name) generates it; don't overwrite.
+        return
     company_name = None
     if hasattr(doc, 'company') and doc.company:
         company_name = doc.company
@@ -1013,6 +1017,30 @@ def _match_numbering_rule(doc):
     return matches[0] if matches else None
 
 
+def _engine_owns_field(doc, fieldname):
+    """True when an enabled Numbering Configuration rule matching this doc
+    targets `fieldname` — the engine then owns that field and legacy
+    generators must not write it."""
+    return any(
+        (r.get("target_field") or "custom_branch_name") == fieldname
+        for r in _matching_numbering_rules(doc)
+    )
+
+
+def _is_counterless(doc, rule):
+    """True when the rule produces this doc's number WITHOUT consuming a
+    counter: either a pass-through rule (no Number segment) or the doc falls
+    in the rule's legacy window (number copied from the legacy source field).
+    Counterless values are safe to recompute on every draft save."""
+    if rule.get("legacy_upto"):
+        doc_date = _rule_date(doc, rule)
+        if doc_date and frappe.utils.getdate(doc_date) <= frappe.utils.getdate(rule["legacy_upto"]):
+            return True
+    return not any(
+        seg.get("segment_type") == "Number" for seg in rule.get("segments", [])
+    )
+
+
 def _doc_date(doc):
     return (
         (getattr(doc, "posting_date", None) if hasattr(doc, "posting_date") else None)
@@ -1234,7 +1262,14 @@ def set_custom_branch_name(doc):
             doc.set(target, None)
 
         if doc.get(target):
-            # already numbered (generate once) — keep guarding collisions.
+            # already numbered (generate once) — but counterless values
+            # (pass-through / legacy copy) follow their source fields while
+            # the document is still a draft, mirroring the old voucher
+            # behavior where editing Document No. updated Voucher No.
+            if doc.docstatus == 0 and _is_counterless(doc, rule):
+                fresh = _build_from_segments(doc, rule)  # no counter consumed
+                if fresh and fresh != doc.get(target):
+                    doc.set(target, fresh)
             _validate_unique_number(doc, target)
             return
 
