@@ -1184,13 +1184,18 @@ def _build_from_segments(doc, rule, commit_series=True):
         doc_date = _rule_date(doc, rule)
         if doc_date and frappe.utils.getdate(doc_date) <= frappe.utils.getdate(rule["legacy_upto"]):
             source = rule.get("legacy_source_field")
-            return (frappe.utils.cstr(doc.get(source)).strip() or None) if source else None
+            value = (frappe.utils.cstr(doc.get(source)).strip() or None) if source else None
+            return value + get_amendment_suffix(doc) if value else None
 
     sep = rule.get("separator") or "/"
     resolved, has_number = _resolve_segments(doc, rule, sep)
     if not has_number:
-        # pass-through: copy the resolved values directly, no counter involved
-        return _join_parts([(r["value"], r["glue"]) for r in resolved], sep)
+        # pass-through: rebuilt from the same (copied) inputs, so an amendment
+        # would collide with its cancelled original — the -1/-2 suffix from the
+        # amended name keeps them apart, matching the legacy voucher behavior.
+        # Counter rules below don't need this: an amendment draws a fresh number.
+        value = _join_parts([(r["value"], r["glue"]) for r in resolved], sep)
+        return value + get_amendment_suffix(doc) if value else None
 
     key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
     series_key = sep.join(key_parts) + sep
