@@ -10,7 +10,8 @@
   "return_value",
   "field",
   "fetch_field",
-  "number_length"
+  "number_length",
+  "join_previous"
  ],
  "fields": [
   {
@@ -61,11 +62,20 @@
   {
    "columns": 1,
    "default": "6",
-   "depends_on": "eval:doc.segment_type=='Number'",
-   "description": "Digits (zero-padded).",
+   "depends_on": "eval:['Number','Document Field','Fetch from Link'].includes(doc.segment_type)",
+   "description": "Digits (zero-padded). For Document Field / Fetch from Link the value is padded only when it is a plain number.",
    "fieldname": "number_length",
    "fieldtype": "Int",
    "label": "Digits"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "description": "Glue this segment directly onto the previous one, without the separator — e.g. a Document Word right after the number: 004781A.",
+   "fieldname": "join_previous",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Attach"
   }
  ],
  "index_web_pages_for_search": 1,

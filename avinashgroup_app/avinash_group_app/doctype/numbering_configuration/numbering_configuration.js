@@ -59,6 +59,7 @@ frappe.ui.form.on("Numbering Segment", {
 	field(frm) { render_preview(frm); },
 	fetch_field(frm) { render_preview(frm); },
 	number_length(frm) { render_preview(frm); },
+	join_previous(frm) { render_preview(frm); },
 });
 
 // --- buttons --------------------------------------------------------------
@@ -210,40 +211,54 @@ function render_preview(frm) {
 	const parts = [];
 	let has_number = false;
 
+	// push respecting "Attach" (join_previous): glued parts concatenate onto
+	// the previous one instead of getting a separator — e.g. 0001 + A -> 0001A
+	const push_part = (s, html) => {
+		if (s.join_previous && parts.length) {
+			parts[parts.length - 1] += html;
+		} else {
+			parts.push(html);
+		}
+	};
+
 	(frm.doc.segments || []).forEach((s) => {
 		switch (s.segment_type) {
 			case "Static Text":
-				if (s.static_value) parts.push(frappe.utils.escape_html(s.static_value));
+				if (s.static_value) push_part(s, frappe.utils.escape_html(s.static_value));
 				break;
 			case "Normal / Return Code": {
 				const normal = s.static_value || "?";
 				const ret = s.return_value;
-				parts.push(frappe.utils.escape_html(ret ? `${normal}|${ret}` : normal));
+				push_part(s, frappe.utils.escape_html(ret ? `${normal}|${ret}` : normal));
 				break;
 			}
 			case "Company Abbr":
-				parts.push(frappe.utils.escape_html(abbr));
+				push_part(s, frappe.utils.escape_html(abbr));
 				break;
 			case "Branch Abbr":
-				parts.push(frappe.utils.escape_html(frm._branch_abbr || (frm.doc.branch ? "…" : "KTM")));
+				push_part(s, frappe.utils.escape_html(frm._branch_abbr || (frm.doc.branch ? "…" : "KTM")));
 				break;
 			case "Fiscal Year":
-				parts.push(sep === "/" ? "82-83" : "82/83");
+				push_part(s, sep === "/" ? "82-83" : "82/83");
 				break;
 			case "Document Field":
-				if (s.field) parts.push(`<i>&lt;${frappe.utils.escape_html(s.field)}&gt;</i>`);
+				if (s.field) {
+					const pad = cint(s.number_length);
+					const hint = pad ? ` (${"0".repeat(pad)})` : "";
+					push_part(s, `<i>&lt;${frappe.utils.escape_html(s.field + hint)}&gt;</i>`);
+				}
 				break;
 			case "Fetch from Link":
 				if (s.field) {
 					const label = s.fetch_field
 						? `${s.field}→${s.fetch_field}`
 						: s.field;
-					parts.push(`<i>&lt;${frappe.utils.escape_html(label)}&gt;</i>`);
+					push_part(s, `<i>&lt;${frappe.utils.escape_html(label)}&gt;</i>`);
 				}
 				break;
 			case "Number": {
 				const len = cint(s.number_length) || 6;
-				parts.push("1".padStart(len, "0"));
+				push_part(s, "1".padStart(len, "0"));
 				has_number = true;
 				break;
 			}

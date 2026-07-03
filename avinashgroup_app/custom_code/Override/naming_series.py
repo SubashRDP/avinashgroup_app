@@ -1,4 +1,6 @@
+import json
 import re
+
 import frappe
 from frappe.model.naming import make_autoname, getseries
 from frappe.model.document import Document
@@ -868,6 +870,12 @@ def validate_custom_name_unique(doc):
     if not hasattr(doc, "custom_name"):
         return
 
+    if _engine_owns_field(doc, "custom_name"):
+        # engine-owned Voucher No.: set_custom_branch_name first clears
+        # numbers carried over by copy paths, THEN runs its own uniqueness
+        # guard — throwing here would reject the doc before that cleanup.
+        return
+
     custom_name = getattr(doc, "custom_name", None)
     if not custom_name:
         return
@@ -965,7 +973,7 @@ def _numbering_rules_for(doctype):
         r["segments"] = frappe.get_all(
             "Numbering Segment",
             filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
-            fields=["segment_type", "static_value", "return_value", "field", "fetch_field", "number_length"],
+            fields=["segment_type", "static_value", "return_value", "field", "fetch_field", "number_length", "join_previous"],
             order_by="idx",
         )
 
@@ -1110,19 +1118,50 @@ def _peek_series(key, digits):
     return ("%0" + str(int(digits)) + "d") % (current + 1)
 
 
+def _pad_segment_value(seg, value):
+    """Zero-pad a Document Field / Fetch from Link value when it is a plain
+    number and the segment has Digits set — mirrors the legacy voucher
+    padding (e.g. 655 -> 000655)."""
+    if not value or seg.get("segment_type") not in ("Document Field", "Fetch from Link"):
+        return value
+    length = int(seg.get("number_length") or 0)
+    if length and value.isdigit():
+        return value.zfill(length)
+    return value
+
+
 def _resolve_segments(doc, rule, sep):
     """Return an ordered list of resolved parts:
-       [{"num": True, "len": n} | {"num": False, "value": str}] and whether a Number exists.
+       [{"num": True, "len": n, "glue": bool} | {"num": False, "value": str, "glue": bool}]
+       and whether a Number exists. "glue" joins the part directly onto the
+       previous one (no separator), e.g. a Document Word after the number.
     """
     resolved = []
     has_number = False
     for seg in rule.get("segments", []):
+        glue = bool(seg.get("join_previous"))
         if seg.get("segment_type") == "Number":
-            resolved.append({"num": True, "len": int(seg.get("number_length") or 6)})
+            resolved.append({"num": True, "len": int(seg.get("number_length") or 6), "glue": glue})
             has_number = True
         else:
-            resolved.append({"num": False, "value": _resolve_segment(doc, seg, sep)})
+            value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep))
+            resolved.append({"num": False, "value": value, "glue": glue})
     return resolved, has_number
+
+
+def _join_parts(parts, sep):
+    """Join resolved [(value, glue)] pairs: glued parts concatenate onto the
+    previous part, everything else is separated by `sep`. Empty values are
+    skipped."""
+    chunks = []
+    for value, glue in parts:
+        if not value:
+            continue
+        if glue and chunks:
+            chunks[-1] += value
+        else:
+            chunks.append(value)
+    return sep.join(chunks) if chunks else None
 
 
 def _build_from_segments(doc, rule, commit_series=True):
@@ -1151,8 +1190,7 @@ def _build_from_segments(doc, rule, commit_series=True):
     resolved, has_number = _resolve_segments(doc, rule, sep)
     if not has_number:
         # pass-through: copy the resolved values directly, no counter involved
-        values = [r["value"] for r in resolved if r.get("value")]
-        return sep.join(values) if values else None
+        return _join_parts([(r["value"], r["glue"]) for r in resolved], sep)
 
     key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
     series_key = sep.join(key_parts) + sep
@@ -1160,13 +1198,9 @@ def _build_from_segments(doc, rule, commit_series=True):
 
     seq = getseries(series_key, number_len) if commit_series else _peek_series(series_key, number_len)
 
-    display = []
-    for r in resolved:
-        if r["num"]:
-            display.append(seq)
-        elif r.get("value"):
-            display.append(r["value"])
-    return sep.join(display) if display else None
+    return _join_parts(
+        [(seq if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
+    )
 
 
 def _rule_dict_from_config(cfg):
@@ -1189,10 +1223,62 @@ def _rule_dict_from_config(cfg):
                 "field": s.field,
                 "fetch_field": s.fetch_field,
                 "number_length": s.number_length,
+                "join_previous": s.get("join_previous"),
             }
             for s in (cfg.segments or [])
         ],
     }
+
+
+@frappe.whitelist()
+def get_numbering_preview_config():
+    """Doctypes that have enabled Numbering Configuration rules, with the doc
+    fields whose change should refresh the live number preview in the form."""
+    config = {}
+    for rule in frappe.get_all(
+        "Numbering Configuration", filters={"enabled": 1}, pluck="name"
+    ):
+        cfg = frappe.get_cached_doc("Numbering Configuration", rule)
+        fields = config.setdefault(cfg.document_type, set())
+        fields.update(["company", "posting_date", "transaction_date", "is_return"])
+        if cfg.date_field:
+            fields.add(cfg.date_field)
+        if cfg.legacy_source_field:
+            fields.add(cfg.legacy_source_field)
+        for c in cfg.conditions or []:
+            if c.field:
+                fields.add(c.field)
+        for s in cfg.segments or []:
+            if s.field:
+                fields.add(s.field)
+            if s.segment_type == "Branch Abbr":
+                fields.add("custom_branch")
+    return {dt: sorted(fields) for dt, fields in config.items()}
+
+
+@frappe.whitelist()
+def preview_document_number(doc):
+    """Live form preview: the number the engine would assign to this (unsaved)
+    document right now. Counters are peeked, never consumed."""
+    data = json.loads(doc) if isinstance(doc, str) else doc
+    doctype = data.get("doctype")
+    if not doctype or not frappe.has_permission(doctype, "write"):
+        return None
+
+    d = frappe.get_doc(data)
+    for rule in _matching_numbering_rules(d):
+        target = rule.get("target_field") or "custom_branch_name"
+        if not d.meta.has_field(target):
+            continue
+        value = _build_from_segments(d, rule, commit_series=False)
+        if value:
+            return {
+                "target_field": target,
+                "label": d.meta.get_label(target),
+                "number": value,
+                "rule": rule["name"],
+            }
+    return None
 
 
 def _number_belongs_to_other_doc(doc, target):
