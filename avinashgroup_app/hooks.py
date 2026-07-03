@@ -199,6 +199,14 @@ has_permission = {
     for _dt in FILTERED_DOCTYPES
 }
 
+# Numbering Configuration engine: rule-driven numbering for EVERY doctype.
+# Wildcard handlers run after the doctype-specific ones, preserving the old
+# order (voucher logic first, engine last). Doctypes without enabled rules
+# exit through a redis-cached gate at ~zero cost.
+_add_doc_event("*", "validate", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
+_add_doc_event("*", "before_save", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
+_add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.naming_series.revert_engine_series_on_delete")
+
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")

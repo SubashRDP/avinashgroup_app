@@ -945,6 +945,32 @@ def naming_requirements_before_insert(doc):
 # Empty segments are skipped. The number is written to the rule's Target Field.
 # ---------------------------------------------------------------------------
 
+def _configured_doctypes():
+    """Doctypes that have at least one enabled rule. Cached in redis (cleared
+    when a Numbering Configuration is saved/deleted) + per request, so the
+    wildcard hooks cost ~nothing for the vast majority of doctypes."""
+    if not hasattr(frappe.local, "_numbering_doctypes_cache"):
+        cached = frappe.cache().get_value("numbering_configured_doctypes")
+        if cached is None:
+            cached = frappe.get_all(
+                "Numbering Configuration",
+                filters={"enabled": 1},
+                distinct=True,
+                pluck="document_type",
+            )
+            frappe.cache().set_value("numbering_configured_doctypes", cached)
+        frappe.local._numbering_doctypes_cache = set(cached)
+    return frappe.local._numbering_doctypes_cache
+
+
+def clear_numbering_rules_cache():
+    """Called when a Numbering Configuration changes."""
+    frappe.cache().delete_value("numbering_configured_doctypes")
+    for attr in ("_numbering_doctypes_cache", "_numbering_rules_cache"):
+        if hasattr(frappe.local, attr):
+            delattr(frappe.local, attr)
+
+
 def _numbering_rules_for(doctype):
     """All enabled Numbering Configuration rules for a doctype, with conditions + segments.
     Results are cached per-request to avoid redundant DB calls when multiple documents are saved."""
@@ -954,6 +980,10 @@ def _numbering_rules_for(doctype):
 
     if doctype in frappe.local._numbering_rules_cache:
         return frappe.local._numbering_rules_cache[doctype]
+
+    if doctype not in _configured_doctypes():
+        frappe.local._numbering_rules_cache[doctype] = []
+        return []
 
     rules = frappe.get_all(
         "Numbering Configuration",
@@ -1321,6 +1351,29 @@ def _validate_unique_number(doc, target):
         )
 
 
+def _renumber_if_scope_changed(doc, rule, target):
+    """A DRAFT's counter number must follow its series scope: when the branch,
+    company or fiscal year changed after the number was drawn, the document
+    would keep a number from the wrong series. Give the old number back to
+    its series (only if it was the last one issued — same rule as delete)
+    and draw a fresh one from the current series. Values that can't be
+    recognised as this rule's output are left untouched."""
+    old_key, old_no = _parse_engine_number(doc, rule, doc.get(target))
+    if old_key is None:
+        return
+
+    sep = rule.get("separator") or "/"
+    resolved, _ = _resolve_segments(doc, rule, sep)
+    new_key = sep.join(r["value"] for r in resolved if not r["num"] and r.get("value")) + sep
+    if old_key == new_key:
+        return
+
+    _revert_series_if_last(old_key, old_no)
+    fresh = _build_from_segments(doc, rule)
+    if fresh:
+        doc.set(target, fresh)
+
+
 def set_custom_branch_name(doc):
     """
     Sets custom_branch_name field based on branch-wise naming.
@@ -1353,14 +1406,17 @@ def set_custom_branch_name(doc):
             doc.set(target, None)
 
         if doc.get(target):
-            # already numbered (generate once) — but counterless values
-            # (pass-through / legacy copy) follow their source fields while
-            # the document is still a draft, mirroring the old voucher
-            # behavior where editing Document No. updated Voucher No.
-            if doc.docstatus == 0 and _is_counterless(doc, rule):
-                fresh = _build_from_segments(doc, rule)  # no counter consumed
-                if fresh and fresh != doc.get(target):
-                    doc.set(target, fresh)
+            # already numbered (generate once) — but drafts still track their
+            # inputs: counterless values (pass-through / legacy copy) follow
+            # their source fields, and counter numbers follow their series
+            # scope (branch / company / fiscal year).
+            if doc.docstatus == 0:
+                if _is_counterless(doc, rule):
+                    fresh = _build_from_segments(doc, rule)  # no counter consumed
+                    if fresh and fresh != doc.get(target):
+                        doc.set(target, fresh)
+                else:
+                    _renumber_if_scope_changed(doc, rule, target)
             _validate_unique_number(doc, target)
             return
 
@@ -1400,6 +1456,49 @@ def _revert_series_if_last(key, deleted_number):
         )
 
 
+def _parse_engine_number(doc, rule, value):
+    """Derive (series_key, counter) from a STORED engine-generated number.
+
+    The key is reconstructed from the stored string itself — not from the
+    document's current field values — so it stays correct even when scope
+    fields (branch, company, date) changed after the number was drawn.
+    Returns (None, None) when the value cannot be confidently recognised as
+    a number generated by this rule; callers must then leave it alone.
+    """
+    sep = rule.get("separator") or "/"
+    resolved, has_number = _resolve_segments(doc, rule, sep)
+    if not has_number:
+        return None, None
+
+    number_len = next((r["len"] for r in resolved if r["num"]), 6)
+
+    # locate the Number's index among the non-empty display parts
+    num_index, display_count = None, 0
+    for r in resolved:
+        if r["num"]:
+            num_index = display_count
+            display_count += 1
+        elif r.get("value"):
+            display_count += 1
+
+    parts = str(value).split(sep)
+
+    # exact current shape (same segments non-empty then and now)
+    if num_index is not None and len(parts) == display_count and parts[num_index].isdigit():
+        key = sep.join(parts[:num_index] + parts[num_index + 1:]) + sep
+        return key, int(parts[num_index])
+
+    # shape changed (e.g. a Branch Abbr that was empty is now filled): the
+    # counter is the single all-digit part of the configured width.
+    digit_idx = [i for i, p in enumerate(parts) if p.isdigit() and len(p) == number_len]
+    if len(digit_idx) == 1:
+        i = digit_idx[0]
+        key = sep.join(parts[:i] + parts[i + 1:]) + sep
+        return key, int(parts[i])
+
+    return None, None
+
+
 def _revert_engine_series(doc, rule):
     """Revert a Numbering Configuration engine series if this doc held its last number."""
     target = rule.get("target_field") or "custom_branch_name"
@@ -1414,28 +1513,9 @@ def _revert_engine_series(doc, rule):
         if doc_date and frappe.utils.getdate(doc_date) <= frappe.utils.getdate(rule["legacy_upto"]):
             return
 
-    sep = rule.get("separator") or "/"
-    resolved, has_number = _resolve_segments(doc, rule, sep)
-    if not has_number:
-        return
-
-    key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
-    series_key = sep.join(key_parts) + sep
-
-    # locate the Number's index among the non-empty display parts
-    num_index, display_count = None, 0
-    for r in resolved:
-        if r["num"]:
-            num_index = display_count
-            display_count += 1
-        elif r.get("value"):
-            display_count += 1
-
-    parts = str(number_str).split(sep)
-    if num_index is None or len(parts) != display_count:
-        return
-    if parts[num_index].isdigit():
-        _revert_series_if_last(series_key, int(parts[num_index]))
+    series_key, number = _parse_engine_number(doc, rule, number_str)
+    if series_key:
+        _revert_series_if_last(series_key, number)
 
 
 def revert_series_on_delete(doc, method=None):
@@ -1447,12 +1527,10 @@ def revert_series_on_delete(doc, method=None):
     """
     doctype = doc.doctype
 
-    # 1) Numbering Configuration engine series — recompute the series key from the
-    #    rule's segments and revert if this document held the last number. The
-    #    Number segment may sit anywhere in the order, so it is located by position.
+    # 1) Numbering Configuration engine series revert now happens in the
+    #    wildcard revert_engine_series_on_delete (all doctypes); here the rule
+    #    lookup only gates the legacy branch-series fallback below.
     rule = _match_numbering_rule(doc)
-    if rule:
-        _revert_engine_series(doc, rule)
 
     if doctype not in NAMING_CONFIG:
         return
@@ -1481,12 +1559,14 @@ def handle_before_insert(doc, method=None):
 
 
 def handle_validate(doc, method=None):
+    # engine numbering (set_custom_branch_name) is NOT called here: the
+    # wildcard doc_events run apply_engine_numbering for EVERY doctype right
+    # after these doctype-specific handlers — same order, single execution.
     if doc.is_new():
         set_auto_document_no(doc)
     set_custom_name_field(doc)
     validate_document_no(doc)
     validate_custom_name_unique(doc)
-    set_custom_branch_name(doc)
 
 
 def handle_before_save(doc, method=None):
@@ -1499,7 +1579,28 @@ def handle_before_save(doc, method=None):
     set_custom_name_field(doc)
     validate_document_no(doc)
     validate_custom_name_unique(doc)
+
+
+def apply_engine_numbering(doc, method=None):
+    """Wildcard validate/before_save hook: rule-driven numbering for EVERY
+    doctype. Doctypes without enabled rules exit via the cached
+    _configured_doctypes() gate inside the engine (plus the plain
+    custom_branch_name = doc.name fallback where that field exists)."""
+    if doc.meta.istable or frappe.flags.in_install or frappe.flags.in_migrate:
+        return
     set_custom_branch_name(doc)
+
+
+def revert_engine_series_on_delete(doc, method=None):
+    """Wildcard after_delete hook: step the engine series back when the
+    deleted document held the last issued number."""
+    if doc.meta.istable or frappe.flags.in_install or frappe.flags.in_migrate:
+        return
+    if doc.doctype not in _configured_doctypes():
+        return
+    rule = _match_numbering_rule(doc)
+    if rule:
+        _revert_engine_series(doc, rule)
 
 
 def naming_series_autoname(self, method):

@@ -11,6 +11,7 @@ from avinashgroup_app.custom_code.Override.naming_series import (
 	_build_from_segments,
 	_rule_dict_from_config,
 	_rule_matches,
+	clear_numbering_rules_cache,
 )
 
 
@@ -46,6 +47,10 @@ class NumberingConfiguration(Document):
 	def on_update(self):
 		self.ensure_target_field_no_copy()
 		self.ensure_target_field_indexed()
+		clear_numbering_rules_cache()
+
+	def on_trash(self):
+		clear_numbering_rules_cache()
 
 	def ensure_target_field_no_copy(self):
 		"""Generated numbers must not survive Duplicate/Amend — mark the target
@@ -73,19 +78,30 @@ class NumberingConfiguration(Document):
 
 	def ensure_target_field_indexed(self):
 		"""The uniqueness check queries the target field on every save; without
-		a DB index that is a full table scan (seconds on large tables)."""
+		a DB index that is a full table scan (seconds on large tables).
+
+		Only Data (varchar) fields are indexed — TEXT-backed types (Small Text,
+		Text Editor, ...) need a key length MariaDB won't add automatically.
+		Indexing is an optimization: it must never block saving the rule."""
 		if not (self.document_type and self.target_field):
 			return
 
-		custom_field = frappe.db.get_value(
-			"Custom Field",
-			{"dt": self.document_type, "fieldname": self.target_field},
-			["name", "search_index"],
-			as_dict=True,
-		)
-		if custom_field and not custom_field.search_index:
-			frappe.db.set_value("Custom Field", custom_field.name, "search_index", 1)
-		frappe.db.add_index(self.document_type, [self.target_field])
+		df = frappe.get_meta(self.document_type).get_field(self.target_field)
+		if not df or df.fieldtype != "Data":
+			return
+
+		try:
+			custom_field = frappe.db.get_value(
+				"Custom Field",
+				{"dt": self.document_type, "fieldname": self.target_field},
+				["name", "search_index"],
+				as_dict=True,
+			)
+			if custom_field and not custom_field.search_index:
+				frappe.db.set_value("Custom Field", custom_field.name, "search_index", 1)
+			frappe.db.add_index(self.document_type, [self.target_field])
+		except Exception:
+			frappe.log_error(title="Numbering Configuration: target field index failed")
 
 	def validate_segments(self):
 		number_segments = 0
