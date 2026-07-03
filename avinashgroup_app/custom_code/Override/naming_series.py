@@ -924,7 +924,15 @@ def naming_requirements_before_insert(doc):
 # ---------------------------------------------------------------------------
 
 def _numbering_rules_for(doctype):
-    """All enabled Numbering Configuration rules for a doctype, with conditions + segments."""
+    """All enabled Numbering Configuration rules for a doctype, with conditions + segments.
+    Results are cached per-request to avoid redundant DB calls when multiple documents are saved."""
+    # Per-request cache: if rules have already been fetched, return the cached copy
+    if not hasattr(frappe.local, "_numbering_rules_cache"):
+        frappe.local._numbering_rules_cache = {}
+
+    if doctype in frappe.local._numbering_rules_cache:
+        return frappe.local._numbering_rules_cache[doctype]
+
     rules = frappe.get_all(
         "Numbering Configuration",
         filters={"document_type": doctype, "enabled": 1},
@@ -946,6 +954,8 @@ def _numbering_rules_for(doctype):
             fields=["segment_type", "static_value", "return_value", "field", "fetch_field", "number_length"],
             order_by="idx",
         )
+
+    frappe.local._numbering_rules_cache[doctype] = rules
     return rules
 
 
@@ -1029,7 +1039,7 @@ def _resolve_segment(doc, seg, sep):
         if not branch:
             return ""
         return frappe.utils.cstr(
-            frappe.db.get_value("Branch", branch, "custom_abbr") or ""
+            frappe.get_cached_value("Branch", branch, "custom_abbr") or ""
         )
 
     if stype == "Fiscal Year":
@@ -1049,7 +1059,7 @@ def _resolve_segment(doc, seg, sep):
         if not link_dt or not seg.get("fetch_field"):
             return ""
         return frappe.utils.cstr(
-            frappe.db.get_value(link_dt, link_value, seg.get("fetch_field")) or ""
+            frappe.get_cached_value(link_dt, link_value, seg.get("fetch_field")) or ""
         )
 
     return ""
