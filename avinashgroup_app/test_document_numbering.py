@@ -923,3 +923,20 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertTrue(cm(d, {"field": "flag1", "operator": "Is Set", "value": ""}))
         self.assertTrue(cm(d, {"field": "txt", "operator": "Is Set", "value": ""}))
         self.assertFalse(cm(d, {"field": "empty", "operator": "Is Set", "value": ""}))
+
+    def test_53_manual_number_bumps_counter(self):
+        # A manually-entered number raises the scope counter, so the next auto
+        # draw continues PAST it (concurrency hardening for manual-vs-auto).
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "MB" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1, extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[{"field": "custom_p_type", "value": self.OFF_TYPE}],
+        )
+        d1 = self._pe_off(); ns.apply_document_no(d1)
+        self.assertEqual(d1.custom_document_no, 1)
+        dm = self._pe_off(); dm.custom_document_no = 500; dm.custom_document_no_manual = 1
+        ns.apply_document_no(dm)
+        self.assertEqual(dm.custom_document_no, 500)          # manual kept
+        d2 = self._pe_off(); ns.apply_document_no(d2)
+        self.assertEqual(d2.custom_document_no, 501)          # auto skipped past the manual number

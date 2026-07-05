@@ -942,6 +942,29 @@ def _next_number_hint(doc):
     return f" Next available number is {nxt}." if nxt else ""
 
 
+def _keep_counter_above_manual(doc, field):
+    """A manually-entered number is not drawn from the counter, so bump the
+    counter up to it. Future auto draws in the same scope then skip past manual
+    numbers even across concurrent transactions — the draw's upsert reads the
+    latest committed `current` under a row lock, so once a manual number has
+    raised the counter no auto draw can reissue it. Best-effort; never blocks
+    the save."""
+    n = frappe.utils.cint(doc.get(field))
+    if n <= 0:
+        return
+    scope = _docno_scope(doc)
+    if not scope:
+        return
+    try:
+        frappe.db.sql(
+            "INSERT INTO `tabSeries` (`name`, `current`) VALUES (%(k)s, %(n)s) "
+            "ON DUPLICATE KEY UPDATE `current` = GREATEST(`current`, %(n)s)",
+            {"k": _docno_series_key(doc, scope), "n": n},
+        )
+    except Exception:
+        pass
+
+
 def _draw_next_document_no(doc, scope):
     """Atomic, deadlock-resistant next number for a scope.
 
@@ -998,6 +1021,7 @@ def apply_document_no(doc):
         return
 
     if _is_manual_document_no(doc, field):
+        _keep_counter_above_manual(doc, field)
         doc.flags._docno_assigned = True
         return
 
