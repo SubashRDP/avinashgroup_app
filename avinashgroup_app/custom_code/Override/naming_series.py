@@ -796,6 +796,27 @@ def _rule_docno_scope(doc, rule):
     return {"key": key, "pattern": pattern, "field": target}
 
 
+def _docno_eligible(doc, rule):
+    """Whether this document should get an auto document number.
+
+      1. Rule-driven (the generalized path): the matching Numbering Configuration
+         rule has 'Auto-fill Document No.' ticked. Conditions on the rule
+         (Equals / In / Is Set …) decide when it applies — fully configurable in
+         the desk, no code change.
+      2. Fallback: the hardcoded AUTO_NUMBER_CONFIG (type field in a fixed list),
+         so day-one behaviour is unchanged for the doctypes shipped with it.
+    """
+    if rule and rule.get("auto_document_no"):
+        return True
+
+    cfg = AUTO_NUMBER_CONFIG.get(doc.doctype)
+    if not cfg:
+        return False
+    type_field = cfg.get("type_field")
+    type_value = doc.get(type_field) if type_field else None
+    return bool(type_value and type_value in cfg.get("types", []))
+
+
 def _docno_scope(doc):
     """Series scope for the auto document number, or None when the doc is not
     eligible. Returns a dict {key, pattern, field}:
@@ -808,31 +829,27 @@ def _docno_scope(doc):
     Also back-fills custom_p_type_code on the doc when it was empty but
     resolvable, so the custom_name built later is correct even if the framework
     has not run its own fetch yet."""
-    cfg = AUTO_NUMBER_CONFIG.get(doc.doctype)
-    if not cfg:
-        return None
-
-    type_field = cfg.get("type_field")
-    type_value = doc.get(type_field) if type_field else None
-    if not type_value or type_value not in cfg.get("types", []):
+    rule = _match_numbering_rule(doc)
+    if not _docno_eligible(doc, rule):
         return None
 
     code = _resolve_p_type_code(doc)
     company_abbr = get_company_abbr(doc)
     fiscal_year = _resolve_docno_fiscal_year(doc)
-    if not (code and company_abbr and fiscal_year):
-        return None
 
-    if doc.meta.has_field("custom_p_type_code") and not doc.get("custom_p_type_code"):
+    if doc.meta.has_field("custom_p_type_code") and code and not doc.get("custom_p_type_code"):
         doc.custom_p_type_code = code
 
-    rule = _match_numbering_rule(doc)
+    # Rule-derived scope (branch / condition aware) when the matching rule defines
+    # a number position.
     if rule:
         rule_scope = _rule_docno_scope(doc, rule)
         if rule_scope and rule_scope.get("pattern"):
             return rule_scope
 
-    # Legacy fallback: company + code + fiscal year, matched on custom_name.
+    # Legacy fallback scope needs the company + code + fiscal-year triple.
+    if not (code and company_abbr and fiscal_year):
+        return None
     return {
         "key": "|".join((company_abbr, code, fiscal_year)),
         "pattern": f"{company_abbr}-{code}-%-{fiscal_year}%",
@@ -939,8 +956,11 @@ def apply_document_no(doc):
     Idempotent within a single save via doc.flags._docno_assigned."""
     if doc.flags.get("_docno_assigned"):
         return
-    if not doc.is_new() or doc.doctype not in AUTO_NUMBER_CONFIG:
+    if not doc.is_new():
         return
+    # Any doctype that carries custom_document_no can be auto-numbered — via a
+    # rule (auto_document_no) or the hardcoded fallback. Eligibility is decided
+    # inside _docno_scope; here we only skip doctypes without the field.
     if not doc.meta.has_field("custom_document_no"):
         return
 
@@ -1213,7 +1233,7 @@ def _build_numbering_rules(doctype):
         filters={"document_type": doctype, "enabled": 1},
         fields=[
             "name", "company", "branch", "target_field", "separator",
-            "date_field", "legacy_upto", "legacy_source_field",
+            "date_field", "legacy_upto", "legacy_source_field", "auto_document_no",
         ],
     )
     if not rules:
@@ -1224,7 +1244,7 @@ def _build_numbering_rules(doctype):
     conditions = frappe.get_all(
         "Numbering Condition",
         filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
-        fields=["parent", "field", "value"],
+        fields=["parent", "field", "value", "operator"],
         order_by="idx",
     )
     segments = frappe.get_all(
@@ -1285,6 +1305,34 @@ def _rule_date(doc, rule):
     return _doc_date(doc)
 
 
+def _condition_matches(doc, cond):
+    """Evaluate one condition with its operator. A blank/absent operator means
+    Equals — so rules created before operators existed behave exactly as before.
+
+    Operators:
+      Equals / Not Equals  — scalar compare (string-normalised)
+      In / Not In          — value is a comma-separated list
+      Is Set / Is Not Set  — the field is (non-)empty; value ignored
+    """
+    op = (cond.get("operator") or "Equals").strip()
+    field_value = frappe.utils.cstr(doc.get(cond.get("field")))
+
+    if op == "Is Set":
+        return field_value.strip() != ""
+    if op == "Is Not Set":
+        return field_value.strip() == ""
+
+    if op in ("In", "Not In"):
+        items = [v.strip() for v in frappe.utils.cstr(cond.get("value")).split(",") if v.strip()]
+        in_list = field_value in items
+        return in_list if op == "In" else not in_list
+
+    target = frappe.utils.cstr(cond.get("value"))
+    if op == "Not Equals":
+        return field_value != target
+    return field_value == target  # Equals (default)
+
+
 def _rule_matches(doc, rule):
     """True if the document satisfies the rule's company/branch scope
     and ALL conditions."""
@@ -1294,7 +1342,7 @@ def _rule_matches(doc, rule):
         return False
 
     for cond in rule.get("conditions", []):
-        if frappe.utils.cstr(doc.get(cond["field"])) != frappe.utils.cstr(cond["value"]):
+        if not _condition_matches(doc, cond):
             return False
     return True
 
@@ -1516,7 +1564,11 @@ def _rule_dict_from_config(cfg):
         "date_field": cfg.get("date_field"),
         "legacy_upto": cfg.get("legacy_upto"),
         "legacy_source_field": cfg.get("legacy_source_field"),
-        "conditions": [{"field": c.field, "value": c.value} for c in (cfg.conditions or [])],
+        "auto_document_no": cfg.get("auto_document_no"),
+        "conditions": [
+            {"field": c.field, "value": c.value, "operator": c.get("operator")}
+            for c in (cfg.conditions or [])
+        ],
         "segments": [
             {
                 "segment_type": s.segment_type,
@@ -1888,6 +1940,12 @@ def apply_engine_numbering(doc, method=None):
     custom_branch_name = doc.name fallback where that field exists)."""
     if doc.meta.istable or frappe.flags.in_install or frappe.flags.in_migrate:
         return
+    # Draw the document number first (idempotent via flags — a no-op for the
+    # audited doctypes where handle_validate already ran it), then build the
+    # name from it. This wildcard makes rule-driven auto-numbering work for ANY
+    # doctype that carries custom_document_no, not just the audited ones.
+    if doc.is_new():
+        apply_document_no(doc)
     set_custom_branch_name(doc)
 
 

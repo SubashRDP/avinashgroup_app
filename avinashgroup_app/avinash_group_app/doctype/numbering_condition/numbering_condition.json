@@ -6,11 +6,12 @@
  "engine": "InnoDB",
  "field_order": [
   "field",
+  "operator",
   "value"
  ],
  "fields": [
   {
-   "columns": 5,
+   "columns": 4,
    "description": "Field on the document to check (picked from the Document Type).",
    "fieldname": "field",
    "fieldtype": "Select",
@@ -19,19 +20,30 @@
    "reqd": 1
   },
   {
-   "columns": 5,
-   "description": "Value the field must equal, e.g. 1, Receive, Pay",
+   "columns": 3,
+   "default": "Equals",
+   "description": "How to compare. In / Not In take a comma-separated list.",
+   "fieldname": "operator",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "Equals\nNot Equals\nIn\nNot In\nIs Set\nIs Not Set"
+  },
+  {
+   "columns": 4,
+   "depends_on": "eval:!['Is Set','Is Not Set'].includes(doc.operator)",
+   "mandatory_depends_on": "eval:!['Is Set','Is Not Set'].includes(doc.operator)",
+   "description": "Value to compare. For In / Not In use a comma-separated list, e.g. Bank Entry, Party Journal.",
    "fieldname": "value",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Value",
-   "reqd": 1
+   "label": "Value"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-01 00:00:00.000000",
+ "modified": "2026-07-06 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Condition",
