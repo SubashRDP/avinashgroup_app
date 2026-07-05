@@ -1,8 +1,12 @@
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
+from frappe.utils import flt, now_datetime
 from datetime import datetime
 from collections import defaultdict
+
+# Fallback de-duplication window (minutes) when the sending device has no
+# Duplicate Threshold configured. Matches the Biometric Device field default.
+DEFAULT_DUPLICATE_THRESHOLD_MINUTES = 1.0
 
 
 def assert_known_device(serial: str) -> str:
@@ -41,9 +45,10 @@ def assert_known_device(serial: str) -> str:
 
 def process_attendance_records(attendance_data, device_identifier=None):
     """
-    Store every biometric punch as its own Employee Checkin row. For each
-    (employee, date), all punches (existing in DB + new from this batch) are
-    merged, deduped by exact timestamp, sorted chronologically, and assigned
+    Store biometric punches as Employee Checkin rows. For each (employee, date),
+    new punches are merged with existing rows, de-duplicated within the sending
+    device's Duplicate Threshold window (near-simultaneous repeats of one
+    physical punch are dropped), sorted chronologically, and assigned
     alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ...
 
     Re-running with the same batch is idempotent. A late-arriving punch slots
@@ -91,10 +96,18 @@ def process_attendance_records(attendance_data, device_identifier=None):
     # company, so the same work-number (attendance_device_id) can be reused
     # across companies. None (legacy device with no company) = no company filter.
     device_company = None
+    threshold_minutes = DEFAULT_DUPLICATE_THRESHOLD_MINUTES
     if device_identifier:
-        device_company = frappe.db.get_value(
-            "Biometric Device", {"device_serial": device_identifier}, "company"
+        device_row = frappe.db.get_value(
+            "Biometric Device",
+            {"device_serial": device_identifier},
+            ["company", "duplicate_threshold_minutes"],
+            as_dict=True,
         )
+        if device_row:
+            device_company = device_row.company
+            if device_row.duplicate_threshold_minutes is not None:
+                threshold_minutes = device_row.duplicate_threshold_minutes
 
     for record in attendance_data:
         user_id = str(record.get("user_id", "")).strip()
@@ -152,7 +165,8 @@ def process_attendance_records(attendance_data, device_identifier=None):
                 continue
 
             inserted, updated = _reconcile_day_checkins(
-                employee, punch_date, new_timestamps, device_identifier
+                employee, punch_date, new_timestamps, device_identifier,
+                threshold_minutes=threshold_minutes,
             )
 
             synced += len(new_timestamps)
@@ -195,9 +209,19 @@ def process_attendance_records(attendance_data, device_identifier=None):
     }
 
 
-def _reconcile_day_checkins(employee, punch_date, new_timestamps, device_identifier=None):
-    """Merge new punches with existing rows for the day, dedup by exact time,
-    and apply IN/OUT alternation in chronological order.
+def _reconcile_day_checkins(
+    employee, punch_date, new_timestamps, device_identifier=None,
+    threshold_minutes=DEFAULT_DUPLICATE_THRESHOLD_MINUTES,
+):
+    """Merge new punches with existing rows for the day and apply IN/OUT
+    alternation in chronological order.
+
+    De-duplication (``threshold_minutes``, "prevent new only"): existing
+    Employee Checkin rows are always kept; a *new* punch is dropped when it
+    falls within ``threshold_minutes`` of a punch already kept for the day
+    (an existing row or an earlier new punch we've accepted). This collapses
+    the repeated reads a device fires for a single physical punch. A threshold
+    of 0 keeps only exact-timestamp de-duplication.
 
     Returns (inserted_count, relabeled_count).
     """
@@ -215,7 +239,22 @@ def _reconcile_day_checkins(employee, punch_date, new_timestamps, device_identif
     )
     existing_by_time = {row.time: row for row in existing_rows}
 
-    all_times = sorted(set(existing_by_time.keys()) | set(new_timestamps))
+    threshold_seconds = max(flt(threshold_minutes), 0) * 60.0
+
+    # Existing rows are always kept. Walk new punches in chronological order,
+    # accepting one only when it is not within the threshold of an already-kept
+    # punch for the day.
+    kept_times = list(existing_by_time.keys())
+    for ts in sorted(set(new_timestamps)):
+        if ts in existing_by_time:
+            continue  # exact duplicate of an existing row
+        if threshold_seconds and any(
+            abs((ts - kept).total_seconds()) < threshold_seconds for kept in kept_times
+        ):
+            continue  # near-duplicate within threshold — don't store again
+        kept_times.append(ts)
+
+    all_times = sorted(kept_times)
 
     inserted = 0
     relabeled = 0

@@ -161,6 +161,36 @@ class TestAttendancePipeline(FrappeTestCase):
         rows = self._checkins(self.emp_a.name, day)
         self.assertEqual([r.log_type for r in rows], ["IN", "OUT", "IN", "OUT", "IN"])
 
+    def test_duplicate_punches_within_threshold_collapse(self):
+        # SERIAL_A device uses the default Duplicate Threshold of 1 minute.
+        day = "2026-06-08"
+        # One physical IN fired 3 times in 5s, and one OUT fired twice.
+        batch = [
+            {"user_id": DEVICE_USER_ID, "timestamp": f"{day} 09:00:01"},
+            {"user_id": DEVICE_USER_ID, "timestamp": f"{day} 09:00:03"},
+            {"user_id": DEVICE_USER_ID, "timestamp": f"{day} 09:00:05"},
+            {"user_id": DEVICE_USER_ID, "timestamp": f"{day} 17:30:00"},
+            {"user_id": DEVICE_USER_ID, "timestamp": f"{day} 17:30:02"},
+        ]
+        process_attendance_records(batch, device_identifier=SERIAL_A)
+        rows = self._checkins(self.emp_a.name, day)
+        # Only the first punch of each burst survives -> one IN, one OUT.
+        self.assertEqual(
+            [r.time.strftime("%H:%M:%S") for r in rows], ["09:00:01", "17:30:00"]
+        )
+        self.assertEqual([r.log_type for r in rows], ["IN", "OUT"])
+
+        # Re-sending the same burst stays idempotent (nothing new inserted).
+        process_attendance_records(batch, device_identifier=SERIAL_A)
+        self.assertEqual(len(self._checkins(self.emp_a.name, day)), 2)
+
+        # A genuine separate punch >1 min after the kept IN is NOT collapsed.
+        process_attendance_records(
+            [{"user_id": DEVICE_USER_ID, "timestamp": f"{day} 09:02:00"}],
+            device_identifier=SERIAL_A,
+        )
+        self.assertEqual(len(self._checkins(self.emp_a.name, day)), 3)
+
     def test_manual_checkin_gets_company_via_fetch_from(self):
         checkin = frappe.new_doc("Employee Checkin")
         checkin.employee = self.emp_a.name
