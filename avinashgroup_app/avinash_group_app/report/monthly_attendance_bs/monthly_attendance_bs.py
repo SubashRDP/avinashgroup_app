@@ -70,12 +70,25 @@ def execute(filters=None):
 	data = []
 	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0}
 
+	# Per-date values (BS label + weekday) are identical for every employee, and
+	# ad_to_bs is expensive, so compute them once per distinct date up front.
+	dates = [
+		getdate(frappe.utils.add_days(ad_start, offset))
+		for offset in range((ad_end - ad_start).days + 1)
+	]
+	date_info = {}
+	for ad_date in dates:
+		bs = ad_to_bs(ad_date)
+		bs_label = f"{bs.day:02d} {get_bs_month_name(bs.month)}"
+		weekday = DAY_NAMES[ad_date.weekday()]
+		date_info[ad_date] = (bs_label, weekday)
+
 	for emp in employees:
 		emp_holidays = holiday_map.get(emp.holiday_list, {})
-		for offset in range((ad_end - ad_start).days + 1):
-			ad_date = getdate(frappe.utils.add_days(ad_start, offset))
+		for ad_date in dates:
+			bs_label, weekday = date_info[ad_date]
 			row = _build_row(
-				emp, ad_date, att_map, emp_holidays, leave_map,
+				emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map,
 				components, shift_cache,
 			)
 			data.append(row)
@@ -313,11 +326,7 @@ def _to_seconds(val):
 
 
 
-def _build_row(emp, ad_date, att_map, emp_holidays, leave_map, components, shift_cache):
-	bs = ad_to_bs(ad_date)
-	bs_label = f"{bs.day:02d} {get_bs_month_name(bs.month)}"
-	weekday = DAY_NAMES[ad_date.weekday()]
-
+def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, shift_cache):
 	holiday = emp_holidays.get(ad_date)
 	leave_type = leave_map.get((emp.name, ad_date))
 	att = att_map.get((emp.name, ad_date))

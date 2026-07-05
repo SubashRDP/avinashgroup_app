@@ -19,6 +19,8 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
 Reuses period resolution, employee fetch, and bulk fetches from the per-day report module.
 """
 
+import bisect
+
 import frappe
 from frappe import _
 from frappe.utils import getdate, flt, add_days
@@ -107,22 +109,26 @@ def execute(filters=None):
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
 	holiday_map = _fetch_holidays(employees, ad_start, ad_end)
-	leave_map = _fetch_leaves(employees, ad_start, ad_end, company)
+	# Bucket each leave map ONCE into {employee: sorted [dates]} so per-employee
+	# leave counting is a bounded bisect instead of a full scan of every entry.
+	leave_dates = _bucket_leave_dates(_fetch_leaves(employees, ad_start, ad_end, company))
 
 	# Previous-month leave map
 	prev_start, prev_end = _previous_bs_month_range(ad_start)
-	prev_leave_map = _fetch_leaves(employees, prev_start, prev_end, company) if prev_start else {}
+	prev_leave_dates = _bucket_leave_dates(
+		_fetch_leaves(employees, prev_start, prev_end, company) if prev_start else {}
+	)
 
 	# FY-to-month-end leave map
 	fy_start = _bs_fy_start(ad_start)
-	upto_leave_map = (
+	upto_leave_dates = _bucket_leave_dates(
 		_fetch_leaves(employees, fy_start, ad_end, company) if fy_start else {}
 	)
 
 	leave_windows = {
-		"current":  (leave_map,       ad_start, ad_end),
-		"previous": (prev_leave_map,  prev_start, prev_end),
-		"upto":     (upto_leave_map,  fy_start, ad_end),
+		"current":  (leave_dates,       ad_start, ad_end),
+		"previous": (prev_leave_dates,  prev_start, prev_end),
+		"upto":     (upto_leave_dates,  fy_start, ad_end),
 	}
 
 	shift_cache = {}
@@ -235,20 +241,39 @@ def _build_summary_row(
 	return row
 
 
-def _leave_days_for(employee, leave_map, range_start, range_end):
-	"""Count (employee, date) entries in leave_map falling within [range_start, range_end].
+def _bucket_leave_dates(leave_map):
+	"""Pre-bucket a (employee, date) -> leave_type map into {employee: sorted [dates]}.
 
-	The map is built by `_fetch_leaves` which unrolls every day of each overlapping
-	Leave Application — so it can contain dates outside the intended window. We
-	bound here so previous/upto counts don't bleed across windows.
+	`_fetch_leaves` returns one entry per unrolled day of each overlapping Leave
+	Application, keyed by (employee, date). Bucketing once (single pass) lets each
+	per-employee, per-window count be a bounded bisect instead of a full scan of
+	every entry across all employees.
 	"""
-	if not leave_map or range_start is None or range_end is None:
+	buckets = {}
+	for (emp, d) in (leave_map or {}):
+		buckets.setdefault(emp, []).append(d)
+	for dates in buckets.values():
+		dates.sort()
+	return buckets
+
+
+def _leave_days_for(employee, leave_dates, range_start, range_end):
+	"""Count this employee's leave dates falling within [range_start, range_end].
+
+	`leave_dates` is the bucketed {employee: sorted [dates]} map produced by
+	`_bucket_leave_dates`. The underlying dates can lie outside the intended window
+	(applications are unrolled fully), so we bound here to stop previous/upto counts
+	bleeding across windows. Equivalent to counting (employee, date) entries where
+	range_start <= date <= range_end, but via bisect on the sorted per-employee list.
+	"""
+	if not leave_dates or range_start is None or range_end is None:
 		return 0
-	count = 0
-	for (emp, d), _leave_type in leave_map.items():
-		if emp == employee and range_start <= d <= range_end:
-			count += 1
-	return count
+	dates = leave_dates.get(employee)
+	if not dates:
+		return 0
+	lo = bisect.bisect_left(dates, range_start)
+	hi = bisect.bisect_right(dates, range_end)
+	return hi - lo
 
 
 # ---------------------------------------------------------------------------

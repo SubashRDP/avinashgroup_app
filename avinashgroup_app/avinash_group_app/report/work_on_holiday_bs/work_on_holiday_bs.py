@@ -127,11 +127,16 @@ def _count_worked_on_holiday(emp_names, ad_start, ad_end, company=None):
 		fields=["employee", "attendance_date"],
 	)
 	by_emp = {}
+	# Attendance dates repeat heavily across rows; convert each distinct date once.
+	bs_month_cache = {}
 	for r in rows:
 		d = getdate(r.attendance_date)
-		bs = ad_to_bs(d)
+		bs_month = bs_month_cache.get(d)
+		if bs_month is None:
+			bs_month = ad_to_bs(d).month
+			bs_month_cache[d] = bs_month
 		bucket = by_emp.setdefault(r.employee, {})
-		bucket[bs.month] = bucket.get(bs.month, 0) + 1
+		bucket[bs_month] = bucket.get(bs_month, 0) + 1
 	return by_emp
 
 

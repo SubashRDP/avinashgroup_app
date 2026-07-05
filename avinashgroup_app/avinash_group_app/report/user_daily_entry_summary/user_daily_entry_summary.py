@@ -50,7 +50,9 @@ def execute(filters=None):
 			perm_cache[dt] = frappe.has_permission(dt, "read")
 		return perm_cache[dt]
 
-	readable = [dt for dt in doctypes if frappe.db.exists("DocType", dt) and can_read(dt)]
+	# One query for all doctypes' existence instead of one per doctype.
+	valid = set(frappe.get_all("DocType", filters={"name": ["in", doctypes]}, pluck="name"))
+	readable = [dt for dt in doctypes if dt in valid and can_read(dt)]
 
 	rows = []
 	for dt, counts in _status_counts(filters.user, from_dt, to_dt, readable).items():

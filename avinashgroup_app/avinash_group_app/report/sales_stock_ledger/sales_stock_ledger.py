@@ -1,5 +1,8 @@
+import nepali_datetime
+
 import frappe
 from frappe import _
+from frappe.utils import getdate
 
 
 def execute(filters=None):
@@ -35,7 +38,6 @@ NEPALI_MONTHS = [
 
 def _bs_month_to_gregorian_range(year, month):
     """Convert a Bikram Sambat (year, month) to a Gregorian (start, end) date pair."""
-    import nepali_datetime
     from datetime import timedelta
 
     start = nepali_datetime.date(year, month, 1).to_datetime_date()
@@ -69,9 +71,6 @@ def _to_nepali_date_str(gregorian_date):
     if not gregorian_date:
         return ""
     try:
-        import nepali_datetime
-        from frappe.utils import getdate
-
         bs = nepali_datetime.date.from_datetime_date(getdate(gregorian_date))
         return "{0:04d}-{1:02d}-{2:02d}".format(bs.year, bs.month, bs.day)
     except Exception:
@@ -79,8 +78,14 @@ def _to_nepali_date_str(gregorian_date):
 
 
 def _add_nepali_dates(rows):
+    # Many detail rows share the same posting_date, so convert each distinct
+    # date once and reuse the cached Bikram Sambat string.
+    cache = {}
     for row in rows:
-        row["nepali_date"] = _to_nepali_date_str(row.get("posting_date"))
+        posting_date = row.get("posting_date")
+        if posting_date not in cache:
+            cache[posting_date] = _to_nepali_date_str(posting_date)
+        row["nepali_date"] = cache[posting_date]
     return rows
 
 
@@ -91,8 +96,6 @@ def get_default_nepali_month():
     Used by the report's JS to default the period to the running Nepali month,
     so the report opens "in Nepali month" out of the box.
     """
-    import nepali_datetime
-
     today = nepali_datetime.date.today()
     from_date, to_date = _bs_month_to_gregorian_range(today.year, today.month)
     return {

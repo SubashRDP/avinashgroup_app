@@ -187,12 +187,47 @@ def _blank_if_zero(value):
 	return None if not value else value
 
 
+# When an AD from_date/to_date filter is present we push a COARSE date window into
+# SQL so we stop scanning every gas document in company history. The window is
+# widened by this many days on each side of the requested range; the exact,
+# authoritative period check still happens in Python (_in_period). The margin must
+# exceed the largest gap between a receipt's Store Receipt date and the date of the
+# invoice it is billed on (the linkage comment notes an invoice may fall in a later
+# month than its receipt). ~2 months is a deliberately generous cushion so the
+# coarse SQL bound can never drop a row that _in_period would have kept.
+_AD_WIDEN_DAYS = 62
+
+
+def _push_ad_bounds(filters, alias, conditions, values):
+	"""Append a WIDENED coarse floor/ceiling on custom_store_receipt_date when an AD
+	from_date/to_date filter is present. Rows with a NULL date are always kept so that
+	receipt<->invoice linkage still resolves; _in_period remains the final filter."""
+	from frappe.utils import add_days
+
+	from_date = filters.get("from_date")
+	to_date = filters.get("to_date")
+	if from_date:
+		conditions.append(
+			f"({alias}.custom_store_receipt_date IS NULL "
+			f"OR {alias}.custom_store_receipt_date >= %(ad_widen_from)s)"
+		)
+		values["ad_widen_from"] = add_days(from_date, -_AD_WIDEN_DAYS)
+	if to_date:
+		conditions.append(
+			f"({alias}.custom_store_receipt_date IS NULL "
+			f"OR {alias}.custom_store_receipt_date <= %(ad_widen_to)s)"
+		)
+		values["ad_widen_to"] = add_days(to_date, _AD_WIDEN_DAYS)
+
+
 def _gas_invoices(filters):
 	"""Gas Purchase Invoices, company/refinery scoped but NOT date scoped, each tagged with
 	the Purchase Receipt it was billed from (pii.purchase_receipt) so linkage can be resolved."""
 	conditions, values = _doc_conditions(filters, "pi", with_date=False)
 	conditions.append("pi.custom_purchase_type = %(gas_inv_type)s")
 	values["gas_inv_type"] = GAS_INVOICE_TYPE
+	# Coarse widened AD pre-filter (exact period still enforced by _in_period).
+	_push_ad_bounds(filters, "pi", conditions, values)
 
 	return frappe.db.sql(
 		f"""
@@ -229,6 +264,8 @@ def _gas_receipts(filters):
 	conditions, values = _doc_conditions(filters, "pr", with_date=False)
 	conditions.append("pr.custom_receipt_type = %(gas_rec_type)s")
 	values["gas_rec_type"] = GAS_RECEIPT_TYPE
+	# Coarse widened AD pre-filter (exact period still enforced by _in_period).
+	_push_ad_bounds(filters, "pr", conditions, values)
 
 	return frappe.db.sql(
 		f"""

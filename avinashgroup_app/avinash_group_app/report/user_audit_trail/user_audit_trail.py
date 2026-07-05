@@ -77,8 +77,10 @@ def _scope_doctypes(document_type):
 
 def _created_rows(user, from_dt, to_dt, doctypes, can_read):
 	rows = []
+	# One query for all doctypes' existence instead of one per doctype.
+	existing = set(frappe.get_all("DocType", filters={"name": ["in", doctypes]}, pluck="name"))
 	for dt in doctypes:
-		if not frappe.db.exists("DocType", dt) or not can_read(dt):
+		if dt not in existing or not can_read(dt):
 			continue
 		# Doctype may not (yet) carry the audit field — skip cleanly.
 		if not frappe.get_meta(dt).has_field(CREATED_BY_FIELD):

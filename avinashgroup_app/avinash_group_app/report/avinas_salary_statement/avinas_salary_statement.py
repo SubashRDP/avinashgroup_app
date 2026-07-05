@@ -33,12 +33,8 @@ def execute(filters):
 
 	slip_names = [s.name for s in salary_slips]
 
-	# Get earning and deduction component types
-	earning_types, ded_types = get_component_types(slip_names)
-
-	# Pivot earnings and deductions by slip
-	earn_map = get_details_map(slip_names, "earnings")
-	ded_map = get_details_map(slip_names, "deductions")
+	# Get component types and amount pivots for earnings/deductions in one query
+	earning_types, ded_types, earn_map, ded_map = get_salary_details(slip_names)
 
 	# Get previous month's net pay for each employee
 	employees = list({s.employee for s in salary_slips})
@@ -81,45 +77,50 @@ def get_salary_slips(company, start_date, end_date, docstatus):
 	return query.run(as_dict=True) or []
 
 
-def get_component_types(slip_names):
-	"""Get sorted lists of earning and deduction component names."""
+def get_salary_details(slip_names):
+	"""Single-pass fetch of Salary Detail rows for the given slips.
+
+	Returns (earning_types, ded_types, earn_map, ded_map):
+	  - earning_types / ded_types: sorted lists of component names that have a
+	    non-zero amount on at least one row. This replicates the original
+	    ``SELECT DISTINCT salary_component, parentfield ... WHERE amount != 0``
+	    (SQL ``amount != 0`` excludes both zero and NULL, so we gate on truthiness).
+	  - earn_map / ded_map: {slip_name: {component_name: summed_amount}} built from
+	    ALL rows of that parentfield (including zero amounts), matching the original
+	    per-parentfield pivot which had no amount filter.
+	"""
 	if not slip_names:
-		return [], []
+		return [], [], {}, {}
 
 	sd = frappe.qb.DocType("Salary Detail")
 	rows = (
 		frappe.qb.from_(sd)
-		.select(sd.salary_component, sd.parentfield)
-		.distinct()
+		.select(sd.parent, sd.salary_component, sd.parentfield, sd.amount)
 		.where(sd.parent.isin(slip_names))
-		.where(sd.amount != 0)
 	).run(as_dict=True)
 
-	earnings = sorted({r.salary_component for r in rows if r.parentfield == "earnings"})
-	deductions = sorted({r.salary_component for r in rows if r.parentfield == "deductions"})
-	return earnings, deductions
+	earnings = set()
+	deductions = set()
+	earn_map = {}
+	ded_map = {}
 
-
-def get_details_map(slip_names, parentfield):
-	"""Return {slip_name: {component_name: amount}} for the given parentfield."""
-	if not slip_names:
-		return {}
-
-	sd = frappe.qb.DocType("Salary Detail")
-	rows = (
-		frappe.qb.from_(sd)
-		.select(sd.parent, sd.salary_component, sd.amount)
-		.where(sd.parent.isin(slip_names))
-		.where(sd.parentfield == parentfield)
-	).run(as_dict=True)
-
-	result = {}
 	for r in rows:
-		result.setdefault(r.parent, {})
-		result[r.parent][r.salary_component] = (
-			result[r.parent].get(r.salary_component, 0.0) + flt(r.amount)
-		)
-	return result
+		if r.parentfield == "earnings":
+			type_set, amount_map = earnings, earn_map
+		elif r.parentfield == "deductions":
+			type_set, amount_map = deductions, ded_map
+		else:
+			continue
+
+		# Component-type list: only components with a non-zero amount.
+		if r.amount:
+			type_set.add(r.salary_component)
+
+		# Amount pivot: sum every row (zero rows included) per component.
+		comp_map = amount_map.setdefault(r.parent, {})
+		comp_map[r.salary_component] = comp_map.get(r.salary_component, 0.0) + flt(r.amount)
+
+	return sorted(earnings), sorted(deductions), earn_map, ded_map
 
 
 def get_prev_net_pay(employees, prev_start, prev_end, company, docstatus):
@@ -207,11 +208,15 @@ def build_data(salary_slips, earning_types, ded_types, earn_map, ded_map, prev_n
 	"""Build data rows with sub-totals by designation."""
 	data = []
 
+	# Scrubbed fieldnames (computed once, reused in the hot loop below)
+	scrubbed_earnings = [frappe.scrub(e) for e in earning_types]
+	scrubbed_deductions = [frappe.scrub(d) for d in ded_types]
+
 	# List of numeric field names for totaling
 	numeric_fields = (
-		[frappe.scrub(e) for e in earning_types] +
+		scrubbed_earnings +
 		["gross_pay"] +
-		[frappe.scrub(d) for d in ded_types] +
+		scrubbed_deductions +
 		["net_pay", "prev_month_net_pay"]
 	)
 
@@ -234,20 +239,20 @@ def build_data(salary_slips, earning_types, ded_types, earn_map, ded_map, prev_n
 			}
 
 			# Earning components
-			for e in earning_types:
+			for e, field in zip(earning_types, scrubbed_earnings):
 				val = flt(earn_map.get(ss.name, {}).get(e, 0))
-				row[frappe.scrub(e)] = val
-				group_totals[frappe.scrub(e)] += val
+				row[field] = val
+				group_totals[field] += val
 
 			# Gross pay
 			row["gross_pay"] = flt(ss.gross_pay)
 			group_totals["gross_pay"] += flt(ss.gross_pay)
 
 			# Deduction components
-			for d in ded_types:
+			for d, field in zip(ded_types, scrubbed_deductions):
 				val = flt(ded_map.get(ss.name, {}).get(d, 0))
-				row[frappe.scrub(d)] = val
-				group_totals[frappe.scrub(d)] += val
+				row[field] = val
+				group_totals[field] += val
 
 			# Net pay
 			row["net_pay"] = flt(ss.net_pay)
