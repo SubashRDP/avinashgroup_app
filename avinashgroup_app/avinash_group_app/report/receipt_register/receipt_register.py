@@ -346,7 +346,7 @@ _PAGE_CAP = {"Portrait": 117.0, "Landscape": 72.0}
 # Summary view packs one row per customer (no sub-lines), so it needs a lower budget.
 _PAGE_CAP_SUMMARY = {"Portrait": 69.0, "Landscape": 44.0}
 # Date Wise has its own budget so it can be tuned independently of Customer Wise.
-_PAGE_CAP_DATE_WISE = {"Portrait": 136.0, "Landscape": 72.0}
+_PAGE_CAP_DATE_WISE = {"Portrait": 136.0, "Landscape": 73.0}
 _CHARS_PER_LINE = 45
 
 
