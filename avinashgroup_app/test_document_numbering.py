@@ -27,6 +27,7 @@ year, two branches, two accounts). Tests that need a fixture that is missing
 skip themselves instead of failing, so the suite is portable across sites.
 """
 
+import json
 import threading
 
 import frappe
@@ -447,3 +448,196 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertEqual(got, int(num_max))                 # numeric max
         if str(lex_max) != str(num_max):                    # data actually exposes the bug
             self.assertNotEqual(str(got), str(lex_max))     # and we don't return it
+
+    # ==================================================================
+    #  STRONG REGRESSION BATTERY
+    #  One guard per fixed bug + invariants + stress. Each test name says
+    #  what regressing would mean.
+    # ==================================================================
+
+    def _count_db_queries(self, fn):
+        orig = frappe.db.sql
+        n = [0]
+
+        def counting(*a, **k):
+            n[0] += 1
+            return orig(*a, **k)
+
+        frappe.db.sql = counting
+        try:
+            fn()
+        finally:
+            frappe.db.sql = orig
+        return n[0]
+
+    # ---- bug-guard regressions ----
+    def test_21_preview_handles_full_draft_payload(self):
+        # Regression: the preview crashed on the whole draft because the accounts
+        # child table arrived nested; it must resolve to a number.
+        payload = {
+            "doctype": "Journal Entry", "name": "new-je-xyz", "__islocal": 1,
+            "company": self.company, "posting_date": str(self.pdate),
+            "voucher_type": "Journal Entry", "custom_p_type": JE_TYPE,
+            "accounts": [{"doctype": "Journal Entry Account", "idx": 1}],
+        }
+        got = ns.get_next_custom_document_no(doc=json.dumps(payload))
+        self.assertIsInstance(got, int)
+        self.assertGreater(got, 0)
+
+    def test_22_preview_never_raises(self):
+        # child table as a STRING (the exact crash), garbage, missing doctype,
+        # and no args -> None, never an exception.
+        weird = {"doctype": "Journal Entry", "company": self.company,
+                 "posting_date": str(self.pdate), "custom_p_type": JE_TYPE,
+                 "accounts": "[{\"idx\": 1}]"}
+        for bad in (json.dumps(weird), "not-json", json.dumps({"x": 1}), None):
+            try:
+                r = ns.get_next_custom_document_no(doc=bad)
+            except Exception as exc:  # pragma: no cover
+                self.fail("preview raised on %r: %s" % (bad, exc))
+            self.assertTrue(r is None or isinstance(r, int))
+
+    def test_23_revert_skips_when_scope_changed(self):
+        # Regression: a doc whose stored name no longer matches its current scope
+        # must NOT step a series back (would gap this / corrupt another).
+        d = self._je()
+        scope = ns._docno_scope(d)
+        key = ns._docno_series_key(d, scope)
+        ns._draw_next_document_no(d, scope)
+        before = ns._series_current(key)
+        d.custom_document_no = before
+        d.custom_name = "TOTALLY-DIFFERENT-SCOPE-000999"   # as if branch/date changed
+        ns._revert_document_no_series(d)
+        self.assertEqual(ns._series_current(key), before)  # untouched
+
+    def test_24_amendment_number_stable_across_events(self):
+        d = self._je(amended_from="JE-AMEND-1", custom_document_no=555, custom_document_no_manual=0)
+        ns.apply_document_no(d)
+        ns.apply_document_no(d)                              # validate + before_save
+        self.assertEqual(d.custom_document_no, 555)
+
+    def test_25_number_drawn_exactly_once(self):
+        # apply runs on both validate and before_save; the counter must advance once.
+        d = self._je()
+        scope = ns._docno_scope(d)
+        key = ns._docno_series_key(d, scope)
+        before = ns._series_current(key)
+        ns.apply_document_no(d)
+        n1 = d.custom_document_no
+        ns.apply_document_no(d)
+        self.assertEqual(d.custom_document_no, n1)           # idempotent
+        self.assertEqual(ns._series_current(key), before + 1)  # bumped once, not twice
+
+    def test_26_preview_reserves_nothing_under_stress(self):
+        d = self._je()
+        scope = ns._docno_scope(d)
+        key = ns._docno_series_key(d, scope)
+        before = ns._series_current(key)
+        peeks = {ns.peek_next_document_no(self._je()) for _ in range(30)}
+        self.assertEqual(len(peeks), 1)                     # stable preview
+        self.assertEqual(ns._series_current(key), before)   # counter untouched
+
+    # ---- caching regressions ----
+    def test_27_redis_roundtrip_preserves_rule_shape(self):
+        configured = list(ns._configured_doctypes())
+        self._require(configured, "no doctype has numbering rules")
+        dt = configured[0]
+        fresh = ns._build_numbering_rules(dt)
+        ns.clear_numbering_rules_cache()
+        frappe.local._numbering_rules_cache = {}
+        ns._numbering_rules_for(dt)                          # populate redis
+        frappe.local._numbering_rules_cache = {}
+        from_redis = ns._numbering_rules_for(dt)             # redis hit
+        self.assertEqual(from_redis, fresh)                 # identical shape/content
+        for r in from_redis:
+            for child in list(r.get("conditions", [])) + list(r.get("segments", [])):
+                self.assertNotIn("parent", child)           # grouping key stripped
+
+    def test_28_unconfigured_doctype_hits_no_db(self):
+        ns._configured_doctypes()                           # warm the gate
+        dt = "ToDo"
+        self._require(dt not in ns._configured_doctypes(), "ToDo unexpectedly configured")
+        frappe.local._numbering_rules_cache = {}
+        self.assertEqual(self._count_db_queries(lambda: ns._numbering_rules_for(dt)), 0)
+
+    def test_29_new_rule_visible_after_invalidation(self):
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "UT" + frappe.generate_hash(length=6)
+        self.assertNotIn(tag, (ns._docno_scope(self._pe()) or {}).get("key", ""))
+        self._temp_rule(
+            extra_segments=[
+                {"segment_type": "Company Abbr"},
+                {"segment_type": "Static Text", "static_value": tag},
+                {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
+            ],
+            conditions=[{"field": "custom_p_type", "value": PE_TYPE}],
+        )
+        scope = ns._docno_scope(self._pe())
+        self.assertIsNotNone(scope)
+        self.assertIn(tag, scope["key"])                    # cache invalidated on insert
+
+    # ---- invariants / property / stress ----
+    def test_30_sequential_draws_unique_and_gapless(self):
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "SEQ" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            extra_segments=[
+                {"segment_type": "Company Abbr"},
+                {"segment_type": "Static Text", "static_value": tag},
+                {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
+            ],
+            conditions=[{"field": "custom_p_type", "value": PE_TYPE}],
+        )
+        nums = [self._draw_pe(None) for _ in range(200)]
+        self.assertEqual(nums, list(range(1, 201)))         # strictly 1..200, no gaps/dupes
+
+    def test_31_high_concurrency_no_collision(self):
+        tag = "HC" + frappe.generate_hash(length=8)
+        n = 12
+        by = self._run_concurrent([(i, tag) for i in range(n)])
+        nums = by.get(tag, [])
+        self.assertTrue(all(isinstance(x, int) for x in nums), msg=str(nums))
+        self.assertEqual(sorted(nums), list(range(1, n + 1)))
+
+    def test_32_auto_skips_past_a_manual_number(self):
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        big = 700000 + int(frappe.generate_hash(length=6), 16) % 90000
+        self.addCleanup(self._cleanup_by_docno, big)
+        m = self._je(custom_document_no=big, custom_document_no_manual=1)
+        self._balance(m).insert(ignore_permissions=True)
+        a = self._je()
+        ns.apply_document_no(a)
+        self.assertGreater(a.custom_document_no, big)       # floor jumped past the manual value
+
+    def test_33_fiscal_years_are_separate_series(self):
+        fys = frappe.get_all(
+            "Fiscal Year", fields=["name", "year_start_date"],
+            order_by="year_start_date desc", limit=2,
+        )
+        self._require(len(fys) >= 2, "needs two fiscal years")
+        d1 = self._je(posting_date=fys[0].year_start_date)
+        d2 = self._je(posting_date=fys[1].year_start_date)
+        s1, s2 = ns._docno_scope(d1), ns._docno_scope(d2)
+        self.assertIsNotNone(s1)
+        self.assertIsNotNone(s2)
+        self.assertNotEqual(s1["key"], s2["key"])
+        self.assertNotEqual(ns._docno_series_key(d1, s1), ns._docno_series_key(d2, s2))
+
+    def test_34_same_scope_different_doctype_isolated(self):
+        scope = {"key": "SAME|CODE|82-83", "pattern": "%", "field": "custom_name"}
+        k_je = ns._docno_series_key(self._je(), scope)
+        k_pe = ns._docno_series_key(self._pe(), scope)
+        self.assertNotEqual(k_je, k_pe)                     # doctype is part of the series key
+        self.assertTrue(k_je.startswith("docno:Journal Entry|"))
+        self.assertTrue(k_pe.startswith("docno:Payment Entry|"))
+
+    def test_35_all_configured_doctypes_have_the_field(self):
+        # The four AUTO_NUMBER_CONFIG doctypes must carry custom_document_no,
+        # else apply_document_no silently no-ops for them.
+        for dt in ns.AUTO_NUMBER_CONFIG:
+            if not frappe.db.exists("DocType", dt):
+                continue
+            self.assertTrue(
+                frappe.get_meta(dt).has_field("custom_document_no"),
+                msg=f"{dt} is auto-numbered but has no custom_document_no field",
+            )
