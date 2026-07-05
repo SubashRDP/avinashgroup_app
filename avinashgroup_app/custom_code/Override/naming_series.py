@@ -800,14 +800,17 @@ def _docno_eligible(doc, rule):
     """Whether this document should get an auto document number.
 
       1. Rule-driven (the generalized path): the matching Numbering Configuration
-         rule has 'Auto-fill Document No.' ticked. Conditions on the rule
-         (Equals / In / Is Set …) decide when it applies — fully configurable in
-         the desk, no code change.
+         rule has 'Auto-fill Document No.' ticked AND the document satisfies the
+         rule's separate DOCUMENT NO. CONDITIONS (Equals / In / Is Set …). These
+         are independent of the Voucher No. conditions that select the rule, so
+         you can format the name for a broad set but only number a subset.
+         Empty Document No. conditions = number every document the rule applies to.
       2. Fallback: the hardcoded AUTO_NUMBER_CONFIG (type field in a fixed list),
          so day-one behaviour is unchanged for the doctypes shipped with it.
     """
     if rule and rule.get("auto_document_no"):
-        return True
+        if all(_condition_matches(doc, c) for c in rule.get("document_no_conditions", [])):
+            return True
 
     cfg = AUTO_NUMBER_CONFIG.get(doc.doctype)
     if not cfg:
@@ -1241,8 +1244,16 @@ def _build_numbering_rules(doctype):
 
     rule_names = [r["name"] for r in rules]
 
+    # Voucher No. conditions (name generation) — no operator, plain equality.
     conditions = frappe.get_all(
         "Numbering Condition",
+        filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+        fields=["parent", "field", "value"],
+        order_by="idx",
+    )
+    # Document No. conditions (auto-fill gate) — with operators.
+    docno_conditions = frappe.get_all(
+        "Numbering Document No Condition",
         filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
         fields=["parent", "field", "value", "operator"],
         order_by="idx",
@@ -1256,16 +1267,20 @@ def _build_numbering_rules(doctype):
 
     # group children by parent, preserving idx order (rows arrive idx-ascending;
     # grouping keeps each parent's relative order intact)
-    cond_by_parent = {}
-    for c in conditions:
-        cond_by_parent.setdefault(c.pop("parent"), []).append(c)
-    seg_by_parent = {}
-    for s in segments:
-        seg_by_parent.setdefault(s.pop("parent"), []).append(s)
+    def _group(rows):
+        out = {}
+        for row in rows:
+            out.setdefault(row.pop("parent"), []).append(row)
+        return out
+
+    cond_by_parent = _group(conditions)
+    docno_cond_by_parent = _group(docno_conditions)
+    seg_by_parent = _group(segments)
 
     for r in rules:
-        # rules with zero conditions/segments still get empty lists
+        # rules with zero children still get empty lists
         r["conditions"] = cond_by_parent.get(r["name"], [])
+        r["document_no_conditions"] = docno_cond_by_parent.get(r["name"], [])
         r["segments"] = seg_by_parent.get(r["name"], [])
 
     return rules
@@ -1566,8 +1581,12 @@ def _rule_dict_from_config(cfg):
         "legacy_source_field": cfg.get("legacy_source_field"),
         "auto_document_no": cfg.get("auto_document_no"),
         "conditions": [
-            {"field": c.field, "value": c.value, "operator": c.get("operator")}
+            {"field": c.field, "value": c.value}
             for c in (cfg.conditions or [])
+        ],
+        "document_no_conditions": [
+            {"field": c.field, "value": c.value, "operator": c.get("operator")}
+            for c in (cfg.get("document_no_conditions") or [])
         ],
         "segments": [
             {

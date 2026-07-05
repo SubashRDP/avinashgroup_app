@@ -39,9 +39,21 @@ frappe.ui.form.on("Numbering Configuration", {
 	legacy_source_field(frm) { render_preview(frm); },
 });
 
+// Voucher No. conditions (Equals only, no operator).
 frappe.ui.form.on("Numbering Condition", {
 	conditions_add(frm) { render_preview(frm); },
 	conditions_remove(frm) { render_preview(frm); },
+	field(frm, cdt, cdn) {
+		set_smart_value_options(frm, cdt, cdn);
+		render_preview(frm);
+	},
+	value(frm) { render_preview(frm); },
+});
+
+// Document No. conditions (with operators). Only used when Auto-fill is on.
+frappe.ui.form.on("Numbering Document No Condition", {
+	document_no_conditions_add(frm) { render_preview(frm); },
+	document_no_conditions_remove(frm) { render_preview(frm); },
 	field(frm, cdt, cdn) {
 		set_smart_value_options(frm, cdt, cdn);
 		render_preview(frm);
@@ -154,8 +166,10 @@ function load_field_options(frm, reset_default) {
 			.filter((f) => !skip.includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)
 			.sort();
+		// Autocomplete suggestions — the user may still type any field name.
 		const options = ["", ...doc_fields].join("\n");
 		frm.fields_dict.conditions.grid.update_docfield_property("field", "options", options);
+		frm.fields_dict.document_no_conditions.grid.update_docfield_property("field", "options", options);
 		frm.fields_dict.segments.grid.update_docfield_property("field", "options", options);
 
 		// "Date Field" -> date-like fields for the legacy cut-over comparison.
@@ -179,6 +193,7 @@ function load_field_options(frm, reset_default) {
 		}
 		frm.refresh_field("target_field");
 		frm.refresh_field("conditions");
+		frm.refresh_field("document_no_conditions");
 		frm.refresh_field("segments");
 	});
 }
@@ -188,7 +203,9 @@ function set_smart_value_options(frm, cdt, cdn) {
 	const row = locals[cdt][cdn];
 	if (!row.field || !frm.doc.document_type) return;
 
-	const grid = frm.fields_dict.conditions.grid;
+	// works for either the Voucher No. (conditions) or Document No.
+	// (document_no_conditions) grid — the row knows its own parent table.
+	const grid = frm.fields_dict[row.parentfield].grid;
 	const op = row.operator || "Equals";
 
 	// In / Not In take a comma-separated LIST, so the value must stay free text —

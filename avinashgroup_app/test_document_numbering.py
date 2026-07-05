@@ -157,7 +157,8 @@ class TestDocumentNumbering(FrappeTestCase):
         frappe.db.commit()
 
     def _temp_rule(self, *, extra_segments, conditions, doctype="Payment Entry",
-                   target="custom_name", separator="-", auto_document_no=0):
+                   target="custom_name", separator="-", auto_document_no=0,
+                   document_no_conditions=None):
         segments = list(extra_segments) + [
             {"segment_type": "Document Field", "field": "custom_document_no", "number_length": 6},
             {"segment_type": "Fiscal Year"},
@@ -166,7 +167,9 @@ class TestDocumentNumbering(FrappeTestCase):
             "doctype": "Numbering Configuration", "document_type": doctype,
             "enabled": 1, "target_field": target, "separator": separator,
             "auto_document_no": auto_document_no,
-            "conditions": conditions, "segments": segments,
+            "conditions": conditions,
+            "document_no_conditions": document_no_conditions or [],
+            "segments": segments,
         }).insert(ignore_permissions=True)
         ns.clear_numbering_rules_cache()
         self.addCleanup(self._drop_rule, rule.name)
@@ -671,22 +674,27 @@ class TestDocumentNumbering(FrappeTestCase):
     def _pe_off(self, ptype=None):
         return self._pe(custom_p_type=ptype or self.OFF_TYPE)
 
-    def test_36_rule_turns_numbering_on_beyond_hardcoded_list(self):
+    # segments shared by these rule tests (Company Abbr + unique tag + code)
+    def _tag_segments(self, tag):
+        return [
+            {"segment_type": "Company Abbr"},
+            {"segment_type": "Static Text", "static_value": tag},
+            {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
+        ]
+
+    def test_36_docno_condition_turns_numbering_on_beyond_hardcoded_list(self):
         self._require(self.has_rules, "Numbering Configuration not installed")
         # baseline: a non-configured type is NOT eligible without a rule
         self.assertIsNone(ns._docno_scope(self._pe_off()))
         tag = "AF" + frappe.generate_hash(length=6)
         self._temp_rule(
             auto_document_no=1,
-            extra_segments=[
-                {"segment_type": "Company Abbr"},
-                {"segment_type": "Static Text", "static_value": tag},
-                {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
-            ],
-            conditions=[{"field": "custom_p_type", "operator": "Equals", "value": self.OFF_TYPE}],
+            extra_segments=self._tag_segments(tag),
+            conditions=[],                               # voucher: applies to all PE
+            document_no_conditions=[{"field": "custom_p_type", "operator": "Equals", "value": self.OFF_TYPE}],
         )
         scope = ns._docno_scope(self._pe_off())
-        self.assertIsNotNone(scope)                     # now eligible via the rule
+        self.assertIsNotNone(scope)                      # eligible via the Document No. condition
         self.assertIn(tag, scope["key"])
         self.assertEqual(ns.peek_next_document_no(self._pe_off()), 1)
 
@@ -694,46 +702,54 @@ class TestDocumentNumbering(FrappeTestCase):
         self._require(self.has_rules, "Numbering Configuration not installed")
         tag = "AF" + frappe.generate_hash(length=6)
         self._temp_rule(
-            auto_document_no=0,                          # rule matches but doesn't auto-number
-            extra_segments=[
-                {"segment_type": "Company Abbr"},
-                {"segment_type": "Static Text", "static_value": tag},
-                {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
-            ],
-            conditions=[{"field": "custom_p_type", "operator": "Equals", "value": self.OFF_TYPE}],
+            auto_document_no=0,                          # rule matches (name) but doesn't auto-number
+            extra_segments=self._tag_segments(tag),
+            conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "operator": "Equals", "value": self.OFF_TYPE}],
         )
         self.assertIsNone(ns._docno_scope(self._pe_off()))  # flag off -> not eligible
 
-    def test_38_in_operator_matches_a_list(self):
+    def test_38_docno_in_operator_matches_a_list(self):
         self._require(self.has_rules, "Numbering Configuration not installed")
         tag = "IN" + frappe.generate_hash(length=6)
         self._temp_rule(
             auto_document_no=1,
-            extra_segments=[
-                {"segment_type": "Company Abbr"},
-                {"segment_type": "Static Text", "static_value": tag},
-                {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
-            ],
-            conditions=[{"field": "custom_p_type", "operator": "In",
-                         "value": f"{self.OFF_TYPE}, {self.OFF_TYPE_2}"}],
+            extra_segments=self._tag_segments(tag),
+            conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "operator": "In",
+                                     "value": f"{self.OFF_TYPE}, {self.OFF_TYPE_2}"}],
         )
-        # both listed types are eligible via the one rule
         self.assertIn(tag, (ns._docno_scope(self._pe_off(self.OFF_TYPE)) or {}).get("key", ""))
         self.assertIn(tag, (ns._docno_scope(self._pe_off(self.OFF_TYPE_2)) or {}).get("key", ""))
-        # an unlisted, non-configured type is not eligible
         self.assertIsNone(ns._docno_scope(self._pe_off("Customers/Suppliers Receipt")))
 
-    def test_39_blank_operator_behaves_as_equals(self):
+    def test_39_docno_blank_operator_behaves_as_equals(self):
         self._require(self.has_rules, "Numbering Configuration not installed")
         tag = "EQ" + frappe.generate_hash(length=6)
         self._temp_rule(
             auto_document_no=1,
-            extra_segments=[
-                {"segment_type": "Company Abbr"},
-                {"segment_type": "Static Text", "static_value": tag},
-                {"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"},
-            ],
-            conditions=[{"field": "custom_p_type", "value": self.OFF_TYPE}],   # no operator -> Equals
+            extra_segments=self._tag_segments(tag),
+            conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "value": self.OFF_TYPE}],  # no operator -> Equals
         )
         self.assertIn(tag, (ns._docno_scope(self._pe_off(self.OFF_TYPE)) or {}).get("key", ""))
-        self.assertIsNone(ns._docno_scope(self._pe_off(self.OFF_TYPE_2)))     # different value -> no match
+        self.assertIsNone(ns._docno_scope(self._pe_off(self.OFF_TYPE_2)))
+
+    def test_40_voucher_and_docno_conditions_are_independent(self):
+        # Voucher conditions gate the NAME; Document No. conditions gate the NUMBER.
+        # Here the rule applies to ALL Payment Entries (empty voucher conditions)
+        # but only auto-numbers OFF_TYPE — a different type is named but not numbered.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "SEP" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1,
+            extra_segments=self._tag_segments(tag),
+            conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "operator": "Equals", "value": self.OFF_TYPE}],
+        )
+        # numbered (docno condition matches)
+        self.assertIsNotNone(ns._docno_scope(self._pe_off(self.OFF_TYPE)))
+        # NOT numbered via the rule (docno condition fails) and OFF_TYPE_2 isn't a
+        # hardcoded auto type either -> no auto number, even though the rule still
+        # builds this doc's name.
+        self.assertIsNone(ns._docno_scope(self._pe_off(self.OFF_TYPE_2)))

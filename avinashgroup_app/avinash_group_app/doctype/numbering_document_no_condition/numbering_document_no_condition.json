@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "creation": "2026-07-06 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "field",
+  "operator",
+  "value"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "description": "Field to check — pick a suggestion or type any field name.",
+   "fieldname": "field",
+   "fieldtype": "Autocomplete",
+   "in_list_view": 1,
+   "label": "Field",
+   "reqd": 1
+  },
+  {
+   "columns": 3,
+   "default": "Equals",
+   "description": "How to compare. In / Not In take a comma-separated list.",
+   "fieldname": "operator",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "Equals\nNot Equals\nIn\nNot In\nIs Set\nIs Not Set"
+  },
+  {
+   "columns": 3,
+   "depends_on": "eval:!['Is Set','Is Not Set'].includes(doc.operator)",
+   "mandatory_depends_on": "eval:!['Is Set','Is Not Set'].includes(doc.operator)",
+   "description": "Value to compare. For In / Not In use a comma-separated list.",
+   "fieldname": "value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Value"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-06 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Numbering Document No Condition",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
