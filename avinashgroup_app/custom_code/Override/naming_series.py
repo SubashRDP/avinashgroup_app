@@ -796,6 +796,13 @@ def _rule_docno_scope(doc, rule):
     return {"key": key, "pattern": pattern, "field": target}
 
 
+def _docno_field(rule):
+    """The field the auto Document No. is written into. Configurable per rule
+    (document_no_field); defaults to custom_document_no so the shipped doctypes
+    are unchanged."""
+    return (rule.get("document_no_field") if rule else None) or "custom_document_no"
+
+
 def _docno_eligible(doc, rule):
     """Whether this document should get an auto document number.
 
@@ -842,6 +849,7 @@ def _docno_scope(doc):
     if not _docno_eligible(doc, rule):
         return None
 
+    number_field = _docno_field(rule)  # which field holds the counter
     code = _resolve_p_type_code(doc)
     company_abbr = get_company_abbr(doc)
     fiscal_year = _resolve_docno_fiscal_year(doc)
@@ -854,6 +862,7 @@ def _docno_scope(doc):
     if rule:
         rule_scope = _rule_docno_scope(doc, rule)
         if rule_scope and rule_scope.get("pattern"):
+            rule_scope["number_field"] = number_field
             return rule_scope
 
     # Legacy fallback scope needs the company + code + fiscal-year triple.
@@ -863,6 +872,7 @@ def _docno_scope(doc):
         "key": "|".join((company_abbr, code, fiscal_year)),
         "pattern": f"{company_abbr}-{code}-%-{fiscal_year}%",
         "field": "custom_name",
+        "number_field": number_field,
     }
 
 
@@ -877,9 +887,10 @@ def _current_max_document_no(doc, scope):
     and let auto numbers eventually collide with a higher manual number."""
     table = "tab" + doc.doctype.replace("`", "")
     field = scope["field"].replace("`", "")
+    number_field = scope.get("number_field", "custom_document_no").replace("`", "")
     row = frappe.db.sql(
-        "SELECT MAX(CAST(`custom_document_no` AS UNSIGNED)) "
-        "FROM `{table}` WHERE `{field}` LIKE %s".format(table=table, field=field),
+        "SELECT MAX(CAST(`{nf}` AS UNSIGNED)) "
+        "FROM `{table}` WHERE `{field}` LIKE %s".format(nf=number_field, table=table, field=field),
         (scope["pattern"],),
     )
     return int(row[0][0]) if row and row[0][0] is not None else 0
@@ -942,14 +953,16 @@ def _draw_next_document_no(doc, scope):
     return _series_current(key)
 
 
-def _is_manual_document_no(doc):
-    """True when custom_document_no was entered by the user and must be
-    preserved (only uniqueness-checked), not auto-drawn."""
-    if doc.meta.has_field("custom_document_no_manual"):
-        return bool(frappe.utils.cint(doc.get("custom_document_no_manual")))
-    # Flag field not deployed yet: we cannot tell a user value from a stale
-    # client preview, so treat any existing value as manual (never overwrite).
-    return bool(doc.get("custom_document_no"))
+def _is_manual_document_no(doc, field="custom_document_no"):
+    """True when the number field was entered by the user and must be preserved
+    (only uniqueness-checked), not auto-drawn. The manual flag follows the
+    convention <field>_manual (custom_document_no -> custom_document_no_manual)."""
+    flag = field + "_manual"
+    if doc.meta.has_field(flag):
+        return bool(frappe.utils.cint(doc.get(flag)))
+    # No flag field: we cannot tell a user value from a stale client preview,
+    # so treat any existing value as manual (never overwrite).
+    return bool(doc.get(field))
 
 
 def apply_document_no(doc):
@@ -967,13 +980,14 @@ def apply_document_no(doc):
         return
     if not doc.is_new():
         return
-    # Any doctype that carries custom_document_no can be auto-numbered — via a
-    # rule (auto_document_no) or the hardcoded fallback. Eligibility is decided
-    # inside _docno_scope; here we only skip doctypes without the field.
-    if not doc.meta.has_field("custom_document_no"):
+
+    # Which field holds the number — configurable per rule, default
+    # custom_document_no. Any doctype carrying that field can be auto-numbered.
+    field = _docno_field(_match_numbering_rule(doc))
+    if not doc.meta.has_field(field):
         return
 
-    if _is_manual_document_no(doc):
+    if _is_manual_document_no(doc, field):
         doc.flags._docno_assigned = True
         return
 
@@ -981,7 +995,7 @@ def apply_document_no(doc):
     # amended voucher stays tied to it (custom_name adds the -1/-2 suffix). A
     # plain Duplicate/Copy is NOT an amendment (no amended_from) and correctly
     # falls through to draw a fresh number.
-    if doc.get("amended_from") and doc.get("custom_document_no"):
+    if doc.get("amended_from") and doc.get(field):
         doc.flags._docno_assigned = True
         return
 
@@ -990,12 +1004,13 @@ def apply_document_no(doc):
         # Not eligible yet (missing code / company / fiscal year, or a type that
         # is simply not auto-numbered). Blank it for manual entry and do NOT set
         # the assigned flag, so a later hook retries once the scope is complete.
-        doc.custom_document_no = None
+        doc.set(field, None)
         return
 
-    doc.custom_document_no = _draw_next_document_no(doc, scope)
-    if doc.meta.has_field("custom_document_no_manual"):
-        doc.custom_document_no_manual = 0
+    doc.set(field, _draw_next_document_no(doc, scope))
+    flag = field + "_manual"
+    if doc.meta.has_field(flag):
+        doc.set(flag, 0)
     doc.flags._docno_assigned = True
 
 
@@ -1243,6 +1258,7 @@ def _build_numbering_rules(doctype):
         fields=[
             "name", "company", "branch", "target_field", "separator",
             "date_field", "legacy_upto", "legacy_source_field", "auto_document_no",
+            "document_no_field",
         ],
     )
     if not rules:
@@ -1586,6 +1602,7 @@ def _rule_dict_from_config(cfg):
         "legacy_upto": cfg.get("legacy_upto"),
         "legacy_source_field": cfg.get("legacy_source_field"),
         "auto_document_no": cfg.get("auto_document_no"),
+        "document_no_field": cfg.get("document_no_field"),
         "conditions": [
             {"field": c.field, "value": c.value}
             for c in (cfg.conditions or [])
@@ -1867,12 +1884,13 @@ def _revert_document_no_series(doc):
     last number in its scope, so the number is reused — mirroring the historical
     max+1 self-heal. Mid-series gaps are left alone. Manual numbers never
     consumed the counter, so they are skipped."""
-    if doc.doctype not in AUTO_NUMBER_CONFIG or not doc.meta.has_field("custom_document_no"):
+    field = _docno_field(_match_numbering_rule(doc))
+    if not doc.meta.has_field(field):
         return
     # Manual numbers and amendments never consumed the counter -> never revert.
-    if _is_manual_document_no(doc) or doc.get("amended_from"):
+    if _is_manual_document_no(doc, field) or doc.get("amended_from"):
         return
-    number = frappe.utils.cint(doc.get("custom_document_no"))
+    number = frappe.utils.cint(doc.get(field))
     if not number:
         return
     scope = _docno_scope(doc)

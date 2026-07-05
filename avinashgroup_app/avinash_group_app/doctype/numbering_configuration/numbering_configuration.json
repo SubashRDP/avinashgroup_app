@@ -11,6 +11,7 @@
   "branch",
   "enabled",
   "auto_document_no",
+  "document_no_field",
   "column_break_main",
   "company_abbr",
   "conditions_section",
@@ -72,10 +73,18 @@
   },
   {
    "default": "0",
-   "description": "When this rule matches a document, auto-fill its Document No. (custom_document_no). Leave off to only format the name/voucher number.",
+   "description": "When this rule matches a document, auto-fill its Document No. Leave off to only format the name/voucher number.",
    "fieldname": "auto_document_no",
    "fieldtype": "Check",
    "label": "Auto-fill Document No."
+  },
+  {
+   "default": "custom_document_no",
+   "depends_on": "auto_document_no",
+   "description": "The field the auto number is written into. Defaults to custom_document_no; pick a suggestion or type another field name if this doctype stores it differently.",
+   "fieldname": "document_no_field",
+   "fieldtype": "Autocomplete",
+   "label": "Document No. field"
   },
   {
    "fieldname": "column_break_main",

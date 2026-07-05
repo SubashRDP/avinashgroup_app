@@ -170,7 +170,7 @@ class TestDocumentNumbering(FrappeTestCase):
 
     def _temp_rule(self, *, extra_segments, conditions, doctype="Payment Entry",
                    target="custom_name", separator="-", auto_document_no=0,
-                   document_no_conditions=None):
+                   document_no_conditions=None, document_no_field=None):
         segments = list(extra_segments) + [
             {"segment_type": "Document Field", "field": "custom_document_no", "number_length": 6},
             {"segment_type": "Fiscal Year"},
@@ -179,6 +179,7 @@ class TestDocumentNumbering(FrappeTestCase):
             "doctype": "Numbering Configuration", "document_type": doctype,
             "enabled": 1, "target_field": target, "separator": separator,
             "auto_document_no": auto_document_no,
+            "document_no_field": document_no_field or "custom_document_no",
             "conditions": conditions,
             "document_no_conditions": document_no_conditions or [],
             "segments": segments,
@@ -212,7 +213,8 @@ class TestDocumentNumbering(FrappeTestCase):
         d = self._je()
         scope = ns._docno_scope(d)
         self.assertIsNotNone(scope)
-        self.assertEqual(set(scope), {"key", "pattern", "field"})
+        self.assertLessEqual({"key", "pattern", "field", "number_field"}, set(scope))
+        self.assertEqual(scope["number_field"], "custom_document_no")   # default
         # When no Numbering Configuration rule matches this JE, the scope is the
         # legacy company|code|year keyed on custom_name.
         if not ns._match_numbering_rule(d):
@@ -765,3 +767,24 @@ class TestDocumentNumbering(FrappeTestCase):
         # hardcoded auto type either -> no auto number, even though the rule still
         # builds this doc's name.
         self.assertIsNone(ns._docno_scope(self._pe_off(self.OFF_TYPE_2)))
+
+    def test_41_document_no_field_is_configurable(self):
+        # The auto number can be written into a field other than custom_document_no.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        alt = "custom_document_word"   # a real (non-default) field on Payment Entry
+        self._require(frappe.get_meta("Payment Entry").has_field(alt), "needs an alternate field")
+        tag = "FLD" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1,
+            document_no_field=alt,
+            extra_segments=self._tag_segments(tag),
+            conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "value": self.OFF_TYPE}],
+        )
+        d = self._pe_off(self.OFF_TYPE)
+        scope = ns._docno_scope(d)
+        self.assertIsNotNone(scope)
+        self.assertEqual(scope["number_field"], alt)     # scope points at the configured field
+        ns.apply_document_no(d)
+        self.assertTrue(frappe.utils.cint(d.get(alt)) > 0)   # number written to the alt field
+        self.assertFalse(d.get("custom_document_no"))        # NOT the default field

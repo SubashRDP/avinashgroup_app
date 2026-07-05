@@ -26,7 +26,20 @@ class NumberingConfiguration(Document):
 	def validate(self):
 		self.validate_segments()
 		self.validate_condition_fields()
+		self.validate_document_no_field()
 		self.validate_legacy_cutover()
+
+	def validate_document_no_field(self):
+		if not (self.auto_document_no and self.document_no_field and self.document_type):
+			return
+		if not frappe.get_meta(self.document_type).has_field(self.document_no_field):
+			frappe.msgprint(
+				_("Document No. field '{0}' does not exist on {1} — the number can't be stored. Pick an existing field.").format(
+					self.document_no_field, self.document_type
+				),
+				indicator="orange",
+				alert=True,
+			)
 
 	def validate_legacy_cutover(self):
 		if not self.legacy_upto:

@@ -187,6 +187,8 @@ function load_field_options(frm, reset_default) {
 			.sort();
 		frm.set_df_property("target_field", "options", ["", ...target_fields].join("\n"));
 		frm.set_df_property("legacy_source_field", "options", ["", ...target_fields].join("\n"));
+		// "Document No. field" -> any field (Int/Data usually) can hold the number.
+		frm.set_df_property("document_no_field", "options", ["", ...doc_fields].join("\n"));
 
 		if ((reset_default || !frm.doc.target_field) && target_fields.includes("custom_branch_name")) {
 			frm.set_value("target_field", "custom_branch_name");
