@@ -98,6 +98,18 @@ class TestDocumentNumbering(FrappeTestCase):
         rows = frappe.db.sql("SELECT `name`, `current` FROM `tabSeries` WHERE `name` LIKE %s", ("docno:%",))
         self._docno_snapshot = {n: c for n, c in rows}
         self.addCleanup(self._restore_docno_counters)
+        # Some tests set a Branch's abbreviation; snapshot and restore it so the
+        # suite never changes real branch data.
+        self._branch_abbr_snapshot = {
+            b: frappe.db.get_value("Branch", b, "custom_abbr") for b in self.branches
+        }
+        self.addCleanup(self._restore_branch_abbrs)
+
+    def _restore_branch_abbrs(self):
+        for b, abbr in self._branch_abbr_snapshot.items():
+            if frappe.db.get_value("Branch", b, "custom_abbr") != abbr:
+                frappe.db.set_value("Branch", b, "custom_abbr", abbr)
+        frappe.db.commit()
 
     def _restore_docno_counters(self):
         rows = frappe.db.sql("SELECT `name`, `current` FROM `tabSeries` WHERE `name` LIKE %s", ("docno:%",))
