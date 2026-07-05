@@ -22,7 +22,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
-    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
+    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.6",
     "/assets/avinashgroup_app/js/numbering_preview.js?v=1.0",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
 ]
