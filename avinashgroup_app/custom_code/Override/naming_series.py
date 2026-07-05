@@ -1187,17 +1187,75 @@ def _configured_doctypes():
     return frappe.local._numbering_doctypes_cache
 
 
+def _numbering_rules_key(doctype):
+    """Redis key holding the fully-assembled rules (with conditions + segments)
+    for a single doctype."""
+    return f"numbering_rules::{doctype}"
+
+
 def clear_numbering_rules_cache():
     """Called when a Numbering Configuration changes."""
     frappe.cache().delete_value("numbering_configured_doctypes")
+    # assembled-rules keys are per-doctype (numbering_rules::<doctype>)
+    frappe.cache().delete_keys("numbering_rules::")
     for attr in ("_numbering_doctypes_cache", "_numbering_rules_cache"):
         if hasattr(frappe.local, attr):
             delattr(frappe.local, attr)
 
 
+def _build_numbering_rules(doctype):
+    """Assemble a doctype's enabled rules with their conditions + segments in a
+    fixed 3 queries (1 rules + 2 batched child fetches), grouping the children
+    in Python by parent — instead of the old 2 queries PER rule (N+1).
+    Conditions and segments keep exact idx ordering."""
+    rules = frappe.get_all(
+        "Numbering Configuration",
+        filters={"document_type": doctype, "enabled": 1},
+        fields=[
+            "name", "company", "branch", "target_field", "separator",
+            "date_field", "legacy_upto", "legacy_source_field",
+        ],
+    )
+    if not rules:
+        return rules
+
+    rule_names = [r["name"] for r in rules]
+
+    conditions = frappe.get_all(
+        "Numbering Condition",
+        filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+        fields=["parent", "field", "value"],
+        order_by="idx",
+    )
+    segments = frappe.get_all(
+        "Numbering Segment",
+        filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+        fields=["parent", "segment_type", "static_value", "return_value", "field", "fetch_field", "number_length", "join_previous"],
+        order_by="idx",
+    )
+
+    # group children by parent, preserving idx order (rows arrive idx-ascending;
+    # grouping keeps each parent's relative order intact)
+    cond_by_parent = {}
+    for c in conditions:
+        cond_by_parent.setdefault(c.pop("parent"), []).append(c)
+    seg_by_parent = {}
+    for s in segments:
+        seg_by_parent.setdefault(s.pop("parent"), []).append(s)
+
+    for r in rules:
+        # rules with zero conditions/segments still get empty lists
+        r["conditions"] = cond_by_parent.get(r["name"], [])
+        r["segments"] = seg_by_parent.get(r["name"], [])
+
+    return rules
+
+
 def _numbering_rules_for(doctype):
     """All enabled Numbering Configuration rules for a doctype, with conditions + segments.
-    Results are cached per-request to avoid redundant DB calls when multiple documents are saved."""
+    Layered cache: per-request (frappe.local) on top of redis on top of a batched DB
+    build. Redis holds the fully-assembled rule dicts in the exact shape returned here,
+    so both saves and (separate-request) live previews avoid the N+1 rule fetch."""
     # Per-request cache: if rules have already been fetched, return the cached copy
     if not hasattr(frappe.local, "_numbering_rules_cache"):
         frappe.local._numbering_rules_cache = {}
@@ -1209,27 +1267,12 @@ def _numbering_rules_for(doctype):
         frappe.local._numbering_rules_cache[doctype] = []
         return []
 
-    rules = frappe.get_all(
-        "Numbering Configuration",
-        filters={"document_type": doctype, "enabled": 1},
-        fields=[
-            "name", "company", "branch", "target_field", "separator",
-            "date_field", "legacy_upto", "legacy_source_field",
-        ],
-    )
-    for r in rules:
-        r["conditions"] = frappe.get_all(
-            "Numbering Condition",
-            filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
-            fields=["field", "value"],
-            order_by="idx",
-        )
-        r["segments"] = frappe.get_all(
-            "Numbering Segment",
-            filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
-            fields=["segment_type", "static_value", "return_value", "field", "fetch_field", "number_length", "join_previous"],
-            order_by="idx",
-        )
+    # Redis layer: fully-assembled rules, built once per doctype and reused across
+    # requests (invalidated by clear_numbering_rules_cache on any rule change).
+    rules = frappe.cache().get_value(_numbering_rules_key(doctype))
+    if rules is None:
+        rules = _build_numbering_rules(doctype)
+        frappe.cache().set_value(_numbering_rules_key(doctype), rules)
 
     frappe.local._numbering_rules_cache[doctype] = rules
     return rules
