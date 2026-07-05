@@ -808,10 +808,16 @@ def _docno_eligible(doc, rule):
       2. Fallback: the hardcoded AUTO_NUMBER_CONFIG (type field in a fixed list),
          so day-one behaviour is unchanged for the doctypes shipped with it.
     """
+    # A matching Auto-fill rule is AUTHORITATIVE for the Document No.: the doc is
+    # numbered iff ALL of the rule's Document No. conditions match (empty list =
+    # number every doc the rule applies to). This lets the conditions both turn
+    # numbering ON for new types and RESTRICT it (e.g. only when a branch is set)
+    # — the fallback below is NOT consulted once such a rule applies.
     if rule and rule.get("auto_document_no"):
-        if all(_condition_matches(doc, c) for c in rule.get("document_no_conditions", [])):
-            return True
+        return all(_condition_matches(doc, c) for c in rule.get("document_no_conditions", []))
 
+    # No Auto-fill rule applies -> hardcoded fallback (day-one behaviour): the
+    # type field is in the shipped list.
     cfg = AUTO_NUMBER_CONFIG.get(doc.doctype)
     if not cfg:
         return False
