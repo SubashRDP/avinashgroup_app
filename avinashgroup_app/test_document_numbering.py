@@ -91,6 +91,23 @@ class TestDocumentNumbering(FrappeTestCase):
     def setUp(self):
         if not (self.company and self.abbr and self.fy):
             self.skipTest("needs a company with an abbreviation and a fiscal year")
+        # Tests draw on tabSeries counters; app hooks + our own cleanup commits
+        # would otherwise PERSIST those draws and pollute real counters. Snapshot
+        # every docno counter now and restore it after the test (delete any the
+        # test created, reset any it changed) so the suite is non-polluting.
+        rows = frappe.db.sql("SELECT `name`, `current` FROM `tabSeries` WHERE `name` LIKE %s", ("docno:%",))
+        self._docno_snapshot = {n: c for n, c in rows}
+        self.addCleanup(self._restore_docno_counters)
+
+    def _restore_docno_counters(self):
+        rows = frappe.db.sql("SELECT `name`, `current` FROM `tabSeries` WHERE `name` LIKE %s", ("docno:%",))
+        for name, cur in rows:
+            snap = self._docno_snapshot.get(name)
+            if snap is None:
+                frappe.db.sql("DELETE FROM `tabSeries` WHERE `name`=%s", name)
+            elif snap != cur:
+                frappe.db.sql("UPDATE `tabSeries` SET `current`=%s WHERE `name`=%s", (snap, name))
+        frappe.db.commit()
 
     # ---------------------------------------------------------------- helpers
     def _je(self, **kw):
@@ -606,8 +623,8 @@ class TestDocumentNumbering(FrappeTestCase):
         m = self._je(custom_document_no=big, custom_document_no_manual=1)
         self._balance(m).insert(ignore_permissions=True)
         a = self._je()
-        ns.apply_document_no(a)
-        self.assertGreater(a.custom_document_no, big)       # floor jumped past the manual value
+        # peek reflects what auto WOULD assign, without consuming the counter
+        self.assertGreater(ns.peek_next_document_no(a), big)  # floor jumped past the manual value
 
     def test_33_fiscal_years_are_separate_series(self):
         fys = frappe.get_all(
