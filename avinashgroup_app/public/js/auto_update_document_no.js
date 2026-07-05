@@ -36,11 +36,24 @@ function is_manual(frm) {
     return has_manual_flag(frm) && !!cint(frm.doc.custom_document_no_manual);
 }
 
+// A non-empty value that WE did not put there belongs to the user. cint() so
+// Data-typed custom_document_no ("5") and our numeric preview (5) compare equal.
+function user_owns_value(frm) {
+    const v = frm.doc.custom_document_no;
+    return !!v && cint(v) !== cint(frm._auto_docno_value);
+}
+
+// Do not auto-preview over a number the user controls — via the manual flag, or
+// (even when the flag field isn't deployed yet) via a value we didn't write.
+function auto_locked(frm) {
+    return is_manual(frm) || user_owns_value(frm);
+}
+
 function update_hint(frm, preview) {
     if (!frm.get_field || !frm.get_field("custom_document_no")) return;
     let msg = "";
     if (should_auto_number(frm)) {
-        if (is_manual(frm)) {
+        if (auto_locked(frm)) {
             msg = __("Manually entered. Clear the field to auto-number.");
         } else if (preview) {
             msg = __("Auto — assigned on save (preview: {0}).", [preview]);
@@ -61,20 +74,22 @@ function set_auto_value(frm, value) {
 }
 
 function fetch_preview(frm) {
-    if (!should_auto_number(frm) || is_manual(frm)) {
+    if (!should_auto_number(frm) || auto_locked(frm)) {
         update_hint(frm, frm.doc.custom_document_no);
         return;
     }
 
+    // Monotonic token so an older, slower response can't paint over a newer one.
+    const token = (frm._docno_req = (frm._docno_req || 0) + 1);
     frappe.call({
         method: "avinashgroup_app.custom_code.Override.naming_series.get_next_custom_document_no",
         args: { doc: frm.doc },
         callback: function(r) {
-            // Ignore stale responses: the user may have edited or the form may
-            // have moved on while this request was in flight.
-            if (!should_auto_number(frm) || is_manual(frm)) return;
+            if (token !== frm._docno_req) return;            // superseded
+            // The user may have taken over / the form moved on while in flight.
+            if (!should_auto_number(frm) || auto_locked(frm)) return;
             const next = r && r.message;
-            if (next && frm.doc.custom_document_no !== next) {
+            if (next && cint(frm.doc.custom_document_no) !== cint(next)) {
                 set_auto_value(frm, next);
             }
             update_hint(frm, next);
@@ -99,8 +114,9 @@ Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
         },
         custom_document_no: function(frm) {
             const v = frm.doc.custom_document_no;
-            // our own preview fill (value matches what set_auto_value stored)
-            if (v && v === frm._auto_docno_value) return;
+            // our own preview fill (value matches what set_auto_value stored);
+            // cint() so a Data-typed "5" equals our numeric 5.
+            if (v && cint(v) === cint(frm._auto_docno_value)) return;
             if (v) {
                 // a value we did not set -> user typed it -> it's now theirs
                 if (has_manual_flag(frm)) frm.set_value("custom_document_no_manual", 1);

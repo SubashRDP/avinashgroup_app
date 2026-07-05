@@ -1,3 +1,4 @@
+import fnmatch
 import json
 import re
 
@@ -842,15 +843,20 @@ def _docno_scope(doc):
 def _current_max_document_no(doc, scope):
     """Highest custom_document_no already used in this scope (0 if none).
     Matches the scope's pattern against its target field, so per-branch scopes
-    only ever see that branch's documents."""
-    return int(
-        frappe.db.get_value(
-            doc.doctype,
-            {scope["field"]: ["like", scope["pattern"]]},
-            "max(custom_document_no)",
-        )
-        or 0
+    only ever see that branch's documents.
+
+    CAST(... AS UNSIGNED) makes the max NUMERIC even where custom_document_no is
+    a Data column (Purchase Receipt) rather than Int — a plain MAX() on a varchar
+    compares lexicographically ("9" > "50"), which would compute a wrong floor
+    and let auto numbers eventually collide with a higher manual number."""
+    table = "tab" + doc.doctype.replace("`", "")
+    field = scope["field"].replace("`", "")
+    row = frappe.db.sql(
+        "SELECT MAX(CAST(`custom_document_no` AS UNSIGNED)) "
+        "FROM `{table}` WHERE `{field}` LIKE %s".format(table=table, field=field),
+        (scope["pattern"],),
     )
+    return int(row[0][0]) if row and row[0][0] is not None else 0
 
 
 def _docno_series_key(doc, scope):
@@ -979,6 +985,11 @@ def get_next_custom_document_no(doc=None, **kwargs):
         if isinstance(data, str):
             data = json.loads(data)
         if not isinstance(data, dict) or not data.get("doctype"):
+            return None
+        # Only expose the next number to users who can read the doctype (the
+        # sibling preview_document_number does the same) — the number leaks the
+        # scope's current count otherwise.
+        if not frappe.has_permission(data["doctype"], "read"):
             return None
         scalars = {k: v for k, v in data.items() if not isinstance(v, (list, dict))}
         return peek_next_document_no(frappe.get_doc(scalars))
@@ -1738,13 +1749,23 @@ def _revert_document_no_series(doc):
     consumed the counter, so they are skipped."""
     if doc.doctype not in AUTO_NUMBER_CONFIG or not doc.meta.has_field("custom_document_no"):
         return
-    if _is_manual_document_no(doc):
+    # Manual numbers and amendments never consumed the counter -> never revert.
+    if _is_manual_document_no(doc) or doc.get("amended_from"):
         return
     number = frappe.utils.cint(doc.get("custom_document_no"))
     if not number:
         return
     scope = _docno_scope(doc)
     if not scope:
+        return
+    # Only revert when the stored number still belongs to the CURRENT scope. If
+    # branch / company / date / type changed after the number was drawn, the
+    # recomputed scope points at a DIFFERENT series and must not be stepped back
+    # (that would gap this series and could wrongly decrement another). The
+    # stored target value was built with the scope at draw time, so it matches
+    # the current pattern only when the scope is unchanged.
+    stored = frappe.utils.cstr(doc.get(scope["field"]))
+    if not fnmatch.fnmatch(stored, scope["pattern"].replace("%", "*")):
         return
     _revert_series_if_last(_docno_series_key(doc, scope), number)
 

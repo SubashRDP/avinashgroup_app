@@ -46,14 +46,36 @@ class TestDocumentNumbering(FrappeTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = frappe.db.get_value("Company", {"abbr": ["is", "set"]}, "name")
-        cls.abbr = frappe.get_cached_value("Company", cls.company, "abbr") if cls.company else None
         fy = frappe.get_all(
             "Fiscal Year", fields=["name", "year_start_date"],
             order_by="year_start_date desc", limit=1,
         )
         cls.fy = fy[0].name if fy else None
         cls.pdate = fy[0].year_start_date if fy else None
+
+        # Pick, deterministically, the first company (with an abbreviation) whose
+        # legacy custom_name numbering actually yields a value -- this skips
+        # special-case companies that intentionally blank custom_name.
+        cls.company = cls.abbr = None
+        if cls.pdate:
+            for name in frappe.get_all(
+                "Company", filters={"abbr": ["is", "set"]}, order_by="name", pluck="name"
+            ):
+                probe = frappe.new_doc("Journal Entry")
+                probe.company = name
+                probe.posting_date = cls.pdate
+                probe.voucher_type = "Journal Entry"
+                probe.custom_p_type = JE_TYPE
+                probe.custom_document_no = 1
+                try:
+                    ns.set_custom_name_field(probe)
+                except Exception:
+                    continue
+                if probe.get("custom_name"):
+                    cls.company = name
+                    cls.abbr = frappe.get_cached_value("Company", name, "abbr")
+                    break
+
         cls.branches = frappe.get_all("Branch", pluck="name", limit=2)
         cls.accounts = (
             frappe.get_all(
@@ -97,6 +119,25 @@ class TestDocumentNumbering(FrappeTestCase):
                               "credit_in_account_currency": 100, "credit": 100})
         return d
 
+    # Real inserts commit (app hooks commit mid-save), so FrappeTestCase's
+    # rollback does NOT undo them. Every insert therefore registers an explicit
+    # cleanup so the suite is safe to re-run.
+    def _insert_je(self, **kw):
+        d = self._je(**kw)
+        self._balance(d).insert(ignore_permissions=True)
+        self.addCleanup(self._force_delete, "Journal Entry", d.name)
+        return d
+
+    def _force_delete(self, doctype, name):
+        if name and frappe.db.exists(doctype, name):
+            frappe.delete_doc(doctype, name, force=1, ignore_permissions=True)
+        frappe.db.commit()
+
+    def _cleanup_by_docno(self, docno):
+        for n in frappe.get_all("Journal Entry", filters={"custom_document_no": docno}, pluck="name"):
+            frappe.delete_doc("Journal Entry", n, force=1, ignore_permissions=True)
+        frappe.db.commit()
+
     def _temp_rule(self, *, extra_segments, conditions, doctype="Payment Entry",
                    target="custom_name", separator="-"):
         segments = list(extra_segments) + [
@@ -115,6 +156,7 @@ class TestDocumentNumbering(FrappeTestCase):
     def _drop_rule(self, name):
         if frappe.db.exists("Numbering Configuration", name):
             frappe.delete_doc("Numbering Configuration", name, force=1, ignore_permissions=True)
+        frappe.db.commit()
         ns.clear_numbering_rules_cache()
 
     def _draw_pe(self, branch):
@@ -298,7 +340,9 @@ class TestDocumentNumbering(FrappeTestCase):
     # ------------------------------------------- 15-17  real inserts (rolled back)
     def test_15_manual_duplicate_is_rejected_with_hint(self):
         self._require(len(self.accounts) >= 2, "needs two accounts")
-        big = 900001
+        # random high number + cleanup -> safe to re-run even if a run is killed
+        big = 800000 + int(frappe.generate_hash(length=6), 16) % 90000
+        self.addCleanup(self._cleanup_by_docno, big)
         a = self._je(custom_document_no=big, custom_document_no_manual=1)
         self._balance(a).insert(ignore_permissions=True)
         b = self._je(custom_document_no=big, custom_document_no_manual=1)
@@ -309,19 +353,18 @@ class TestDocumentNumbering(FrappeTestCase):
 
     def test_16_delete_reverts_last_number(self):
         self._require(len(self.accounts) >= 2, "needs two accounts")
-        d = self._je()
-        self._balance(d).insert(ignore_permissions=True)
+        d = self._insert_je()
         scope = ns._docno_scope(d)
         key = ns._docno_series_key(d, scope)
         before = ns._series_current(key)
         self.assertEqual(before, d.custom_document_no)  # counter holds our number
         d.delete()
+        frappe.db.commit()
         self.assertEqual(ns._series_current(key), before - 1)  # freed for reuse
 
     def test_17_end_to_end_je_insert(self):
         self._require(len(self.accounts) >= 2, "needs two accounts")
-        d = self._je()
-        self._balance(d).insert(ignore_permissions=True)
+        d = self._insert_je()
         self.assertIsNotNone(d.custom_document_no)
         self.assertGreater(d.custom_document_no, 0)
         self.assertTrue(d.custom_name.startswith(f"{self.abbr}-BJV-"))
@@ -382,3 +425,25 @@ class TestDocumentNumbering(FrappeTestCase):
             nums = by_tag.get(tag, [])
             self.assertTrue(all(isinstance(x, int) for x in nums), msg=str(nums))
             self.assertEqual(sorted(nums), list(range(1, per + 1)), msg=f"{tag}: {nums}")
+
+    # -------------------------------------------- 20  type safety (Data column)
+    def test_20_max_is_numeric_not_lexicographic(self):
+        # Regression: where custom_document_no is a Data (varchar) column, e.g.
+        # Purchase Receipt, MAX must be numeric ("9" < "50"), not string.
+        dt = "Purchase Receipt"
+        self._require(frappe.db.exists("DocType", dt), "Purchase Receipt not installed")
+        ftype = frappe.db.get_value(
+            "Custom Field", {"dt": dt, "fieldname": "custom_document_no"}, "fieldtype"
+        )
+        self._require(ftype == "Data", "custom_document_no is not a Data field here")
+        numeric = frappe.db.sql(
+            "SELECT MAX(CAST(`custom_document_no` AS UNSIGNED)), MAX(`custom_document_no`) "
+            "FROM `tab{0}` WHERE custom_document_no REGEXP '^[0-9]+$'".format(dt)
+        )
+        num_max, lex_max = (numeric[0] if numeric else (None, None))
+        self._require(num_max is not None, "no numeric custom_document_no data to compare")
+        scope = {"key": "x", "pattern": "%", "field": "custom_document_no"}
+        got = ns._current_max_document_no(frappe.new_doc(dt), scope)
+        self.assertEqual(got, int(num_max))                 # numeric max
+        if str(lex_max) != str(num_max):                    # data actually exposes the bug
+            self.assertNotEqual(str(got), str(lex_max))     # and we don't return it
