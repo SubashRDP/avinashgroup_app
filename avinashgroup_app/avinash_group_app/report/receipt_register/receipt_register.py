@@ -342,28 +342,19 @@ def _fmt_inr(v):
 # Per-page capacity in "line units" (after the repeated header band) and the chars that
 # fit on one wrapped line of a remark / wide cell. Conservative — better an under-filled
 # page than content spilling onto the next physical page.
-_PAGE_CAP = {"Portrait": 117.0, "Landscape": 72.0}
+_PAGE_CAP = {"Portrait": 67.0, "Landscape": 40.0}
 # Summary view packs one row per customer (no sub-lines), so it needs a lower budget.
 _PAGE_CAP_SUMMARY = {"Portrait": 69.0, "Landscape": 44.0}
 # Date Wise has its own budget so it can be tuned independently of Customer Wise.
-_PAGE_CAP_DATE_WISE = {"Portrait": 136.0, "Landscape": 73.0}
+_PAGE_CAP_DATE_WISE = {"Portrait": 74.0, "Landscape": 40.0}
 _CHARS_PER_LINE = 45
 
 
 def _row_line_units(row):
-	"""Estimate how many text lines a data row occupies (remarks/long cells wrap)."""
-	import math
-	if row.get("is_sub"):
-		# Remarks now render on a FULL-WIDTH line, so far more chars fit before wrapping.
-		text = " ".join(p for p in (row.get("voucher_no"), row.get("bank_account"), row.get("customer_name")) if p)
-		return max(1, math.ceil(len(text) / 130)) * 0.9
-	# primary / header / total row — long name/bank/combined cells can wrap to 2+ lines
-	height = 1.0
-	for f in ("customer_name", "bank_account", "cust_combined"):
-		v = row.get(f) or ""
-		if len(v) > _CHARS_PER_LINE:
-			height += math.ceil(len(v) / _CHARS_PER_LINE) - 1
-	return height
+	"""Flat count: every row counts as exactly 1 so pagination is a fixed rows-per-page
+	(the _PAGE_CAP numbers = rows per page), independent of remark/name text length. This
+	keeps the page count identical across sites for the same data."""
+	return 1.0
 
 
 def _paginate(data, orientation, view=None):
