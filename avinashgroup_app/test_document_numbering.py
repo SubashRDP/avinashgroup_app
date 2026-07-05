@@ -172,7 +172,9 @@ class TestDocumentNumbering(FrappeTestCase):
                    target="custom_name", separator="-", auto_document_no=0,
                    document_no_conditions=None, document_no_field=None):
         segments = list(extra_segments) + [
-            {"segment_type": "Document Field", "field": "custom_document_no", "number_length": 6},
+            # the name's number slot references the SAME field the number is
+            # written into, so the voucher name always contains the number
+            {"segment_type": "Document Field", "field": document_no_field or "custom_document_no", "number_length": 6},
             {"segment_type": "Fiscal Year"},
         ]
         rule = frappe.get_doc({
@@ -265,11 +267,15 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertIsNotNone(d.custom_document_no)
         self.assertNotEqual(d.custom_document_no, 321)
 
-    def test_09_ineligible_type_blanks_field(self):
+    def test_09_ineligible_type_not_numbered_but_value_preserved(self):
+        # An ineligible type gets no auto number. And a value that was set
+        # programmatically (no desk request) is PRESERVED — blanking only happens
+        # in the desk to clear a stale client preview, never on import/API.
         d = self._je(custom_p_type=JE_TYPE_OFF,
                      custom_document_no=7, custom_document_no_manual=0)
+        self.assertIsNone(ns._docno_scope(d))     # not eligible
         ns.apply_document_no(d)
-        self.assertIsNone(d.custom_document_no)
+        self.assertEqual(d.custom_document_no, 7)  # non-UI value kept (no data loss)
 
     # ------------------------------------------- 10-14  rule-driven scope
     def test_10_rule_gives_isolated_scope(self):
@@ -788,3 +794,132 @@ class TestDocumentNumbering(FrappeTestCase):
         ns.apply_document_no(d)
         self.assertTrue(frappe.utils.cint(d.get(alt)) > 0)   # number written to the alt field
         self.assertFalse(d.get("custom_document_no"))        # NOT the default field
+
+    # ============================================================
+    #  RANDOMISED FUZZ — many situations, core invariants each time
+    # ============================================================
+    def test_50_fuzz_random_situations(self):
+        """Deterministic-seed randomised coverage across branch/no-branch, each
+        operator, default vs custom number field, eligible vs not, auto vs
+        manual — asserting the invariants (gapless sequence, non-reserving peek,
+        manual kept, ineligible not numbered) on every iteration."""
+        import random
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.branches) >= 1, "needs a branch")
+        random.seed(20260706)
+        branch = self.branches[0]
+        frappe.db.set_value("Branch", branch, "custom_abbr", "fz")   # restored by cleanup
+        has_word = frappe.get_meta("Payment Entry").has_field("custom_document_word")
+
+        for i in range(50):
+            tag = "FZ%02d%s" % (i, frappe.generate_hash(length=4))
+            use_branch = random.random() < 0.5
+            field = "custom_document_word" if (has_word and random.random() < 0.35) else "custom_document_no"
+            op = random.choice(["Equals", "In", "Is Set"])
+            if op == "In":
+                dcond = [{"field": "custom_p_type", "operator": "In",
+                          "value": f"{self.OFF_TYPE} , {self.OFF_TYPE_2}"}]   # spaces on purpose
+                ptype = random.choice([self.OFF_TYPE, self.OFF_TYPE_2]); bad = "Customers/Suppliers Receipt"
+            elif op == "Is Set":
+                dcond = [{"field": "custom_p_type", "operator": "Is Set", "value": ""}]
+                ptype = self.OFF_TYPE; bad = ""     # empty type -> Is Set fails
+            else:
+                dcond = [{"field": "custom_p_type", "operator": "Equals", "value": self.OFF_TYPE}]
+                ptype = self.OFF_TYPE; bad = self.OFF_TYPE_2
+
+            segs = [{"segment_type": "Company Abbr"}, {"segment_type": "Static Text", "static_value": tag}]
+            if use_branch:
+                segs.append({"segment_type": "Branch Abbr"})
+            segs.append({"segment_type": "Fetch from Link", "field": "custom_p_type", "fetch_field": "data_hrcj"})
+            rule = self._temp_rule(auto_document_no=1, document_no_field=field,
+                                   extra_segments=segs, conditions=[], document_no_conditions=dcond)
+            ctx = f"iter {i} op={op} field={field} branch={use_branch}"
+            try:
+                def mk(pt):
+                    d = self._pe()
+                    d.custom_p_type = pt      # set directly ("" stays empty)
+                    if use_branch:
+                        d.custom_branch = branch
+                    return d
+
+                # (1) eligible: n fresh draws -> gapless 1..n in the configured field
+                n = random.randint(2, 4)
+                nums = [self._draw_into(mk(ptype), field) for _ in range(n)]
+                self.assertEqual(nums, list(range(1, n + 1)), msg=f"{ctx}: {nums}")
+                # (2) peek is non-reserving and predicts the next number
+                self.assertEqual(ns.peek_next_document_no(mk(ptype)), n + 1, msg=ctx)
+                # (3) a manually-set number is kept
+                dm = mk(ptype); dm.set(field, 987654)
+                if frappe.get_meta("Payment Entry").has_field(field + "_manual"):
+                    dm.set(field + "_manual", 1)
+                ns.apply_document_no(dm)
+                self.assertEqual(frappe.utils.cint(dm.get(field)), 987654, msg=f"manual not kept {ctx}")
+                # (4) a doc that fails the Document No. condition is not numbered
+                self.assertIsNone(ns._docno_scope(mk(bad)), msg=f"ineligible got scope {ctx}")
+            finally:
+                self._drop_rule(rule.name)   # keep exactly one rule live at a time
+
+    def _draw_into(self, doc, field):
+        ns.apply_document_no(doc)
+        return frappe.utils.cint(doc.get(field))
+
+    # ============================================================
+    #  CORE DOCTYPE — rule-driven numbering on a core Frappe doctype
+    # ============================================================
+    def test_51_core_doctype_todo(self):
+        """Prove the generalized numbering works on a CORE doctype (ToDo) — not
+        just the ERPNext transaction doctypes. Adds temp fields, a rule, inserts
+        ToDos, checks the number + name, then removes everything."""
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+        dt = "ToDo"
+        create_custom_fields({dt: [
+            {"fieldname": "custom_document_no", "label": "Doc No", "fieldtype": "Int", "insert_after": "description"},
+            {"fieldname": "custom_voucher_no", "label": "Voucher No", "fieldtype": "Data", "insert_after": "custom_document_no"},
+        ]}, ignore_validate=True)
+        self.addCleanup(self._drop_todo_fields)
+        frappe.clear_cache(doctype=dt)
+
+        tag = "TD" + frappe.generate_hash(length=5)
+        self._temp_rule(
+            doctype=dt, target="custom_voucher_no", auto_document_no=1,
+            document_no_field="custom_document_no",
+            extra_segments=[{"segment_type": "Static Text", "static_value": tag}],
+            conditions=[], document_no_conditions=[],
+        )
+        made = []
+        self.addCleanup(lambda: [self._force_delete(dt, n) for n in made])
+
+        def mk():
+            d = frappe.new_doc(dt)
+            d.description = "numbering demo " + frappe.generate_hash(length=4)
+            d.insert(ignore_permissions=True)
+            made.append(d.name)
+            return d
+
+        a, b = mk(), mk()
+        self.assertEqual(a.custom_document_no, 1)                 # core doctype auto-numbered
+        self.assertEqual(b.custom_document_no, 2)
+        self.assertTrue(a.custom_voucher_no.startswith(tag + "-"))   # name built from the rule
+        self.assertIn("000001", a.custom_voucher_no)             # padded number inside the name
+
+    def _drop_todo_fields(self):
+        for fn in ("custom_document_no", "custom_voucher_no"):
+            name = frappe.db.get_value("Custom Field", {"dt": "ToDo", "fieldname": fn})
+            if name:
+                frappe.delete_doc("Custom Field", name, force=1, ignore_permissions=True)
+        frappe.db.commit()
+        frappe.clear_cache(doctype="ToDo")
+
+    def test_52_is_set_treats_zero_as_unset(self):
+        # Regression: an unchecked Check / Int 0 is "not set" for the Is Set /
+        # Is Not Set operators (only "", "0", "0.0" and None count as unset).
+        cm = ns._condition_matches
+        d = frappe._dict({"flag0": 0, "flag1": 1, "empty": "", "txt": "x", "zerostr": "0"})
+        self.assertFalse(cm(d, {"field": "flag0", "operator": "Is Set", "value": ""}))
+        self.assertTrue(cm(d, {"field": "flag0", "operator": "Is Not Set", "value": ""}))
+        self.assertFalse(cm(d, {"field": "zerostr", "operator": "Is Set", "value": ""}))
+        self.assertFalse(cm(d, {"field": "missing", "operator": "Is Set", "value": ""}))
+        self.assertTrue(cm(d, {"field": "flag1", "operator": "Is Set", "value": ""}))
+        self.assertTrue(cm(d, {"field": "txt", "operator": "Is Set", "value": ""}))
+        self.assertFalse(cm(d, {"field": "empty", "operator": "Is Set", "value": ""}))

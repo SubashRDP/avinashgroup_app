@@ -736,18 +736,6 @@ def _resolve_docno_fiscal_year(doc):
     return get_fiscal_year_from_date(date_field) if date_field else None
 
 
-def _is_docno_position_segment(seg):
-    """A segment that represents the number itself (not part of the series
-    scope): a real Number segment, or the Document Field carrying
-    custom_document_no / custom_document_word."""
-    if seg.get("segment_type") == "Number":
-        return True
-    return seg.get("segment_type") == "Document Field" and seg.get("field") in (
-        "custom_document_no",
-        "custom_document_word",
-    )
-
-
 def _rule_docno_scope(doc, rule):
     """Derive the Document No. series scope from a matching Numbering
     Configuration rule, so the number counts exactly the way the rule groups
@@ -763,20 +751,34 @@ def _rule_docno_scope(doc, rule):
                   max (continues an existing series and stays above any
                   manually-typed number), per branch too.
 
+    The number position is a Number segment OR the Document Field referencing the
+    rule's configured document_no_field — so a rule that stores the number in a
+    non-default field is still recognised (and isn't mistaken for a scope part).
+
     Returns None when the rule has no number position (a pass-through rule),
     so the caller falls back to the legacy company+code+year scope."""
+    number_field = _docno_field(rule)
     sep = rule.get("separator") or "/"
     parts = []  # (value_or_wildcard, glue, is_number)
     number_seen = False
     for seg in rule.get("segments", []):
         glue = bool(seg.get("join_previous"))
-        if _is_docno_position_segment(seg):
-            # The word is the glued tail of the number and is covered by the same
-            # wildcard, so only the number/custom_document_no adds a placeholder.
-            if seg.get("segment_type") == "Number" or seg.get("field") == "custom_document_no":
-                if not number_seen:
-                    parts.append(("%", glue, True))
-                    number_seen = True
+        stype = seg.get("segment_type")
+        fld = seg.get("field")
+        is_number = stype == "Number" or (stype == "Document Field" and fld == number_field)
+        # custom_document_word is the glued letter tail of the number (e.g. 7A) —
+        # covered by the number's wildcard — UNLESS it IS the number field itself.
+        is_word_tail = (
+            stype == "Document Field"
+            and fld == "custom_document_word"
+            and number_field != "custom_document_word"
+        )
+        if is_number:
+            if not number_seen:
+                parts.append(("%", glue, True))
+                number_seen = True
+            continue
+        if is_word_tail:
             continue
         value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep))
         parts.append((value, glue, False))
@@ -793,7 +795,12 @@ def _rule_docno_scope(doc, rule):
 
     pattern = _join_parts([(v, g) for (v, g, _n) in parts], sep)
     key = _join_parts([(v, g) for (v, g, n) in parts if not n], sep) or ""
-    return {"key": key, "pattern": pattern, "field": target}
+    # Isolate counters per number field when it's non-default, so two rules that
+    # share a prefix but write DIFFERENT fields never share one counter. The
+    # default field appends nothing, preserving existing series continuity.
+    if number_field != "custom_document_no":
+        key = (key + "|" + number_field) if key else number_field
+    return {"key": key, "pattern": pattern, "field": target, "number_field": number_field}
 
 
 def _docno_field(rule):
@@ -868,8 +875,11 @@ def _docno_scope(doc):
     # Legacy fallback scope needs the company + code + fiscal-year triple.
     if not (code and company_abbr and fiscal_year):
         return None
+    key = "|".join((company_abbr, code, fiscal_year))
+    if number_field != "custom_document_no":
+        key += "|" + number_field
     return {
-        "key": "|".join((company_abbr, code, fiscal_year)),
+        "key": key,
         "pattern": f"{company_abbr}-{code}-%-{fiscal_year}%",
         "field": "custom_name",
         "number_field": number_field,
@@ -1002,9 +1012,14 @@ def apply_document_no(doc):
     scope = _docno_scope(doc)
     if not scope:
         # Not eligible yet (missing code / company / fiscal year, or a type that
-        # is simply not auto-numbered). Blank it for manual entry and do NOT set
-        # the assigned flag, so a later hook retries once the scope is complete.
-        doc.set(field, None)
+        # is simply not auto-numbered). In the DESK, clear a stale client preview
+        # so the field falls back to manual entry — but NEVER blank a value that
+        # arrived by import/API (there's no client preview there; blanking would
+        # be silent data loss). Do NOT set the assigned flag, so a later hook
+        # retries once the scope is complete.
+        from_ui = bool(getattr(frappe.local, "request", None)) and not frappe.flags.in_import
+        if from_ui:
+            doc.set(field, None)
         return
 
     doc.set(field, _draw_next_document_no(doc, scope))
@@ -1354,10 +1369,11 @@ def _condition_matches(doc, cond):
     op = (cond.get("operator") or "Equals").strip()
     field_value = frappe.utils.cstr(doc.get(cond.get("field")))
 
-    if op == "Is Set":
-        return field_value.strip() != ""
-    if op == "Is Not Set":
-        return field_value.strip() == ""
+    if op in ("Is Set", "Is Not Set"):
+        # A blank, "0", or 0.0 is "not set" — covers Check/Int gate fields where
+        # 0/unchecked is semantically empty, as well as truly-empty text/links.
+        is_set = field_value.strip() not in ("", "0", "0.0")
+        return is_set if op == "Is Set" else not is_set
 
     if op in ("In", "Not In"):
         items = [v.strip() for v in frappe.utils.cstr(cond.get("value")).split(",") if v.strip()]
