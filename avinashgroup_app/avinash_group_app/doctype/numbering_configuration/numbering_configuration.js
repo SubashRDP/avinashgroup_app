@@ -46,6 +46,11 @@ frappe.ui.form.on("Numbering Condition", {
 		set_smart_value_options(frm, cdt, cdn);
 		render_preview(frm);
 	},
+	operator(frm, cdt, cdn) {
+		// In / Not In need a free-text list; Is Set / Is Not Set need no value.
+		set_smart_value_options(frm, cdt, cdn);
+		render_preview(frm);
+	},
 	value(frm) { render_preview(frm); },
 });
 
@@ -183,9 +188,22 @@ function set_smart_value_options(frm, cdt, cdn) {
 	const row = locals[cdt][cdn];
 	if (!row.field || !frm.doc.document_type) return;
 
+	const grid = frm.fields_dict.conditions.grid;
+	const op = row.operator || "Equals";
+
+	// In / Not In take a comma-separated LIST, so the value must stay free text —
+	// a single-pick dropdown can't express a list. Is Set / Is Not Set need no
+	// value at all (the field is hidden). Only Equals / Not Equals get the
+	// convenience dropdown of the referenced field's own options.
+	if (op === "In" || op === "Not In" || op === "Is Set" || op === "Is Not Set") {
+		grid.update_docfield_property("value", "fieldtype", "Data");
+		grid.update_docfield_property("value", "options", "");
+		grid.refresh();
+		return;
+	}
+
 	frappe.model.with_doctype(frm.doc.document_type, () => {
 		const df = frappe.meta.get_docfield(frm.doc.document_type, row.field);
-		const grid = frm.fields_dict.conditions.grid;
 		let value_df = { fieldtype: "Data", options: "" };
 
 		if (df && df.fieldtype === "Check") {

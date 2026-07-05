@@ -11,7 +11,7 @@
  ],
  "fields": [
   {
-   "columns": 4,
+   "columns": 3,
    "description": "Field on the document to check (picked from the Document Type).",
    "fieldname": "field",
    "fieldtype": "Select",
@@ -30,7 +30,7 @@
    "options": "Equals\nNot Equals\nIn\nNot In\nIs Set\nIs Not Set"
   },
   {
-   "columns": 4,
+   "columns": 3,
    "depends_on": "eval:!['Is Set','Is Not Set'].includes(doc.operator)",
    "mandatory_depends_on": "eval:!['Is Set','Is Not Set'].includes(doc.operator)",
    "description": "Value to compare. For In / Not In use a comma-separated list, e.g. Bank Entry, Party Journal.",
