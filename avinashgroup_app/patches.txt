@@ -22,3 +22,4 @@ avinashgroup_app.patches.add_gl_entry_fin_stmt_agg_index
 avinashgroup_app.patches.add_company_to_employee_checkin
 avinashgroup_app.patches.company_scoped_attendance_device_id
 avinashgroup_app.patches.add_company_to_shift_type
+avinashgroup_app.patches.add_sales_invoice_print_count

@@ -21,6 +21,10 @@ frappe.ui.form.on("Sales Invoice", {
         if (frm.is_new()) {
             set_due_date_from_customer(frm);
         }
+        setup_print_count_watch(frm);
+        if (frm.__sync_print_count) {
+            frm.__sync_print_count();   // reconcile when returning to the form
+        }
     },
 
     before_save: function(frm) {
@@ -63,6 +67,45 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
 });
+
+// Printing an invoice bumps custom_print_count server-side, but that happens
+// in a separate print/PDF window — the open form never hears about it. When the
+// user switches back to the invoice tab, re-read just that one field so the
+// count (and IRD copy title logic) reflects the print that just happened.
+function setup_print_count_watch(frm) {
+    if (frm.__print_count_watch) {
+        return;                       // listeners are added once per form object
+    }
+    frm.__print_count_watch = true;
+
+    const sync = frappe.utils.debounce(function() {
+        const cur = frm.doc;
+        if (!cur || cur.__islocal || frm.is_dirty()) {
+            return;                   // don't touch new or unsaved-edited forms
+        }
+        const name = cur.name;
+        frappe.db.get_value("Sales Invoice", name, "custom_print_count").then(function(r) {
+            const v = r && r.message ? r.message.custom_print_count : undefined;
+            // ignore if the user navigated to another doc while the call was in flight
+            if (v === undefined || !frm.doc || frm.doc.name !== name) {
+                return;
+            }
+            if (cint(v) !== cint(frm.doc.custom_print_count)) {
+                frm.doc.custom_print_count = cint(v);
+                frm.refresh_field("custom_print_count");
+            }
+        });
+    }, 300);
+
+    frm.__sync_print_count = sync;    // let refresh re-run it on return to the form
+
+    document.addEventListener("visibilitychange", function() {
+        if (document.visibilityState === "visible") {
+            sync();
+        }
+    });
+    window.addEventListener("focus", sync);
+}
 
 frappe.ui.form.on("Sales Invoice Item", {
     item_code: function(frm, cdt, cdn) {

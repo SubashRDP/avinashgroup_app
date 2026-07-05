@@ -13,7 +13,7 @@ page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 app_include_js = [
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=10.5",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=10.6",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.0",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.1",
@@ -73,7 +73,9 @@ supplier_quotation_events = {
 sales_invoice_specific_events = {
     "before_validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_validate_salesinvoice",
     "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
-    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice",
+    # IRD copy labeling: count real prints (Tax Invoice / Copy of Original / Copy of Original 2 ...)
+    "before_print": "avinashgroup_app.custom_code.SalesInvoice.print_count.before_print",
 }
 
 cbms_sales_invoice_events = {
