@@ -107,9 +107,14 @@ rfq_events = {
     "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_request_for_quotation"
 }
 
+# All three run on `validate`, NOT `before_save`: auto attendance creates
+# Attendance already submitted (insert with docstatus=1), and Frappe runs
+# `before_submit` instead of `before_save` on that path — before_save hooks
+# would silently never fire for device-marked attendance. `validate` runs on
+# both save and submit-on-create.
 attendance_events = {
-    "validate": "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
-    "before_save": [
+    "validate": [
+        "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
         "avinashgroup_app.biometric.attendance_override.set_shift_deviation_fields",
         "avinashgroup_app.biometric.attendance_override.enforce_late_arrival_half_day",
     ],

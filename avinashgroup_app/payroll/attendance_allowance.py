@@ -221,12 +221,12 @@ def set_holiday_flag(doc, _method=None):
 		if emp.company else None
 	)
 
-	doc.custom_worked_on_holiday = int(
+	doc.custom_worked_on_holiday = 1 if (
 		holiday_list and frappe.db.exists("Holiday", {
 			"parent": holiday_list,
 			"holiday_date": doc.attendance_date,
 		})
-	)
+	) else 0
 
 
 @frappe.whitelist()

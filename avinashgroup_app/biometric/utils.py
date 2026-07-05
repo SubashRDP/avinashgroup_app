@@ -232,6 +232,7 @@ def _reconcile_day_checkins(employee, punch_date, new_timestamps, device_identif
             checkin = frappe.new_doc("Employee Checkin")
             checkin.employee = employee.name
             checkin.employee_name = employee.employee_name
+            checkin.custom_company = employee.company
             checkin.time = ts
             checkin.log_type = desired_log_type
             checkin.skip_auto_attendance = 0

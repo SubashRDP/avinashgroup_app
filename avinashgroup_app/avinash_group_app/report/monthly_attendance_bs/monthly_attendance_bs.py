@@ -200,7 +200,7 @@ def _get_employees(filters, ad_start, ad_end):
 			"holiday_list", "default_shift",
 			"date_of_joining", "relieving_date",
 		],
-		order_by="Employee.employee_name asc",
+		order_by="employee_name asc",
 	)
 
 
