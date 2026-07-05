@@ -24,6 +24,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
+    "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -52,7 +53,10 @@ purchase_invoice_specific_events = {
     "on_submit": "avinashgroup_app.custom_code.stock_revaluation.on_purchase_invoice_submit",
     "before_validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_validate_purchase_invoice",
     "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
-    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice"
+    "validate": [
+        "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice",
+        "avinashgroup_app.custom_code.vehicle_mandatory.validate_purchase_invoice",
+    ],
 }
 
 purchase_order_events = {
@@ -107,6 +111,10 @@ material_request_events = {
 
 rfq_events = {
     "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_request_for_quotation"
+}
+
+journal_entry_events = {
+    "validate": "avinashgroup_app.custom_code.vehicle_mandatory.validate_journal_entry",
 }
 
 # All three run on `validate`, NOT `before_save`: auto attendance creates
@@ -176,6 +184,9 @@ for _event, _handler in material_request_events.items():
 
 for _event, _handler in rfq_events.items():
     _add_doc_event("Request for Quotation", _event, _handler)
+
+for _event, _handler in journal_entry_events.items():
+    _add_doc_event("Journal Entry", _event, _handler)
 
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
