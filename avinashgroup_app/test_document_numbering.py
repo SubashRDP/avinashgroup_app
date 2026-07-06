@@ -1077,6 +1077,47 @@ class TestDocumentNumbering(FrappeTestCase):
         ns.apply_document_no(nxt)
         self.assertEqual(nxt.custom_document_no, 501)              # continues past 500
 
+    def test_57_draft_scope_change_redraws_number(self):
+        # A saved DRAFT edited onto a different series must not keep the old
+        # series' number: the old one is given back (if last) and a fresh one
+        # is drawn from the new series. Manual numbers are never touched.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.branches) >= 2, "needs two branches")
+        b1, b2 = self.branches
+        frappe.db.set_value("Branch", b1, "custom_abbr", "t1")
+        frappe.db.set_value("Branch", b2, "custom_abbr", "t2")
+        tag = "SC" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1,
+            extra_segments=self._tag_segments(tag) + [{"segment_type": "Branch Abbr"}],
+            conditions=[{"field": "custom_p_type", "value": PE_TYPE}],
+        )
+        d = self._pe(custom_branch=b1)
+        ns.apply_document_no(d)
+        self.assertEqual(d.custom_document_no, 1)
+        old_scope = ns._docno_scope(d)
+
+        # simulate the SAVED draft being edited: branch b1 -> b2
+        before = self._pe(custom_branch=b1, custom_document_no=d.custom_document_no)
+        d.name = "SIM-DRAFT-0001"; d.set("__islocal", 0)   # looks saved now
+        d.custom_branch = b2
+        d.flags.pop("_docno_assigned", None)
+        d._doc_before_save = before
+        ns._redraw_docno_if_scope_changed(d)
+        self.assertEqual(d.custom_document_no, 1)   # b2's own series starts at 1
+        self.assertNotEqual(ns._docno_scope(d)["key"], old_scope["key"])
+        # the b1 number was reverted (it was the last drawn)
+        self.assertEqual(ns._series_current(ns._docno_series_key(before, old_scope)), 0)
+
+        # manual numbers are never redrawn
+        m = self._pe(custom_branch=b1, custom_document_no=42, custom_document_no_manual=1)
+        mb = self._pe(custom_branch=b1, custom_document_no=42, custom_document_no_manual=1)
+        m.name = "SIM-DRAFT-0002"; m.set("__islocal", 0)
+        m.custom_branch = b2
+        m._doc_before_save = mb
+        ns._redraw_docno_if_scope_changed(m)
+        self.assertEqual(m.custom_document_no, 42)
+
     # ================================================================
     #  SPECIFICATION MATRIX — one comprehensive, deterministic spec per
     #  doctype: every operator x scope x field x mode x match/no-match,

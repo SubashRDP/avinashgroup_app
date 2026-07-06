@@ -100,6 +100,12 @@ function fetch_preview(frm) {
             const next = r && r.message;
             if (next && cint(frm.doc.custom_document_no) !== cint(next)) {
                 set_auto_value(frm, next);
+            } else if (!next && frm.doc.custom_document_no) {
+                // the rule no longer numbers this doc (a field change broke a
+                // condition): clear OUR stale preview instead of leaving the
+                // old number stuck on screen. (auto_locked above guarantees
+                // the value is ours, not the user's.)
+                set_auto_value(frm, null);
             }
             update_hint(frm, next);
         }
@@ -200,6 +206,16 @@ Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
             if (frm.is_new()) {
                 subscribe_docno_events(frm);
                 bind_rule_watch_fields(frm);
+                // A DUPLICATED draft carries the source's number with the
+                // manual flag cleared (the flag is no_copy) — that number
+                // belongs to the ORIGINAL. Blank it so preview and save
+                // treat this doc fresh (the server redraws it anyway; the
+                // screen must not show the copied number as if it were
+                // this doc's). Amendments legitimately keep their number.
+                if (frm.doc.custom_document_no && !frm.doc.amended_from
+                    && has_manual_flag(frm) && !cint(frm.doc.custom_document_no_manual)) {
+                    set_auto_value(frm, null);
+                }
                 schedule_preview(frm);
             }
         },

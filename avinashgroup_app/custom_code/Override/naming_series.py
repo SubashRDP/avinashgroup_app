@@ -1076,6 +1076,45 @@ def _document_no_taken(doc, scope, value, for_update=False):
     return row[0][0] if row else None
 
 
+def _redraw_docno_if_scope_changed(doc):
+    """A saved DRAFT edited onto a different series must not keep a number
+    from the old one (e.g. branch an -> kt with per-branch counting: keeping
+    an's 5 would corrupt kt's sequence and desync an's). Give the old number
+    back to its series (only if it was the last drawn — same rule as delete)
+    and draw fresh from the new series. Manual numbers and amendments belong
+    to the user and are never touched. Submitted documents are immutable."""
+    if doc.get("docstatus") != 0 or doc.get("amended_from"):
+        return
+    rule = _match_numbering_rule(doc)
+    field = _docno_field(rule)
+    field_df = doc.meta.get_field(field)
+    if not field_df or field_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+        return
+    if not doc.get(field) or _is_manual_document_no(doc, field):
+        return
+    before = doc.get_doc_before_save()
+    if not before:
+        return
+    new_scope = _docno_scope(doc)
+    if not new_scope:
+        # the edit made the doc ineligible — leave the number (the field is
+        # mandatory on the audited doctypes; the user can overtype it)
+        return
+    try:
+        old_scope = _docno_scope(before)
+    except Exception:
+        old_scope = None
+    if old_scope and old_scope["key"] == new_scope["key"]:
+        return  # same series — number stays
+    if old_scope:
+        _revert_series_if_last(
+            _docno_series_key(before, old_scope), frappe.utils.cint(doc.get(field))
+        )
+    doc.set(field, _draw_next_document_no(doc, new_scope))
+    _notify_docno_drawn(doc, new_scope)
+    doc.flags._docno_assigned = True
+
+
 def _duplicate_action(rule):
     """Per-rule policy when a manually-typed number is already used:
     'Throw Error' (default — the save is rejected with a next-number hint) or
@@ -1120,6 +1159,10 @@ def apply_document_no(doc):
     if doc.flags.get("_docno_assigned"):
         return
     if not doc.is_new():
+        # An existing DRAFT's number must follow its scope: editing branch /
+        # company / type / date onto a different series redraws the number
+        # (mirror of _renumber_if_scope_changed for the name).
+        _redraw_docno_if_scope_changed(doc)
         return
 
     # Which field holds the number — configurable per rule, default
@@ -2233,8 +2276,9 @@ def handle_validate(doc, method=None):
     # engine numbering (set_custom_branch_name) is NOT called here: the
     # wildcard doc_events run apply_engine_numbering for EVERY doctype right
     # after these doctype-specific handlers — same order, single execution.
-    if doc.is_new():
-        apply_document_no(doc)
+    # apply_document_no handles both lifecycles: draw for new docs, redraw
+    # for saved drafts whose series scope changed.
+    apply_document_no(doc)
     set_custom_name_field(doc)
     validate_document_no(doc)
     validate_custom_name_unique(doc)
@@ -2247,8 +2291,7 @@ def handle_before_save(doc, method=None):
     apply_document_no is idempotent within a save, so the assignment (and its
     per-scope lock) happens exactly once even though this runs after validate.
     """
-    if doc.is_new():
-        apply_document_no(doc)
+    apply_document_no(doc)
     set_custom_name_field(doc)
     validate_document_no(doc)
     validate_custom_name_unique(doc)
@@ -2265,8 +2308,8 @@ def apply_engine_numbering(doc, method=None):
     # audited doctypes where handle_validate already ran it), then build the
     # name from it. This wildcard makes rule-driven auto-numbering work for ANY
     # doctype that carries custom_document_no, not just the audited ones.
-    if doc.is_new():
-        apply_document_no(doc)
+    # Non-new drafts get the scope-change redraw inside apply_document_no.
+    apply_document_no(doc)
     set_custom_branch_name(doc)
 
 
