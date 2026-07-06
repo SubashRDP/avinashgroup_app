@@ -1,0 +1,207 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-07-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "intro_html",
+  "document_type",
+  "company",
+  "branch",
+  "enabled",
+  "column_break_main",
+  "company_abbr",
+  "conditions_section",
+  "conditions",
+  "legacy_section",
+  "legacy_upto",
+  "date_field",
+  "column_break_legacy",
+  "legacy_source_field",
+  "segments_section",
+  "segments",
+  "output_section",
+  "target_field",
+  "separator",
+  "preview_section",
+  "preview"
+ ],
+ "fields": [
+  {
+   "fieldname": "intro_html",
+   "fieldtype": "HTML",
+   "options": "<div class='text-muted' style='padding:6px 0'>Build a document number from the <b>Segments</b> below (drag to reorder). Watch the <b>Live Preview</b> update as you go. When several rules match a document, the most specific one wins (Company + Branch + each condition add specificity).</div>"
+  },
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Document Type",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "description": "Optional — leave blank to apply to every company.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "description": "Optional — leave blank to apply to every branch.",
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Branch",
+   "options": "Branch"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "company.abbr",
+   "fieldname": "company_abbr",
+   "fieldtype": "Data",
+   "label": "Company Abbr",
+   "read_only": 1
+  },
+  {
+   "description": "This rule applies only when ALL conditions match the document. Pick a field, then choose/type the value it must equal. Leave empty for a default/base rule.",
+   "fieldname": "conditions_section",
+   "fieldtype": "Section Break",
+   "label": "Apply only when … (conditions)"
+  },
+  {
+   "fieldname": "conditions",
+   "fieldtype": "Table",
+   "label": "Conditions",
+   "options": "Numbering Condition"
+  },
+  {
+   "depends_on": "legacy_upto",
+   "description": "Which date on the document to compare against the cut-over. Leave blank to use Posting/Transaction Date automatically.",
+   "fieldname": "date_field",
+   "fieldtype": "Select",
+   "label": "Date Field"
+  },
+  {
+   "collapsible": 1,
+   "description": "Optional cut-over in ONE rule: documents dated up to the date below COPY their number from the chosen field (the old ERP number); documents after it get a generated number from the Segments. Leave blank if there is no legacy data.",
+   "fieldname": "legacy_section",
+   "fieldtype": "Section Break",
+   "label": "Legacy numbers (before cut-over)"
+  },
+  {
+   "description": "Up to and including this date, copy the number from the Legacy Source Field instead of generating one.",
+   "fieldname": "legacy_upto",
+   "fieldtype": "Date",
+   "label": "Copy Legacy Number Upto"
+  },
+  {
+   "fieldname": "column_break_legacy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "legacy_upto",
+   "description": "Field on the document that holds the old ERP number (e.g. custom_narration or remarks).",
+   "fieldname": "legacy_source_field",
+   "fieldtype": "Select",
+   "label": "Legacy Source Field",
+   "mandatory_depends_on": "legacy_upto"
+  },
+  {
+   "description": "The number is built by joining these segments (in order) with the separator. Empty segments are skipped. Include exactly one Number segment.",
+   "fieldname": "segments_section",
+   "fieldtype": "Section Break",
+   "label": "Number Segments"
+  },
+  {
+   "fieldname": "segments",
+   "fieldtype": "Table",
+   "label": "Segments",
+   "options": "Numbering Segment",
+   "reqd": 1
+  },
+  {
+   "fieldname": "output_section",
+   "fieldtype": "Section Break",
+   "label": "Output"
+  },
+  {
+   "default": "custom_branch_name",
+   "description": "Where the generated number is stored on the document.",
+   "fieldname": "target_field",
+   "fieldtype": "Select",
+   "label": "Store Number In",
+   "reqd": 1
+  },
+  {
+   "default": "/",
+   "description": "Character between segments, e.g. / or -",
+   "fieldname": "separator",
+   "fieldtype": "Data",
+   "label": "Separator",
+   "reqd": 1
+  },
+  {
+   "fieldname": "preview_section",
+   "fieldtype": "Section Break",
+   "label": "Live Preview"
+  },
+  {
+   "fieldname": "preview",
+   "fieldtype": "HTML"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-07-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Numbering Configuration",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

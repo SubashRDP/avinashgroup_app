@@ -19,3 +19,4 @@ avinashgroup_app.patches.enable_track_changes_audited_doctypes
 avinashgroup_app.patches.add_creation_index_daily_entry
 avinashgroup_app.patches.create_cbms_custom_fields
 avinashgroup_app.patches.add_gl_entry_fin_stmt_agg_index
+avinashgroup_app.patches.add_document_no_manual_flag

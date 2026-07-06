@@ -22,7 +22,8 @@ app_include_js = [
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
-    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.2",
+    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.6",
+    "/assets/avinashgroup_app/js/numbering_preview.js?v=1.0",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
 ]
 
@@ -205,6 +206,14 @@ has_permission = {
     _dt: "avinashgroup_app.custom_code.fiscal_year_filter.has_fiscal_year_permission"
     for _dt in FILTERED_DOCTYPES
 }
+
+# Numbering Configuration engine: rule-driven numbering for EVERY doctype.
+# Wildcard handlers run after the doctype-specific ones, preserving the old
+# order (voucher logic first, engine last). Doctypes without enabled rules
+# exit through a redis-cached gate at ~zero cost.
+_add_doc_event("*", "validate", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
+_add_doc_event("*", "before_save", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
+_add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.naming_series.revert_engine_series_on_delete")
 
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")

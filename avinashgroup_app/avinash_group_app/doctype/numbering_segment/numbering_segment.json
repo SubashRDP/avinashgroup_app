@@ -1,0 +1,93 @@
+{
+ "actions": [],
+ "creation": "2026-07-01 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "segment_type",
+  "static_value",
+  "return_value",
+  "field",
+  "fetch_field",
+  "number_length",
+  "join_previous"
+ ],
+ "fields": [
+  {
+   "columns": 2,
+   "description": "What this part of the number is.",
+   "fieldname": "segment_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Segment Type",
+   "options": "Static Text\nNormal / Return Code\nDocument Field\nFetch from Link\nCompany Abbr\nBranch Abbr\nFiscal Year\nNumber",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "depends_on": "eval:['Static Text','Normal / Return Code'].includes(doc.segment_type)",
+   "description": "Fixed text, e.g. INV, SI. For Normal / Return Code this is the NORMAL code.",
+   "fieldname": "static_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Text"
+  },
+  {
+   "columns": 2,
+   "depends_on": "eval:doc.segment_type=='Normal / Return Code'",
+   "description": "Code used when the document is a return (is_return = 1), e.g. SR.",
+   "fieldname": "return_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Return Text"
+  },
+  {
+   "columns": 3,
+   "depends_on": "eval:['Document Field','Fetch from Link'].includes(doc.segment_type)",
+   "description": "Field on the document (for Fetch from Link this is the Link field to follow).",
+   "fieldname": "field",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Field"
+  },
+  {
+   "columns": 2,
+   "depends_on": "eval:doc.segment_type=='Fetch from Link'",
+   "description": "Field to read on the linked record, e.g. abbr.",
+   "fieldname": "fetch_field",
+   "fieldtype": "Data",
+   "label": "Fetch Field"
+  },
+  {
+   "columns": 1,
+   "default": "6",
+   "depends_on": "eval:['Number','Document Field','Fetch from Link'].includes(doc.segment_type)",
+   "description": "Digits (zero-padded). For Document Field / Fetch from Link the value is padded only when it is a plain number.",
+   "fieldname": "number_length",
+   "fieldtype": "Int",
+   "label": "Digits"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "description": "Glue this segment directly onto the previous one, without the separator — e.g. a Document Word right after the number: 004781A.",
+   "fieldname": "join_previous",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Attach"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Numbering Segment",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
