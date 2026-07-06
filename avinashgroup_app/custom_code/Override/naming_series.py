@@ -1198,6 +1198,36 @@ def get_next_custom_document_no(doc=None, **kwargs):
         return None
 
 
+@frappe.whitelist()
+def get_docno_watch_fields(doctype):
+    """Fields the live Document No. preview must re-fetch on: everything any
+    enabled rule's conditions or segments read, plus the legacy scope fields.
+    The form can't know rule-configured fields statically — a rule gating on
+    payment_type / custom_branch would otherwise never refresh the preview
+    when those fields change (the number still arrives on save, but the user
+    sees a blank field and thinks numbering is broken)."""
+    if not isinstance(doctype, str) or not frappe.has_permission(doctype, "read"):
+        return []
+    fields = {"company", "posting_date", "custom_fiscal_year", "custom_p_type_code"}
+    cfg = AUTO_NUMBER_CONFIG.get(doctype)
+    if cfg and cfg.get("type_field"):
+        fields.add(cfg["type_field"])
+    try:
+        for rule in _numbering_rules_for(doctype):
+            for c in (rule.get("conditions") or []) + (rule.get("document_no_conditions") or []):
+                if c.get("field"):
+                    fields.add(c["field"])
+            for s in rule.get("segments") or []:
+                if s.get("field"):
+                    fields.add(s["field"])
+            if rule.get("date_field"):
+                fields.add(rule["date_field"])
+    except Exception:
+        pass
+    meta = frappe.get_meta(doctype)
+    return sorted(f for f in fields if meta.has_field(f))
+
+
 def _client_payload_doc(doc, kwargs):
     """Parse a client-sent draft payload into an in-memory doc, gated by
     DOC-LEVEL read permission — a role-only check would let a user restricted

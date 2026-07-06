@@ -164,6 +164,34 @@ function subscribe_docno_events(frm) {
     }
 }
 
+// Numbering rules are configurable: their conditions/segments can read ANY
+// field (payment_type, custom_branch, reference_no ...), so the static
+// trigger list below can't know them. Ask the server which fields the
+// doctype's rules actually use and bind a preview-refresh to each — without
+// this, filling a condition field never refreshes the preview and the user
+// stares at a blank Document No. that would only fill at save.
+const docno_watch_bound = {};   // doctype -> true once handlers are bound
+
+function bind_rule_watch_fields(frm) {
+    const dt = frm.doc.doctype;
+    if (docno_watch_bound[dt]) return;
+    docno_watch_bound[dt] = true;
+    frappe.call({
+        method: "avinashgroup_app.custom_code.Override.naming_series.get_docno_watch_fields",
+        args: { doctype: dt },
+        callback: function (r) {
+            (r.message || []).forEach(function (field) {
+                if (field === "custom_document_no") return;   // has its own handler
+                const h = {};
+                h[field] = schedule_preview;                  // debounce coalesces duplicates
+                frappe.ui.form.on(dt, h);
+            });
+            // re-evaluate now that all triggers are live
+            if (frm.is_new()) schedule_preview(frm);
+        }
+    });
+}
+
 Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
     const cfg = AUTO_NUMBER_CONFIG[doctype];
 
@@ -171,6 +199,7 @@ Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
         onload_post_render: function(frm) {
             if (frm.is_new()) {
                 subscribe_docno_events(frm);
+                bind_rule_watch_fields(frm);
                 schedule_preview(frm);
             }
         },
