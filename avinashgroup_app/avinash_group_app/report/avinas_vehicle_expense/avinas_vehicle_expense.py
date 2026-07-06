@@ -5,6 +5,17 @@
 import frappe
 from frappe import _
 
+# The three expense categories are matched by the SAME substring `like`
+# patterns that the SQL used to embed as leading-wildcard LIKEs.  Resolving
+# the matching Account names ONCE (below) lets the SQL use indexed IN lookups
+# instead of re-running non-sargable `account_name LIKE '%...%'` up to 4x per
+# matched row, while keeping membership byte-for-byte identical.
+EXPENSE_ACCOUNT_PATTERNS = {
+    "fuel": "%Fuel Expenses%",
+    "repair": "%R & M - Vehicles%",
+    "others": "%Other Vehicle Expenses%",
+}
+
 def execute(filters=None):
     columns = get_columns()
     data = get_data(filters)
@@ -46,11 +57,16 @@ def get_data(filters):
     
     # Prepare filter values
     filter_values = prepare_filter_values(filters)
-    
+
+    # Resolve the matching Account names ONCE (indexed IN instead of scan LIKE).
+    # Adds the per-category tuples + the combined tuple onto filter_values so
+    # they get bound as %(...)s params below.
+    resolve_expense_accounts(filter_values)
+
     # Build conditions
     conditions_pi = build_conditions(filter_values, "pi", "pic")
     conditions_je = build_conditions(filter_values, "je", "jea")
-    
+
     query = """
         SELECT
             combined.vehicle AS vehicle,
@@ -62,11 +78,11 @@ def get_data(filters):
             -- Purchase Invoice Expenses
             SELECT
                 pic.custom_subtype AS vehicle,
-                SUM(CASE WHEN acc.account_name LIKE '%%Fuel Expenses%%'
+                SUM(CASE WHEN acc.name IN %(fuel_accounts)s
                         THEN pic.amount ELSE 0 END) AS fuel,
-                SUM(CASE WHEN acc.account_name LIKE '%%R & M - Vehicles%%'
+                SUM(CASE WHEN acc.name IN %(repair_accounts)s
                         THEN pic.amount ELSE 0 END) AS repair,
-                SUM(CASE WHEN acc.account_name LIKE '%%Other Vehicle Expenses%%'
+                SUM(CASE WHEN acc.name IN %(others_accounts)s
                         THEN pic.amount ELSE 0 END) AS others
             FROM
                 `tabPurchase Invoice` pi
@@ -74,11 +90,7 @@ def get_data(filters):
                 JOIN `tabAccount` acc ON acc.name = pic.expense_account
             WHERE
                 pi.docstatus = 1
-                AND (
-                    acc.account_name LIKE '%%Fuel Expenses%%'
-                    OR acc.account_name LIKE '%%R & M - Vehicles%%'
-                    OR acc.account_name LIKE '%%Other Vehicle Expenses%%'
-                )
+                AND acc.name IN %(all_expense_accounts)s
                 {conditions_pi}
             GROUP BY pic.custom_subtype
 
@@ -87,11 +99,11 @@ def get_data(filters):
             -- Journal Entry Expenses
             SELECT
                 jea.custom_subtype AS vehicle,
-                SUM(CASE WHEN acc.account_name LIKE '%%Fuel Expenses%%'
+                SUM(CASE WHEN acc.name IN %(fuel_accounts)s
                         THEN jea.debit - jea.credit ELSE 0 END) AS fuel,
-                SUM(CASE WHEN acc.account_name LIKE '%%R & M - Vehicles%%'
+                SUM(CASE WHEN acc.name IN %(repair_accounts)s
                         THEN jea.debit - jea.credit ELSE 0 END) AS repair,
-                SUM(CASE WHEN acc.account_name LIKE '%%Other Vehicle Expenses%%'
+                SUM(CASE WHEN acc.name IN %(others_accounts)s
                         THEN jea.debit - jea.credit ELSE 0 END) AS others
             FROM
                 `tabJournal Entry` je
@@ -99,11 +111,7 @@ def get_data(filters):
                 JOIN `tabAccount` acc ON acc.name = jea.account
             WHERE
                 je.docstatus = 1
-                AND (
-                    acc.account_name LIKE '%%Fuel Expenses%%'
-                    OR acc.account_name LIKE '%%R & M - Vehicles%%'
-                    OR acc.account_name LIKE '%%Other Vehicle Expenses%%'
-                )
+                AND acc.name IN %(all_expense_accounts)s
                 {conditions_je}
             GROUP BY jea.custom_subtype
         ) AS combined
@@ -114,6 +122,36 @@ def get_data(filters):
     """.format(conditions_pi=conditions_pi, conditions_je=conditions_je)
 
     return frappe.db.sql(query, filter_values, as_dict=True)
+
+def resolve_expense_accounts(filter_values):
+    """
+    Resolve, ONCE, the set of Account names that match each expense category,
+    using the SAME `like` patterns the SQL used to embed. Stores parameterized
+    tuples on filter_values for binding as %(...)s.
+
+    Company scope mirrors the old WHERE `acc.company = %(company)s`: when a
+    company filter is set we only resolve that company's accounts (the SQL
+    still applies `acc.company` in build_conditions, so behaviour is identical).
+
+    Empty categories are bound as `(None,)` so the SQL renders `IN (NULL)` --
+    valid SQL that matches nothing -- instead of an illegal `IN ()`.
+    """
+    base_filters = {}
+    if filter_values.get("company"):
+        base_filters["company"] = filter_values["company"]
+
+    all_accounts = set()
+    for category, pattern in EXPENSE_ACCOUNT_PATTERNS.items():
+        names = frappe.get_all(
+            "Account",
+            filters={**base_filters, "account_name": ["like", pattern]},
+            pluck="name",
+        )
+        all_accounts.update(names)
+        # `tuple(names) or (None,)` -> empty list becomes (None,) => IN (NULL)
+        filter_values[f"{category}_accounts"] = tuple(names) or (None,)
+
+    filter_values["all_expense_accounts"] = tuple(all_accounts) or (None,)
 
 def prepare_filter_values(filters):
     """Prepare all filter values with a single DB call per filter type"""

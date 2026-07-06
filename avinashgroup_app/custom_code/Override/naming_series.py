@@ -630,6 +630,8 @@ def make_name_with_fiscal_year(prefix, doc, sequence_length=7):
         date_field = doc.posting_date
     elif hasattr(doc, "transaction_date") and doc.transaction_date:
         date_field = doc.transaction_date
+    elif hasattr(doc, "attendance_date") and doc.attendance_date:
+        date_field = doc.attendance_date
     elif hasattr(doc, "custom_created_on") and doc.custom_created_on:
         date_field = doc.custom_created_on
 
@@ -1129,12 +1131,13 @@ def naming_requirements_before_insert(doc):
         date_field = (
             (getattr(doc, "posting_date", None) if hasattr(doc, "posting_date") else None) or
             (getattr(doc, "transaction_date", None) if hasattr(doc, "transaction_date") else None) or
+            (getattr(doc, "attendance_date", None) if hasattr(doc, "attendance_date") else None) or
             (getattr(doc, "custom_created_on", None) if hasattr(doc, "custom_created_on") else None)
         )
 
         if not date_field:
             frappe.throw(
-                f"Date field (posting_date, transaction_date, or custom_created_on) is required for {doctype}.",
+                f"Date field (posting_date, transaction_date, attendance_date, or custom_created_on) is required for {doctype}.",
                 title="Missing Date Field"
             )
 

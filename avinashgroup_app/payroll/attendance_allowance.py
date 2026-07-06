@@ -28,9 +28,19 @@ def get_present_statuses() -> tuple:
 	well-known non-present statuses, so adding a new status (e.g. via Custom
 	Field) doesn't require code changes here.
 	"""
+	cached = getattr(frappe.local, "_agp_present_statuses", None)
+	if cached is not None:
+		return cached
+
 	options = frappe.get_meta("Attendance").get_field("status").options or ""
 	statuses = [s.strip() for s in options.split("\n") if s.strip()]
-	return tuple(s for s in statuses if s not in _NON_PRESENT_STATUSES)
+	result = tuple(s for s in statuses if s not in _NON_PRESENT_STATUSES)
+
+	# Memoize per request: this runs in the innermost employee×day×component loop
+	# of the attendance reports. frappe.local resets each request, so schema
+	# changes to Attendance.status are picked up on the next request (no stale cache).
+	frappe.local._agp_present_statuses = result
+	return result
 
 
 @frappe.whitelist()
@@ -221,12 +231,12 @@ def set_holiday_flag(doc, _method=None):
 		if emp.company else None
 	)
 
-	doc.custom_worked_on_holiday = int(
+	doc.custom_worked_on_holiday = 1 if (
 		holiday_list and frappe.db.exists("Holiday", {
 			"parent": holiday_list,
 			"holiday_date": doc.attendance_date,
 		})
-	)
+	) else 0
 
 
 @frappe.whitelist()

@@ -29,6 +29,7 @@
   "sync_interval",
   "column_break_3",
   "timeout",
+  "duplicate_threshold_minutes",
   "alerting_section",
   "alert_threshold_minutes",
   "alert_recipients",
@@ -180,6 +181,13 @@
    "fieldname": "timeout",
    "fieldtype": "Int",
    "label": "Connection Timeout (seconds)"
+  },
+  {
+   "default": "1",
+   "description": "De-duplication window in minutes. When a device fires the same punch several times in quick succession, punches within this many minutes of an already-kept punch are treated as duplicates and not stored again. Set to 0 to keep only exact-timestamp de-duplication.",
+   "fieldname": "duplicate_threshold_minutes",
+   "fieldtype": "Float",
+   "label": "Duplicate Threshold (minutes)"
   },
   {
    "collapsible": 1,

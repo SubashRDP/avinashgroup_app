@@ -152,6 +152,8 @@ def _aggregate_leave_taken(emp_names, ad_start, ad_end):
 	)
 
 	by_emp = {}
+	# Overlapping leaves revisit the same calendar days; convert each date once.
+	bs_cache = {}
 	for la in apps:
 		fd = getdate(la.from_date)
 		td = getdate(la.to_date)
@@ -175,7 +177,10 @@ def _aggregate_leave_taken(emp_names, ad_start, ad_end):
 		for d, w in day_weights.items():
 			if d < ad_start or d > ad_end:
 				continue
-			bs = ad_to_bs(d)
+			bs = bs_cache.get(d)
+			if bs is None:
+				bs = ad_to_bs(d)
+				bs_cache[d] = bs
 			emp_bucket[bs.month] = emp_bucket.get(bs.month, 0) + w
 
 	return by_emp

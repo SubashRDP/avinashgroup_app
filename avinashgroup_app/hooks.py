@@ -13,7 +13,7 @@ page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 app_include_js = [
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=10.5",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=10.6",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.0",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.1",
@@ -25,6 +25,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=1.6",
     "/assets/avinashgroup_app/js/numbering_preview.js?v=1.0",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
+    "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -53,7 +54,10 @@ purchase_invoice_specific_events = {
     "on_submit": "avinashgroup_app.custom_code.stock_revaluation.on_purchase_invoice_submit",
     "before_validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_validate_purchase_invoice",
     "before_save": "avinashgroup_app.custom_code.common.purchase_taxes_handler.before_save_purchase_invoice",
-    "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice"
+    "validate": [
+        "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice",
+        "avinashgroup_app.custom_code.vehicle_mandatory.validate_purchase_invoice",
+    ],
 }
 
 purchase_order_events = {
@@ -74,7 +78,9 @@ supplier_quotation_events = {
 sales_invoice_specific_events = {
     "before_validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_validate_salesinvoice",
     "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
-    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice"
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice",
+    # IRD copy labeling: count real prints (Tax Invoice / Copy of Original / Copy of Original 2 ...)
+    "before_print": "avinashgroup_app.custom_code.SalesInvoice.print_count.before_print",
 }
 
 cbms_sales_invoice_events = {
@@ -108,9 +114,18 @@ rfq_events = {
     "validate": "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_request_for_quotation"
 }
 
+journal_entry_events = {
+    "validate": "avinashgroup_app.custom_code.vehicle_mandatory.validate_journal_entry",
+}
+
+# All three run on `validate`, NOT `before_save`: auto attendance creates
+# Attendance already submitted (insert with docstatus=1), and Frappe runs
+# `before_submit` instead of `before_save` on that path — before_save hooks
+# would silently never fire for device-marked attendance. `validate` runs on
+# both save and submit-on-create.
 attendance_events = {
-    "validate": "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
-    "before_save": [
+    "validate": [
+        "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
         "avinashgroup_app.biometric.attendance_override.set_shift_deviation_fields",
         "avinashgroup_app.biometric.attendance_override.enforce_late_arrival_half_day",
     ],
@@ -170,6 +185,9 @@ for _event, _handler in material_request_events.items():
 
 for _event, _handler in rfq_events.items():
     _add_doc_event("Request for Quotation", _event, _handler)
+
+for _event, _handler in journal_entry_events.items():
+    _add_doc_event("Journal Entry", _event, _handler)
 
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
