@@ -318,9 +318,16 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertEqual(d.custom_document_no, 321)
 
     def test_08_duplicate_redraws_number(self):
-        # New doc (no amended_from) carrying a copied number, not flagged manual.
+        # DESK form save: a new doc carrying a value with the manual flag unset
+        # is a stale preview / copied value -> redrawn with the authoritative
+        # draw. (Outside the desk — import/API/script — the value is kept;
+        # see test_56.)
         d = self._je(custom_document_no=321, custom_document_no_manual=0)
-        ns.apply_document_no(d)
+        frappe.form_dict["cmd"] = "frappe.desk.form.save.savedocs"
+        try:
+            ns.apply_document_no(d)
+        finally:
+            frappe.form_dict.pop("cmd", None)
         self.assertIsNotNone(d.custom_document_no)
         self.assertNotEqual(d.custom_document_no, 321)
 
@@ -1048,6 +1055,27 @@ class TestDocumentNumbering(FrappeTestCase):
         res = ns.check_document_no_availability(doc=payload)
         self.assertFalse(res["taken"])
         self.assertIsNone(res["used_by"])
+
+    def test_56_import_keeps_and_continues_file_numbers(self):
+        # Data Import contract: a row WITHOUT a number is auto-numbered, a row
+        # WITH a number keeps it (legacy data), the sequence continues past
+        # imported numbers, and a duplicate row fails visibly (never silently
+        # renumbered).
+        frappe.flags.in_import = True
+        self.addCleanup(setattr, frappe.flags, "in_import", False)
+
+        blank = self._je()
+        ns.apply_document_no(blank)
+        self.assertEqual(blank.custom_document_no, 1)              # auto
+
+        legacy = self._je(custom_document_no=500)                  # flag NOT set,
+        ns.apply_document_no(legacy)                               # like an import row
+        self.assertEqual(legacy.custom_document_no, 500)           # kept
+        self.assertEqual(frappe.utils.cint(legacy.custom_document_no_manual), 1)  # marked manual
+
+        nxt = self._je()
+        ns.apply_document_no(nxt)
+        self.assertEqual(nxt.custom_document_no, 501)              # continues past 500
 
     # ================================================================
     #  SPECIFICATION MATRIX — one comprehensive, deterministic spec per

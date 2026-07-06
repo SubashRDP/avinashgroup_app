@@ -1009,16 +1009,40 @@ def _draw_next_document_no(doc, scope):
     return _series_current(key)
 
 
+def _is_desk_form_save():
+    """True only for a desk FORM save (savedocs) — the one path where the
+    number field may hold a stale client preview and our JS manages the
+    manual flag. Everywhere else (Data Import, REST API, server code) a
+    value in the field is intentional data and must never be discarded."""
+    if frappe.flags.in_import:
+        return False
+    form_dict = getattr(frappe.local, "form_dict", None) or {}
+    return form_dict.get("cmd") == "frappe.desk.form.save.savedocs"
+
+
 def _is_manual_document_no(doc, field="custom_document_no"):
-    """True when the number field was entered by the user and must be preserved
+    """True when the number field carries a value that must be preserved
     (only uniqueness-checked), not auto-drawn. The manual flag follows the
     convention <field>_manual (custom_document_no -> custom_document_no_manual)."""
     flag = field + "_manual"
-    if doc.meta.has_field(flag):
-        return bool(frappe.utils.cint(doc.get(flag)))
-    # No flag field: we cannot tell a user value from a stale client preview,
-    # so treat any existing value as manual (never overwrite).
-    return bool(doc.get(field))
+    if doc.meta.has_field(flag) and frappe.utils.cint(doc.get(flag)):
+        return True
+    if not doc.get(field):
+        return False
+    if not doc.meta.has_field(flag):
+        # No flag field: we cannot tell a user value from a stale preview,
+        # so treat any existing value as manual (never overwrite).
+        return True
+    # A STORED document's flag is authoritative: 0 = auto-drawn (matters for
+    # delete-revert: auto numbers return to the counter, manual ones don't).
+    if not doc.is_new():
+        return False
+    # NEW doc, value present, flag unset: in a desk FORM save that's our own
+    # preview fill — the auto path overwrites it with the authoritative draw.
+    # In an import / REST / script save there is no preview: the value came
+    # in the payload on purpose (e.g. legacy numbers in an import file) and
+    # silently renumbering it would be data loss.
+    return not _is_desk_form_save()
 
 
 def _document_no_taken(doc, scope, value, for_update=False):
@@ -1148,6 +1172,13 @@ def apply_document_no(doc):
                         ),
                         title=_("Duplicate Document Number"),
                     )
+            else:
+                # The kept value is manual from here on — persist that in the
+                # flag so the STORED doc is classified consistently (imports /
+                # API payloads arrive with the flag unset).
+                flag = field + "_manual"
+                if doc.meta.has_field(flag):
+                    doc.set(flag, 1)
             _notify_docno_drawn(doc, scope)
         doc.flags._docno_assigned = True
         return
@@ -1163,13 +1194,12 @@ def apply_document_no(doc):
     scope = _docno_scope(doc)
     if not scope:
         # Not eligible yet (missing code / company / fiscal year, or a type that
-        # is simply not auto-numbered). In the DESK, clear a stale client preview
-        # so the field falls back to manual entry — but NEVER blank a value that
-        # arrived by import/API (there's no client preview there; blanking would
-        # be silent data loss). Do NOT set the assigned flag, so a later hook
-        # retries once the scope is complete.
-        from_ui = bool(getattr(frappe.local, "request", None)) and not frappe.flags.in_import
-        if from_ui:
+        # is simply not auto-numbered). In a desk FORM save, clear a stale
+        # client preview so the field falls back to manual entry — but NEVER
+        # blank a value that arrived by import/REST/script (no client preview
+        # there; blanking would be silent data loss). Do NOT set the assigned
+        # flag, so a later hook retries once the scope is complete.
+        if _is_desk_form_save():
             doc.set(field, None)
         return
 
