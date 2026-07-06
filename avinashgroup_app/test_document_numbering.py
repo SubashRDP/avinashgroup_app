@@ -940,3 +940,115 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertEqual(dm.custom_document_no, 500)          # manual kept
         d2 = self._pe_off(); ns.apply_document_no(d2)
         self.assertEqual(d2.custom_document_no, 501)          # auto skipped past the manual number
+
+    # ================================================================
+    #  SPECIFICATION MATRIX — one comprehensive, deterministic spec per
+    #  doctype: every operator x scope x field x mode x match/no-match,
+    #  each asserting the same invariants. The matrix IS the logic.
+    # ================================================================
+    def _spec_doc(self, cfg, ptype, use_branch):
+        d = frappe.new_doc(cfg["doctype"])
+        d.company = self.company
+        d.posting_date = self.pdate
+        if cfg["doctype"] == "Journal Entry":
+            d.voucher_type = "Journal Entry"
+        elif cfg["doctype"] == "Payment Entry":
+            d.payment_type = "Receive"
+        d.custom_p_type = ptype
+        if use_branch and cfg.get("branch"):
+            d.custom_branch = cfg["branch"]
+        return d
+
+    def _run_spec_matrix(self, cfg):
+        """Generic driver. For every (operator x scope x field), build the rule,
+        then assert the invariants for a MATCHING doc (numbered) and a
+        NON-MATCHING doc (not numbered). `cfg` is the per-doctype spec."""
+        off, off2, bad = cfg["off"], cfg["off2"], cfg["bad"]
+        # operator -> (matching value, non-matching value)
+        ops = {
+            "Equals":     (off,  off2),
+            "Not Equals": (off2, off),
+            "In":         (off,  bad),
+            "Not In":     (bad,  off),
+            "Is Set":     (off,  ""),
+            "Is Not Set": ("",   off),
+        }
+        branch_choices = [False, True] if cfg.get("branch") else [False]
+        fields = ["custom_document_no"]
+        if frappe.get_meta(cfg["doctype"]).has_field("custom_document_word"):
+            fields.append("custom_document_word")
+
+        checked = 0
+        for op, (match_val, nomatch_val) in ops.items():
+            for use_branch in branch_choices:
+                for field in fields:
+                    tag = "MX" + frappe.generate_hash(length=6)
+                    if op in ("Is Set", "Is Not Set"):
+                        val = ""
+                    elif op in ("In", "Not In"):
+                        val = f"{off} , {off2}"
+                    else:
+                        val = off
+                    segs = [{"segment_type": "Company Abbr"},
+                            {"segment_type": "Static Text", "static_value": tag}]
+                    if use_branch:
+                        segs.append({"segment_type": "Branch Abbr"})
+                    segs.append({"segment_type": "Fetch from Link",
+                                 "field": "custom_p_type", "fetch_field": cfg["code_fetch"]})
+                    rule = self._temp_rule(
+                        doctype=cfg["doctype"], auto_document_no=1, document_no_field=field,
+                        extra_segments=segs, conditions=[],
+                        document_no_conditions=[{"field": "custom_p_type", "operator": op, "value": val}],
+                    )
+                    ctx = f"{cfg['doctype']} op={op} branch={use_branch} field={field}"
+                    try:
+                        # POSITIVE: matching doc -> eligible
+                        d1 = self._spec_doc(cfg, match_val, use_branch)
+                        ns.apply_document_no(d1)
+                        self.assertEqual(frappe.utils.cint(d1.get(field)), 1, msg=f"{ctx}: not 1")
+                        ns.set_custom_branch_name(d1)               # build the name
+                        self.assertIn(tag, d1.get(cfg["target"]), msg=f"{ctx} name={d1.get(cfg['target'])}")
+                        self.assertIn("000001", d1.get(cfg["target"]), msg=f"{ctx} name={d1.get(cfg['target'])}")
+                        # gapless sequence + non-reserving peek
+                        seq = [1] + [self._draw_into(self._spec_doc(cfg, match_val, use_branch), field) for _ in range(2)]
+                        self.assertEqual(seq, [1, 2, 3], msg=f"{ctx}: {seq}")
+                        self.assertEqual(ns.peek_next_document_no(self._spec_doc(cfg, match_val, use_branch)), 4, msg=ctx)
+                        # manual kept
+                        dm = self._spec_doc(cfg, match_val, use_branch)
+                        dm.set(field, 9999)
+                        if frappe.get_meta(cfg["doctype"]).has_field(field + "_manual"):
+                            dm.set(field + "_manual", 1)
+                        ns.apply_document_no(dm)
+                        self.assertEqual(frappe.utils.cint(dm.get(field)), 9999, msg=f"{ctx}: manual lost")
+                        # NEGATIVE: non-matching doc (and not a fallback type) -> not numbered
+                        self.assertIsNone(ns._docno_scope(self._spec_doc(cfg, nomatch_val, use_branch)),
+                                          msg=f"{ctx}: nomatch {nomatch_val!r} eligible")
+                        checked += 1
+                    finally:
+                        self._drop_rule(rule.name)
+        return checked
+
+    def test_60_spec_matrix_payment_entry(self):
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.branches) >= 1, "needs a branch")
+        branch = self.branches[0]
+        frappe.db.set_value("Branch", branch, "custom_abbr", "sp")
+        n = self._run_spec_matrix({
+            "doctype": "Payment Entry", "target": "custom_name", "code_fetch": "data_hrcj",
+            "off": "Vendor Payment", "off2": "Vendor Receipt", "bad": "Customers/Suppliers Receipt",
+            "branch": branch,
+        })
+        self.assertGreaterEqual(n, 20)   # 6 ops x 2 branch x 2 fields
+
+    def test_61_spec_matrix_journal_entry(self):
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        # Journal Entry has no branch field — the driver skips that dimension.
+        for t in ("Cash Entry", "Opening Entry", "Contract Form"):
+            if not frappe.db.exists("JV Type", t):
+                self.skipTest(f"JV Type {t} missing")
+        n = self._run_spec_matrix({
+            "doctype": "Journal Entry", "target": "custom_name", "code_fetch": "jv_type_code",
+            "off": "Cash Entry", "off2": "Opening Entry", "bad": "Contract Form",
+            "branch": None,
+        })
+        self.assertGreaterEqual(n, 6)    # 6 ops x 1 x fields
