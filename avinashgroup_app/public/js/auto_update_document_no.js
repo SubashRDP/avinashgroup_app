@@ -64,6 +64,14 @@ function update_hint(frm, preview) {
     frm.set_df_property("custom_document_no", "description", msg);
 }
 
+// The user's cursor is IN the field: frm.doc only updates on change (blur),
+// so mid-typed digits are invisible to the guards — writing now would silently
+// discard them. Callers must skip the fill while focused.
+function docno_input_focused(frm) {
+    const f = frm.get_field && frm.get_field("custom_document_no");
+    return !!(f && f.$input && f.$input.is(":focus"));
+}
+
 function set_auto_value(frm, value) {
     // Remember the value WE put in, so the field's change handler can tell our
     // own preview fill from a real user edit. A value-compare is used instead
@@ -88,6 +96,7 @@ function fetch_preview(frm) {
             if (token !== frm._docno_req) return;            // superseded
             // The user may have taken over / the form moved on while in flight.
             if (!should_auto_number(frm) || auto_locked(frm)) return;
+            if (docno_input_focused(frm)) return;            // user is typing — hands off
             const next = r && r.message;
             if (next && cint(frm.doc.custom_document_no) !== cint(next)) {
                 set_auto_value(frm, next);
@@ -132,14 +141,27 @@ function schedule_taken_check(frm) {
 
 // Another user just consumed a number in this doctype: any live auto preview
 // may now be stale — re-fetch it so two open forms never show the same number.
-// Registered once per page load; the server publishes after commit only.
+// The server publishes to the DOCTYPE ROOM (permission-gated) after commit;
+// subscribe_docno_events joins that room when a new auto-number form opens.
+// Registered once per page load.
 if (frappe.realtime && frappe.realtime.on) {
     frappe.realtime.on("docno_assigned", function (data) {
         const frm = window.cur_frm;
         if (!frm || !data || frm.doc.doctype !== data.doctype) return;
+        // Only touch the form the user is actually LOOKING at — cur_frm can
+        // be a backgrounded form after navigating to a list/report, and
+        // writing to it would dirty it invisibly.
+        const route = frappe.get_route ? frappe.get_route() : [];
+        if (route[0] !== "Form" || route[1] !== data.doctype) return;
         if (!should_auto_number(frm) || auto_locked(frm)) return;
         schedule_preview(frm);
     });
+}
+
+function subscribe_docno_events(frm) {
+    if (frappe.realtime && frappe.realtime.doctype_subscribe) {
+        frappe.realtime.doctype_subscribe(frm.doc.doctype);
+    }
 }
 
 Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
@@ -147,7 +169,10 @@ Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
 
     const handlers = {
         onload_post_render: function(frm) {
-            if (frm.is_new()) schedule_preview(frm);
+            if (frm.is_new()) {
+                subscribe_docno_events(frm);
+                schedule_preview(frm);
+            }
         },
         refresh: function(frm) {
             if (frm.is_new()) update_hint(frm, frm.doc.custom_document_no);

@@ -18,3 +18,4 @@ avinashgroup_app.patches.leave_application_dynamic_approval
 avinashgroup_app.patches.enable_track_changes_audited_doctypes
 avinashgroup_app.patches.add_creation_index_daily_entry
 avinashgroup_app.patches.add_document_no_manual_flag
+avinashgroup_app.patches.add_unique_custom_name_index

@@ -41,6 +41,10 @@ JE_TYPE_OFF = "Opening Entry"  # a real JV Type that is NOT auto-numbered
 PE_TYPE = "NOC Payment"        # Payment Entry auto-type with no specific
                                # production rule -> our temp rule always wins
 
+# Global key recording which real rules a running test has disabled, so a
+# killed run can be healed by the next one (see _heal_quarantine_leftovers).
+QUARANTINE_MARKER = "numbering_test_quarantine"
+
 
 class TestDocumentNumbering(FrappeTestCase):
     # ------------------------------------------------------------------ setup
@@ -87,6 +91,8 @@ class TestDocumentNumbering(FrappeTestCase):
             if cls.company else []
         )
         cls.has_rules = bool(frappe.db.exists("DocType", "Numbering Configuration"))
+        if cls.has_rules:
+            cls._heal_quarantine_leftovers()
 
     def setUp(self):
         if not (self.company and self.abbr and self.fy):
@@ -109,18 +115,23 @@ class TestDocumentNumbering(FrappeTestCase):
         # admin configured on this site would change test outcomes. Quarantine:
         # disable every enabled rule for the duration of the test — _temp_rule
         # creates exactly the rules a test wants — and restore them afterwards.
+        # Crash safety: the cleanup is registered BEFORE the mutation, and the
+        # disabled list is persisted as a global so a killed run (SIGKILL /
+        # power loss) is healed by the next run's setUpClass instead of
+        # leaving the site's numbering silently off.
         self._live_rules = (
             frappe.get_all("Numbering Configuration", filters={"enabled": 1}, pluck="name")
             if self.has_rules else []
         )
+        self.addCleanup(self._restore_live_rules)
         if self._live_rules:
+            frappe.db.set_global(QUARANTINE_MARKER, json.dumps(self._live_rules))
             frappe.db.sql(
                 "UPDATE `tabNumbering Configuration` SET enabled=0 WHERE name IN %s",
                 (tuple(self._live_rules),),
             )
             frappe.db.commit()
             ns.clear_numbering_rules_cache()
-        self.addCleanup(self._restore_live_rules)
 
     def _restore_live_rules(self):
         if getattr(self, "_live_rules", None):
@@ -128,8 +139,26 @@ class TestDocumentNumbering(FrappeTestCase):
                 "UPDATE `tabNumbering Configuration` SET enabled=1 WHERE name IN %s",
                 (tuple(self._live_rules),),
             )
+            frappe.db.set_global(QUARANTINE_MARKER, None)
             frappe.db.commit()
             ns.clear_numbering_rules_cache()
+
+    @staticmethod
+    def _heal_quarantine_leftovers():
+        """A previous test run killed mid-quarantine left real rules disabled:
+        re-enable whatever the persisted marker recorded."""
+        leftover = frappe.db.get_global(QUARANTINE_MARKER)
+        if not leftover:
+            return
+        names = [n for n in json.loads(leftover) if frappe.db.exists("Numbering Configuration", n)]
+        if names:
+            frappe.db.sql(
+                "UPDATE `tabNumbering Configuration` SET enabled=1 WHERE name IN %s",
+                (tuple(names),),
+            )
+        frappe.db.set_global(QUARANTINE_MARKER, None)
+        frappe.db.commit()
+        ns.clear_numbering_rules_cache()
 
     def _restore_branch_abbrs(self):
         for b, abbr in self._branch_abbr_snapshot.items():
