@@ -104,6 +104,32 @@ class TestDocumentNumbering(FrappeTestCase):
             b: frappe.db.get_value("Branch", b, "custom_abbr") for b in self.branches
         }
         self.addCleanup(self._restore_branch_abbrs)
+        # Site-configured Numbering Configuration rules are AUTHORITATIVE (an
+        # Auto-fill rule's conditions can turn numbering OFF), so whatever an
+        # admin configured on this site would change test outcomes. Quarantine:
+        # disable every enabled rule for the duration of the test — _temp_rule
+        # creates exactly the rules a test wants — and restore them afterwards.
+        self._live_rules = (
+            frappe.get_all("Numbering Configuration", filters={"enabled": 1}, pluck="name")
+            if self.has_rules else []
+        )
+        if self._live_rules:
+            frappe.db.sql(
+                "UPDATE `tabNumbering Configuration` SET enabled=0 WHERE name IN %s",
+                (tuple(self._live_rules),),
+            )
+            frappe.db.commit()
+            ns.clear_numbering_rules_cache()
+        self.addCleanup(self._restore_live_rules)
+
+    def _restore_live_rules(self):
+        if getattr(self, "_live_rules", None):
+            frappe.db.sql(
+                "UPDATE `tabNumbering Configuration` SET enabled=1 WHERE name IN %s",
+                (tuple(self._live_rules),),
+            )
+            frappe.db.commit()
+            ns.clear_numbering_rules_cache()
 
     def _restore_branch_abbrs(self):
         for b, abbr in self._branch_abbr_snapshot.items():
@@ -170,7 +196,8 @@ class TestDocumentNumbering(FrappeTestCase):
 
     def _temp_rule(self, *, extra_segments, conditions, doctype="Payment Entry",
                    target="custom_name", separator="-", auto_document_no=0,
-                   document_no_conditions=None, document_no_field=None):
+                   document_no_conditions=None, document_no_field=None,
+                   duplicate_action=None):
         segments = list(extra_segments) + [
             # the name's number slot references the SAME field the number is
             # written into, so the voucher name always contains the number
@@ -182,6 +209,7 @@ class TestDocumentNumbering(FrappeTestCase):
             "enabled": 1, "target_field": target, "separator": separator,
             "auto_document_no": auto_document_no,
             "document_no_field": document_no_field or "custom_document_no",
+            "duplicate_action": duplicate_action or "Throw Error",
             "conditions": conditions,
             "document_no_conditions": document_no_conditions or [],
             "segments": segments,
@@ -940,6 +968,57 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertEqual(dm.custom_document_no, 500)          # manual kept
         d2 = self._pe_off(); ns.apply_document_no(d2)
         self.assertEqual(d2.custom_document_no, 501)          # auto skipped past the manual number
+
+    def test_54_duplicate_action_uses_next_available(self):
+        # Rule policy 'Use Next Available Number': a manually-typed number that
+        # is already used is bumped to the next free one (instead of the save
+        # being rejected), and ownership returns to auto (manual flag cleared).
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "DA" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            doctype="Journal Entry", auto_document_no=1,
+            extra_segments=self._tag_segments(tag), conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "value": JE_TYPE}],
+            duplicate_action="Use Next Available Number",
+        )
+        d1 = self._insert_je()                                # takes number 1
+        self.assertEqual(frappe.utils.cint(d1.custom_document_no), 1)
+
+        dm = self._je(); dm.custom_document_no = 1; dm.custom_document_no_manual = 1
+        ns.apply_document_no(dm)
+        self.assertEqual(frappe.utils.cint(dm.custom_document_no), 2)   # bumped, not kept
+        self.assertEqual(frappe.utils.cint(dm.custom_document_no_manual), 0)  # back to auto
+
+        # default policy keeps the duplicate (validators reject it at save)
+        dt = self._je(); dt.custom_document_no = 1; dt.custom_document_no_manual = 1
+        rule = ns._match_numbering_rule(dt)
+        self.assertEqual(ns._duplicate_action({}), "Throw Error")       # default
+        self.assertEqual(ns._duplicate_action(rule), "Use Next Available Number")
+
+    def test_55_check_document_no_availability(self):
+        # The typing-time availability check: reports who holds a taken number
+        # and the next free one; a free number reports available.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "AV" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            doctype="Journal Entry", auto_document_no=1,
+            extra_segments=self._tag_segments(tag), conditions=[],
+            document_no_conditions=[{"field": "custom_p_type", "value": JE_TYPE}],
+        )
+        d1 = self._insert_je()
+        payload = {"doctype": "Journal Entry", "company": self.company,
+                   "posting_date": self.pdate, "voucher_type": "Journal Entry",
+                   "custom_p_type": JE_TYPE,
+                   "custom_document_no": frappe.utils.cint(d1.custom_document_no)}
+        res = ns.check_document_no_availability(doc=payload)
+        self.assertTrue(res and res["taken"])
+        self.assertEqual(res["used_by"], d1.name)
+        self.assertEqual(res["next"], frappe.utils.cint(d1.custom_document_no) + 1)
+
+        payload["custom_document_no"] = 424242
+        res = ns.check_document_no_availability(doc=payload)
+        self.assertFalse(res["taken"])
+        self.assertIsNone(res["used_by"])
 
     # ================================================================
     #  SPECIFICATION MATRIX — one comprehensive, deterministic spec per

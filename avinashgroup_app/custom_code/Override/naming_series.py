@@ -3,6 +3,7 @@ import json
 import re
 
 import frappe
+from frappe import _
 from frappe.model.naming import make_autoname, getseries
 from frappe.model.document import Document
 
@@ -998,6 +999,48 @@ def _is_manual_document_no(doc, field="custom_document_no"):
     return bool(doc.get(field))
 
 
+def _document_no_taken(doc, scope, value):
+    """Name of another live document in this scope already holding the given
+    Document No., or None. Scoped by the same LIKE pattern as
+    _current_max_document_no, so per-branch series only see their own branch.
+    CAST keeps the comparison numeric on Data-typed number columns."""
+    n = frappe.utils.cint(value)
+    if n <= 0:
+        return None
+    table = "tab" + doc.doctype.replace("`", "")
+    field = scope["field"].replace("`", "")
+    number_field = scope.get("number_field", "custom_document_no").replace("`", "")
+    row = frappe.db.sql(
+        "SELECT `name` FROM `{table}` WHERE `{field}` LIKE %s "
+        "AND CAST(`{nf}` AS UNSIGNED) = %s AND `docstatus` < 2 AND `name` != %s "
+        "LIMIT 1".format(table=table, field=field, nf=number_field),
+        (scope["pattern"], n, doc.name or ""),
+    )
+    return row[0][0] if row else None
+
+
+def _duplicate_action(rule):
+    """Per-rule policy when a manually-typed number is already used:
+    'Throw Error' (default — the save is rejected with a next-number hint) or
+    'Use Next Available Number' (the number is bumped and the user alerted)."""
+    return (rule.get("duplicate_action") if rule else None) or "Throw Error"
+
+
+def _notify_docno_drawn(doc, scope):
+    """Realtime nudge to other open forms: a number in this scope was just
+    consumed, so any live preview of it is stale — re-fetch. Published only
+    after commit (a rolled-back save consumed nothing) and best-effort:
+    realtime being down must never block a save."""
+    try:
+        frappe.publish_realtime(
+            "docno_assigned",
+            {"doctype": doc.doctype, "scope_key": scope["key"]},
+            after_commit=True,
+        )
+    except Exception:
+        pass
+
+
 def apply_document_no(doc):
     """Authoritative, collision-free assignment of custom_document_no at save.
 
@@ -1021,7 +1064,31 @@ def apply_document_no(doc):
         return
 
     if _is_manual_document_no(doc, field):
+        # Per-rule duplicate policy: 'Use Next Available Number' resolves a
+        # taken manual number by drawing the next one (alerting the user)
+        # instead of letting the uniqueness validators reject the save.
+        scope = _docno_scope(doc)
+        if scope and _duplicate_action(_match_numbering_rule(doc)) == "Use Next Available Number":
+            taken_by = _document_no_taken(doc, scope, doc.get(field))
+            if taken_by:
+                old = doc.get(field)
+                doc.set(field, _draw_next_document_no(doc, scope))
+                flag = field + "_manual"
+                if doc.meta.has_field(flag):
+                    doc.set(flag, 0)
+                _notify_docno_drawn(doc, scope)
+                doc.flags._docno_assigned = True
+                frappe.msgprint(
+                    _("Document No. {0} is already used by {1} — assigned the next available number {2} instead.").format(
+                        old, taken_by, doc.get(field)
+                    ),
+                    indicator="orange",
+                    alert=True,
+                )
+                return
         _keep_counter_above_manual(doc, field)
+        if scope:
+            _notify_docno_drawn(doc, scope)
         doc.flags._docno_assigned = True
         return
 
@@ -1050,6 +1117,7 @@ def apply_document_no(doc):
     flag = field + "_manual"
     if doc.meta.has_field(flag):
         doc.set(flag, 0)
+    _notify_docno_drawn(doc, scope)
     doc.flags._docno_assigned = True
 
 
@@ -1076,6 +1144,38 @@ def get_next_custom_document_no(doc=None, **kwargs):
             return None
         scalars = {k: v for k, v in data.items() if not isinstance(v, (list, dict))}
         return peek_next_document_no(frappe.get_doc(scalars))
+    except Exception:
+        return None
+
+
+@frappe.whitelist()
+def check_document_no_availability(doc=None, **kwargs):
+    """Client helper: is the manually-typed Document No. free in this draft's
+    scope? Returns {"taken": bool, "used_by": name, "next": int} — or None when
+    it can't tell (type not auto-numbered, scope incomplete, unparsable payload).
+    Never raises: the form only uses it to show a warning hint while typing."""
+    try:
+        data = doc if doc is not None else kwargs
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not isinstance(data, dict) or not data.get("doctype"):
+            return None
+        if not frappe.has_permission(data["doctype"], "read"):
+            return None
+        scalars = {k: v for k, v in data.items() if not isinstance(v, (list, dict))}
+        d = frappe.get_doc(scalars)
+        scope = _docno_scope(d)
+        if not scope:
+            return None
+        value = frappe.utils.cint(d.get(scope["number_field"]))
+        if value <= 0:
+            return None
+        used_by = _document_no_taken(d, scope, value)
+        return {
+            "taken": bool(used_by),
+            "used_by": used_by,
+            "next": peek_next_document_no(d) if used_by else None,
+        }
     except Exception:
         return None
 
@@ -1297,7 +1397,7 @@ def _build_numbering_rules(doctype):
         fields=[
             "name", "company", "branch", "target_field", "separator",
             "date_field", "legacy_upto", "legacy_source_field", "auto_document_no",
-            "document_no_field",
+            "document_no_field", "duplicate_action",
         ],
     )
     if not rules:
@@ -1643,6 +1743,7 @@ def _rule_dict_from_config(cfg):
         "legacy_source_field": cfg.get("legacy_source_field"),
         "auto_document_no": cfg.get("auto_document_no"),
         "document_no_field": cfg.get("document_no_field"),
+        "duplicate_action": cfg.get("duplicate_action"),
         "conditions": [
             {"field": c.field, "value": c.value}
             for c in (cfg.conditions or [])

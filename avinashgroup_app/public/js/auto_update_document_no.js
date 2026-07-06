@@ -102,6 +102,46 @@ function schedule_preview(frm) {
     frm._docno_timer = setTimeout(() => fetch_preview(frm), DEBOUNCE_MS);
 }
 
+// Manual number typed: ask the server whether it is already used in this
+// scope and warn IMMEDIATELY (before save) with the next free number.
+function warn_if_taken(frm) {
+    const v = frm.doc.custom_document_no;
+    if (!v) return;
+    const token = (frm._docno_check_req = (frm._docno_check_req || 0) + 1);
+    frappe.call({
+        method: "avinashgroup_app.custom_code.Override.naming_series.check_document_no_availability",
+        args: { doc: frm.doc },
+        callback: function (r) {
+            if (token !== frm._docno_check_req) return;          // superseded
+            if (cint(frm.doc.custom_document_no) !== cint(v)) return; // value moved on
+            const res = r && r.message;
+            if (!res || !res.taken) return;
+            const msg = res.next
+                ? __("Document No. {0} is already used by {1}. Next available is {2}.", [v, res.used_by, res.next])
+                : __("Document No. {0} is already used by {1}.", [v, res.used_by]);
+            frappe.show_alert({ message: msg, indicator: "orange" }, 8);
+            frm.set_df_property("custom_document_no", "description", "⚠ " + msg);
+        }
+    });
+}
+
+function schedule_taken_check(frm) {
+    clearTimeout(frm._docno_check_timer);
+    frm._docno_check_timer = setTimeout(() => warn_if_taken(frm), DEBOUNCE_MS);
+}
+
+// Another user just consumed a number in this doctype: any live auto preview
+// may now be stale — re-fetch it so two open forms never show the same number.
+// Registered once per page load; the server publishes after commit only.
+if (frappe.realtime && frappe.realtime.on) {
+    frappe.realtime.on("docno_assigned", function (data) {
+        const frm = window.cur_frm;
+        if (!frm || !data || frm.doc.doctype !== data.doctype) return;
+        if (!should_auto_number(frm) || auto_locked(frm)) return;
+        schedule_preview(frm);
+    });
+}
+
 Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
     const cfg = AUTO_NUMBER_CONFIG[doctype];
 
@@ -121,6 +161,7 @@ Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
                 // a value we did not set -> user typed it -> it's now theirs
                 if (has_manual_flag(frm)) frm.set_value("custom_document_no_manual", 1);
                 update_hint(frm, null);
+                schedule_taken_check(frm);   // instant duplicate warning
             } else {
                 // user cleared it -> back to auto
                 frm._auto_docno_value = null;

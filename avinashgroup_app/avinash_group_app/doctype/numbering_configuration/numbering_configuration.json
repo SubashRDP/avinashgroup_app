@@ -12,6 +12,7 @@
   "enabled",
   "auto_document_no",
   "document_no_field",
+  "duplicate_action",
   "column_break_main",
   "company_abbr",
   "conditions_section",
@@ -85,6 +86,15 @@
    "fieldname": "document_no_field",
    "fieldtype": "Autocomplete",
    "label": "Document No. field"
+  },
+  {
+   "default": "Throw Error",
+   "depends_on": "auto_document_no",
+   "description": "What to do when a manually-typed Document No. is already used: stop with an error, or silently assign the next available number (you are alerted).",
+   "fieldname": "duplicate_action",
+   "fieldtype": "Select",
+   "label": "On Duplicate Document No.",
+   "options": "Throw Error\nUse Next Available Number"
   },
   {
    "fieldname": "column_break_main",

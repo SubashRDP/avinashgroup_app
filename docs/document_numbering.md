@@ -62,6 +62,7 @@ Awesome bar → **New Numbering Configuration**.
 | **Enabled** | Turn the rule on/off. |
 | **Auto-fill Document No.** | The switch that makes the rule generate the Document No. (not just the name). |
 | **Document No. field** | *(shown when Auto-fill is on)* Which field the number is written into. Default `custom_document_no`; type another field name if a doctype stores it differently. |
+| **On Duplicate Document No.** | *(shown when Auto-fill is on)* What to do when a **manually-typed** number is already used: **Throw Error** (default — the save is rejected with a next-number hint) or **Use Next Available Number** (the number is silently bumped and you're alerted). Auto numbers never duplicate either way. |
 | **Voucher No. Conditions** | When the rule builds the **name** (field + value; ALL must match). |
 | **Document No. Conditions** | *(shown when Auto-fill is on)* When to **auto-fill the number** — a separate list with operators. Empty = number every doc the rule names. |
 | **Segments** | The ordered building blocks of the number (drag to reorder). |
@@ -160,6 +161,13 @@ a receipt with no branch is named but **not** auto-numbered.
   - *"Set Type, Company and Date to auto-number, or type a number."* → something's missing.
 - Duplicate error: **"Document No. 13 is already used by … Next available number is 14."**
   → type the suggested number, or clear the field for auto.
+- **Instant duplicate warning:** typing a taken number shows an orange alert right away
+  ("already used by X — next available is N"), *before* you save.
+- **Duplicate policy is per rule** — with **On Duplicate Document No. = Use Next Available
+  Number**, a typed duplicate is auto-bumped at save (with an alert) instead of erroring.
+- **Live sync between users:** the preview refreshes over the realtime socket when another
+  user consumes a number in the same doctype, so two open forms don't show the same preview.
+  (The save itself was always collision-free; this just keeps previews honest.)
 
 ---
 
