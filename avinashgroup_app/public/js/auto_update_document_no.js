@@ -36,11 +36,24 @@ function is_manual(frm) {
     return has_manual_flag(frm) && !!cint(frm.doc.custom_document_no_manual);
 }
 
+// A non-empty value that WE did not put there belongs to the user. cint() so
+// Data-typed custom_document_no ("5") and our numeric preview (5) compare equal.
+function user_owns_value(frm) {
+    const v = frm.doc.custom_document_no;
+    return !!v && cint(v) !== cint(frm._auto_docno_value);
+}
+
+// Do not auto-preview over a number the user controls — via the manual flag, or
+// (even when the flag field isn't deployed yet) via a value we didn't write.
+function auto_locked(frm) {
+    return is_manual(frm) || user_owns_value(frm);
+}
+
 function update_hint(frm, preview) {
     if (!frm.get_field || !frm.get_field("custom_document_no")) return;
     let msg = "";
     if (should_auto_number(frm)) {
-        if (is_manual(frm)) {
+        if (auto_locked(frm)) {
             msg = __("Manually entered. Clear the field to auto-number.");
         } else if (preview) {
             msg = __("Auto — assigned on save (preview: {0}).", [preview]);
@@ -49,6 +62,14 @@ function update_hint(frm, preview) {
         }
     }
     frm.set_df_property("custom_document_no", "description", msg);
+}
+
+// The user's cursor is IN the field: frm.doc only updates on change (blur),
+// so mid-typed digits are invisible to the guards — writing now would silently
+// discard them. Callers must skip the fill while focused.
+function docno_input_focused(frm) {
+    const f = frm.get_field && frm.get_field("custom_document_no");
+    return !!(f && f.$input && f.$input.is(":focus"));
 }
 
 function set_auto_value(frm, value) {
@@ -61,21 +82,30 @@ function set_auto_value(frm, value) {
 }
 
 function fetch_preview(frm) {
-    if (!should_auto_number(frm) || is_manual(frm)) {
+    if (!should_auto_number(frm) || auto_locked(frm)) {
         update_hint(frm, frm.doc.custom_document_no);
         return;
     }
 
+    // Monotonic token so an older, slower response can't paint over a newer one.
+    const token = (frm._docno_req = (frm._docno_req || 0) + 1);
     frappe.call({
         method: "avinashgroup_app.custom_code.Override.naming_series.get_next_custom_document_no",
         args: { doc: frm.doc },
         callback: function(r) {
-            // Ignore stale responses: the user may have edited or the form may
-            // have moved on while this request was in flight.
-            if (!should_auto_number(frm) || is_manual(frm)) return;
+            if (token !== frm._docno_req) return;            // superseded
+            // The user may have taken over / the form moved on while in flight.
+            if (!should_auto_number(frm) || auto_locked(frm)) return;
+            if (docno_input_focused(frm)) return;            // user is typing — hands off
             const next = r && r.message;
-            if (next && frm.doc.custom_document_no !== next) {
+            if (next && cint(frm.doc.custom_document_no) !== cint(next)) {
                 set_auto_value(frm, next);
+            } else if (!next && frm.doc.custom_document_no) {
+                // the rule no longer numbers this doc (a field change broke a
+                // condition): clear OUR stale preview instead of leaving the
+                // old number stuck on screen. (auto_locked above guarantees
+                // the value is ours, not the user's.)
+                set_auto_value(frm, null);
             }
             update_hint(frm, next);
         }
@@ -87,24 +117,121 @@ function schedule_preview(frm) {
     frm._docno_timer = setTimeout(() => fetch_preview(frm), DEBOUNCE_MS);
 }
 
+// Manual number typed: ask the server whether it is already used in this
+// scope and warn IMMEDIATELY (before save) with the next free number.
+function warn_if_taken(frm) {
+    const v = frm.doc.custom_document_no;
+    if (!v) return;
+    const token = (frm._docno_check_req = (frm._docno_check_req || 0) + 1);
+    frappe.call({
+        method: "avinashgroup_app.custom_code.Override.naming_series.check_document_no_availability",
+        args: { doc: frm.doc },
+        callback: function (r) {
+            if (token !== frm._docno_check_req) return;          // superseded
+            if (cint(frm.doc.custom_document_no) !== cint(v)) return; // value moved on
+            const res = r && r.message;
+            if (!res || !res.taken) return;
+            const msg = res.next
+                ? __("Document No. {0} is already used by {1}. Next available is {2}.", [v, res.used_by, res.next])
+                : __("Document No. {0} is already used by {1}.", [v, res.used_by]);
+            frappe.show_alert({ message: msg, indicator: "orange" }, 8);
+            frm.set_df_property("custom_document_no", "description", "⚠ " + msg);
+        }
+    });
+}
+
+function schedule_taken_check(frm) {
+    clearTimeout(frm._docno_check_timer);
+    frm._docno_check_timer = setTimeout(() => warn_if_taken(frm), DEBOUNCE_MS);
+}
+
+// Another user just consumed a number in this doctype: any live auto preview
+// may now be stale — re-fetch it so two open forms never show the same number.
+// The server publishes to the DOCTYPE ROOM (permission-gated) after commit;
+// subscribe_docno_events joins that room when a new auto-number form opens.
+// Registered once per page load.
+if (frappe.realtime && frappe.realtime.on) {
+    frappe.realtime.on("docno_assigned", function (data) {
+        const frm = window.cur_frm;
+        if (!frm || !data || frm.doc.doctype !== data.doctype) return;
+        // Only touch the form the user is actually LOOKING at — cur_frm can
+        // be a backgrounded form after navigating to a list/report, and
+        // writing to it would dirty it invisibly.
+        const route = frappe.get_route ? frappe.get_route() : [];
+        if (route[0] !== "Form" || route[1] !== data.doctype) return;
+        if (!should_auto_number(frm) || auto_locked(frm)) return;
+        schedule_preview(frm);
+    });
+}
+
+function subscribe_docno_events(frm) {
+    if (frappe.realtime && frappe.realtime.doctype_subscribe) {
+        frappe.realtime.doctype_subscribe(frm.doc.doctype);
+    }
+}
+
+// Numbering rules are configurable: their conditions/segments can read ANY
+// field (payment_type, custom_branch, reference_no ...), so the static
+// trigger list below can't know them. Ask the server which fields the
+// doctype's rules actually use and bind a preview-refresh to each — without
+// this, filling a condition field never refreshes the preview and the user
+// stares at a blank Document No. that would only fill at save.
+const docno_watch_bound = {};   // doctype -> true once handlers are bound
+
+function bind_rule_watch_fields(frm) {
+    const dt = frm.doc.doctype;
+    if (docno_watch_bound[dt]) return;
+    docno_watch_bound[dt] = true;
+    frappe.call({
+        method: "avinashgroup_app.custom_code.Override.naming_series.get_docno_watch_fields",
+        args: { doctype: dt },
+        callback: function (r) {
+            (r.message || []).forEach(function (field) {
+                if (field === "custom_document_no") return;   // has its own handler
+                const h = {};
+                h[field] = schedule_preview;                  // debounce coalesces duplicates
+                frappe.ui.form.on(dt, h);
+            });
+            // re-evaluate now that all triggers are live
+            if (frm.is_new()) schedule_preview(frm);
+        }
+    });
+}
+
 Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
     const cfg = AUTO_NUMBER_CONFIG[doctype];
 
     const handlers = {
         onload_post_render: function(frm) {
-            if (frm.is_new()) schedule_preview(frm);
+            if (frm.is_new()) {
+                subscribe_docno_events(frm);
+                bind_rule_watch_fields(frm);
+                // A DUPLICATED draft carries the source's number with the
+                // manual flag cleared (the flag is no_copy) — that number
+                // belongs to the ORIGINAL. Blank it so preview and save
+                // treat this doc fresh (the server redraws it anyway; the
+                // screen must not show the copied number as if it were
+                // this doc's). Amendments legitimately keep their number.
+                if (frm.doc.custom_document_no && !frm.doc.amended_from
+                    && has_manual_flag(frm) && !cint(frm.doc.custom_document_no_manual)) {
+                    set_auto_value(frm, null);
+                }
+                schedule_preview(frm);
+            }
         },
         refresh: function(frm) {
             if (frm.is_new()) update_hint(frm, frm.doc.custom_document_no);
         },
         custom_document_no: function(frm) {
             const v = frm.doc.custom_document_no;
-            // our own preview fill (value matches what set_auto_value stored)
-            if (v && v === frm._auto_docno_value) return;
+            // our own preview fill (value matches what set_auto_value stored);
+            // cint() so a Data-typed "5" equals our numeric 5.
+            if (v && cint(v) === cint(frm._auto_docno_value)) return;
             if (v) {
                 // a value we did not set -> user typed it -> it's now theirs
                 if (has_manual_flag(frm)) frm.set_value("custom_document_no_manual", 1);
                 update_hint(frm, null);
+                schedule_taken_check(frm);   // instant duplicate warning
             } else {
                 // user cleared it -> back to auto
                 frm._auto_docno_value = null;

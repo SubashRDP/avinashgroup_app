@@ -10,10 +10,15 @@
   "company",
   "branch",
   "enabled",
+  "auto_document_no",
+  "document_no_field",
+  "duplicate_action",
   "column_break_main",
   "company_abbr",
   "conditions_section",
   "conditions",
+  "document_no_conditions_section",
+  "document_no_conditions",
   "legacy_section",
   "legacy_upto",
   "date_field",
@@ -68,6 +73,30 @@
    "label": "Enabled"
   },
   {
+   "default": "0",
+   "description": "When this rule matches a document, auto-fill its Document No. Leave off to only format the name/voucher number.",
+   "fieldname": "auto_document_no",
+   "fieldtype": "Check",
+   "label": "Auto-fill Document No."
+  },
+  {
+   "default": "custom_document_no",
+   "depends_on": "auto_document_no",
+   "description": "The field the auto number is written into. Defaults to custom_document_no; pick a suggestion or type another field name if this doctype stores it differently.",
+   "fieldname": "document_no_field",
+   "fieldtype": "Autocomplete",
+   "label": "Document No. field"
+  },
+  {
+   "default": "Throw Error",
+   "depends_on": "auto_document_no",
+   "description": "What to do when a manually-typed Document No. is already used: stop with an error, or silently assign the next available number (you are alerted).",
+   "fieldname": "duplicate_action",
+   "fieldtype": "Select",
+   "label": "On Duplicate Document No.",
+   "options": "Throw Error\nUse Next Available Number"
+  },
+  {
    "fieldname": "column_break_main",
    "fieldtype": "Column Break"
   },
@@ -85,10 +114,25 @@
    "label": "Apply only when … (conditions)"
   },
   {
+   "description": "This rule builds the VOUCHER NUMBER (name) only when ALL of these match. Leave empty for a default/base rule.",
    "fieldname": "conditions",
    "fieldtype": "Table",
-   "label": "Conditions",
+   "label": "Voucher No. Conditions",
    "options": "Numbering Condition"
+  },
+  {
+   "depends_on": "auto_document_no",
+   "description": "Separate from the Voucher No. conditions above. The DOCUMENT NO. is auto-filled only when ALL of these match. Leave empty to auto-fill for every document this rule applies to.",
+   "fieldname": "document_no_conditions_section",
+   "fieldtype": "Section Break",
+   "label": "Auto-fill Document No. only when …"
+  },
+  {
+   "depends_on": "auto_document_no",
+   "fieldname": "document_no_conditions",
+   "fieldtype": "Table",
+   "label": "Document No. Conditions",
+   "options": "Numbering Document No Condition"
   },
   {
    "depends_on": "legacy_upto",

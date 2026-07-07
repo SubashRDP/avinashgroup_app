@@ -1,7 +1,9 @@
+import fnmatch
 import json
 import re
 
 import frappe
+from frappe import _
 from frappe.model.naming import make_autoname, getseries
 from frappe.model.document import Document
 
@@ -737,18 +739,6 @@ def _resolve_docno_fiscal_year(doc):
     return get_fiscal_year_from_date(date_field) if date_field else None
 
 
-def _is_docno_position_segment(seg):
-    """A segment that represents the number itself (not part of the series
-    scope): a real Number segment, or the Document Field carrying
-    custom_document_no / custom_document_word."""
-    if seg.get("segment_type") == "Number":
-        return True
-    return seg.get("segment_type") == "Document Field" and seg.get("field") in (
-        "custom_document_no",
-        "custom_document_word",
-    )
-
-
 def _rule_docno_scope(doc, rule):
     """Derive the Document No. series scope from a matching Numbering
     Configuration rule, so the number counts exactly the way the rule groups
@@ -764,20 +754,34 @@ def _rule_docno_scope(doc, rule):
                   max (continues an existing series and stays above any
                   manually-typed number), per branch too.
 
+    The number position is a Number segment OR the Document Field referencing the
+    rule's configured document_no_field — so a rule that stores the number in a
+    non-default field is still recognised (and isn't mistaken for a scope part).
+
     Returns None when the rule has no number position (a pass-through rule),
     so the caller falls back to the legacy company+code+year scope."""
+    number_field = _docno_field(rule)
     sep = rule.get("separator") or "/"
     parts = []  # (value_or_wildcard, glue, is_number)
     number_seen = False
     for seg in rule.get("segments", []):
         glue = bool(seg.get("join_previous"))
-        if _is_docno_position_segment(seg):
-            # The word is the glued tail of the number and is covered by the same
-            # wildcard, so only the number/custom_document_no adds a placeholder.
-            if seg.get("segment_type") == "Number" or seg.get("field") == "custom_document_no":
-                if not number_seen:
-                    parts.append(("%", glue, True))
-                    number_seen = True
+        stype = seg.get("segment_type")
+        fld = seg.get("field")
+        is_number = stype == "Number" or (stype == "Document Field" and fld == number_field)
+        # custom_document_word is the glued letter tail of the number (e.g. 7A) —
+        # covered by the number's wildcard — UNLESS it IS the number field itself.
+        is_word_tail = (
+            stype == "Document Field"
+            and fld == "custom_document_word"
+            and number_field != "custom_document_word"
+        )
+        if is_number:
+            if not number_seen:
+                parts.append(("%", glue, True))
+                number_seen = True
+            continue
+        if is_word_tail:
             continue
         value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep))
         parts.append((value, glue, False))
@@ -785,16 +789,74 @@ def _rule_docno_scope(doc, rule):
     if not number_seen:
         return None
 
-    target = rule.get("target_field") or "custom_branch_name"
+    target = _safe_col(rule.get("target_field")) or "custom_branch_name"
     # The pattern is matched against the rule's target field to find the current
-    # max. If that field doesn't exist on this doctype the rule is inapplicable
-    # (the engine skips it too) — fall back to the legacy scope.
-    if not doc.meta.has_field(target):
+    # max. If that field doesn't exist on this doctype (or isn't backed by a
+    # real DB column, e.g. a Table field) the rule is inapplicable — fall back
+    # to the legacy scope instead of erroring every save.
+    target_df = doc.meta.get_field(target)
+    if not target_df or target_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
         return None
 
     pattern = _join_parts([(v, g) for (v, g, _n) in parts], sep)
     key = _join_parts([(v, g) for (v, g, n) in parts if not n], sep) or ""
-    return {"key": key, "pattern": pattern, "field": target}
+    # Isolate counters per number field when it's non-default, so two rules that
+    # share a prefix but write DIFFERENT fields never share one counter. The
+    # default field appends nothing, preserving existing series continuity.
+    if number_field != "custom_document_no":
+        key = (key + "|" + number_field) if key else number_field
+    return {"key": key, "pattern": pattern, "field": target, "number_field": number_field}
+
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def _safe_col(name):
+    """Validate a rule-configured fieldname before it is formatted into SQL as
+    an identifier. Only plain identifiers pass; anything else (a stray %, which
+    would break pymysql parameter binding, quotes, spaces...) returns None so
+    callers can fail soft instead of erroring every save."""
+    name = (name or "").strip()
+    return name if _IDENTIFIER_RE.match(name) else None
+
+
+def _docno_field(rule):
+    """The field the auto Document No. is written into. Configurable per rule
+    (document_no_field); defaults to custom_document_no so the shipped doctypes
+    are unchanged. A malformed configured name falls back to the default (and
+    the doc.meta.has_field gate downstream keeps a wrong name from breaking
+    saves)."""
+    return _safe_col(rule.get("document_no_field") if rule else None) or "custom_document_no"
+
+
+def _docno_eligible(doc, rule):
+    """Whether this document should get an auto document number.
+
+      1. Rule-driven (the generalized path): the matching Numbering Configuration
+         rule has 'Auto-fill Document No.' ticked AND the document satisfies the
+         rule's separate DOCUMENT NO. CONDITIONS (Equals / In / Is Set …). These
+         are independent of the Voucher No. conditions that select the rule, so
+         you can format the name for a broad set but only number a subset.
+         Empty Document No. conditions = number every document the rule applies to.
+      2. Fallback: the hardcoded AUTO_NUMBER_CONFIG (type field in a fixed list),
+         so day-one behaviour is unchanged for the doctypes shipped with it.
+    """
+    # A matching Auto-fill rule is AUTHORITATIVE for the Document No.: the doc is
+    # numbered iff ALL of the rule's Document No. conditions match (empty list =
+    # number every doc the rule applies to). This lets the conditions both turn
+    # numbering ON for new types and RESTRICT it (e.g. only when a branch is set)
+    # — the fallback below is NOT consulted once such a rule applies.
+    if rule and rule.get("auto_document_no"):
+        return all(_condition_matches(doc, c) for c in rule.get("document_no_conditions", []))
+
+    # No Auto-fill rule applies -> hardcoded fallback (day-one behaviour): the
+    # type field is in the shipped list.
+    cfg = AUTO_NUMBER_CONFIG.get(doc.doctype)
+    if not cfg:
+        return False
+    type_field = cfg.get("type_field")
+    type_value = doc.get(type_field) if type_field else None
+    return bool(type_value and type_value in cfg.get("types", []))
 
 
 def _docno_scope(doc):
@@ -809,50 +871,60 @@ def _docno_scope(doc):
     Also back-fills custom_p_type_code on the doc when it was empty but
     resolvable, so the custom_name built later is correct even if the framework
     has not run its own fetch yet."""
-    cfg = AUTO_NUMBER_CONFIG.get(doc.doctype)
-    if not cfg:
+    rule = _match_numbering_rule(doc)
+    if not _docno_eligible(doc, rule):
         return None
 
-    type_field = cfg.get("type_field")
-    type_value = doc.get(type_field) if type_field else None
-    if not type_value or type_value not in cfg.get("types", []):
-        return None
-
+    number_field = _docno_field(rule)  # which field holds the counter
     code = _resolve_p_type_code(doc)
     company_abbr = get_company_abbr(doc)
     fiscal_year = _resolve_docno_fiscal_year(doc)
-    if not (code and company_abbr and fiscal_year):
-        return None
 
-    if doc.meta.has_field("custom_p_type_code") and not doc.get("custom_p_type_code"):
+    if doc.meta.has_field("custom_p_type_code") and code and not doc.get("custom_p_type_code"):
         doc.custom_p_type_code = code
 
-    rule = _match_numbering_rule(doc)
+    # Rule-derived scope (branch / condition aware) when the matching rule defines
+    # a number position.
     if rule:
         rule_scope = _rule_docno_scope(doc, rule)
         if rule_scope and rule_scope.get("pattern"):
+            rule_scope["number_field"] = number_field
             return rule_scope
 
-    # Legacy fallback: company + code + fiscal year, matched on custom_name.
+    # Legacy fallback scope needs the company + code + fiscal-year triple.
+    if not (code and company_abbr and fiscal_year):
+        return None
+    key = "|".join((company_abbr, code, fiscal_year))
+    if number_field != "custom_document_no":
+        key += "|" + number_field
     return {
-        "key": "|".join((company_abbr, code, fiscal_year)),
+        "key": key,
         "pattern": f"{company_abbr}-{code}-%-{fiscal_year}%",
         "field": "custom_name",
+        "number_field": number_field,
     }
 
 
 def _current_max_document_no(doc, scope):
     """Highest custom_document_no already used in this scope (0 if none).
     Matches the scope's pattern against its target field, so per-branch scopes
-    only ever see that branch's documents."""
-    return int(
-        frappe.db.get_value(
-            doc.doctype,
-            {scope["field"]: ["like", scope["pattern"]]},
-            "max(custom_document_no)",
-        )
-        or 0
+    only ever see that branch's documents.
+
+    CAST(... AS UNSIGNED) makes the max NUMERIC even where custom_document_no is
+    a Data column (Purchase Receipt) rather than Int — a plain MAX() on a varchar
+    compares lexicographically ("9" > "50"), which would compute a wrong floor
+    and let auto numbers eventually collide with a higher manual number."""
+    table = "tab" + doc.doctype.replace("`", "")
+    field = _safe_col(scope["field"])
+    number_field = _safe_col(scope.get("number_field", "custom_document_no"))
+    if not (field and number_field):
+        return 0
+    row = frappe.db.sql(
+        "SELECT MAX(CAST(`{nf}` AS UNSIGNED)) "
+        "FROM `{table}` WHERE `{field}` LIKE %s".format(nf=number_field, table=table, field=field),
+        (scope["pattern"],),
     )
+    return int(row[0][0]) if row and row[0][0] is not None else 0
 
 
 def _docno_series_key(doc, scope):
@@ -891,6 +963,33 @@ def _next_number_hint(doc):
     return f" Next available number is {nxt}." if nxt else ""
 
 
+def _keep_counter_above_manual(doc, field, scope=None):
+    """A manually-entered number is not drawn from the counter, so bump the
+    counter up to it. Future auto draws in the same scope then skip past manual
+    numbers even across concurrent transactions — the draw's upsert reads the
+    latest committed `current` under a row lock, so once a manual number has
+    raised the counter no auto draw can reissue it. Best-effort; never blocks
+    the save.
+
+    Side effect relied on by apply_document_no: the upsert's row lock (held to
+    commit) SERIALIZES concurrent saves of the same scope — the duplicate
+    locking-read that follows it is only race-free behind this lock."""
+    n = frappe.utils.cint(doc.get(field))
+    if n <= 0:
+        return
+    scope = scope or _docno_scope(doc)
+    if not scope:
+        return
+    try:
+        frappe.db.sql(
+            "INSERT INTO `tabSeries` (`name`, `current`) VALUES (%(k)s, %(n)s) "
+            "ON DUPLICATE KEY UPDATE `current` = GREATEST(`current`, %(n)s)",
+            {"k": _docno_series_key(doc, scope), "n": n},
+        )
+    except Exception:
+        pass
+
+
 def _draw_next_document_no(doc, scope):
     """Atomic, deadlock-resistant next number for a scope.
 
@@ -912,14 +1011,140 @@ def _draw_next_document_no(doc, scope):
     return _series_current(key)
 
 
-def _is_manual_document_no(doc):
-    """True when custom_document_no was entered by the user and must be
-    preserved (only uniqueness-checked), not auto-drawn."""
-    if doc.meta.has_field("custom_document_no_manual"):
-        return bool(frappe.utils.cint(doc.get("custom_document_no_manual")))
-    # Flag field not deployed yet: we cannot tell a user value from a stale
-    # client preview, so treat any existing value as manual (never overwrite).
-    return bool(doc.get("custom_document_no"))
+def _is_desk_form_save():
+    """True only for a desk FORM save (savedocs) — the one path where the
+    number field may hold a stale client preview and our JS manages the
+    manual flag. Everywhere else (Data Import, REST API, server code) a
+    value in the field is intentional data and must never be discarded."""
+    if frappe.flags.in_import:
+        return False
+    form_dict = getattr(frappe.local, "form_dict", None) or {}
+    return form_dict.get("cmd") == "frappe.desk.form.save.savedocs"
+
+
+def _is_manual_document_no(doc, field="custom_document_no"):
+    """True when the number field carries a value that must be preserved
+    (only uniqueness-checked), not auto-drawn. The manual flag follows the
+    convention <field>_manual (custom_document_no -> custom_document_no_manual)."""
+    flag = field + "_manual"
+    if doc.meta.has_field(flag) and frappe.utils.cint(doc.get(flag)):
+        return True
+    if not doc.get(field):
+        return False
+    if not doc.meta.has_field(flag):
+        # No flag field: we cannot tell a user value from a stale preview,
+        # so treat any existing value as manual (never overwrite).
+        return True
+    # A STORED document's flag is authoritative: 0 = auto-drawn (matters for
+    # delete-revert: auto numbers return to the counter, manual ones don't).
+    if not doc.is_new():
+        return False
+    # NEW doc, value present, flag unset: in a desk FORM save that's our own
+    # preview fill — the auto path overwrites it with the authoritative draw.
+    # In an import / REST / script save there is no preview: the value came
+    # in the payload on purpose (e.g. legacy numbers in an import file) and
+    # silently renumbering it would be data loss.
+    return not _is_desk_form_save()
+
+
+def _document_no_taken(doc, scope, value, for_update=False):
+    """Name of another live document in this scope already holding the given
+    Document No., or None. Scoped by the same LIKE pattern as
+    _current_max_document_no, so per-branch series only see their own branch.
+    CAST keeps the comparison numeric on Data-typed number columns.
+
+    for_update=True makes this a LOCKING read: under REPEATABLE READ a plain
+    SELECT uses the transaction's snapshot and CANNOT see a row a concurrent
+    save committed after this transaction started — a locking read always
+    reads latest-committed. Callers must hold the scope's tabSeries row lock
+    first (_keep_counter_above_manual / _draw_next_document_no), which
+    serializes same-scope savers so the peer's row is committed by the time
+    this runs."""
+    n = frappe.utils.cint(value)
+    if n <= 0:
+        return None
+    table = "tab" + doc.doctype.replace("`", "")
+    field = _safe_col(scope["field"])
+    number_field = _safe_col(scope.get("number_field", "custom_document_no"))
+    if not (field and number_field):
+        return None
+    row = frappe.db.sql(
+        ("SELECT `name` FROM `{table}` WHERE `{field}` LIKE %s "
+         "AND CAST(`{nf}` AS UNSIGNED) = %s AND `docstatus` < 2 AND `name` != %s "
+         "LIMIT 1" + (" FOR UPDATE" if for_update else "")).format(
+            table=table, field=field, nf=number_field),
+        (scope["pattern"], n, doc.name or ""),
+    )
+    return row[0][0] if row else None
+
+
+def _redraw_docno_if_scope_changed(doc):
+    """A saved DRAFT edited onto a different series must not keep a number
+    from the old one (e.g. branch an -> kt with per-branch counting: keeping
+    an's 5 would corrupt kt's sequence and desync an's). Give the old number
+    back to its series (only if it was the last drawn — same rule as delete)
+    and draw fresh from the new series. Manual numbers and amendments belong
+    to the user and are never touched. Submitted documents are immutable."""
+    if doc.get("docstatus") != 0 or doc.get("amended_from"):
+        return
+    rule = _match_numbering_rule(doc)
+    field = _docno_field(rule)
+    field_df = doc.meta.get_field(field)
+    if not field_df or field_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+        return
+    if not doc.get(field) or _is_manual_document_no(doc, field):
+        return
+    before = doc.get_doc_before_save()
+    if not before:
+        return
+    new_scope = _docno_scope(doc)
+    if not new_scope:
+        # the edit made the doc ineligible — leave the number (the field is
+        # mandatory on the audited doctypes; the user can overtype it)
+        return
+    try:
+        old_scope = _docno_scope(before)
+    except Exception:
+        old_scope = None
+    if old_scope and old_scope["key"] == new_scope["key"]:
+        return  # same series — number stays
+    if old_scope:
+        _revert_series_if_last(
+            _docno_series_key(before, old_scope), frappe.utils.cint(doc.get(field))
+        )
+    doc.set(field, _draw_next_document_no(doc, new_scope))
+    _notify_docno_drawn(doc, new_scope)
+    doc.flags._docno_assigned = True
+
+
+def _duplicate_action(rule):
+    """Per-rule policy when a manually-typed number is already used:
+    'Throw Error' (default — the save is rejected with a next-number hint) or
+    'Use Next Available Number' (the number is bumped and the user alerted)."""
+    return (rule.get("duplicate_action") if rule else None) or "Throw Error"
+
+
+def _notify_docno_drawn(doc, scope=None):
+    """Realtime nudge to other open forms: a number in this doctype was just
+    consumed, so any live preview may be stale — re-fetch. Published only
+    after commit (a rolled-back save consumed nothing) and best-effort:
+    realtime being down must never block a save.
+
+    Scoped to the DOCTYPE ROOM (clients doctype_subscribe on new forms;
+    subscription is permission-gated by frappe's can_subscribe_doctype) — a
+    site-wide broadcast would tell every logged-in user about every voucher.
+    The payload carries no scope details for the same reason: the client just
+    re-fetches its own preview."""
+    try:
+        from frappe.realtime import get_doctype_room
+        frappe.publish_realtime(
+            "docno_assigned",
+            {"doctype": doc.doctype},
+            room=get_doctype_room(doc.doctype),
+            after_commit=True,
+        )
+    except Exception:
+        pass
 
 
 def apply_document_no(doc):
@@ -935,12 +1160,71 @@ def apply_document_no(doc):
     Idempotent within a single save via doc.flags._docno_assigned."""
     if doc.flags.get("_docno_assigned"):
         return
-    if not doc.is_new() or doc.doctype not in AUTO_NUMBER_CONFIG:
-        return
-    if not doc.meta.has_field("custom_document_no"):
+    if not doc.is_new():
+        # An existing DRAFT's number must follow its scope: editing branch /
+        # company / type / date onto a different series redraws the number
+        # (mirror of _renumber_if_scope_changed for the name).
+        _redraw_docno_if_scope_changed(doc)
         return
 
-    if _is_manual_document_no(doc):
+    # Which field holds the number — configurable per rule, default
+    # custom_document_no. Any doctype carrying that field can be auto-numbered.
+    # The field must be backed by a real DB column (a configured Table/Section
+    # field would crash the CAST in every draw query — fail soft instead).
+    field = _docno_field(_match_numbering_rule(doc))
+    field_df = doc.meta.get_field(field)
+    if not field_df or field_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+        return
+
+    if _is_manual_document_no(doc, field):
+        scope = _docno_scope(doc)
+        # ORDER MATTERS (concurrency): bump the counter FIRST — its
+        # INSERT..ON DUPLICATE KEY UPDATE takes the scope's tabSeries row lock
+        # (held to commit), so a concurrent save of the same scope blocks here
+        # until this one commits. Only THEN check for a duplicate, with a
+        # LOCKING read that sees the peer's committed row (a plain SELECT's
+        # REPEATABLE READ snapshot would miss it, letting two users who typed
+        # the same free number both save it).
+        _keep_counter_above_manual(doc, field, scope)
+        if scope:
+            taken_by = _document_no_taken(doc, scope, doc.get(field), for_update=True)
+            if taken_by:
+                # Per-rule duplicate policy. Imports always take the throw
+                # path: silently renumbering imported data would be invisible
+                # in a background job — a visible row error is safer.
+                bump = (
+                    _duplicate_action(_match_numbering_rule(doc)) == "Use Next Available Number"
+                    and not frappe.flags.in_import
+                )
+                if bump:
+                    old = doc.get(field)
+                    doc.set(field, _draw_next_document_no(doc, scope))
+                    flag = field + "_manual"
+                    if doc.meta.has_field(flag):
+                        doc.set(flag, 0)
+                    frappe.msgprint(
+                        _("Document No. {0} is already used by {1} — assigned the next available number {2} instead.").format(
+                            old, taken_by, doc.get(field)
+                        ),
+                        indicator="orange",
+                        alert=True,
+                    )
+                else:
+                    frappe.throw(
+                        _("Document No. {0} is already used by {1}.{2} "
+                          "Leave the field empty to get the next number automatically.").format(
+                            doc.get(field), taken_by, _next_number_hint(doc)
+                        ),
+                        title=_("Duplicate Document Number"),
+                    )
+            else:
+                # The kept value is manual from here on — persist that in the
+                # flag so the STORED doc is classified consistently (imports /
+                # API payloads arrive with the flag unset).
+                flag = field + "_manual"
+                if doc.meta.has_field(flag):
+                    doc.set(flag, 1)
+            _notify_docno_drawn(doc, scope)
         doc.flags._docno_assigned = True
         return
 
@@ -948,21 +1232,27 @@ def apply_document_no(doc):
     # amended voucher stays tied to it (custom_name adds the -1/-2 suffix). A
     # plain Duplicate/Copy is NOT an amendment (no amended_from) and correctly
     # falls through to draw a fresh number.
-    if doc.get("amended_from") and doc.get("custom_document_no"):
+    if doc.get("amended_from") and doc.get(field):
         doc.flags._docno_assigned = True
         return
 
     scope = _docno_scope(doc)
     if not scope:
         # Not eligible yet (missing code / company / fiscal year, or a type that
-        # is simply not auto-numbered). Blank it for manual entry and do NOT set
-        # the assigned flag, so a later hook retries once the scope is complete.
-        doc.custom_document_no = None
+        # is simply not auto-numbered). In a desk FORM save, clear a stale
+        # client preview so the field falls back to manual entry — but NEVER
+        # blank a value that arrived by import/REST/script (no client preview
+        # there; blanking would be silent data loss). Do NOT set the assigned
+        # flag, so a later hook retries once the scope is complete.
+        if _is_desk_form_save():
+            doc.set(field, None)
         return
 
-    doc.custom_document_no = _draw_next_document_no(doc, scope)
-    if doc.meta.has_field("custom_document_no_manual"):
-        doc.custom_document_no_manual = 0
+    doc.set(field, _draw_next_document_no(doc, scope))
+    flag = field + "_manual"
+    if doc.meta.has_field(flag):
+        doc.set(flag, 0)
+    _notify_docno_drawn(doc, scope)
     doc.flags._docno_assigned = True
 
 
@@ -977,13 +1267,88 @@ def get_next_custom_document_no(doc=None, **kwargs):
     accounts) arrive as JSON strings/lists and are irrelevant to numbering, so
     only scalar fields are kept before building a lightweight in-memory doc."""
     try:
-        data = doc if doc is not None else kwargs
-        if isinstance(data, str):
-            data = json.loads(data)
-        if not isinstance(data, dict) or not data.get("doctype"):
+        d = _client_payload_doc(doc, kwargs)
+        return peek_next_document_no(d) if d else None
+    except Exception:
+        return None
+
+
+@frappe.whitelist()
+def get_docno_watch_fields(doctype):
+    """Fields the live Document No. preview must re-fetch on: everything any
+    enabled rule's conditions or segments read, plus the legacy scope fields.
+    The form can't know rule-configured fields statically — a rule gating on
+    payment_type / custom_branch would otherwise never refresh the preview
+    when those fields change (the number still arrives on save, but the user
+    sees a blank field and thinks numbering is broken)."""
+    if not isinstance(doctype, str) or not frappe.has_permission(doctype, "read"):
+        return []
+    fields = {"company", "posting_date", "custom_fiscal_year", "custom_p_type_code"}
+    cfg = AUTO_NUMBER_CONFIG.get(doctype)
+    if cfg and cfg.get("type_field"):
+        fields.add(cfg["type_field"])
+    try:
+        for rule in _numbering_rules_for(doctype):
+            for c in (rule.get("conditions") or []) + (rule.get("document_no_conditions") or []):
+                if c.get("field"):
+                    fields.add(c["field"])
+            for s in rule.get("segments") or []:
+                if s.get("field"):
+                    fields.add(s["field"])
+            if rule.get("date_field"):
+                fields.add(rule["date_field"])
+    except Exception:
+        pass
+    meta = frappe.get_meta(doctype)
+    return sorted(f for f in fields if meta.has_field(f))
+
+
+def _client_payload_doc(doc, kwargs):
+    """Parse a client-sent draft payload into an in-memory doc, gated by
+    DOC-LEVEL read permission — a role-only check would let a user restricted
+    (by User Permissions) to one company/branch probe another's series by
+    posting a payload for it. Returns None when unparsable or not permitted."""
+    data = doc if doc is not None else kwargs
+    if isinstance(data, str):
+        data = json.loads(data)
+    if not isinstance(data, dict) or not data.get("doctype"):
+        return None
+    scalars = {k: v for k, v in data.items() if not isinstance(v, (list, dict))}
+    d = frappe.get_doc(scalars)
+    # doc= applies User Permissions against the payload's own field values
+    # (company, branch, ...), not just the role's doctype access.
+    if not frappe.has_permission(d.doctype, "read", doc=d):
+        return None
+    return d
+
+
+@frappe.whitelist()
+def check_document_no_availability(doc=None, **kwargs):
+    """Client helper: is the manually-typed Document No. free in this draft's
+    scope? Returns {"taken": bool, "used_by": name, "next": int} — or None when
+    it can't tell (type not auto-numbered, scope incomplete, unparsable payload).
+    Never raises: the form only uses it to show a warning hint while typing."""
+    try:
+        d = _client_payload_doc(doc, kwargs)
+        if not d:
             return None
-        scalars = {k: v for k, v in data.items() if not isinstance(v, (list, dict))}
-        return peek_next_document_no(frappe.get_doc(scalars))
+        scope = _docno_scope(d)
+        if not scope:
+            return None
+        # The form types into custom_document_no; fall back to it when the
+        # rule's configured number field isn't in the payload, so rules with a
+        # non-default field still warn.
+        value = frappe.utils.cint(
+            d.get(scope["number_field"]) or d.get("custom_document_no")
+        )
+        if value <= 0:
+            return None
+        used_by = _document_no_taken(d, scope, value)
+        return {
+            "taken": bool(used_by),
+            "used_by": used_by,
+            "next": peek_next_document_no(d) if used_by else None,
+        }
     except Exception:
         return None
 
@@ -1001,7 +1366,9 @@ def set_custom_name_field(doc):
     elif hasattr(doc, 'custom_company') and doc.custom_company:
         company_name = doc.custom_company
     if company_name and company_name == "Grihalaxmi Metal Industries Pvt. Ltd":
-        doc.custom_name = ""
+        # None, not "": custom_name carries a UNIQUE DB index — NULLs may
+        # repeat freely, but a second empty-string row would violate it.
+        doc.custom_name = None
         return
 
     company_code = get_company_abbr(doc) or ""
@@ -1179,17 +1546,95 @@ def _configured_doctypes():
     return frappe.local._numbering_doctypes_cache
 
 
+def _numbering_rules_key(doctype):
+    """Redis key holding the fully-assembled rules (with conditions + segments)
+    for a single doctype."""
+    return f"numbering_rules::{doctype}"
+
+
 def clear_numbering_rules_cache():
     """Called when a Numbering Configuration changes."""
     frappe.cache().delete_value("numbering_configured_doctypes")
+    # assembled-rules keys are per-doctype (numbering_rules::<doctype>)
+    frappe.cache().delete_keys("numbering_rules::")
     for attr in ("_numbering_doctypes_cache", "_numbering_rules_cache"):
         if hasattr(frappe.local, attr):
             delattr(frappe.local, attr)
 
 
+def _build_numbering_rules(doctype):
+    """Assemble a doctype's enabled rules with their conditions + segments in a
+    fixed 3 queries (1 rules + 2 batched child fetches), grouping the children
+    in Python by parent — instead of the old 2 queries PER rule (N+1).
+    Conditions and segments keep exact idx ordering."""
+    # duplicate_action shipped after the other columns: in the deploy window
+    # between code reload and `bench migrate`, selecting it would 1054-error
+    # every save of every configured doctype. Probe once per build (results
+    # are redis-cached, so this is not a hot path).
+    fields = [
+        "name", "company", "branch", "target_field", "separator",
+        "date_field", "legacy_upto", "legacy_source_field", "auto_document_no",
+        "document_no_field",
+    ]
+    if frappe.db.has_column("Numbering Configuration", "duplicate_action"):
+        fields.append("duplicate_action")
+    rules = frappe.get_all(
+        "Numbering Configuration",
+        filters={"document_type": doctype, "enabled": 1},
+        fields=fields,
+    )
+    if not rules:
+        return rules
+
+    rule_names = [r["name"] for r in rules]
+
+    # Voucher No. conditions (name generation) — no operator, plain equality.
+    conditions = frappe.get_all(
+        "Numbering Condition",
+        filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+        fields=["parent", "field", "value"],
+        order_by="idx",
+    )
+    # Document No. conditions (auto-fill gate) — with operators.
+    docno_conditions = frappe.get_all(
+        "Numbering Document No Condition",
+        filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+        fields=["parent", "field", "value", "operator"],
+        order_by="idx",
+    )
+    segments = frappe.get_all(
+        "Numbering Segment",
+        filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+        fields=["parent", "segment_type", "static_value", "return_value", "field", "fetch_field", "number_length", "join_previous"],
+        order_by="idx",
+    )
+
+    # group children by parent, preserving idx order (rows arrive idx-ascending;
+    # grouping keeps each parent's relative order intact)
+    def _group(rows):
+        out = {}
+        for row in rows:
+            out.setdefault(row.pop("parent"), []).append(row)
+        return out
+
+    cond_by_parent = _group(conditions)
+    docno_cond_by_parent = _group(docno_conditions)
+    seg_by_parent = _group(segments)
+
+    for r in rules:
+        # rules with zero children still get empty lists
+        r["conditions"] = cond_by_parent.get(r["name"], [])
+        r["document_no_conditions"] = docno_cond_by_parent.get(r["name"], [])
+        r["segments"] = seg_by_parent.get(r["name"], [])
+
+    return rules
+
+
 def _numbering_rules_for(doctype):
     """All enabled Numbering Configuration rules for a doctype, with conditions + segments.
-    Results are cached per-request to avoid redundant DB calls when multiple documents are saved."""
+    Layered cache: per-request (frappe.local) on top of redis on top of a batched DB
+    build. Redis holds the fully-assembled rule dicts in the exact shape returned here,
+    so both saves and (separate-request) live previews avoid the N+1 rule fetch."""
     # Per-request cache: if rules have already been fetched, return the cached copy
     if not hasattr(frappe.local, "_numbering_rules_cache"):
         frappe.local._numbering_rules_cache = {}
@@ -1201,27 +1646,12 @@ def _numbering_rules_for(doctype):
         frappe.local._numbering_rules_cache[doctype] = []
         return []
 
-    rules = frappe.get_all(
-        "Numbering Configuration",
-        filters={"document_type": doctype, "enabled": 1},
-        fields=[
-            "name", "company", "branch", "target_field", "separator",
-            "date_field", "legacy_upto", "legacy_source_field",
-        ],
-    )
-    for r in rules:
-        r["conditions"] = frappe.get_all(
-            "Numbering Condition",
-            filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
-            fields=["field", "value"],
-            order_by="idx",
-        )
-        r["segments"] = frappe.get_all(
-            "Numbering Segment",
-            filters={"parent": r["name"], "parenttype": "Numbering Configuration"},
-            fields=["segment_type", "static_value", "return_value", "field", "fetch_field", "number_length", "join_previous"],
-            order_by="idx",
-        )
+    # Redis layer: fully-assembled rules, built once per doctype and reused across
+    # requests (invalidated by clear_numbering_rules_cache on any rule change).
+    rules = frappe.cache().get_value(_numbering_rules_key(doctype))
+    if rules is None:
+        rules = _build_numbering_rules(doctype)
+        frappe.cache().set_value(_numbering_rules_key(doctype), rules)
 
     frappe.local._numbering_rules_cache[doctype] = rules
     return rules
@@ -1234,6 +1664,35 @@ def _rule_date(doc, rule):
     return _doc_date(doc)
 
 
+def _condition_matches(doc, cond):
+    """Evaluate one condition with its operator. A blank/absent operator means
+    Equals — so rules created before operators existed behave exactly as before.
+
+    Operators:
+      Equals / Not Equals  — scalar compare (string-normalised)
+      In / Not In          — value is a comma-separated list
+      Is Set / Is Not Set  — the field is (non-)empty; value ignored
+    """
+    op = (cond.get("operator") or "Equals").strip()
+    field_value = frappe.utils.cstr(doc.get(cond.get("field")))
+
+    if op in ("Is Set", "Is Not Set"):
+        # A blank, "0", or 0.0 is "not set" — covers Check/Int gate fields where
+        # 0/unchecked is semantically empty, as well as truly-empty text/links.
+        is_set = field_value.strip() not in ("", "0", "0.0")
+        return is_set if op == "Is Set" else not is_set
+
+    if op in ("In", "Not In"):
+        items = [v.strip() for v in frappe.utils.cstr(cond.get("value")).split(",") if v.strip()]
+        in_list = field_value in items
+        return in_list if op == "In" else not in_list
+
+    target = frappe.utils.cstr(cond.get("value"))
+    if op == "Not Equals":
+        return field_value != target
+    return field_value == target  # Equals (default)
+
+
 def _rule_matches(doc, rule):
     """True if the document satisfies the rule's company/branch scope
     and ALL conditions."""
@@ -1243,7 +1702,7 @@ def _rule_matches(doc, rule):
         return False
 
     for cond in rule.get("conditions", []):
-        if frappe.utils.cstr(doc.get(cond["field"])) != frappe.utils.cstr(cond["value"]):
+        if not _condition_matches(doc, cond):
             return False
     return True
 
@@ -1465,7 +1924,17 @@ def _rule_dict_from_config(cfg):
         "date_field": cfg.get("date_field"),
         "legacy_upto": cfg.get("legacy_upto"),
         "legacy_source_field": cfg.get("legacy_source_field"),
-        "conditions": [{"field": c.field, "value": c.value} for c in (cfg.conditions or [])],
+        "auto_document_no": cfg.get("auto_document_no"),
+        "document_no_field": cfg.get("document_no_field"),
+        "duplicate_action": cfg.get("duplicate_action"),
+        "conditions": [
+            {"field": c.field, "value": c.value}
+            for c in (cfg.conditions or [])
+        ],
+        "document_no_conditions": [
+            {"field": c.field, "value": c.value, "operator": c.get("operator")}
+            for c in (cfg.get("document_no_conditions") or [])
+        ],
         "segments": [
             {
                 "segment_type": s.segment_type,
@@ -1739,15 +2208,26 @@ def _revert_document_no_series(doc):
     last number in its scope, so the number is reused — mirroring the historical
     max+1 self-heal. Mid-series gaps are left alone. Manual numbers never
     consumed the counter, so they are skipped."""
-    if doc.doctype not in AUTO_NUMBER_CONFIG or not doc.meta.has_field("custom_document_no"):
+    field = _docno_field(_match_numbering_rule(doc))
+    if not doc.meta.has_field(field):
         return
-    if _is_manual_document_no(doc):
+    # Manual numbers and amendments never consumed the counter -> never revert.
+    if _is_manual_document_no(doc, field) or doc.get("amended_from"):
         return
-    number = frappe.utils.cint(doc.get("custom_document_no"))
+    number = frappe.utils.cint(doc.get(field))
     if not number:
         return
     scope = _docno_scope(doc)
     if not scope:
+        return
+    # Only revert when the stored number still belongs to the CURRENT scope. If
+    # branch / company / date / type changed after the number was drawn, the
+    # recomputed scope points at a DIFFERENT series and must not be stepped back
+    # (that would gap this series and could wrongly decrement another). The
+    # stored target value was built with the scope at draw time, so it matches
+    # the current pattern only when the scope is unchanged.
+    stored = frappe.utils.cstr(doc.get(scope["field"]))
+    if not fnmatch.fnmatch(stored, scope["pattern"].replace("%", "*")):
         return
     _revert_series_if_last(_docno_series_key(doc, scope), number)
 
@@ -1799,8 +2279,9 @@ def handle_validate(doc, method=None):
     # engine numbering (set_custom_branch_name) is NOT called here: the
     # wildcard doc_events run apply_engine_numbering for EVERY doctype right
     # after these doctype-specific handlers — same order, single execution.
-    if doc.is_new():
-        apply_document_no(doc)
+    # apply_document_no handles both lifecycles: draw for new docs, redraw
+    # for saved drafts whose series scope changed.
+    apply_document_no(doc)
     set_custom_name_field(doc)
     validate_document_no(doc)
     validate_custom_name_unique(doc)
@@ -1813,8 +2294,7 @@ def handle_before_save(doc, method=None):
     apply_document_no is idempotent within a save, so the assignment (and its
     per-scope lock) happens exactly once even though this runs after validate.
     """
-    if doc.is_new():
-        apply_document_no(doc)
+    apply_document_no(doc)
     set_custom_name_field(doc)
     validate_document_no(doc)
     validate_custom_name_unique(doc)
@@ -1827,6 +2307,12 @@ def apply_engine_numbering(doc, method=None):
     custom_branch_name = doc.name fallback where that field exists)."""
     if doc.meta.istable or frappe.flags.in_install or frappe.flags.in_migrate:
         return
+    # Draw the document number first (idempotent via flags — a no-op for the
+    # audited doctypes where handle_validate already ran it), then build the
+    # name from it. This wildcard makes rule-driven auto-numbering work for ANY
+    # doctype that carries custom_document_no, not just the audited ones.
+    # Non-new drafts get the scope-change redraw inside apply_document_no.
+    apply_document_no(doc)
     set_custom_branch_name(doc)
 
 

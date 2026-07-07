@@ -26,7 +26,20 @@ class NumberingConfiguration(Document):
 	def validate(self):
 		self.validate_segments()
 		self.validate_condition_fields()
+		self.validate_document_no_field()
 		self.validate_legacy_cutover()
+
+	def validate_document_no_field(self):
+		if not (self.auto_document_no and self.document_no_field and self.document_type):
+			return
+		if not frappe.get_meta(self.document_type).has_field(self.document_no_field):
+			frappe.msgprint(
+				_("Document No. field '{0}' does not exist on {1} — the number can't be stored. Pick an existing field.").format(
+					self.document_no_field, self.document_type
+				),
+				indicator="orange",
+				alert=True,
+			)
 
 	def validate_legacy_cutover(self):
 		if not self.legacy_upto:
@@ -166,18 +179,21 @@ class NumberingConfiguration(Document):
 			)
 
 	def validate_condition_fields(self):
-		if not self.document_type or not self.conditions:
+		if not self.document_type:
 			return
 		meta = frappe.get_meta(self.document_type)
-		for row in self.conditions:
-			if row.field and not meta.has_field(row.field):
-				frappe.msgprint(
-					_("Condition row {0}: '{1}' is not a field on {2}.").format(
-						row.idx, row.field, self.document_type
-					),
-					indicator="orange",
-					alert=True,
-				)
+		checks = [(_("Voucher No. condition"), self.conditions or []),
+			(_("Document No. condition"), self.get("document_no_conditions") or [])]
+		for label, rows in checks:
+			for row in rows:
+				if row.field and not meta.has_field(row.field):
+					frappe.msgprint(
+						_("{0} row {1}: '{2}' is not a field on {3} — typo? The rule won't match on it.").format(
+							label, row.idx, row.field, self.document_type
+						),
+						indicator="orange",
+						alert=True,
+					)
 
 	@frappe.whitelist()
 	def test_number(self, reference=None):

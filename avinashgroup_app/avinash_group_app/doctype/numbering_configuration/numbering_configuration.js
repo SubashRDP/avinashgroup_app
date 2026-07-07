@@ -39,10 +39,27 @@ frappe.ui.form.on("Numbering Configuration", {
 	legacy_source_field(frm) { render_preview(frm); },
 });
 
+// Voucher No. conditions (Equals only, no operator).
 frappe.ui.form.on("Numbering Condition", {
 	conditions_add(frm) { render_preview(frm); },
 	conditions_remove(frm) { render_preview(frm); },
 	field(frm, cdt, cdn) {
+		set_smart_value_options(frm, cdt, cdn);
+		render_preview(frm);
+	},
+	value(frm) { render_preview(frm); },
+});
+
+// Document No. conditions (with operators). Only used when Auto-fill is on.
+frappe.ui.form.on("Numbering Document No Condition", {
+	document_no_conditions_add(frm) { render_preview(frm); },
+	document_no_conditions_remove(frm) { render_preview(frm); },
+	field(frm, cdt, cdn) {
+		set_smart_value_options(frm, cdt, cdn);
+		render_preview(frm);
+	},
+	operator(frm, cdt, cdn) {
+		// In / Not In need a free-text list; Is Set / Is Not Set need no value.
 		set_smart_value_options(frm, cdt, cdn);
 		render_preview(frm);
 	},
@@ -149,8 +166,10 @@ function load_field_options(frm, reset_default) {
 			.filter((f) => !skip.includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)
 			.sort();
+		// Autocomplete suggestions — the user may still type any field name.
 		const options = ["", ...doc_fields].join("\n");
 		frm.fields_dict.conditions.grid.update_docfield_property("field", "options", options);
+		frm.fields_dict.document_no_conditions.grid.update_docfield_property("field", "options", options);
 		frm.fields_dict.segments.grid.update_docfield_property("field", "options", options);
 
 		// "Date Field" -> date-like fields for the legacy cut-over comparison.
@@ -168,12 +187,15 @@ function load_field_options(frm, reset_default) {
 			.sort();
 		frm.set_df_property("target_field", "options", ["", ...target_fields].join("\n"));
 		frm.set_df_property("legacy_source_field", "options", ["", ...target_fields].join("\n"));
+		// "Document No. field" -> any field (Int/Data usually) can hold the number.
+		frm.set_df_property("document_no_field", "options", ["", ...doc_fields].join("\n"));
 
 		if ((reset_default || !frm.doc.target_field) && target_fields.includes("custom_branch_name")) {
 			frm.set_value("target_field", "custom_branch_name");
 		}
 		frm.refresh_field("target_field");
 		frm.refresh_field("conditions");
+		frm.refresh_field("document_no_conditions");
 		frm.refresh_field("segments");
 	});
 }
@@ -183,9 +205,24 @@ function set_smart_value_options(frm, cdt, cdn) {
 	const row = locals[cdt][cdn];
 	if (!row.field || !frm.doc.document_type) return;
 
+	// works for either the Voucher No. (conditions) or Document No.
+	// (document_no_conditions) grid — the row knows its own parent table.
+	const grid = frm.fields_dict[row.parentfield].grid;
+	const op = row.operator || "Equals";
+
+	// In / Not In take a comma-separated LIST, so the value must stay free text —
+	// a single-pick dropdown can't express a list. Is Set / Is Not Set need no
+	// value at all (the field is hidden). Only Equals / Not Equals get the
+	// convenience dropdown of the referenced field's own options.
+	if (op === "In" || op === "Not In" || op === "Is Set" || op === "Is Not Set") {
+		grid.update_docfield_property("value", "fieldtype", "Data");
+		grid.update_docfield_property("value", "options", "");
+		grid.refresh();
+		return;
+	}
+
 	frappe.model.with_doctype(frm.doc.document_type, () => {
 		const df = frappe.meta.get_docfield(frm.doc.document_type, row.field);
-		const grid = frm.fields_dict.conditions.grid;
 		let value_df = { fieldtype: "Data", options: "" };
 
 		if (df && df.fieldtype === "Check") {
