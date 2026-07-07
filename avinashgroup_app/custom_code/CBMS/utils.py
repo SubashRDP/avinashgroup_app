@@ -1,12 +1,13 @@
 """Shared helpers for the CBMS (Central Billing Monitoring System / IRD) integration.
 
-Bikram Sambat (BS) dates and the IRD fiscal-year string are derived directly from the
-`nepali_datetime` package rather than this app's own Fiscal Year doctype, because the IRD
-API expects a specific dotted format ("2081.082") that doesn't match this app's short BS
-fiscal year names ("82/83").
+Bikram Sambat (BS) dates come from the `nepali_datetime` package. The IRD fiscal-year
+string is resolved from the Fiscal Year record the posting date falls in (per company),
+reformatted from the site's short names ("82/83") to the dotted format the IRD API
+expects ("2082.083").
 """
 
 import nepali_datetime
+from erpnext.accounts.utils import get_fiscal_year
 from frappe.utils import getdate
 
 
@@ -22,17 +23,17 @@ def bs_date_str(ad_date, sep="-"):
 	return f"{bs.year:04d}{sep}{bs.month:02d}{sep}{bs.day:02d}"
 
 
-def cbms_fiscal_year(ad_date):
-	"""IRD fiscal-year string for a Gregorian date, e.g. "2081.082".
+def cbms_fiscal_year(ad_date, company=None):
+	"""Fiscal-year string for a posting date, e.g. "82.83".
 
-	The Nepali fiscal year runs Shrawan (BS month 4) through Ashadh (BS month 3 of the
-	next BS year). Given a BS year/month, the fiscal year starting year is the current
-	BS year for months 4-12, or the previous BS year for months 1-3.
+	Finds the Fiscal Year record the posting date falls in (year_start_date..
+	year_end_date, respecting company-specific fiscal years) and returns its name
+	as-is, with the slash swapped for a dot: "82/83" -> "82.83".
+	Raises FiscalYearError if no record covers the date, so a missing Fiscal Year
+	surfaces in the Error Log instead of a wrong year being reported to IRD.
 	"""
-	bs = to_bs_date(ad_date)
-	start_year = bs.year if bs.month >= 4 else bs.year - 1
-	end_year = start_year + 1
-	return f"{start_year}.{end_year % 1000:03d}"
+	fy = get_fiscal_year(date=getdate(ad_date), company=company, as_dict=True)
+	return fy.name.replace("/", ".")  # "82/83" -> "82.83"
 
 
 def cbms_invoice_number(sales_invoice):

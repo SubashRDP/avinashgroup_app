@@ -36,8 +36,8 @@ RETURN_ERRORS = {
 
 
 def _other_sales_fields(doc):
-	"""Excise/HST/ESF stay 0 for this business; export_sales and tax_exempted_sales
-	are computed on the CBMS doc by build_cbms_fields."""
+	"""HST/ESF stay 0 for this business; excisable_amount, excise, export_sales and
+	tax_exempted_sales are computed on the CBMS doc by build_cbms_fields."""
 	return {
 		"excisable_amount": doc.excisable_amount or 0,
 		"excise": doc.excise or 0,

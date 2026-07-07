@@ -46,13 +46,22 @@ def _line_value(item):
 	selling-taxes handler has computed it, else base_net_amount. VAT here is levied on
 	net + excise, so this is the base the taxable/exempt split must use for the
 	reported components to reconcile with grand_total."""
-	return flt(item.get("custom_total")) or flt(item.base_net_amount)
+	return flt(item.get("custom_total")) 
 
 
 def _booked_vat(sales_invoice):
-	"""The VAT actually booked on the invoice — custom_total_vat_amount (maintained by
-	salesinvoice_taxes on every save), falling back to the VAT-account tax rows for any
-	document that predates that handler."""
+	"""The VAT actually booked on the invoice — summed from each line's
+	custom_vat_amount where VAT Apply On is "VAT 13%" or "Amount" (both maintained
+	by salesinvoice_taxes on every save; "VAT 0%" lines carry no VAT). Falls back to
+	the parent custom_total_vat_amount, then to the VAT-account tax rows, for any
+	document that predates the per-line fields."""
+	line_vat = sum(
+		flt(item.get("custom_vat_amount"))
+		for item in sales_invoice.items
+		if item.get("custom_vat_apply_on") in ("VAT 13%", "Amount")
+	)
+	if line_vat:
+		return abs(line_vat)
 	booked = flt(sales_invoice.get("custom_total_vat_amount"))
 	if booked:
 		return abs(booked)
@@ -65,17 +74,11 @@ def _booked_vat(sales_invoice):
 	)
 
 
+
 def build_cbms_fields(sales_invoice):
 	"""Field mapping shared by CBMS Bill and CBMS Bill Return, from a submitted Sales
 	Invoice, per the IRD mapping spec:
 
-	- tax_exempted_sales: line values where VAT Apply On = "VAT 0%"
-	- taxable_sales_vat:  line values of every other line
-	- vat:                the VAT amount booked on the invoice (not derived)
-	- total_sales:        grand total excluding the VAT-0% (exempt) line values
-	- export_sales:       whole sales value when territory ≠ Nepal or currency ≠ NPR
-	- discount:           additional discount amount when applied on Net Total
-	                      (recorded on the CBMS doc only; the IRD API has no such field)
 	"""
 	customer_pan = frappe.db.get_value("Customer", sales_invoice.customer, "tax_id")
 	seller_pan = frappe.get_cached_value("Company", sales_invoice.company, "tax_id")
@@ -96,18 +99,32 @@ def build_cbms_fields(sales_invoice):
 	)
 	vat = _booked_vat(sales_invoice)
 
+	# Excise: lines carrying a custom_excise_value (manual, maintained by
+	# salesinvoice_taxes). excise = their summed excise; excisable_amount = the
+	# summed base_net_amount of those same lines (the base the excise sits on).
+	excise = abs(
+		sum(flt(item.get("custom_excise_value")) for item in sales_invoice.items)
+	)
+	excisable_amount = abs(
+		sum(
+			flt(item.amount)
+			for item in sales_invoice.items
+			if flt(item.get("custom_excise_value"))
+		)
+	)
+
 	if is_export_invoice(sales_invoice):
 		# Exports are zero-rated: the whole sales value goes in export_sales.
-		export_sales = taxable_sales + exempt_sales
-		taxable_sales = exempt_sales = 0
-		total_sales = abs(sales_invoice.base_grand_total)
+		export_sales = sales_invoice.grand_total
+		taxable_sales = 0
+		total_sales = abs(sales_invoice.grand_total)
 	else:
 		export_sales = 0
-		total_sales = abs(sales_invoice.base_grand_total) - exempt_sales
+		total_sales = abs(sales_invoice.grand_total) - exempt_sales
 
 	discount = 0
 	if sales_invoice.apply_discount_on == "Net Total":
-		discount = abs(flt(sales_invoice.base_discount_amount))
+		discount = abs(flt(sales_invoice.discount_amount))
 
 	return {
 		"company": sales_invoice.company,
@@ -115,12 +132,14 @@ def build_cbms_fields(sales_invoice):
 		"buyer_name": sales_invoice.customer_name or sales_invoice.customer,
 		"buyer_pan": customer_pan or "",
 		"seller_pan": seller_pan or "",
-		"fiscal_year": utils.cbms_fiscal_year(sales_invoice.posting_date),
+		"fiscal_year": utils.cbms_fiscal_year(sales_invoice.posting_date, sales_invoice.company),
 		"total_sales": flt(total_sales, 2),
 		"taxable_sales_vat": flt(taxable_sales, 2),
 		"vat": flt(vat, 2),
 		"tax_exempted_sales": flt(exempt_sales, 2),
 		"export_sales": flt(export_sales, 2),
+		"excisable_amount": flt(excisable_amount, 2),
+		"excise": flt(excise, 2),
 		"discount": flt(discount, 2),
 		"datetime_client": frappe.utils.now_datetime(),
 	}
@@ -147,14 +166,22 @@ def create_cbms_bill_return(sales_invoice):
 	if frappe.db.exists("CBMS Bill Return", {"sales_invoice": sales_invoice.name}):
 		return None
 
-	original_invoice_number = frappe.db.get_value(
-		"CBMS Bill", {"sales_invoice": sales_invoice.return_against}, "invoice_number"
-	)
-	if not original_invoice_number:
-		# The original invoice hasn't been posted to CBMS yet (or CBMS wasn't enabled
-		# for it) — nothing to reference. reconcile_missing_cbms_bills will retry this
-		# once the original invoice has a CBMS Bill.
+	if not sales_invoice.return_against:
+		# Standalone credit note with no original invoice — nothing to reference.
 		return None
+
+	# The original invoice's branch-wise number, straight from its branch field —
+	# falling back to the invoice name when the field is absent on this site or
+	# blank on legacy data (mirrors utils.cbms_invoice_number, so this always
+	# matches the invoice_number the original's CBMS Bill was created with).
+	# send_return_to_cbms still holds this return until the original's CBMS Bill
+	# is Synced, so ordering is unchanged.
+	original_invoice_number = sales_invoice.return_against
+	if frappe.get_meta("Sales Invoice").has_field("custom_branch_name"):
+		original_invoice_number = (
+			frappe.db.get_value("Sales Invoice", sales_invoice.return_against, "custom_branch_name")
+			or sales_invoice.return_against
+		)
 
 	fields = build_cbms_fields(sales_invoice)
 	fields.update(
