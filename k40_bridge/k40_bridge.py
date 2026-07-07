@@ -45,7 +45,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.6.6"
+VERSION = "1.6.7"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -1156,10 +1156,18 @@ class HtmsClient(_BaseClient):
         # NOTE: COM is initialized once per fetch in fetch_attendance() (and
         # balanced with CoUninitialize there), not here — so this can be called
         # repeatedly (master DB + each year file) without nesting init counts.
+        # Open read-only AND share-deny-none so we never take a lock that could
+        # shut out HTMS-86 / Swastik, which write to these .mdb files live. A
+        # plain read/write (or even read-only) open still makes Jet contend for
+        # the file lock and can throw an unhandled "Cannot open database" in
+        # *their* process. adModeRead(1) | adModeShareDenyNone(16) = 17 means we
+        # read the file without denying anyone else read or write access.
+        _ADO_READ_SHARE_DENY_NONE = 1 | 16
         last_err = None
         for prov in self._PROVIDERS:
             try:
                 conn = win32com.client.Dispatch("ADODB.Connection")
+                conn.Mode = _ADO_READ_SHARE_DENY_NONE
                 conn.Open(f"Provider={prov};Data Source={db_path};")
                 return conn
             except Exception as e:
