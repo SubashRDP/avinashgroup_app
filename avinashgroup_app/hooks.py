@@ -131,6 +131,13 @@ attendance_events = {
     ],
 }
 
+# Jinja helpers for print formats (e.g. BS date on the Nepal Gas invoice)
+jinja = {
+    "methods": [
+        "avinashgroup_app.custom_code.CBMS.utils.bs_date_str",
+    ],
+}
+
 doc_events = AuditEventMapper.get_doc_events()
 
 def _add_doc_event(doctype, event, handler):
