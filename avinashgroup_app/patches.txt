@@ -26,7 +26,5 @@ avinashgroup_app.patches.vehicle_mandatory_property_setters #2 remove setters, p
 avinashgroup_app.patches.add_company_to_shift_type
 avinashgroup_app.patches.add_sales_invoice_print_count
 avinashgroup_app.patches.add_document_no_manual_flag
-
-avinashgroup_app.patches.add_document_no_manual_flag
 avinashgroup_app.patches.add_unique_custom_name_index
 
