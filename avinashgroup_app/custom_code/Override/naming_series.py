@@ -1147,6 +1147,40 @@ def _notify_docno_drawn(doc, scope=None):
         pass
 
 
+def _pin_amended_docno(doc):
+    """An amendment is the SAME voucher re-entered after cancellation, so its
+    Document No. is the ORIGINAL's — always. The form shows the field
+    read-only; here the number stored on the cancelled original overwrites
+    whatever arrived in the payload (stale preview, typed value, API copy),
+    on every save of the amended doc, so it can never drift onto a different
+    number. The manual flag is copied too, keeping delete-revert semantics.
+
+    Returns True when the number is settled (pinned, or kept when the
+    original can't be read), False when there is no number anywhere so the
+    normal draw applies (e.g. amending a legacy doc from before numbering)."""
+    field = _docno_field(_match_numbering_rule(doc))
+    field_df = doc.meta.get_field(field)
+    if not field_df or field_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+        return False
+    flag = field + "_manual"
+    has_flag = doc.meta.has_field(flag)
+    fetch = [field] + ([flag] if has_flag else [])
+    row = frappe.db.get_value(doc.doctype, doc.get("amended_from"), fetch, as_dict=True)
+    if row and row.get(field):
+        doc.set(field, row.get(field))
+        if has_flag:
+            doc.set(flag, frappe.utils.cint(row.get(flag)))
+        doc.flags._docno_assigned = True
+        return True
+    # Original missing or unnumbered: keep an incoming value as-is (it was
+    # copied from the amend source client-side), otherwise fall through so
+    # the normal draw can number the doc.
+    if doc.get(field):
+        doc.flags._docno_assigned = True
+        return True
+    return False
+
+
 def apply_document_no(doc):
     """Authoritative, collision-free assignment of custom_document_no at save.
 
@@ -1159,6 +1193,10 @@ def apply_document_no(doc):
 
     Idempotent within a single save via doc.flags._docno_assigned."""
     if doc.flags.get("_docno_assigned"):
+        return
+    # Amendments never draw or keep their own number — it is pinned to the
+    # cancelled original's before manual/auto classification can touch it.
+    if doc.get("amended_from") and _pin_amended_docno(doc):
         return
     if not doc.is_new():
         # An existing DRAFT's number must follow its scope: editing branch /
@@ -1225,14 +1263,6 @@ def apply_document_no(doc):
                 if doc.meta.has_field(flag):
                     doc.set(flag, 1)
             _notify_docno_drawn(doc, scope)
-        doc.flags._docno_assigned = True
-        return
-
-    # Amendment: keep the number copied from the cancelled original so the
-    # amended voucher stays tied to it (custom_name adds the -1/-2 suffix). A
-    # plain Duplicate/Copy is NOT an amendment (no amended_from) and correctly
-    # falls through to draw a fresh number.
-    if doc.get("amended_from") and doc.get(field):
         doc.flags._docno_assigned = True
         return
 

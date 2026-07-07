@@ -1229,3 +1229,30 @@ class TestDocumentNumbering(FrappeTestCase):
             "branch": None,
         })
         self.assertGreaterEqual(n, 6)    # 6 ops x 1 x fields
+
+    def test_62_amendment_pins_original_number(self):
+        # An amendment's Document No. is ALWAYS the number stored on the
+        # original: a typed-over value, a stale preview or an API payload
+        # cannot move it (the form additionally shows the field read-only).
+        orig = self._insert_je()
+        n = frappe.utils.cint(orig.custom_document_no)
+        self.assertGreater(n, 0)
+
+        # typed-over manual value -> pinned back; flag follows the original (auto)
+        d = self._je(amended_from=orig.name,
+                     custom_document_no=999999, custom_document_no_manual=1)
+        ns.apply_document_no(d)
+        self.assertEqual(frappe.utils.cint(d.custom_document_no), n)
+        self.assertEqual(frappe.utils.cint(d.custom_document_no_manual), 0)
+
+        # blank payload (a copy path that stripped the field) -> still pinned
+        d2 = self._je(amended_from=orig.name)
+        ns.apply_document_no(d2)
+        self.assertEqual(frappe.utils.cint(d2.custom_document_no), n)
+
+        # pinned on EVERY save, not just the first: a later edit that slipped
+        # a different number in (docstatus 0 draft re-save) is reset too
+        d2.flags.pop("_docno_assigned", None)
+        d2.custom_document_no = 424242
+        ns.apply_document_no(d2)
+        self.assertEqual(frappe.utils.cint(d2.custom_document_no), n)

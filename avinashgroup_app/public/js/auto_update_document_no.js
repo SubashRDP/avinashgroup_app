@@ -25,7 +25,9 @@ const SERIES_DEPS = ["custom_p_type_code", "company", "posting_date", "custom_fi
 const DEBOUNCE_MS = 400;
 
 function should_auto_number(frm) {
-    return !!AUTO_NUMBER_CONFIG[frm.doc.doctype] && frm.is_new();
+    // An amendment never draws its own number — the server pins it to the
+    // cancelled original's (apply_document_no), so no preview machinery.
+    return !!AUTO_NUMBER_CONFIG[frm.doc.doctype] && frm.is_new() && !frm.doc.amended_from;
 }
 
 function has_manual_flag(frm) {
@@ -52,7 +54,9 @@ function auto_locked(frm) {
 function update_hint(frm, preview) {
     if (!frm.get_field || !frm.get_field("custom_document_no")) return;
     let msg = "";
-    if (should_auto_number(frm)) {
+    if (frm.doc.amended_from) {
+        msg = __("Amendment — keeps the Document No. of the original.");
+    } else if (should_auto_number(frm)) {
         if (auto_locked(frm)) {
             msg = __("Manually entered. Clear the field to auto-number.");
         } else if (preview) {
@@ -220,9 +224,17 @@ Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
             }
         },
         refresh: function(frm) {
+            // Amended docs carry the original's number: lock the field so it
+            // cannot be typed over (the server would pin it back anyway).
+            if (frm.doc.amended_from) {
+                frm.set_df_property("custom_document_no", "read_only", 1);
+                update_hint(frm);
+                return;
+            }
             if (frm.is_new()) update_hint(frm, frm.doc.custom_document_no);
         },
         custom_document_no: function(frm) {
+            if (frm.doc.amended_from) return;   // pinned to the original — not user-ownable
             const v = frm.doc.custom_document_no;
             // our own preview fill (value matches what set_auto_value stored);
             // cint() so a Data-typed "5" equals our numeric 5.
