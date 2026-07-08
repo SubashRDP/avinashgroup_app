@@ -5,12 +5,17 @@ that range we look at what's actually in the database and reconcile it:
 
   - Checkins exist, no Attendance      → create Attendance, link the checkins.
   - Checkins exist, Attendance Absent  → delete stale Absent, create from checkins.
-  - Checkins exist, Attendance Present → link any orphan checkins to the row.
+  - Checkins exist, other Attendance   → link any orphan checkins to the row
+    (Present / Half Day / On Leave / WFH — never overwritten).
   - No checkins, no Attendance         → mark Absent (skipping holidays).
   - No checkins, Attendance exists     → leave it (HR may have entered it).
 
 Reuses stock HRMS primitives so attendance status / working-hours computation
 matches everywhere else in the system.
+
+The per-day reconciliation lives in module-level functions (reconcile_employee_day
+and friends) so the scheduled self-heal job (biometric/attendance_self_heal.py)
+shares the exact same logic.
 """
 
 from datetime import datetime, time, timedelta
@@ -190,155 +195,205 @@ class AttendanceFix(Document):
     def _reconcile_day(
         self, shift_doc, employee, attendance_date, holiday_dates, counters, log_lines
     ):
-        if attendance_date in holiday_dates:
-            return
-
-        day_start = datetime.combine(attendance_date, time.min)
-        day_end = datetime.combine(attendance_date, time.max)
-
-        checkins = frappe.get_all(
-            "Employee Checkin",
-            filters={
-                "employee": employee,
-                "time": ("between", [day_start, day_end]),
-            },
-            fields=[
-                "name",
-                "employee",
-                "log_type",
-                "time",
-                "shift",
-                "shift_start",
-                "shift_end",
-                "shift_actual_start",
-                "shift_actual_end",
-                "device_id",
-                "attendance",
-                "skip_auto_attendance",
-            ],
-            order_by="time asc",
+        reconcile_employee_day(
+            shift_doc, employee, attendance_date, holiday_dates, counters, log_lines
         )
 
-        existing = frappe.db.get_value(
-            "Attendance",
-            {
-                "employee": employee,
-                "attendance_date": attendance_date,
-                "docstatus": ("<", 2),
-            },
-            ["name", "status", "docstatus"],
-            as_dict=True,
-        )
 
-        if not checkins:
-            if existing:
-                return  # leave as-is
-            marked = mark_attendance(employee, attendance_date, "Absent", shift_doc.name)
-            if marked:
-                # Ensure posting_date is set (required system field)
-                if not marked.posting_date:
-                    marked.db_set("posting_date", attendance_date, update_modified=False)
-                counters["attendance_created_or_updated"] += 1
-                log_lines.append(f"{employee} {attendance_date}: marked Absent (no checkins)")
-            return
+def reconcile_employee_day(
+    shift_doc,
+    employee,
+    attendance_date,
+    holiday_dates,
+    counters,
+    log_lines,
+    include_skipped=False,
+    mark_absent_when_no_checkins=True,
+):
+    """Reconcile one (employee, date) against whatever is in the database.
 
-        # Checkins exist for this day.
-        if existing and existing.status in ("Present", "Half Day"):
-            orphan_names = [c.name for c in checkins if not c.attendance]
-            if orphan_names:
-                update_attendance_in_checkins(orphan_names, existing.name)
-                counters["checkins_relinked"] += len(orphan_names)
-                log_lines.append(
-                    f"{employee} {attendance_date}: relinked {len(orphan_names)} orphan checkin(s) to {existing.name}"
-                )
-            return
+    Shared by Attendance Fix (manual, HR-submitted) and the hourly self-heal
+    job (biometric/attendance_self_heal.py).
 
-        # Prepare logs BEFORE touching the existing Absent. If we can't produce a
-        # replacement (no resolvable checkins for this shift, all skip_auto_attendance,
-        # fetch_shift failed) we leave the Absent in place rather than nuke evidence.
-        prepared_logs = self._prepare_checkins_for_shift(checkins, shift_doc)
-        if not prepared_logs:
-            log_lines.append(
-                f"{employee} {attendance_date}: kept existing "
-                f"({existing.status if existing else 'no row'}) — no checkins resolvable to this shift"
-            )
-            return
+    include_skipped: also consider checkins flagged skip_auto_attendance=1.
+        Stock HRMS sets that flag permanently whenever attendance creation
+        fails (e.g. DuplicateAttendanceError on a day already marked Absent,
+        or any ValidationError) — for repair flows those are exactly the
+        checkins that need processing. The flag is cleared on the logs that
+        end up linked to an attendance.
+    mark_absent_when_no_checkins: the self-heal job passes False — marking
+        absentees is stock HRMS's job; self-heal only acts on days that have
+        punches.
+    """
+    if attendance_date in holiday_dates:
+        return
 
-        if existing and existing.status == "Absent":
-            self._cancel_and_delete(existing)
-            counters["absent_rows_deleted"] += 1
-            existing = None
+    day_start = datetime.combine(attendance_date, time.min)
+    day_end = datetime.combine(attendance_date, time.max)
 
-        (
-            status,
-            working_hours,
-            late_entry,
-            early_exit,
-            in_time,
-            out_time,
-        ) = shift_doc.get_attendance(prepared_logs)
+    checkins = frappe.get_all(
+        "Employee Checkin",
+        filters={
+            "employee": employee,
+            "time": ("between", [day_start, day_end]),
+        },
+        fields=[
+            "name",
+            "employee",
+            "log_type",
+            "time",
+            "shift",
+            "shift_start",
+            "shift_end",
+            "shift_actual_start",
+            "shift_actual_end",
+            "device_id",
+            "attendance",
+            "skip_auto_attendance",
+        ],
+        order_by="time asc",
+    )
 
-        attendance = mark_attendance_and_link_log(
-            prepared_logs,
-            status,
-            attendance_date,
-            working_hours,
-            late_entry,
-            early_exit,
-            in_time,
-            out_time,
-            shift_doc.name,
-        )
-        if attendance:
-            # Ensure posting_date is set (required system field)
-            if not attendance.posting_date:
-                attendance.db_set("posting_date", attendance_date, update_modified=False)
+    existing = frappe.db.get_value(
+        "Attendance",
+        {
+            "employee": employee,
+            "attendance_date": attendance_date,
+            "docstatus": ("<", 2),
+        },
+        ["name", "status", "docstatus"],
+        as_dict=True,
+    )
+
+    if not checkins:
+        if existing or not mark_absent_when_no_checkins:
+            return  # leave as-is
+        marked = mark_attendance(employee, attendance_date, "Absent", shift_doc.name)
+        if marked:
+            _ensure_posting_date(marked, attendance_date)
             counters["attendance_created_or_updated"] += 1
+            log_lines.append(f"{employee} {attendance_date}: marked Absent (no checkins)")
+        return
+
+    # Checkins exist for this day. Any non-Absent attendance (Present, Half Day,
+    # On Leave, Work From Home, manual entries) is kept — we only attach the
+    # orphan punches to it. Falling through to mark_attendance_and_link_log
+    # here would raise DuplicateAttendanceError and poison the checkins.
+    if existing and existing.status != "Absent":
+        orphan_names = [c.name for c in checkins if not c.attendance]
+        if orphan_names:
+            update_attendance_in_checkins(orphan_names, existing.name)
+            counters["checkins_relinked"] += len(orphan_names)
             log_lines.append(
-                f"{employee} {attendance_date}: created {attendance.name} ({status}, "
-                f"hours={flt(working_hours, 2)})"
+                f"{employee} {attendance_date}: relinked {len(orphan_names)} orphan checkin(s) to {existing.name}"
             )
+        return
 
-    def _prepare_checkins_for_shift(self, checkins, shift_doc):
-        """Make sure each checkin has shift fields populated. We call stock
-        Employee Checkin.fetch_shift() if shift is missing, mirroring what the
-        scheduled auto-attendance does."""
-        prepared = []
-        for c in checkins:
-            if c.skip_auto_attendance:
-                continue
-            if not c.shift or not c.shift_actual_end:
-                ck_doc = frappe.get_doc("Employee Checkin", c.name)
-                ck_doc.fetch_shift()
-                ck_doc.db_update()
-                c.shift = ck_doc.shift
-                c.shift_start = ck_doc.shift_start
-                c.shift_end = ck_doc.shift_end
-                c.shift_actual_start = ck_doc.shift_actual_start
-                c.shift_actual_end = ck_doc.shift_actual_end
-
-            # DEBUG: Log shift comparison
-            if not c.shift:
-                frappe.log_error(
-                    f"Employee Checkin {c.name}: shift is empty after fetch_shift",
-                    "Attendance Fix Debug"
-                )
-
-            # Match by shift name (not strict equality - allow None to match)
-            shift_matches = (c.shift == shift_doc.name) if c.shift else False
-            if not shift_matches:
-                continue
-            prepared.append(c)
-        return prepared
-
-    def _cancel_and_delete(self, existing):
-        if existing.docstatus == 1:
-            att = frappe.get_doc("Attendance", existing.name)
-            att.flags.ignore_permissions = True
-            att.cancel()
-        frappe.delete_doc(
-            "Attendance", existing.name, force=True, ignore_permissions=True
+    # Prepare logs BEFORE touching the existing Absent. If we can't produce a
+    # replacement (no resolvable checkins for this shift, all skip_auto_attendance,
+    # fetch_shift failed) we leave the Absent in place rather than nuke evidence.
+    prepared_logs = prepare_checkins_for_shift(checkins, shift_doc, include_skipped)
+    if not prepared_logs:
+        log_lines.append(
+            f"{employee} {attendance_date}: kept existing "
+            f"({existing.status if existing else 'no row'}) — no checkins resolvable to this shift"
         )
+        return
+
+    if existing and existing.status == "Absent":
+        cancel_and_delete_attendance(existing)
+        counters["absent_rows_deleted"] += 1
+        existing = None
+
+    (
+        status,
+        working_hours,
+        late_entry,
+        early_exit,
+        in_time,
+        out_time,
+    ) = shift_doc.get_attendance(prepared_logs)
+
+    attendance = mark_attendance_and_link_log(
+        prepared_logs,
+        status,
+        attendance_date,
+        working_hours,
+        late_entry,
+        early_exit,
+        in_time,
+        out_time,
+        shift_doc.name,
+    )
+    if attendance:
+        _ensure_posting_date(attendance, attendance_date)
+        # Linked logs are no longer skipped — clear stale poison flags so the
+        # data reads consistently.
+        for c in prepared_logs:
+            if c.skip_auto_attendance:
+                frappe.db.set_value(
+                    "Employee Checkin", c.name, "skip_auto_attendance", 0,
+                    update_modified=False,
+                )
+        counters["attendance_created_or_updated"] += 1
+        log_lines.append(
+            f"{employee} {attendance_date}: created {attendance.name} ({status}, "
+            f"hours={flt(working_hours, 2)})"
+        )
+    else:
+        # mark_attendance_and_link_log swallowed a ValidationError and poisoned
+        # the logs (comment added on each checkin by stock HRMS).
+        log_lines.append(
+            f"{employee} {attendance_date}: attendance creation rejected by HRMS — see checkin comments"
+        )
+
+
+def _ensure_posting_date(attendance, attendance_date):
+    """Some deployments add a posting_date custom field on Attendance; set it
+    only when the field actually exists. `attendance` may be a doc
+    (mark_attendance_and_link_log) or a name string (mark_attendance)."""
+    if not frappe.get_meta("Attendance").has_field("posting_date"):
+        return
+    name = attendance if isinstance(attendance, str) else attendance.name
+    if not frappe.db.get_value("Attendance", name, "posting_date"):
+        frappe.db.set_value(
+            "Attendance", name, "posting_date", attendance_date, update_modified=False
+        )
+
+
+def prepare_checkins_for_shift(checkins, shift_doc, include_skipped=False):
+    """Make sure each checkin has shift fields populated. We call stock
+    Employee Checkin.fetch_shift() if shift is missing, mirroring what the
+    scheduled auto-attendance does. Re-fetching also repairs checkins stored
+    before the employee had a shift assignment."""
+    prepared = []
+    for c in checkins:
+        if c.skip_auto_attendance and not include_skipped:
+            continue
+        if not c.shift or not c.shift_actual_end:
+            ck_doc = frappe.get_doc("Employee Checkin", c.name)
+            ck_doc.fetch_shift()
+            ck_doc.db_update()
+            c.shift = ck_doc.shift
+            c.shift_start = ck_doc.shift_start
+            c.shift_end = ck_doc.shift_end
+            c.shift_actual_start = ck_doc.shift_actual_start
+            c.shift_actual_end = ck_doc.shift_actual_end
+
+        if c.shift != shift_doc.name:
+            continue
+        prepared.append(c)
+    return prepared
+
+
+def cancel_and_delete_attendance(existing):
+    if existing.docstatus == 1:
+        att = frappe.get_doc("Attendance", existing.name)
+        att.flags.ignore_permissions = True
+        att.cancel()
+    frappe.delete_doc(
+        "Attendance", existing.name, force=True, ignore_permissions=True
+    )
 
 
 def run_attendance_fix_in_background(doc_name: str):

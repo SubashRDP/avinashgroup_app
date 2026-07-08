@@ -110,7 +110,7 @@ class PurchaseOrder(ERPNextPurchaseOrder):
 
 	def validate_workflow(self):
 		workflow = self.meta.get_workflow()
-		if isinstance(workflow, str):
+		if workflow and isinstance(workflow, str):
 			workflow = frappe.get_cached_doc("Workflow", workflow)
 		if workflow and workflow.name == "Purchase Order Workflow":
 			if frappe.session.user == "Administrator":
@@ -164,7 +164,7 @@ class PurchaseInvoice(ERPNextPurchaseInvoice):
 class MaterialRequest(ERPNextMaterialRequest):
 	def validate_workflow(self):
 		workflow = self.meta.get_workflow()
-		if isinstance(workflow, str):
+		if workflow and isinstance(workflow, str):
 			workflow = frappe.get_cached_doc("Workflow", workflow)
 		if workflow and workflow.name == "Material Request One-Line Approver":
 			if frappe.session.user == "Administrator":

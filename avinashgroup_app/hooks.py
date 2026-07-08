@@ -261,6 +261,13 @@ scheduler_events = {
     "hourly": [
         "avinashgroup_app.biometric.heartbeat.check_bridge_heartbeats",
     ],
+    # Self-heal runs in the same long-job bucket as HRMS's auto attendance so
+    # each hour goes: HRMS marks what it can → self-heal repairs what it
+    # couldn't (late punches on Absent days, poisoned skip flags, checkins
+    # stored before a shift assignment existed).
+    "hourly_long": [
+        "avinashgroup_app.biometric.attendance_self_heal.heal_unlinked_checkins",
+    ],
     "cron": {
         "*/5 * * * *": [
             "avinashgroup_app.custom_code.CBMS.scheduler.retry_failed_cbms_syncs",
