@@ -11,37 +11,42 @@ One template, two print formats:
                         plain paper, hold the sheet on top of a real form
                         against light, then adjust the numbers below.
 
-CALIBRATION: every position is in mm from the top-left corner of the form
-(9.5in = 241.3mm wide, 5.5in = 139.7mm tall, tractor strips ~12.7mm each side).
-If the WHOLE print is shifted, change only ox / oy. If one field is off, change
-its row in P. wkhtmltopdf's old engine has no CSS var() support, so the knobs
-live here as Jinja values.
+GEOMETRY: all positions are mm from the top-left corner of the form
+(9.5in = 241.3mm wide, 5.5in = 139.7mm tall; sheet confirmed 11 sprocket
+holes = 5.5in). Coordinates below are MEASURED from a perspective-rectified
+photo of the real form (sprocket holes used as a 12.7mm reference grid,
+fit residual < 1mm). If a whole print is shifted on a given printer, change
+only ox / oy. wkhtmltopdf's old engine has no CSS var() support, so the
+knobs live here as Jinja values.
 -#}
 {%- set draw_form = draw_form | default(false) -%}
 {%- set ox = 0 -%}{#- global horizontal nudge, mm (+ = right) -#}
 {%- set oy = 0 -%}{#- global vertical nudge, mm (+ = down) -#}
-{%- set rows_per_page = rows_per_page | default(2) -%}{#- item lines that fit in the body -#}
+{%- set rows_per_page = rows_per_page | default(3) -%}{#- item lines in the 71.2..86.0mm body -#}
 
 {%- set P = {
-  'copy_label':   {'y': 2.0,  'x': 60,    'w': 120},
-  'inv_no':       {'y': 31.0, 'x': 36,    'w': 60,  'label_x': 9.5},
-  'vat_boxes':    {'y': 37.5, 'x': 27,    'box_w': 5.1, 'label_x': 9.5},
-  'trans_date':   {'y': 28.5, 'x': 193,   'w': 38,  'label_x': 150},
-  'inv_date':     {'y': 34.5, 'x': 193,   'w': 38,  'label_x': 150},
-  'do_no':        {'y': 40.5, 'x': 188,   'w': 43,  'label_x': 150},
-  'customer':     {'y': 44.5, 'x': 50,    'w': 130, 'label_x': 9.5},
-  'address':      {'y': 48.5, 'x': 50,    'w': 130, 'label_x': 9.5},
-  'pan':          {'y': 52.5, 'x': 52,    'w': 80,  'label_x': 9.5},
-  'mode':         {'y': 56.5, 'label_x': 9.5, 'opts_x': 48},
-  'mode_words':   {'Cash': [47.5, 11], 'Credit': [59.5, 14], 'Cheque': [74.5, 15], 'Other': [90.5, 12]},
-  'table':        {'x': 9.5, 'y': 63.0, 'w': 219.5, 'head_h': 7.0, 'body_y': 71.0, 'row_h': 5.0},
-  'cols':         [9.5, 22.1, 43.2, 136.4, 161.8, 180.3, 229.0],
-  'disc':         {'y': 81.5,  'label_x': 138, 'val_x': 181.5, 'val_w': 45},
-  'taxable':      {'y': 87.0,  'label_x': 138, 'val_x': 181.5, 'val_w': 45},
-  'vat_amt':      {'y': 92.5,  'label_x': 138, 'val_x': 181.5, 'val_w': 45},
-  'grand':        {'y': 104.5, 'label_x': 138, 'val_x': 181.5, 'val_w': 45},
-  'words':        {'y': 86.5, 'x': 45, 'w': 88, 'label_x': 9.5},
-  'sign':         {'y': 128.0, 'x': 150, 'w': 79},
+  'copy_label':   {'y': 1.2,   'x': 70,   'w': 100},
+  'title':        {'y': 8.2,   'addr_y': 14.8, 'tel_y': 19.8, 'cx': 28, 'cw': 180},
+  'inv_no':       {'y': 29.2,  'x': 36,   'w': 95,  'label_x': 11.2, 'label_y': 29.2},
+  'trans_date':   {'y': 28.5,  'x': 200,  'w': 32,  'label_x': 155, 'label_y': 28.5},
+  'vat_boxes':    {'y': 37.4,  'x': 32.8, 'box_w': 4.87, 'box_h': 5.8, 'label_x': 11.2, 'label_y': 38.2},
+  'inv_date':     {'y': 33.9,  'x': 200,  'w': 32,  'label_x': 155, 'label_y': 33.9},
+  'do_no':        {'y': 38.9,  'x': 200,  'w': 32,  'label_x': 155, 'label_y': 38.9},
+  'customer':     {'y': 44.0,  'x': 63,   'w': 95,  'label_x': 11.2, 'label_y': 44.0},
+  'address':      {'y': 50.8,  'x': 63,   'w': 105, 'label_x': 11.2, 'label_y': 50.8},
+  'pan':          {'y': 56.2,  'x': 63,   'w': 70,  'label_x': 11.2, 'label_y': 56.2},
+  'mode':         {'label_x': 11.2, 'label_y': 62.2, 'opts_x': 54.4, 'ring_y': 60.3, 'ring_h': 5.4},
+  'mode_words':   {'Cash': [54.4, 7.3], 'Credit': [63.6, 10.9], 'Cheque': [76.4, 10.9], 'Other': [89.2, 9.1]},
+  'table':        {'top': 65.4, 'head_bot': 71.2, 'body_bot': 86.0, 'bot': 113.1,
+                   'head_ty': 66.7, 'body_y': 72.3, 'row_h': 4.8},
+  'cols':         [11.2, 22.4, 45.4, 136.0, 160.8, 186.0, 228.4],
+  'disc':         {'ty': 87.9,  'label': '%Discount'},
+  'taxable':      {'ty': 93.7,  'label': 'Taxable Amount'},
+  'vat_amt':      {'ty': 99.7,  'label': '13% VAT'},
+  'grand':        {'ty': 106.5, 'label': 'Grand Total'},
+  'tot_rows':     [86.2, 92.2, 98.0, 104.2],
+  'words':        {'x': 63, 'y': 88.0, 'w': 71, 'label_x': 12, 'label_y': 87.8},
+  'sign':         {'line_y': 123.4, 'x': 160.6, 'w': 68, 'text_y': 124.8},
 } -%}
 
 {#- ------------------------------ data ---------------------------------- -#}
@@ -51,6 +56,7 @@ live here as Jinja values.
 {%- set do_nos = doc.items | map(attribute='delivery_note') | select | unique | list -%}
 {%- set address = (doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
 {%- set address = address.rstrip(', ') if address else '' -%}
+{%- set is_cn = doc.is_return -%}
 
 {#- Mode of payment: POS payment row wins; a submitted unpaid invoice is Credit -#}
 {%- set ns = namespace(mode='Credit') -%}
@@ -74,21 +80,25 @@ live here as Jinja values.
 {%- endif -%}
 {%- set grand_total = doc.rounded_total or doc.grand_total -%}
 
-{#- IRD copy labeling, same series as custom_code/SalesInvoice/print_count.py -#}
+{#- IRD copy labeling, same series as custom_code/SalesInvoice/print_count.py.
+    Returns are credit notes, and all figures print positive: the document
+    type states the direction. -#}
 {%- set n_print = doc.get('custom_print_count') or 1 -%}
-{%- if n_print <= 1 -%}{%- set copy_label = 'TAX INVOICE' -%}
+{%- set base_title = 'CREDIT NOTE' if is_cn else 'TAX INVOICE' -%}
+{%- if n_print <= 1 -%}{%- set copy_label = base_title -%}
 {%- elif n_print == 2 -%}{%- set copy_label = 'COPY OF ORIGINAL' -%}
 {%- else -%}{%- set copy_label = 'COPY OF ORIGINAL ' ~ (n_print - 1) -%}{%- endif -%}
+{%- if is_cn and n_print > 1 -%}{%- set copy_label = copy_label ~ ' (CREDIT NOTE)' -%}{%- endif -%}
 
 {#- ----------------------------- helpers -------------------------------- -#}
 {%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false) -%}
 <div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
   text-align:{{ align }}; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
-  {% if not wrap %}white-space:nowrap; overflow:hidden;{% endif %} line-height:1.15;">{{ caller() }}</div>
+  {% if not wrap %}white-space:nowrap; overflow:hidden;{% endif %} line-height:1.2;">{{ caller() }}</div>
 {%- endmacro -%}
 
-{%- macro num(v) -%}{{ frappe.utils.fmt_money(v, 2) if v is not none else '' }}{%- endmacro -%}
-{%- macro qty_fmt(q) -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
+{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
 
 {%- macro hline(x, y, w, th=0.3) -%}
 <div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm; border-top:{{ th }}mm solid #000;"></div>
@@ -123,65 +133,71 @@ live here as Jinja values.
 {%- for page_items in item_pages -%}
 {%- set is_last = loop.last -%}
 {%- set page_no = loop.index -%}
+{%- set T = P.table -%}
 <div class="ngi-page{% if is_last %} last{% endif %}">
 
   {%- if draw_form -%}
   <div class="ngi-ink">
-    {%- call at(20, 6, 200, 'center', true, 15) %}{{ doc.company }}{% endcall -%}
-    {%- call at(20, 13.5, 200, 'center', false, 9) %}{{ head_address | default('Balaju Industrial Estate, Balaju, Kathmandu, Nepal') }}{% endcall -%}
-    {%- call at(20, 18.5, 200, 'center', false, 8) %}{{ head_contact | default('Tel : 01-4970416, Fax : 01-4970399, E-mail : info@nepalgas.com.np') }}{% endcall -%}
+    {%- call at(30, P.title.y, 180, 'center', true, 15) %}{{ doc.company }}{% endcall -%}
+    {%- call at(30, P.title.addr_y, 180, 'center', true, 9.5) %}{{ head_address | default('Balaju Industrial Estate, Balaju, Kathmandu, Nepal') }}{% endcall -%}
+    {%- call at(30, P.title.tel_y, 180, 'center', true, 7.5) %}{{ head_contact | default('Tel : 01-4970416, Fax : 01-4970399, E-mail : info@nepalgas.com.np') }}{% endcall -%}
 
-    {%- call at(P.inv_no.label_x, P.inv_no.y, 26, 'left', false, 9) %}Invoice No.:{% endcall -%}
-    {%- call at(P.vat_boxes.label_x, P.vat_boxes.y + 1, 17, 'left', false, 9) %}VAT No. :{% endcall -%}
+    {%- call at(P.inv_no.label_x, P.inv_no.label_y, 40, 'left', false, 9.5) %}Invoice No.:{% endcall -%}
+    {%- call at(P.vat_boxes.label_x, P.vat_boxes.label_y, 30, 'left', false, 9.5) %}VAT No.&nbsp;&nbsp;&nbsp;:{% endcall -%}
     {%- set company_vat = frappe.db.get_value('Company', doc.company, 'tax_id') or '' -%}
     {%- for d in company_vat -%}
       <div style="position:absolute; left:{{ P.vat_boxes.x + loop.index0 * P.vat_boxes.box_w + ox }}mm; top:{{ P.vat_boxes.y + oy }}mm;
-        width:{{ P.vat_boxes.box_w }}mm; height:5.2mm; border:0.3mm solid #000; text-align:center; font-size:9pt; line-height:5.2mm;">{{ d }}</div>
+        width:{{ P.vat_boxes.box_w }}mm; height:{{ P.vat_boxes.box_h }}mm; border:0.3mm solid #000; text-align:center; font-size:10pt; line-height:{{ P.vat_boxes.box_h }}mm;">{{ d }}</div>
     {%- endfor -%}
-    {%- call at(P.trans_date.label_x, P.trans_date.y, 42, 'left', false, 9) %}Transaction Date:{% endcall -%}
-    {%- call at(P.inv_date.label_x, P.inv_date.y, 42, 'left', false, 9) %}Invoice Date:{% endcall -%}
-    {%- call at(P.do_no.label_x, P.do_no.y, 42, 'left', false, 9) %}D/O No:{% endcall -%}
-    {%- call at(P.customer.label_x, P.customer.y, 40, 'left', false, 9) %}Customer's Name :{% endcall -%}
-    {%- call at(P.address.label_x, P.address.y, 40, 'left', false, 9) %}Address&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; :{% endcall -%}
-    {%- call at(P.pan.label_x, P.pan.y, 40, 'left', false, 9) %}Customer's Pan No.:{% endcall -%}
-    {%- call at(P.mode.label_x, P.mode.y, 38, 'left', false, 9) %}Mode of Payment&nbsp;&nbsp; :{% endcall -%}
-    {%- call at(P.mode.opts_x, P.mode.y, 60, 'left', false, 9) %}Cash/Credit/Cheque/Other{% endcall -%}
+    {%- call at(P.trans_date.label_x, P.trans_date.label_y, 43, 'right', false, 9.5) %}Transaction Date:{% endcall -%}
+    {%- call at(P.inv_date.label_x, P.inv_date.label_y, 43, 'right', false, 9.5) %}Invoice Date:{% endcall -%}
+    {%- call at(P.do_no.label_x, P.do_no.label_y, 43, 'right', false, 9.5) %}D/O No:{% endcall -%}
+    {%- call at(P.customer.label_x, P.customer.label_y, 48, 'left', false, 9.5) %}Customer's Name&nbsp;&nbsp;:{% endcall -%}
+    {%- call at(P.address.label_x, P.address.label_y, 48, 'left', false, 9.5) %}Address&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:{% endcall -%}
+    {%- call at(P.pan.label_x, P.pan.label_y, 48, 'left', false, 9.5) %}Customer's Pan No.:{% endcall -%}
+    {%- call at(P.mode.label_x, P.mode.label_y, 45, 'left', false, 9.5) %}Mode of Payment&nbsp;&nbsp;:{% endcall -%}
+    {%- call at(P.mode.opts_x, P.mode.label_y, 62, 'left', false, 9.5) %}Cash/Credit/Cheque/Other{% endcall -%}
 
-    {#- table frame -#}
-    {%- set T = P.table -%}
-    {{ hline(T.x, T.y, T.w, 0.4) }}
-    {{ hline(T.x, T.y + T.head_h, T.w, 0.3) }}
-    {{ hline(T.x, P.grand.y + 6.5, T.w, 0.4) }}
-    {%- for cx in P.cols -%}{{ vline(cx, T.y, P.grand.y + 6.5 - T.y, 0.3 if not loop.first and not loop.last else 0.4) }}{%- endfor -%}
+    {#- table frame: measured rulings -#}
+    {%- set TW = P.cols[6] - P.cols[0] -%}
+    {{ hline(P.cols[0], T.top, TW, 0.4) }}
+    {{ hline(P.cols[0], T.head_bot, TW, 0.3) }}
+    {{ hline(P.cols[0], T.body_bot, TW, 0.3) }}
+    {{ hline(P.cols[0], T.bot, TW, 0.4) }}
+    {#- left region columns stop at the body; right region columns run to the bottom -#}
+    {%- for cx in P.cols[0:4] -%}{{ vline(cx, T.top, T.body_bot - T.top, 0.4 if loop.first else 0.3) }}{%- endfor -%}
+    {{ vline(P.cols[0], T.body_bot, T.bot - T.body_bot, 0.4) }}
+    {%- for cx in P.cols[3:7] -%}{{ vline(cx, T.top, T.bot - T.top, 0.4 if loop.last else 0.3) }}{%- endfor -%}
     {%- set heads = ['S.No.', 'H. S. Code', 'Particular', 'Quantity', 'Rate', 'Total Price NRS'] -%}
     {%- for h in heads -%}
       {%- set i = loop.index0 -%}
-      {%- call at(P.cols[i], T.y + 2, P.cols[i+1] - P.cols[i], 'center', true, 9) %}{{ h }}{% endcall -%}
+      {%- call at(P.cols[i], T.head_ty, P.cols[i+1] - P.cols[i], 'center', true, 9.5) %}{{ h }}{% endcall -%}
     {%- endfor -%}
     {#- totals row separators (right side only) -#}
-    {%- for ty in [P.disc.y - 1, P.taxable.y - 1, P.vat_amt.y - 1, P.vat_amt.y + 4.5, P.grand.y - 1] -%}
-      {{ hline(P.cols[3], ty, 229.0 - P.cols[3], 0.3) }}
+    {%- for ty in P.tot_rows -%}
+      {{ hline(P.cols[3], ty, P.cols[6] - P.cols[3], 0.3) }}
     {%- endfor -%}
-    {%- call at(P.disc.label_x, P.disc.y, 42, 'center', false, 9) %}%Discount{% endcall -%}
-    {%- call at(P.taxable.label_x, P.taxable.y, 42, 'center', false, 9) %}Taxable Amount{% endcall -%}
-    {%- call at(P.vat_amt.label_x, P.vat_amt.y, 42, 'center', false, 9) %}13% VAT{% endcall -%}
-    {%- call at(P.grand.label_x, P.grand.y, 42, 'center', true, 9.5) %}Grand Total{% endcall -%}
-    {%- call at(P.words.label_x, P.words.y, 34, 'left', false, 9) %}Amount in Words :{% endcall -%}
-    {{ hline(P.sign.x, P.sign.y, 70, 0.3) }}
-    {%- call at(P.sign.x, P.sign.y + 1.5, 79, 'left', true, 9) %}For: {{ doc.company }}{% endcall -%}
+    {%- for key in ['disc', 'taxable', 'vat_amt', 'grand'] -%}
+      {%- set r = P[key] -%}
+      {%- call at(P.cols[3], r.ty, P.cols[5] - P.cols[3], 'center', key == 'grand', 9.5 if key != 'grand' else 10.5) %}{{ r.label }}{% endcall -%}
+    {%- endfor -%}
+    {%- call at(P.words.label_x, P.words.label_y, 48, 'left', false, 9.5) %}Amount in Words :{% endcall -%}
+    {{ hline(P.sign.x, P.sign.line_y, P.sign.w, 0.3) }}
+    {%- call at(P.sign.x, P.sign.text_y, P.sign.w, 'left', true, 9.5) %}For: {{ doc.company }}{% endcall -%}
   </div>
   {%- endif -%}
 
   {#- ============================ DATA ================================= -#}
 
-  {%- if draw_form -%}
-    {%- call at(P.copy_label.x, P.copy_label.y, P.copy_label.w, 'center', true, 9) %}{{ copy_label }}{% endcall -%}
-  {%- elif n_print > 1 -%}
-    {#- top-center of the real form holds the Blue/Black ply boxes; use the free top-left corner -#}
-    {%- call at(12, P.copy_label.y, 80, 'left', true, 8) %}{{ copy_label }}{% endcall -%}
+  {%- if draw_form or n_print > 1 or is_cn -%}
+    {%- call at(P.copy_label.x, P.copy_label.y, P.copy_label.w, 'center', true, 8.5) %}{{ copy_label }}{% endcall -%}
   {%- endif -%}
 
-  {%- call at(P.inv_no.x, P.inv_no.y, P.inv_no.w, 'left', true) %}{{ invoice_no }}{% endcall -%}
+  {%- call at(P.inv_no.x, P.inv_no.y, P.inv_no.w, 'left', true, 9) %}{{ invoice_no }}{% endcall -%}
+  {%- if is_cn and doc.return_against -%}
+    {#- credit note must reference the original invoice; free space right of the VAT boxes -#}
+    {%- call at(97, P.vat_boxes.y + 1.2, 58, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
+  {%- endif -%}
   {%- call at(P.trans_date.x, P.trans_date.y, P.trans_date.w) %}{{ bs_date }}{% endcall -%}
   {%- call at(P.inv_date.x, P.inv_date.y, P.inv_date.w) %}{{ ad_date }}{% endcall -%}
   {%- if do_nos -%}
@@ -191,15 +207,13 @@ live here as Jinja values.
   {%- call at(P.address.x, P.address.y, P.address.w) %}{{ address }}{% endcall -%}
   {%- call at(P.pan.x, P.pan.y, P.pan.w) %}{{ doc.tax_id or '' }}{% endcall -%}
 
-  {#- tick the payment mode: underline the pre-printed word -#}
+  {#- mark the payment mode: draw a ring around the pre-printed word -#}
   {%- set mw = P.mode_words[ns.mode] -%}
-  {{ hline(mw[0], P.mode.y + 4.2, mw[1], 0.45) }}
-  {%- if draw_form -%}{#- on plain paper an underline alone is easy to miss -#}
-    {%- call at(mw[0], P.mode.y - 3.2, mw[1], 'center', true, 7) %}&#10004;{% endcall -%}
-  {%- endif -%}
+  <div style="position:absolute; left:{{ mw[0] - 1.5 + ox }}mm; top:{{ P.mode.ring_y + oy }}mm;
+    width:{{ mw[1] + 3 }}mm; height:{{ P.mode.ring_h }}mm; border:0.5mm solid #000;
+    border-radius:{{ P.mode.ring_h / 2 }}mm;"></div>
 
   {#- item rows -#}
-  {%- set T = P.table -%}
   {%- set base_sno = (page_no - 1) * rows_per_page -%}
   {%- for item in page_items -%}
     {%- set ry = T.body_y + loop.index0 * T.row_h -%}
@@ -214,18 +228,18 @@ live here as Jinja values.
 
   {%- if is_last -%}
     {%- if doc.additional_discount_percentage -%}
-      {%- call at(P.disc.val_x, P.disc.y, P.disc.val_w, 'right') %}{{ doc.additional_discount_percentage }}%{% endcall -%}
+      {%- call at(P.cols[5] + 1, P.disc.ty, P.cols[6] - P.cols[5] - 3, 'right') %}{{ doc.additional_discount_percentage | abs }}%{% endcall -%}
     {%- endif -%}
-    {%- call at(P.taxable.val_x, P.taxable.y, P.taxable.val_w, 'right') %}{{ num(doc.net_total) }}{% endcall -%}
-    {%- call at(P.vat_amt.val_x, P.vat_amt.y, P.vat_amt.val_w, 'right') %}{{ num(ns2.vat) }}{% endcall -%}
-    {%- call at(P.grand.val_x, P.grand.y, P.grand.val_w, 'right', true) %}{{ num(grand_total) }}{% endcall -%}
-    {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 8, true) %}{{ doc.in_words or '' }}{% endcall -%}
+    {%- call at(P.cols[5] + 1, P.taxable.ty, P.cols[6] - P.cols[5] - 3, 'right') %}{{ num(doc.net_total) }}{% endcall -%}
+    {%- call at(P.cols[5] + 1, P.vat_amt.ty, P.cols[6] - P.cols[5] - 3, 'right') %}{{ num(ns2.vat) }}{% endcall -%}
+    {%- call at(P.cols[5] + 1, P.grand.ty, P.cols[6] - P.cols[5] - 3, 'right', true) %}{{ num(grand_total) }}{% endcall -%}
+    {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 7.5, true) %}{{ doc.in_words or '' }}{% endcall -%}
   {%- else -%}
-    {%- call at(P.cols[2] + 1.5, T.body_y + rows_per_page * T.row_h, 60, 'left', true) %}Contd. on next form...{% endcall -%}
+    {%- call at(P.cols[2] + 1.5, T.body_y + rows_per_page * T.row_h, 70, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}
 
   {%- if item_pages | length > 1 -%}
-    {%- call at(200, 134, 30, 'right', false, 7) %}Form {{ page_no }}/{{ item_pages | length }}{% endcall -%}
+    {%- call at(196, 134.5, 34, 'right', false, 7) %}Form {{ page_no }}/{{ item_pages | length }}{% endcall -%}
   {%- endif -%}
 </div>
 {%- endfor -%}
