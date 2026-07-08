@@ -68,6 +68,7 @@ section as a reference. Everything below reflects the current code.
 | 9 | [Advance Tax TDS](#advance-tax-tds) | Purchase Invoice | Supplier TDS withholding by category. |
 | 10 | [Loan Summary](#loan-summary) | GL Entry | Company-wise loan closing balances. |
 | 11 | [One Lakh Above](#one-lakh-above) | SI + PI | Parties with totals ≥ NPR 100,000. |
+| 12 | [Gas Purchase](#gas-purchase) | Purchase Invoice | LP-gas purchases per refinery (DO / IOC challan / tanker / qty / rate). |
 
 `* ` = required filter. PDF patterns A/B/C are defined in **Start Here**.
 
@@ -161,6 +162,14 @@ section as a reference. Everything below reflects the current code.
 - **Filters:** `company*`, `from*`/`to*`.
 - **PDF:** C — stock Frappe print.
 > ⚠️ `trade_name_type` hardcoded `'E'`; no totals row.
+
+<a id="gas-purchase"></a>
+### 12. Gas Purchase Report
+- **What:** LP-gas purchases from IOC refineries — one row per purchase line (Refinery, Vch/DO/IOC-challan/tanker no, Challan date, SR no + Miti, Qty, Bill no, Rate, Price, VAT, Other Expense) with a bold totals row.
+- **Source:** `Purchase Invoice` + `Purchase Invoice Item` (custom fields `custom_refinery`, `custom_do_no`, `custom_tanker_no`, `custom_ioc_challan_no`, `custom_ioc_challan_date`, …). Falls back to `Purchase Receipt` when a field/data is absent on PI.
+- **Filters:** `company`, `from*`/`to*`, `refinery` (options pulled from the `custom_refinery` Select field's own option list).
+- **PDF:** stock query-report print (+ shared portrait helper); no custom PDF template.
+> ⚠️ Refinery-specific report — depends on the `custom_refinery`/DO/challan custom fields existing on Purchase Invoice.
 
 ---
 
@@ -275,6 +284,12 @@ section as a reference. Everything below reflects the current code.
 **Purpose:** Restrict Link-field dropdowns (incl. child-table & Dynamic Link) to the document's company; block cross-company saves.
 **How it works:** `Company Filter Config` (`doctype_name`, `company_field`) + child `Company Filter Field` define what to filter. `get_filter_config` (Redis-cached) serves it. `company_filter.js` applies `frm.set_query()` per field (Dynamic Link → server query `search_link_by_company`); on company change, mismatched values are cleared. Server-side, `validate_company_matching` throws "Company Mismatch". Cache cleared on Config/Field save.
 **Files:** `custom_code/globalfilter/globalfilter.py` · `public/js/company_filter.js`, `global_filter.js` · doctypes `Company Filter Config` / `Field` · `hooks.py`.
+
+#### Nepali BS Date + "📅 Select Month" on reports (shared, from `rdp_common_app`)
+**Purpose:** Every query report gets a **Nepali (BS) date twin** next to each AD `Date` filter (e.g. "From Date (BS)" / "To Date (BS)") plus a **📅 Select Month** picker that fills the AD from/to from a chosen BS month — so users can filter in Bikram Sambat.
+**How it works:** Provided **automatically** by the shared **`rdp_common_app/report_nepali_date.js`** (loaded globally via that app's `app_include_js`). On every query-report render it scans the report's filters; for **each `Date`-type filter** it creates a `<fieldname>_bs` companion and wires two-way AD↔BS conversion, and appends the month picker. **No per-report code is needed** — it applies to any report with `from_date`/`to_date` (or the other pairs in `DATE_FIELD_COMBINATIONS`). There is **no report-name allowlist**; a report either has `Date` filters (→ gets it) or not.
+**Files (in `rdp_common_app`, not this app):** `public/js/report_nepali_date.js` · that app's `hooks.py` (`app_include_js`). Some reports here (`party_ledger_summary.js`, `gas_purchase_report.js`, `sales_stock_ledger.js`) only *comment* on it where they account for the appended picker in their column logic.
+> ⚠️ It's a **shared `rdp_common_app`** feature — if BS dates/Select Month don't appear on a report that has `Date` filters, it's an assets/load issue (rebuild `rdp_common_app`, hard-refresh), not a gap in this app's report code.
 
 #### Automatic Document Numbering (Voucher Number Settings)
 **Purpose:** Human-facing `custom_document_no` + composite `custom_name` (e.g. `SGU-RC-000006-82/83`), auto or manual per transaction type.

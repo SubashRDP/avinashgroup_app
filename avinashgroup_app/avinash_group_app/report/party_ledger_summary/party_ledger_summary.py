@@ -404,7 +404,7 @@ def get_company_parties(party_type, company, txt=None):
 
 # Body rows per page (header band is repeated per page via thead). Summary rows are
 # single-line, so a simple count-based pack is enough — conservative on purpose.
-_SUM_CAPACITY = {'Portrait': 58, 'Landscape': 24}
+_SUM_CAPACITY = {'Portrait': 61, 'Landscape': 24}
 
 
 def _paginate(rows, orientation):
