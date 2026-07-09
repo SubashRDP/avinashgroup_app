@@ -22,7 +22,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
-    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=2.2",
+    "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.3",
     "/assets/avinashgroup_app/js/numbering_preview.js?v=1.0",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
@@ -303,4 +303,18 @@ fixtures = [
             "name": ["in", ["Customer Balance Confirmation", "Vendor Balance Confirmation"]]
         },
     },
+]
+
+# Custom masters/config that must survive ERPNext's Transaction Deletion
+# Record (Company > Delete Transactions), which otherwise wipes every
+# doctype carrying a Company link field.
+company_data_to_be_ignored = [
+    "Biometric Device",
+    "JV Type",
+    "Numbering Configuration",
+    "Payment - Receipt Type",
+    "CBMS Config",
+    "Dynamic Approval Setting",
+    "Nepal BS Period",
+    "Sub-Ledger Category",
 ]

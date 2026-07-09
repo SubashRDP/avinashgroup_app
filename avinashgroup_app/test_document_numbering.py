@@ -226,7 +226,8 @@ class TestDocumentNumbering(FrappeTestCase):
     def _temp_rule(self, *, extra_segments, conditions, doctype="Payment Entry",
                    target="custom_name", separator="-", auto_document_no=0,
                    document_no_conditions=None, document_no_field=None,
-                   duplicate_action=None):
+                   duplicate_action=None, normal_docno_mode=None, return_docno_mode=None,
+                   docno_group_by=None):
         segments = list(extra_segments) + [
             # the name's number slot references the SAME field the number is
             # written into, so the voucher name always contains the number
@@ -237,10 +238,13 @@ class TestDocumentNumbering(FrappeTestCase):
             "doctype": "Numbering Configuration", "document_type": doctype,
             "enabled": 1, "target_field": target, "separator": separator,
             "auto_document_no": auto_document_no,
+            "normal_docno_mode": normal_docno_mode or "Auto",
+            "return_docno_mode": return_docno_mode or "Auto",
             "document_no_field": document_no_field or "custom_document_no",
             "duplicate_action": duplicate_action or "Throw Error",
             "conditions": conditions,
             "document_no_conditions": document_no_conditions or [],
+            "docno_group_by": [{"field": f} for f in (docno_group_by or [])],
             "segments": segments,
         }).insert(ignore_permissions=True)
         ns.clear_numbering_rules_cache()
@@ -1256,3 +1260,192 @@ class TestDocumentNumbering(FrappeTestCase):
         d2.custom_document_no = 424242
         ns.apply_document_no(d2)
         self.assertEqual(frappe.utils.cint(d2.custom_document_no), n)
+
+    # ============================================================
+    #  STABILITY: server is the single source of truth for the number
+    # ============================================================
+    def test_63_status_endpoint_reflects_server_decision(self):
+        # The form now asks the server for the field's state instead of guessing.
+        # An auto-numbered draft reports auto=True with the peeked next number;
+        # a draft no rule numbers reports auto=False (field becomes manual/required).
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "ST" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1, extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[{"field": "custom_p_type", "value": self.OFF_TYPE}],
+        )
+        auto = ns.get_document_no_status(doc=json.dumps({
+            "doctype": "Payment Entry", "company": self.company,
+            "posting_date": str(self.pdate), "payment_type": "Receive",
+            "custom_p_type": self.OFF_TYPE,
+        }))
+        self.assertTrue(auto["auto"])
+        self.assertEqual(auto["next"], ns.peek_next_document_no(self._pe_off(self.OFF_TYPE)))
+        self.assertFalse(auto["ambiguous"])
+
+        manual = ns.get_document_no_status(doc=json.dumps({
+            "doctype": "Payment Entry", "company": self.company,
+            "posting_date": str(self.pdate), "payment_type": "Receive",
+            "custom_p_type": self.OFF_TYPE_2,   # not numbered by the rule or fallback
+        }))
+        self.assertFalse(manual["auto"])
+        self.assertIsNone(manual["next"])
+
+    def test_64_saved_number_is_server_draw_not_client_value(self):
+        # Stability guarantee: whatever number the form displayed as a preview,
+        # the SAVED number is the server's authoritative draw. A stale non-manual
+        # value on a fresh DESK-FORM draft is overwritten, never trusted.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "SV" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1, extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[{"field": "custom_p_type", "value": self.OFF_TYPE}],
+        )
+        d1 = self._pe_off(); ns.apply_document_no(d1)
+        self.assertEqual(d1.custom_document_no, 1)
+        # Simulate a desk form save: a bogus preview (999) with the manual flag
+        # unset is OUR preview -> the server ignores it and draws the real next.
+        orig_fd = getattr(frappe.local, "form_dict", None)
+        frappe.local.form_dict = frappe._dict({"cmd": "frappe.desk.form.save.savedocs"})
+        self.addCleanup(setattr, frappe.local, "form_dict", orig_fd)
+        d2 = self._pe_off()
+        d2.custom_document_no = 999
+        if frappe.get_meta("Payment Entry").has_field("custom_document_no_manual"):
+            d2.custom_document_no_manual = 0
+        ns.apply_document_no(d2)
+        self.assertEqual(d2.custom_document_no, 2)   # server draw, not the 999 preview
+
+    def test_65_equally_specific_rules_flagged_ambiguous(self):
+        # Two enabled rules with the SAME scope both match a doc: the winner is
+        # still deterministic, but the overlap is reported so an admin can fix it.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        vcond = [{"field": "custom_p_type", "value": self.OFF_TYPE}]   # voucher condition -> both match, tie
+        self._temp_rule(auto_document_no=1, conditions=vcond, document_no_conditions=[],
+                        extra_segments=self._tag_segments("AM1" + frappe.generate_hash(length=4)))
+        self._temp_rule(auto_document_no=1, conditions=vcond, document_no_conditions=[],
+                        extra_segments=self._tag_segments("AM2" + frappe.generate_hash(length=4)))
+        d = self._pe_off(self.OFF_TYPE)
+        tied = ns._ambiguous_numbering_rules(d)
+        self.assertGreaterEqual(len(tied), 2)             # overlap detected
+        self.assertIsNotNone(ns._match_numbering_rule(d)) # still resolves to one
+
+    def test_66_return_auto_normal_manual_same_doctype(self):
+        # The docs recipe (docs/numbering_configuration.md §4): ONE rule on a
+        # doctype holding both normal and return documents (is_return), with
+        # Document No. condition `is_return Equals 1` -> returns are
+        # auto-numbered, normal documents stay manual (field required on the
+        # form). Uses Purchase Invoice, whose returns live in the same doctype.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "RA" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            doctype="Purchase Invoice", auto_document_no=1,
+            extra_segments=[{"segment_type": "Company Abbr"},
+                            {"segment_type": "Static Text", "static_value": tag}],
+            conditions=[],                                            # names every PI
+            document_no_conditions=[{"field": "is_return", "operator": "Equals", "value": "1"}],
+        )
+
+        def pi(is_return):
+            d = frappe.new_doc("Purchase Invoice")
+            d.company = self.company
+            d.posting_date = self.pdate
+            d.is_return = is_return
+            return d
+
+        # RETURN -> auto: eligible, status says auto, draws a gapless sequence
+        self.assertIsNotNone(ns._docno_scope(pi(1)))
+        st = ns.get_document_no_status(doc=json.dumps({
+            "doctype": "Purchase Invoice", "company": self.company,
+            "posting_date": str(self.pdate), "is_return": 1}))
+        self.assertTrue(st["auto"])
+        nums = [self._draw_into(pi(1), "custom_document_no") for _ in range(2)]
+        self.assertEqual(nums, [1, 2])
+
+        # NORMAL -> manual: the auto-fill rule is authoritative and its
+        # Document No. condition fails, so the doc is NOT auto-numbered
+        # (the form then shows the field as required manual entry).
+        self.assertIsNone(ns._docno_scope(pi(0)))
+        st = ns.get_document_no_status(doc=json.dumps({
+            "doctype": "Purchase Invoice", "company": self.company,
+            "posting_date": str(self.pdate), "is_return": 0}))
+        self.assertFalse(st["auto"])
+
+    def test_67_normal_return_mode_switches(self):
+        # The simple UI for the same split: ONE rule matching every document,
+        # with the "Normal Documents" / "Return Documents" Auto/Manual selects
+        # instead of hand-typed conditions. normal=Manual + return=Auto ->
+        # returns auto-numbered, normal manual. Blank modes behave as Auto.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        tag = "MD" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            doctype="Purchase Invoice", auto_document_no=1,
+            normal_docno_mode="Manual", return_docno_mode="Auto",
+            extra_segments=[{"segment_type": "Company Abbr"},
+                            {"segment_type": "Static Text", "static_value": tag}],
+            conditions=[], document_no_conditions=[],
+        )
+
+        def pi(is_return):
+            d = frappe.new_doc("Purchase Invoice")
+            d.company = self.company
+            d.posting_date = self.pdate
+            d.is_return = is_return
+            return d
+
+        # return -> Auto mode -> numbered
+        self.assertIsNotNone(ns._docno_scope(pi(1)))
+        self.assertEqual(self._draw_into(pi(1), "custom_document_no"), 1)
+        # normal -> Manual mode -> not auto-numbered (authoritative)
+        self.assertIsNone(ns._docno_scope(pi(0)))
+        st = ns.get_document_no_status(doc=json.dumps({
+            "doctype": "Purchase Invoice", "company": self.company,
+            "posting_date": str(self.pdate), "is_return": 0}))
+        self.assertFalse(st["auto"])
+        # a doctype WITHOUT is_return uses the Normal mode: Manual blocks it too
+        rule = {"auto_document_no": 1, "normal_docno_mode": "Manual",
+                "return_docno_mode": "Auto", "document_no_conditions": []}
+        self.assertFalse(ns._docno_eligible(self._pe_off(), rule))
+        # blank modes (pre-existing rules) keep numbering everything
+        rule_blank = {"auto_document_no": 1, "document_no_conditions": []}
+        self.assertTrue(ns._docno_eligible(self._pe_off(), rule_blank))
+
+    def test_68_group_by_fields_partition_the_series(self):
+        # "Group Document No. By": the admin picks the fields whose value
+        # combinations each count on their OWN sequence — here company + branch
+        # + custom_p_type + fiscal year on Payment Entry. Branches and types
+        # must number independently; same group must be gapless; manual numbers
+        # bump only their own group's counter.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.branches) >= 2, "needs two branches")
+        b1, b2 = self.branches
+        tag = "GB" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1,
+            extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[],
+            docno_group_by=["company", "custom_branch", "custom_p_type",
+                            "custom_fiscal_year"],
+        )
+
+        def pe(branch, ptype=None):
+            return self._pe(custom_branch=branch, custom_p_type=ptype or self.OFF_TYPE)
+
+        scope = ns._docno_scope(pe(b1))
+        self.assertIsNotNone(scope)
+        self.assertTrue(scope["key"].startswith("gb|"))      # group-by scope in use
+        self.assertIn("custom_branch=" + b1, scope["group"])
+        self.assertIn("fy=", scope["group"])                 # fiscal year resolved
+
+        # same group counts 1, 2 — different branch/type start their own 1
+        self.assertEqual(self._draw_into(pe(b1), "custom_document_no"), 1)
+        self.assertEqual(self._draw_into(pe(b1), "custom_document_no"), 2)
+        self.assertEqual(self._draw_into(pe(b2), "custom_document_no"), 1)
+        self.assertEqual(self._draw_into(pe(b1, self.OFF_TYPE_2), "custom_document_no"), 1)
+
+        # manual number bumps ONLY its own group: next b1 draw skips past it,
+        # b2 keeps counting where it was
+        dm = pe(b1); dm.custom_document_no = 77; dm.custom_document_no_manual = 1
+        ns.apply_document_no(dm)
+        self.assertEqual(dm.custom_document_no, 77)
+        self.assertEqual(ns.peek_next_document_no(pe(b1)), 78)
+        self.assertEqual(ns.peek_next_document_no(pe(b2)), 2)

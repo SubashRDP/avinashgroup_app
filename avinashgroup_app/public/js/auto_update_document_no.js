@@ -1,129 +1,135 @@
-// Live PREVIEW of custom_document_no for new docs configured in
-// AUTO_NUMBER_CONFIG (naming_series.py).
+// Document No. (custom_document_no) field behaviour — driven entirely by the
+// server, never guessed in the browser.
 //
-// The value shown while filling a draft is only a preview. The authoritative,
-// collision-free number is assigned on the server at save time
-// (naming_series.apply_document_no) by drawing max+1 under a per-scope lock, so
-// two users on the same scope never receive the same number.
+// The number itself is assigned authoritatively on the server at save
+// (naming_series.apply_document_no: atomic max+1 under a per-scope lock). The
+// form does NOT re-run the rule logic to predict it. It only asks the server for
+// the current STATUS of the draft and reflects it:
 //
-// Manual override: if the user types a number, custom_document_no_manual is set
-// to 1 and auto-preview backs off; the server keeps and only uniqueness-checks
-// that value. Clearing the field returns it to auto.
+//   * auto   -> the field is HIDDEN while the doc is new: the number does not
+//               exist until the server assigns it at save, so nothing is shown
+//               that could differ from the saved value. After save the field
+//               appears read-only with the real number.
+//   * manual -> the field is REQUIRED; the user types it and gets an instant
+//               duplicate warning.
+//
+// This replaces the old live-preview machinery (per-rule field watching +
+// realtime re-fetch + manual/preview tug-of-war) that showed a wrong or blank
+// number whenever a client change event didn't fire.
 
-const AUTO_NUMBER_CONFIG = {
-    "Purchase Receipt": { type_field: "custom_receipt_type" },
-    "Purchase Invoice": { type_field: "custom_purchase_type" },
-    "Payment Entry": { type_field: "custom_p_type" },
-    "Journal Entry": { type_field: "custom_p_type" }
-};
+// Forms that carry the custom_document_no field. The AUTO vs MANUAL decision is
+// NOT here — the server decides that per Numbering Configuration rule; this list
+// only says which forms have the field to manage.
+const DOCNO_DOCTYPES = ["Payment Entry", "Journal Entry", "Purchase Invoice", "Purchase Receipt"];
 
-// Fields that scope the document_no series on the server (_docno_scope):
-//   custom_p_type_code → prefix code, company → company abbr,
-//   posting_date → fiscal year, custom_fiscal_year → direct override.
-const SERIES_DEPS = ["custom_p_type_code", "company", "posting_date", "custom_fiscal_year"];
+// Fields that can change whether/what number applies (server scope inputs).
+const SCOPE_FIELDS = [
+    "custom_p_type", "custom_purchase_type", "custom_receipt_type",
+    "custom_p_type_code", "company", "custom_branch", "is_return",
+    "posting_date", "transaction_date", "custom_fiscal_year",
+];
 
 const DEBOUNCE_MS = 400;
 
-function should_auto_number(frm) {
-    // An amendment never draws its own number — the server pins it to the
-    // cancelled original's (apply_document_no), so no preview machinery.
-    return !!AUTO_NUMBER_CONFIG[frm.doc.doctype] && frm.is_new() && !frm.doc.amended_from;
+function has_docno_field(frm) {
+    return !!(frm.fields_dict && frm.fields_dict["custom_document_no"]);
 }
 
 function has_manual_flag(frm) {
     return !!frm.fields_dict["custom_document_no_manual"];
 }
 
-function is_manual(frm) {
-    return has_manual_flag(frm) && !!cint(frm.doc.custom_document_no_manual);
+function was_auto_drawn(frm) {
+    // Stored docs record how their number was obtained in the manual flag:
+    // 0 (or absent value) = server-drawn -> the user must not edit it.
+    return has_manual_flag(frm) && !cint(frm.doc.custom_document_no_manual);
 }
 
-// A non-empty value that WE did not put there belongs to the user. cint() so
-// Data-typed custom_document_no ("5") and our numeric preview (5) compare equal.
-function user_owns_value(frm) {
-    const v = frm.doc.custom_document_no;
-    return !!v && cint(v) !== cint(frm._auto_docno_value);
-}
-
-// Do not auto-preview over a number the user controls — via the manual flag, or
-// (even when the flag field isn't deployed yet) via a value we didn't write.
-function auto_locked(frm) {
-    return is_manual(frm) || user_owns_value(frm);
-}
-
-function update_hint(frm, preview) {
-    if (!frm.get_field || !frm.get_field("custom_document_no")) return;
-    let msg = "";
-    if (frm.doc.amended_from) {
-        msg = __("Amendment — keeps the Document No. of the original.");
-    } else if (should_auto_number(frm)) {
-        if (auto_locked(frm)) {
-            msg = __("Manually entered. Clear the field to auto-number.");
-        } else if (preview) {
-            msg = __("Auto — assigned on save (preview: {0}).", [preview]);
-        } else {
-            msg = __("Set Type, Company and Date to auto-number, or type a number.");
-        }
-    }
-    frm.set_df_property("custom_document_no", "description", msg);
-}
-
-// The user's cursor is IN the field: frm.doc only updates on change (blur),
-// so mid-typed digits are invisible to the guards — writing now would silently
-// discard them. Callers must skip the fill while focused.
-function docno_input_focused(frm) {
+function is_readonly(frm) {
     const f = frm.get_field && frm.get_field("custom_document_no");
-    return !!(f && f.$input && f.$input.is(":focus"));
+    return !!(f && f.df && f.df.read_only);
 }
 
-function set_auto_value(frm, value) {
-    // Remember the value WE put in, so the field's change handler can tell our
-    // own preview fill from a real user edit. A value-compare is used instead
-    // of a synchronous flag because set_value may trigger the handler async.
-    frm._auto_docno_value = value;
-    frm.set_value("custom_document_no", value);
-    if (has_manual_flag(frm)) frm.set_value("custom_document_no_manual", 0);
-}
+// Ask the server for the draft's Document No. status and reflect it on the field.
+function fetch_status(frm) {
+    if (!has_docno_field(frm) || !frm.is_new()) return;
 
-function fetch_preview(frm) {
-    if (!should_auto_number(frm) || auto_locked(frm)) {
-        update_hint(frm, frm.doc.custom_document_no);
+    // Amendment: the number is pinned to the cancelled original by the server —
+    // lock the field, no status call needed.
+    if (frm.doc.amended_from) {
+        apply_status(frm, { amended: true });
         return;
     }
 
-    // Monotonic token so an older, slower response can't paint over a newer one.
     const token = (frm._docno_req = (frm._docno_req || 0) + 1);
     frappe.call({
-        method: "avinashgroup_app.custom_code.Override.naming_series.get_next_custom_document_no",
+        method: "avinashgroup_app.custom_code.Override.naming_series.get_document_no_status",
         args: { doc: frm.doc },
-        callback: function(r) {
-            if (token !== frm._docno_req) return;            // superseded
-            // The user may have taken over / the form moved on while in flight.
-            if (!should_auto_number(frm) || auto_locked(frm)) return;
-            if (docno_input_focused(frm)) return;            // user is typing — hands off
-            const next = r && r.message;
-            if (next && cint(frm.doc.custom_document_no) !== cint(next)) {
-                set_auto_value(frm, next);
-            } else if (!next && frm.doc.custom_document_no) {
-                // the rule no longer numbers this doc (a field change broke a
-                // condition): clear OUR stale preview instead of leaving the
-                // old number stuck on screen. (auto_locked above guarantees
-                // the value is ours, not the user's.)
-                set_auto_value(frm, null);
-            }
-            update_hint(frm, next);
+        callback: function (r) {
+            if (token !== frm._docno_req) return;          // superseded by a newer call
+            apply_status(frm, r && r.message);
         }
     });
 }
 
-function schedule_preview(frm) {
-    clearTimeout(frm._docno_timer);
-    frm._docno_timer = setTimeout(() => fetch_preview(frm), DEBOUNCE_MS);
+// The field's own mandatory_depends_on (e.g. "every company except Grihalaxmi")
+// OVERRIDES reqd in frappe's mandatory check — so hiding the field must also
+// neutralize it, and manual mode must restore it. The BASE docfield map holds
+// the pristine expression (set_df_property only ever writes the per-doc copy).
+function base_mandatory_expr(frm) {
+    const base = (frappe.meta.docfield_map[frm.doc.doctype] || {})["custom_document_no"];
+    return (base && base.mandatory_depends_on) || "";
 }
 
-// Manual number typed: ask the server whether it is already used in this
-// scope and warn IMMEDIATELY (before save) with the next free number.
+function apply_status(frm, st) {
+    if (!has_docno_field(frm)) return;
+    st = st || { auto: false, ambiguous: false };
+
+    if (st.amended) {
+        // Pinned to the cancelled original's number — visible but locked.
+        set_field(frm, { hidden: 0, read_only: 1, reqd: 0, mandatory_depends_on: "eval:false",
+            description: __("Amendment — keeps the Document No. of the original.") });
+        return;
+    }
+
+    if (st.auto) {
+        // The number does not exist until the server assigns it at save:
+        // hide the field entirely so nothing provisional is ever shown. The
+        // mandatory override matters: hidden fields still fail the client
+        // mandatory check, and reqd alone is trumped by mandatory_depends_on.
+        set_field(frm, { hidden: 1, reqd: 0, mandatory_depends_on: "eval:false", description: "" });
+        if (st.ambiguous) {
+            frappe.show_alert({
+                message: __("Multiple numbering rules match this document equally — "
+                    + "the Document No. rule is ambiguous. Ask an admin to make one rule more specific."),
+                indicator: "orange"
+            }, 10);
+        }
+    } else {
+        // No rule numbers this doc: the user must enter it. Restore the field's
+        // own mandatory expression (it may exempt some companies) — with reqd 1
+        // as the fallback when there is none.
+        set_field(frm, { hidden: 0, read_only: 0, reqd: 1,
+            mandatory_depends_on: base_mandatory_expr(frm),
+            description: __("Enter the Document No. (required).") });
+    }
+}
+
+function set_field(frm, props) {
+    Object.keys(props).forEach(function (k) {
+        frm.set_df_property("custom_document_no", k, props[k]);
+    });
+}
+
+function schedule_status(frm) {
+    clearTimeout(frm._docno_timer);
+    frm._docno_timer = setTimeout(function () { fetch_status(frm); }, DEBOUNCE_MS);
+}
+
+// Manual entry only: warn immediately if the typed number is already used, and
+// show the next free one. No-op in auto mode (the field is read-only there).
 function warn_if_taken(frm) {
+    if (is_readonly(frm)) return;
     const v = frm.doc.custom_document_no;
     if (!v) return;
     const token = (frm._docno_check_req = (frm._docno_check_req || 0) + 1);
@@ -131,8 +137,8 @@ function warn_if_taken(frm) {
         method: "avinashgroup_app.custom_code.Override.naming_series.check_document_no_availability",
         args: { doc: frm.doc },
         callback: function (r) {
-            if (token !== frm._docno_check_req) return;          // superseded
-            if (cint(frm.doc.custom_document_no) !== cint(v)) return; // value moved on
+            if (token !== frm._docno_check_req) return;
+            if (cint(frm.doc.custom_document_no) !== cint(v)) return;
             const res = r && r.message;
             if (!res || !res.taken) return;
             const msg = res.next
@@ -146,121 +152,55 @@ function warn_if_taken(frm) {
 
 function schedule_taken_check(frm) {
     clearTimeout(frm._docno_check_timer);
-    frm._docno_check_timer = setTimeout(() => warn_if_taken(frm), DEBOUNCE_MS);
+    frm._docno_check_timer = setTimeout(function () { warn_if_taken(frm); }, DEBOUNCE_MS);
 }
 
-// Another user just consumed a number in this doctype: any live auto preview
-// may now be stale — re-fetch it so two open forms never show the same number.
-// The server publishes to the DOCTYPE ROOM (permission-gated) after commit;
-// subscribe_docno_events joins that room when a new auto-number form opens.
-// Registered once per page load.
-if (frappe.realtime && frappe.realtime.on) {
-    frappe.realtime.on("docno_assigned", function (data) {
-        const frm = window.cur_frm;
-        if (!frm || !data || frm.doc.doctype !== data.doctype) return;
-        // Only touch the form the user is actually LOOKING at — cur_frm can
-        // be a backgrounded form after navigating to a list/report, and
-        // writing to it would dirty it invisibly.
-        const route = frappe.get_route ? frappe.get_route() : [];
-        if (route[0] !== "Form" || route[1] !== data.doctype) return;
-        if (!should_auto_number(frm) || auto_locked(frm)) return;
-        schedule_preview(frm);
-    });
-}
-
-function subscribe_docno_events(frm) {
-    if (frappe.realtime && frappe.realtime.doctype_subscribe) {
-        frappe.realtime.doctype_subscribe(frm.doc.doctype);
-    }
-}
-
-// Numbering rules are configurable: their conditions/segments can read ANY
-// field (payment_type, custom_branch, reference_no ...), so the static
-// trigger list below can't know them. Ask the server which fields the
-// doctype's rules actually use and bind a preview-refresh to each — without
-// this, filling a condition field never refreshes the preview and the user
-// stares at a blank Document No. that would only fill at save.
-const docno_watch_bound = {};   // doctype -> true once handlers are bound
-
-function bind_rule_watch_fields(frm) {
-    const dt = frm.doc.doctype;
-    if (docno_watch_bound[dt]) return;
-    docno_watch_bound[dt] = true;
-    frappe.call({
-        method: "avinashgroup_app.custom_code.Override.naming_series.get_docno_watch_fields",
-        args: { doctype: dt },
-        callback: function (r) {
-            (r.message || []).forEach(function (field) {
-                if (field === "custom_document_no") return;   // has its own handler
-                const h = {};
-                h[field] = schedule_preview;                  // debounce coalesces duplicates
-                frappe.ui.form.on(dt, h);
-            });
-            // re-evaluate now that all triggers are live
-            if (frm.is_new()) schedule_preview(frm);
-        }
-    });
-}
-
-Object.keys(AUTO_NUMBER_CONFIG).forEach(function(doctype) {
-    const cfg = AUTO_NUMBER_CONFIG[doctype];
-
+DOCNO_DOCTYPES.forEach(function (doctype) {
     const handlers = {
-        onload_post_render: function(frm) {
-            if (frm.is_new()) {
-                subscribe_docno_events(frm);
-                bind_rule_watch_fields(frm);
-                // A DUPLICATED draft carries the source's number with the
-                // manual flag cleared (the flag is no_copy) — that number
-                // belongs to the ORIGINAL. Blank it so preview and save
-                // treat this doc fresh (the server redraws it anyway; the
-                // screen must not show the copied number as if it were
-                // this doc's). Amendments legitimately keep their number.
-                if (frm.doc.custom_document_no && !frm.doc.amended_from
-                    && has_manual_flag(frm) && !cint(frm.doc.custom_document_no_manual)) {
-                    set_auto_value(frm, null);
+        onload_post_render: function (frm) {
+            if (!frm.is_new()) return;
+            // A DUPLICATED draft carries the source's number with the manual
+            // flag cleared (the flag is no_copy) — that number belongs to the
+            // ORIGINAL. Start blank: auto redraws at save anyway, manual must
+            // be typed by the user. Amendments legitimately keep their number.
+            if (frm.doc.custom_document_no && !frm.doc.amended_from
+                && has_manual_flag(frm) && !cint(frm.doc.custom_document_no_manual)) {
+                frm.set_value("custom_document_no", null);
+            }
+            fetch_status(frm);
+        },
+        refresh: function (frm) {
+            if (frm.is_new()) { fetch_status(frm); return; }
+            if (!has_docno_field(frm)) return;
+            // SAVED doc: the number now exists — show it. Locked when the
+            // server drew it; editable (draft) when the user typed it.
+            set_field(frm, {
+                hidden: 0, reqd: 0,
+                read_only: was_auto_drawn(frm) ? 1 : 0,
+                description: was_auto_drawn(frm) ? __("Assigned automatically.") : "",
+            });
+        },
+        custom_document_no: function (frm) {
+            // Only meaningful in manual mode (auto is hidden/read-only). A typed
+            // value is the USER'S: record that in the manual flag — the server
+            // keeps flagged values verbatim, but treats an unflagged value on a
+            // desk save as a stale leftover and clears it (that would blank the
+            // number the user just typed). Clearing the field returns it to auto.
+            if (is_readonly(frm) || frm.doc.amended_from) return;
+            if (frm.doc.custom_document_no) {
+                if (has_manual_flag(frm) && !cint(frm.doc.custom_document_no_manual)) {
+                    frm.set_value("custom_document_no_manual", 1);
                 }
-                schedule_preview(frm);
-            }
-        },
-        refresh: function(frm) {
-            // Amended docs carry the original's number: lock the field so it
-            // cannot be typed over (the server would pin it back anyway).
-            if (frm.doc.amended_from) {
-                frm.set_df_property("custom_document_no", "read_only", 1);
-                update_hint(frm);
-                return;
-            }
-            if (frm.is_new()) update_hint(frm, frm.doc.custom_document_no);
-        },
-        custom_document_no: function(frm) {
-            if (frm.doc.amended_from) return;   // pinned to the original — not user-ownable
-            const v = frm.doc.custom_document_no;
-            // our own preview fill (value matches what set_auto_value stored);
-            // cint() so a Data-typed "5" equals our numeric 5.
-            if (v && cint(v) === cint(frm._auto_docno_value)) return;
-            if (v) {
-                // a value we did not set -> user typed it -> it's now theirs
-                if (has_manual_flag(frm)) frm.set_value("custom_document_no_manual", 1);
-                update_hint(frm, null);
-                schedule_taken_check(frm);   // instant duplicate warning
-            } else {
-                // user cleared it -> back to auto
-                frm._auto_docno_value = null;
-                if (has_manual_flag(frm)) frm.set_value("custom_document_no_manual", 0);
-                schedule_preview(frm);
+                schedule_taken_check(frm);
+            } else if (has_manual_flag(frm) && cint(frm.doc.custom_document_no_manual)) {
+                frm.set_value("custom_document_no_manual", 0);
             }
         }
     };
 
-    // Per-doctype type discriminator (custom_p_type / custom_purchase_type / ...)
-    if (cfg.type_field) {
-        handlers[cfg.type_field] = schedule_preview;
-    }
-
-    // Shared series-scope dependencies
-    SERIES_DEPS.forEach(function(field) {
-        if (!handlers[field]) handlers[field] = schedule_preview;
+    // Any scope field changing can flip auto/manual or move the preview number.
+    SCOPE_FIELDS.forEach(function (field) {
+        if (!handlers[field]) handlers[field] = schedule_status;
     });
 
     frappe.ui.form.on(doctype, handlers);

@@ -15,6 +15,12 @@
   "duplicate_action",
   "column_break_main",
   "company_abbr",
+  "docno_mode_section",
+  "normal_docno_mode",
+  "column_break_docno_mode",
+  "return_docno_mode",
+  "docno_group_by_section",
+  "docno_group_by",
   "conditions_section",
   "conditions",
   "document_no_conditions_section",
@@ -78,6 +84,48 @@
    "fieldname": "auto_document_no",
    "fieldtype": "Check",
    "label": "Auto-fill Document No."
+  },
+  {
+   "depends_on": "auto_document_no",
+   "description": "Who fills the Document No., per kind of document. Auto = the system assigns it at save (field hidden until then); Manual = the user must type it (field required).",
+   "fieldname": "docno_mode_section",
+   "fieldtype": "Section Break",
+   "label": "Document No. — Auto or Manual"
+  },
+  {
+   "default": "Auto",
+   "depends_on": "auto_document_no",
+   "fieldname": "normal_docno_mode",
+   "fieldtype": "Select",
+   "label": "Normal Documents",
+   "options": "Auto\nManual"
+  },
+  {
+   "fieldname": "column_break_docno_mode",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Auto",
+   "depends_on": "auto_document_no",
+   "description": "A return is a document with the standard 'Is Return' checkbox on (e.g. Sales / Purchase Invoice Return).",
+   "fieldname": "return_docno_mode",
+   "fieldtype": "Select",
+   "label": "Return Documents",
+   "options": "Auto\nManual"
+  },
+  {
+   "depends_on": "auto_document_no",
+   "description": "Each unique combination of these fields counts on its OWN sequence (1, 2, 3, …) — e.g. company + branch + custom_p_type + custom_fiscal_year gives every company/branch/type/year its own numbers. Leave empty to group by the rule's number prefix (default).",
+   "fieldname": "docno_group_by_section",
+   "fieldtype": "Section Break",
+   "label": "Group Document No. By"
+  },
+  {
+   "depends_on": "auto_document_no",
+   "fieldname": "docno_group_by",
+   "fieldtype": "Table",
+   "label": "Group By Fields",
+   "options": "Numbering Group By Field"
   },
   {
    "default": "custom_document_no",

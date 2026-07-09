@@ -1,4 +1,5 @@
 import fnmatch
+import hashlib
 import json
 import re
 
@@ -829,24 +830,39 @@ def _docno_field(rule):
     return _safe_col(rule.get("document_no_field") if rule else None) or "custom_document_no"
 
 
+def _docno_mode(doc, rule):
+    """Auto/Manual mode of the rule for THIS document: return_docno_mode when
+    the doc is a return (is_return checked), normal_docno_mode otherwise.
+    Blank/missing (rules saved before the fields shipped) = Auto, preserving
+    the old 'auto_document_no numbers everything' behaviour."""
+    is_return = doc.meta.has_field("is_return") and frappe.utils.cint(doc.get("is_return"))
+    mode = rule.get("return_docno_mode") if is_return else rule.get("normal_docno_mode")
+    return mode or "Auto"
+
+
 def _docno_eligible(doc, rule):
     """Whether this document should get an auto document number.
 
       1. Rule-driven (the generalized path): the matching Numbering Configuration
-         rule has 'Auto-fill Document No.' ticked AND the document satisfies the
-         rule's separate DOCUMENT NO. CONDITIONS (Equals / In / Is Set …). These
-         are independent of the Voucher No. conditions that select the rule, so
-         you can format the name for a broad set but only number a subset.
-         Empty Document No. conditions = number every document the rule applies to.
+         rule has 'Auto-fill Document No.' ticked, the Normal/Return mode for
+         this document is Auto (Normal Documents / Return Documents selects on
+         the rule — e.g. normal = Manual, return = Auto in one rule), AND the
+         document satisfies the rule's separate DOCUMENT NO. CONDITIONS
+         (Equals / In / Is Set …). Conditions are independent of the Voucher No.
+         conditions that select the rule, so you can format the name for a broad
+         set but only number a subset. Empty conditions = number everything the
+         mode allows.
       2. Fallback: the hardcoded AUTO_NUMBER_CONFIG (type field in a fixed list),
          so day-one behaviour is unchanged for the doctypes shipped with it.
     """
     # A matching Auto-fill rule is AUTHORITATIVE for the Document No.: the doc is
-    # numbered iff ALL of the rule's Document No. conditions match (empty list =
-    # number every doc the rule applies to). This lets the conditions both turn
-    # numbering ON for new types and RESTRICT it (e.g. only when a branch is set)
-    # — the fallback below is NOT consulted once such a rule applies.
+    # numbered iff its Normal/Return mode is Auto AND ALL Document No. conditions
+    # match. This lets one rule turn numbering ON for new types and RESTRICT it
+    # (e.g. returns auto, normal manual) — the fallback below is NOT consulted
+    # once such a rule applies.
     if rule and rule.get("auto_document_no"):
+        if _docno_mode(doc, rule) != "Auto":
+            return False
         return all(_condition_matches(doc, c) for c in rule.get("document_no_conditions", []))
 
     # No Auto-fill rule applies -> hardcoded fallback (day-one behaviour): the
@@ -859,12 +875,75 @@ def _docno_eligible(doc, rule):
     return bool(type_value and type_value in cfg.get("types", []))
 
 
+def _group_by_scope(doc, rule):
+    """Scope from the rule's explicit GROUP BY fields ("Group Document No. By"):
+    each unique combination of the configured field values counts on its own
+    sequence. Returns None when the rule has no group-by rows.
+
+    Unlike the prefix/pattern scopes, this one scans by FILTERS on the real
+    columns (`where` + `params`), so history is visible even when the stored
+    voucher format changes — an existing series continues instead of restarting.
+
+    Special case: custom_fiscal_year groups by the FISCAL YEAR of the document's
+    posting/transaction date (resolved, not the raw column — the stored column
+    may be empty on old rows), matched as a date-range filter."""
+    group_fields = [r.get("field") for r in (rule.get("docno_group_by") or []) if r.get("field")]
+    if not group_fields:
+        return None
+
+    where, params, key_parts = [], [], []
+    for name in group_fields:
+        col = _safe_col(name)
+        if not col:
+            continue
+        if col in ("custom_fiscal_year", "fiscal_year"):
+            fy = _resolve_docno_fiscal_year(doc)
+            if not fy:
+                return None  # scope incomplete until a date is set
+            date_col = "posting_date" if doc.meta.has_field("posting_date") else (
+                "transaction_date" if doc.meta.has_field("transaction_date") else None)
+            bounds = frappe.get_cached_value("Fiscal Year", fy,
+                                             ["year_start_date", "year_end_date"])
+            if not (date_col and bounds):
+                return None
+            where.append("`{0}` BETWEEN %s AND %s".format(date_col))
+            params.extend([bounds[0], bounds[1]])
+            key_parts.append("fy=" + fy)
+            continue
+        df = doc.meta.get_field(col)
+        if not df or df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+            continue
+        value = frappe.utils.cstr(doc.get(col))
+        # IFNULL: a blank value is its own group and must match stored NULLs too
+        where.append("IFNULL(`{0}`, '') = %s".format(col))
+        params.append(value)
+        key_parts.append("{0}={1}".format(col, value))
+
+    if not key_parts:
+        return None
+    # The tabSeries name column is short (140 incl. the "docno:<doctype>|"
+    # prefix) and full company/branch names easily overflow it — store a
+    # stable hash as the key; `group` keeps the readable form for debugging.
+    readable = "|".join(key_parts)
+    key = "gb|" + hashlib.sha1(readable.encode("utf-8")).hexdigest()[:24]
+    return {
+        "key": key,
+        "group": readable,
+        "where": " AND ".join(where),
+        "params": params,
+        "number_field": _docno_field(rule),
+    }
+
+
 def _docno_scope(doc):
     """Series scope for the auto document number, or None when the doc is not
-    eligible. Returns a dict {key, pattern, field}:
+    eligible. Returns a dict — either {key, pattern, field} (prefix-matched) or
+    {key, where, params} (column-filtered):
 
-      * When a Numbering Configuration rule matches, the scope is DERIVED FROM
-        THE RULE (branch / conditions aware) — see _rule_docno_scope.
+      * When the matching rule has GROUP BY fields, the scope is those field
+        values (see _group_by_scope) — fully admin-configurable grouping.
+      * Else, when a rule matches, the scope is DERIVED FROM THE RULE's number
+        prefix (branch / conditions aware) — see _rule_docno_scope.
       * Otherwise it falls back to the legacy company + code + fiscal-year scope,
         matched on custom_name (unchanged historical behaviour).
 
@@ -883,9 +962,13 @@ def _docno_scope(doc):
     if doc.meta.has_field("custom_p_type_code") and code and not doc.get("custom_p_type_code"):
         doc.custom_p_type_code = code
 
-    # Rule-derived scope (branch / condition aware) when the matching rule defines
-    # a number position.
     if rule:
+        # 1) Explicit "Group Document No. By" fields — the admin's grouping.
+        group_scope = _group_by_scope(doc, rule)
+        if group_scope:
+            return group_scope
+        # 2) Rule-derived scope (branch / condition aware) when the matching
+        #    rule defines a number position.
         rule_scope = _rule_docno_scope(doc, rule)
         if rule_scope and rule_scope.get("pattern"):
             rule_scope["number_field"] = number_field
@@ -905,24 +988,37 @@ def _docno_scope(doc):
     }
 
 
+def _scope_where(doc, scope):
+    """(where_sql, params) that selects this scope's documents — either the
+    prefix pattern (LIKE on the scope's target field) or a group-by filter
+    (`where` + `params` built by _group_by_scope). None when unusable."""
+    if scope.get("where"):
+        return scope["where"], list(scope.get("params") or [])
+    field = _safe_col(scope.get("field"))
+    if not field:
+        return None
+    return "`{0}` LIKE %s".format(field), [scope["pattern"]]
+
+
 def _current_max_document_no(doc, scope):
     """Highest custom_document_no already used in this scope (0 if none).
-    Matches the scope's pattern against its target field, so per-branch scopes
-    only ever see that branch's documents.
+    Scoped by the scope's own selector (prefix pattern or group-by filters),
+    so per-branch/per-group scopes only ever see their own documents.
 
     CAST(... AS UNSIGNED) makes the max NUMERIC even where custom_document_no is
     a Data column (Purchase Receipt) rather than Int — a plain MAX() on a varchar
     compares lexicographically ("9" > "50"), which would compute a wrong floor
     and let auto numbers eventually collide with a higher manual number."""
     table = "tab" + doc.doctype.replace("`", "")
-    field = _safe_col(scope["field"])
     number_field = _safe_col(scope.get("number_field", "custom_document_no"))
-    if not (field and number_field):
+    selector = _scope_where(doc, scope)
+    if not (selector and number_field):
         return 0
+    where, params = selector
     row = frappe.db.sql(
         "SELECT MAX(CAST(`{nf}` AS UNSIGNED)) "
-        "FROM `{table}` WHERE `{field}` LIKE %s".format(nf=number_field, table=table, field=field),
-        (scope["pattern"],),
+        "FROM `{table}` WHERE {where}".format(nf=number_field, table=table, where=where),
+        params,
     )
     return int(row[0][0]) if row and row[0][0] is not None else 0
 
@@ -1064,16 +1160,17 @@ def _document_no_taken(doc, scope, value, for_update=False):
     if n <= 0:
         return None
     table = "tab" + doc.doctype.replace("`", "")
-    field = _safe_col(scope["field"])
     number_field = _safe_col(scope.get("number_field", "custom_document_no"))
-    if not (field and number_field):
+    selector = _scope_where(doc, scope)
+    if not (selector and number_field):
         return None
+    where, params = selector
     row = frappe.db.sql(
-        ("SELECT `name` FROM `{table}` WHERE `{field}` LIKE %s "
+        ("SELECT `name` FROM `{table}` WHERE {where} "
          "AND CAST(`{nf}` AS UNSIGNED) = %s AND `docstatus` < 2 AND `name` != %s "
          "LIMIT 1" + (" FOR UPDATE" if for_update else "")).format(
-            table=table, field=field, nf=number_field),
-        (scope["pattern"], n, doc.name or ""),
+            table=table, where=where, nf=number_field),
+        params + [n, doc.name or ""],
     )
     return row[0][0] if row else None
 
@@ -1113,7 +1210,6 @@ def _redraw_docno_if_scope_changed(doc):
             _docno_series_key(before, old_scope), frappe.utils.cint(doc.get(field))
         )
     doc.set(field, _draw_next_document_no(doc, new_scope))
-    _notify_docno_drawn(doc, new_scope)
     doc.flags._docno_assigned = True
 
 
@@ -1122,29 +1218,6 @@ def _duplicate_action(rule):
     'Throw Error' (default — the save is rejected with a next-number hint) or
     'Use Next Available Number' (the number is bumped and the user alerted)."""
     return (rule.get("duplicate_action") if rule else None) or "Throw Error"
-
-
-def _notify_docno_drawn(doc, scope=None):
-    """Realtime nudge to other open forms: a number in this doctype was just
-    consumed, so any live preview may be stale — re-fetch. Published only
-    after commit (a rolled-back save consumed nothing) and best-effort:
-    realtime being down must never block a save.
-
-    Scoped to the DOCTYPE ROOM (clients doctype_subscribe on new forms;
-    subscription is permission-gated by frappe's can_subscribe_doctype) — a
-    site-wide broadcast would tell every logged-in user about every voucher.
-    The payload carries no scope details for the same reason: the client just
-    re-fetches its own preview."""
-    try:
-        from frappe.realtime import get_doctype_room
-        frappe.publish_realtime(
-            "docno_assigned",
-            {"doctype": doc.doctype},
-            room=get_doctype_room(doc.doctype),
-            after_commit=True,
-        )
-    except Exception:
-        pass
 
 
 def _pin_amended_docno(doc):
@@ -1262,7 +1335,6 @@ def apply_document_no(doc):
                 flag = field + "_manual"
                 if doc.meta.has_field(flag):
                     doc.set(flag, 1)
-            _notify_docno_drawn(doc, scope)
         doc.flags._docno_assigned = True
         return
 
@@ -1282,7 +1354,6 @@ def apply_document_no(doc):
     flag = field + "_manual"
     if doc.meta.has_field(flag):
         doc.set(flag, 0)
-    _notify_docno_drawn(doc, scope)
     doc.flags._docno_assigned = True
 
 
@@ -1304,33 +1375,35 @@ def get_next_custom_document_no(doc=None, **kwargs):
 
 
 @frappe.whitelist()
-def get_docno_watch_fields(doctype):
-    """Fields the live Document No. preview must re-fetch on: everything any
-    enabled rule's conditions or segments read, plus the legacy scope fields.
-    The form can't know rule-configured fields statically — a rule gating on
-    payment_type / custom_branch would otherwise never refresh the preview
-    when those fields change (the number still arrives on save, but the user
-    sees a blank field and thinks numbering is broken)."""
-    if not isinstance(doctype, str) or not frappe.has_permission(doctype, "read"):
-        return []
-    fields = {"company", "posting_date", "custom_fiscal_year", "custom_p_type_code"}
-    cfg = AUTO_NUMBER_CONFIG.get(doctype)
-    if cfg and cfg.get("type_field"):
-        fields.add(cfg["type_field"])
+def get_document_no_status(doc=None, **kwargs):
+    """Client helper for the form. Returns the current Document No. STATUS of a
+    draft so the field can reflect the server's decision instead of guessing:
+
+      * auto      — a numbering rule (or fallback) numbers this doc, so the field
+                    is shown read-only and the server assigns the number at save.
+      * next      — non-reserving preview of that number, or None when the scope
+                    fields aren't resolvable yet (shown as "assigned on save").
+      * ambiguous — two or more enabled rules tie for most specific on this doc,
+                    so which one applies is arbitrary; the form warns the admin.
+
+    `auto` is decided by eligibility (the type/rule), NOT by whether every scope
+    field is filled — so the field locks as soon as the type says auto, even
+    before company/date are set. Never raises; returns auto=False when it can't
+    tell, so the form falls back to manual (required) entry."""
+    blank = {"auto": False, "next": None, "ambiguous": False}
     try:
-        for rule in _numbering_rules_for(doctype):
-            for c in (rule.get("conditions") or []) + (rule.get("document_no_conditions") or []):
-                if c.get("field"):
-                    fields.add(c["field"])
-            for s in rule.get("segments") or []:
-                if s.get("field"):
-                    fields.add(s["field"])
-            if rule.get("date_field"):
-                fields.add(rule["date_field"])
+        d = _client_payload_doc(doc, kwargs)
+        if not d:
+            return blank
+        rule = _match_numbering_rule(d)
+        auto = _docno_eligible(d, rule)
+        return {
+            "auto": bool(auto),
+            "next": peek_next_document_no(d) if auto else None,
+            "ambiguous": bool(_ambiguous_numbering_rules(d)),
+        }
     except Exception:
-        pass
-    meta = frappe.get_meta(doctype)
-    return sorted(f for f in fields if meta.has_field(f))
+        return blank
 
 
 def _client_payload_doc(doc, kwargs):
@@ -1606,8 +1679,11 @@ def _build_numbering_rules(doctype):
         "date_field", "legacy_upto", "legacy_source_field", "auto_document_no",
         "document_no_field",
     ]
-    if frappe.db.has_column("Numbering Configuration", "duplicate_action"):
-        fields.append("duplicate_action")
+    # columns that shipped after the originals: probe so the deploy window
+    # between code reload and `bench migrate` can't 1054-error every save
+    for late_col in ("duplicate_action", "normal_docno_mode", "return_docno_mode"):
+        if frappe.db.has_column("Numbering Configuration", late_col):
+            fields.append(late_col)
     rules = frappe.get_all(
         "Numbering Configuration",
         filters={"document_type": doctype, "enabled": 1},
@@ -1632,6 +1708,16 @@ def _build_numbering_rules(doctype):
         fields=["parent", "field", "value", "operator"],
         order_by="idx",
     )
+    # Group Document No. By fields (series grouping). Table probe: shipped
+    # after the others — must not 1054 in the deploy window before migrate.
+    group_by_rows = []
+    if frappe.db.table_exists("Numbering Group By Field"):
+        group_by_rows = frappe.get_all(
+            "Numbering Group By Field",
+            filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
+            fields=["parent", "field"],
+            order_by="idx",
+        )
     segments = frappe.get_all(
         "Numbering Segment",
         filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
@@ -1649,12 +1735,14 @@ def _build_numbering_rules(doctype):
 
     cond_by_parent = _group(conditions)
     docno_cond_by_parent = _group(docno_conditions)
+    group_by_parent = _group(group_by_rows)
     seg_by_parent = _group(segments)
 
     for r in rules:
         # rules with zero children still get empty lists
         r["conditions"] = cond_by_parent.get(r["name"], [])
         r["document_no_conditions"] = docno_cond_by_parent.get(r["name"], [])
+        r["docno_group_by"] = group_by_parent.get(r["name"], [])
         r["segments"] = seg_by_parent.get(r["name"], [])
 
     return rules
@@ -1758,6 +1846,20 @@ def _match_numbering_rule(doc):
     """Return the most specific enabled rule matching the document, or None."""
     matches = _matching_numbering_rules(doc)
     return matches[0] if matches else None
+
+
+def _ambiguous_numbering_rules(doc):
+    """Enabled rules that TIE for most-specific on this document. The winner is
+    still deterministic (broken by name in _matching_numbering_rules), but a tie
+    means the choice is arbitrary — two overlapping rules the admin probably
+    didn't intend. Returns the tied rules (len >= 2) so the form/config can warn;
+    empty when the match is unambiguous."""
+    matches = _matching_numbering_rules(doc)
+    if len(matches) < 2:
+        return []
+    top = _rule_specificity(matches[0])
+    tied = [r for r in matches if _rule_specificity(r) == top]
+    return tied if len(tied) > 1 else []
 
 
 def _engine_owns_field(doc, fieldname):
@@ -1955,6 +2057,8 @@ def _rule_dict_from_config(cfg):
         "legacy_upto": cfg.get("legacy_upto"),
         "legacy_source_field": cfg.get("legacy_source_field"),
         "auto_document_no": cfg.get("auto_document_no"),
+        "normal_docno_mode": cfg.get("normal_docno_mode"),
+        "return_docno_mode": cfg.get("return_docno_mode"),
         "document_no_field": cfg.get("document_no_field"),
         "duplicate_action": cfg.get("duplicate_action"),
         "conditions": [
@@ -1964,6 +2068,9 @@ def _rule_dict_from_config(cfg):
         "document_no_conditions": [
             {"field": c.field, "value": c.value, "operator": c.get("operator")}
             for c in (cfg.get("document_no_conditions") or [])
+        ],
+        "docno_group_by": [
+            {"field": g.field} for g in (cfg.get("docno_group_by") or [])
         ],
         "segments": [
             {
@@ -2256,9 +2363,14 @@ def _revert_document_no_series(doc):
     # (that would gap this series and could wrongly decrement another). The
     # stored target value was built with the scope at draw time, so it matches
     # the current pattern only when the scope is unchanged.
-    stored = frappe.utils.cstr(doc.get(scope["field"]))
-    if not fnmatch.fnmatch(stored, scope["pattern"].replace("%", "*")):
-        return
+    # Group-by (filter) scopes have no stored prefix to compare — their scope is
+    # computed from the doc's own field values, and drafts are already redrawn
+    # onto the right series whenever those fields change, so the recomputed
+    # scope IS the draw-time scope.
+    if scope.get("pattern"):
+        stored = frappe.utils.cstr(doc.get(scope["field"]))
+        if not fnmatch.fnmatch(stored, scope["pattern"].replace("%", "*")):
+            return
     _revert_series_if_last(_docno_series_key(doc, scope), number)
 
 

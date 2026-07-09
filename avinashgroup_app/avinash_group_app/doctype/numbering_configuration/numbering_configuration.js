@@ -70,10 +70,21 @@ frappe.ui.form.on("Numbering Segment", {
 	segments_add(frm) { render_preview(frm); },
 	segments_remove(frm) { render_preview(frm); },
 	segments_move(frm) { render_preview(frm); },
-	segment_type(frm) { render_preview(frm); },
+	// Opening a row's detail form: make sure its pickers match the row's state.
+	form_render(frm, cdt, cdn) {
+		set_segment_field_options(frm, cdt, cdn);
+		set_fetch_field_options(frm, cdt, cdn);
+	},
+	segment_type(frm, cdt, cdn) {
+		set_segment_field_options(frm, cdt, cdn, true);
+		render_preview(frm);
+	},
 	static_value(frm) { render_preview(frm); },
 	return_value(frm) { render_preview(frm); },
-	field(frm) { render_preview(frm); },
+	field(frm, cdt, cdn) {
+		set_fetch_field_options(frm, cdt, cdn, true);
+		render_preview(frm);
+	},
 	fetch_field(frm) { render_preview(frm); },
 	number_length(frm) { render_preview(frm); },
 	join_previous(frm) { render_preview(frm); },
@@ -153,24 +164,42 @@ function add_buttons(frm) {
 
 // --- field pickers ----------------------------------------------------------
 
+const SKIP_FIELDTYPES = ["Section Break", "Column Break", "Tab Break", "HTML",
+	"Table", "Table MultiSelect", "Button", "Fold", "Heading", "Image"];
+
 function load_field_options(frm, reset_default) {
 	if (!frm.doc.document_type) return;
 
 	frappe.model.with_doctype(frm.doc.document_type, () => {
 		const meta = frappe.get_meta(frm.doc.document_type);
-		const skip = ["Section Break", "Column Break", "Tab Break", "HTML",
-			"Table", "Table MultiSelect", "Button", "Fold", "Heading", "Image"];
+		const skip = SKIP_FIELDTYPES;
 
 		// Fields a condition or segment can reference.
 		const doc_fields = (meta.fields || [])
 			.filter((f) => !skip.includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)
 			.sort();
+		// Link fields only — the valid choices for a Fetch from Link segment.
+		frm._segment_doc_fields = doc_fields;
+		frm._segment_link_fields = (meta.fields || [])
+			.filter((f) => f.fieldtype === "Link" && f.options && f.fieldname)
+			.map((f) => f.fieldname)
+			.sort();
 		// Autocomplete suggestions — the user may still type any field name.
 		const options = ["", ...doc_fields].join("\n");
 		frm.fields_dict.conditions.grid.update_docfield_property("field", "options", options);
 		frm.fields_dict.document_no_conditions.grid.update_docfield_property("field", "options", options);
+		if (frm.fields_dict.docno_group_by) {
+			frm.fields_dict.docno_group_by.grid.update_docfield_property("field", "options", options);
+		}
 		frm.fields_dict.segments.grid.update_docfield_property("field", "options", options);
+
+		// The grid-wide options above also reset every row's copy — re-narrow
+		// each existing segment row to its own segment type.
+		(frm.doc.segments || []).forEach((row) => {
+			set_segment_field_options(frm, row.doctype, row.name);
+			set_fetch_field_options(frm, row.doctype, row.name);
+		});
 
 		// "Date Field" -> date-like fields for the legacy cut-over comparison.
 		const date_fields = (meta.fields || [])
@@ -196,8 +225,76 @@ function load_field_options(frm, reset_default) {
 		frm.refresh_field("target_field");
 		frm.refresh_field("conditions");
 		frm.refresh_field("document_no_conditions");
+		frm.refresh_field("docno_group_by");
 		frm.refresh_field("segments");
 	});
+}
+
+// Segment "Field" picker, per row: a Fetch from Link segment may only follow
+// a Link field, so that row's dropdown lists just the Link fields of the
+// document type; other segment types keep the full field list. Options are
+// written on the row's own docfield copy (frappe.meta.get_docfield with the
+// row name), so rows of different segment types coexist in the same grid.
+function set_segment_field_options(frm, cdt, cdn, clear_invalid) {
+	if (!frm._segment_doc_fields) return;
+	const row = locals[cdt][cdn];
+	const fields = row.segment_type === "Fetch from Link"
+		? (frm._segment_link_fields || [])
+		: frm._segment_doc_fields;
+	const df = frappe.meta.get_docfield(cdt, "field", cdn);
+	if (df) df.options = ["", ...fields].join("\n");
+
+	// On a type change, a field carried over from another segment type may not
+	// be a Link — drop it (and the stale fetch_field) instead of keeping a
+	// segment the server will flag as always-empty.
+	if (clear_invalid && row.segment_type === "Fetch from Link"
+		&& row.field && !fields.includes(row.field)) {
+		frappe.model.set_value(cdt, cdn, "field", null);
+		frappe.model.set_value(cdt, cdn, "fetch_field", null);
+	}
+	refresh_segment_row_field(frm, cdn, "field");
+}
+
+// Segment "Fetch Field" picker, per row: once the Link field is chosen, offer
+// the linked doctype's own fields instead of free text.
+function set_fetch_field_options(frm, cdt, cdn, clear_invalid) {
+	const row = locals[cdt][cdn];
+	if (row.segment_type !== "Fetch from Link" || !row.field || !frm.doc.document_type) return;
+
+	frappe.model.with_doctype(frm.doc.document_type, () => {
+		const link_df = frappe.meta.get_docfield(frm.doc.document_type, row.field);
+		if (!link_df || link_df.fieldtype !== "Link" || !link_df.options) return;
+
+		frappe.model.with_doctype(link_df.options, () => {
+			const target_fields = (frappe.get_meta(link_df.options).fields || [])
+				.filter((f) => !SKIP_FIELDTYPES.includes(f.fieldtype) && f.fieldname)
+				.map((f) => f.fieldname)
+				.sort();
+			const df = frappe.meta.get_docfield(cdt, "fetch_field", cdn);
+			// "name" is not a docfield but is always fetchable.
+			if (df) df.options = ["", "name", ...target_fields].join("\n");
+			if (clear_invalid && row.fetch_field && row.fetch_field !== "name"
+				&& !target_fields.includes(row.fetch_field)) {
+				frappe.model.set_value(cdt, cdn, "fetch_field", null);
+			}
+			refresh_segment_row_field(frm, cdn, "fetch_field");
+		});
+	});
+}
+
+// Redraw a row's control after its options change: the inline grid control
+// (if the row is currently editable) and the expanded detail form (if open)
+// both render from the same per-row docfield copy.
+function refresh_segment_row_field(frm, cdn, fieldname) {
+	const grid = frm.fields_dict.segments.grid;
+	const grid_row = grid.grid_rows_by_docname && grid.grid_rows_by_docname[cdn];
+	if (!grid_row) return;
+	const column = grid_row.columns && grid_row.columns[fieldname];
+	if (column && column.field) column.field.refresh();
+	if (grid_row.grid_form && grid_row.grid_form.fields_dict
+		&& grid_row.grid_form.fields_dict[fieldname]) {
+		grid_row.grid_form.fields_dict[fieldname].refresh();
+	}
 }
 
 // Smart value entry: checkbox -> Yes/No select, Select -> its options.
