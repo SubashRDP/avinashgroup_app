@@ -108,9 +108,14 @@ branch number; `credit_note_date` / `_bs`; `reason_for_return` = Sales Invoice
    else `create_cbms_bill` + enqueue `send_bill_to_cbms`.
 4. Creation helpers are idempotent — they skip if a CBMS doc already exists for
    this invoice (also enforced by the `unique` constraint on `sales_invoice`).
-5. Return special case: if the original invoice has no CBMS Bill yet, creation
-   returns None — the reconcile job picks it up later.
+5. Return special case: a standalone credit note (no `return_against`) has nothing
+   to reference, so creation returns None and no CBMS doc is made. A return whose
+   original is not yet Synced *is* created, and `send_return_to_cbms` holds it
+   until the original's CBMS Bill reaches Synced.
 6. `frappe.db.commit()` before enqueue.
+
+This hook is the **only** creator of CBMS Bills / CBMS Bill Returns. Nothing else —
+no scheduler, no patch — brings a Sales Invoice into CBMS scope.
 
 ### before_cancel (`:208-220`)
 
@@ -120,14 +125,20 @@ call to IRD**.
 
 ## 5. Scheduler (every 5 minutes, `hooks.py:246-251`)
 
-- `retry_failed_cbms_syncs` → `queue_failed_for_company` (`scheduler.py:26-59`):
-  per enabled company, re-enqueue sends for CBMS Bills/Returns with
-  `sync_status != "Synced"`, capped at `bill_retry_batch_size` /
-  `return_retry_batch_size` (default 50 each).
-- `reconcile_missing_cbms_bills` (`scheduler.py:87-135`): per company, find
-  submitted Sales Invoices (`posting_date >= enable_from_date`) with **no** CBMS
-  doc at all, create the doc and enqueue the send. Each invoice is
-  try/except-wrapped with Error Log on failure.
+Exactly one scheduled job, and it only ever **sends** existing CBMS docs:
+
+- `retry_failed_cbms_syncs` → `queue_failed_for_company`: per enabled company,
+  re-enqueue sends for CBMS Bills/Returns with `sync_status != "Synced"`, capped at
+  `bill_retry_batch_size` / `return_retry_batch_size` (default 50 each).
+
+There is deliberately **no job that creates CBMS docs.** An earlier
+`reconcile_missing_cbms_bills` cron did, and on 2026-07-08 it created 293 bills for
+Nepal Gas Udhyog (Karnali) in the 3-minute window between the config being enabled
+and its Send From Date being corrected from 2026-04-01 to 2026-07-08 — 290 of them
+for invoices that were never meant to be reported. Since a Synced bill can no longer
+be cancelled, bill creation must follow only from invoice submission. Backfilling a
+company that was enabled late is an explicit operator action, not a side effect of
+the scheduler waking up.
 
 ## 6. Send logic and status model
 

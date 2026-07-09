@@ -2,9 +2,17 @@
 
 Non-negotiable rule: nothing here may ever block a Sales Invoice submission. Every code path
 either does fast, local, non-throwing work, or hands the slow network call off to a background
-job. If something unexpected still goes wrong, it's logged to the Error Log and left for
-`avinashgroup_app.custom_code.CBMS.scheduler.reconcile_missing_cbms_bills` to pick up later —
-so a bill is never silently lost even if this hook itself misbehaves.
+job.
+
+This hook is also the ONLY place a CBMS Bill / CBMS Bill Return is ever created. No scheduled
+job creates them, because reporting a bill to IRD cannot be undone (once Synced, `before_cancel`
+refuses to let the invoice be cancelled). Which invoices get reported must therefore follow
+deterministically from which invoices were submitted, rather than from when a cron ran and what
+the config said at that instant.
+
+The cost of that guarantee: if this hook fails, the invoice has no CBMS Bill and nothing will
+create one behind your back. The failure is logged to the Error Log and the gap must be closed
+by an explicit, operator-initiated backfill.
 """
 
 import frappe

@@ -1,18 +1,20 @@
-"""Scheduled jobs that keep CBMS in sync even when the on-submit hook or a background
-job didn't get all the way through — the "can't fail" safety net for the integration.
+"""Scheduled job that keeps CBMS in sync when a send didn't get all the way through.
 
 - retry_failed_cbms_syncs: re-sends every CBMS Bill/CBMS Bill Return still not Synced.
-- reconcile_missing_cbms_bills: finds submitted Sales Invoices that have NO CBMS Bill/
-  CBMS Bill Return row at all (e.g. the on_submit hook itself hit an unexpected error)
-  and creates + enqueues them.
+
+Nothing here creates CBMS Bills. That is the exclusive job of the Sales Invoice on_submit
+hook, so the set of invoices reported to IRD is a deterministic function of what was
+submitted — not of when a background job happened to run against the config of the moment.
+A cron that mass-created bills on a schedule once swept up nine months of out-of-scope
+invoices in the gap between enabling a config and correcting its Send From Date; because
+reporting a bill to IRD is irreversible, that class of mistake must not be reachable.
+
+Submitted invoices that somehow have no CBMS Bill (a data import bypassing hooks, a
+crash inside on_submit) are therefore never auto-created. Backfill is an explicit,
+operator-initiated action.
 """
 
 import frappe
-
-from avinashgroup_app.custom_code.CBMS.sales_invoice_hooks import (
-	create_cbms_bill,
-	create_cbms_bill_return,
-)
 
 
 def _enabled_configs():
@@ -67,69 +69,3 @@ def retry_failed_cbms_syncs():
 		totals["bills_queued"] += result["bills_queued"]
 		totals["returns_queued"] += result["returns_queued"]
 	return totals
-
-
-def _submitted_invoices_missing_cbms_row(company, enable_from_date, is_return, cbms_doctype):
-	synced_invoice_names = frappe.get_all(
-		cbms_doctype, filters={"company": company}, pluck="sales_invoice"
-	)
-	filters = {
-		"company": company,
-		"docstatus": 1,
-		"is_return": 1 if is_return else 0,
-		"posting_date": [">=", enable_from_date],
-	}
-	if synced_invoice_names:
-		filters["name"] = ["not in", synced_invoice_names]
-	return frappe.get_all("Sales Invoice", filters=filters, pluck="name")
-
-
-def reconcile_missing_cbms_bills():
-	"""Cron job (every 5 minutes): create+enqueue CBMS Bill/Return rows for any submitted
-	Sales Invoice that doesn't have one yet, per CBMS-enabled company.
-	"""
-	created = {"bills": 0, "returns": 0}
-	for config in _enabled_configs():
-		for name in _submitted_invoices_missing_cbms_row(
-			config.company, config.enable_from_date, False, "CBMS Bill"
-		):
-			try:
-				doc = frappe.get_doc("Sales Invoice", name)
-				cbms_doc = create_cbms_bill(doc)
-				if cbms_doc:
-					frappe.db.commit()
-					frappe.enqueue(
-						"avinashgroup_app.custom_code.CBMS.api_client.send_bill_to_cbms",
-						queue="default",
-						timeout=300,
-						cbms_bill_name=cbms_doc.name,
-					)
-					created["bills"] += 1
-			except Exception:
-				frappe.log_error(
-					title=f"CBMS reconcile: failed to create CBMS Bill for {name}",
-					message=frappe.get_traceback(),
-				)
-
-		for name in _submitted_invoices_missing_cbms_row(
-			config.company, config.enable_from_date, True, "CBMS Bill Return"
-		):
-			try:
-				doc = frappe.get_doc("Sales Invoice", name)
-				cbms_doc = create_cbms_bill_return(doc)
-				if cbms_doc:
-					frappe.db.commit()
-					frappe.enqueue(
-						"avinashgroup_app.custom_code.CBMS.api_client.send_return_to_cbms",
-						queue="default",
-						timeout=300,
-						cbms_bill_return_name=cbms_doc.name,
-					)
-					created["returns"] += 1
-			except Exception:
-				frappe.log_error(
-					title=f"CBMS reconcile: failed to create CBMS Bill Return for {name}",
-					message=frappe.get_traceback(),
-				)
-
-	return created

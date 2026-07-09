@@ -269,9 +269,13 @@ scheduler_events = {
         "avinashgroup_app.biometric.attendance_self_heal.heal_unlinked_checkins",
     ],
     "cron": {
+        # Only the send-side retry is scheduled. CBMS Bills are created solely by the
+        # Sales Invoice on_submit hook — never by a background job. Reporting a bill to
+        # IRD is irreversible (a Synced invoice can no longer be cancelled), so which
+        # invoices become bills must be a deterministic consequence of submitting them,
+        # not of when a cron happened to fire against the config of the moment.
         "*/5 * * * *": [
             "avinashgroup_app.custom_code.CBMS.scheduler.retry_failed_cbms_syncs",
-            "avinashgroup_app.custom_code.CBMS.scheduler.reconcile_missing_cbms_bills",
         ],
     },
 }

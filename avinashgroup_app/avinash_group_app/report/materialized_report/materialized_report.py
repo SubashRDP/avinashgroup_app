@@ -1,0 +1,78 @@
+# Copyright (c) 2026, Raindrop and contributors
+# For license information, please see license.txt
+
+import frappe
+from frappe import _
+
+
+def execute(filters=None):
+	filters = frappe._dict(filters or {})
+	return get_columns(), get_data(filters)
+
+
+def get_columns():
+	return [
+		{"label": _("Fiscal Year"), "fieldname": "fiscal_year", "fieldtype": "Data", "width": 100},
+		{"label": _("Invoice Number"), "fieldname": "invoice_number", "fieldtype": "Data", "width": 130},
+		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data", "width": 200},
+		{"label": _("Customer PAN"), "fieldname": "customer_pan", "fieldtype": "Data", "width": 130},
+		{"label": _("Invoice Date"), "fieldname": "invoice_date", "fieldtype": "Data", "width": 110},
+		{"label": _("Discount Amount"), "fieldname": "discount_amount", "fieldtype": "Float", "width": 130},
+		{"label": _("Gross Amount"), "fieldname": "gross_amount", "fieldtype": "Float", "width": 130},
+		{"label": _("Taxable Amount"), "fieldname": "taxable_amount", "fieldtype": "Float", "width": 130},
+		{"label": _("VAT"), "fieldname": "vat", "fieldtype": "Float", "width": 100},
+		{"label": _("Total Amount"), "fieldname": "total_amount", "fieldtype": "Float", "width": 130},
+		{"label": _("Sync with IRD"), "fieldname": "synced_with_ird", "fieldtype": "Check", "width": 110},
+		{
+			"label": _("Sales Invoice"),
+			"fieldname": "sales_invoice",
+			"fieldtype": "Link",
+			"options": "Sales Invoice",
+			"width": 160,
+		},
+	]
+
+
+def get_conditions(filters):
+	conditions = []
+
+	if filters.company:
+		conditions.append("bill.company = %(company)s")
+	if filters.fiscal_year:
+		conditions.append("bill.fiscal_year = %(fiscal_year)s")
+	if filters.sync_status:
+		conditions.append("bill.sync_status = %(sync_status)s")
+	if filters.from_date:
+		conditions.append("bill.invoice_date >= %(from_date)s")
+	if filters.to_date:
+		conditions.append("bill.invoice_date <= %(to_date)s")
+
+	return (" and " + " and ".join(conditions)) if conditions else ""
+
+
+def get_data(filters):
+	# total_amount is the invoice grand total: CBMS `total_sales` excludes exempt
+	# sales (see build_cbms_fields), so adding them back reconstitutes it. Gross is
+	# that total before VAT, which keeps Gross + VAT = Total on every row.
+	return frappe.db.sql(
+		"""
+		select
+			bill.fiscal_year,
+			bill.invoice_number,
+			bill.buyer_name as customer_name,
+			bill.buyer_pan as customer_pan,
+			bill.invoice_date_bs as invoice_date,
+			bill.discount as discount_amount,
+			(bill.total_sales + bill.tax_exempted_sales - bill.vat) as gross_amount,
+			bill.taxable_sales_vat as taxable_amount,
+			bill.vat,
+			(bill.total_sales + bill.tax_exempted_sales) as total_amount,
+			case when bill.sync_status = 'Synced' then 1 else 0 end as synced_with_ird,
+			bill.sales_invoice
+		from `tabCBMS Bill` bill
+		where 1 = 1 {conditions}
+		order by bill.fiscal_year asc, bill.invoice_date asc, bill.invoice_number asc
+		""".format(conditions=get_conditions(filters)),
+		filters,
+		as_dict=True,
+	)

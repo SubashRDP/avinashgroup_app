@@ -16,7 +16,8 @@ Columns:
   • AD Date, Day-of-week
   • Employee + Name + Department
   • IN / OUT (from Attendance.in_time / out_time)
-  • Hours, Status
+  • Hours — Attendance.working_hours (decimal) rendered as HH:MM
+  • Status
   • Late (min): max(0, in_time - shift.start_time) when Attendance.late_entry=1
   • Before Office (min): max(0, shift.end_time - out_time)  — *early exit*, not early arrival
   • Leave (1/blank)
@@ -333,7 +334,7 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 
 	in_time_str = ""
 	out_time_str = ""
-	working_hours = 0
+	working_hours = ""
 	status = ""
 	late_min = 0
 	early_exit_min = 0
@@ -363,7 +364,7 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 
 	if att:
 		status = att.status or ""
-		working_hours = flt(att.working_hours or 0)
+		working_hours = _fmt_hours(att.working_hours)
 		if att.in_time:
 			in_time_str = _fmt_time(att.in_time)
 		if att.out_time:
@@ -451,6 +452,19 @@ def _fmt_time(dt):
 	return s.split(" ")[-1] if " " in s else s
 
 
+def _fmt_hours(hours):
+	"""Decimal hours (6.8303) → clock string ('06:49').
+
+	Truncates rather than rounds, so the value never reads as more time than
+	was actually worked. Rounded to 6dp first to absorb float noise that would
+	otherwise turn 8.0 hours into 07:59.
+	"""
+	total_minutes = int(round(flt(hours) * 60, 6))
+	if total_minutes < 0:
+		total_minutes = 0
+	return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
 def _time_of_day_seconds(dt):
 	if hasattr(dt, "hour"):
 		return dt.hour * 3600 + dt.minute * 60 + dt.second
@@ -480,7 +494,7 @@ def _columns(components):
 		{"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 130},
 		{"label": _("IN"), "fieldname": "in_time", "fieldtype": "Data", "width": 85},
 		{"label": _("OUT"), "fieldname": "out_time", "fieldtype": "Data", "width": 85},
-		{"label": _("Hours"), "fieldname": "working_hours", "fieldtype": "Float", "width": 65, "precision": 2},
+		{"label": _("Hours"), "fieldname": "working_hours", "fieldtype": "Data", "width": 65, "align": "right"},
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 95},
 		{"label": _("Late (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
 		{"label": _("Before ofc. Time"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 110},
