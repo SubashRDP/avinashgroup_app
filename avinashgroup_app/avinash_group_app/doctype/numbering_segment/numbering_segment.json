@@ -56,7 +56,7 @@
    "depends_on": "eval:doc.segment_type=='Fetch from Link'",
    "description": "Field to read on the linked record, e.g. abbr.",
    "fieldname": "fetch_field",
-   "fieldtype": "Data",
+   "fieldtype": "Select",
    "label": "Fetch Field"
   },
   {
@@ -81,7 +81,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-01 00:00:00.000000",
+ "modified": "2026-07-08 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Segment",

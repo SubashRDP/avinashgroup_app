@@ -28,6 +28,43 @@ class NumberingConfiguration(Document):
 		self.validate_condition_fields()
 		self.validate_document_no_field()
 		self.validate_legacy_cutover()
+		self.warn_duplicate_scope()
+
+	def _scope_signature(self, doc=None):
+		"""Identity of the documents a rule targets: company + branch + its
+		conditions (field/operator/value, order-independent). Two enabled rules
+		with the same signature match the exact same documents, so they tie for
+		specificity and which one numbers a document is arbitrary."""
+		doc = doc or self
+		conds = sorted(
+			(c.get("field") or "", (c.get("operator") or "Equals"), frappe.utils.cstr(c.get("value")))
+			for c in (doc.get("conditions") or [])
+		)
+		return (doc.get("company") or "", doc.get("branch") or "", tuple(conds))
+
+	def warn_duplicate_scope(self):
+		"""Alert (never block) when another ENABLED rule for the same Document
+		Type has an identical scope — the two are ambiguous and the number could
+		appear to shift between them. The runtime engine still resolves it
+		deterministically (by name), but the admin should fix the overlap."""
+		if not (self.document_type and self.enabled):
+			return
+		sig = self._scope_signature()
+		siblings = frappe.get_all(
+			"Numbering Configuration",
+			filters={"document_type": self.document_type, "enabled": 1, "name": ["!=", self.name or ""]},
+			pluck="name",
+		)
+		for other in siblings:
+			if self._scope_signature(frappe.get_cached_doc("Numbering Configuration", other)) == sig:
+				frappe.msgprint(
+					_("Another enabled rule <b>{0}</b> has the same scope (company, branch and conditions). "
+					  "Both match the same documents equally, so which one applies is arbitrary — "
+					  "make one more specific or disable the other.").format(other),
+					indicator="orange",
+					alert=True,
+				)
+				return
 
 	def validate_document_no_field(self):
 		if not (self.auto_document_no and self.document_no_field and self.document_type):
@@ -183,7 +220,8 @@ class NumberingConfiguration(Document):
 			return
 		meta = frappe.get_meta(self.document_type)
 		checks = [(_("Voucher No. condition"), self.conditions or []),
-			(_("Document No. condition"), self.get("document_no_conditions") or [])]
+			(_("Document No. condition"), self.get("document_no_conditions") or []),
+			(_("Group By"), self.get("docno_group_by") or [])]
 		for label, rows in checks:
 			for row in rows:
 				if row.field and not meta.has_field(row.field):
