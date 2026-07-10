@@ -284,7 +284,17 @@ before_request = [
     "avinashgroup_app.custom_code.Override.auto_insert_item_price.patch_insert_item_price_set_company"
 ]
 
+# The distro's unpatched-Qt wkhtmltopdf shrinks every length by 0.7688x, which
+# destroys the mm-exact continuous-form invoice overlays. Render those through
+# headless Chrome instead; all other print formats are unaffected.
+pdf_generator = ["avinashgroup_app.custom_code.printing.chrome_pdf.render"]
+
+# Re-pins pdf_generator="chrome" on the NGI formats after every migrate, since
+# re-importing a standard print format resets the field to its default.
+after_migrate = ["avinashgroup_app.custom_code.printing.setup.ensure_chrome_generator"]
+
 override_whitelisted_methods = {
+    "frappe.utils.print_format.download_pdf": "avinashgroup_app.custom_code.printing.chrome_pdf.download_pdf",
     "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
     "erpnext.stock.get_item_details.get_item_details": "avinashgroup_app.custom_code.Override.get_item_details.get_item_details",
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",

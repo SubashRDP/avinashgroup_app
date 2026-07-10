@@ -13,40 +13,52 @@ One template, two print formats:
 
 GEOMETRY: all positions are mm from the top-left corner of the form
 (9.5in = 241.3mm wide, 5.5in = 139.7mm tall; sheet confirmed 11 sprocket
-holes = 5.5in). Coordinates below are MEASURED from a perspective-rectified
-photo of the real form (sprocket holes used as a 12.7mm reference grid,
-fit residual < 1mm). If a whole print is shifted on a given printer, change
-only ox / oy. wkhtmltopdf's old engine has no CSS var() support, so the
-knobs live here as Jinja values.
+holes = 5.5in).
+
+Coordinates below were re-measured (2026-07-10) from a CamScanner scan of a
+*printed* Narayani form, metrically rectified by fitting a homography to all
+22 sprocket-hole centres (holes are 12.7mm apart and 6.35mm in from each paper
+edge). Fit residual: 0.39mm mean / 0.99mm max. The same procedure on a photo of
+a blank Nepal Gas Industries form agrees to within 0.6mm on every row and on
+the four right-hand columns, so ONE coordinate set serves both pre-printed
+stationeries. Where the two forms disagree slightly, the value chosen is the
+one that keeps left-aligned text clear of the rule on BOTH forms (e.g. cols[2]
+is the larger 49.2, not the Industries 46.8).
+
+Values here are CSS box tops/lefts, not glyph tops. Measured on a Chrome render:
+a glyph sits ~0.15mm below its box top at 8.5pt and ~0.4mm at 9.5pt. Do not
+"correct" for that again -- it is already baked into the numbers.
+
+If a whole print is shifted on a given printer, change only ox / oy.
 -#}
 {%- set draw_form = draw_form | default(false) -%}
 {%- set ox = 0 -%}{#- global horizontal nudge, mm (+ = right) -#}
 {%- set oy = 0 -%}{#- global vertical nudge, mm (+ = down) -#}
-{%- set rows_per_page = rows_per_page | default(3) -%}{#- item lines in the 71.2..86.0mm body -#}
+{%- set rows_per_page = rows_per_page | default(3) -%}{#- item lines in the 71.2..85.9mm body -#}
 
 {%- set P = {
-  'copy_label':   {'y': 1.2,   'x': 70,   'w': 100},
+  'copy_label':   {'y': 1.5,   'x': 70,   'w': 100},
   'title':        {'y': 8.2,   'addr_y': 14.8, 'tel_y': 19.8, 'cx': 28, 'cw': 180},
-  'inv_no':       {'y': 29.2,  'x': 36,   'w': 95,  'label_x': 11.2, 'label_y': 29.2},
-  'trans_date':   {'y': 28.5,  'x': 200,  'w': 32,  'label_x': 155, 'label_y': 28.5},
-  'vat_boxes':    {'y': 37.4,  'x': 32.8, 'box_w': 4.87, 'box_h': 5.8, 'label_x': 11.2, 'label_y': 38.2},
-  'inv_date':     {'y': 33.9,  'x': 200,  'w': 32,  'label_x': 155, 'label_y': 33.9},
-  'do_no':        {'y': 38.9,  'x': 200,  'w': 32,  'label_x': 155, 'label_y': 38.9},
-  'customer':     {'y': 44.0,  'x': 63,   'w': 95,  'label_x': 11.2, 'label_y': 44.0},
-  'address':      {'y': 50.8,  'x': 63,   'w': 105, 'label_x': 11.2, 'label_y': 50.8},
-  'pan':          {'y': 56.2,  'x': 63,   'w': 70,  'label_x': 11.2, 'label_y': 56.2},
-  'mode':         {'label_x': 11.2, 'label_y': 62.2, 'opts_x': 54.4, 'ring_y': 60.3, 'ring_h': 5.4},
-  'mode_words':   {'Cash': [54.4, 7.3], 'Credit': [63.6, 10.9], 'Cheque': [76.4, 10.9], 'Other': [89.2, 9.1]},
-  'table':        {'top': 65.4, 'head_bot': 71.2, 'body_bot': 86.0, 'bot': 113.1,
-                   'head_ty': 66.7, 'body_y': 72.3, 'row_h': 4.8},
-  'cols':         [11.2, 22.4, 45.4, 136.0, 160.8, 186.0, 228.4],
-  'disc':         {'ty': 87.9,  'label': '%Discount'},
-  'taxable':      {'ty': 93.7,  'label': 'Taxable Amount'},
-  'vat_amt':      {'ty': 99.7,  'label': '13% VAT'},
-  'grand':        {'ty': 106.5, 'label': 'Grand Total'},
-  'tot_rows':     [86.2, 92.2, 98.0, 104.2],
-  'words':        {'x': 63, 'y': 88.0, 'w': 71, 'label_x': 12, 'label_y': 87.8},
-  'sign':         {'line_y': 123.4, 'x': 160.6, 'w': 68, 'text_y': 124.8},
+  'inv_no':       {'y': 29.2,  'x': 36,   'w': 95,  'label_x': 12.4, 'label_y': 28.4},
+  'trans_date':   {'y': 28.8,  'x': 194,  'w': 34,  'label_x': 147, 'label_y': 28.5},
+  'vat_boxes':    {'y': 37.7,  'x': 35.8, 'box_w': 4.91, 'box_h': 5.6, 'label_x': 12.4, 'label_y': 38.9},
+  'inv_date':     {'y': 34.1,  'x': 194,  'w': 34,  'label_x': 147, 'label_y': 33.8},
+  'do_no':        {'y': 39.3,  'x': 194,  'w': 34,  'label_x': 147, 'label_y': 39.0},
+  'customer':     {'y': 44.4,  'x': 55,   'w': 80,  'label_x': 12.4, 'label_y': 44.1},
+  'address':      {'y': 49.9,  'x': 55,   'w': 95,  'label_x': 12.4, 'label_y': 49.7},
+  'pan':          {'y': 54.8,  'x': 55,   'w': 70,  'label_x': 12.4, 'label_y': 54.5},
+  'mode':         {'label_x': 12.4, 'label_y': 59.9, 'opts_x': 53.1, 'ring_y': 59.8, 'ring_h': 4.8},
+  'mode_words':   {'Cash': [53.2, 9.3], 'Credit': [64.6, 11.7], 'Cheque': [78.2, 12.4], 'Other': [92.4, 9.9]},
+  'table':        {'top': 65.6, 'head_bot': 71.2, 'body_bot': 85.9, 'bot': 112.4,
+                   'head_ty': 66.8, 'body_y': 72.4, 'row_h': 4.8},
+  'cols':         [12.0, 24.0, 49.2, 138.4, 162.7, 187.4, 229.0],
+  'disc':         {'ty': 87.4,  'label': '%Discount'},
+  'taxable':      {'ty': 93.3,  'label': 'Taxable Amount'},
+  'vat_amt':      {'ty': 99.1,  'label': '13% VAT'},
+  'grand':        {'ty': 106.3, 'label': 'Grand Total'},
+  'tot_rows':     [85.9, 92.0, 97.6, 103.8],
+  'words':        {'x': 52, 'y': 88.0, 'w': 84, 'label_x': 12.4, 'label_y': 87.6},
+  'sign':         {'line_y': 122.9, 'x': 150, 'w': 79, 'text_y': 124.9},
 } -%}
 
 {#- ------------------------------ data ---------------------------------- -#}
@@ -108,12 +120,29 @@ knobs live here as Jinja values.
 {%- endmacro -%}
 
 <style>
-  /* Server-side PDF (wkhtmltopdf) reads page-width/page-height from .print-format;
-     browser print (Ctrl+P at a branch PC) reads @page. Same size, both paths —
-     branch-side settings cannot change the geometry, only paper loading can. */
+  /* Chrome (browser print, and the server-side "chrome" pdf_generator) reads
+     @page. Frappe's wkhtmltopdf path instead reads page-width/page-height off
+     .print-format -- but the distro's unpatched-Qt wkhtmltopdf shrinks every
+     length by 0.7688x and ignores --disable-smart-shrinking, so it can never
+     hold an mm-exact overlay. These two formats therefore render through
+     Chrome; page-width/page-height below only matter as a fallback. */
   @page { size: 241.3mm 139.7mm; margin: 0; }
   .print-format { page-width: 241.3mm; page-height: 139.7mm;
     margin-top: 0mm; margin-bottom: 0mm; margin-left: 0mm; margin-right: 0mm; }
+
+  /* Frappe's standard.css styles .print-format as an A4 *portrait* sheet on
+     screen (max-width 8.3in, min-height 11.69in, padding 0.75in), and its
+     .print-format.landscape variant is only ever applied to reports, never to
+     a doctype format. Without this override the print preview shows a tall
+     portrait page with the 9.5in form hanging off its right edge. Screen only;
+     it does not affect what is printed. */
+  @media screen {
+    .print-format { max-width: none !important; min-height: 0 !important;
+      padding: 0 !important; margin: 0 auto !important;
+      width: 241.3mm; border-radius: 0 !important; }
+    .print-format-gutter { padding: 16px 0 !important; }
+  }
+
   .print-format, .print-format p, .print-format div {
     font-family: 'Courier New', Courier, monospace; color: #000; }
   .print-format .letter-head, .print-format .print-heading { display: none; }
@@ -167,7 +196,11 @@ knobs live here as Jinja values.
     {#- left region columns stop at the body; right region columns run to the bottom -#}
     {%- for cx in P.cols[0:4] -%}{{ vline(cx, T.top, T.body_bot - T.top, 0.4 if loop.first else 0.3) }}{%- endfor -%}
     {{ vline(P.cols[0], T.body_bot, T.bot - T.body_bot, 0.4) }}
-    {%- for cx in P.cols[3:7] -%}{{ vline(cx, T.top, T.bot - T.top, 0.4 if loop.last else 0.3) }}{%- endfor -%}
+    {#- in the totals block the Quantity and Rate cells are merged into one label
+        cell, so cols[4] must stop at the body -- drawing it to the bottom cuts
+        straight through "Taxable Amount" / "Grand Total". -#}
+    {{ vline(P.cols[4], T.top, T.body_bot - T.top, 0.3) }}
+    {%- for cx in [P.cols[3], P.cols[5], P.cols[6]] -%}{{ vline(cx, T.top, T.bot - T.top, 0.4 if loop.last else 0.3) }}{%- endfor -%}
     {%- set heads = ['S.No.', 'H. S. Code', 'Particular', 'Quantity', 'Rate', 'Total Price NRS'] -%}
     {%- for h in heads -%}
       {%- set i = loop.index0 -%}
@@ -195,8 +228,10 @@ knobs live here as Jinja values.
 
   {%- call at(P.inv_no.x, P.inv_no.y, P.inv_no.w, 'left', true, 9) %}{{ invoice_no }}{% endcall -%}
   {%- if is_cn and doc.return_against -%}
-    {#- credit note must reference the original invoice; free space right of the VAT boxes -#}
-    {%- call at(97, P.vat_boxes.y + 1.2, 58, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
+    {#- credit note must reference the original invoice. The gap between the VAT
+        boxes (end 80.2mm) and the "Transaction Date:" label (starts 158mm) is
+        the only free space on the form. -#}
+    {%- call at(84, P.vat_boxes.y + 1.3, 70, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
   {%- endif -%}
   {%- call at(P.trans_date.x, P.trans_date.y, P.trans_date.w) %}{{ bs_date }}{% endcall -%}
   {%- call at(P.inv_date.x, P.inv_date.y, P.inv_date.w) %}{{ ad_date }}{% endcall -%}
@@ -235,7 +270,9 @@ knobs live here as Jinja values.
     {%- call at(P.cols[5] + 1, P.grand.ty, P.cols[6] - P.cols[5] - 3, 'right', true) %}{{ num(grand_total) }}{% endcall -%}
     {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 7.5, true) %}{{ doc.in_words or '' }}{% endcall -%}
   {%- else -%}
-    {%- call at(P.cols[2] + 1.5, T.body_y + rows_per_page * T.row_h, 70, 'left', true) %}Contd. on next form...{% endcall -%}
+    {#- the body is full on a continuation page, so this goes in the (empty)
+        Amount-in-Words cell rather than on top of the last item row -#}
+    {%- call at(P.words.label_x, P.disc.ty, 90, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}
 
   {%- if item_pages | length > 1 -%}
