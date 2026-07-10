@@ -3,6 +3,7 @@
 # Read docs to understand patches: https://frappeframework.com/docs/v14/user/en/database-migrations
 avinashgroup_app.patches.create_document_generator_roles
 avinashgroup_app.patches.rename_vocher_number_settings
+avinashgroup_app.patches.skip_broken_hrms_advance_ledger_patch
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -28,3 +29,4 @@ avinashgroup_app.patches.add_sales_invoice_print_count
 avinashgroup_app.patches.add_document_no_manual_flag
 avinashgroup_app.patches.add_unique_custom_name_index
 
+avinashgroup_app.patches.sales_currency_precision_5
