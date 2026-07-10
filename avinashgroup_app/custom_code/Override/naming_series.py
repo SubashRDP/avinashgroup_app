@@ -5,7 +5,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.model.naming import make_autoname, getseries
+from frappe.model.naming import make_autoname
 from frappe.model.document import Document
 
 # NOTE: the old BRANCH_CODE_CONFIG / BRANCH_NAME_COMPANY hardcoded branch
@@ -1948,11 +1948,70 @@ def _resolve_segment(doc, seg, sep):
     return ""
 
 
-def _peek_series(key, digits):
-    """Next number for a series WITHOUT incrementing the counter (for previews)."""
+def _peek_series(key, digits, floor=0):
+    """Next number for a series WITHOUT incrementing the counter (for previews).
+    Mirrors _draw_engine_series: never below the data floor."""
     row = frappe.db.sql("select current from `tabSeries` where name=%s", key)
     current = row[0][0] if row and row[0][0] is not None else 0
-    return ("%0" + str(int(digits)) + "d") % (current + 1)
+    return ("%0" + str(int(digits)) + "d") % (max(int(current), int(floor)) + 1)
+
+
+def _like_escape(text):
+    """Escape a literal string for use inside a LIKE pattern."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _series_data_floor(doc, rule, resolved, sep):
+    """Highest counter value already STORED in the rule's target column for
+    this series shape (prefix/suffix around the Number segment), 0 if none.
+
+    The tabSeries counter can lag the data — a hand-edited target value, a
+    restored backup, a series that predates the rule — and a plain counter
+    draw would then re-issue a taken number and die on the uniqueness check
+    (e.g. every duplicate of the lone invoice in a series failing with
+    "Number ... is already used"). Drawing above this floor self-heals."""
+    target = _safe_col(rule.get("target_field")) or "custom_branch_name"
+    target_df = doc.meta.get_field(target)
+    if not target_df or target_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+        return 0
+
+    sentinel = "\x00"
+    built = _join_parts(
+        [(sentinel if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
+    )
+    if not built or sentinel not in built:
+        return 0
+    prefix, _, suffix = built.partition(sentinel)
+
+    table = "tab" + doc.doctype.replace("`", "")
+    number_sql = (
+        "SUBSTRING(`{col}`, %(plen)s + 1, "
+        "CHAR_LENGTH(`{col}`) - %(plen)s - %(slen)s)"
+    ).format(col=target)
+    row = frappe.db.sql(
+        "SELECT MAX(CAST({num} AS UNSIGNED)) FROM `{table}` "
+        "WHERE `{col}` LIKE %(like)s AND docstatus < 2 "
+        "AND {num} REGEXP '^[0-9]+$'".format(num=number_sql, table=table, col=target),
+        {
+            "plen": len(prefix),
+            "slen": len(suffix),
+            "like": _like_escape(prefix) + "%" + _like_escape(suffix),
+        },
+    )
+    return int(row[0][0]) if row and row[0][0] is not None else 0
+
+
+def _draw_engine_series(key, digits, floor):
+    """Atomic next voucher-name counter, never below the data floor — the same
+    deadlock-resistant upsert as _draw_next_document_no, instead of core
+    getseries, so a counter that lags the stored data jumps past the taken
+    numbers rather than re-issuing one."""
+    frappe.db.sql(
+        "INSERT INTO `tabSeries` (`name`, `current`) VALUES (%(key)s, %(floor)s) "
+        "ON DUPLICATE KEY UPDATE `current` = GREATEST(`current` + 1, %(floor)s)",
+        {"key": key, "floor": int(floor) + 1},
+    )
+    return ("%0" + str(int(digits)) + "d") % _series_current(key)
 
 
 def _pad_segment_value(seg, value):
@@ -2005,7 +2064,8 @@ def _build_from_segments(doc, rule, commit_series=True):
     """Build the number by joining resolved segments (in order) with the separator.
 
     - Non-empty non-Number segments identify the series (the counter key).
-    - The Number segment is replaced by the running counter (getseries), or by the
+    - The Number segment is replaced by the running counter (atomic draw, never
+      below the highest number already stored in the target column), or by the
       next value without incrementing when commit_series is False (preview/test).
     - The Number may sit anywhere in the order (supports e.g. code-number-year).
     - A rule with NO Number segment is a PASS-THROUGH rule: it just joins the
@@ -2038,7 +2098,12 @@ def _build_from_segments(doc, rule, commit_series=True):
     series_key = sep.join(key_parts) + sep
     number_len = next((r["len"] for r in resolved if r["num"]), 6)
 
-    seq = getseries(series_key, number_len) if commit_series else _peek_series(series_key, number_len)
+    floor = _series_data_floor(doc, rule, resolved, sep)
+    seq = (
+        _draw_engine_series(series_key, number_len, floor)
+        if commit_series
+        else _peek_series(series_key, number_len, floor)
+    )
 
     return _join_parts(
         [(seq if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
@@ -2127,6 +2192,25 @@ def preview_document_number(doc):
         target = rule.get("target_field") or "custom_branch_name"
         if not d.meta.has_field(target):
             continue
+        existing = d.get(target)
+        if existing and not _is_counterless(d, rule):
+            # An already-numbered document KEEPS its number on save
+            # (generate-once) unless its series scope changed — preview the
+            # kept value, not a freshly peeked one, which reads as "your
+            # number is wrong" and invites hand-editing the field.
+            old_key, _no = _parse_engine_number(d, rule, existing)
+            sep = rule.get("separator") or "/"
+            resolved, _has = _resolve_segments(d, rule, sep)
+            new_key = sep.join(
+                r["value"] for r in resolved if not r["num"] and r.get("value")
+            ) + sep
+            if old_key is None or old_key == new_key:
+                return {
+                    "target_field": target,
+                    "label": d.meta.get_label(target),
+                    "number": existing,
+                    "rule": rule["name"],
+                }
         value = _build_from_segments(d, rule, commit_series=False)
         if value:
             return {
@@ -2219,6 +2303,17 @@ def set_custom_branch_name(doc):
         target = rule.get("target_field") or "custom_branch_name"
         if not doc.meta.has_field(target):
             continue
+
+        # A STORED number never changes from OUTSIDE: a client/API/import edit
+        # of an already-numbered document is discarded in favor of the stored
+        # value (the form field is read-only, but REST and scripts are not).
+        # Only the engine itself may renumber (counterless recompute and the
+        # draft scope-change redraw below); a deliberate correction can opt in
+        # via frappe.flags.allow_number_overwrite.
+        if not doc.is_new() and not frappe.flags.get("allow_number_overwrite"):
+            stored = frappe.db.get_value(doc.doctype, doc.name, target)
+            if stored and doc.get(target) != stored:
+                doc.set(target, stored)
 
         # A NEW document arriving with another document's number means the
         # value was carried over by a copy path that bypassed no_copy

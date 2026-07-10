@@ -234,7 +234,7 @@
   },
   {
    "default": "custom_branch_name",
-   "description": "Where the generated number is stored on the document.",
+   "description": "Where the generated number is stored on the document (default custom_branch_name). Once stored on a document, the number itself can never be changed.",
    "fieldname": "target_field",
    "fieldtype": "Select",
    "label": "Store Number In",
@@ -260,7 +260,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-01 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Configuration",

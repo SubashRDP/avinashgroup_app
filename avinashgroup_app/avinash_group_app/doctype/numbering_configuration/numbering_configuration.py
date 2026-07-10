@@ -96,6 +96,7 @@ class NumberingConfiguration(Document):
 
 	def on_update(self):
 		self.ensure_target_field_no_copy()
+		self.ensure_target_field_read_only()
 		self.ensure_target_field_indexed()
 		clear_numbering_rules_cache()
 
@@ -123,6 +124,32 @@ class NumberingConfiguration(Document):
 				from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 				make_property_setter(
 					self.document_type, self.target_field, "no_copy", 1, "Check"
+				)
+				frappe.clear_cache(doctype=self.document_type)
+
+	def ensure_target_field_read_only(self):
+		"""The generated number is server-owned: an editable target field lets
+		users overwrite it on the form (the value sticks — it is kept like a
+		manual number — and the series then has holes/hand-picked values).
+		Mark the field read-only; the engine writes it server-side regardless."""
+		if not (self.document_type and self.target_field):
+			return
+
+		custom_field = frappe.db.get_value(
+			"Custom Field", {"dt": self.document_type, "fieldname": self.target_field}
+		)
+		if custom_field:
+			if not frappe.db.get_value("Custom Field", custom_field, "read_only"):
+				frappe.db.set_value("Custom Field", custom_field, "read_only", 1)
+				frappe.clear_cache(doctype=self.document_type)
+		else:
+			# standard field -> property setter
+			meta = frappe.get_meta(self.document_type)
+			df = meta.get_field(self.target_field)
+			if df and not df.read_only:
+				from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+				make_property_setter(
+					self.document_type, self.target_field, "read_only", 1, "Check"
 				)
 				frappe.clear_cache(doctype=self.document_type)
 

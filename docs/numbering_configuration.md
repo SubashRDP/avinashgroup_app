@@ -13,7 +13,7 @@ Every voucher has **two related numbers**, managed by two cooperating mechanisms
 
 | | What it is | Where it's stored | Who generates it |
 |---|---|---|---|
-| **Voucher No.** | The formatted display number, e.g. `GEPL-INV-000123-82-83` | The rule's **Target Field** (default `custom_branch_name`, can be `custom_name`) | The **rule engine** (`set_custom_branch_name`) from the rule's Segments |
+| **Voucher No.** | The formatted display number, e.g. `GEPL-INV-000123-82-83` | The rule's **Store Number In** (default `custom_branch_name`) | The **rule engine** (`set_custom_branch_name`) from the rule's Segments |
 | **Document No.** | The bare running counter, e.g. `123` | `custom_document_no` (+ optional letter tail in `custom_document_word`) | `apply_document_no` — atomic max+1 under a per-scope lock |
 
 They connect when a rule's Segments include a `Document Field: custom_document_no`
@@ -33,15 +33,30 @@ and optionally auto-fill the Document No.*
 ### Scope & matching
 - `document_type` (required), `company` (blank = all), `branch` (blank = all).
 - **Voucher No. Conditions** (child: *Numbering Condition*, plain `field = value`):
-  ALL must match for the rule to apply.
+  ALL must match for the rule to apply. The Value input adapts to the picked
+  field — a Link field gets a standard link picker, a Select its options, a
+  Check a Yes/No dropdown, a Date a date picker (same in the Document No.
+  conditions; `In`/`Not In` stay free text because they take a comma list).
 - **Most specific rule wins**: specificity = (company set? +1) + (branch set? +1) +
   (number of conditions). Ties break deterministically by rule name, and tied rules
   are reported as **ambiguous** (form alert + warning on rule save) — fix by making
   one rule more specific or disabling one.
 
 ### Output
-- `target_field` — where the built voucher number is written (auto-marked
-  `no_copy`, auto-indexed).
+- `target_field` ("Store Number In") — where the built voucher number is written
+  (auto-marked `no_copy`, `read_only` and auto-indexed). The stored number is
+  **unique** (checked on every save against all non-cancelled documents of the
+  doctype — cancelled ones are excluded so an amendment can keep its original
+  number) and **immutable**: once assigned, an edit arriving from the form,
+  REST, a script or an import is silently discarded in favor of the stored
+  value. Only the engine may renumber (a DRAFT whose series scope changed), and
+  a deliberate server-side correction can opt in via
+  `frappe.flags.allow_number_overwrite`. Defaults to `custom_branch_name`; when
+  the field targets `custom_name` the engine takes over the legacy voucher name.
+  On a doctype without the target column (e.g. `custom_branch_name` on Payment
+  Entry) the rule writes no voucher name at all — Document No. auto-fill and
+  grouping still work. Changing the target on a live rule starts writing to the
+  new field; numbers already stored in the old field stay where they are.
 - `separator` — joins segments (`-`, `/`, …).
 
 ### Segments (child: *Numbering Segment*, ordered, drag to reorder)
@@ -62,6 +77,10 @@ and optionally auto-fill the Document No.*
   counter (used to copy legacy numbers, e.g. from `custom_narration`).
 - The counter's **series key** is the joined non-Number segment values — two
   documents that resolve the same prefix share a counter.
+- The counter **never re-issues a number already stored** in the target column:
+  every draw floors at the highest number found in the data, so a counter that
+  lags reality (a hand-edited target value, a restored backup) self-heals on
+  the next save instead of colliding with "Number … is already used".
 
 ### Legacy cut-over (one rule covers both eras)
 `legacy_upto` + `legacy_source_field` (+ optional `date_field`): documents dated on
@@ -186,6 +205,10 @@ Document** (consumes nothing).
 
 ## 6. Form tools & plumbing
 
+- The form-side number alert (`numbering_preview.js`) shows the number a draft
+  **would keep or get** on save: an already-numbered draft previews its own
+  number (it only redraws if its series scope changed), a new draft peeks the
+  next counter value without consuming it.
 - **Live Preview** box, **Test on a Document** (real doc, no counter consumed),
   **Apply to Other Companies** (bulk duplicate), duplicate-scope warning on save.
 - Caches: per-request → redis (`numbering_rules::<doctype>`), cleared on any rule
