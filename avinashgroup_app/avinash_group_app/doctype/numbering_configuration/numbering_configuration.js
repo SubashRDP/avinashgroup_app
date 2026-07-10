@@ -18,7 +18,7 @@ frappe.ui.form.on("Numbering Configuration", {
 	document_type(frm) {
 		frm.set_value("company", null);
 		frm.set_value("branch", null);
-		load_field_options(frm, true);
+		load_field_options(frm);
 		render_preview(frm);
 	},
 
@@ -43,6 +43,10 @@ frappe.ui.form.on("Numbering Configuration", {
 frappe.ui.form.on("Numbering Condition", {
 	conditions_add(frm) { render_preview(frm); },
 	conditions_remove(frm) { render_preview(frm); },
+	// Opening a row's detail form: render the value control for the row's field.
+	form_render(frm, cdt, cdn) {
+		set_smart_value_options(frm, cdt, cdn);
+	},
 	field(frm, cdt, cdn) {
 		set_smart_value_options(frm, cdt, cdn);
 		render_preview(frm);
@@ -54,6 +58,9 @@ frappe.ui.form.on("Numbering Condition", {
 frappe.ui.form.on("Numbering Document No Condition", {
 	document_no_conditions_add(frm) { render_preview(frm); },
 	document_no_conditions_remove(frm) { render_preview(frm); },
+	form_render(frm, cdt, cdn) {
+		set_smart_value_options(frm, cdt, cdn);
+	},
 	field(frm, cdt, cdn) {
 		set_smart_value_options(frm, cdt, cdn);
 		render_preview(frm);
@@ -167,7 +174,7 @@ function add_buttons(frm) {
 const SKIP_FIELDTYPES = ["Section Break", "Column Break", "Tab Break", "HTML",
 	"Table", "Table MultiSelect", "Button", "Fold", "Heading", "Image"];
 
-function load_field_options(frm, reset_default) {
+function load_field_options(frm) {
 	if (!frm.doc.document_type) return;
 
 	frappe.model.with_doctype(frm.doc.document_type, () => {
@@ -201,6 +208,11 @@ function load_field_options(frm, reset_default) {
 			set_fetch_field_options(frm, row.doctype, row.name);
 		});
 
+		// Saved condition rows get their typed value control (link picker,
+		// select, …) on load — not only after the field is touched.
+		[...(frm.doc.conditions || []), ...(frm.doc.document_no_conditions || [])]
+			.forEach((row) => set_smart_value_options(frm, row.doctype, row.name));
+
 		// "Date Field" -> date-like fields for the legacy cut-over comparison.
 		const date_fields = (meta.fields || [])
 			.filter((f) => ["Date", "Datetime"].includes(f.fieldtype) && f.fieldname)
@@ -210,16 +222,16 @@ function load_field_options(frm, reset_default) {
 
 		// "Store Number In" / "Legacy Source Field" -> text-like fields.
 		const text_types = ["Data", "Small Text", "Text", "Long Text", "Text Editor"];
-		const target_fields = (meta.fields || [])
+		const text_fields = (meta.fields || [])
 			.filter((f) => text_types.includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)
 			.sort();
-		frm.set_df_property("target_field", "options", ["", ...target_fields].join("\n"));
-		frm.set_df_property("legacy_source_field", "options", ["", ...target_fields].join("\n"));
+		frm.set_df_property("target_field", "options", ["", ...text_fields].join("\n"));
+		frm.set_df_property("legacy_source_field", "options", ["", ...text_fields].join("\n"));
 		// "Document No. field" -> any field (Int/Data usually) can hold the number.
 		frm.set_df_property("document_no_field", "options", ["", ...doc_fields].join("\n"));
 
-		if ((reset_default || !frm.doc.target_field) && target_fields.includes("custom_branch_name")) {
+		if (!frm.doc.target_field && text_fields.includes("custom_branch_name")) {
 			frm.set_value("target_field", "custom_branch_name");
 		}
 		frm.refresh_field("target_field");
@@ -282,12 +294,13 @@ function set_fetch_field_options(frm, cdt, cdn, clear_invalid) {
 	});
 }
 
-// Redraw a row's control after its options change: the inline grid control
-// (if the row is currently editable) and the expanded detail form (if open)
-// both render from the same per-row docfield copy.
-function refresh_segment_row_field(frm, cdn, fieldname) {
-	const grid = frm.fields_dict.segments.grid;
-	const grid_row = grid.grid_rows_by_docname && grid.grid_rows_by_docname[cdn];
+// Redraw a row's control after its docfield copy changed: the inline grid
+// control (if the row is currently editable) and the expanded detail form
+// (if open) both render from the same per-row docfield copy.
+function refresh_row_field(frm, parentfield, cdn, fieldname) {
+	const table = frm.fields_dict[parentfield];
+	if (!table || !table.grid) return;
+	const grid_row = table.grid.grid_rows_by_docname && table.grid.grid_rows_by_docname[cdn];
 	if (!grid_row) return;
 	const column = grid_row.columns && grid_row.columns[fieldname];
 	if (column && column.field) column.field.refresh();
@@ -297,42 +310,87 @@ function refresh_segment_row_field(frm, cdn, fieldname) {
 	}
 }
 
-// Smart value entry: checkbox -> Yes/No select, Select -> its options.
+function refresh_segment_row_field(frm, cdn, fieldname) {
+	refresh_row_field(frm, "segments", cdn, fieldname);
+}
+
+// A cell's control class is chosen from df.fieldtype ONCE, when the control is
+// first made (grid_row.make_control returns early if column.field exists) — so
+// after the row's value docfield changes TYPE, the old control must be
+// destroyed and re-created, both in the inline cell and the expanded row form.
+function rebuild_value_control(frm, parentfield, cdn) {
+	const table = frm.fields_dict[parentfield];
+	if (!table || !table.grid) return;
+	const grid_row = table.grid.grid_rows_by_docname && table.grid.grid_rows_by_docname[cdn];
+	if (!grid_row) return;   // row not rendered yet -> it will pick up the new df when it is
+
+	const column = grid_row.columns && grid_row.columns.value;
+	if (column) {
+		if (column.field) {
+			const i = grid_row.on_grid_fields.indexOf(column.field);
+			if (i > -1) grid_row.on_grid_fields.splice(i, 1);
+			delete grid_row.on_grid_fields_dict.value;
+			column.field = null;
+			column.field_area && column.field_area.empty();
+		}
+		if (grid_row.row.hasClass("editable-row")) {
+			// row is in inline edit right now — remake the control immediately
+			grid_row.make_control(column);
+			column.static_area.toggle(false);
+			column.field_area.toggle(true);
+		} else {
+			grid_row.refresh_field("value");
+		}
+	}
+	// expanded detail form open: re-render it from the row's docfields
+	if (grid_row.grid_form && table.grid.open_grid_row === grid_row.grid_form) {
+		grid_row.grid_form.render();
+	}
+}
+
+// Smart value entry, PER ROW (rows referencing different field types coexist):
+// Link -> a real link picker over the target doctype, Select -> its options,
+// Check -> Yes/No, Date/Datetime -> date picker, anything else -> free text.
 function set_smart_value_options(frm, cdt, cdn) {
 	const row = locals[cdt][cdn];
-	if (!row.field || !frm.doc.document_type) return;
+	if (!frm.doc.document_type) return;
 
-	// works for either the Voucher No. (conditions) or Document No.
-	// (document_no_conditions) grid — the row knows its own parent table.
-	const grid = frm.fields_dict[row.parentfield].grid;
+	const apply = (fieldtype, options) => {
+		// the row's own docfield copy — never the grid-wide column definition
+		const value_df = frappe.meta.get_docfield(cdt, "value", cdn);
+		if (!value_df) return;
+		if (value_df.fieldtype === fieldtype && (value_df.options || "") === options) return;
+		value_df.fieldtype = fieldtype;
+		value_df.options = options;
+		// works for either the Voucher No. (conditions) or Document No.
+		// (document_no_conditions) grid — the row knows its own parent table.
+		rebuild_value_control(frm, row.parentfield, cdn);
+	};
+
 	const op = row.operator || "Equals";
 
 	// In / Not In take a comma-separated LIST, so the value must stay free text —
-	// a single-pick dropdown can't express a list. Is Set / Is Not Set need no
-	// value at all (the field is hidden). Only Equals / Not Equals get the
-	// convenience dropdown of the referenced field's own options.
-	if (op === "In" || op === "Not In" || op === "Is Set" || op === "Is Not Set") {
-		grid.update_docfield_property("value", "fieldtype", "Data");
-		grid.update_docfield_property("value", "options", "");
-		grid.refresh();
+	// a single-pick control can't express a list. Is Set / Is Not Set need no
+	// value at all. Only Equals / Not Equals get the typed control.
+	if (!row.field || op === "In" || op === "Not In" || op === "Is Set" || op === "Is Not Set") {
+		apply("Data", "");
 		return;
 	}
 
 	frappe.model.with_doctype(frm.doc.document_type, () => {
 		const df = frappe.meta.get_docfield(frm.doc.document_type, row.field);
-		let value_df = { fieldtype: "Data", options: "" };
 
 		if (df && df.fieldtype === "Check") {
-			value_df = { fieldtype: "Select", options: "\n1\n0" };
+			apply("Select", "\n1\n0");
 		} else if (df && df.fieldtype === "Select" && df.options) {
-			value_df = { fieldtype: "Select", options: "\n" + df.options };
+			apply("Select", "\n" + df.options);
 		} else if (df && df.fieldtype === "Link" && df.options) {
-			value_df = { fieldtype: "Data", options: "" };
+			apply("Link", df.options);
+		} else if (df && ["Date", "Datetime"].includes(df.fieldtype)) {
+			apply("Date", "");
+		} else {
+			apply("Data", "");
 		}
-
-		grid.update_docfield_property("value", "fieldtype", value_df.fieldtype);
-		grid.update_docfield_property("value", "options", value_df.options);
-		grid.refresh();
 	});
 }
 

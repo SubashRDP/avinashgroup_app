@@ -5,7 +5,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.model.naming import make_autoname, getseries
+from frappe.model.naming import make_autoname
 from frappe.model.document import Document
 
 # NOTE: the old BRANCH_CODE_CONFIG / BRANCH_NAME_COMPANY hardcoded branch
@@ -1175,6 +1175,81 @@ def _document_no_taken(doc, scope, value, for_update=False):
     return row[0][0] if row else None
 
 
+def _locked_group_fields(rule):
+    """Fieldnames in the rule's "Group Document No. By" table marked
+    Lock After Numbering. The rule-level "Lock All Group Fields After
+    Numbering" check locks every row without ticking them one by one."""
+    lock_all = frappe.utils.cint((rule or {}).get("lock_group_fields"))
+    return [
+        r.get("field") for r in ((rule or {}).get("docno_group_by") or [])
+        if r.get("field")
+        and (lock_all or frappe.utils.cint(r.get("lock_after_numbering")))
+    ]
+
+
+def _enforce_locked_group_fields(doc):
+    """Group-by fields marked "Lock After Numbering" must not change once the
+    document carries a Document No. — the change would strand the number in
+    another group's sequence. Unlocked fields keep the default behavior (the
+    draft renumbers into its new group, _redraw_docno_if_scope_changed).
+    Applies to auto AND manual numbers, and to amendments — their number is
+    PINNED to the cancelled original, so their locked fields must match the
+    original's values."""
+    if doc.get("docstatus") != 0:
+        return
+    rule = _match_numbering_rule(doc)
+    locked = _locked_group_fields(rule)
+    if not locked:
+        return
+    field = _docno_field(rule)
+    if not doc.meta.has_field(field):
+        return
+
+    if doc.get("amended_from"):
+        try:
+            before = frappe.get_doc(doc.doctype, doc.get("amended_from"))
+        except Exception:
+            return
+        # the pin will force the original's number onto this amendment
+        number = doc.get(field) or before.get(field)
+    elif not doc.is_new():
+        before = doc.get_doc_before_save()
+        number = doc.get(field)
+    else:
+        return  # a plain new doc has nothing to compare against
+    if not (before and number):
+        return
+
+    changed = []
+    for name in locked:
+        col = _safe_col(name)
+        if not col:
+            continue
+        if col in ("custom_fiscal_year", "fiscal_year"):
+            # grouped by the RESOLVED fiscal year of the posting/transaction
+            # date — the lock is on that, not on the raw (often empty) column
+            if _resolve_docno_fiscal_year(before) != _resolve_docno_fiscal_year(doc):
+                changed.append(_("Fiscal Year"))
+            continue
+        df = doc.meta.get_field(col)
+        if not df or df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+            continue
+        if frappe.utils.cstr(before.get(col)) != frappe.utils.cstr(doc.get(col)):
+            changed.append(_(df.label) if df.label else col)
+
+    if changed:
+        frappe.throw(
+            _("{0} cannot be changed after Document No. {1} is assigned — "
+              "numbering rule {2} groups Document No. sequences by it "
+              "(Group Document No. By → Lock After Numbering).").format(
+                ", ".join(frappe.bold(c) for c in changed),
+                frappe.bold(number),
+                frappe.bold(rule.get("name")),
+            ),
+            title=_("Field Locked by Numbering"),
+        )
+
+
 def _redraw_docno_if_scope_changed(doc):
     """A saved DRAFT edited onto a different series must not keep a number
     from the old one (e.g. branch an -> kt with per-branch counting: keeping
@@ -1267,6 +1342,10 @@ def apply_document_no(doc):
     Idempotent within a single save via doc.flags._docno_assigned."""
     if doc.flags.get("_docno_assigned"):
         return
+    # Locked group-by fields win over every renumber/pin path: a change is
+    # rejected outright (covers saved drafts AND amendments vs their original).
+    _enforce_locked_group_fields(doc)
+
     # Amendments never draw or keep their own number — it is pinned to the
     # cancelled original's before manual/auto classification can touch it.
     if doc.get("amended_from") and _pin_amended_docno(doc):
@@ -1385,22 +1464,32 @@ def get_document_no_status(doc=None, **kwargs):
                     fields aren't resolvable yet (shown as "assigned on save").
       * ambiguous — two or more enabled rules tie for most specific on this doc,
                     so which one applies is arbitrary; the form warns the admin.
+      * locked_fields — group-by fields marked Lock After Numbering: once the
+                    doc carries a number, the form renders them read-only
+                    (custom_fiscal_year is excluded — its lock is on the FY of
+                    the date, and within-FY date edits stay allowed; the server
+                    check rejects cross-FY moves precisely).
 
     `auto` is decided by eligibility (the type/rule), NOT by whether every scope
     field is filled — so the field locks as soon as the type says auto, even
     before company/date are set. Never raises; returns auto=False when it can't
     tell, so the form falls back to manual (required) entry."""
-    blank = {"auto": False, "next": None, "ambiguous": False}
+    blank = {"auto": False, "next": None, "ambiguous": False, "locked_fields": []}
     try:
         d = _client_payload_doc(doc, kwargs)
         if not d:
             return blank
         rule = _match_numbering_rule(d)
         auto = _docno_eligible(d, rule)
+        locked = [
+            f for f in _locked_group_fields(rule)
+            if f not in ("custom_fiscal_year", "fiscal_year") and d.meta.has_field(f)
+        ]
         return {
             "auto": bool(auto),
             "next": peek_next_document_no(d) if auto else None,
             "ambiguous": bool(_ambiguous_numbering_rules(d)),
+            "locked_fields": locked,
         }
     except Exception:
         return blank
@@ -1681,7 +1770,8 @@ def _build_numbering_rules(doctype):
     ]
     # columns that shipped after the originals: probe so the deploy window
     # between code reload and `bench migrate` can't 1054-error every save
-    for late_col in ("duplicate_action", "normal_docno_mode", "return_docno_mode"):
+    for late_col in ("duplicate_action", "normal_docno_mode", "return_docno_mode",
+                     "lock_group_fields"):
         if frappe.db.has_column("Numbering Configuration", late_col):
             fields.append(late_col)
     rules = frappe.get_all(
@@ -1710,12 +1800,16 @@ def _build_numbering_rules(doctype):
     )
     # Group Document No. By fields (series grouping). Table probe: shipped
     # after the others — must not 1054 in the deploy window before migrate.
+    # Same for lock_after_numbering, a column shipped after the table.
     group_by_rows = []
     if frappe.db.table_exists("Numbering Group By Field"):
+        group_by_fields = ["parent", "field"]
+        if frappe.db.has_column("Numbering Group By Field", "lock_after_numbering"):
+            group_by_fields.append("lock_after_numbering")
         group_by_rows = frappe.get_all(
             "Numbering Group By Field",
             filters={"parent": ["in", rule_names], "parenttype": "Numbering Configuration"},
-            fields=["parent", "field"],
+            fields=group_by_fields,
             order_by="idx",
         )
     segments = frappe.get_all(
@@ -1948,11 +2042,70 @@ def _resolve_segment(doc, seg, sep):
     return ""
 
 
-def _peek_series(key, digits):
-    """Next number for a series WITHOUT incrementing the counter (for previews)."""
+def _peek_series(key, digits, floor=0):
+    """Next number for a series WITHOUT incrementing the counter (for previews).
+    Mirrors _draw_engine_series: never below the data floor."""
     row = frappe.db.sql("select current from `tabSeries` where name=%s", key)
     current = row[0][0] if row and row[0][0] is not None else 0
-    return ("%0" + str(int(digits)) + "d") % (current + 1)
+    return ("%0" + str(int(digits)) + "d") % (max(int(current), int(floor)) + 1)
+
+
+def _like_escape(text):
+    """Escape a literal string for use inside a LIKE pattern."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _series_data_floor(doc, rule, resolved, sep):
+    """Highest counter value already STORED in the rule's target column for
+    this series shape (prefix/suffix around the Number segment), 0 if none.
+
+    The tabSeries counter can lag the data — a hand-edited target value, a
+    restored backup, a series that predates the rule — and a plain counter
+    draw would then re-issue a taken number and die on the uniqueness check
+    (e.g. every duplicate of the lone invoice in a series failing with
+    "Number ... is already used"). Drawing above this floor self-heals."""
+    target = _safe_col(rule.get("target_field")) or "custom_branch_name"
+    target_df = doc.meta.get_field(target)
+    if not target_df or target_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
+        return 0
+
+    sentinel = "\x00"
+    built = _join_parts(
+        [(sentinel if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
+    )
+    if not built or sentinel not in built:
+        return 0
+    prefix, _, suffix = built.partition(sentinel)
+
+    table = "tab" + doc.doctype.replace("`", "")
+    number_sql = (
+        "SUBSTRING(`{col}`, %(plen)s + 1, "
+        "CHAR_LENGTH(`{col}`) - %(plen)s - %(slen)s)"
+    ).format(col=target)
+    row = frappe.db.sql(
+        "SELECT MAX(CAST({num} AS UNSIGNED)) FROM `{table}` "
+        "WHERE `{col}` LIKE %(like)s AND docstatus < 2 "
+        "AND {num} REGEXP '^[0-9]+$'".format(num=number_sql, table=table, col=target),
+        {
+            "plen": len(prefix),
+            "slen": len(suffix),
+            "like": _like_escape(prefix) + "%" + _like_escape(suffix),
+        },
+    )
+    return int(row[0][0]) if row and row[0][0] is not None else 0
+
+
+def _draw_engine_series(key, digits, floor):
+    """Atomic next voucher-name counter, never below the data floor — the same
+    deadlock-resistant upsert as _draw_next_document_no, instead of core
+    getseries, so a counter that lags the stored data jumps past the taken
+    numbers rather than re-issuing one."""
+    frappe.db.sql(
+        "INSERT INTO `tabSeries` (`name`, `current`) VALUES (%(key)s, %(floor)s) "
+        "ON DUPLICATE KEY UPDATE `current` = GREATEST(`current` + 1, %(floor)s)",
+        {"key": key, "floor": int(floor) + 1},
+    )
+    return ("%0" + str(int(digits)) + "d") % _series_current(key)
 
 
 def _pad_segment_value(seg, value):
@@ -2005,7 +2158,8 @@ def _build_from_segments(doc, rule, commit_series=True):
     """Build the number by joining resolved segments (in order) with the separator.
 
     - Non-empty non-Number segments identify the series (the counter key).
-    - The Number segment is replaced by the running counter (getseries), or by the
+    - The Number segment is replaced by the running counter (atomic draw, never
+      below the highest number already stored in the target column), or by the
       next value without incrementing when commit_series is False (preview/test).
     - The Number may sit anywhere in the order (supports e.g. code-number-year).
     - A rule with NO Number segment is a PASS-THROUGH rule: it just joins the
@@ -2038,7 +2192,12 @@ def _build_from_segments(doc, rule, commit_series=True):
     series_key = sep.join(key_parts) + sep
     number_len = next((r["len"] for r in resolved if r["num"]), 6)
 
-    seq = getseries(series_key, number_len) if commit_series else _peek_series(series_key, number_len)
+    floor = _series_data_floor(doc, rule, resolved, sep)
+    seq = (
+        _draw_engine_series(series_key, number_len, floor)
+        if commit_series
+        else _peek_series(series_key, number_len, floor)
+    )
 
     return _join_parts(
         [(seq if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
@@ -2069,8 +2228,10 @@ def _rule_dict_from_config(cfg):
             {"field": c.field, "value": c.value, "operator": c.get("operator")}
             for c in (cfg.get("document_no_conditions") or [])
         ],
+        "lock_group_fields": cfg.get("lock_group_fields"),
         "docno_group_by": [
-            {"field": g.field} for g in (cfg.get("docno_group_by") or [])
+            {"field": g.field, "lock_after_numbering": g.get("lock_after_numbering")}
+            for g in (cfg.get("docno_group_by") or [])
         ],
         "segments": [
             {
@@ -2085,57 +2246,6 @@ def _rule_dict_from_config(cfg):
             for s in (cfg.segments or [])
         ],
     }
-
-
-@frappe.whitelist()
-def get_numbering_preview_config():
-    """Doctypes that have enabled Numbering Configuration rules, with the doc
-    fields whose change should refresh the live number preview in the form."""
-    config = {}
-    for rule in frappe.get_all(
-        "Numbering Configuration", filters={"enabled": 1}, pluck="name"
-    ):
-        cfg = frappe.get_cached_doc("Numbering Configuration", rule)
-        fields = config.setdefault(cfg.document_type, set())
-        fields.update(["company", "posting_date", "transaction_date", "is_return"])
-        if cfg.date_field:
-            fields.add(cfg.date_field)
-        if cfg.legacy_source_field:
-            fields.add(cfg.legacy_source_field)
-        for c in cfg.conditions or []:
-            if c.field:
-                fields.add(c.field)
-        for s in cfg.segments or []:
-            if s.field:
-                fields.add(s.field)
-            if s.segment_type == "Branch Abbr":
-                fields.add("custom_branch")
-    return {dt: sorted(fields) for dt, fields in config.items()}
-
-
-@frappe.whitelist()
-def preview_document_number(doc):
-    """Live form preview: the number the engine would assign to this (unsaved)
-    document right now. Counters are peeked, never consumed."""
-    data = json.loads(doc) if isinstance(doc, str) else doc
-    doctype = data.get("doctype")
-    if not doctype or not frappe.has_permission(doctype, "write"):
-        return None
-
-    d = frappe.get_doc(data)
-    for rule in _matching_numbering_rules(d):
-        target = rule.get("target_field") or "custom_branch_name"
-        if not d.meta.has_field(target):
-            continue
-        value = _build_from_segments(d, rule, commit_series=False)
-        if value:
-            return {
-                "target_field": target,
-                "label": d.meta.get_label(target),
-                "number": value,
-                "rule": rule["name"],
-            }
-    return None
 
 
 def _number_belongs_to_other_doc(doc, target):
@@ -2219,6 +2329,17 @@ def set_custom_branch_name(doc):
         target = rule.get("target_field") or "custom_branch_name"
         if not doc.meta.has_field(target):
             continue
+
+        # A STORED number never changes from OUTSIDE: a client/API/import edit
+        # of an already-numbered document is discarded in favor of the stored
+        # value (the form field is read-only, but REST and scripts are not).
+        # Only the engine itself may renumber (counterless recompute and the
+        # draft scope-change redraw below); a deliberate correction can opt in
+        # via frappe.flags.allow_number_overwrite.
+        if not doc.is_new() and not frappe.flags.get("allow_number_overwrite"):
+            stored = frappe.db.get_value(doc.doctype, doc.name, target)
+            if stored and doc.get(target) != stored:
+                doc.set(target, stored)
 
         # A NEW document arriving with another document's number means the
         # value was carried over by a copy path that bypassed no_copy

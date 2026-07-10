@@ -227,13 +227,15 @@ class TestDocumentNumbering(FrappeTestCase):
                    target="custom_name", separator="-", auto_document_no=0,
                    document_no_conditions=None, document_no_field=None,
                    duplicate_action=None, normal_docno_mode=None, return_docno_mode=None,
-                   docno_group_by=None):
-        segments = list(extra_segments) + [
-            # the name's number slot references the SAME field the number is
-            # written into, so the voucher name always contains the number
-            {"segment_type": "Document Field", "field": document_no_field or "custom_document_no", "number_length": 6},
-            {"segment_type": "Fiscal Year"},
-        ]
+                   docno_group_by=None, raw_segments=False):
+        segments = list(extra_segments)
+        if not raw_segments:
+            segments += [
+                # the name's number slot references the SAME field the number is
+                # written into, so the voucher name always contains the number
+                {"segment_type": "Document Field", "field": document_no_field or "custom_document_no", "number_length": 6},
+                {"segment_type": "Fiscal Year"},
+            ]
         rule = frappe.get_doc({
             "doctype": "Numbering Configuration", "document_type": doctype,
             "enabled": 1, "target_field": target, "separator": separator,
@@ -244,7 +246,11 @@ class TestDocumentNumbering(FrappeTestCase):
             "duplicate_action": duplicate_action or "Throw Error",
             "conditions": conditions,
             "document_no_conditions": document_no_conditions or [],
-            "docno_group_by": [{"field": f} for f in (docno_group_by or [])],
+            "docno_group_by": [
+                # accepts "fieldname" or {"field": ..., "lock_after_numbering": ...}
+                (f if isinstance(f, dict) else {"field": f})
+                for f in (docno_group_by or [])
+            ],
             "segments": segments,
         }).insert(ignore_permissions=True)
         ns.clear_numbering_rules_cache()
@@ -1436,16 +1442,171 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertIn("custom_branch=" + b1, scope["group"])
         self.assertIn("fy=", scope["group"])                 # fiscal year resolved
 
-        # same group counts 1, 2 — different branch/type start their own 1
-        self.assertEqual(self._draw_into(pe(b1), "custom_document_no"), 1)
-        self.assertEqual(self._draw_into(pe(b1), "custom_document_no"), 2)
-        self.assertEqual(self._draw_into(pe(b2), "custom_document_no"), 1)
-        self.assertEqual(self._draw_into(pe(b1, self.OFF_TYPE_2), "custom_document_no"), 1)
+        # groups count sequentially and INDEPENDENTLY — measured from each
+        # group's own starting point, because the group-by scope deliberately
+        # continues whatever real data the live site already holds
+        b1_start = ns.peek_next_document_no(pe(b1))
+        b2_start = ns.peek_next_document_no(pe(b2))
+        t2_start = ns.peek_next_document_no(pe(b1, self.OFF_TYPE_2))
+        self.assertEqual(self._draw_into(pe(b1), "custom_document_no"), b1_start)
+        self.assertEqual(self._draw_into(pe(b1), "custom_document_no"), b1_start + 1)
+        # b1's draws advanced ONLY b1's group
+        self.assertEqual(self._draw_into(pe(b2), "custom_document_no"), b2_start)
+        self.assertEqual(self._draw_into(pe(b1, self.OFF_TYPE_2), "custom_document_no"), t2_start)
 
         # manual number bumps ONLY its own group: next b1 draw skips past it,
         # b2 keeps counting where it was
-        dm = pe(b1); dm.custom_document_no = 77; dm.custom_document_no_manual = 1
+        manual = ns.peek_next_document_no(pe(b1)) + 1000
+        dm = pe(b1); dm.custom_document_no = manual; dm.custom_document_no_manual = 1
         ns.apply_document_no(dm)
-        self.assertEqual(dm.custom_document_no, 77)
-        self.assertEqual(ns.peek_next_document_no(pe(b1)), 78)
-        self.assertEqual(ns.peek_next_document_no(pe(b2)), 2)
+        self.assertEqual(dm.custom_document_no, manual)
+        self.assertEqual(ns.peek_next_document_no(pe(b1)), manual + 1)
+        self.assertEqual(ns.peek_next_document_no(pe(b2)), b2_start + 1)
+
+    def test_69_voucher_counter_never_reissues_stored_numbers(self):
+        # The voucher-name Number draw must jump past numbers already STORED
+        # in the target column even when the tabSeries counter lags them
+        # (hand-edited value, restored backup). A lagging counter used to make
+        # every subsequent save collide: "Number ... is already used by ...".
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        tag = "VC" + frappe.generate_hash(length=6)
+        # raw_segments: no Document Field docno slot — the name exercises ONLY
+        # the voucher Number segment under test (custom_document_no is still
+        # filled by the fallback, satisfying the field's mandatory flag).
+        self._temp_rule(
+            doctype="Journal Entry",
+            raw_segments=True,
+            extra_segments=[
+                {"segment_type": "Static Text", "static_value": tag},
+                {"segment_type": "Number", "number_length": 6},
+                {"segment_type": "Fiscal Year"},
+            ],
+            conditions=[{"field": "custom_p_type", "value": JE_TYPE}],
+        )
+        key = f"{tag}-{self.fy}-"
+        self.addCleanup(self._drop_series, key)
+
+        a = self._insert_je()
+        self.assertEqual(a.custom_name, f"{tag}-000001-{self.fy}")
+        self.assertEqual(ns._series_current(key), 1)
+
+        # counter lags the data (reset to 0): the draw must self-heal to 2
+        frappe.db.sql("UPDATE `tabSeries` SET `current`=0 WHERE `name`=%s", key)
+        b = self._insert_je()
+        self.assertEqual(b.custom_name, f"{tag}-000002-{self.fy}")
+
+        # a hand-edited HIGHER stored number becomes the floor of the series
+        frappe.db.set_value("Journal Entry", b.name, "custom_name",
+                            f"{tag}-000009-{self.fy}")
+        frappe.db.sql("UPDATE `tabSeries` SET `current`=0 WHERE `name`=%s", key)
+        c = self._insert_je()
+        self.assertEqual(c.custom_name, f"{tag}-000010-{self.fy}")
+
+    def test_70_stored_number_is_immutable_from_outside(self):
+        # A STORED voucher number must not change once assigned: an edit
+        # arriving from a client/API/script save is discarded in favor of the
+        # stored value. Only frappe.flags.allow_number_overwrite (a deliberate
+        # server-side correction) may replace it.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        tag = "IM" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            doctype="Journal Entry",
+            raw_segments=True,
+            extra_segments=[
+                {"segment_type": "Static Text", "static_value": tag},
+                {"segment_type": "Number", "number_length": 6},
+            ],
+            conditions=[{"field": "custom_p_type", "value": JE_TYPE}],
+        )
+        self.addCleanup(self._drop_series, f"{tag}-")
+
+        a = self._insert_je()
+        assigned = a.custom_name
+        self.assertTrue(assigned.startswith(tag))
+
+        # an outside edit (form/REST/script) is silently reverted on save
+        a.custom_name = f"{tag}-999999"
+        a.user_remark = "edited"
+        a.save(ignore_permissions=True)
+        self.assertEqual(a.custom_name, assigned)
+        self.assertEqual(
+            frappe.db.get_value("Journal Entry", a.name, "custom_name"), assigned)
+
+        # a deliberate correction can opt in via the flag
+        frappe.flags.allow_number_overwrite = True
+        try:
+            a.custom_name = f"{tag}-999999"
+            a.save(ignore_permissions=True)
+        finally:
+            frappe.flags.allow_number_overwrite = False
+        self.assertEqual(a.custom_name, f"{tag}-999999")
+
+    def test_71_locked_group_field_rejects_change(self):
+        # "Group Document No. By -> Lock After Numbering": once a Document No.
+        # is assigned, a locked group field may no longer change — the save is
+        # rejected instead of silently renumbering into the new group.
+        # Unlocked fields keep the default draft renumbering (test_57).
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.branches) >= 2, "needs two branches")
+        b1, b2 = self.branches
+        tag = "LK" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1,
+            extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[],
+            docno_group_by=[
+                {"field": "company"},
+                {"field": "custom_branch", "lock_after_numbering": 1},
+                {"field": "custom_fiscal_year", "lock_after_numbering": 1},
+            ],
+        )
+
+        d = self._pe(custom_branch=b1)
+        ns.apply_document_no(d)
+        self.assertTrue(d.custom_document_no)
+
+        def simulate_saved_edit(**changes):
+            before = self._pe(custom_branch=b1, custom_document_no=d.custom_document_no)
+            cur = self._pe(custom_branch=b1, custom_document_no=d.custom_document_no)
+            cur.name = "SIM-LOCK-0001"; cur.set("__islocal", 0)
+            for k, v in changes.items():
+                setattr(cur, k, v)
+            cur._doc_before_save = before
+            return cur
+
+        # locked branch changed -> rejected
+        with self.assertRaises(frappe.ValidationError):
+            ns._enforce_locked_group_fields(simulate_saved_edit(custom_branch=b2))
+
+        # locked fiscal year: posting date moved into ANOTHER fiscal year -> rejected
+        other_fy = frappe.get_all("Fiscal Year", filters={"name": ["!=", self.fy]},
+                                  fields=["name", "year_start_date"], limit=1)
+        if other_fy:
+            with self.assertRaises(frappe.ValidationError):
+                ns._enforce_locked_group_fields(
+                    simulate_saved_edit(posting_date=other_fy[0].year_start_date))
+
+        # nothing changed -> passes
+        ns._enforce_locked_group_fields(simulate_saved_edit())
+
+        # company is in the grouping but NOT locked -> the lock lets it through
+        # (the scope-change redraw handles the renumbering)
+        other_company = frappe.get_all(
+            "Company", filters={"name": ["!=", self.company]}, pluck="name", limit=1)
+        if other_company:
+            ns._enforce_locked_group_fields(simulate_saved_edit(company=other_company[0]))
+
+        # the status endpoint reports the locked REAL columns for the form
+        # (custom_fiscal_year excluded: within-FY date edits stay allowed)
+        st = ns.get_document_no_status(self._pe(custom_branch=b1).as_dict())
+        self.assertEqual(st.get("locked_fields"), ["custom_branch"])
+
+        # rule-level "Lock All Group Fields After Numbering": every group row
+        # is locked without ticking them one by one — company now throws too
+        rule = ns._match_numbering_rule(self._pe(custom_branch=b1))
+        rule_all = dict(rule, lock_group_fields=1)
+        self.assertEqual(
+            ns._locked_group_fields(rule_all),
+            ["company", "custom_branch", "custom_fiscal_year"])

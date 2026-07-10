@@ -5,23 +5,33 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "field"
+  "field",
+  "lock_after_numbering"
  ],
  "fields": [
   {
-   "columns": 10,
+   "columns": 7,
    "description": "Field on the document. Each unique combination of the listed fields gets its OWN running Document No. sequence (1, 2, 3, …). custom_fiscal_year groups by the fiscal year of the posting/transaction date.",
    "fieldname": "field",
    "fieldtype": "Autocomplete",
    "in_list_view": 1,
    "label": "Field",
    "reqd": 1
+  },
+  {
+   "columns": 3,
+   "default": "0",
+   "description": "Once a Document No. is assigned, this field can no longer be changed on the document — the save is rejected (and the form shows it read-only). Unlocked fields renumber the draft into its new group instead.",
+   "fieldname": "lock_after_numbering",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Lock After Numbering"
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-09 00:00:00.000000",
+ "modified": "2026-07-10 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Group By Field",
