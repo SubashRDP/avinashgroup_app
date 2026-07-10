@@ -10,6 +10,21 @@ def execute(filters=None):
 	return get_columns(), get_data(filters)
 
 
+@frappe.whitelist()
+def get_fiscal_years():
+	# CBMS stores its own fiscal year string (e.g. "2082.083"), which does not
+	# match the Fiscal Year doctype's names ("82/83"), so the dropdown is built
+	# from the values actually present on the credit notes.
+	years = frappe.get_all(
+		"CBMS Bill Return",
+		pluck="fiscal_year",
+		filters={"fiscal_year": ["is", "set"]},
+		distinct=True,
+		order_by="fiscal_year desc",
+	)
+	return [y for y in years if y]
+
+
 def get_columns():
 	return [
 		{"label": _("Fiscal Year"), "fieldname": "fiscal_year", "fieldtype": "Data", "width": 100},

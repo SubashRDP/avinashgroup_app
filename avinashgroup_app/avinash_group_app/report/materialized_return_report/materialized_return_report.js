@@ -13,8 +13,8 @@ frappe.query_reports["Materialized Return Report"] = {
 		{
 			fieldname: "fiscal_year",
 			label: __("Fiscal Year"),
-			fieldtype: "Data",
-			description: __("Nepali fiscal year as stored on the bill, e.g. 2081/82"),
+			fieldtype: "Select",
+			options: [""],
 		},
 		{
 			fieldname: "from_date",
@@ -33,4 +33,16 @@ frappe.query_reports["Materialized Return Report"] = {
 			options: ["", "Pending", "Synced", "Failed"],
 		},
 	],
+
+	onload(report) {
+		frappe
+			.call({
+				method: "avinashgroup_app.avinash_group_app.report.materialized_return_report.materialized_return_report.get_fiscal_years",
+			})
+			.then((r) => {
+				const filter = report.get_filter("fiscal_year");
+				filter.df.options = [""].concat(r.message || []);
+				filter.refresh();
+			});
+	},
 };
