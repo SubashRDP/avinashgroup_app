@@ -26,6 +26,7 @@ PRINT_OUTPUT_CMDS = {
 	"frappe.utils.print_format.download_multi_pdf",
 	"frappe.utils.print_format.print_by_server",
 	"frappe.utils.weasyprint.download_pdf",
+	"frappe.www.printview.get_rendered_raw_commands",
 }
 
 

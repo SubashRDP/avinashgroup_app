@@ -134,6 +134,7 @@ attendance_events = {
 jinja = {
     "methods": [
         "avinashgroup_app.custom_code.CBMS.utils.bs_date_str",
+        "avinashgroup_app.custom_code.printing.escp_invoice.ngi_escp",
     ],
 }
 
