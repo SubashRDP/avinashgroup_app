@@ -43,12 +43,19 @@ If a whole print is shifted on a given printer, change only ox / oy.
                       on any ordinary office printer without defining a custom
                       paper size: print at 100% (not "fit to page"), cut on the
                       crop marks, hold the sheet against a real form. -#}
+{#- sheet = 'a4p'  -> portrait A4, the form rotated 90deg inside at 1:1 mm.
+    For printers/viewers locked to portrait: nothing in the chain has to
+    rotate, so output is deterministic everywhere. Turn the sheet to read. -#}
 {%- set sheet = sheet | default('form') -%}
 {%- set is_a4 = (sheet == 'a4') -%}
-{%- set pw = 297 if is_a4 else 241.3 -%}
-{%- set ph = 210 if is_a4 else 139.7 -%}
-{%- set mx = 27.85 if is_a4 else 0 -%}
-{%- set my = 35.15 if is_a4 else 0 -%}
+{%- set is_a4p = (sheet == 'a4p') -%}
+{%- set pw = 297 if is_a4 else (210 if is_a4p else 241.3) -%}
+{%- set ph = 210 if is_a4 else (297 if is_a4p else 139.7) -%}
+{%- set mx = 27.85 if is_a4 else (35.15 if is_a4p else 0) -%}
+{%- set my = 35.15 if is_a4 else (27.85 if is_a4p else 0) -%}
+{#- footprint of the (possibly rotated) form on the sheet, for crop marks -#}
+{%- set fw = 139.7 if is_a4p else 241.3 -%}
+{%- set fh = 241.3 if is_a4p else 139.7 -%}
 
 {%- set P = {
   'copy_label':   {'y': 1.5,   'x': 70,   'w': 100},
@@ -164,7 +171,8 @@ If a whole print is shifted on a given printer, change only ox / oy.
     page-break-after: always; page-break-inside: avoid; overflow: hidden; }
   .ngi-sheet.last { page-break-after: auto; }
   .ngi-page { position: absolute; left: {{ mx }}mm; top: {{ my }}mm;
-    width: 241.3mm; height: 139.7mm; overflow: hidden; }
+    width: 241.3mm; height: 139.7mm; overflow: hidden;
+    {%- if is_a4p %} transform: translateX(139.7mm) rotate(90deg); transform-origin: 0 0;{% endif %} }
   .crop { position: absolute; background: #000; }
   .ngi-ink, .ngi-ink div { font-family: Arial, Helvetica, sans-serif; }
 </style>
@@ -181,15 +189,15 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- set page_no = loop.index -%}
 {%- set T = P.table -%}
 <div class="ngi-sheet{% if is_last %} last{% endif %}">
-  {%- if is_a4 -%}
+  {%- if is_a4 or is_a4p -%}
     {#- crop marks at the four corners of the real 9.5x5.5in form -#}
-    {%- for cx in [mx, mx + 241.3] -%}{%- for cy in [my, my + 139.7] -%}
+    {%- for cx in [mx, mx + fw] -%}{%- for cy in [my, my + fh] -%}
       <div class="crop" style="left:{{ cx - 6 }}mm; top:{{ cy }}mm; width:5mm; height:0.25mm;"></div>
       <div class="crop" style="left:{{ cx + 1 }}mm; top:{{ cy }}mm; width:5mm; height:0.25mm;"></div>
       <div class="crop" style="left:{{ cx }}mm; top:{{ cy - 6 }}mm; width:0.25mm; height:5mm;"></div>
       <div class="crop" style="left:{{ cx }}mm; top:{{ cy + 1 }}mm; width:0.25mm; height:5mm;"></div>
     {%- endfor -%}{%- endfor -%}
-    <div style="position:absolute; left:{{ mx }}mm; top:{{ my + 145 }}mm; width:241.3mm;
+    <div style="position:absolute; left:{{ mx }}mm; top:{{ my + fh + 5 }}mm; width:{{ fw }}mm;
       text-align:center; font-family:Arial,sans-serif; font-size:7.5pt; color:#555;">
       Print at 100% (not "Fit to page"). Cut on the crop marks: the enclosed area is
       exactly 9.5&quot; &times; 5.5&quot; (241.3 &times; 139.7 mm).
