@@ -50,6 +50,7 @@ import frappe
 CHROME_PRINT_FORMATS = {
 	"Nepal Gas Invoice Pre-Printed",
 	"Nepal Gas Invoice Plain Paper",
+	"Nepal Gas Invoice A4 Proof",
 }
 
 _CHROME_BINARIES = ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser")

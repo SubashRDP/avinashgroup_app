@@ -36,6 +36,20 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- set oy = 0 -%}{#- global vertical nudge, mm (+ = down) -#}
 {%- set rows_per_page = rows_per_page | default(3) -%}{#- item lines in the 71.2..85.9mm body -#}
 
+{#- sheet = 'form' -> the page IS the 9.5x5.5in form (continuous stationery).
+    sheet = 'a4'   -> the same form at exact 1:1 mm, centred on A4 landscape with
+                      crop marks. A4 landscape is 297x210mm, so 241.3x139.7 fits
+                      with 27.85 / 35.15mm margins. Use this to proof the overlay
+                      on any ordinary office printer without defining a custom
+                      paper size: print at 100% (not "fit to page"), cut on the
+                      crop marks, hold the sheet against a real form. -#}
+{%- set sheet = sheet | default('form') -%}
+{%- set is_a4 = (sheet == 'a4') -%}
+{%- set pw = 297 if is_a4 else 241.3 -%}
+{%- set ph = 210 if is_a4 else 139.7 -%}
+{%- set mx = 27.85 if is_a4 else 0 -%}
+{%- set my = 35.15 if is_a4 else 0 -%}
+
 {%- set P = {
   'copy_label':   {'y': 1.5,   'x': 70,   'w': 100},
   'title':        {'y': 8.2,   'addr_y': 14.8, 'tel_y': 19.8, 'cx': 28, 'cw': 180},
@@ -126,8 +140,8 @@ If a whole print is shifted on a given printer, change only ox / oy.
      length by 0.7688x and ignores --disable-smart-shrinking, so it can never
      hold an mm-exact overlay. These two formats therefore render through
      Chrome; page-width/page-height below only matter as a fallback. */
-  @page { size: 241.3mm 139.7mm; margin: 0; }
-  .print-format { page-width: 241.3mm; page-height: 139.7mm;
+  @page { size: {{ pw }}mm {{ ph }}mm; margin: 0; }
+  .print-format { page-width: {{ pw }}mm; page-height: {{ ph }}mm;
     margin-top: 0mm; margin-bottom: 0mm; margin-left: 0mm; margin-right: 0mm; }
 
   /* Frappe's standard.css styles .print-format as an A4 *portrait* sheet on
@@ -146,9 +160,12 @@ If a whole print is shifted on a given printer, change only ox / oy.
   .print-format, .print-format p, .print-format div {
     font-family: 'Courier New', Courier, monospace; color: #000; }
   .print-format .letter-head, .print-format .print-heading { display: none; }
-  .ngi-page { position: relative; width: 241.3mm; height: 139.7mm;
+  .ngi-sheet { position: relative; width: {{ pw }}mm; height: {{ ph }}mm;
     page-break-after: always; page-break-inside: avoid; overflow: hidden; }
-  .ngi-page.last { page-break-after: auto; }
+  .ngi-sheet.last { page-break-after: auto; }
+  .ngi-page { position: absolute; left: {{ mx }}mm; top: {{ my }}mm;
+    width: 241.3mm; height: 139.7mm; overflow: hidden; }
+  .crop { position: absolute; background: #000; }
   .ngi-ink, .ngi-ink div { font-family: Arial, Helvetica, sans-serif; }
 </style>
 
@@ -163,7 +180,22 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- set is_last = loop.last -%}
 {%- set page_no = loop.index -%}
 {%- set T = P.table -%}
-<div class="ngi-page{% if is_last %} last{% endif %}">
+<div class="ngi-sheet{% if is_last %} last{% endif %}">
+  {%- if is_a4 -%}
+    {#- crop marks at the four corners of the real 9.5x5.5in form -#}
+    {%- for cx in [mx, mx + 241.3] -%}{%- for cy in [my, my + 139.7] -%}
+      <div class="crop" style="left:{{ cx - 6 }}mm; top:{{ cy }}mm; width:5mm; height:0.25mm;"></div>
+      <div class="crop" style="left:{{ cx + 1 }}mm; top:{{ cy }}mm; width:5mm; height:0.25mm;"></div>
+      <div class="crop" style="left:{{ cx }}mm; top:{{ cy - 6 }}mm; width:0.25mm; height:5mm;"></div>
+      <div class="crop" style="left:{{ cx }}mm; top:{{ cy + 1 }}mm; width:0.25mm; height:5mm;"></div>
+    {%- endfor -%}{%- endfor -%}
+    <div style="position:absolute; left:{{ mx }}mm; top:{{ my + 145 }}mm; width:241.3mm;
+      text-align:center; font-family:Arial,sans-serif; font-size:7.5pt; color:#555;">
+      Print at 100% (not "Fit to page"). Cut on the crop marks: the enclosed area is
+      exactly 9.5&quot; &times; 5.5&quot; (241.3 &times; 139.7 mm).
+    </div>
+  {%- endif -%}
+  <div class="ngi-page">
 
   {%- if draw_form -%}
   <div class="ngi-ink">
@@ -278,5 +310,6 @@ If a whole print is shifted on a given printer, change only ox / oy.
   {%- if item_pages | length > 1 -%}
     {%- call at(196, 134.5, 34, 'right', false, 7) %}Form {{ page_no }}/{{ item_pages | length }}{% endcall -%}
   {%- endif -%}
+  </div>
 </div>
 {%- endfor -%}
