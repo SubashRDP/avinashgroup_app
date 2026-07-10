@@ -50,16 +50,10 @@ function is_readonly(frm) {
     return !!(f && f.df && f.df.read_only);
 }
 
-// Ask the server for the draft's Document No. status and reflect it on the field.
+// Ask the server for the draft's Document No. status and reflect it on the
+// field — and on the rule's locked group-by fields (any docstatus-0 doc).
 function fetch_status(frm) {
-    if (!has_docno_field(frm) || !frm.is_new()) return;
-
-    // Amendment: the number is pinned to the cancelled original by the server —
-    // lock the field, no status call needed.
-    if (frm.doc.amended_from) {
-        apply_status(frm, { amended: true });
-        return;
-    }
+    if (!has_docno_field(frm)) return;
 
     const token = (frm._docno_req = (frm._docno_req || 0) + 1);
     frappe.call({
@@ -67,9 +61,41 @@ function fetch_status(frm) {
         args: { doc: frm.doc },
         callback: function (r) {
             if (token !== frm._docno_req) return;          // superseded by a newer call
-            apply_status(frm, r && r.message);
+            const st = (r && r.message) || {};
+            if (frm.is_new()) {
+                // Amendment: the number is pinned to the cancelled original by
+                // the server — the field itself just locks.
+                apply_status(frm, frm.doc.amended_from ? { amended: true } : st);
+            }
+            apply_locked_fields(frm, st.locked_fields);
         }
     });
+}
+
+// "Group Document No. By" fields marked Lock After Numbering: once the doc
+// holds a number, the server rejects any change to them — so don't even offer
+// the edit. Unnumbered/new docs keep the field's own base read_only.
+function base_read_only(frm, fieldname) {
+    const base = (frappe.meta.docfield_map[frm.doc.doctype] || {})[fieldname];
+    return base && base.read_only ? 1 : 0;
+}
+
+function apply_locked_fields(frm, locked) {
+    locked = locked || [];
+    const numbered = !frm.is_new() && !!frm.doc.custom_document_no
+        && frm.doc.docstatus === 0;
+    // fields locked earlier but no longer in the list go back to their base
+    (frm._docno_locked_fields || []).forEach(function (f) {
+        if (!locked.includes(f) && frm.fields_dict[f]) {
+            frm.set_df_property(f, "read_only", base_read_only(frm, f));
+        }
+    });
+    locked.forEach(function (f) {
+        if (frm.fields_dict[f]) {
+            frm.set_df_property(f, "read_only", numbered ? 1 : base_read_only(frm, f));
+        }
+    });
+    frm._docno_locked_fields = locked;
 }
 
 // The field's own mandatory_depends_on (e.g. "every company except Grihalaxmi")
@@ -179,6 +205,8 @@ DOCNO_DOCTYPES.forEach(function (doctype) {
                 read_only: was_auto_drawn(frm) ? 1 : 0,
                 description: was_auto_drawn(frm) ? __("Assigned automatically.") : "",
             });
+            // a numbered doc also renders its locked group fields read-only
+            fetch_status(frm);
         },
         custom_document_no: function (frm) {
             // Only meaningful in manual mode (auto is hidden/read-only). A typed

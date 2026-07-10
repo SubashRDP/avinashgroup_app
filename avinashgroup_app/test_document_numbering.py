@@ -246,7 +246,11 @@ class TestDocumentNumbering(FrappeTestCase):
             "duplicate_action": duplicate_action or "Throw Error",
             "conditions": conditions,
             "document_no_conditions": document_no_conditions or [],
-            "docno_group_by": [{"field": f} for f in (docno_group_by or [])],
+            "docno_group_by": [
+                # accepts "fieldname" or {"field": ..., "lock_after_numbering": ...}
+                (f if isinstance(f, dict) else {"field": f})
+                for f in (docno_group_by or [])
+            ],
             "segments": segments,
         }).insert(ignore_permissions=True)
         ns.clear_numbering_rules_cache()
@@ -1538,3 +1542,71 @@ class TestDocumentNumbering(FrappeTestCase):
         finally:
             frappe.flags.allow_number_overwrite = False
         self.assertEqual(a.custom_name, f"{tag}-999999")
+
+    def test_71_locked_group_field_rejects_change(self):
+        # "Group Document No. By -> Lock After Numbering": once a Document No.
+        # is assigned, a locked group field may no longer change — the save is
+        # rejected instead of silently renumbering into the new group.
+        # Unlocked fields keep the default draft renumbering (test_57).
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.branches) >= 2, "needs two branches")
+        b1, b2 = self.branches
+        tag = "LK" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            auto_document_no=1,
+            extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[],
+            docno_group_by=[
+                {"field": "company"},
+                {"field": "custom_branch", "lock_after_numbering": 1},
+                {"field": "custom_fiscal_year", "lock_after_numbering": 1},
+            ],
+        )
+
+        d = self._pe(custom_branch=b1)
+        ns.apply_document_no(d)
+        self.assertTrue(d.custom_document_no)
+
+        def simulate_saved_edit(**changes):
+            before = self._pe(custom_branch=b1, custom_document_no=d.custom_document_no)
+            cur = self._pe(custom_branch=b1, custom_document_no=d.custom_document_no)
+            cur.name = "SIM-LOCK-0001"; cur.set("__islocal", 0)
+            for k, v in changes.items():
+                setattr(cur, k, v)
+            cur._doc_before_save = before
+            return cur
+
+        # locked branch changed -> rejected
+        with self.assertRaises(frappe.ValidationError):
+            ns._enforce_locked_group_fields(simulate_saved_edit(custom_branch=b2))
+
+        # locked fiscal year: posting date moved into ANOTHER fiscal year -> rejected
+        other_fy = frappe.get_all("Fiscal Year", filters={"name": ["!=", self.fy]},
+                                  fields=["name", "year_start_date"], limit=1)
+        if other_fy:
+            with self.assertRaises(frappe.ValidationError):
+                ns._enforce_locked_group_fields(
+                    simulate_saved_edit(posting_date=other_fy[0].year_start_date))
+
+        # nothing changed -> passes
+        ns._enforce_locked_group_fields(simulate_saved_edit())
+
+        # company is in the grouping but NOT locked -> the lock lets it through
+        # (the scope-change redraw handles the renumbering)
+        other_company = frappe.get_all(
+            "Company", filters={"name": ["!=", self.company]}, pluck="name", limit=1)
+        if other_company:
+            ns._enforce_locked_group_fields(simulate_saved_edit(company=other_company[0]))
+
+        # the status endpoint reports the locked REAL columns for the form
+        # (custom_fiscal_year excluded: within-FY date edits stay allowed)
+        st = ns.get_document_no_status(self._pe(custom_branch=b1).as_dict())
+        self.assertEqual(st.get("locked_fields"), ["custom_branch"])
+
+        # rule-level "Lock All Group Fields After Numbering": every group row
+        # is locked without ticking them one by one — company now throws too
+        rule = ns._match_numbering_rule(self._pe(custom_branch=b1))
+        rule_all = dict(rule, lock_group_fields=1)
+        self.assertEqual(
+            ns._locked_group_fields(rule_all),
+            ["company", "custom_branch", "custom_fiscal_year"])

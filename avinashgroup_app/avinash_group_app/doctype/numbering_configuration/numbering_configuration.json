@@ -21,6 +21,7 @@
   "return_docno_mode",
   "docno_group_by_section",
   "docno_group_by",
+  "lock_group_fields",
   "conditions_section",
   "conditions",
   "document_no_conditions_section",
@@ -126,6 +127,14 @@
    "fieldtype": "Table",
    "label": "Group By Fields",
    "options": "Numbering Group By Field"
+  },
+  {
+   "default": "0",
+   "depends_on": "auto_document_no",
+   "description": "Lock EVERY Group By field above once a Document No. is assigned: the document rejects any change to them (and the form shows them read-only). Overrides the per-row Lock After Numbering checks.",
+   "fieldname": "lock_group_fields",
+   "fieldtype": "Check",
+   "label": "Lock All Group Fields After Numbering"
   },
   {
    "default": "custom_document_no",
@@ -260,7 +269,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-10 00:00:00.000000",
+ "modified": "2026-07-10 11:30:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Configuration",

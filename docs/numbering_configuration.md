@@ -2,7 +2,7 @@
 
 Engine: `avinashgroup_app/custom_code/Override/naming_series.py`
 Doctype UI: `avinashgroup_app/avinash_group_app/doctype/numbering_configuration/`
-Form JS: `public/js/auto_update_document_no.js` (Document No. field), `public/js/numbering_preview.js` (voucher-name alert)
+Form JS: `public/js/auto_update_document_no.js` (Document No. field)
 Tests: `avinashgroup_app/test_document_numbering.py`
 
 ---
@@ -112,6 +112,15 @@ matching rule.
   scan by real column filters, so an existing series **continues** even when the
   voucher format changes. Empty table = group by the rule's number prefix
   (default), or the legacy `company|code|fiscal-year` scope.
+  A rule-level **Lock All Group Fields After Numbering** check locks every row
+  at once; otherwise each row has a **Lock After Numbering** check: once the document carries a
+  Document No., a locked field can no longer be changed — the save is rejected
+  and the form shows the field read-only (amendments must match their original
+  too, since their number is pinned to it). An UNLOCKED field may still change:
+  the draft then gives its number back and renumbers into the new group
+  (default behavior). Locking `custom_fiscal_year` locks the *fiscal year of
+  the posting/transaction date* — the date may move within the year, but not
+  across years.
   **Caution:** only group by a field (e.g. `custom_branch`) if the voucher NAME
   also contains it — otherwise two groups can draw the same number and collapse
   into identical names, which the uniqueness guard rejects.
@@ -205,10 +214,11 @@ Document** (consumes nothing).
 
 ## 6. Form tools & plumbing
 
-- The form-side number alert (`numbering_preview.js`) shows the number a draft
-  **would keep or get** on save: an already-numbered draft previews its own
-  number (it only redraws if its series scope changed), a new draft peeks the
-  next counter value without consuming it.
+- There is **no live number preview** on document forms (removed — too many
+  moving inputs made the shown number unreliable and invited hand-edits). The
+  number simply appears after save. What the form DOES do: in **manual** mode,
+  typing a Document No. immediately checks availability and warns "already
+  used by …" with the next free number (`check_document_no_availability`).
 - **Live Preview** box, **Test on a Document** (real doc, no counter consumed),
   **Apply to Other Companies** (bulk duplicate), duplicate-scope warning on save.
 - Caches: per-request → redis (`numbering_rules::<doctype>`), cleared on any rule
