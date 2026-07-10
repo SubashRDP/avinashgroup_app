@@ -284,6 +284,10 @@ before_request = [
 ]
 
 override_whitelisted_methods = {
+    # Sales Invoice: desk Save on a draft is escalated to Submit so save+submit
+    # is one atomic transaction — a failed submit rolls back the insert too,
+    # leaving no draft and no consumed IRD invoice number.
+    "frappe.desk.form.save.savedocs": "avinashgroup_app.custom_code.SalesInvoice.save_and_submit.savedocs",
     "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
     "erpnext.stock.get_item_details.get_item_details": "avinashgroup_app.custom_code.Override.get_item_details.get_item_details",
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
