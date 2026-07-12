@@ -93,6 +93,28 @@ class TestDocumentNumbering(FrappeTestCase):
         cls.has_rules = bool(frappe.db.exists("DocType", "Numbering Configuration"))
         if cls.has_rules:
             cls._heal_quarantine_leftovers()
+        # The branch-grouping tests need a real custom_branch column on Payment
+        # Entry (group-by scope and field locks read doc.meta). Not every site
+        # deploys it — create it for the run and remove it afterwards.
+        cls._created_branch_field = None
+        if not frappe.get_meta("Payment Entry").has_field("custom_branch"):
+            cf = frappe.get_doc({
+                "doctype": "Custom Field", "dt": "Payment Entry",
+                "fieldname": "custom_branch", "label": "Branch",
+                "fieldtype": "Link", "options": "Branch",
+            }).insert(ignore_permissions=True)
+            frappe.db.commit()
+            frappe.clear_cache(doctype="Payment Entry")
+            cls._created_branch_field = cf.name
+            cls.addClassCleanup(cls._drop_created_branch_field)
+
+    @classmethod
+    def _drop_created_branch_field(cls):
+        if cls._created_branch_field and frappe.db.exists("Custom Field", cls._created_branch_field):
+            frappe.delete_doc("Custom Field", cls._created_branch_field,
+                              force=1, ignore_permissions=True)
+            frappe.db.commit()
+            frappe.clear_cache(doctype="Payment Entry")
 
     def setUp(self):
         if not (self.company and self.abbr and self.fy):
@@ -253,6 +275,13 @@ class TestDocumentNumbering(FrappeTestCase):
             ],
             "segments": segments,
         }).insert(ignore_permissions=True)
+        # Frappe auto-fills `company` from user defaults during insert, which
+        # would silently scope this GLOBAL test rule to the site's default
+        # company (and away from the test docs' company). Clear it in the DB —
+        # setting it before insert doesn't survive the default-filling.
+        if rule.company:
+            frappe.db.set_value("Numbering Configuration", rule.name, "company", None)
+            rule.company = None
         ns.clear_numbering_rules_cache()
         self.addCleanup(self._drop_rule, rule.name)
         return rule

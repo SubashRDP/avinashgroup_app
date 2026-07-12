@@ -35,6 +35,7 @@ frappe.ui.form.on("Numbering Configuration", {
 		render_preview(frm);
 	},
 	separator(frm) { render_preview(frm); },
+	date_field(frm) { render_preview(frm); },
 	legacy_upto(frm) { render_preview(frm); },
 	legacy_source_field(frm) { render_preview(frm); },
 });
@@ -213,7 +214,8 @@ function load_field_options(frm) {
 		[...(frm.doc.conditions || []), ...(frm.doc.document_no_conditions || [])]
 			.forEach((row) => set_smart_value_options(frm, row.doctype, row.name));
 
-		// "Date Field" -> date-like fields for the legacy cut-over comparison.
+		// "Document Date Field" -> date-like fields; drives the Fiscal Year
+		// resolution and the legacy cut-over comparison.
 		const date_fields = (meta.fields || [])
 			.filter((f) => ["Date", "Datetime"].includes(f.fieldtype) && f.fieldname)
 			.map((f) => f.fieldname)

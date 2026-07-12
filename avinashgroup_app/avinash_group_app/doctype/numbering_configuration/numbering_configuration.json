@@ -15,6 +15,7 @@
   "duplicate_action",
   "column_break_main",
   "company_abbr",
+  "date_field",
   "docno_mode_section",
   "normal_docno_mode",
   "column_break_docno_mode",
@@ -28,7 +29,6 @@
   "document_no_conditions",
   "legacy_section",
   "legacy_upto",
-  "date_field",
   "column_break_legacy",
   "legacy_source_field",
   "segments_section",
@@ -192,11 +192,10 @@
    "options": "Numbering Document No Condition"
   },
   {
-   "depends_on": "legacy_upto",
-   "description": "Which date on the document to compare against the cut-over. Leave blank to use Posting/Transaction Date automatically.",
+   "description": "Which date on the document determines the Fiscal Year (Fiscal Year segment, Document No. numbering and grouping) and the legacy cut-over. Leave blank to use Posting/Transaction Date automatically.",
    "fieldname": "date_field",
    "fieldtype": "Select",
-   "label": "Date Field"
+   "label": "Document Date Field"
   },
   {
    "collapsible": 1,
@@ -269,7 +268,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-07-10 11:30:00.000000",
+ "modified": "2026-07-11 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Configuration",

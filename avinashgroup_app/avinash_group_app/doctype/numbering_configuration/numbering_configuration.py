@@ -282,6 +282,8 @@ class NumberingConfiguration(Document):
 				doc.posting_date = today
 			if doc.meta.has_field("transaction_date") and not doc.get("transaction_date"):
 				doc.transaction_date = today
+			if self.date_field and doc.meta.has_field(self.date_field) and not doc.get(self.date_field):
+				doc.set(self.date_field, today)
 
 		rule = _rule_dict_from_config(self)
 		return {

@@ -729,11 +729,12 @@ def _resolve_p_type_code(doc):
     return frappe.get_cached_value(link_dt, link_value, source_field) or None
 
 
-def _resolve_docno_fiscal_year(doc):
+def _resolve_docno_fiscal_year(doc, rule=None):
     if doc.get("custom_fiscal_year"):
         return doc.get("custom_fiscal_year")
     date_field = (
-        doc.get("posting_date")
+        (doc.get(rule["date_field"]) if rule and rule.get("date_field") else None)
+        or doc.get("posting_date")
         or doc.get("transaction_date")
         or doc.get("custom_created_on")
     )
@@ -784,7 +785,7 @@ def _rule_docno_scope(doc, rule):
             continue
         if is_word_tail:
             continue
-        value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep))
+        value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep, rule))
         parts.append((value, glue, False))
 
     if not number_seen:
@@ -897,11 +898,15 @@ def _group_by_scope(doc, rule):
         if not col:
             continue
         if col in ("custom_fiscal_year", "fiscal_year"):
-            fy = _resolve_docno_fiscal_year(doc)
+            fy = _resolve_docno_fiscal_year(doc, rule)
             if not fy:
                 return None  # scope incomplete until a date is set
-            date_col = "posting_date" if doc.meta.has_field("posting_date") else (
-                "transaction_date" if doc.meta.has_field("transaction_date") else None)
+            rule_date_col = _safe_col(rule.get("date_field"))
+            if rule_date_col and doc.meta.has_field(rule_date_col):
+                date_col = rule_date_col
+            else:
+                date_col = "posting_date" if doc.meta.has_field("posting_date") else (
+                    "transaction_date" if doc.meta.has_field("transaction_date") else None)
             bounds = frappe.get_cached_value("Fiscal Year", fy,
                                              ["year_start_date", "year_end_date"])
             if not (date_col and bounds):
@@ -957,7 +962,7 @@ def _docno_scope(doc):
     number_field = _docno_field(rule)  # which field holds the counter
     code = _resolve_p_type_code(doc)
     company_abbr = get_company_abbr(doc)
-    fiscal_year = _resolve_docno_fiscal_year(doc)
+    fiscal_year = _resolve_docno_fiscal_year(doc, rule)
 
     if doc.meta.has_field("custom_p_type_code") and code and not doc.get("custom_p_type_code"):
         doc.custom_p_type_code = code
@@ -1226,9 +1231,9 @@ def _enforce_locked_group_fields(doc):
         if not col:
             continue
         if col in ("custom_fiscal_year", "fiscal_year"):
-            # grouped by the RESOLVED fiscal year of the posting/transaction
-            # date — the lock is on that, not on the raw (often empty) column
-            if _resolve_docno_fiscal_year(before) != _resolve_docno_fiscal_year(doc):
+            # grouped by the RESOLVED fiscal year of the rule's document date
+            # — the lock is on that, not on the raw (often empty) column
+            if _resolve_docno_fiscal_year(before, rule) != _resolve_docno_fiscal_year(doc, rule):
                 changed.append(_("Fiscal Year"))
             continue
         df = doc.meta.get_field(col)
@@ -1870,7 +1875,9 @@ def _numbering_rules_for(doctype):
 
 
 def _rule_date(doc, rule):
-    """The document date the rule's legacy cut-over is compared against."""
+    """The rule's document date: the configured Document Date Field when set,
+    else the hardcoded Posting/Transaction Date fallback. Drives the Fiscal
+    Year segment and the legacy cut-over comparison."""
     if rule.get("date_field"):
         return doc.get(rule["date_field"])
     return _doc_date(doc)
@@ -1995,8 +2002,10 @@ def _link_target_doctype(doc, fieldname):
         return None
 
 
-def _resolve_segment(doc, seg, sep):
-    """Resolve one non-Number segment to a string ('' if empty/not applicable)."""
+def _resolve_segment(doc, seg, sep, rule=None):
+    """Resolve one non-Number segment to a string ('' if empty/not applicable).
+    `rule` supplies rule-level settings (the Document Date Field for the
+    Fiscal Year segment); without it the hardcoded date fallback applies."""
     stype = seg.get("segment_type")
 
     if stype == "Static Text":
@@ -2020,7 +2029,8 @@ def _resolve_segment(doc, seg, sep):
         )
 
     if stype == "Fiscal Year":
-        fy = get_fiscal_year_from_date(_doc_date(doc)) or ""
+        doc_date = _rule_date(doc, rule) if rule else _doc_date(doc)
+        fy = get_fiscal_year_from_date(doc_date) or ""
         # avoid separator collision when the separator is '/'
         return fy.replace("/", "-") if sep == "/" else fy
 
@@ -2134,7 +2144,7 @@ def _resolve_segments(doc, rule, sep):
             resolved.append({"num": True, "len": int(seg.get("number_length") or 6), "glue": glue})
             has_number = True
         else:
-            value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep))
+            value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep, rule))
             resolved.append({"num": False, "value": value, "glue": glue})
     return resolved, has_number
 
