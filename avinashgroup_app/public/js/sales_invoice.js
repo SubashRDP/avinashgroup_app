@@ -26,6 +26,7 @@ frappe.ui.form.on("Sales Invoice", {
             frm.__sync_print_count();   // reconcile when returning to the form
         }
         hide_cancel_delete_when_ird_locked(frm);
+        update_total_amount_preview(frm);
     },
 
     before_save: function(frm) {
@@ -335,9 +336,32 @@ function calculate_total_amount_including_excise(frm) {
     }
     
     total_including_excise = flt(total_including_excise, 5);
-    
+
     frm.set_value('custom_total_amount_including_excise', total_including_excise);
     frm.refresh_field('custom_total_amount_including_excise');
+    update_total_amount_preview(frm);
+}
+
+/**
+ * Fill the virtual custom_expected_grand_total field ("Total Amount"):
+ *
+ *   Total Amount = Total Amount Including Excise + Total VAT Amount
+ *
+ * The real VAT/excise tax rows are only appended to the taxes table on the
+ * SERVER (salesinvoice_taxes.update_taxes_table), so before save the form's
+ * grand_total shows only the net amount. This field previews what grand_total
+ * will become after save. Display only: the field is virtual (no DB column)
+ * and grand_total is never written client-side. Direct assignment (not
+ * set_value) so the preview never marks the form dirty.
+ */
+function update_total_amount_preview(frm) {
+    if (!frm || !frm.doc) return;
+
+    const total = flt(frm.doc.custom_total_amount_including_excise)
+                + flt(frm.doc.custom_total_vat_amount);
+
+    frm.doc.custom_expected_grand_total = flt(total, 5);
+    frm.refresh_field('custom_expected_grand_total');
 }
 
 /**
@@ -425,6 +449,7 @@ function calculate_vat_total(frm) {
     vat_total = flt(vat_total, 5);
     frm.set_value('custom_total_vat_amount', vat_total);
     frm.refresh_field('custom_total_vat_amount');
+    update_total_amount_preview(frm);
 }
 
 function set_due_date_from_customer(frm) {

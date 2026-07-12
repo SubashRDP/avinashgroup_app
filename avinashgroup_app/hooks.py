@@ -13,7 +13,6 @@ page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 app_include_js = [
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=10.6",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.0",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.1",
@@ -41,6 +40,9 @@ doctype_js = {
     # Approval-workflow UI (banner + reject dialog) is now generic — see
     # approval_workflow_auto.js in app_include_js. No per-doctype file needed;
     # any doctype set up via setup_workflow gets it automatically.
+    # moved here from app_include_js: form-only handlers, and doctype_js gets
+    # automatic cache invalidation (no manual ?v= bumps)
+    "Sales Invoice": "public/js/sales_invoice.js",
     "Material Request": "public/js/material_request.js",
     "Purchase Invoice": "public/js/pi.js",
     "Journal Entry": "public/js/journal_entry.js",

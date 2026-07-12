@@ -30,4 +30,5 @@ avinashgroup_app.patches.add_document_no_manual_flag
 avinashgroup_app.patches.add_unique_custom_name_index
 avinashgroup_app.patches.sales_currency_precision_5
 avinashgroup_app.patches.backfill_print_log_branch_name
+avinashgroup_app.patches.add_grand_total_preview_field
 
