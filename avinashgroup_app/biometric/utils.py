@@ -4,6 +4,8 @@ from frappe.utils import flt, now_datetime
 from datetime import datetime
 from collections import defaultdict
 
+from avinashgroup_app.biometric.attendance_sync import desired_log_type, sync_day
+
 # Fallback de-duplication window (minutes) when the sending device has no
 # Duplicate Threshold configured. Matches the Biometric Device field default.
 DEFAULT_DUPLICATE_THRESHOLD_MINUTES = 1.0
@@ -49,7 +51,8 @@ def process_attendance_records(attendance_data, device_identifier=None):
     new punches are merged with existing rows, de-duplicated within the sending
     device's Duplicate Threshold window (near-simultaneous repeats of one
     physical punch are dropped), sorted chronologically, and assigned
-    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ...
+    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ... with the day's
+    last punch forced to OUT (see attendance_sync.desired_log_type).
 
     Re-running with the same batch is idempotent. A late-arriving punch slots
     in by time and downstream rows flip IN↔OUT if needed.
@@ -258,27 +261,38 @@ def _reconcile_day_checkins(
 
     inserted = 0
     relabeled = 0
-    for idx, ts in enumerate(all_times):
-        desired_log_type = "IN" if idx % 2 == 0 else "OUT"
-        existing = existing_by_time.get(ts)
-        if existing:
-            if existing.log_type != desired_log_type:
-                frappe.db.set_value(
-                    "Employee Checkin", existing.name, "log_type", desired_log_type
-                )
-                relabeled += 1
-        else:
-            checkin = frappe.new_doc("Employee Checkin")
-            checkin.employee = employee.name
-            checkin.employee_name = employee.employee_name
-            checkin.custom_company = employee.company
-            checkin.time = ts
-            checkin.log_type = desired_log_type
-            checkin.skip_auto_attendance = 0
-            if device_identifier:
-                checkin.device_id = device_identifier
-            checkin.insert(ignore_permissions=True)
-            inserted += 1
+    # Per-insert Employee Checkin hooks (attendance_sync) are suppressed here:
+    # the pipeline itself labels the merged day and runs one sync_day for the
+    # whole group below, instead of once per punch.
+    frappe.flags.in_biometric_day_reconcile = True
+    try:
+        for idx, ts in enumerate(all_times):
+            desired = desired_log_type(idx, len(all_times))
+            existing = existing_by_time.get(ts)
+            if existing:
+                if existing.log_type != desired:
+                    frappe.db.set_value(
+                        "Employee Checkin", existing.name, "log_type", desired
+                    )
+                    relabeled += 1
+            else:
+                checkin = frappe.new_doc("Employee Checkin")
+                checkin.employee = employee.name
+                checkin.employee_name = employee.employee_name
+                checkin.custom_company = employee.company
+                checkin.time = ts
+                checkin.log_type = desired
+                checkin.skip_auto_attendance = 0
+                if device_identifier:
+                    checkin.device_id = device_identifier
+                checkin.insert(ignore_permissions=True)
+                inserted += 1
+    finally:
+        frappe.flags.in_biometric_day_reconcile = False
+
+    # Late punches for a day whose attendance already exists must update its
+    # computed values (in/out, working hours), not just get linked.
+    sync_day(employee.name, punch_date)
 
     return inserted, relabeled
 

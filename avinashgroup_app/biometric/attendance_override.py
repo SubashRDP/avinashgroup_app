@@ -1,20 +1,13 @@
 import frappe
-from datetime import datetime, timedelta
-from frappe.utils import getdate, get_datetime, today
+from datetime import datetime
+from frappe.utils import getdate, get_datetime
 
-
-def _round_to_minute(seconds):
-    """
-    Round seconds to the nearest whole minute.
-    >= 30 seconds → round up   (e.g. 30m 40s → 31m = 1860s)
-    <  30 seconds → round down (e.g. 30m 20s → 30m = 1800s)
-    """
-    return int((int(seconds) + 30) / 60) * 60
+from avinashgroup_app.biometric.attendance_sync import compute_shift_deviations
 
 
 def set_shift_deviation_fields(doc, method):
     """
-    On Attendance before_save: calculate and store the deviation between
+    On Attendance validate: calculate and store the deviation between
     actual in/out times and the shift start/end times.
 
     - custom_late_entry  : how late the employee punched IN after shift start
@@ -25,6 +18,10 @@ def set_shift_deviation_fields(doc, method):
     Only one of each pair will be non-zero at a time.
     Values are rounded to the nearest minute (>=30s rounds up, <30s rounds down).
     Duration fields store seconds as integers.
+
+    The calculation itself lives in attendance_sync.compute_shift_deviations,
+    shared with the refresh path that updates already-saved Attendance rows
+    when late punches arrive.
     """
     doc.custom_late_entry = 0
     doc.custom_early_entry = 0
@@ -36,82 +33,14 @@ def set_shift_deviation_fields(doc, method):
 
     try:
         shift = frappe.get_cached_doc("Shift Type", doc.shift)
-        attendance_date = getdate(doc.attendance_date)
-
-        shift_start_dt = datetime.combine(attendance_date, datetime.min.time()) + shift.start_time
-        shift_end_dt = datetime.combine(attendance_date, datetime.min.time()) + shift.end_time
-
-        # Overnight shift: end_time < start_time means end falls on next day
-        if shift.end_time < shift.start_time:
-            shift_end_dt += timedelta(days=1)
-
-        if doc.in_time:
-            in_time = get_datetime(doc.in_time)
-            diff = (in_time - shift_start_dt).total_seconds()
-            if diff > 0:
-                doc.custom_late_entry = _round_to_minute(diff)
-            elif diff < 0:
-                doc.custom_early_entry = _round_to_minute(abs(diff))
-
-        if doc.out_time:
-            out_time = get_datetime(doc.out_time)
-            diff = (out_time - shift_end_dt).total_seconds()
-            if diff > 0:
-                doc.custom_late_exit = _round_to_minute(diff)
-            elif diff < 0:
-                doc.custom_early_exit = _round_to_minute(abs(diff))
-
+        doc.update(
+            compute_shift_deviations(shift, doc.attendance_date, doc.in_time, doc.out_time)
+        )
     except Exception:
         frappe.log_error(
             frappe.get_traceback(),
             f"Error calculating shift deviation for Attendance {doc.name}"
         )
-
-
-def reconcile_with_existing_attendance(doc, method=None):
-    """Employee Checkin after_insert: link orphan punches to an existing
-    Present/Half Day Attendance row for the same (employee, date).
-
-    Scope is intentionally narrow — this hook never deletes, never cancels,
-    never changes status. Absent → Present transitions, stale-row cleanup,
-    and any other reconciliation go through the Attendance Fix doctype so
-    HR has a submitted, auditable record of every change.
-
-    Behavior:
-    - Existing row is Present/Half Day and this checkin has no `attendance`
-      link → set it. Pure data-correctness fix, no business decision.
-    - Existing row is Absent → no-op. HR uses Attendance Fix to convert.
-    - No existing row → no-op. HR uses Attendance Fix to materialize.
-
-    Runs only for past-date punches; today's punches go through the normal
-    real-time auto-attendance flow.
-    """
-    if not doc.employee or not doc.time or doc.attendance:
-        return
-    punch_date = getdate(doc.time)
-    if punch_date >= getdate(today()):
-        return
-
-    existing = frappe.db.get_value(
-        "Attendance",
-        {
-            "employee": doc.employee,
-            "attendance_date": punch_date,
-            "docstatus": ("<", 2),
-            "status": ("in", ("Present", "Half Day")),
-        },
-        "name",
-    )
-    if not existing:
-        return
-
-    frappe.db.set_value(
-        "Employee Checkin",
-        doc.name,
-        "attendance",
-        existing,
-        update_modified=False,
-    )
 
 
 def enforce_late_arrival_half_day(doc, method=None):

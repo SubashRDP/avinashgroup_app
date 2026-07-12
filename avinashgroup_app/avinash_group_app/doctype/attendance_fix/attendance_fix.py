@@ -31,6 +31,11 @@ from hrms.hr.doctype.employee_checkin.employee_checkin import (
     update_attendance_in_checkins,
 )
 
+from avinashgroup_app.biometric.attendance_sync import (
+    prepare_checkins_for_shift,
+    refresh_attendance_values,
+)
+
 
 class AttendanceFix(Document):
     def validate(self):
@@ -276,9 +281,13 @@ def reconcile_employee_day(
         return
 
     # Checkins exist for this day. Any non-Absent attendance (Present, Half Day,
-    # On Leave, Work From Home, manual entries) is kept — we only attach the
-    # orphan punches to it. Falling through to mark_attendance_and_link_log
-    # here would raise DuplicateAttendanceError and poison the checkins.
+    # On Leave, Work From Home, manual entries) is kept — we attach the orphan
+    # punches to it, and for Present/Half Day also refresh the row's computed
+    # values (working hours, in/out, late/early, deviations) from the full
+    # punch set, so late punches correct the numbers instead of leaving them
+    # stale forever. Status itself is never changed here. Falling through to
+    # mark_attendance_and_link_log would raise DuplicateAttendanceError and
+    # poison the checkins.
     if existing and existing.status != "Absent":
         orphan_names = [c.name for c in checkins if not c.attendance]
         if orphan_names:
@@ -286,6 +295,13 @@ def reconcile_employee_day(
             counters["checkins_relinked"] += len(orphan_names)
             log_lines.append(
                 f"{employee} {attendance_date}: relinked {len(orphan_names)} orphan checkin(s) to {existing.name}"
+            )
+        if existing.status in ("Present", "Half Day") and refresh_attendance_values(
+            existing.name, shift_doc, checkins
+        ):
+            counters["attendance_created_or_updated"] += 1
+            log_lines.append(
+                f"{employee} {attendance_date}: refreshed values on {existing.name} from checkins"
             )
         return
 
@@ -359,31 +375,6 @@ def _ensure_posting_date(attendance, attendance_date):
         frappe.db.set_value(
             "Attendance", name, "posting_date", attendance_date, update_modified=False
         )
-
-
-def prepare_checkins_for_shift(checkins, shift_doc, include_skipped=False):
-    """Make sure each checkin has shift fields populated. We call stock
-    Employee Checkin.fetch_shift() if shift is missing, mirroring what the
-    scheduled auto-attendance does. Re-fetching also repairs checkins stored
-    before the employee had a shift assignment."""
-    prepared = []
-    for c in checkins:
-        if c.skip_auto_attendance and not include_skipped:
-            continue
-        if not c.shift or not c.shift_actual_end:
-            ck_doc = frappe.get_doc("Employee Checkin", c.name)
-            ck_doc.fetch_shift()
-            ck_doc.db_update()
-            c.shift = ck_doc.shift
-            c.shift_start = ck_doc.shift_start
-            c.shift_end = ck_doc.shift_end
-            c.shift_actual_start = ck_doc.shift_actual_start
-            c.shift_actual_end = ck_doc.shift_actual_end
-
-        if c.shift != shift_doc.name:
-            continue
-        prepared.append(c)
-    return prepared
 
 
 def cancel_and_delete_attendance(existing):

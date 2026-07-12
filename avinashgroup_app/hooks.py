@@ -216,11 +216,17 @@ for _event, _handler in journal_entry_events.items():
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
 
-_add_doc_event(
-    "Employee Checkin",
-    "after_insert",
-    "avinashgroup_app.biometric.attendance_override.reconcile_with_existing_attendance",
-)
+# Employee Checkin lifecycle: keep the day's IN/OUT alternation and any
+# existing Present/Half Day Attendance's computed values consistent when
+# punches are entered, edited or deleted via desk/API, or arrive late for an
+# already-marked day. Status is never changed by these hooks — status
+# transitions stay in Attendance Fix / the hourly self-heal.
+for _event in ("after_insert", "on_update", "after_delete"):
+    _add_doc_event(
+        "Employee Checkin",
+        _event,
+        f"avinashgroup_app.biometric.attendance_sync.checkin_{_event}",
+    )
 
 _add_doc_event(
     "Employee",
