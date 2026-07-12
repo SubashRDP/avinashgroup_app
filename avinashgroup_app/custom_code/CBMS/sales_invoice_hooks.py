@@ -31,13 +31,12 @@ def get_cbms_config(company):
 
 
 def in_cbms_scope(config, posting_date):
-	"""Only invoices posted strictly AFTER the company's CBMS go-live date are ever
-	synced — the date itself is the last pre-CBMS day, so there is no ambiguity
-	about invoices posted on the boundary date, and no retroactive reporting of
+	"""Only invoices posted ON or AFTER the company's CBMS go-live date
+	(Send From Date, inclusive) are ever synced — no retroactive reporting of
 	historical invoices that predate go-live."""
 	if not config.enable_from_date:
 		return False
-	return frappe.utils.getdate(posting_date) > frappe.utils.getdate(config.enable_from_date)
+	return frappe.utils.getdate(posting_date) >= frappe.utils.getdate(config.enable_from_date)
 
 
 def _ird_locked(doc):
