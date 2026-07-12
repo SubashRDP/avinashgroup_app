@@ -25,6 +25,8 @@ app_include_js = [
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
     "/assets/avinashgroup_app/js/ngi_print.js?v=1.0",
+    # must load after ngi_print.js — it chains that file's PrintView descriptor
+    "/assets/avinashgroup_app/js/company_print.js?v=1.1",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.1",
 ]
 
@@ -358,6 +360,7 @@ company_data_to_be_ignored = [
     "Numbering Configuration",
     "Payment - Receipt Type",
     "CBMS Config",
+    "Company Print Template",
     "Dynamic Approval Setting",
     "Nepal BS Period",
     "Sub-Ledger Category",

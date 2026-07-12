@@ -1,0 +1,63 @@
+{
+ "actions": [],
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "print_format",
+  "return_print_format",
+  "print_on_submit"
+ ],
+ "fields": [
+  {
+   "columns": 3,
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "columns": 3,
+   "fieldname": "print_format",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Print Format",
+   "options": "Print Format",
+   "reqd": 1
+  },
+  {
+   "columns": 3,
+   "description": "Used instead of Print Format when the document is a return (is_return). Leave blank to use Print Format for returns too.",
+   "fieldname": "return_print_format",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Return Print Format",
+   "options": "Print Format"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "description": "When the document is submitted from the desk, its print opens automatically in a new tab.",
+   "fieldname": "print_on_submit",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Print on Submit"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Company Print Template Company",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

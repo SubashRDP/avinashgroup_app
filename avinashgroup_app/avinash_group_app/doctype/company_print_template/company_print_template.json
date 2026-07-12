@@ -1,0 +1,75 @@
+{
+ "actions": [],
+ "autoname": "field:document_type",
+ "creation": "2026-07-13 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "document_type",
+  "column_break_header",
+  "enabled",
+  "companies_section",
+  "companies"
+ ],
+ "fields": [
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Document Type",
+   "options": "DocType",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "column_break_header",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "companies_section",
+   "fieldtype": "Section Break",
+   "label": "Company Templates"
+  },
+  {
+   "description": "One row per company. The row's Print Format becomes the default whenever a document of this type belonging to that company is printed.",
+   "fieldname": "companies",
+   "fieldtype": "Table",
+   "label": "Companies",
+   "options": "Company Print Template Company",
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-13 00:00:01.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Company Print Template",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
