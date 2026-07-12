@@ -1,7 +1,20 @@
 # Nepal Gas invoice printing — full context handoff (2026-07-12)
 
 Read this to continue the print-calibration work from any device. Everything
-below was established over 2026-07-11/12 on sijan's laptop.
+below was established over 2026-07-11/12 on sijan's laptop, then re-validated
+2026-07-12 on the dell-Vostro-3670 desktop (see "Desktop rig" below).
+
+## CORRECTIONS (2026-07-12, desktop session)
+
+- The site is **avinas1**, not `nepalgas` — run `bench --site avinas1 console`.
+- The desk also has "Nepal Gas Invoice Dot Matrix" and "A4 Portrait" formats
+  (DB-only, for the production dot-matrix); the Canon calibration rig uses
+  Pre-Printed / Plain Paper as before.
+- After pulling on a new machine, run `bench build --app avinashgroup_app` or
+  `ngi_print.js` 404s and the desk Print button silently falls back to the
+  broken A4 browser-print.
+- The IRD `custom_print_count` bumps on ANY `download_pdf` of a submitted
+  invoice regardless of format; the bench-console/`lp` path does not bump it.
 
 ## The system (already built, committed, pushed)
 
@@ -44,6 +57,34 @@ below was established over 2026-07-11/12 on sijan's laptop.
   lpadmin with ppd/CanonLBP-2900-3000.ppd.
 - User cuts the sprocket strips off real forms at the perforations
   (−12.7mm each side → sheet 215.9×139.7mm) and feeds them to the Canon.
+
+## Desktop rig (dell-Vostro-3670, set up 2026-07-12 — Canon moved here)
+
+- Working CUPS queue is **LBP2900-CAPT**. The auto-created `LBP2900` queue is
+  broken (generic driver, CAPT printer can't parse it) and is left disabled +
+  rejecting; do not re-enable, jobs sent there wedge the USB port.
+- Driver: captdriver compiled without root — `apt-get download libcups2-dev
+  libcupsimage2-dev` + `dpkg -x` for headers, then
+  `gcc -O2 -Ihdr/usr/include -o rastertocapt src/*.c
+  /usr/lib/x86_64-linux-gnu/libcupsimage.so.2 .../libcups.so.2`.
+  Binary+PPD staged in `/home/dell/captdriver-local/`; the binary must be
+  copied root-owned to `/usr/lib/cups/filter/rastertocapt` (cupsd refuses
+  non-root-owned filters, and also checks the containing dir — absolute-path
+  filters in $HOME do NOT work). Queue created as dell via lpadmin group.
+- rastertocapt cannot run standalone (needs CUPS back/side channel — CAPT is
+  bidirectional); it only works under cupsd.
+- PPD has a named size **NGIForm "NGI Form 215.9x139.7mm" (612×396pt)** set as
+  default, and the queue default is `print-scaling=none`, so
+  `lp -d LBP2900-CAPT file.pdf` needs no options. In the browser print dialog
+  pick paper "NGI Form 215.9x139.7mm" + **Scale: Actual size**, else Chrome
+  rotates/shrinks onto A4 portrait (the "comes out landscape" symptom).
+- The full-width 241.3mm desk PDF center-crops onto the 215.9mm cut sheet via
+  `print-scaling=none` — exactly the two 12.7mm strip cuts, so the pypdf shift
+  recipe below is optional on this rig.
+- Zombie-backend failure mode (seen twice): a job hangs "now printing"/"waiting
+  for printer", a root-owned `usb://Canon/...` process is stuck in
+  `ps aux | grep 'usb://'`. Fix: cancel the job, power-cycle the printer; the
+  backend then exits and the next job flows.
 
 ## Print recipes (run from `sites/` via `bench --site nepalgas console`)
 
