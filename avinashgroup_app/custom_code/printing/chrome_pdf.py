@@ -59,6 +59,11 @@ _TIMEOUT = 60  # seconds
 
 
 def find_chrome() -> str | None:
+	# Servers without root access can extract the Chrome .deb anywhere and
+	# point to the binary via `chrome_binary` in (common_)site_config.json.
+	configured = frappe.conf.get("chrome_binary")
+	if configured and os.access(configured, os.X_OK):
+		return configured
 	for name in _CHROME_BINARIES:
 		path = shutil.which(name)
 		if path:
