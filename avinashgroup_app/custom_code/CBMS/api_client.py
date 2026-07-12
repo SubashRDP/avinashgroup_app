@@ -171,6 +171,28 @@ def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry"):
 		return False
 
 
+@frappe.whitelist()
+def sync_now(cbms_doctype, name):
+	"""The "Sync Now" button on CBMS Bill / CBMS Bill Return forms: send this
+	one record to IRD right now instead of waiting for the retry cron. Reuses
+	the exact send functions the cron uses (same success codes, same activity
+	logging, logged with Triggered From = Manual)."""
+	frappe.only_for(("System Manager", "Accounts Manager"))
+	if cbms_doctype not in ("CBMS Bill", "CBMS Bill Return"):
+		frappe.throw(frappe._("Sync Now supports only CBMS Bill and CBMS Bill Return."))
+	if not frappe.db.exists(cbms_doctype, name):
+		frappe.throw(frappe._("{0} {1} does not exist.").format(cbms_doctype, name))
+
+	if cbms_doctype == "CBMS Bill":
+		ok = send_bill_to_cbms(name, triggered_from="Manual")
+	else:
+		ok = send_return_to_cbms(name, triggered_from="Manual")
+
+	status, response = frappe.db.get_value(cbms_doctype, name, ["sync_status", "sync_response"])
+	held = not ok and status != "Failed" and _last_log_operation(name) == "Held"
+	return {"ok": bool(ok), "sync_status": status, "sync_response": response, "held": held}
+
+
 def _last_log_operation(cbms_ref):
 	return frappe.db.get_value(
 		"CBMS Sync Log", {"cbms_ref": cbms_ref}, "operation", order_by="creation desc"
