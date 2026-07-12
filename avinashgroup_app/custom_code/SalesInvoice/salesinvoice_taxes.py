@@ -411,6 +411,15 @@ def validate_salesinvoice(doc, method=None):
     validate_custom_fields(doc)
     force_selling_warehouse(doc)
     assert_taxes_table_built(doc)
+    validate_return_reason(doc)
+
+
+def validate_return_reason(doc):
+    """Returns must state why. The form enforces this via mandatory_depends_on
+    on custom_reason_for_return; this is the server-side guarantee for
+    documents created through the API or scripts."""
+    if getattr(doc, "is_return", 0) and not (doc.get("custom_reason_for_return") or "").strip():
+        frappe.throw(_("Reason for Return is mandatory for a return Sales Invoice."))
 
 
 def assert_taxes_table_built(doc):

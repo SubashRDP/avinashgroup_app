@@ -31,4 +31,5 @@ avinashgroup_app.patches.add_unique_custom_name_index
 avinashgroup_app.patches.sales_currency_precision_5
 avinashgroup_app.patches.backfill_print_log_branch_name
 avinashgroup_app.patches.add_grand_total_preview_field
+avinashgroup_app.patches.return_reason_mandatory
 
