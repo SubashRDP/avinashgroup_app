@@ -1039,6 +1039,56 @@ def _series_current(key):
     return frappe.utils.cint(row[0][0]) if row and row[0][0] is not None else 0
 
 
+# --- O(1) fast path: skip the MAX() data scan while the counter is verified --
+#
+# The tabSeries counter is authoritative: every in-app write keeps it at or
+# above the highest stored number (draws increment it, manual entries bump it
+# via _keep_counter_above_manual, delete-revert only returns the newest draw).
+# The MAX(CAST(...)) scan on every draw/preview exists solely to catch data
+# written OUTSIDE the app (raw-SQL imports, restored backups) — but it is O(n)
+# over the scope and dominates save time past ~1M rows. So: after a scan
+# OBSERVES the committed invariant (data max <= counter), remember that for an
+# hour in Redis and skip the scan. The marker is deliberately NOT set when the
+# invariant only becomes true through this transaction's own reseed — a later
+# rollback would revert the counter but not the Redis marker.
+
+FLOOR_VERIFY_TTL = 3600
+
+
+def _floor_key(series_key):
+    return "docno_floor_verified:" + series_key
+
+
+def _floor_verified(series_key):
+    try:
+        return bool(frappe.cache().get_value(_floor_key(series_key)))
+    except Exception:
+        return False
+
+
+def _mark_floor_verified(series_key):
+    try:
+        frappe.cache().set_value(_floor_key(series_key), 1, expires_in_sec=FLOOR_VERIFY_TTL)
+    except Exception:
+        pass
+
+
+def _clear_floor_verified(series_key):
+    """Drop a series' verification, forcing the next draw to rescan — called
+    when a freshly drawn number turns out to be taken (external write within
+    the marker's TTL)."""
+    try:
+        frappe.cache().delete_value(_floor_key(series_key))
+    except Exception:
+        pass
+
+
+def _series_row_exists(key):
+    """True when the tabSeries row itself exists — _series_current can't tell
+    "no row" from "current = 0", and the scan skip is only safe with a row."""
+    return bool(frappe.db.sql("SELECT 1 FROM `tabSeries` WHERE name = %s", key))
+
+
 def peek_next_document_no(doc):
     """Non-reserving preview of the number this doc would get right now.
     No lock, no side effects — safe for the live form preview. Mirrors the
@@ -1048,10 +1098,14 @@ def peek_next_document_no(doc):
     scope = _docno_scope(doc)
     if not scope:
         return None
-    return max(
-        _current_max_document_no(doc, scope),
-        _series_current(_docno_series_key(doc, scope)),
-    ) + 1
+    key = _docno_series_key(doc, scope)
+    if _series_row_exists(key) and _floor_verified(key):
+        return _series_current(key) + 1
+    data_max = _current_max_document_no(doc, scope)
+    current = _series_current(key)
+    if data_max <= current:
+        _mark_floor_verified(key)
+    return max(data_max, current) + 1
 
 
 def _next_number_hint(doc):
@@ -1101,9 +1155,19 @@ def _draw_next_document_no(doc, scope):
     brief row lock — not a transaction-long `SELECT ... FOR UPDATE` — which is
     what avoids the gap-lock deadlock against core `getseries` (the doc-name
     series) that a long-held lock would cause. The counter is authoritative:
-    `current + 1` guarantees each concurrent save a distinct number."""
+    `current + 1` guarantees each concurrent save a distinct number.
+
+    Fast path: while the scope's floor is verified (see _floor_verified) the
+    O(n) data scan is skipped — floor=1 makes the GREATEST upsert a pure
+    counter increment."""
     key = _docno_series_key(doc, scope)
-    floor = _current_max_document_no(doc, scope) + 1
+    if _series_row_exists(key) and _floor_verified(key):
+        floor = 1
+    else:
+        data_max = _current_max_document_no(doc, scope)
+        floor = data_max + 1
+        if data_max <= _series_current(key):
+            _mark_floor_verified(key)
     frappe.db.sql(
         "INSERT INTO `tabSeries` (`name`, `current`) VALUES (%(key)s, %(floor)s) "
         "ON DUPLICATE KEY UPDATE `current` = GREATEST(`current` + 1, %(floor)s)",
@@ -2164,7 +2228,7 @@ def _join_parts(parts, sep):
     return sep.join(chunks) if chunks else None
 
 
-def _build_from_segments(doc, rule, commit_series=True):
+def _build_from_segments(doc, rule, commit_series=True, force_scan=False):
     """Build the number by joining resolved segments (in order) with the separator.
 
     - Non-empty non-Number segments identify the series (the counter key).
@@ -2202,7 +2266,18 @@ def _build_from_segments(doc, rule, commit_series=True):
     series_key = sep.join(key_parts) + sep
     number_len = next((r["len"] for r in resolved if r["num"]), 6)
 
-    floor = _series_data_floor(doc, rule, resolved, sep)
+    # Same fast path as _draw_next_document_no: skip the O(n) data-floor scan
+    # while the series is verified; floor=0 leaves the counter authoritative.
+    # force_scan (the collision self-heal in set_custom_branch_name) drops the
+    # marker and takes the scan unconditionally.
+    if not force_scan and _series_row_exists(series_key) and _floor_verified(series_key):
+        floor = 0
+    else:
+        if force_scan:
+            _clear_floor_verified(series_key)
+        floor = _series_data_floor(doc, rule, resolved, sep)
+        if floor <= _series_current(series_key):
+            _mark_floor_verified(series_key)
     seq = (
         _draw_engine_series(series_key, number_len, floor)
         if commit_series
@@ -2376,6 +2451,15 @@ def set_custom_branch_name(doc):
         number = _build_from_segments(doc, rule)
         if number:
             doc.set(target, number)
+            if _number_belongs_to_other_doc(doc, target):
+                # A FRESH draw can only collide when the counter lags numbers
+                # stored behind its back (raw-SQL write, restored backup) and
+                # the fast path skipped the healing scan. Rescan and redraw
+                # once; _validate_unique_number still throws if even the
+                # rescanned draw collides.
+                healed = _build_from_segments(doc, rule, force_scan=True)
+                if healed:
+                    doc.set(target, healed)
             _validate_unique_number(doc, target)
             return
         # rule matched but produced nothing (e.g. empty source field) ->

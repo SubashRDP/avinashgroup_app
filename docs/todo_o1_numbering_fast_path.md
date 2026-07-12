@@ -1,7 +1,12 @@
-# TODO: O(1) document-numbering fast path ("trust the counter")
+# O(1) document-numbering fast path ("trust the counter")
 
-**Status: planned, not implemented** (deferred by request; plan approved for later).
-Full plan: `~/.claude/plans/enumerated-yawning-globe.md` (session 2026-07-12).
+**Status: IMPLEMENTED 2026-07-13** in `custom_code/Override/naming_series.py`
+(`_floor_verified` / `_mark_floor_verified` / `_series_row_exists`, used by
+`_draw_next_document_no`, `peek_next_document_no`, `_build_from_segments`).
+One deliberate hardening over the original plan: the marker is set ONLY when a
+scan OBSERVES data_max <= counter in committed state — never on the strength
+of the same transaction's reseed, which a rollback would revert while the
+Redis marker survived. The benchmark table below is kept for reference.
 
 ## Why
 
