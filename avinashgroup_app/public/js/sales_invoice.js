@@ -25,7 +25,7 @@ frappe.ui.form.on("Sales Invoice", {
         if (frm.__sync_print_count) {
             frm.__sync_print_count();   // reconcile when returning to the form
         }
-        hide_cancel_delete_when_ird_locked(frm);
+        hide_cancel_delete(frm);
         update_total_amount_preview(frm);
     },
 
@@ -70,21 +70,31 @@ frappe.ui.form.on("Sales Invoice", {
 
 });
 
-// Invoices under IRD e-billing (posting date on/after the company's CBMS cutoff,
-// flagged server-side via __onload.ird_locked) can never be cancelled or deleted.
-// The server hooks (CBMS/sales_invoice_hooks.py) are the real block; this only
-// removes the Cancel/Delete entries from the form menu so users aren't offered
-// an action that will be refused.
-function hide_cancel_delete_when_ird_locked(frm) {
-    if (frm.is_new() || !(frm.doc.__onload && frm.doc.__onload.ird_locked)) {
+// Sales Invoices are never cancelled or deleted from the desk — an issued IRD
+// invoice number must leave no gap; wrong invoices are reversed with a credit
+// note. The server hooks (CBMS/sales_invoice_hooks.py) hard-block invoices in
+// CBMS scope; this removes the actions from the UI for ALL invoices:
+//   - "Delete" dropdown entry AND its Shift+Ctrl+D shortcut (removing the menu
+//     item alone is not enough — the shortcut clicks the detached element)
+//   - "Cancel", which on submitted docs is the secondary action BUTTON, not a
+//     menu entry (plus the menu entry, defensively)
+function hide_cancel_delete(frm) {
+    if (frm.is_new()) {
         return;
     }
-    // the menu is (re)built in the same refresh cycle — trim it after it settles
+    // the menu/actions are (re)built in the same refresh cycle — trim after they settle
     setTimeout(function() {
         frm.page.menu.find("a.dropdown-item").filter(function() {
             const label = decodeURIComponent($(this).attr("data-label") || "");
             return label === __("Cancel") || label === __("Delete");
         }).parent().remove();
+
+        frappe.ui.keys.off("shift+ctrl+d", frm.page);   // Delete shortcut
+
+        const sec = frm.page.btn_secondary;
+        if (sec && sec.text().trim() === __("Cancel")) {
+            frm.page.clear_secondary_action();
+        }
     }, 100);
 }
 
