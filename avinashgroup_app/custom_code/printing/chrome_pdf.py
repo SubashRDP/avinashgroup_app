@@ -64,7 +64,8 @@ def find_chrome() -> str | None:
 	# in a home directory) declare the binary in site_config/common_site_config,
 	# e.g. "chrome_path": "/home/frappe/bin/google-chrome". Needed because web
 	# workers under supervisor inherit a bare PATH that misses user dirs.
-	configured = frappe.conf.get("chrome_path")
+	# ("chrome_binary" is accepted as an alias.)
+	configured = frappe.conf.get("chrome_path") or frappe.conf.get("chrome_binary")
 	if configured and os.access(configured, os.X_OK):
 		return configured
 	for name in _CHROME_BINARIES:
