@@ -1,0 +1,36 @@
+/* All desk list views: hide per-row activity meta (modified time "1w",
+   comment count). !important because comment-count carries Bootstrap's
+   d-flex (display: flex !important).
+   Also let the main section fill whatever width the sidebar isn't using,
+   whichever way the sidebar was hidden (no-list-sidebar body class or the
+   header toggle button's inline style). */
+
+[data-page-route^="List/"] .layout-main-section-wrapper {
+	flex: 1;
+	max-width: 100%;
+}
+
+/* Frappe reserves ~20% of every row for the right-side meta area
+   (level-left flex:4/min-width:80% vs level-right flex:1). With the
+   modified/comment meta hidden that space sits empty while data columns
+   (e.g. Voucher No.) truncate. Reclaim it: fixed narrow right section —
+   just enough for the header's "20 of 1,000+" counter and the like icon —
+   identical on header and rows so their columns stay aligned. */
+[data-page-route^="List/"] .list-row .level-left,
+[data-page-route^="List/"] .list-row-head .level-left {
+	flex: 1;
+	min-width: 0;
+}
+
+[data-page-route^="List/"] .list-row .level-right,
+[data-page-route^="List/"] .list-row-head .level-right {
+	flex: 0 0 140px;
+	justify-content: flex-end;
+	white-space: nowrap;
+}
+
+[data-page-route^="List/"] .list-row-activity .modified,
+[data-page-route^="List/"] .list-row-activity .comment-count,
+[data-page-route^="List/"] .list-row-activity .comment-count + .mx-2 {
+	display: none !important;
+}

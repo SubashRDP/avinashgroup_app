@@ -19,31 +19,37 @@ def before_save_salesinvoice(doc, method=None):
     """
     # 0. Ensure VAT Apply On defaults are set
     ensure_vat_apply_on_defaults(doc)
-    
-    # 1. Calculate item-level totals (respects manual excise)
-    calculate_custom_total(doc)
-    
-    # 2. Calculate total amount including excise (sum of custom_total from all items)
-    calculate_total_amount_including_excise(doc)
-    
-    # 3. VAT calculation (strict rules)
-    calculate_item_vat_amounts(doc)
-    calculate_total_vat_amount(doc)
-    
-    # 4. Excise totals (aggregation only, no calculation)
-    calculate_total_excise_amount(doc)
-    
-    # 5. Update taxes table
-    update_taxes_table(doc)
-    
-    # 6. Calculate custom_total_amount
-    calculate_custom_total_amount(doc)
-    
-    # 7. Let ERPNext calculate standard totals
-    doc.calculate_taxes_and_totals()
 
-    # 8. For return documents, ensure VAT amounts are negative (must run last)
+    # 1. Returns: restore manual VAT/excise from the original invoice rows
+    #    (they are no_copy fields, so the return mapper delivers them as 0)
+    #    and force return signs. Must happen BEFORE any totals or the taxes
+    #    table are computed — a late sign flip leaves the taxes table and
+    #    grand total built from the wrong values.
+    restore_return_item_taxes(doc)
+    apply_return_excise_sign(doc)
+
+    # 2. Calculate item-level totals (respects manual excise)
+    calculate_custom_total(doc)
+
+    # 3. Calculate total amount including excise (sum of custom_total from all items)
+    calculate_total_amount_including_excise(doc)
+
+    # 4. VAT calculation (strict rules), then return sign before aggregation
+    calculate_item_vat_amounts(doc)
     apply_return_vat_sign(doc)
+    calculate_total_vat_amount(doc)
+
+    # 5. Excise totals (aggregation only, no calculation)
+    calculate_total_excise_amount(doc)
+
+    # 6. Update taxes table
+    update_taxes_table(doc)
+
+    # 7. Calculate custom_total_amount
+    calculate_custom_total_amount(doc)
+
+    # 8. Let ERPNext calculate standard totals
+    doc.calculate_taxes_and_totals()
 
 
 def before_validate_salesinvoice(doc, method=None):
@@ -153,9 +159,58 @@ def calculate_total_vat_amount(doc):
     frappe.logger().debug(f"Total VAT: {total_vat}")
 
 
+def restore_return_item_taxes(doc):
+    """
+    Return invoices arrive from the Create > Return mapper with
+    custom_vat_amount, custom_excise_value and custom_total zeroed — those
+    fields are no_copy on Sales Invoice Item. 'VAT 13%' rows self-heal
+    because their VAT is recalculated from the (negative) net amount, but
+    manual 'Amount' VAT and excise are never recalculated, so without this
+    the credit note silently drops them: the refund is short by the VAT and
+    no VAT reversal reaches the GL. Restore both from the original invoice
+    row, scaled to the returned qty (partial returns), with the return sign.
+    """
+    if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Sales Invoice"):
+        return
+
+    for item in doc.items:
+        source_row = getattr(item, "sales_invoice_item", None)
+        if not source_row:
+            continue
+        src = frappe.db.get_value(
+            "Sales Invoice Item",
+            source_row,
+            ["qty", "custom_vat_amount", "custom_excise_value", "custom_vat_apply_on"],
+            as_dict=True,
+        )
+        if not src or not flt(src.qty):
+            continue
+        ratio = abs(flt(item.qty)) / abs(flt(src.qty))
+        if src.custom_vat_apply_on == "Amount" and not flt(item.custom_vat_amount):
+            item.custom_vat_amount = flt(-abs(flt(src.custom_vat_amount) * ratio), 5)
+        if not flt(item.custom_excise_value):
+            item.custom_excise_value = flt(-abs(flt(src.custom_excise_value) * ratio), 5)
+
+
+def apply_return_excise_sign(doc):
+    """
+    For return Sales Invoices, force custom_excise_value negative on each
+    item (covers manually entered excise on a return; a positive excise on
+    negative items would understate the return and charge excise back).
+    """
+    if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Sales Invoice"):
+        return
+
+    for item in doc.items:
+        item.custom_excise_value = -abs(flt(getattr(item, "custom_excise_value", 0)) or 0)
+
+
 def apply_return_vat_sign(doc):
     """
     For return Sales Invoices, force custom_vat_amount negative on each item.
+    Runs after calculate_item_vat_amounts and BEFORE the totals/taxes table
+    are built (only manual 'Amount' rows can carry a wrong positive sign;
+    'VAT 13%' rows are already negative via the negative net amount).
     """
     if not (getattr(doc, "is_return", 0) and getattr(doc, "doctype", None) == "Sales Invoice"):
         return
@@ -355,6 +410,34 @@ def validate_salesinvoice(doc, method=None):
     # validate_sales_invoice(doc, method)
     validate_custom_fields(doc)
     force_selling_warehouse(doc)
+    assert_taxes_table_built(doc)
+
+
+def assert_taxes_table_built(doc):
+    """Last line of defense: never let an invoice reach the database with
+    VAT/excise computed on its items but no matching row in the taxes table
+    (that combination posts a VAT-free grand total to the GL). Runs on both
+    save and submit-on-create, so inside the atomic save-and-submit it aborts
+    the whole transaction instead of leaving a wrong submitted invoice."""
+    checks = [
+        (flt(doc.custom_total_vat_amount), "VAT", "VAT"),
+        (flt(doc.custom_total_excise_amount), "348204", "Excise Duty"),
+    ]
+    for total, account_prefix, label in checks:
+        if not total:
+            continue
+        account = find_account_by_prefix(doc.company, account_prefix)
+        if not account:
+            frappe.throw(_(
+                "{0} of {1} is calculated on this invoice but no {0} account "
+                "starting with '{2}' exists for company {3}."
+            ).format(label, total, account_prefix, doc.company))
+        if not has_tax_row(doc, account):
+            frappe.throw(_(
+                "{0} of {1} is calculated on this invoice but the Sales Taxes "
+                "and Charges table has no {0} row. The tax pipeline did not "
+                "run — this invoice must not be saved or submitted as is."
+            ).format(label, total))
 
 
 def validate_quotation(doc, method=None):

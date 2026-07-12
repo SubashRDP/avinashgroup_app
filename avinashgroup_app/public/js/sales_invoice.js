@@ -25,6 +25,7 @@ frappe.ui.form.on("Sales Invoice", {
         if (frm.__sync_print_count) {
             frm.__sync_print_count();   // reconcile when returning to the form
         }
+        hide_cancel_delete_when_ird_locked(frm);
     },
 
     before_save: function(frm) {
@@ -67,6 +68,24 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
 });
+
+// Invoices under IRD e-billing (posting date on/after the company's CBMS cutoff,
+// flagged server-side via __onload.ird_locked) can never be cancelled or deleted.
+// The server hooks (CBMS/sales_invoice_hooks.py) are the real block; this only
+// removes the Cancel/Delete entries from the form menu so users aren't offered
+// an action that will be refused.
+function hide_cancel_delete_when_ird_locked(frm) {
+    if (frm.is_new() || !(frm.doc.__onload && frm.doc.__onload.ird_locked)) {
+        return;
+    }
+    // the menu is (re)built in the same refresh cycle — trim it after it settles
+    setTimeout(function() {
+        frm.page.menu.find("a.dropdown-item").filter(function() {
+            const label = decodeURIComponent($(this).attr("data-label") || "");
+            return label === __("Cancel") || label === __("Delete");
+        }).parent().remove();
+    }, 100);
+}
 
 // Printing an invoice bumps custom_print_count server-side, but that happens
 // in a separate print/PDF window — the open form never hears about it. When the

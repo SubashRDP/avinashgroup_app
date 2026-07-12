@@ -25,6 +25,8 @@ app_include_js = [
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.4",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
+    "/assets/avinashgroup_app/js/ngi_print.js?v=1.0",
+    "/assets/avinashgroup_app/js/list_cleanup.js?v=1.1",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -32,6 +34,7 @@ app_include_js = [
 # only when the user is on a query-report route.
 app_include_css = [
     "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
+    "/assets/avinashgroup_app/css/list_cleanup.css?v=1.2",
 ]
 
 doctype_js = {
@@ -76,15 +79,29 @@ supplier_quotation_events = {
 
 sales_invoice_specific_events = {
     "before_validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_validate_salesinvoice",
-    "before_save": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
-    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice",
+    # Tax pipeline runs on `validate`, NOT `before_save`: desk Save on a Sales
+    # Invoice draft is escalated to Submit (save_and_submit.py), and Frappe runs
+    # `before_submit` instead of `before_save` on that path — a before_save hook
+    # would silently skip building the taxes table on every desk-created invoice.
+    # `validate` runs on both save and submit-on-create (same pitfall as
+    # attendance_events below). Pipeline first, then validate_salesinvoice,
+    # which asserts the taxes table matches the computed VAT/excise totals.
+    "validate": [
+        "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
+        "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice",
+    ],
     # IRD copy labeling: count real prints (Tax Invoice / Copy of Original / Copy of Original 2 ...)
     "before_print": "avinashgroup_app.custom_code.SalesInvoice.print_count.before_print",
 }
 
 cbms_sales_invoice_events = {
     "on_submit": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.on_submit",
+    # IRD immutability from the CBMS cutoff date (enable_from_date): in-scope
+    # invoices can never be cancelled or deleted; onload flags them so the desk
+    # form hides those menu entries too.
+    "onload": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.onload",
     "before_cancel": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.before_cancel",
+    "on_trash": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.on_trash",
 }
 
 quotation_events = {

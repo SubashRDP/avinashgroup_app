@@ -15,6 +15,11 @@ The counter increments only on an *actual* print — the browser Print button
 (printview?trigger_print=1), a PDF download, or raw/server printing. Rendering
 the preview in the Print view does NOT consume a copy number; the preview shows
 the title the NEXT print will get.
+
+Each actual print also inserts a Sales Invoice Print Log row (who, when, which
+copy) — the per-event trail behind the Invoice Activity Report. Logging must
+never block the print: a log failure goes to the Error Log and the print
+proceeds.
 """
 
 import frappe
@@ -58,8 +63,26 @@ def before_print(doc, method=None, *args, **kwargs):
 		doc.custom_print_count = cint(
 			frappe.db.get_value("Sales Invoice", doc.name, "custom_print_count")
 		)
+		_log_print(doc)
 		# printview / download_pdf are GET requests — commit explicitly so the
 		# increment survives the request-end rollback.
 		frappe.db.commit()
 	else:
 		doc.custom_print_count = stored + 1
+
+
+def _log_print(doc):
+	try:
+		frappe.get_doc(
+			{
+				"doctype": "Sales Invoice Print Log",
+				"sales_invoice": doc.name,
+				"company": doc.company,
+				"copy_number": cint(doc.custom_print_count),
+			}
+		).insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(
+			title=f"Print log failed for Sales Invoice {doc.name}",
+			message=frappe.get_traceback(),
+		)

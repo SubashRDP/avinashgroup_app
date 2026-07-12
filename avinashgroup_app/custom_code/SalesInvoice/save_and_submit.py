@@ -33,13 +33,26 @@ def _has_active_workflow(doctype):
 def savedocs(doc, action):
 	parsed = json.loads(doc) if isinstance(doc, str) else doc
 
-	if (
+	escalated = (
 		action == "Save"
 		and parsed.get("doctype") == "Sales Invoice"
 		and cint(parsed.get("docstatus") or 0) == 0
 		and frappe.has_permission("Sales Invoice", "submit")
 		and not _has_active_workflow("Sales Invoice")
-	):
+	)
+	if escalated:
 		action = "Submit"
 
-	return _core_savedocs(doc, action)
+	ret = _core_savedocs(doc, action)
+
+	if escalated:
+		# On insert+submit the in-memory doc keeps status "Draft":
+		# SalesInvoice.set_status early-returns while the doc is new, and the
+		# real status ("Unpaid", ...) is written by update_voucher_outstanding
+		# onto a *reloaded* copy the response never sees. Refresh it so the
+		# desk doesn't render a submitted invoice with a Draft badge.
+		for d in frappe.response.get("docs") or []:
+			if d.get("doctype") == "Sales Invoice" and d.get("name"):
+				d["status"] = frappe.db.get_value("Sales Invoice", d["name"], "status")
+
+	return ret

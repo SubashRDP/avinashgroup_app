@@ -13,8 +13,9 @@ frappe.query_reports["Materialized Return Report"] = {
 		{
 			fieldname: "fiscal_year",
 			label: __("Fiscal Year"),
-			fieldtype: "Data",
-			description: __("Nepali fiscal year as stored on the bill, e.g. 2081/82"),
+			fieldtype: "Link",
+			options: "Fiscal Year",
+			default: frappe.defaults.get_user_default("fiscal_year"),
 		},
 		{
 			fieldname: "from_date",

@@ -50,6 +50,19 @@ class DeliveryNote(ERPNextDeliveryNote):
 
 
 class CustomSalesInvoice(ERPNextSalesInvoice):
+	def before_submit(self):
+		# The desk's atomic save-and-submit (save_and_submit.py) makes Frappe run
+		# before_submit INSTEAD of before_save, so core before_save logic would be
+		# silently skipped on desk-created invoices. Re-run it here — both methods
+		# recompute from the payments child table, so a second run on the normal
+		# two-step path is a no-op — and refresh the audit modifier stamp so the
+		# submitting user is recorded even when they didn't author the draft.
+		self.set_account_for_mode_of_payment()
+		self.set_paid_amount()
+		from avinashgroup_app.utils.audit_file_manager import set_audit_fields
+		set_audit_fields(self)
+		super().before_submit()
+
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:

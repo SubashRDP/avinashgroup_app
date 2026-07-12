@@ -20,6 +20,7 @@ from frappe.utils import flt
 from frappe.utils.nestedset import get_ancestors_of
 
 from avinashgroup_app.custom_code.CBMS import utils
+from avinashgroup_app.custom_code.CBMS.activity_log import log_cbms_activity
 from avinashgroup_app.custom_code.CBMS.api_client import send_bill_to_cbms, send_return_to_cbms
 
 
@@ -35,6 +36,34 @@ def in_cbms_scope(config, posting_date):
 	if not config.enable_from_date:
 		return False
 	return frappe.utils.getdate(posting_date) >= frappe.utils.getdate(config.enable_from_date)
+
+
+def _ird_locked(doc):
+	"""True when the invoice falls under IRD e-billing: its company has an enabled
+	CBMS Config and the posting date is on/after the go-live cutoff
+	(enable_from_date). Such invoices are immutable — no cancel, no delete."""
+	config = get_cbms_config(doc.company)
+	return bool(config and in_cbms_scope(config, doc.posting_date))
+
+
+def onload(doc, method=None):
+	"""Tell the desk form whether this invoice is IRD-locked so it can hide the
+	Cancel/Delete menu entries (sales_invoice.js). The server-side blocks below
+	are the real enforcement."""
+	doc.set_onload("ird_locked", _ird_locked(doc))
+
+
+def on_trash(doc, method=None):
+	if frappe.flags.in_install or frappe.flags.in_uninstall or frappe.flags.in_migrate:
+		return
+	if _ird_locked(doc):
+		frappe.throw(
+			frappe._(
+				"Sales Invoice {0} is under IRD e-billing (on/after the CBMS cutoff date) "
+				"and cannot be deleted: its invoice number is already consumed and the "
+				"IRD numbering sequence must have no gaps."
+			).format(doc.name)
+		)
 
 
 def is_export_invoice(sales_invoice):
@@ -220,15 +249,27 @@ def on_submit(doc, method=None):
 		if doc.is_return:
 			cbms_doc = create_cbms_bill_return(doc)
 			enqueue_method = "avinashgroup_app.custom_code.CBMS.api_client.send_return_to_cbms"
-			enqueue_kwargs = {"cbms_bill_return_name": cbms_doc.name} if cbms_doc else None
+			enqueue_kwargs = (
+				{"cbms_bill_return_name": cbms_doc.name, "triggered_from": "Submit"}
+				if cbms_doc
+				else None
+			)
 		else:
 			cbms_doc = create_cbms_bill(doc)
 			enqueue_method = "avinashgroup_app.custom_code.CBMS.api_client.send_bill_to_cbms"
-			enqueue_kwargs = {"cbms_bill_name": cbms_doc.name} if cbms_doc else None
+			enqueue_kwargs = (
+				{"cbms_bill_name": cbms_doc.name, "triggered_from": "Submit"} if cbms_doc else None
+			)
 
 		if not cbms_doc:
 			return
 
+		log_cbms_activity(
+			cbms_doc,
+			"Queued",
+			details="Created on invoice submit and queued for sync",
+			triggered_from="Submit",
+		)
 		frappe.db.commit()
 		frappe.enqueue(enqueue_method, queue="default", timeout=300, **enqueue_kwargs)
 	except Exception:
@@ -241,10 +282,19 @@ def on_submit(doc, method=None):
 
 
 def before_cancel(doc, method=None):
-	"""Block cancelling a Sales Invoice/Return that IRD has already been told about —
-	once a bill is reported to CBMS it can't just disappear from our side. Anything not
-	yet synced (or CBMS not enabled) can still be cancelled freely.
+	"""Block cancelling any Sales Invoice/Return under IRD e-billing (posting date
+	on/after the CBMS cutoff): an issued IRD invoice is never cancelled — it is
+	reversed by a credit note. Invoices outside CBMS scope can still be cancelled,
+	unless their bill somehow already reached IRD (Synced).
 	"""
+	if _ird_locked(doc):
+		frappe.throw(
+			frappe._(
+				"Sales Invoice {0} is under IRD e-billing (on/after the CBMS cutoff date) "
+				"and cannot be cancelled. Issue a Credit Note (Sales Return) against it instead."
+			).format(doc.name)
+		)
+
 	cbms_doctype = "CBMS Bill Return" if doc.is_return else "CBMS Bill"
 	sync_status = frappe.db.get_value(cbms_doctype, {"sales_invoice": doc.name}, "sync_status")
 	if sync_status == "Synced":
