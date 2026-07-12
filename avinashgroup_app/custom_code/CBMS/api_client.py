@@ -7,6 +7,7 @@ is always safe to call from a background job without risking an unhandled-except
 
 import frappe
 import requests
+from frappe.utils import getdate
 
 from avinashgroup_app.custom_code.CBMS.activity_log import log_cbms_activity
 
@@ -176,6 +177,26 @@ def _last_log_operation(cbms_ref):
 	)
 
 
+def _original_predates_cbms(bill_return, config):
+	"""True when the return's original invoice was posted before the company's
+	CBMS go-live (enable_from_date, inclusive scope): the original was reported
+	through the pre-CBMS system, no CBMS Bill will ever exist for it, and the
+	return must be sent instead of held forever. Any missing data -> False,
+	i.e. fail safe into the existing hold.
+
+	Deliberately does not import in_cbms_scope from sales_invoice_hooks (that
+	module imports this one); `<` here is the exact complement of its `>=`."""
+	return_against = frappe.db.get_value(
+		"Sales Invoice", bill_return.sales_invoice, "return_against"
+	)
+	if not return_against or not config.enable_from_date:
+		return False
+	posting_date = frappe.db.get_value("Sales Invoice", return_against, "posting_date")
+	if not posting_date:
+		return False
+	return getdate(posting_date) < getdate(config.enable_from_date)
+
+
 def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 	"""POST a CBMS Bill Return to /api/billreturn. Always returns True/False, never raises."""
 	try:
@@ -190,18 +211,24 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 		original_synced = frappe.db.get_value(
 			"CBMS Bill", {"invoice_number": bill_return.ref_invoice_number}, "sync_status"
 		)
+		bypass_note = ""
 		if original_synced != "Synced":
-			# No HTTP attempt happens while held, and the retry cron re-enters
-			# every few minutes — log the hold once, not per retry.
-			if _last_log_operation(bill_return.name) != "Held":
-				log_cbms_activity(
-					bill_return,
-					"Held",
-					details=f"Original bill {bill_return.ref_invoice_number} is not Synced yet",
-					triggered_from=triggered_from,
-				)
-				frappe.db.commit()
-			return False
+			if _original_predates_cbms(bill_return, config):
+				# The original was reported through the pre-CBMS system — there
+				# is no CBMS Bill to wait for; send the return directly.
+				bypass_note = "Original invoice predates CBMS go-live — sent without original bill"
+			else:
+				# No HTTP attempt happens while held, and the retry cron re-enters
+				# every few minutes — log the hold once, not per retry.
+				if _last_log_operation(bill_return.name) != "Held":
+					log_cbms_activity(
+						bill_return,
+						"Held",
+						details=f"Original bill {bill_return.ref_invoice_number} is not Synced yet",
+						triggered_from=triggered_from,
+					)
+					frappe.db.commit()
+				return False
 
 		response = requests.post(
 			RETURN_URL, json=_build_return_payload(bill_return, config), timeout=REQUEST_TIMEOUT
@@ -209,11 +236,16 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 		code = _response_code(response)
 
 		if response.status_code == 200 and code in RETURN_SUCCESS_CODES:
-			log_cbms_activity(bill_return, "Synced", response_code=code, triggered_from=triggered_from)
+			log_cbms_activity(
+				bill_return, "Synced", details=bypass_note,
+				response_code=code, triggered_from=triggered_from,
+			)
 			_record_result("CBMS Bill Return", bill_return.name, "Synced", code)
 			return True
 
 		error = f"{code}: {RETURN_ERRORS.get(code, 'Unknown error')}"
+		if bypass_note:
+			error = f"{error} ({bypass_note})"
 		log_cbms_activity(bill_return, "Failed", details=error, response_code=code, triggered_from=triggered_from)
 		_record_result("CBMS Bill Return", bill_return.name, "Failed", error)
 		return False
