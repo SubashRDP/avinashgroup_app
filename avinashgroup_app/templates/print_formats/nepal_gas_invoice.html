@@ -132,15 +132,12 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- endif -%}
 {%- set grand_total = doc.rounded_total or doc.grand_total -%}
 
-{#- IRD copy labeling, same series as custom_code/SalesInvoice/print_count.py.
-    Returns are credit notes, and all figures print positive: the document
+{#- IRD copy labeling: invoice_copy_titles (print_count.py) returns one title
+    per sheet this print event produces — the first print of an invoice is the
+    INVOICE + TAX INVOICE pair, so the whole form renders once per title.
+    Returns are credit memos, and all figures print positive: the document
     type states the direction. -#}
-{%- set n_print = doc.get('custom_print_count') or 1 -%}
-{%- set base_title = 'CREDIT NOTE' if is_cn else 'TAX INVOICE' -%}
-{%- if n_print <= 1 -%}{%- set copy_label = base_title -%}
-{%- elif n_print == 2 -%}{%- set copy_label = 'COPY OF ORIGINAL' -%}
-{%- else -%}{%- set copy_label = 'COPY OF ORIGINAL ' ~ (n_print - 1) -%}{%- endif -%}
-{%- if is_cn and n_print > 1 -%}{%- set copy_label = copy_label ~ ' (CREDIT NOTE)' -%}{%- endif -%}
+{%- set copy_titles = invoice_copy_titles(doc) -%}
 
 {#- ----------------------------- helpers -------------------------------- -#}
 {%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false) -%}
@@ -203,8 +200,10 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- endfor -%}
 {%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
 
+{%- for copy_label in copy_titles -%}
+{%- set copy_last = loop.last -%}
 {%- for page_items in item_pages -%}
-{%- set is_last = loop.last -%}
+{%- set is_last = copy_last and loop.last -%}
 {%- set page_no = loop.index -%}
 {%- set T = P.table -%}
 <div class="ngi-sheet{% if is_last %} last{% endif %}">
@@ -307,7 +306,10 @@ If a whole print is shifted on a given printer, change only ox / oy.
 
   {#- ============================ DATA ================================= -#}
 
-  {%- if draw_form or n_print > 1 or is_cn -%}
+  {#- the pre-printed roll already says TAX INVOICE, so the data-only overlay
+      skips exactly that title; every other title (INVOICE, CREDIT MEMO, the
+      copy series) must be typed onto the form -#}
+  {%- if draw_form or copy_label != 'TAX INVOICE' -%}
     {%- call at(P.copy_label.x, P.copy_label.y, P.copy_label.w, 'center', true, 8.5) %}{{ copy_label }}{% endcall -%}
   {%- endif -%}
 
@@ -365,4 +367,5 @@ If a whole print is shifted on a given printer, change only ox / oy.
   {%- endif -%}
   </div>
 </div>
+{%- endfor -%}
 {%- endfor -%}

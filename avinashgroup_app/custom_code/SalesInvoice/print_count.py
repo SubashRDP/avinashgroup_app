@@ -4,12 +4,17 @@
 """IRD print-copy tracking for Sales Invoice.
 
 The IRD electronic-billing rules require the software to count how many times
-an invoice is printed and to label every reprint as a copy of the original:
+an invoice is printed and to label every reprint as a copy of the original.
+`invoice_copy_titles` is the single source of truth for the series — the NGI
+Jinja template and the ESC/P builder both call it:
 
-	1st print  -> Tax Invoice
-	2nd print  -> Copy of Original
-	3rd print  -> Copy of Original 2
-	nth print  -> Copy of Original (n - 1)
+	1st print  -> INVOICE + TAX INVOICE   (one print event, two sheets)
+	2nd print  -> COPY OF ORIGINAL
+	3rd print  -> COPY OF ORIGINAL 1
+	nth print  -> COPY OF ORIGINAL (n - 2)
+
+	Returns print a single CREDIT MEMO instead of the invoice pair; their
+	reprints follow the same copy series suffixed "(CREDIT MEMO)".
 
 The counter increments only on an *actual* print — the browser Print button
 (printview?trigger_print=1), a PDF download, or raw/server printing. Rendering
@@ -33,6 +38,27 @@ PRINT_OUTPUT_CMDS = {
 	"frappe.utils.weasyprint.download_pdf",
 	"frappe.www.printview.get_rendered_raw_commands",
 }
+
+
+def invoice_copy_titles(doc) -> list[str]:
+	"""Titles of the sheets this print event produces, in print order.
+
+	Driven by doc.custom_print_count, which before_print has already set to the
+	number this render represents (preview shows the upcoming print, so a
+	never-printed invoice previews the INVOICE + TAX INVOICE pair).
+	"""
+	n = cint(doc.get("custom_print_count")) or 1
+	if cint(doc.get("is_return")):
+		if n <= 1:
+			return ["CREDIT MEMO"]
+		return [_copy_of_original(n) + " (CREDIT MEMO)"]
+	if n <= 1:
+		return ["INVOICE", "TAX INVOICE"]
+	return [_copy_of_original(n)]
+
+
+def _copy_of_original(n: int) -> str:
+	return "COPY OF ORIGINAL" if n == 2 else f"COPY OF ORIGINAL {n - 2}"
 
 
 def is_actual_print() -> bool:

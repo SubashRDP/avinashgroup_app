@@ -33,6 +33,8 @@ next form's top regardless of how much was printed.
 import frappe
 from frappe.utils import fmt_money, formatdate
 
+from avinashgroup_app.custom_code.SalesInvoice.print_count import invoice_copy_titles
+
 ESC = "\x1b"
 FF = "\x0c"
 
@@ -165,18 +167,17 @@ def build(doc) -> str:
 				vat += t.tax_amount or 0
 	grand = doc.get("rounded_total") or doc.get("grand_total") or 0
 
-	n_print = doc.get("custom_print_count") or 1
-	base = "CREDIT NOTE" if is_cn else "TAX INVOICE"
-	copy_label = base if n_print <= 1 else ("COPY OF ORIGINAL" if n_print == 2 else f"COPY OF ORIGINAL {n_print - 1}")
-	if is_cn and n_print > 1:
-		copy_label += " (CREDIT NOTE)"
+	# One full form run per copy title: the first print of an invoice is the
+	# INVOICE + TAX INVOICE pair (two form feeds), reprints a single copy.
+	copy_titles = invoice_copy_titles(doc)
 
 	items = list(doc.items)
 	pages = [items[i : i + ROWS_PER_PAGE] for i in range(0, len(items), ROWS_PER_PAGE)] or [[]]
 
 	out = [f"{ESC}@", f"{ESC}C{chr(33)}", f"{ESC}x{chr(1)}"]  # init, form=33 lines(5.5in), LQ mode
 	P = POS
-	for pno, page_items in enumerate(pages, 1):
+	runs = [(t, pno, pi) for t in copy_titles for pno, pi in enumerate(pages, 1)]
+	for copy_label, pno, page_items in runs:
 		last = pno == len(pages)
 		el: list = []
 		_el(el, P["copy_label"][0], P["copy_label"][1], copy_label, bold=True)
