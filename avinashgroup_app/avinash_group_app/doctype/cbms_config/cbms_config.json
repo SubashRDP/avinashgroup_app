@@ -34,7 +34,7 @@
    "label": "Enable CBMS Sync"
   },
   {
-   "description": "Sales Invoices/Returns posted before this date are never sent to CBMS — only invoices on or after this go-live date are in scope. Required whenever CBMS Sync is enabled.",
+   "description": "The last day BEFORE CBMS: Sales Invoices/Returns posted AFTER this date are sent to CBMS; invoices posted on or before it are never sent. Required whenever CBMS Sync is enabled.",
    "fieldname": "enable_from_date",
    "fieldtype": "Date",
    "in_list_view": 1,
