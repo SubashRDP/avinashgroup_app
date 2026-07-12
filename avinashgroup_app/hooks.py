@@ -27,7 +27,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/ngi_print.js?v=1.0",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=1.1",
-    "/assets/avinashgroup_app/js/list_cleanup.js?v=1.1",
+    "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -35,7 +35,6 @@ app_include_js = [
 # only when the user is on a query-report route.
 app_include_css = [
     "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
-    "/assets/avinashgroup_app/css/list_cleanup.css?v=1.2",
 ]
 
 doctype_js = {
@@ -156,6 +155,7 @@ jinja = {
     "methods": [
         "avinashgroup_app.custom_code.CBMS.utils.bs_date_str",
         "avinashgroup_app.custom_code.printing.escp_invoice.ngi_escp",
+        "avinashgroup_app.custom_code.SalesInvoice.print_count.invoice_copy_titles",
     ],
 }
 
