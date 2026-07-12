@@ -78,6 +78,7 @@ def _log_print(doc):
 			{
 				"doctype": "Sales Invoice Print Log",
 				"sales_invoice": doc.name,
+				"branch_name": doc.get("custom_branch_name"),
 				"company": doc.company,
 				"copy_number": cint(doc.custom_print_count),
 			}

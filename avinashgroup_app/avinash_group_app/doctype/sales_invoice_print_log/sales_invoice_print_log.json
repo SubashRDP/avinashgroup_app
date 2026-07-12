@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "sales_invoice",
+  "branch_name",
   "company",
   "copy_number"
  ],
@@ -22,9 +23,17 @@
    "search_index": 1
   },
   {
+   "description": "Branch-wise invoice number (custom_branch_name) at the time of printing.",
+   "fieldname": "branch_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Branch Name",
+   "read_only": 1
+  },
+  {
    "fieldname": "company",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Company",
    "options": "Company",
@@ -42,7 +51,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-07-11 00:00:00.000000",
+ "modified": "2026-07-12 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Sales Invoice Print Log",
