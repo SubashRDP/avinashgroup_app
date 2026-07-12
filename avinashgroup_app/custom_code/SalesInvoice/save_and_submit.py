@@ -51,8 +51,18 @@ def savedocs(doc, action):
 		# real status ("Unpaid", ...) is written by update_voucher_outstanding
 		# onto a *reloaded* copy the response never sees. Refresh it so the
 		# desk doesn't render a submitted invoice with a Draft badge.
+		#
+		# Returns get no such repair: their outstanding is tracked on
+		# return_against, so update_voucher_outstanding never revisits the
+		# return itself and its DB status would stay "Draft" forever.
+		# Recompute on a reloaded copy (no longer "new") when that happens.
 		for d in frappe.response.get("docs") or []:
 			if d.get("doctype") == "Sales Invoice" and d.get("name"):
-				d["status"] = frappe.db.get_value("Sales Invoice", d["name"], "status")
+				status = frappe.db.get_value("Sales Invoice", d["name"], "status")
+				if status == "Draft":
+					si = frappe.get_doc("Sales Invoice", d["name"])
+					si.set_status(update=True, update_modified=False)
+					status = si.status
+				d["status"] = status
 
 	return ret
