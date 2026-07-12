@@ -1,0 +1,22 @@
+/* Stock frappe reserves a fifth of every list row for the right-side meta
+   area (.level-left flex:4/min-width:80% vs .level-right flex:1) no matter
+   how little it holds, so long data values (Voucher No., invoice names…)
+   truncate while that space sits mostly empty. Pin the right section to a
+   fixed width — enough for the header's "20 of 1,538" counter and the row
+   meta (modified time, comments, like) — identical on header and rows so
+   their columns stay aligned, and give everything else to the data columns.
+   The meta itself stays visible (unlike the earlier, rolled-back version
+   that hid it). */
+
+[data-page-route^="List/"] .list-row .level-left,
+[data-page-route^="List/"] .list-row-head .level-left {
+	flex: 1;
+	min-width: 0;
+}
+
+[data-page-route^="List/"] .list-row .level-right,
+[data-page-route^="List/"] .list-row-head .level-right {
+	flex: 0 0 180px;
+	justify-content: flex-end;
+	white-space: nowrap;
+}
