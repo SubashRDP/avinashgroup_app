@@ -1,7 +1,7 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
-frappe.query_reports["Materialized Report"] = {
+frappe.query_reports["CBMS Activity Report"] = {
 	filters: [
 		{
 			fieldname: "company",
@@ -11,27 +11,28 @@ frappe.query_reports["Materialized Report"] = {
 			default: frappe.defaults.get_user_default("Company"),
 		},
 		{
-			fieldname: "fiscal_year",
-			label: __("Fiscal Year"),
-			fieldtype: "Link",
-			options: "Fiscal Year",
-			default: frappe.defaults.get_user_default("fiscal_year"),
-		},
-		{
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
+			default: frappe.datetime.add_days(frappe.datetime.get_today(), -30),
 		},
 		{
 			fieldname: "to_date",
 			label: __("To Date"),
 			fieldtype: "Date",
+			default: frappe.datetime.get_today(),
 		},
 		{
-			fieldname: "sync_status",
-			label: __("Sync Status"),
+			fieldname: "sales_invoice",
+			label: __("Sales Invoice"),
+			fieldtype: "Link",
+			options: "Sales Invoice",
+		},
+		{
+			fieldname: "operation",
+			label: __("Operation"),
 			fieldtype: "Select",
-			options: ["", "Pending", "Synced", "Failed"],
+			options: ["", "Queued", "Synced", "Failed", "Held"],
 		},
 	],
 };

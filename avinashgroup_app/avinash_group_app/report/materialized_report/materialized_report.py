@@ -12,7 +12,7 @@ def execute(filters=None):
 
 def get_columns():
 	return [
-		{"label": _("Fiscal Year"), "fieldname": "fiscal_year", "fieldtype": "Data", "width": 100},
+		{"label": _("Fiscal Year"), "fieldname": "fiscal_year", "fieldtype": "Link", "options": "Fiscal Year", "width": 100},
 		{"label": _("Invoice Number"), "fieldname": "invoice_number", "fieldtype": "Data", "width": 130},
 		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data", "width": 200},
 		{"label": _("Customer PAN"), "fieldname": "customer_pan", "fieldtype": "Data", "width": 130},
@@ -23,13 +23,7 @@ def get_columns():
 		{"label": _("VAT"), "fieldname": "vat", "fieldtype": "Float", "width": 100},
 		{"label": _("Total Amount"), "fieldname": "total_amount", "fieldtype": "Float", "width": 130},
 		{"label": _("Sync with IRD"), "fieldname": "synced_with_ird", "fieldtype": "Check", "width": 110},
-		{
-			"label": _("Sales Invoice"),
-			"fieldname": "sales_invoice",
-			"fieldtype": "Link",
-			"options": "Sales Invoice",
-			"width": 160,
-		},
+		{"label": _("Branch Name"), "fieldname": "branch_name", "fieldtype": "Data", "width": 160},
 	]
 
 
@@ -39,6 +33,9 @@ def get_conditions(filters):
 	if filters.company:
 		conditions.append("bill.company = %(company)s")
 	if filters.fiscal_year:
+		# The filter is a Fiscal Year docname ("82/83"); bills store the IRD
+		# dotted form ("82.83") written by utils.cbms_fiscal_year.
+		filters.fiscal_year = filters.fiscal_year.replace("/", ".")
 		conditions.append("bill.fiscal_year = %(fiscal_year)s")
 	if filters.sync_status:
 		conditions.append("bill.sync_status = %(sync_status)s")
@@ -57,7 +54,7 @@ def get_data(filters):
 	return frappe.db.sql(
 		"""
 		select
-			bill.fiscal_year,
+			replace(bill.fiscal_year, '.', '/') as fiscal_year,
 			bill.invoice_number,
 			bill.buyer_name as customer_name,
 			bill.buyer_pan as customer_pan,
@@ -68,8 +65,9 @@ def get_data(filters):
 			bill.vat,
 			(bill.total_sales + bill.tax_exempted_sales) as total_amount,
 			case when bill.sync_status = 'Synced' then 1 else 0 end as synced_with_ird,
-			bill.sales_invoice
+			si.custom_branch_name as branch_name
 		from `tabCBMS Bill` bill
+		left join `tabSales Invoice` si on si.name = bill.sales_invoice
 		where 1 = 1 {conditions}
 		order by bill.fiscal_year asc, bill.invoice_date asc, bill.invoice_number asc
 		""".format(conditions=get_conditions(filters)),

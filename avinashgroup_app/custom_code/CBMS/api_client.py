@@ -8,6 +8,8 @@ is always safe to call from a background job without risking an unhandled-except
 import frappe
 import requests
 
+from avinashgroup_app.custom_code.CBMS.activity_log import log_cbms_activity
+
 BILL_URL = "https://cbapi.ird.gov.np/api/bill"
 RETURN_URL = "https://cbapi.ird.gov.np/api/billreturn"
 REQUEST_TIMEOUT = 30
@@ -124,7 +126,7 @@ def _record_result(doctype, name, sync_status, sync_response):
 	frappe.db.commit()
 
 
-def send_bill_to_cbms(cbms_bill_name):
+def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry"):
 	"""POST a CBMS Bill to /api/bill. Always returns True/False, never raises."""
 	try:
 		bill = frappe.get_doc("CBMS Bill", cbms_bill_name)
@@ -141,10 +143,13 @@ def send_bill_to_cbms(cbms_bill_name):
 		code = _response_code(response)
 
 		if response.status_code == 200 and code in BILL_SUCCESS_CODES:
+			log_cbms_activity(bill, "Synced", response_code=code, triggered_from=triggered_from)
 			_record_result("CBMS Bill", bill.name, "Synced", code)
 			return True
 
-		_record_result("CBMS Bill", bill.name, "Failed", f"{code}: {BILL_ERRORS.get(code, 'Unknown error')}")
+		error = f"{code}: {BILL_ERRORS.get(code, 'Unknown error')}"
+		log_cbms_activity(bill, "Failed", details=error, response_code=code, triggered_from=triggered_from)
+		_record_result("CBMS Bill", bill.name, "Failed", error)
 		return False
 
 	except Exception:
@@ -152,12 +157,26 @@ def send_bill_to_cbms(cbms_bill_name):
 			title=f"CBMS bill sync failed: {cbms_bill_name}", message=frappe.get_traceback()
 		)
 		frappe.db.rollback()
+		try:
+			bill = frappe.get_doc("CBMS Bill", cbms_bill_name)
+			log_cbms_activity(
+				bill, "Failed", details="Exception during send — see Error Log",
+				triggered_from=triggered_from,
+			)
+		except Exception:
+			pass
 		frappe.db.set_value("CBMS Bill", cbms_bill_name, "sync_status", "Failed", update_modified=False)
 		frappe.db.commit()
 		return False
 
 
-def send_return_to_cbms(cbms_bill_return_name):
+def _last_log_operation(cbms_ref):
+	return frappe.db.get_value(
+		"CBMS Sync Log", {"cbms_ref": cbms_ref}, "operation", order_by="creation desc"
+	)
+
+
+def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 	"""POST a CBMS Bill Return to /api/billreturn. Always returns True/False, never raises."""
 	try:
 		bill_return = frappe.get_doc("CBMS Bill Return", cbms_bill_return_name)
@@ -172,6 +191,16 @@ def send_return_to_cbms(cbms_bill_return_name):
 			"CBMS Bill", {"invoice_number": bill_return.ref_invoice_number}, "sync_status"
 		)
 		if original_synced != "Synced":
+			# No HTTP attempt happens while held, and the retry cron re-enters
+			# every few minutes — log the hold once, not per retry.
+			if _last_log_operation(bill_return.name) != "Held":
+				log_cbms_activity(
+					bill_return,
+					"Held",
+					details=f"Original bill {bill_return.ref_invoice_number} is not Synced yet",
+					triggered_from=triggered_from,
+				)
+				frappe.db.commit()
 			return False
 
 		response = requests.post(
@@ -180,12 +209,13 @@ def send_return_to_cbms(cbms_bill_return_name):
 		code = _response_code(response)
 
 		if response.status_code == 200 and code in RETURN_SUCCESS_CODES:
+			log_cbms_activity(bill_return, "Synced", response_code=code, triggered_from=triggered_from)
 			_record_result("CBMS Bill Return", bill_return.name, "Synced", code)
 			return True
 
-		_record_result(
-			"CBMS Bill Return", bill_return.name, "Failed", f"{code}: {RETURN_ERRORS.get(code, 'Unknown error')}"
-		)
+		error = f"{code}: {RETURN_ERRORS.get(code, 'Unknown error')}"
+		log_cbms_activity(bill_return, "Failed", details=error, response_code=code, triggered_from=triggered_from)
+		_record_result("CBMS Bill Return", bill_return.name, "Failed", error)
 		return False
 
 	except Exception:
@@ -193,6 +223,14 @@ def send_return_to_cbms(cbms_bill_return_name):
 			title=f"CBMS return sync failed: {cbms_bill_return_name}", message=frappe.get_traceback()
 		)
 		frappe.db.rollback()
+		try:
+			bill_return = frappe.get_doc("CBMS Bill Return", cbms_bill_return_name)
+			log_cbms_activity(
+				bill_return, "Failed", details="Exception during send — see Error Log",
+				triggered_from=triggered_from,
+			)
+		except Exception:
+			pass
 		frappe.db.set_value(
 			"CBMS Bill Return", cbms_bill_return_name, "sync_status", "Failed", update_modified=False
 		)
