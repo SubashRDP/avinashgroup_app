@@ -20,3 +20,18 @@
 	justify-content: flex-end;
 	white-space: nowrap;
 }
+
+/* Inside 180px the meta can overflow (avatars + time + comments + like) and
+   flex shrinks the leftmost items first — the "1w" timestamp vanished while
+   the like heart survived. The timestamp matters (IRD audit habit), the like
+   does not: drop the heart (rows + the header's liked-by-me filter) and its
+   separator dot, and let nothing else shrink so the time is always visible. */
+[data-page-route^="List/"] .list-row-activity > * {
+	flex-shrink: 0;
+}
+
+[data-page-route^="List/"] .list-row-activity .list-row-like,
+[data-page-route^="List/"] .list-row-activity .comment-count + .mx-2,
+[data-page-route^="List/"] .list-row-head .list-liked-by-me {
+	display: none !important;
+}

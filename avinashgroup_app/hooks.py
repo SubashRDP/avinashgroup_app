@@ -35,7 +35,7 @@ app_include_js = [
 # only when the user is on a query-report route.
 app_include_css = [
     "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
-    "/assets/avinashgroup_app/css/list_cleanup.css?v=2.0",
+    "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
 ]
 
 doctype_js = {
