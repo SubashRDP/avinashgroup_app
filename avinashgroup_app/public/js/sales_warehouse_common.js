@@ -48,9 +48,33 @@ SELLING_WAREHOUSE_DOCTYPES.forEach(function(doctype) {
 
 
 /**
+ * Resolve the selling warehouse for an item, preferring a branch-specific
+ * override (Item.custom_branch_wise_warehouse) then falling back to the item's
+ * custom_selling_warehouse.
+ *
+ * Single source of truth: this file is loaded globally via app_include_js, so
+ * every selling doctype (Quotation, Sales Order, Delivery Note) AND sales_invoice.js
+ * (loaded per-form after this file) can rely on it. Do NOT redefine it elsewhere.
+ */
+async function _fetch_selling_wh(item_code, custom_branch) {
+    let wh = '';
+    if (custom_branch) {
+        const item_doc = await frappe.db.get_doc('Item', item_code);
+        const brow = (item_doc.custom_branch_wise_warehouse || [])
+            .find(r => r.custom_branch === custom_branch);
+        if (brow) wh = brow.custom_selling_warehouse || '';
+    }
+    if (!wh) {
+        const res = await frappe.db.get_value('Item', item_code, 'custom_selling_warehouse');
+        wh = (res && res.message && res.message.custom_selling_warehouse) || '';
+    }
+    return wh;
+}
+
+
+/**
  * Before save: sweep all item rows and force warehouse = custom_selling_warehouse.
  * Only overrides if custom_selling_warehouse is set — preserves manual user selection.
- * Uses _fetch_selling_wh defined in sales_invoice.js (both loaded globally via app_include_js).
  */
 async function force_all_selling_warehouses(frm) {
     if (!frm.doc.items || !frm.doc.items.length) return;

@@ -502,24 +502,9 @@ function calculate_total(frm) {
 }
 
 
-/**
- * Fetch custom_selling_warehouse for an item, respecting branch-wise config.
- * Returns "" if not configured — caller decides whether to set or leave.
- */
-async function _fetch_selling_wh(item_code, custom_branch) {
-    let wh = '';
-    if (custom_branch) {
-        const item_doc = await frappe.db.get_doc('Item', item_code);
-        const brow = (item_doc.custom_branch_wise_warehouse || [])
-            .find(r => r.custom_branch === custom_branch);
-        if (brow) wh = brow.custom_selling_warehouse || '';
-    }
-    if (!wh) {
-        const res = await frappe.db.get_value('Item', item_code, 'custom_selling_warehouse');
-        wh = (res && res.message && res.message.custom_selling_warehouse) || '';
-    }
-    return wh;
-}
+// _fetch_selling_wh() is defined in sales_warehouse_common.js, which is loaded
+// globally via app_include_js (before this per-form file). Single source of
+// truth — do not redefine it here.
 
 /**
  * Before save: sweep all item rows and force warehouse = custom_selling_warehouse.
