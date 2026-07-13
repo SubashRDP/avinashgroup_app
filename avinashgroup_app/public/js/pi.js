@@ -5,11 +5,21 @@ frappe.ui.form.on('Purchase Invoice', {
     onload: function(frm) {
         // setTimeout so we win the race against company_filter.js (which also uses setTimeout 0)
         setTimeout(() => setup_vehicle_query(frm), 50);
+
+        // Covers returns created via the "Return / Debit Note" button (is_return
+        // is already 1 when the mapped doc opens, so the field trigger never fires)
+        if (frm.is_new()) {
+            set_purchase_type_for_return(frm);
+        }
     },
 
     refresh: function(frm) {
         setTimeout(() => setup_vehicle_query(frm), 50);
         prefetch_vehicles_for_existing_rows(frm);
+    },
+
+    is_return: function(frm) {
+        set_purchase_type_for_return(frm);
     },
 
     items_on_form_rendered: function(frm) {
@@ -32,6 +42,17 @@ frappe.ui.form.on('Purchase Invoice Item', {
         });
     }
 });
+
+// ── Purchase Type for returns ─────────────────────────────────
+function set_purchase_type_for_return(frm) {
+    if (frm.doc.is_return) {
+        if (frm.doc.custom_purchase_type !== 'Purchase Return') {
+            frm.set_value('custom_purchase_type', 'Purchase Return');
+        }
+    } else if (frm.doc.custom_purchase_type === 'Purchase Return') {
+        frm.set_value('custom_purchase_type', '');
+    }
+}
 
 // ── Inline grid rows ──────────────────────────────────────────
 function setup_vehicle_query(frm) {
