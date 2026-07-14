@@ -271,8 +271,21 @@ def on_submit(doc, method=None):
 			details="Created on invoice submit and queued for sync",
 			triggered_from="Submit",
 		)
-		frappe.db.commit()
-		frappe.enqueue(enqueue_method, queue="default", timeout=300, **enqueue_kwargs)
+		# enqueue_after_commit: the job is pushed only when the request's own
+		# transaction commits — never an explicit commit here. A mid-request
+		# commit would make the submitted invoice durable while later code in
+		# the same request can still fail: the user would see a save error, the
+		# invoice would exist anyway, and the queued job would report it to IRD
+		# (irreversible). With this flag, any failure rolls back invoice, CBMS
+		# doc and job together — an error always means nothing happened. The
+		# worker still only ever sees a committed CBMS doc.
+		frappe.enqueue(
+			enqueue_method,
+			queue="default",
+			timeout=300,
+			enqueue_after_commit=True,
+			**enqueue_kwargs,
+		)
 	except Exception:
 		frappe.log_error(
 			title=f"CBMS: failed to record Sales Invoice {doc.name} on submit",

@@ -50,11 +50,17 @@ SELLING_TAX_DOCTYPES.forEach(function(doctype) {
             const row = locals[cdt][cdn];
             if (!row || !row.item_code) return;
 
-            frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
-                frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
+            // Fill the VAT mode only when the row has none — never overwrite
+            // a value the user picked (VAT 0% / Amount must survive item changes).
+            if (!row.custom_vat_apply_on) {
+                frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
+                    frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
+                    frappe.after_ajax(() => selling_toggle_vat_fields(frm, cdt, cdn));
+                    frm.refresh_field('items');
+                });
+            } else {
                 frappe.after_ajax(() => selling_toggle_vat_fields(frm, cdt, cdn));
-                frm.refresh_field('items');
-            });
+            }
         },
 
         qty: function(frm, cdt, cdn) {
@@ -116,9 +122,14 @@ SELLING_TAX_DOCTYPES.forEach(function(doctype) {
         },
 
         items_add: function(frm, cdt, cdn) {
-            frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
+            const row = locals[cdt][cdn];
+            if (row && !row.custom_vat_apply_on) {
+                frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
+                    frappe.after_ajax(() => selling_toggle_vat_fields(frm, cdt, cdn));
+                });
+            } else {
                 frappe.after_ajax(() => selling_toggle_vat_fields(frm, cdt, cdn));
-            });
+            }
         }
     });
 });

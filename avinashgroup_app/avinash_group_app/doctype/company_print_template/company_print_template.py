@@ -73,7 +73,12 @@ class CompanyPrintTemplate(Document):
 
 
 def clear_company_print_template_cache():
+	# Delete now AND after commit: a request racing the save could rebuild the
+	# cache from pre-commit data, resurrecting the old rules permanently. The
+	# realtime event then tells every open desk to re-fetch (company_print.js).
 	frappe.cache().delete_value(CACHE_KEY)
+	frappe.db.after_commit.add(lambda: frappe.cache().delete_value(CACHE_KEY))
+	frappe.publish_realtime("company_print_templates_updated", after_commit=True)
 
 
 @frappe.whitelist()

@@ -13,12 +13,11 @@ page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 app_include_js = [
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.8",
-    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.0",
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=1.9",
+    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.1",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.2",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
-    "/assets/avinashgroup_app/js/payment_entry.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.1",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.4",
@@ -26,7 +25,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
     "/assets/avinashgroup_app/js/ngi_print.js?v=1.0",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
-    "/assets/avinashgroup_app/js/company_print.js?v=1.1",
+    "/assets/avinashgroup_app/js/company_print.js?v=1.3",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
 ]
 
@@ -45,6 +44,7 @@ doctype_js = {
     # moved here from app_include_js: form-only handlers, and doctype_js gets
     # automatic cache invalidation (no manual ?v= bumps)
     "Sales Invoice": "public/js/sales_invoice.js",
+    "Payment Entry": "public/js/payment_entry.js",
     "Material Request": "public/js/material_request.js",
     "Purchase Invoice": "public/js/pi.js",
     "Journal Entry": "public/js/journal_entry.js",

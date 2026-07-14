@@ -83,7 +83,8 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
         },
 
         items_add: function(frm, cdt, cdn) {
-            if (should_apply_vat_default(frm)) {
+            const row = locals[cdt][cdn];
+            if (should_apply_vat_default(frm) && row && !row.custom_vat_apply_on) {
                 frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
                     toggle_vat_fields(frm, cdt, cdn);
                     frm.refresh_field('items');
@@ -301,7 +302,9 @@ function handle_item_code_change(frm, cdt, cdn) {
                 await frappe.model.set_value(cdt, cdn, 'custom_subtype', '');
             }
 
-            if (should_apply_vat_default(frm)) {
+            // Fill the VAT mode only when the row has none — never overwrite
+            // a value the user picked (VAT 0% / Amount must survive item changes).
+            if (should_apply_vat_default(frm) && !row.custom_vat_apply_on) {
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%');
                 await frappe.model.set_value(cdt, cdn, 'custom_vat_rate', 13);
             }

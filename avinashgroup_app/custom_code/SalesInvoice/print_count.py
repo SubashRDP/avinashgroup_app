@@ -40,21 +40,36 @@ PRINT_OUTPUT_CMDS = {
 }
 
 
-def invoice_copy_titles(doc) -> list[str]:
+def invoice_copy_titles(doc, pair=True) -> list[str]:
 	"""Titles of the sheets this print event produces, in print order.
 
 	Driven by doc.custom_print_count, which before_print has already set to the
 	number this render represents (preview shows the upcoming print, so a
 	never-printed invoice previews the INVOICE + TAX INVOICE pair).
+
+	pair=True is the Nepal Gas convention: the first print event produces the
+	INVOICE + TAX INVOICE sheet pair, and every reprint is a copy.
+
+	pair=False (Grihalaxmi) prints ONE sheet per event and spreads the pair
+	over the first two prints instead:
+
+		1st -> INVOICE, 2nd -> TAX INVOICE, 3rd -> COPY OF ORIGINAL,
+		4th -> COPY OF ORIGINAL 2, 5th -> COPY OF ORIGINAL 3, ...
 	"""
 	n = cint(doc.get("custom_print_count")) or 1
 	if cint(doc.get("is_return")):
 		if n <= 1:
 			return ["CREDIT MEMO"]
 		return [_copy_of_original(n) + " (CREDIT MEMO)"]
-	if n <= 1:
-		return ["INVOICE", "TAX INVOICE"]
-	return [_copy_of_original(n)]
+	if pair:
+		if n <= 1:
+			return ["INVOICE", "TAX INVOICE"]
+		return [_copy_of_original(n)]
+	if n == 1:
+		return ["INVOICE"]
+	if n == 2:
+		return ["TAX INVOICE"]
+	return ["COPY OF ORIGINAL" if n == 3 else f"COPY OF ORIGINAL {n - 2}"]
 
 
 def _copy_of_original(n: int) -> str:

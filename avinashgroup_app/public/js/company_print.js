@@ -2,25 +2,39 @@
 // record per Document Type, one child row per company).
 //
 // Rules map (Document Type, Company) -> Print Format — plus an optional
-// Return Print Format used when the document has is_return set — and are
-// fetched once per desk session from
-// company_print_template.get_print_templates (redis-cached server-side,
+// Return Print Format used when the document has is_return set — and come
+// from company_print_template.get_print_templates (redis-cached server-side,
 // invalidated when a rule changes; the endpoint flattens the child rows so
-// this file never sees the parent/child shape). Two behaviours:
+// this file never sees the parent/child shape). Fetched at app_ready, then
+// re-fetched whenever a Company Print Template is saved (realtime event
+// published by the doctype) and on every Print view open — an edited rule
+// must win in already-open desk sessions, not only after a reload. Three
+// behaviours:
 //
-//   1. Print view default: set_default_print_format is patched so a document
+//   1. Direct print from the form: Form.print_doc (the Print menu item, the
+//      toolbar printer icon, Ctrl+P) is patched so a saved document whose
+//      company has a rule prints AT ONCE with that format — no Print view, no
+//      "choose format" step. An alert offers a link to the Print view for the
+//      rare case a different format is wanted. Dirty/new documents fall back
+//      to the stock Print view (a direct print would render the saved version
+//      and silently drop the user's unsaved edits).
+//
+//   2. Print view default: set_default_print_format is patched so a document
 //      whose company has a rule opens the Print view with that format
 //      pre-selected (instead of the doctype-wide default, and instead of the
 //      sticky last-used format — company must win when switching between
-//      documents of different companies).
+//      documents of different companies). Reached via the alert link in (1),
+//      or for doctypes/companies with no rule.
 //
-//   2. Print Immediately on Submit: for doctypes with such a rule, submitting
-//      from the desk opens the print in a new tab at once. Formats whose
-//      pdf_generator is "chrome" (the mm-exact NGI overlays) open through
-//      download_pdf — same route ngi_print.js uses for the Print button —
-//      while everything else opens /printview?trigger_print=1, which pops the
-//      browser print dialog directly. Both routes count as an actual print
-//      for the IRD copy counter (print_count.py).
+//   3. Print Immediately on Submit: for doctypes with such a rule, submitting
+//      from the desk opens the print in a new tab at once.
+//
+// (1) and (3) share one routing rule: formats whose pdf_generator is "chrome"
+// (the mm-exact NGI overlays) open through download_pdf — same route
+// ngi_print.js uses for the Print view's Print button — while everything else
+// opens /printview?trigger_print=1, which pops the browser print dialog
+// directly. Both routes count as an actual print for the IRD copy counter
+// (print_count.py).
 //
 // Submit detection needs TWO hooks because of save_and_submit.py: a Sales
 // Invoice desk Save is escalated to Submit server-side, so the client never
@@ -33,7 +47,34 @@
 
 (function () {
 	let rules = null; // {doctype: {company: rule}}
+	let rules_request = null; // in-flight fetch, shared by concurrent callers
 	const auto_printed = new Set();
+	const registered_doctypes = new Set();
+
+	function load_rules() {
+		if (!rules_request) {
+			rules_request = frappe
+				.xcall(
+					"avinashgroup_app.avinash_group_app.doctype.company_print_template.company_print_template.get_print_templates"
+				)
+				.then(function (list) {
+					rules = {};
+					(list || []).forEach(function (r) {
+						rules[r.document_type] = rules[r.document_type] || {};
+						rules[r.document_type][r.company] = r;
+					});
+					register_auto_print(Object.keys(rules));
+				})
+				.catch(function () {
+					// Config fetch failing must never break the desk; keep the
+					// last-known rules (stock behaviour when none loaded yet).
+				})
+				.then(function () {
+					rules_request = null;
+				});
+		}
+		return rules_request;
+	}
 
 	function get_rule(doctype, doc) {
 		if (!rules || !doc) return null;
@@ -50,24 +91,119 @@
 		return { format: rule.print_format, generator: rule.pdf_generator };
 	}
 
+	// Open the actual print output for (doctype, name) with the selected
+	// format: chrome formats via download_pdf, the rest via the browser print
+	// dialog. Both bump the IRD copy counter server-side.
+	function open_print(doctype, name, sel) {
+		let url;
+		if (sel.generator === "chrome") {
+			url =
+				"/api/method/frappe.utils.print_format.download_pdf?" +
+				new URLSearchParams({
+					doctype: doctype,
+					name: name,
+					format: sel.format,
+					no_letterhead: "0",
+				});
+		} else {
+			url =
+				"/printview?" +
+				new URLSearchParams({
+					doctype: doctype,
+					name: name,
+					format: sel.format,
+					no_letterhead: "0",
+					trigger_print: "1",
+				});
+		}
+		url = frappe.urllib.get_full_url(url);
+
+		const w = window.open(url);
+		if (!w) {
+			// Popup blocked (window.open ran outside the click's user
+			// activation): hand the user a link instead of losing the print.
+			frappe.msgprint({
+				title: __("Print ready"),
+				indicator: "blue",
+				message: __("The browser blocked the print window. {0}", [
+					`<a href="${url}" target="_blank" rel="noopener">${__("Open print")}</a>`,
+				]),
+			});
+		}
+	}
+
 	// ------------------------------------------------------------------
-	// 1. Print view: default the format to the company's template
+	// 1. Direct print from the form — skip the "choose format" step
+	// ------------------------------------------------------------------
+
+	// Form.print_doc is the single entry point for the Print menu item, the
+	// toolbar printer icon, and Ctrl+P. With a company rule the format choice
+	// is already made — print straight away instead of routing to the Print
+	// view. Everything else (no rule, unknown format, unsaved changes) falls
+	// through to the stock behaviour.
+	const FormCls = frappe.ui.form.Form;
+	if (FormCls && !FormCls.prototype._company_print_doc_patched) {
+		const orig_print_doc = FormCls.prototype.print_doc;
+		FormCls.prototype.print_doc = function () {
+			const frm = this;
+			// A direct print renders the SAVED document; with unsaved edits the
+			// stock Print view (which warns about them) is the honest path.
+			if (frm.doc.__islocal || frm.is_dirty()) {
+				return orig_print_doc.apply(this, arguments);
+			}
+			load_rules().then(function () {
+				const rule = get_rule(frm.doctype, frm.doc);
+				const sel = rule && pick_format(rule, frm.doc);
+				if (!sel || !frappe.meta.get_print_formats(frm.doctype).includes(sel.format)) {
+					return orig_print_doc.call(frm);
+				}
+				open_print(frm.doctype, frm.doc.name, sel);
+				const print_view_url = frappe.urllib.get_full_url(
+					"/app/print/" +
+						encodeURIComponent(frm.doctype) +
+						"/" +
+						encodeURIComponent(frm.doc.name)
+				);
+				frappe.show_alert(
+					{
+						message: __("Printing {0} — {1}", [
+							frappe.utils.escape_html(sel.format),
+							`<a href="${print_view_url}">${__("choose another format")}</a>`,
+						]),
+						indicator: "blue",
+					},
+					7
+				);
+			});
+		};
+		FormCls.prototype._company_print_doc_patched = true;
+	}
+
+	// ------------------------------------------------------------------
+	// 2. Print view: default the format to the company's template
 	// ------------------------------------------------------------------
 
 	function patch(cls) {
 		if (!cls || cls.prototype._company_print_patched) return cls;
 		const orig = cls.prototype.set_default_print_format;
 		cls.prototype.set_default_print_format = function () {
-			const rule = this.frm && get_rule(this.frm.doctype, this.frm.doc);
-			if (rule) {
-				const sel = pick_format(rule, this.frm.doc);
-				if (frappe.meta.get_print_formats(this.frm.doctype).includes(sel.format)) {
-					this.print_format_selector.empty();
-					this.print_format_selector.val(sel.format);
-					return;
+			const args = arguments;
+			// Re-fetch the rules first (cheap: redis-cached server-side) so a
+			// template edited after this desk session loaded still wins here.
+			// show() runs this through frappe.run_serially, which waits on the
+			// returned promise before rendering the preview.
+			return load_rules().then(() => {
+				const rule = this.frm && get_rule(this.frm.doctype, this.frm.doc);
+				if (rule) {
+					const sel = pick_format(rule, this.frm.doc);
+					if (frappe.meta.get_print_formats(this.frm.doctype).includes(sel.format)) {
+						this.print_format_selector.empty();
+						this.print_format_selector.val(sel.format);
+						return;
+					}
 				}
-			}
-			return orig.apply(this, arguments);
+				return orig.apply(this, args);
+			});
 		};
 		cls.prototype._company_print_patched = true;
 		return cls;
@@ -95,7 +231,7 @@
 	});
 
 	// ------------------------------------------------------------------
-	// 2. Print immediately on submit
+	// 3. Print immediately on submit
 	// ------------------------------------------------------------------
 
 	function auto_print(frm) {
@@ -106,46 +242,16 @@
 		if (auto_printed.has(key)) return;
 		auto_printed.add(key);
 
-		const sel = pick_format(rule, frm.doc);
-		let url;
-		if (sel.generator === "chrome") {
-			url =
-				"/api/method/frappe.utils.print_format.download_pdf?" +
-				new URLSearchParams({
-					doctype: frm.doctype,
-					name: frm.doc.name,
-					format: sel.format,
-					no_letterhead: "0",
-				});
-		} else {
-			url =
-				"/printview?" +
-				new URLSearchParams({
-					doctype: frm.doctype,
-					name: frm.doc.name,
-					format: sel.format,
-					no_letterhead: "0",
-					trigger_print: "1",
-				});
-		}
-		url = frappe.urllib.get_full_url(url);
-
-		const w = window.open(url);
-		if (!w) {
-			// Popup blocked (window.open ran outside the click's user
-			// activation): hand the user a link instead of losing the print.
-			frappe.msgprint({
-				title: __("Print ready"),
-				indicator: "blue",
-				message: __("The browser blocked the print window. {0}", [
-					`<a href="${url}" target="_blank" rel="noopener">${__("Open print")}</a>`,
-				]),
-			});
-		}
+		open_print(frm.doctype, frm.doc.name, pick_format(rule, frm.doc));
 	}
 
+	// Handlers are registered for every doctype that has any rule — whether to
+	// actually print is decided at fire time (auto_print re-reads the rule), so
+	// toggling Print on Submit mid-session behaves once the rules re-fetch.
 	function register_auto_print(doctypes) {
 		doctypes.forEach(function (dt) {
+			if (registered_doctypes.has(dt)) return;
+			registered_doctypes.add(dt);
 			frappe.ui.form.on(dt, {
 				before_save(frm) {
 					frm.__cpt_was_draft = frm.doc.docstatus === 0;
@@ -164,29 +270,13 @@
 	}
 
 	// ------------------------------------------------------------------
-	// Load rules once the desk session is up
+	// Load rules when the desk session is up; keep them fresh via realtime
 	// ------------------------------------------------------------------
 
 	$(document).on("app_ready", function () {
-		frappe
-			.xcall(
-				"avinashgroup_app.avinash_group_app.doctype.company_print_template.company_print_template.get_print_templates"
-			)
-			.then(function (list) {
-				rules = {};
-				const submit_doctypes = new Set();
-				(list || []).forEach(function (r) {
-					rules[r.document_type] = rules[r.document_type] || {};
-					rules[r.document_type][r.company] = r;
-					if (cint(r.print_on_submit)) {
-						submit_doctypes.add(r.document_type);
-					}
-				});
-				register_auto_print([...submit_doctypes]);
-			})
-			.catch(function () {
-				// Config fetch failing must never break the desk; printing
-				// simply falls back to stock behaviour.
-			});
+		load_rules();
+		frappe.realtime.on("company_print_templates_updated", function () {
+			load_rules();
+		});
 	});
 })();

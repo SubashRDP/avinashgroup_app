@@ -10,6 +10,19 @@ from erpnext.stock.doctype.material_request.material_request import MaterialRequ
 from erpnext.buying.doctype.purchase_order.purchase_order import PurchaseOrder as ERPNextPurchaseOrder
 
 
+def _lenient_warehouse_check(doc, validate):
+	"""Drafts may be saved without a warehouse (it gets filled from the source
+	document or by the user later), but submission must enforce it — otherwise
+	stock documents submit with no warehouse and no Stock Ledger Entry."""
+	if doc.docstatus.is_draft():
+		try:
+			validate()
+		except frappe.ValidationError:
+			pass
+	else:
+		validate()
+
+
 def _restore_warehouse(doc, link_field, source_doctype):
 	"""Restore warehouse from source document item.
 	Only runs during document creation (for_validate=False) so that
@@ -30,10 +43,7 @@ class SalesOrder(ERPNextSalesOrder):
 			_restore_warehouse(self, "quotation_item", "Quotation Item")
 
 	def validate_warehouse(self):
-		try:
-			super().validate_warehouse()
-		except Exception:
-			pass
+		_lenient_warehouse_check(self, super().validate_warehouse)
 
 
 class DeliveryNote(ERPNextDeliveryNote):
@@ -43,10 +53,7 @@ class DeliveryNote(ERPNextDeliveryNote):
 			_restore_warehouse(self, "so_detail", "Sales Order Item")
 
 	def validate_warehouse(self):
-		try:
-			super().validate_warehouse()
-		except Exception:
-			pass
+		_lenient_warehouse_check(self, super().validate_warehouse)
 
 
 class CustomSalesInvoice(ERPNextSalesInvoice):
@@ -75,10 +82,7 @@ class CustomSalesInvoice(ERPNextSalesInvoice):
 					item.warehouse = source_warehouse or ""
 
 	def validate_warehouse(self):
-		try:
-			super().validate_warehouse()
-		except Exception:
-			pass
+		_lenient_warehouse_check(self, super().validate_warehouse)
 
 
 # ─── Buying Hierarchy ─────────────────────────────────────────────────────────
@@ -147,10 +151,7 @@ class PurchaseReceipt(ERPNextPurchaseReceipt):
 			_restore_warehouse(self, "purchase_order_item", "Purchase Order Item")
 
 	def validate_warehouse(self):
-		try:
-			super().validate_warehouse()
-		except Exception:
-			pass
+		_lenient_warehouse_check(self, super().validate_warehouse)
 
 
 class PurchaseInvoice(ERPNextPurchaseInvoice):
@@ -166,10 +167,7 @@ class PurchaseInvoice(ERPNextPurchaseInvoice):
 					item.warehouse = source_warehouse or ""
 
 	def validate_warehouse(self, for_validate=True):
-		try:
-			super().validate_warehouse(for_validate=for_validate)
-		except Exception:
-			pass
+		_lenient_warehouse_check(self, lambda: super(PurchaseInvoice, self).validate_warehouse(for_validate=for_validate))
 
 
 # ─── Other Overrides ──────────────────────────────────────────────────────────

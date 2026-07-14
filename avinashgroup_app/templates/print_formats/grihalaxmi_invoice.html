@@ -1,0 +1,252 @@
+{#- ============================================================================
+Grihalaxmi Metal Industries — A4 portrait Sales Invoice (plain paper, laser)
+=============================================================================
+Layout traced from the legacy software's "sales invoice GLMI 81-82" PDF.
+One template serves both directions of the document:
+
+  normal invoice -> first print is the INVOICE + TAX INVOICE pair, reprints
+                    are COPY OF ORIGINAL n (invoice_copy_titles / print_count)
+  is_return      -> CREDIT MEMO referencing return_against; all figures
+                    print positive — the document type states the direction.
+
+Company furniture (name, logo, VAT number) comes off the Company record so
+the format follows renames/logo swaps; only the Off/Fac address lines are
+template defaults (no Address records exist for GLMI).
+-#}
+{%- set company_logo = frappe.db.get_value('Company', doc.company, 'company_logo') -%}
+{%- set company_vat = frappe.db.get_value('Company', doc.company, 'tax_id') or '' -%}
+{%- set office_line = office_line | default('Off: Balaju - 16, Kathmandu, Nepal') -%}
+{%- set factory_line = factory_line | default('Fac: Rapti Municipality - 6, Chitwan, Nepal') -%}
+
+{#- ------------------------------- data --------------------------------- -#}
+{%- set invoice_no = doc.get('custom_branch_name') or doc.name -%}
+{%- set bs_date = doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date) -%}
+{#- legacy software printed miti as dd/mm/yyyy; flip an ISO yyyy-mm-dd -#}
+{%- if bs_date and bs_date[4:5] == '-' -%}
+  {%- set bs_date = bs_date.split('-') | reverse | join('/') -%}
+{%- endif -%}
+{%- set customer_vat = doc.tax_id or frappe.db.get_value('Customer', doc.customer, 'tax_id') or '' -%}
+{%- set ad_date = frappe.utils.formatdate(doc.posting_date, 'dd/MM/yyyy') -%}
+{%- set address = (doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
+{%- set address = address.rstrip(', ') if address else '' -%}
+{%- set is_cn = doc.is_return -%}
+
+{#- Mode of payment: POS payment row wins; a submitted unpaid invoice is Credit -#}
+{%- set ns = namespace(mode='Credit') -%}
+{%- if doc.get('is_pos') and doc.get('payments') -%}
+  {%- set pm = (doc.payments[0].mode_of_payment or '') | lower -%}
+  {%- if 'cash' in pm -%}{%- set ns.mode = 'Cash' -%}
+  {%- elif 'cheque' in pm or 'check' in pm -%}{%- set ns.mode = 'Cheque' -%}
+  {%- else -%}{%- set ns.mode = 'Other' -%}{%- endif -%}
+{%- elif doc.docstatus == 1 and not doc.get('outstanding_amount') -%}
+  {%- set ns.mode = 'Cash' -%}
+{%- endif -%}
+
+{#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
+{%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
+{%- if not ns2.vat -%}
+  {%- for t in doc.taxes -%}
+    {%- if 'vat' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
+      {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endif -%}
+{%- set excise = doc.get('custom_total_excise_amount') or 0 -%}
+{%- set taxable = doc.get('custom_total_amount_including_excise') or doc.net_total -%}
+{%- set grand_total = doc.rounded_total or doc.grand_total -%}
+
+{#- GLMI prints ONE sheet per print event: TAX INVOICE first, then copies -#}
+{%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}
+{%- set print_stamp = frappe.utils.now_datetime().strftime('%d/%m/%Y %I:%M:%S%p') -%}
+
+{%- set rows_per_page = rows_per_page | default(8) -%}
+
+{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
+
+<style>
+  @page { size: 210mm 297mm; margin: 0; }
+  .print-format { page-width: 210mm; page-height: 297mm;
+    margin-top: 0mm; margin-bottom: 0mm; margin-left: 0mm; margin-right: 0mm; }
+  @media screen {
+    .print-format { padding: 0 !important; }
+  }
+  .print-format, .print-format p, .print-format div, .print-format td, .print-format th {
+    font-family: Arial, Helvetica, sans-serif; color: #000; }
+  .print-format .letter-head, .print-format .print-heading { display: none; }
+
+  .glm-sheet { position: relative; width: 210mm; height: 296mm;
+    padding: 8mm 10mm; page-break-after: always; page-break-inside: avoid; overflow: hidden; }
+  .glm-sheet.last { page-break-after: auto; }
+
+  .glm-head { position: relative; text-align: center; }
+  .glm-head .logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
+  .glm-head .cname { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 22pt; }
+  .glm-head .caddr { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 10pt; line-height: 1.35; }
+  .glm-copy { text-align: right; font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.3; }
+  .glm-vat { text-align: center; font-weight: bold; font-size: 11pt; margin: 1mm 0 3mm; }
+
+  .glm-info { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 4mm; }
+  .glm-info td { padding: 0.6mm 0; vertical-align: top; }
+  .glm-info .l { width: 32mm; }
+  .glm-info .c { width: 3mm; text-align: center; }
+  .glm-info .rl { width: 28mm; }
+  .glm-info .rv { width: 48mm; white-space: nowrap; }
+
+  table.glm-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
+  table.glm-items th, table.glm-items td { border: 0.35mm solid #000; padding: 1mm 1.5mm; }
+  table.glm-items th { font-size: 9pt; text-align: center; }
+  table.glm-items td.body { vertical-align: top; height: 118mm; padding: 0; overflow: hidden; }
+  .cell-stack div { padding: 1.2mm 1.5mm 0; line-height: 1.25; white-space: nowrap; overflow: hidden; }
+  .cell-stack .wrap { white-space: normal; }
+
+  table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.9mm 1mm; white-space: nowrap; overflow: hidden; }
+  table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.9mm 1.5mm; }
+  table.glm-items td.words { vertical-align: top; font-size: 9pt; }
+  table.glm-items td.serials { vertical-align: top; font-size: 9.5pt; }
+  .serials div { padding: 1mm 0; }
+
+  .glm-terms { font-size: 8.5pt; margin-top: 2mm; }
+  .glm-sign { position: absolute; right: 10mm; bottom: 14mm; width: 70mm; text-align: center; }
+  .glm-sign .line { border-top: 0.3mm solid #000; margin-bottom: 1mm; }
+  .glm-sign .who { font-weight: bold; font-size: 9pt; }
+  .glm-pageno { position: absolute; right: 10mm; bottom: 8mm; font-size: 7.5pt; }
+</style>
+
+{#- split items into pages -#}
+{%- set item_pages = [] -%}
+{%- for i in range(0, doc.items | length, rows_per_page) -%}
+  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
+{%- endfor -%}
+{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
+
+{%- for copy_label in copy_titles -%}
+{%- set copy_last = loop.last -%}
+{%- for page_items in item_pages -%}
+{%- set is_last = copy_last and loop.last -%}
+{#- totals close every copy, not just the last one -#}
+{%- set page_last = loop.last -%}
+{%- set page_no = loop.index -%}
+<div class="glm-sheet{% if is_last %} last{% endif %}">
+
+  <div class="glm-head">
+    {%- if company_logo -%}<img class="logo" src="{{ company_logo }}" onerror="this.style.display='none'">{%- endif -%}
+    <div class="cname">{{ doc.company }}</div>
+    <div class="caddr">{{ office_line }}<br>{{ factory_line }}</div>
+  </div>
+  <div class="glm-copy">{{ copy_label }}<br>{{ print_stamp }}</div>
+  <div class="glm-vat">{% if company_vat %}Vat No:{{ company_vat }}{% endif %}</div>
+
+  <table class="glm-info">
+    <tr>
+      <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
+      <td class="rl">Transaction Date</td><td class="c">:</td><td class="rv">{{ ad_date }}</td>
+    </tr>
+    <tr>
+      <td class="l"></td><td class="c"></td><td></td>
+      <td class="rl">Transaction Miti</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer Address</td><td class="c">:</td><td>{{ address }}</td>
+      <td class="rl">Invoice No.</td><td class="c">:</td><td class="rv">{{ invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
+      <td class="rl">Mode of payment</td><td class="c">:</td><td class="rv">{{ ns.mode }}</td>
+    </tr>
+    {%- if is_cn and doc.return_against %}
+    <tr>
+      <td class="l"></td><td class="c"></td><td></td>
+      <td class="rl">Ref Invoice No.</td><td class="c">:</td><td class="rv">{{ doc.return_against }}</td>
+    </tr>
+    {%- endif %}
+  </table>
+
+  {%- set base_sno = (page_no - 1) * rows_per_page -%}
+  <table class="glm-items">
+    <colgroup>
+      <col style="width:9mm;"><col style="width:22mm;"><col style="width:78mm;">
+      <col style="width:12mm;"><col style="width:11mm;"><col style="width:24mm;"><col style="width:34mm;">
+    </colgroup>
+    <tr>
+      <th>S.No.</th><th>H.S Code</th><th>Particular</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Amount</th>
+    </tr>
+    <tr>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ base_sno + loop.index }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ frappe.db.get_value('Item', item.item_code, 'custom_hs_code') or '&nbsp;' }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack">
+        {%- for item in page_items %}<div>{{ item.item_name or item.item_code }}{% if item.batch_no %}<br>Batch No:&nbsp; {{ item.batch_no }}{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ item.uom or '' }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ num(item.rate) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ num(item.amount) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+    </tr>
+
+    {%- if page_last %}
+    <tr>
+      <td class="words" colspan="5" rowspan="2"><b>Amount In Words :</b>{{ doc.in_words or '' }}</td>
+      <td class="tot-label">B. Amount</td>
+      <td class="tot-val">{{ num(doc.total) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">B. Discount</td>
+      <td class="tot-val">{{ num(doc.discount_amount or 0) }}</td>
+    </tr>
+    <tr>
+      {#- labels only — the serial numbers are filled in by hand -#}
+      <td class="serials" colspan="5" rowspan="4">
+        <div>Serial No:</div>
+        <div>A/T</div>
+        <div>B/T</div>
+      </td>
+      <td class="tot-label">Excise Duty</td>
+      <td class="tot-val">{{ num(excise) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">Taxable Value</td>
+      <td class="tot-val">{{ num(taxable) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">VAT @ 13%</td>
+      <td class="tot-val">{{ num(ns2.vat) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">Net Amount</td>
+      <td class="tot-val"><b>{{ num(grand_total) }}</b></td>
+    </tr>
+    {%- else %}
+    <tr>
+      <td class="words" colspan="7"><b>Contd. on next page...</b></td>
+    </tr>
+    {%- endif %}
+  </table>
+
+  <div class="glm-terms">
+    <b>Terms &amp; Conditions</b><br>
+    <b>*</b> Interest @ 18% p.a.will be charged if billing amount is not paid within thirty days of the issue of invoice.
+  </div>
+
+  <div class="glm-sign">
+    <div class="line"></div>
+    <div class="who">For: {{ doc.company }}</div>
+  </div>
+
+  {%- if item_pages | length > 1 %}
+  <div class="glm-pageno">Page {{ page_no }}/{{ item_pages | length }}</div>
+  {%- endif %}
+</div>
+{%- endfor -%}
+{%- endfor -%}

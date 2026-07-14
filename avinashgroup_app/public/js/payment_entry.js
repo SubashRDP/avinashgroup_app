@@ -1,4 +1,20 @@
+// Exact record names from the "Payment - Receipt Type" master (same on all sites)
+const P_TYPE_TO_PAYMENT_TYPE = {
+	"Bank Customers Receipt": "Receive",
+	"Vendor Receipt": "Receive",
+	"Customers/Suppliers Receipt": "Receive",
+	"NOC Payment": "Pay",
+	"Vendor Payment": "Pay",
+	"Contra Voucher- cash to bank": "Internal Transfer",
+};
+
 frappe.ui.form.on("Payment Entry", {
+	custom_p_type: function (frm) {
+		const payment_type = P_TYPE_TO_PAYMENT_TYPE[frm.doc.custom_p_type];
+		if (payment_type && frm.doc.payment_type !== payment_type) {
+			frm.set_value("payment_type", payment_type);
+		}
+	},
 	setup_party_query: function (frm) {
 		if (!frm.fields_dict.party) return;
 		frm.set_query("party", function () {
