@@ -329,11 +329,8 @@ If a whole print is shifted on a given printer, change only ox / oy.
   {%- call at(P.address.x, P.address.y, P.address.w) %}{{ address }}{% endcall -%}
   {%- call at(P.pan.x, P.pan.y, P.pan.w) %}{{ doc.tax_id or '' }}{% endcall -%}
 
-  {#- mark the payment mode: draw a ring around the pre-printed word -#}
-  {%- set mw = P.mode_words[ns.mode] -%}
-  <div style="position:absolute; left:{{ mw[0] - 1.5 + ox }}mm; top:{{ P.mode.ring_y + oy }}mm;
-    width:{{ mw[1] + 3 }}mm; height:{{ P.mode.ring_h }}mm; border:0.5mm solid #000;
-    border-radius:{{ P.mode.ring_h / 2 }}mm;"></div>
+  {#- payment-mode ring removed 2026-07-14 on user request: nothing is
+      printed on the Cash/Credit/Cheque/Other line -#}
 
   {#- item rows -#}
   {%- set base_sno = (page_no - 1) * rows_per_page -%}

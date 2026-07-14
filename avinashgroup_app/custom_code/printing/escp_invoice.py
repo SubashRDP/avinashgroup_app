@@ -39,39 +39,50 @@ ESC = "\x1b"
 FF = "\x0c"
 
 # --- calibration ---------------------------------------------------------
-X0_MM = 22.0  # paper-left -> printer column 0 (FACT prints S.No. at 22.1mm = its col 0)
-Y0_MM = 0.0   # top-of-form offset; + moves everything down
+X0_MM = 12.0  # measured 2026-07-14 with the centre-circle target: column 0
+              # sits 12mm from the paper's left edge on this rig. Every POS x
+              # is a TRUE ruler distance from the left paper edge. Max
+              # reachable ink: X0 + 203.2mm head travel = 215.4mm.
+Y0_MM = -7.7  # measured 2026-07-14 with the centre-circle target: the printer
+              # registers top-of-form 7.7mm below the perforation. With this
+              # correction every POS y is a TRUE ruler distance from the
+              # perforation — measure the form, type the number.
 
 # --- measured field targets (mm from paper top-left), data baseline tops --
+# Re-derived 2026-07-14 from the branch-calibrated "Avinash Sales invoice"
+# HTML format: rendered it on A4 via chrome exactly as the branches print it,
+# read the glyph boxes with pdftotext -bbox, and added X0 (page x=0 lands on
+# printer column 0 = 22mm from the paper edge). The old FACT-scan values are
+# in git history if this calibration turns out worse.
 POS = {
-	"copy_label":   (70.0, 1.5),
-	"invoice_no":   (33.0, 29.6),
-	"ref_inv":      (84.0, 39.0),
-	"trans_date":   (196.5, 27.5),
-	"invoice_date": (196.5, 32.8),
-	"do_no":        (196.1, 37.8),
-	"customer":     (54.0, 43.5),
-	"address":      (54.7, 49.0),
-	"pan":          (55.0, 53.9),
-	"body_top":     (0, 72.4),
+	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
+	"invoice_no":   (35.0, 31.5),  # starts 3.5cm from left, 1.5mm up from 3.3cm per user
+	"ref_inv":      (74.0, 46.7),
+	"trans_date":   (193.0, 31.0),  # printed at 12cpi so the full date fits before the 215.4mm head limit
+	"invoice_date": (193.0, 36.3),  # same column/pitch as trans date, 5.3mm below
+	"do_no":        (193.0, 41.5),
+	"customer":     (52.0, 48.0),  # 5.2cm from left; 2mm up from 5.0cm per user
+	"address":      (52.0, 53.0),
+	"pan":          (52.0, 58.0),
+	"body_top":     (0, 75.0),  # first item row 7.5cm from top per user
 	"row_h":        4.8,
-	"words":        (52.0, 88.0),
+	"words":        (48.0, 90.1),  # wraps at 13.5cm (51 chars at 15cpi), continues down
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        22.1,
-	"c_hs":         27.0,
-	"c_part":       50.5,
-	"r_qty":        160.0,   # right edge for qty
-	"r_rate":       185.0,
-	"r_amt":        225.0,   # right edge; X0+8.0in head travel = 225.2mm hard limit
+	"c_sno":        15.0,
+	"c_hs":         25.0,
+	"c_part":       50.0,    # particulars box runs 5.0 -> 13.8cm (41 chars at 12cpi)
+	"r_qty":        148.0,   # right edge for qty
+	"r_rate":       182.0,
+	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       88.2,
-	"y_taxable":    93.9,
-	"y_vat":        100.1,
-	"y_grand":      106.9,
+	"y_disc":       90.0,  # 1mm up per user
+	"y_taxable":    96.0,  # 1mm up per user
+	"y_vat":        102.0,
+	"y_grand":      110.0,
 }
 
-ROWS_PER_PAGE = 3
-CPI = 10  # default pica; char cell = 2.54mm
+ROWS_PER_PAGE = 2  # the branch format prints 2 item lines per form
+CPI = 15  # whole invoice prints at 15cpi; char cell = 1.69mm
 
 
 def _h(x_mm: float) -> str:
@@ -103,11 +114,7 @@ def _emit(elems: list) -> str:
 	for y_mm, x_mm, s, bold in sorted(elems, key=lambda e: (e[0], e[1])):
 		out.append(_feed_to(st, y_mm))
 		out.append(_h(x_mm))
-		if bold:
-			out.append(f"{ESC}E")
-		out.append(s)
-		if bold:
-			out.append(f"{ESC}F")
+		out.append(s)  # regular weight everywhere; bold flag intentionally ignored
 		out.append("\r")
 	return "".join(out)
 
@@ -156,6 +163,11 @@ def build(doc) -> str:
 			bs_date = ""
 	ad_date = formatdate(doc.posting_date, "dd-MM-yyyy")
 	do_nos = ", ".join(sorted({i.delivery_note for i in doc.items if i.get("delivery_note")}))
+	price_list = (
+		frappe.db.get_value("Price List", doc.selling_price_list, "price_list_name")
+		if doc.get("selling_price_list")
+		else ""
+	) or (doc.get("selling_price_list") or "")
 	address = (doc.address_display or doc.get("custom_citytown") or "")
 	address = frappe.utils.strip_html(address.replace("<br>", ", ")).replace("\n", " ").strip().rstrip(",")
 	is_cn = bool(doc.get("is_return"))
@@ -174,17 +186,20 @@ def build(doc) -> str:
 	items = list(doc.items)
 	pages = [items[i : i + ROWS_PER_PAGE] for i in range(0, len(items), ROWS_PER_PAGE)] or [[]]
 
-	out = [f"{ESC}@", f"{ESC}C{chr(33)}", f"{ESC}x{chr(1)}"]  # init, form=33 lines(5.5in), LQ mode
+	# init, form=33 lines(5.5in), LQ mode, 15cpi, regular weight
+	out = [f"{ESC}@", f"{ESC}C{chr(33)}", f"{ESC}x{chr(1)}", f"{ESC}g"]
 	P = POS
 	runs = [(t, pno, pi) for t in copy_titles for pno, pi in enumerate(pages, 1)]
 	for copy_label, pno, page_items in runs:
 		last = pno == len(pages)
 		el: list = []
-		_el(el, P["copy_label"][0], P["copy_label"][1], copy_label, bold=True)
+		# copy label is centred on P["copy_label"].x (branch format centres it)
+		_el(el, P["copy_label"][0] - len(copy_label) * 25.4 / CPI / 2,
+			P["copy_label"][1], copy_label, bold=True)
 		_el(el, P["invoice_no"][0], P["invoice_no"][1], invoice_no, bold=True)
 		_el(el, P["trans_date"][0], P["trans_date"][1], bs_date)
 		_el(el, P["invoice_date"][0], P["invoice_date"][1], ad_date)
-		_el(el, P["do_no"][0], P["do_no"][1], do_nos[:20])
+		_el(el, P["do_no"][0], P["do_no"][1], do_nos[:12])
 		if is_cn and doc.get("return_against"):
 			_el(el, P["ref_inv"][0], P["ref_inv"][1], f"Ref Inv: {doc.return_against}")
 		_el(el, P["customer"][0], P["customer"][1], (doc.customer_name or "")[:34])
@@ -195,23 +210,24 @@ def build(doc) -> str:
 		for i, it in enumerate(page_items):
 			y = P["body_top"][1] + i * P["row_h"]
 			hs = frappe.db.get_value("Item", it.item_code, "custom_hs_code") or ""
+			# particulars mirror the branch format: description, UOM, (price list)
+			desc = frappe.utils.strip_html(frappe.utils.cstr(it.description or it.item_name or it.item_code)).replace("\n", " ").strip()
+			part = ", ".join(p for p in (desc, it.uom or "", f"({price_list})" if price_list else "") if p)
 			_el(el, P["c_sno"], y, str(base_sno + i + 1))
 			_el(el, P["c_hs"], y, str(hs)[:8])
-			_el(el, P["c_part"], y, (it.item_name or it.item_code or "")[:33])
-			_el(el, P["r_qty"], y, f"{_qty(it.qty)} {it.uom or ''}".strip(), right=True)
+			_el(el, P["c_part"], y, part[:40])
+			_el(el, P["r_qty"], y, _qty(it.qty), right=True)
 			_el(el, P["r_rate"], y, _money(it.rate), right=True)
 			_el(el, P["r_amt"], y, _money(it.amount), right=True)
 
 		if last:
-			if doc.get("additional_discount_percentage"):
-				_el(el, P["r_amt"], P["y_disc"], f"{abs(doc.additional_discount_percentage)}%", right=True)
+			_el(el, P["r_amt"], P["y_disc"], _money(doc.get("discount_amount") or 0), right=True)
 			_el(el, P["r_amt"], P["y_taxable"], _money(doc.net_total), right=True)
 			_el(el, P["r_amt"], P["y_vat"], _money(vat), right=True)
 			_el(el, P["r_amt"], P["y_grand"], _money(grand), bold=True, right=True)
-			for j, line in enumerate(_wrap(doc.get("in_words") or "", 33)[:4]):
+			# line width: words box runs 4.8 -> 13.5cm = 87mm = 51 chars at 15cpi
+			for j, line in enumerate(_wrap(doc.get("in_words") or "", 51)[:4]):
 				_el(el, P["words"][0], P["words"][1] + j * 4.3, line)
-		else:
-			_el(el, P["c_part"], P["y_taxable"], "Contd. on next form...", bold=True)
 		out.append(_emit(el))
 		out.append(FF)
 	out.append(f"{ESC}@")
