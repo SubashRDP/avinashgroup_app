@@ -52,6 +52,7 @@ CHROME_PRINT_FORMATS = {
 	"Nepal Gas Invoice Plain Paper",
 	"Nepal Gas Invoice A4 Proof",
 	"Nepal Gas Invoice A4 Portrait",
+	"Avinash Invoice Pre-Printed",
 }
 
 _CHROME_BINARIES = ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser")

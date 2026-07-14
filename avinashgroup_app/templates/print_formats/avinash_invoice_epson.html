@@ -1,0 +1,223 @@
+{#-
+Avinash pre-printed invoice slip — Epson LQ-310 continuous form (9.5in x 5.5in).
+
+Built from the field-calibrated "Avinash Sales invoice" A4 format (2026-07-14):
+the table layout, px paddings and position nudges below are copied VERBATIM
+from that calibration — do not "clean them up", they are the measurements that
+land the data in the pre-printed boxes. What changed vs the A4 original:
+
+- @page is the exact form (241.3 x 139.7mm), not A4. A4 is 297mm long, so every
+  A4 page fed TWO 5.5in forms through the tractor. One sheet div = one form.
+- The pagination loop actually paginates now: the old format sliced page_items
+  but then printed ALL items on every page, and had no page-break between
+  pages, so multi-page invoices overflowed instead of continuing on a new slip.
+- The Google Fonts <link> is gone (external fetch stalls headless Chrome
+  offline; the format renders in Arial anyway).
+
+If a whole print is shifted on a given printer, change only ox / oy below
+(mm; + = right / down) — never the field nudges.
+-#}
+{%- set ox = 0 -%}
+{%- set oy = 0 -%}
+
+{% set customer_addresses = frappe.get_all(
+    "Address",
+    filters={"link_doctype": "Customer", "link_name": doc.customer},
+    fields=["*"],
+    limit=1,
+    order_by="is_primary_address desc, creation desc"
+) %}
+{% set customer_addr = customer_addresses[0] if customer_addresses else None %}
+{% set customer_doc = frappe.get_doc("Customer", doc.customer) %}
+
+{% set price_list_title = frappe.db.get_value("Price List", doc.selling_price_list, "price_list_name") if doc.selling_price_list else '' %}
+{% set inv_miti = (doc.custom_invoice_miti | string).split(' ')[0] if doc.custom_invoice_miti else '' %}
+
+{% set print_count_no = 1 if not print_count or print_count[0].print_count == 0 else print_count[0].print_count %}
+{% set headings = ["Tax Invoice", "Invoice", "Invoice", "Copy Of Original"] %}
+{% set copy_count = 1 if doc.is_return or print_count_no > 3 else print_count_no %}
+
+{% set row_limit = 2 %}
+{% set total_items = doc.items | length %}
+{% set total_pages = (total_items // row_limit) + (1 if total_items % row_limit > 0 else 0) %}
+{% if total_pages < 1 %}{% set total_pages = 1 %}{% endif %}
+
+<style>
+  /* exact continuous-form page; margin must stay 0 or the tractor feed drifts */
+  @page { size: 241.3mm 139.7mm; margin: 0; }
+  .print-format { page-width: 241.3mm; page-height: 139.7mm; }
+
+  /* neutralize Frappe's A4 screen frame so preview == print */
+  .print-format, .print-format .format-container { padding: 0 !important; }
+  @media screen {
+    .print-format { max-width: none !important; min-height: 0 !important;
+      box-shadow: none !important; }
+  }
+
+  /* one sheet = one physical form */
+  .avi-sheet { position: relative; width: 241.3mm; height: 139.7mm;
+    padding-left: {{ 2.9 + ox }}mm; padding-top: {{ oy }}mm;
+    box-sizing: border-box; overflow: hidden;
+    page-break-after: always; page-break-inside: avoid; }
+  .avi-sheet.last { page-break-after: auto; }
+
+  .title strong { font-size: 15px; font-weight: 600; }
+
+  .top-table tr td { font-size: 14px !important; padding: 1px 4px !important; }
+
+  .main-table { margin-top: 15px !important; margin-bottom: 0; }
+  .main-table tr th { font-size: 15px !important; font-weight: 600;
+    padding: 5px !important; color: #000; }
+  .main-table tr td { font-size: 14px !important; padding: 3px !important; }
+
+  /* data only — the boxes are pre-printed on the slip */
+  .main-table.table-bordered,
+  .main-table.table-bordered td,
+  .main-table.table-bordered th { border: 0; }
+
+  table { border-collapse: collapse; }
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+
+  /* ---- field calibration (2026-07-14, taken as-is from the A4 format) ---- */
+  /* push all values down */
+  .avi-sheet .format-inner { position: relative !important; top: 13px !important; }
+  /* shift both dates right */
+  .top-table td:nth-child(4) { padding-left: 17px !important; position: relative; top: -4px !important; }
+  /* shift invoice number left */
+  .top-table tr:first-child td:nth-child(2) span { position: relative; left: -23px !important; }
+  /* smaller font on item rows only, to fit rows in the box */
+  .main-table tbody td { font-size: 10px !important; }
+  /* shift S.No left */
+  .main-table tbody td:first-child { position: relative; left: -9px !important; }
+</style>
+
+{% for copy in range(copy_count) %}
+  {% for page_num in range(total_pages) %}
+    {% set start = page_num * row_limit %}
+    {% set end = start + row_limit %}
+    {% set page_items = doc.items[start:end] %}
+
+    <div class="avi-sheet{% if copy == copy_count - 1 and page_num == total_pages - 1 %} last{% endif %}">
+      <div class="format-inner" style="font-family: Arial, sans-serif; font-size: 12px;">
+
+        <!-- HEADER -->
+        <div class="title text-center" style="padding-top:20px;position:relative;top:20px;">
+          <strong>
+            {% if not doc.is_return %}
+              {% if print_count_no <= 3 %}
+                {{ headings[copy] }}
+              {% else %}
+                {{ headings[3] }} {{ print_count_no - 3 }}
+              {% endif %}
+            {% endif %}
+          </strong>
+        </div>
+
+        <table class="top-table" style="width:100%;margin-top:9px;margin-bottom:0px;">
+          <tbody>
+            <tr>
+              <td style="width:90px"></td>
+              <td style="width:120px;padding-left:25px !important;">
+                <span style="position:relative;top:3px;">{{ doc.custom_branch_name or doc.name }}</span>
+              </td>
+              <td style="width:230px" class="text-right"></td>
+              <td style="width:100px">{{ inv_miti }}</td>
+            </tr>
+            <tr>
+              <td style="width:90px">&nbsp;</td>
+              <td style="width:190px;"></td>
+              <td style="width:230px" class="text-right">&nbsp;</td>
+              <td style="width:100px;">{{ inv_miti }}</td>
+            </tr>
+            <tr>
+              <td style="width:90px">&nbsp;</td>
+              <td style="width:190px;padding-left:25px !important;">
+                <span style="position:relative;top:12px;">{{ doc.customer_name }}</span>
+              </td>
+              <td style="width:20px" class="text-right">&nbsp;</td>
+              <td style="width:100px"></td>
+            </tr>
+            <tr>
+              <td style="width:90px">&nbsp;</td>
+              <td style="width:190px;white-space:nowrap;padding-left:25px !important;">
+                <span style="position:relative;top:12px;">{{ customer_addr.address_line1 if customer_addr else '' }}{% if customer_addr and customer_addr.city %}, {{ customer_addr.city }}{% endif %}{% if customer_addr and customer_addr.phone %}, {{ customer_addr.phone | trim }}{% endif %}</span>
+              </td>
+              <td style="width:20px" class="text-right">&nbsp;</td>
+              <td style="width:100px">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="width:90px">&nbsp;</td>
+              <td style="width:190px;padding-left:25px !important;">
+                <span style="position:relative;top:12px;">{{ customer_doc.tax_id or '' }}</span>
+              </td>
+              <td style="width:20px" class="text-right">&nbsp;</td>
+              <td style="width:100px">&nbsp;</td>
+            </tr>
+            <tr>
+              <td style="width:90px">&nbsp;</td>
+              <td style="width:190px">&nbsp;</td>
+              <td style="width:20px" class="text-right">&nbsp;</td>
+              <td style="width:100px">&nbsp;</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- ITEM TABLE -->
+        <table class="main-table table table-bordered">
+          <thead>
+            <tr>
+              <th style="width:15px;text-align:center;">&nbsp;</th>
+              <th style="width:100px;text-align:center;">&nbsp;</th>
+              <th style="width:390px;text-align:center;">&nbsp;</th>
+              <th style="text-align:center;">&nbsp;</th>
+              <th style="text-align:center;">&nbsp;</th>
+              <th style="text-align:center;">&nbsp;</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in page_items %}
+            <tr>
+              <td>{{ start + loop.index }}</td>
+              <td>{{ frappe.db.get_value("Item", item.item_code, "custom_hs_code") or '' }}</td>
+              <td>
+                {% if item.description %}
+                  {{ item.description }},
+                {% endif %}
+                {{ item.uom or '' }}, ({{ price_list_title or doc.selling_price_list or '' }})
+              </td>
+              <td class="text-center"><span style="position:relative;left:-15px;">{{ abs(item.qty) or '' }}</span></td>
+              <td class="text-center"><span style="position:relative;left:-15px;">{{ abs(item.rate) }}</span></td>
+              <td class="text-center">{{ abs(item.amount) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3" rowspan="4">
+                <span style="padding-left:105px;padding-top:20px;display:inline-block;"></span>
+                <span style="display:inline-block;position:relative;top:20px;">{% set _w = doc.in_words or '' %}{% if ' and ' in _w %}{% set _p = _w.rsplit(' and ', 1) %}{{ _p[0] }} and<br>{{ _p[1] }}{% else %}{{ _w }}{% endif %}</span>
+              </td>
+              <td colspan="2" style="text-align:center;">{{ doc.additional_discount_percentage or '' }}</td>
+              <td style="text-align:center;"><span style="position:relative;top:28px;">{{ doc.discount_amount or '0' }}</span></td>
+            </tr>
+            <tr>
+              <td colspan="2" style="text-align:center;"></td>
+              <td style="text-align:center;"><span style="position:relative;top:28px;">{{ doc.total or '0' }}</span></td>
+            </tr>
+            <tr>
+              <td colspan="2" style="text-align:center;"></td>
+              <td style="text-align:center;"><span style="position:relative;top:28px;">{{ doc.total_taxes_and_charges or '0' }}</span></td>
+            </tr>
+            <tr>
+              <td colspan="2" style="text-align:center;"></td>
+              <td style="text-align:center;"><span style="position:relative;top:28px;">{{ doc.grand_total or '' }}</span></td>
+            </tr>
+          </tfoot>
+        </table>
+
+      </div>
+    </div>
+
+  {% endfor %}
+{% endfor %}

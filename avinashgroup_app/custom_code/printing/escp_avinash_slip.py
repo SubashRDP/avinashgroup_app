@@ -8,12 +8,15 @@ ESC/P, QZ Tray carries the bytes, the printer types with its own font and
 advances exactly one slip per form feed. See that module's header for why raw
 ESC/P instead of a PDF.
 
-The slip is 243mm x 140mm — its field span (12mm to 222mm = 210mm) exceeds a
-narrow carriage's 8.0in (203mm) head travel, so this format REQUIRES a
-wide-carriage printer (Epson LQ-2190 class). Those are ESC/P2, which also
-lets the form length be set exactly: 140mm is not a whole number of 1/6in
-lines (33 lines = 139.7mm would creep 0.3mm per slip on continuous forms),
-so ESC ( U defines a 1/360in unit and ESC ( C sets the page to 1984 units.
+The slip is the 9.5in x 5.5in (241.3 x 139.7mm) continuous form. The office
+printer is an Epson LQ-310 — NARROW carriage, 8.0in (203mm) head travel — so
+the rightmost printable position is X0_MM + 203mm. The amount column's
+original 222mm right edge (from the wide-carriage plan) is out of reach;
+R_AMT below is clamped to what the LQ-310 can hit. If a wide-carriage
+LQ-2190-class printer is ever used instead, restore r_amt to 222.0.
+Form length is the classic ESC C 33 (33 lines of 1/6in = 5.5in exactly,
+same as escp_invoice.py) so FF lands on the next slip's top-of-form
+regardless of emulation mode; the ESC/P2 ESC ( C variant was dropped.
 
 All field positions are the millimetre values from the confirmed HTML slip
 template (Print Format "Avinash Test" / the user's calibration block).
@@ -54,7 +57,7 @@ POS = {
 	"c_part":       54.0,
 	"r_qty":        170.0,   # right edge (QTY_X 150 + QTY_W 20)
 	"r_rate":       194.0,
-	"r_amt":        222.0,   # right edge; needs wide-carriage head travel
+	"r_amt":        214.0,   # right edge; LQ-310 hard limit is X0+203mm (=215) — was 222 on wide carriage
 	# totals rows: right-aligned numerics at r_amt
 	"y_disc":       88.0,
 	"y_taxable":    94.0,
@@ -64,10 +67,6 @@ POS = {
 
 ROWS_PER_PAGE = 2
 CPI = 10  # default pica; char cell = 2.54mm
-
-# 140mm slip in 1/360in units for ESC ( C (ESC/P2 exact page length)
-PAGE_LEN_UNITS = round(140 / 25.4 * 360)  # = 1984
-
 
 def _h(x_mm: float) -> str:
 	"""ESC $ absolute horizontal position (1/60in units from column 0)."""
@@ -186,12 +185,7 @@ def build(doc) -> str:
 	items = list(doc.items)
 	pages = [items[i : i + ROWS_PER_PAGE] for i in range(0, len(items), ROWS_PER_PAGE)] or [[]]
 
-	out = [
-		f"{ESC}@",
-		f"{ESC}(U\x01\x00\x0a",  # define unit = 10/3600in = 1/360in
-		f"{ESC}(C\x02\x00" + chr(PAGE_LEN_UNITS % 256) + chr(PAGE_LEN_UNITS // 256),  # page = 140mm
-		f"{ESC}x\x01",  # LQ mode
-	]
+	out = [f"{ESC}@", f"{ESC}C{chr(33)}", f"{ESC}x\x01"]  # init, form=33 lines(5.5in), LQ mode
 	P = POS
 	runs = [(t, pno, pi) for t in copy_titles for pno, pi in enumerate(pages, 1)]
 	for copy_label, pno, page_items in runs:
