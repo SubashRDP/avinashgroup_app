@@ -27,6 +27,7 @@ app_include_js = [
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=1.3",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
+    "/assets/avinashgroup_app/js/qz_sign.js?v=1.0",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every

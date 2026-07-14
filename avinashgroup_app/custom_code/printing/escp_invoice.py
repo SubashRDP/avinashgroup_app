@@ -86,9 +86,17 @@ CPI = 15  # whole invoice prints at 15cpi; char cell = 1.69mm
 
 
 def _h(x_mm: float) -> str:
-	"""ESC $ absolute horizontal position (1/60in units from column 0)."""
-	n = max(0, round((x_mm - X0_MM) * 60 / 25.4))
-	return f"{ESC}${chr(n % 256)}{chr(n // 256)}"
+	"""Horizontal position: CR then spaces at the current pitch.
+
+	Deliberately NOT ESC $ — its binary argument bytes exceed 127 for most
+	of the form width, and the browser->QZ Tray path UTF-8-encodes the
+	command string, mangling any byte over 127 (dates/amounts then print at
+	the left edge). CR + spaces keeps the whole job 7-bit ASCII, which every
+	transport passes through untouched. Quantization is one char cell
+	(25.4/CPI mm), well inside dot-matrix tolerance.
+	"""
+	n = max(0, round((x_mm - X0_MM) * CPI / 25.4))
+	return "\r" + " " * n
 
 
 def _feed_to(state: dict, y_mm: float) -> str:
@@ -101,7 +109,7 @@ def _feed_to(state: dict, y_mm: float) -> str:
 	units = round(delta * 180 / 25.4)
 	out = []
 	while units > 0:
-		step = min(units, 255)
+		step = min(units, 127)  # <=127 keeps the byte 7-bit-safe through UTF-8 transports
 		out.append(f"{ESC}J{chr(step)}")
 		units -= step
 	return "".join(out)
