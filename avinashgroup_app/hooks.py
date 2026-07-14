@@ -90,9 +90,12 @@ sales_invoice_specific_events = {
     # `validate` runs on both save and submit-on-create (same pitfall as
     # attendance_events below). Pipeline first, then validate_salesinvoice,
     # which asserts the taxes table matches the computed VAT/excise totals.
+    # credit_control runs last: it reads doc.grand_total, which is only final
+    # after the tax pipeline above has built the taxes table and totals.
     "validate": [
         "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_save_salesinvoice",
         "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_salesinvoice",
+        "avinashgroup_app.custom_code.SalesInvoice.credit_control.validate_sales_invoice",
     ],
     # IRD copy labeling: count real prints (Tax Invoice / Copy of Original / Copy of Original 2 ...)
     "before_print": "avinashgroup_app.custom_code.SalesInvoice.print_count.before_print",
