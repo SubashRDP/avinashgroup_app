@@ -133,11 +133,12 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- set grand_total = doc.rounded_total or doc.grand_total -%}
 
 {#- IRD copy labeling: invoice_copy_titles (print_count.py) returns one title
-    per sheet this print event produces — the first print of an invoice is the
-    INVOICE + TAX INVOICE pair, so the whole form renders once per title.
-    Returns are credit memos, and all figures print positive: the document
-    type states the direction. -#}
-{%- set copy_titles = invoice_copy_titles(doc) -%}
+    per sheet this print event produces. pair=False = one sheet per print
+    event: 1st print INVOICE, 2nd TAX INVOICE, 3rd COPY OF ORIGINAL, ...
+    (decided 2026-07-14; the first-print INVOICE + TAX INVOICE pair was
+    dropped). Returns are credit memos, and all figures print positive: the
+    document type states the direction. -#}
+{%- set copy_titles = invoice_copy_titles(doc, pair=False) -%}
 
 {#- ----------------------------- helpers -------------------------------- -#}
 {%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false) -%}

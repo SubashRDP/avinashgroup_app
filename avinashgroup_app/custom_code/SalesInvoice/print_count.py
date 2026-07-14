@@ -6,11 +6,12 @@
 The IRD electronic-billing rules require the software to count how many times
 an invoice is printed and to label every reprint as a copy of the original.
 `invoice_copy_titles` is the single source of truth for the series — the NGI
-Jinja template and the ESC/P builder both call it:
+Jinja template and the ESC/P builder both call it with pair=False
+(one sheet per print event; decided 2026-07-14):
 
-	1st print  -> INVOICE + TAX INVOICE   (one print event, two sheets)
-	2nd print  -> COPY OF ORIGINAL
-	3rd print  -> COPY OF ORIGINAL 1
+	1st print  -> INVOICE
+	2nd print  -> TAX INVOICE
+	3rd print  -> COPY OF ORIGINAL
 	nth print  -> COPY OF ORIGINAL (n - 2)
 
 	Returns print a single CREDIT MEMO instead of the invoice pair; their
@@ -47,11 +48,11 @@ def invoice_copy_titles(doc, pair=True) -> list[str]:
 	number this render represents (preview shows the upcoming print, so a
 	never-printed invoice previews the INVOICE + TAX INVOICE pair).
 
-	pair=True is the Nepal Gas convention: the first print event produces the
+	pair=True (unused since 2026-07-14): the first print event produces the
 	INVOICE + TAX INVOICE sheet pair, and every reprint is a copy.
 
-	pair=False (Grihalaxmi) prints ONE sheet per event and spreads the pair
-	over the first two prints instead:
+	pair=False (Nepal Gas AND Grihalaxmi) prints ONE sheet per event and
+	spreads the pair over the first two prints instead:
 
 		1st -> INVOICE, 2nd -> TAX INVOICE, 3rd -> COPY OF ORIGINAL,
 		4th -> COPY OF ORIGINAL 2, 5th -> COPY OF ORIGINAL 3, ...

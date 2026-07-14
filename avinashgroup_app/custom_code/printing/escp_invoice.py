@@ -167,9 +167,9 @@ def build(doc) -> str:
 				vat += t.tax_amount or 0
 	grand = doc.get("rounded_total") or doc.get("grand_total") or 0
 
-	# One full form run per copy title: the first print of an invoice is the
-	# INVOICE + TAX INVOICE pair (two form feeds), reprints a single copy.
-	copy_titles = invoice_copy_titles(doc)
+	# One full form run per copy title — pair=False: one sheet per print
+	# event (1st INVOICE, 2nd TAX INVOICE, then copies).
+	copy_titles = invoice_copy_titles(doc, pair=False)
 
 	items = list(doc.items)
 	pages = [items[i : i + ROWS_PER_PAGE] for i in range(0, len(items), ROWS_PER_PAGE)] or [[]]
