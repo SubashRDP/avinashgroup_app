@@ -16,7 +16,10 @@ const ITEM_DOCTYPES = {
 // Doctypes that have taxes table
 const DOCTYPES_WITH_TAXES = ["Purchase Invoice", "Purchase Receipt", "Purchase Order", "Supplier Quotation"];
 // Doctypes that should default VAT Apply On to VAT 13%
-const VAT_DEFAULT_DOCTYPES = ["Purchase Order", "Purchase Receipt", "Supplier Quotation"];
+const VAT_DEFAULT_DOCTYPES = ["Purchase Invoice", "Purchase Order", "Purchase Receipt", "Supplier Quotation"];
+
+// Account → subtype (vehicle) list cache for the Purchase Invoice subtype filter
+let pi_account_subtype_cache = {};
 
 // Item fields to map between documents
 const ITEM_FIELDS_TO_MAP = [
@@ -84,6 +87,13 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
 
         items_add: function(frm, cdt, cdn) {
             const row = locals[cdt][cdn];
+
+            // Purchase Invoice: new rows start with an empty (no-match) Subtype
+            // filter until an item provides an expense account to filter by
+            if (frm.doc.doctype === "Purchase Invoice") {
+                set_initial_subtype_filter(frm, cdn, 0);
+            }
+
             if (should_apply_vat_default(frm) && row && !row.custom_vat_apply_on) {
                 frappe.model.set_value(cdt, cdn, 'custom_vat_apply_on', 'VAT 13%').then(() => {
                     toggle_vat_fields(frm, cdt, cdn);
@@ -249,6 +259,13 @@ function purchase_taxes_refresh(frm) {
     }
     frm.refresh_field('items');
 
+    // Purchase Invoice: rebuild the account→subtype cache and re-apply
+    // the Subtype dropdown filters for all existing rows
+    if (frm.doc.doctype === "Purchase Invoice") {
+        pi_account_subtype_cache = {};
+        prefetch_account_subtypes(frm);
+    }
+
     // Check and populate from source document for new docs created via buttons
     check_and_populate_from_source(frm);
 }
@@ -258,7 +275,14 @@ function purchase_taxes_refresh(frm) {
  */
 function handle_item_code_change(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
-    if (!row || !row.item_code) return;
+    if (!row) return;
+    if (!row.item_code) {
+        // Item cleared — reset the Subtype filter to match nothing
+        if (frm.doc.doctype === "Purchase Invoice") {
+            apply_subtype_filter(frm, cdn, []);
+        }
+        return;
+    }
 
     // Start fetching our warehouse immediately (runs in background)
     const wh_promise = _fetch_buying_wh(row.item_code, frm.doc.custom_branch);
@@ -321,6 +345,18 @@ function handle_item_code_change(frm, cdt, cdn) {
                 }
                 if (!row.custom_tds_rate && item_data.message.custom_tds_rate) {
                     await frappe.model.set_value(cdt, cdn, 'custom_tds_rate', item_data.message.custom_tds_rate);
+                }
+            }
+
+            // Purchase Invoice: filter the Subtype dropdown to the vehicles
+            // configured on the item's default expense account
+            if (frm.doc.doctype === "Purchase Invoice") {
+                const expense_account = await get_expense_account_from_item(row.item_code);
+                if (expense_account) {
+                    const vehicles = await get_account_subtypes(expense_account);
+                    apply_subtype_filter(frm, cdn, vehicles);
+                } else {
+                    apply_subtype_filter(frm, cdn, []);
                 }
             }
 
@@ -951,4 +987,99 @@ async function force_all_pi_warehouses(frm) {
     }
     frm.refresh_field('items');
     
+}
+
+
+// ---------------------------------------------------------------------------
+// Purchase Invoice: Subtype (vehicle) dropdown filtering
+// The Subtype link field on each item row is filtered to the vehicles listed
+// on the item's default expense account (Account.custom_sub_type_list).
+// Ported from the legacy "Purchase Invoice" Client Script (now disabled).
+// ---------------------------------------------------------------------------
+
+function set_initial_subtype_filter(frm, cdn, attempt) {
+    const grid_row = frm.fields_dict['items'].grid.grid_rows_by_docname[cdn];
+    if (grid_row) {
+        grid_row.get_field('custom_subtype').get_query = function() {
+            return { filters: { 'name': ['in', ['__no_match__']] } };
+        };
+    } else if (attempt < 5) {
+        setTimeout(() => set_initial_subtype_filter(frm, cdn, attempt + 1), 200);
+    }
+}
+
+/**
+ * Get expense account from Item's item_defaults child table
+ */
+function get_expense_account_from_item(item_code) {
+    return frappe.db.get_doc('Item', item_code).then(item_doc => {
+        for (const default_entry of (item_doc.item_defaults || [])) {
+            if (default_entry.expense_account) {
+                return default_entry.expense_account;
+            }
+        }
+        return null;
+    });
+}
+
+/**
+ * Pre-fetch subtype lists for all items' expense accounts and apply row filters
+ */
+function prefetch_account_subtypes(frm) {
+    const unique_items = [...new Set(
+        (frm.doc.items || []).map(row => row.item_code).filter(Boolean)
+    )];
+    if (!unique_items.length) return;
+
+    Promise.all(unique_items.map(item_code => get_expense_account_from_item(item_code)))
+        .then(expense_accounts => {
+            const unique_accounts = [...new Set(expense_accounts.filter(Boolean))];
+            if (!unique_accounts.length) return;
+
+            return Promise.all(unique_accounts.map(account => get_account_subtypes(account)));
+        })
+        .then(() => {
+            (frm.doc.items || []).forEach(row => {
+                if (!row.item_code) return;
+                get_expense_account_from_item(row.item_code).then(expense_account => {
+                    if (expense_account && pi_account_subtype_cache[expense_account]) {
+                        apply_subtype_filter(frm, row.name, pi_account_subtype_cache[expense_account]);
+                    }
+                });
+            });
+        })
+        .catch(err => console.error('Error prefetching account subtypes:', err));
+}
+
+/**
+ * Get an account's subtype (vehicle) list with caching
+ */
+function get_account_subtypes(account) {
+    if (pi_account_subtype_cache[account] !== undefined) {
+        return Promise.resolve(pi_account_subtype_cache[account]);
+    }
+    return frappe.db.get_doc('Account', account).then(account_doc => {
+        const vehicles = (account_doc.custom_sub_type_list || [])
+            .map(item => item.vehicle_list)
+            .filter(Boolean);
+        pi_account_subtype_cache[account] = vehicles;
+        return vehicles;
+    });
+}
+
+/**
+ * Apply the Subtype link-field filter to a specific item row
+ */
+function apply_subtype_filter(frm, row_name, vehicles) {
+    const grid_row = frm.fields_dict['items'].grid.grid_rows_by_docname[row_name];
+    if (!grid_row) return;
+
+    grid_row.get_field('custom_subtype').get_query = function() {
+        return {
+            filters: {
+                'name': ['in', vehicles.length > 0 ? vehicles : ['__no_match__']]
+            }
+        };
+    };
+    grid_row.refresh_field('custom_subtype');
 }

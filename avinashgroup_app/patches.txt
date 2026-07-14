@@ -33,3 +33,4 @@ avinashgroup_app.patches.backfill_print_log_branch_name
 avinashgroup_app.patches.add_grand_total_preview_field
 avinashgroup_app.patches.return_reason_mandatory
 
+avinashgroup_app.patches.vat_apply_on_default_13
