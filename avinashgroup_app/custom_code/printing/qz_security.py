@@ -36,6 +36,55 @@ def certificate() -> str:
 
 
 @frappe.whitelist()
+def setup_bat():
+	"""Downloadable Windows installer for the QZ override certificate.
+
+	Give office users this URL (logged in):
+	  /api/method/avinashgroup_app.custom_code.printing.qz_security.setup_bat
+	They download install-qz-cert.bat and double-click it: the script
+	re-launches itself as administrator, writes the site certificate to
+	"C:\\Program Files\\QZ Tray\\override.crt" and restarts QZ Tray, after
+	which prints from this site run with no Allow prompt.
+	"""
+	pem = certificate().strip()
+	if not pem:
+		frappe.throw("No qz-certificate.pem on this site — generate it first (see qz_security.py header).")
+
+	echo_lines = "\r\n".join(f"echo {line}" for line in pem.splitlines())
+	script = (
+		"@echo off\r\n"
+		f":: QZ Tray override certificate installer — {frappe.local.site}\r\n"
+		":: Writes the ERP's signing certificate as QZ Tray's override cert so\r\n"
+		":: prints from the site run without an Allow prompt.\r\n"
+		"net session >nul 2>&1\r\n"
+		"if %errorlevel% neq 0 (\r\n"
+		"    echo Requesting administrator rights...\r\n"
+		"    powershell -Command \"Start-Process -FilePath '%~f0' -Verb RunAs\"\r\n"
+		"    exit /b\r\n"
+		")\r\n"
+		"set \"QZDIR=%ProgramFiles%\\QZ Tray\"\r\n"
+		"if not exist \"%QZDIR%\" (\r\n"
+		"    echo QZ Tray is not installed. Install it from https://qz.io/download first, then run this again.\r\n"
+		"    pause\r\n"
+		"    exit /b 1\r\n"
+		")\r\n"
+		"(\r\n"
+		f"{echo_lines}\r\n"
+		") > \"%QZDIR%\\override.crt\"\r\n"
+		"taskkill /f /im qz-tray.exe >nul 2>&1\r\n"
+		"start \"\" \"%QZDIR%\\qz-tray.exe\"\r\n"
+		"echo.\r\n"
+		"echo Done. QZ Tray restarted with the site certificate installed.\r\n"
+		"pause\r\n"
+	)
+
+	frappe.response["type"] = "download"
+	frappe.response["filename"] = "install-qz-cert.bat"
+	frappe.response["filecontent"] = script
+	frappe.response["content_type"] = "application/octet-stream"
+
+
+@frappe.whitelist()
 def sign(request: str) -> str:
 	"""SHA512-RSA signature (base64) of QZ's to-sign payload."""
 	from cryptography.hazmat.primitives import hashes, serialization
