@@ -82,19 +82,82 @@
 		return (rules[doctype] && rules[doctype][company]) || null;
 	}
 
-	// Returns {format, generator} — the return-specific format when the doc
-	// is a return (credit/debit note) and one is configured, else the normal.
+	// Returns {format, generator, raw} — the return-specific format when the
+	// doc is a return (credit/debit note) and one is configured, else the normal.
 	function pick_format(rule, doc) {
 		if (cint(doc.is_return) && rule.return_print_format) {
-			return { format: rule.return_print_format, generator: rule.return_pdf_generator };
+			return {
+				format: rule.return_print_format,
+				generator: rule.return_pdf_generator,
+				raw: cint(rule.return_raw_printing),
+			};
 		}
-		return { format: rule.print_format, generator: rule.pdf_generator };
+		return {
+			format: rule.print_format,
+			generator: rule.pdf_generator,
+			raw: cint(rule.raw_printing),
+		};
+	}
+
+	// Raw (ESC/P) formats must never go through /printview — the browser
+	// print dialog renders HTML through the OS printer driver, which dumps
+	// the text at the top of the form. Send the rendered raw commands to the
+	// printer over QZ Tray instead, exactly like the Print view's printit()
+	// does. Rendering server-side bumps the IRD copy counter, same as the
+	// other routes. Uses the same localStorage printer mapping as the Print
+	// view ("Printer Settings" there); without a mapping we route to the
+	// Print view so the user can set one.
+	function qz_raw_print(doctype, name, sel) {
+		frappe.call({
+			method: "frappe.www.printview.get_rendered_raw_commands",
+			args: { doc: doctype, name: name, print_format: sel.format },
+			callback: function (r) {
+				if (r.exc) return;
+				let mapping = [];
+				try {
+					const map = JSON.parse(localStorage.print_format_printer_map)[doctype] || [];
+					mapping = map.filter(function (m) {
+						return m.print_format === sel.format;
+					});
+				} catch (e) {
+					mapping = [];
+				}
+				if (mapping.length !== 1) {
+					frappe.show_alert(
+						{
+							message: __("Printer mapping not set for {0}.", [sel.format]),
+							subtitle: __(
+								"Opening the Print view — set a printer in its Printer Settings, then print again."
+							),
+							indicator: "warning",
+						},
+						10
+					);
+					frappe.set_route("print", doctype, name);
+					return;
+				}
+				frappe.ui.form
+					.qz_connect()
+					.then(function () {
+						const config = qz.configs.create(mapping[0].printer);
+						return qz.print(config, [r.message.raw_commands]);
+					})
+					.then(frappe.ui.form.qz_success)
+					.catch(function (err) {
+						frappe.ui.form.qz_fail(err);
+					});
+			},
+		});
 	}
 
 	// Open the actual print output for (doctype, name) with the selected
 	// format: chrome formats via download_pdf, the rest via the browser print
 	// dialog. Both bump the IRD copy counter server-side.
 	function open_print(doctype, name, sel) {
+		if (sel.raw) {
+			qz_raw_print(doctype, name, sel);
+			return;
+		}
 		let url;
 		if (sel.generator === "chrome") {
 			url =

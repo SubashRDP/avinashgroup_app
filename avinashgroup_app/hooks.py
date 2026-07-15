@@ -23,9 +23,9 @@ app_include_js = [
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.4",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
-    "/assets/avinashgroup_app/js/ngi_print.js?v=1.0",
+    "/assets/avinashgroup_app/js/ngi_print.js?v=1.1",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
-    "/assets/avinashgroup_app/js/company_print.js?v=1.3",
+    "/assets/avinashgroup_app/js/company_print.js?v=1.4",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
     "/assets/avinashgroup_app/js/qz_sign.js?v=1.0",
 ]
