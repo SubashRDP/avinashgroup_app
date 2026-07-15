@@ -106,11 +106,41 @@ def before_print(doc, method=None, *args, **kwargs):
 			frappe.db.get_value("Sales Invoice", doc.name, "custom_print_count")
 		)
 		_log_print(doc)
+		_update_print_count_doc(doc)
 		# printview / download_pdf are GET requests — commit explicitly so the
 		# increment survives the request-end rollback.
 		frappe.db.commit()
 	else:
 		doc.custom_print_count = stored + 1
+
+
+def _update_print_count_doc(doc):
+	"""Mirror the invoice's current print count into Sales Invoice Print Count.
+
+	One row per invoice (autonamed by sales_invoice), upserted on every actual
+	print so the row always holds the latest count and branch. Like _log_print,
+	a failure here must never block the print.
+	"""
+	try:
+		values = {
+			"branch_name": doc.get("custom_branch_name"),
+			"print_count": cint(doc.custom_print_count),
+		}
+		if frappe.db.exists("Sales Invoice Print Count", doc.name):
+			frappe.db.set_value("Sales Invoice Print Count", doc.name, values)
+		else:
+			frappe.get_doc(
+				{
+					"doctype": "Sales Invoice Print Count",
+					"sales_invoice": doc.name,
+					**values,
+				}
+			).insert(ignore_permissions=True)
+	except Exception:
+		frappe.log_error(
+			title=f"Print count doc update failed for Sales Invoice {doc.name}",
+			message=frappe.get_traceback(),
+		)
 
 
 def _log_print(doc):
