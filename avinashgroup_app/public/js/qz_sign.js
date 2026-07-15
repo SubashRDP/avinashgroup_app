@@ -13,27 +13,38 @@
 (function () {
 	function wire() {
 		if (!window.qz || qz.__avinash_signed) return;
-		qz.security.setCertificatePromise(function (resolve, reject) {
-			frappe
-				.call("avinashgroup_app.custom_code.printing.qz_security.certificate")
-				.then((r) => (r.message ? resolve(r.message) : reject("no qz certificate on site")))
-				.catch(reject);
-		});
-		if (qz.security.setSignatureAlgorithm) {
-			qz.security.setSignatureAlgorithm("SHA512");
-		}
-		qz.security.setSignaturePromise(function (toSign) {
-			return function (resolve, reject) {
-				frappe
-					.call({
-						method: "avinashgroup_app.custom_code.printing.qz_security.sign",
-						args: { request: toSign },
-					})
-					.then((r) => (r.message ? resolve(r.message) : reject("qz signing failed")))
-					.catch(reject);
-			};
-		});
 		qz.__avinash_signed = true;
+		// Fetch the site cert FIRST and only install the security promises when
+		// one exists. A site without qz-certificate.pem must keep stock
+		// anonymous behaviour — installing rejecting promises breaks every QZ
+		// call after the Allow prompt (printer list never loads, print silently
+		// does nothing).
+		frappe
+			.call("avinashgroup_app.custom_code.printing.qz_security.certificate")
+			.then(function (r) {
+				const cert = r.message;
+				if (!cert || !window.qz) return; // unsigned site: anonymous QZ
+				qz.security.setCertificatePromise(function (resolve) {
+					resolve(cert);
+				});
+				if (qz.security.setSignatureAlgorithm) {
+					qz.security.setSignatureAlgorithm("SHA512");
+				}
+				qz.security.setSignaturePromise(function (toSign) {
+					return function (resolve, reject) {
+						frappe
+							.call({
+								method: "avinashgroup_app.custom_code.printing.qz_security.sign",
+								args: { request: toSign },
+							})
+							.then((r2) => (r2.message ? resolve(r2.message) : resolve(null)))
+							.catch(() => resolve(null)); // sign failure: send unsigned, don't break the call
+					};
+				});
+			})
+			.catch(function () {
+				// endpoint unreachable: stay anonymous
+			});
 	}
 
 	$(document).on("app_ready", function () {
