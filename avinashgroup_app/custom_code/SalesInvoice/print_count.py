@@ -43,9 +43,11 @@ PRINT_OUTPUT_CMDS = {
 def invoice_copy_titles(doc, pair=True) -> list[str]:
 	"""Titles of the sheets this print event produces, in print order.
 
-	Driven by doc.custom_print_count, which before_print has already set to the
-	number this render represents (preview shows the upcoming print, so a
-	never-printed invoice previews the INVOICE + TAX INVOICE pair).
+	Driven by doc.flags.print_copy_number, which before_print has already set to
+	the number this render represents (preview shows the upcoming print, so a
+	never-printed invoice previews the INVOICE + TAX INVOICE pair). The counter
+	itself lives in the Sales Invoice Print Count doctype, not on the invoice;
+	the stored count is the fallback if before_print did not run.
 
 	pair=True is the Nepal Gas convention: the first print event produces the
 	INVOICE + TAX INVOICE sheet pair, and every reprint is a copy.
@@ -56,7 +58,7 @@ def invoice_copy_titles(doc, pair=True) -> list[str]:
 		1st -> INVOICE, 2nd -> TAX INVOICE, 3rd -> COPY OF ORIGINAL,
 		4th -> COPY OF ORIGINAL 2, 5th -> COPY OF ORIGINAL 3, ...
 	"""
-	n = cint(doc.get("custom_print_count")) or 1
+	n = cint(doc.flags.get("print_copy_number")) or _stored_count(doc.get("name")) or 1
 	if cint(doc.get("is_return")):
 		if n <= 1:
 			return ["CREDIT MEMO"]
@@ -84,66 +86,77 @@ def is_actual_print() -> bool:
 
 
 def before_print(doc, method=None, *args, **kwargs):
-	"""Set doc.custom_print_count to the number this render represents.
+	"""Stamp doc.flags.print_copy_number with the number this render represents.
 
-	Submitted invoice + real print: increment the stored counter (atomic) and
+	The counter lives in the Sales Invoice Print Count doctype (one row per
+	invoice, autonamed by the invoice) — NOT on the Sales Invoice itself.
+
+	Submitted invoice + real print: increment that doctype counter (atomic) and
 	stamp the new value on the doc. Anything else (preview, draft, cancelled):
 	stamp stored + 1 in memory only, so the render shows the upcoming title
 	without consuming it.
 	"""
-	stored = cint(
-		frappe.db.get_value("Sales Invoice", doc.name, "custom_print_count")
-		if doc.name and not doc.get("__islocal")
-		else 0
+	stored = (
+		_stored_count(doc.name) if doc.name and not doc.get("__islocal") else 0
 	)
 
 	if doc.docstatus == 1 and is_actual_print():
-		frappe.db.sql(
-			"UPDATE `tabSales Invoice` SET custom_print_count = custom_print_count + 1 WHERE name = %s",
-			doc.name,
-		)
-		doc.custom_print_count = cint(
-			frappe.db.get_value("Sales Invoice", doc.name, "custom_print_count")
-		)
-		_log_print(doc)
-		_update_print_count_doc(doc)
+		n = _increment_print_count_doc(doc)
+		doc.flags.print_copy_number = n
+		_log_print(doc, n)
 		# printview / download_pdf are GET requests — commit explicitly so the
 		# increment survives the request-end rollback.
 		frappe.db.commit()
 	else:
-		doc.custom_print_count = stored + 1
+		doc.flags.print_copy_number = stored + 1
 
 
-def _update_print_count_doc(doc):
-	"""Mirror the invoice's current print count into Sales Invoice Print Count.
+def _stored_count(invoice_name) -> int:
+	"""Current print count for an invoice, from Sales Invoice Print Count (0 if none).
 
-	One row per invoice (autonamed by sales_invoice), upserted on every actual
-	print so the row always holds the latest count and branch. Like _log_print,
-	a failure here must never block the print.
+	The doctype is autonamed by sales_invoice, so its name IS the invoice name.
 	"""
+	if not invoice_name:
+		return 0
+	return cint(
+		frappe.db.get_value("Sales Invoice Print Count", invoice_name, "print_count")
+	)
+
+
+def _increment_print_count_doc(doc) -> int:
+	"""Atomically +1 the invoice's Sales Invoice Print Count row; return the new
+	value. Creates the row (starting at 1) on the first ever print. The counter
+	starts fresh — it does NOT seed from any past custom_print_count. A failure
+	must never block the print, so it falls back to the stored count.
+	"""
+	name = doc.name
+	branch = doc.get("custom_branch_name")
 	try:
-		values = {
-			"branch_name": doc.get("custom_branch_name"),
-			"print_count": cint(doc.custom_print_count),
-		}
-		if frappe.db.exists("Sales Invoice Print Count", doc.name):
-			frappe.db.set_value("Sales Invoice Print Count", doc.name, values)
-		else:
-			frappe.get_doc(
-				{
-					"doctype": "Sales Invoice Print Count",
-					"sales_invoice": doc.name,
-					**values,
-				}
-			).insert(ignore_permissions=True)
+		if frappe.db.exists("Sales Invoice Print Count", name):
+			frappe.db.sql(
+				"UPDATE `tabSales Invoice Print Count` "
+				"SET print_count = print_count + 1, branch_name = %s WHERE name = %s",
+				(branch, name),
+			)
+			return _stored_count(name)
+		frappe.get_doc(
+			{
+				"doctype": "Sales Invoice Print Count",
+				"sales_invoice": name,
+				"branch_name": branch,
+				"print_count": 1,
+			}
+		).insert(ignore_permissions=True)
+		return 1
 	except Exception:
 		frappe.log_error(
-			title=f"Print count doc update failed for Sales Invoice {doc.name}",
+			title=f"Print count update failed for Sales Invoice {name}",
 			message=frappe.get_traceback(),
 		)
+		return _stored_count(name)
 
 
-def _log_print(doc):
+def _log_print(doc, copy_number):
 	try:
 		frappe.get_doc(
 			{
@@ -151,7 +164,7 @@ def _log_print(doc):
 				"sales_invoice": doc.name,
 				"branch_name": doc.get("custom_branch_name"),
 				"company": doc.company,
-				"copy_number": cint(doc.custom_print_count),
+				"copy_number": cint(copy_number),
 			}
 		).insert(ignore_permissions=True)
 	except Exception:

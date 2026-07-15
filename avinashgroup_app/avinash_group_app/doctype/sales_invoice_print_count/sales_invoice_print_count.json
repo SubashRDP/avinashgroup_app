@@ -32,7 +32,7 @@
    "read_only": 1
   },
   {
-   "description": "Current value of the invoice's custom_print_count (updated on every actual print).",
+   "description": "Number of times this invoice has actually been printed or downloaded (incremented on every real print; drives the IRD copy title).",
    "fieldname": "print_count",
    "fieldtype": "Int",
    "in_list_view": 1,
