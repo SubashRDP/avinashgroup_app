@@ -25,7 +25,6 @@ avinashgroup_app.patches.add_company_to_employee_checkin
 avinashgroup_app.patches.company_scoped_attendance_device_id
 avinashgroup_app.patches.vehicle_mandatory_property_setters #2 remove setters, per-row JS validation instead
 avinashgroup_app.patches.add_company_to_shift_type
-avinashgroup_app.patches.add_sales_invoice_print_count
 avinashgroup_app.patches.add_document_no_manual_flag
 avinashgroup_app.patches.add_unique_custom_name_index
 avinashgroup_app.patches.sales_currency_precision_5
@@ -34,3 +33,5 @@ avinashgroup_app.patches.add_grand_total_preview_field
 avinashgroup_app.patches.return_reason_mandatory
 
 avinashgroup_app.patches.vat_apply_on_default_13
+
+avinashgroup_app.patches.remove_sales_invoice_print_count_field
