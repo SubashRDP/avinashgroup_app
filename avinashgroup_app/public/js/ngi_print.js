@@ -15,6 +15,7 @@
 		"Nepal Gas Invoice Plain Paper",
 		"Nepal Gas Invoice A4 Proof",
 		"Avinash Invoice Pre-Printed",
+		"Grishma Invoice Pre-Printed",
 	];
 
 	function patch(cls) {
