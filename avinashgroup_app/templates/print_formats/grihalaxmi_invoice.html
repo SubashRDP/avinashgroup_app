@@ -75,8 +75,12 @@ template defaults (no Address records exist for GLMI).
     font-family: Arial, Helvetica, sans-serif; color: #000; }
   .print-format .letter-head, .print-format .print-heading { display: none; }
 
-  .glm-sheet { position: relative; width: 210mm; height: 296mm;
-    padding: 8mm 10mm; page-break-after: always; page-break-inside: avoid; overflow: hidden; }
+  {#- Half-A4 layout: the sheet is exactly half of A4 (297mm / 2 = 148.5mm), so
+      the invoice occupies the top 50% of the page and the bottom half is blank.
+      min-height (not height) lets a long, many-item invoice grow past the half
+      instead of clipping. page-break-after keeps one copy per sheet. -#}
+  .glm-sheet { position: relative; width: 210mm; min-height: 148.5mm;
+    padding: 8mm 10mm; page-break-after: always; page-break-inside: avoid; }
   .glm-sheet.last { page-break-after: auto; }
 
   .glm-head { position: relative; text-align: center; }
@@ -96,21 +100,25 @@ template defaults (no Address records exist for GLMI).
   table.glm-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
   table.glm-items th, table.glm-items td { border: 0.35mm solid #000; padding: 1mm 1.5mm; }
   table.glm-items th { font-size: 9pt; text-align: center; }
-  table.glm-items td.body { vertical-align: top; height: 118mm; padding: 0; overflow: hidden; }
+  {#- item box hugs its rows plus 30px of breathing room at the bottom -#}
+  table.glm-items td.body { vertical-align: top; height: auto; padding: 0 0 30px; }
   .cell-stack div { padding: 1.2mm 1.5mm 0; line-height: 1.25; white-space: nowrap; overflow: hidden; }
   .cell-stack .wrap { white-space: normal; }
 
-  table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.9mm 1mm; white-space: nowrap; overflow: hidden; }
-  table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.9mm 1.5mm; }
+  {#- totals rows tightened (0.9mm -> 0.4mm): the serials cell spans these four
+      rows, so shrinking them shrinks the Serial No / A/T / B/T box -#}
+  table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.4mm 1mm; white-space: nowrap; overflow: hidden; }
+  table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.4mm 1.5mm; }
   table.glm-items td.words { vertical-align: top; font-size: 9pt; }
   table.glm-items td.serials { vertical-align: top; font-size: 9.5pt; }
-  .serials div { padding: 1mm 0; }
+  .serials div { padding: 0.3mm 0; }
 
   .glm-terms { font-size: 8.5pt; margin-top: 2mm; }
-  .glm-sign { position: absolute; right: 10mm; bottom: 14mm; width: 70mm; text-align: center; }
+  {#- flows right after the terms (was pinned to the A4 bottom) -#}
+  .glm-sign { position: relative; margin: 10mm 0 0 auto; width: 70mm; text-align: center; }
   .glm-sign .line { border-top: 0.3mm solid #000; margin-bottom: 1mm; }
   .glm-sign .who { font-weight: bold; font-size: 9pt; }
-  .glm-pageno { position: absolute; right: 10mm; bottom: 8mm; font-size: 7.5pt; }
+  .glm-pageno { text-align: right; margin-top: 2mm; font-size: 7.5pt; }
 </style>
 
 {#- split items into pages -#}
