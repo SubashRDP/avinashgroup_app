@@ -161,6 +161,7 @@ jinja = {
         "avinashgroup_app.custom_code.CBMS.utils.bs_date_str",
         "avinashgroup_app.custom_code.printing.escp_invoice.ngi_escp",
         "avinashgroup_app.custom_code.printing.escp_avinash_slip.avinash_slip_escp",
+        "avinashgroup_app.custom_code.printing.escp_grishma.grishma_escp",
         "avinashgroup_app.custom_code.SalesInvoice.print_count.invoice_copy_titles",
     ],
 }
