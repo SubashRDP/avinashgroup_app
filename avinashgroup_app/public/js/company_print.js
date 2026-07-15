@@ -46,6 +46,11 @@
 // trigger neither event — workflow-approved doctypes don't auto-print.
 
 (function () {
+	// Raw queue created on every office print machine by the all-in-one
+	// installer (qz_security.setup_print_machine_bat): Generic/Text Only
+	// driver, so RAW ESC/P bytes bypass the Epson driver that swallows them.
+	const DEFAULT_RAW_PRINTER = "LQ310-RAW";
+
 	let rules = null; // {doctype: {company: rule}}
 	let rules_request = null; // in-flight fetch, shared by concurrent callers
 	const auto_printed = new Set();
@@ -122,27 +127,53 @@
 				} catch (e) {
 					mapping = [];
 				}
-				if (mapping.length !== 1) {
-					frappe.show_alert(
-						{
-							message: __("Printer mapping not set for {0}.", [sel.format]),
-							subtitle: __(
-								"Opening the Print view — set a printer in its Printer Settings, then print again."
-							),
-							indicator: "warning",
-						},
-						10
-					);
-					frappe.set_route("print", doctype, name);
+				if (mapping.length === 1) {
+					frappe.ui.form
+						.qz_connect()
+						.then(function () {
+							const config = qz.configs.create(mapping[0].printer);
+							return qz.print(config, [r.message.raw_commands]);
+						})
+						.then(frappe.ui.form.qz_success)
+						.catch(function (err) {
+							frappe.ui.form.qz_fail(err);
+						});
 					return;
 				}
+				// No explicit mapping: fall back to the LQ310-RAW queue that
+				// setup-print-machine.bat (qz_security.setup_print_machine_bat)
+				// creates on every office print machine. Explicit mappings
+				// above always win; machines without the queue keep the old
+				// "set a mapping" behaviour.
 				frappe.ui.form
 					.qz_connect()
 					.then(function () {
-						const config = qz.configs.create(mapping[0].printer);
-						return qz.print(config, [r.message.raw_commands]);
+						return qz.printers.find();
 					})
-					.then(frappe.ui.form.qz_success)
+					.then(function (printers) {
+						const list = Array.isArray(printers) ? printers : [printers];
+						if (list.includes(DEFAULT_RAW_PRINTER)) {
+							frappe.show_alert(
+								{ message: __("Printing via {0}", [DEFAULT_RAW_PRINTER]), indicator: "blue" },
+								5
+							);
+							const config = qz.configs.create(DEFAULT_RAW_PRINTER);
+							return qz
+								.print(config, [r.message.raw_commands])
+								.then(frappe.ui.form.qz_success);
+						}
+						frappe.show_alert(
+							{
+								message: __("Printer mapping not set for {0}.", [sel.format]),
+								subtitle: __(
+									"Opening the Print view — set a printer in its Printer Settings, then print again."
+								),
+								indicator: "warning",
+							},
+							10
+						);
+						frappe.set_route("print", doctype, name);
+					})
 					.catch(function (err) {
 						frappe.ui.form.qz_fail(err);
 					});

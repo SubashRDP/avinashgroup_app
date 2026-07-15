@@ -66,3 +66,18 @@ Symptom chain established:
 5. Office Windows laptops: full checklist is in claude_printing_handoff.md
    (QZ Tray install, install-qz-cert.bat from the setup_bat endpoint, per-
    format printer mapping, tractor alignment ~12mm).
+
+## SHIPPED (later on 2026-07-15): all-in-one print machine installer
+
+The raw-queue deliverable above is superseded by a bigger one, now in the app:
+
+- `qz_security.setup_print_machine_bat()` — logged-in download at
+  `/api/method/avinashgroup_app.custom_code.printing.qz_security.setup_print_machine_bat`
+  returns `setup-print-machine.bat`: self-elevates, installs QZ Tray v2.2.6 if
+  missing (GitHub download, silent /S; skips gracefully offline), creates the
+  LQ310-RAW Generic/Text Only queue on the Epson's auto-detected USB port
+  (idempotent), writes the site cert as override.crt, restarts QZ Tray.
+- `company_print.js` v1.5: `qz_raw_print()` falls back to LQ310-RAW when no
+  explicit Print-view mapping exists (explicit mappings still win) — the
+  per-browser mapping step is gone on machines set up by the installer.
+- The older `setup_bat` (cert-only installer) still exists unchanged.
