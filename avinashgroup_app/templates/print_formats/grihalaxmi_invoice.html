@@ -181,7 +181,7 @@ template defaults (no Address records exist for GLMI).
         {%- for item in page_items %}<div>{{ frappe.db.get_value('Item', item.item_code, 'custom_hs_code') or '&nbsp;' }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack">
-        {%- for item in page_items %}<div>{{ item.item_name or item.item_code }}{% if item.batch_no %}<br>Batch No:&nbsp; {{ item.batch_no }}{% endif %}</div>{% endfor -%}
+        {%- for item in page_items %}<div>{{ item.item_name or item.item_code }}{% if item.custom_batch_number %}<br>Batch No:&nbsp; {{ item.custom_batch_number }}{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:center;">
         {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
@@ -208,11 +208,10 @@ template defaults (no Address records exist for GLMI).
       <td class="tot-val">{{ num(doc.discount_amount or 0) }}</td>
     </tr>
     <tr>
-      {#- labels only — the serial numbers are filled in by hand -#}
       <td class="serials" colspan="5" rowspan="4">
-        <div>Serial No:</div>
-        <div>A/T</div>
-        <div>B/T</div>
+        <div><b>Serial No:</b> {{ doc.custom_serial_no or '' }}</div>
+        <div><b>A/T:</b> {{ doc.custom_at or '' }}</div>
+        <div><b>B/T:</b> {{ doc.custom_bt or '' }}</div>
       </td>
       <td class="tot-label">Excise Duty</td>
       <td class="tot-val">{{ num(excise) }}</td>
