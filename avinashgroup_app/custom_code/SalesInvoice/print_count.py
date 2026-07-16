@@ -5,26 +5,38 @@
 
 The IRD electronic-billing rules require the software to count how many times
 an invoice is printed and to label every reprint as a copy of the original.
-`invoice_copy_titles` is the single source of truth for the series — the NGI
-Jinja template and the ESC/P builder both call it:
+`invoice_copy_titles` is the single source of truth for the series — the Jinja
+templates and the ESC/P builders both call it.
 
-	1st print  -> INVOICE + TAX INVOICE   (one print event, two sheets)
-	2nd print  -> COPY OF ORIGINAL
-	3rd print  -> COPY OF ORIGINAL 1
-	nth print  -> COPY OF ORIGINAL (n - 2)
+Sheet-based series (pair=True — Nepal Gas / Grishma / Avinash dot-matrix):
 
-	Returns print a single CREDIT MEMO instead of the invoice pair; their
-	reprints follow the same copy series suffixed "(CREDIT MEMO)".
+	1st print -> TAX INVOICE + INVOICE   (one print event, TWO sheets)
+	2nd print -> COPY OF ORIGINAL 1
+	3rd print -> COPY OF ORIGINAL 2
+	nth print -> COPY OF ORIGINAL (n - 1)
+
+The counter counts SHEETS, so the two-sheet original pair advances the count
+by 2 (the first print leaves the count at 2), and each later single-sheet copy
+adds 1.
+
+Single-sheet series (pair=False — Grihalaxmi) is unchanged: one sheet per
+print, the pair spread over the first two prints:
+
+	1st -> INVOICE, 2nd -> TAX INVOICE, 3rd -> COPY OF ORIGINAL,
+	4th -> COPY OF ORIGINAL 2, ...
+
+Returns print a single CREDIT MEMO on every print (no copy-of-original prefix,
+however many times printed).
 
 The counter increments only on an *actual* print — the browser Print button
 (printview?trigger_print=1), a PDF download, or raw/server printing. Rendering
-the preview in the Print view does NOT consume a copy number; the preview shows
-the title the NEXT print will get.
+the preview in the Print view does NOT consume sheets; the preview shows the
+titles the NEXT print will get.
 
-Each actual print also inserts a Sales Invoice Print Log row (who, when, which
-copy) — the per-event trail behind the Invoice Activity Report. Logging must
-never block the print: a log failure goes to the Error Log and the print
-proceeds.
+Each actual print inserts one Sales Invoice Print Log row per sheet (who, when,
+which sheet number) — the per-event trail behind the Invoice Activity Report.
+Logging must never block the print: a failure goes to the Error Log and the
+print proceeds.
 """
 
 import frappe
@@ -39,43 +51,68 @@ PRINT_OUTPUT_CMDS = {
 	"frappe.www.printview.get_rendered_raw_commands",
 }
 
+# Print formats that print ONE sheet per event (Grihalaxmi): the Tax Invoice /
+# Invoice pair is spread across the first two prints instead of one two-sheet
+# event. Everything else is a "pair" format (Nepal Gas / Grishma / Avinash).
+SINGLE_SHEET_FORMATS = {
+	"Grihalaxmi Invoice A4",
+	"Grihalaxmi Invoice Half A4",
+}
+
+
+def _current_print_format() -> str:
+	"""The print format of the in-flight request (download_pdf/printview use
+	`format`, get_rendered_raw_commands uses `print_format`)."""
+	fd = getattr(frappe.local, "form_dict", None) or {}
+	return fd.get("format") or fd.get("print_format") or ""
+
+
+def _titles_for(prev_sheets: int, pair: bool, is_return: bool) -> list[str]:
+	"""Sheet titles for ONE print event, given the sheet count BEFORE it.
+
+	Returns always print a single CREDIT MEMO.
+
+	pair=True: first print is the TAX INVOICE + INVOICE pair (two sheets),
+	every later print a single COPY OF ORIGINAL N; the count is sheets:
+
+		prev 0  -> [TAX INVOICE, INVOICE]   (count -> 2)
+		prev 2  -> [COPY OF ORIGINAL 1]     (count -> 3)
+		prev n  -> [COPY OF ORIGINAL n - 1]
+
+	pair=False (Grihalaxmi, unchanged): one sheet per print, count == prints.
+	"""
+	if is_return:
+		return ["CREDIT MEMO"]
+	if pair:
+		if prev_sheets <= 0:
+			return ["TAX INVOICE", "INVOICE"]
+		# after the 2-sheet pair prev is 2 -> COPY OF ORIGINAL 1; guard against
+		# legacy counts of 1 (old event-based scheme) so we never show "0".
+		return [f"COPY OF ORIGINAL {max(1, prev_sheets - 1)}"]
+	# pair=False (Grihalaxmi)
+	if prev_sheets == 0:
+		return ["INVOICE"]
+	if prev_sheets == 1:
+		return ["TAX INVOICE"]
+	return ["COPY OF ORIGINAL" if prev_sheets == 2 else f"COPY OF ORIGINAL {prev_sheets - 1}"]
+
 
 def invoice_copy_titles(doc, pair=True) -> list[str]:
 	"""Titles of the sheets this print event produces, in print order.
 
-	Driven by doc.flags.print_copy_number, which before_print has already set to
-	the number this render represents (preview shows the upcoming print, so a
-	never-printed invoice previews the INVOICE + TAX INVOICE pair). The counter
-	itself lives in the Sales Invoice Print Count doctype, not on the invoice;
-	the stored count is the fallback if before_print did not run.
+	before_print stamps doc.flags.print_prev_sheets with the sheet count BEFORE
+	this event (previews fall back to the stored count, so a never-printed
+	invoice previews the TAX INVOICE + INVOICE pair). The counter lives in the
+	Sales Invoice Print Count doctype (one row per invoice), NOT on the invoice.
 
-	pair=True is the Nepal Gas convention: the first print event produces the
-	INVOICE + TAX INVOICE sheet pair, and every reprint is a copy.
-
-	pair=False (Grihalaxmi) prints ONE sheet per event and spreads the pair
-	over the first two prints instead:
-
-		1st -> INVOICE, 2nd -> TAX INVOICE, 3rd -> COPY OF ORIGINAL,
-		4th -> COPY OF ORIGINAL 2, 5th -> COPY OF ORIGINAL 3, ...
+	`pair` is supplied by the caller (the format): the Grihalaxmi templates pass
+	pair=False; the Nepal Gas / Grishma / Avinash builders use the default True.
 	"""
-	n = cint(doc.flags.get("print_copy_number")) or _stored_count(doc.get("name")) or 1
-	if cint(doc.get("is_return")):
-		if n <= 1:
-			return ["CREDIT MEMO"]
-		return [_copy_of_original(n) + " (CREDIT MEMO)"]
-	if pair:
-		if n <= 1:
-			return ["INVOICE", "TAX INVOICE"]
-		return [_copy_of_original(n)]
-	if n == 1:
-		return ["INVOICE"]
-	if n == 2:
-		return ["TAX INVOICE"]
-	return ["COPY OF ORIGINAL" if n == 3 else f"COPY OF ORIGINAL {n - 2}"]
-
-
-def _copy_of_original(n: int) -> str:
-	return "COPY OF ORIGINAL" if n == 2 else f"COPY OF ORIGINAL {n - 2}"
+	if "print_prev_sheets" in doc.flags:
+		prev = cint(doc.flags.get("print_prev_sheets"))
+	else:
+		prev = _stored_count(doc.get("name"))
+	return _titles_for(prev, pair, cint(doc.get("is_return")))
 
 
 def is_actual_print() -> bool:
@@ -86,33 +123,33 @@ def is_actual_print() -> bool:
 
 
 def before_print(doc, method=None, *args, **kwargs):
-	"""Stamp doc.flags.print_copy_number with the number this render represents.
+	"""Stamp doc.flags.print_prev_sheets with the sheet count BEFORE this event.
 
 	The counter lives in the Sales Invoice Print Count doctype (one row per
 	invoice, autonamed by the invoice) — NOT on the Sales Invoice itself.
 
-	Submitted invoice + real print: increment that doctype counter (atomic) and
-	stamp the new value on the doc. Anything else (preview, draft, cancelled):
-	stamp stored + 1 in memory only, so the render shows the upcoming title
-	without consuming it.
+	Submitted invoice + real print: advance that counter by the number of
+	sheets this event prints (the pair = 2, a copy = 1) and log one row per
+	sheet. Anything else (preview, draft, cancelled): stamp the stored count in
+	memory only, so the render shows the upcoming titles without consuming them.
 	"""
-	stored = (
-		_stored_count(doc.name) if doc.name and not doc.get("__islocal") else 0
-	)
+	stored = _stored_count(doc.name) if doc.name and not doc.get("__islocal") else 0
+	# titles for THIS event are computed from the sheets printed BEFORE it, so
+	# the flag stays `stored` even after we advance the stored counter below.
+	doc.flags.print_prev_sheets = stored
 
 	if doc.docstatus == 1 and is_actual_print():
-		n = _increment_print_count_doc(doc)
-		doc.flags.print_copy_number = n
-		_log_print(doc, n)
+		pair = _current_print_format() not in SINGLE_SHEET_FORMATS
+		titles = _titles_for(stored, pair, cint(doc.get("is_return")))
+		_add_print_count_doc(doc, len(titles))
+		_log_print(doc, stored, titles)
 		# printview / download_pdf are GET requests — commit explicitly so the
 		# increment survives the request-end rollback.
 		frappe.db.commit()
-	else:
-		doc.flags.print_copy_number = stored + 1
 
 
 def _stored_count(invoice_name) -> int:
-	"""Current print count for an invoice, from Sales Invoice Print Count (0 if none).
+	"""Current sheet count for an invoice, from Sales Invoice Print Count (0 if none).
 
 	The doctype is autonamed by sales_invoice, so its name IS the invoice name.
 	"""
@@ -123,10 +160,9 @@ def _stored_count(invoice_name) -> int:
 	)
 
 
-def _increment_print_count_doc(doc) -> int:
-	"""Atomically +1 the invoice's Sales Invoice Print Count row; return the new
-	value. Creates the row (starting at 1) on the first ever print. The counter
-	starts fresh — it does NOT seed from any past custom_print_count. A failure
+def _add_print_count_doc(doc, sheets: int) -> int:
+	"""Atomically add `sheets` to the invoice's Sales Invoice Print Count row;
+	return the new value. Creates the row on the first ever print. A failure
 	must never block the print, so it falls back to the stored count.
 	"""
 	name = doc.name
@@ -135,8 +171,8 @@ def _increment_print_count_doc(doc) -> int:
 		if frappe.db.exists("Sales Invoice Print Count", name):
 			frappe.db.sql(
 				"UPDATE `tabSales Invoice Print Count` "
-				"SET print_count = print_count + 1, branch_name = %s WHERE name = %s",
-				(branch, name),
+				"SET print_count = print_count + %s, branch_name = %s WHERE name = %s",
+				(sheets, branch, name),
 			)
 			return _stored_count(name)
 		frappe.get_doc(
@@ -144,10 +180,10 @@ def _increment_print_count_doc(doc) -> int:
 				"doctype": "Sales Invoice Print Count",
 				"sales_invoice": name,
 				"branch_name": branch,
-				"print_count": 1,
+				"print_count": sheets,
 			}
 		).insert(ignore_permissions=True)
-		return 1
+		return sheets
 	except Exception:
 		frappe.log_error(
 			title=f"Print count update failed for Sales Invoice {name}",
@@ -156,19 +192,21 @@ def _increment_print_count_doc(doc) -> int:
 		return _stored_count(name)
 
 
-def _log_print(doc, copy_number):
-	try:
-		frappe.get_doc(
-			{
-				"doctype": "Sales Invoice Print Log",
-				"sales_invoice": doc.name,
-				"branch_name": doc.get("custom_branch_name"),
-				"company": doc.company,
-				"copy_number": cint(copy_number),
-			}
-		).insert(ignore_permissions=True)
-	except Exception:
-		frappe.log_error(
-			title=f"Print log failed for Sales Invoice {doc.name}",
-			message=frappe.get_traceback(),
-		)
+def _log_print(doc, start_sheet: int, titles: list[str]):
+	"""One Sales Invoice Print Log row per sheet, numbered from start_sheet+1."""
+	for i, _title in enumerate(titles, 1):
+		try:
+			frappe.get_doc(
+				{
+					"doctype": "Sales Invoice Print Log",
+					"sales_invoice": doc.name,
+					"branch_name": doc.get("custom_branch_name"),
+					"company": doc.company,
+					"copy_number": start_sheet + i,
+				}
+			).insert(ignore_permissions=True)
+		except Exception:
+			frappe.log_error(
+				title=f"Print log failed for Sales Invoice {doc.name}",
+				message=frappe.get_traceback(),
+			)
