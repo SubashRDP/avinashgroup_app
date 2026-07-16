@@ -31,7 +31,7 @@ next form's top regardless of how much was printed.
 """
 
 import frappe
-from frappe.utils import fmt_money, formatdate
+from frappe.utils import fmt_money
 
 from avinashgroup_app.custom_code.SalesInvoice.print_count import invoice_copy_titles
 
@@ -161,7 +161,10 @@ def _wrap(s: str, width: int) -> list[str]:
 def build(doc) -> str:
 	"""Full ESC/P job for one Sales Invoice. One FF per 3-item form."""
 	invoice_no = doc.get("custom_branch_name") or doc.name
-	bs_date = doc.get("custom_invoice_miti") or ""
+	# BS miti, date only: custom_invoice_miti may carry a time part
+	# ("2083-01-16 00:00:00") — keep just the date. Shown in BOTH the
+	# Transaction Date and Invoice Date fields.
+	bs_date = frappe.utils.cstr(doc.get("custom_invoice_miti") or "").split(" ")[0]
 	if not bs_date:
 		try:
 			from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
@@ -169,7 +172,6 @@ def build(doc) -> str:
 			bs_date = bs_date_str(doc.posting_date)
 		except Exception:
 			bs_date = ""
-	ad_date = formatdate(doc.posting_date, "dd-MM-yyyy")
 	do_nos = ", ".join(sorted({i.delivery_note for i in doc.items if i.get("delivery_note")}))
 	price_list = (
 		frappe.db.get_value("Price List", doc.selling_price_list, "price_list_name")
@@ -206,7 +208,7 @@ def build(doc) -> str:
 			P["copy_label"][1], copy_label, bold=True)
 		_el(el, P["invoice_no"][0], P["invoice_no"][1], invoice_no, bold=True)
 		_el(el, P["trans_date"][0], P["trans_date"][1], bs_date)
-		_el(el, P["invoice_date"][0], P["invoice_date"][1], ad_date)
+		_el(el, P["invoice_date"][0], P["invoice_date"][1], bs_date)
 		_el(el, P["do_no"][0], P["do_no"][1], do_nos[:12])
 		if is_cn and doc.get("return_against"):
 			_el(el, P["ref_inv"][0], P["ref_inv"][1], f"Ref Inv: {doc.return_against}")
