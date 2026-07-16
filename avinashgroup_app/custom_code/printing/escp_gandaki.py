@@ -1,28 +1,27 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
-"""ESC/P byte stream for the Grishma Enterprises continuous-form invoice (LQ-310).
+"""ESC/P byte stream for the Gandaki continuous-form invoice (LQ-310).
 
-Clone of escp_invoice.py (Nepal Gas) — see that module's header for why raw
-ESC/P instead of a PDF, and for the transport rules (whole job stays 7-bit
-ASCII so the browser->QZ Tray path can't mangle it).
+Clone of escp_grishma.py — see escp_invoice.py (Nepal Gas) for why raw ESC/P
+instead of a PDF, and for the transport rules (whole job stays 7-bit ASCII so
+the browser->QZ Tray path can't mangle it).
 
-The Grishma form (photo 2026-07-15, VAT No. 610489998) is the same 9.5x5.5in
-form family with ONE layout difference: there is NO HS Code column. The item
-table is  S.No. | Particular | Quantity | Rate | Total Price NRS.
+Same 9.5x5.5in form family as Grishma, with the same item table layout:
+S.No. | H.S. Code | Particular | Quantity | Rate | Total Price NRS.
 
 Coordinates
 -----------
-Every POS value is a TRUE ruler distance in mm from the form's top-left
-corner (top = the perforation): measure the form, type the number.
-X0_MM / Y0_MM carry the printer-rig geometry measured 2026-07-14 with the
-centre-circle target; they are shared with the Nepal Gas format because it is
-the same physical printer. If a WHOLE print is shifted, fix X0/Y0 (or check
-the tractor position) — never the fields.
+Every POS value is a TRUE ruler distance in mm from the form's top-left corner
+(top = the perforation): measure the form, type the number. X0_MM / Y0_MM carry
+the printer-rig geometry measured 2026-07-14 with the centre-circle target; they
+are shared with the other dot-matrix formats because it is the same physical
+printer. If a WHOLE print is shifted, fix X0/Y0 (or check the tractor position)
+— never the fields.
 
-The POS values below START from the Nepal Gas calibration (same form family);
-calibrate them against a real Grishma form with print_grishma_test.sh at the
-bench root: edit a number, run the script, measure again.
+The POS values below START from the Grishma calibration (same form family);
+calibrate them against a real Gandaki form: edit a number, print a test sheet,
+measure again. Never touch the other formats' POS — this file only.
 """
 
 import frappe
@@ -45,23 +44,23 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # where the first character should sit. EXCEPTION: r_qty / r_rate / r_amt are
 # RIGHT edges, because numbers are right-aligned so their digits line up in
 # the column; for those three, measure to where the number should END.
-# Initial values = the Nepal Gas 2026-07-14 calibration, with the HS Code
-# column removed (particulars pulled left to follow S.No.). Calibrate each
-# number on a real Grishma form.
+# Initial values = the Grishma calibration; calibrate each number on a real
+# Gandaki form.
 POS = {
 	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
+	"invoice_no":   (41.0, 33.0),  # left start decreased 2mm per user (4.3 -> 4.1cm)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 37.0),  # x=198 is the empirical rightmost: at x>=200 the
-	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 46.0),  # same column as trans date
+	"trans_date":   (198.0, 37.0),  # 19.8cm: latest start where the full date fits
+	                                # before the 215.4mm head limit (box is at 20.4
+	                                # but the head can't reach 22.1cm)
+	"invoice_date": (198.0, 43.0),  # same column as trans date; 2mm up again per user
 	"do_no":        (193.0, 41.5),
 	"customer":     (58.0, 51.0),  # starts 5.8cm from left, 5.1cm from top per user
 	"address":      (58.0, 56.0),  # same left start as customer name
-	"pan":          (58.0, 63.0),  # same left start as customer name; +2mm down per user
+	"pan":          (58.0, 61.0),  # same left start as customer name
 	"body_top":     (0, 80.0),   # first item row; +5mm per user
 	"row_h":        4.8,
-	"words":        (31.0, 95.1),  # amount in words; -1cm more left per user
+	"words":        (51.0, 92.1),  # amount in words; +3mm left, +2mm down per user
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        17.0,    # +2mm per user
 	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
@@ -69,14 +68,14 @@ POS = {
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        144.0,   # right edge for qty; -5mm left per user
-	"r_rate":       177.0,   # -5mm left per user
+	"r_qty":        149.0,   # right edge for qty; +1mm per user
+	"r_rate":       182.0,
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       93.0,   # +3mm down per user
-	"y_taxable":    99.0,   # +3mm down per user
-	"y_vat":        107.0,  # net position after user nudges (-1mm up latest)
-	"y_grand":      114.0,  # +2mm down per user (2x)
+	"y_disc":       90.0,
+	"y_taxable":    96.0,
+	"y_vat":        102.0,
+	"y_grand":      110.0,
 }
 
 ROWS_PER_PAGE = 2
@@ -152,8 +151,8 @@ def build(doc) -> str:
 	"""Full ESC/P job for one Sales Invoice. One FF per form."""
 	invoice_no = doc.get("custom_branch_name") or doc.name
 	# BS miti, date only: custom_invoice_miti may carry a time part
-	# ("2083-01-16 00:00:00") — keep just the date. The Grishma form shows this
-	# same miti in BOTH the Transaction Date and Invoice Date fields.
+	# ("2083-01-16 00:00:00") — keep just the date. The form shows this same
+	# miti in BOTH the Transaction Date and Invoice Date fields.
 	bs_date = frappe.utils.cstr(doc.get("custom_invoice_miti") or "").split(" ")[0]
 	if not bs_date:
 		try:
@@ -226,8 +225,8 @@ def build(doc) -> str:
 			part = ", ".join(p for p in (desc, it.uom or "", f"({price_list})" if price_list else "") if p)
 			hs = frappe.db.get_value("Item", it.item_code, "custom_hs_code") or ""
 			_el(el, P["c_sno"], y, str(base_sno + i + 1))
-			# HS code: its own column, no border; +1mm down from the row line per user
-			_el(el, P["c_hs"], y + 1, str(hs)[:8])
+			# HS code: its own column, no border, on the item's row line
+			_el(el, P["c_hs"], y, str(hs)[:8])
 			_el(el, P["c_part"], y, part[:50])
 			_el(el, P["r_qty"], y, _qty(it.qty), right=True)
 			_el(el, P["r_rate"], y, _money(it.rate), right=True)
@@ -247,6 +246,6 @@ def build(doc) -> str:
 	return "".join(out)
 
 
-def grishma_escp(doc) -> str:
+def gandaki_escp(doc) -> str:
 	"""Jinja entry point for the raw_commands template."""
 	return build(doc)
