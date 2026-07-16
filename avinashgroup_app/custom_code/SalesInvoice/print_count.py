@@ -19,10 +19,10 @@ The counter counts SHEETS, so the two-sheet original pair advances the count
 by 2 (the first print leaves the count at 2), and each later single-sheet copy
 adds 1.
 
-Single-sheet series (pair=False — Grihalaxmi) is unchanged: one sheet per
-print, the pair spread over the first two prints:
+Single-sheet series (pair=False — Grihalaxmi A4/Half, Nepal Gas Half) follows
+the SAME order as the dot-matrix pair, one sheet per print:
 
-	1st -> INVOICE, 2nd -> TAX INVOICE, 3rd -> COPY OF ORIGINAL,
+	1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF ORIGINAL 1,
 	4th -> COPY OF ORIGINAL 2, ...
 
 Returns print a single CREDIT MEMO on every print (no copy-of-original prefix,
@@ -89,12 +89,14 @@ def _titles_for(prev_sheets: int, pair: bool, is_return: bool) -> list[str]:
 		# after the 2-sheet pair prev is 2 -> COPY OF ORIGINAL 1; guard against
 		# legacy counts of 1 (old event-based scheme) so we never show "0".
 		return [f"COPY OF ORIGINAL {max(1, prev_sheets - 1)}"]
-	# pair=False (Grihalaxmi)
+	# pair=False (single-sheet: Grihalaxmi A4/Half, Nepal Gas Half). Follows the
+	# same order as the dot-matrix pair, spread one sheet per print:
+	#   1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF ORIGINAL 1, ...
 	if prev_sheets == 0:
-		return ["INVOICE"]
-	if prev_sheets == 1:
 		return ["TAX INVOICE"]
-	return ["COPY OF ORIGINAL" if prev_sheets == 2 else f"COPY OF ORIGINAL {prev_sheets - 1}"]
+	if prev_sheets == 1:
+		return ["INVOICE"]
+	return [f"COPY OF ORIGINAL {prev_sheets - 1}"]
 
 
 def invoice_copy_titles(doc, pair=True) -> list[str]:
