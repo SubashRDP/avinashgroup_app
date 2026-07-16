@@ -1,28 +1,25 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
-"""ESC/P byte stream for the Grishma Enterprises continuous-form invoice (LQ-310).
+"""ESC/P byte stream for the Narayani continuous-form invoice (LQ-310).
 
-Clone of escp_invoice.py (Nepal Gas) — see that module's header for why raw
-ESC/P instead of a PDF, and for the transport rules (whole job stays 7-bit
-ASCII so the browser->QZ Tray path can't mangle it).
-
-The Grishma form (photo 2026-07-15, VAT No. 610489998) is the same 9.5x5.5in
-form family with ONE layout difference: there is NO HS Code column. The item
-table is  S.No. | Particular | Quantity | Rate | Total Price NRS.
+Clone of escp_grishma.py — see escp_invoice.py (Nepal Gas) for why raw ESC/P
+instead of a PDF, and for the transport rules (whole job stays 7-bit ASCII so
+the browser->QZ Tray path can't mangle it). Same 9.5x5.5in form family and item
+table: S.No. | H.S. Code | Particular | Quantity | Rate | Total Price NRS.
 
 Coordinates
 -----------
 Every POS value is a TRUE ruler distance in mm from the form's top-left
 corner (top = the perforation): measure the form, type the number.
 X0_MM / Y0_MM carry the printer-rig geometry measured 2026-07-14 with the
-centre-circle target; they are shared with the Nepal Gas format because it is
-the same physical printer. If a WHOLE print is shifted, fix X0/Y0 (or check
-the tractor position) — never the fields.
+centre-circle target; they are shared with the other dot-matrix formats because
+it is the same physical printer. If a WHOLE print is shifted, fix X0/Y0 (or
+check the tractor position) — never the fields.
 
-The POS values below START from the Nepal Gas calibration (same form family);
-calibrate them against a real Grishma form with print_grishma_test.sh at the
-bench root: edit a number, run the script, measure again.
+The POS values below START from the calibrated Grishma layout (same form
+family); calibrate them against a real Narayani form: edit a number, print a
+test sheet, measure again. Never touch the other formats' POS — this file only.
 """
 
 import frappe
@@ -50,7 +47,7 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # number on a real Grishma form.
 POS = {
 	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (39.0, 27.0),  # -2mm left; -4mm more up per user (3.1->2.7cm)
+	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
 	"ref_inv":      (74.0, 46.7),
 	"trans_date":   (198.0, 37.0),  # x=198 is the empirical rightmost: at x>=200 the
 	                                # 10th digit wraps to the next line on this rig
@@ -69,13 +66,13 @@ POS = {
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        134.0,   # right edge for qty; -5mm then -1cm more left per user
-	"r_rate":       167.0,   # -5mm then -1cm more left per user
+	"r_qty":        144.0,   # right edge for qty; -5mm left per user
+	"r_rate":       177.0,   # -5mm left per user
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       95.0,   # +3mm then +2mm more down per user
-	"y_taxable":    101.0,  # +3mm then +2mm more down per user
-	"y_vat":        106.0,  # net after user nudges (-3mm up latest)
+	"y_disc":       93.0,   # +3mm down per user
+	"y_taxable":    99.0,   # +3mm down per user
+	"y_vat":        107.0,  # net position after user nudges (-1mm up latest)
 	"y_grand":      114.0,  # +2mm down per user (2x)
 }
 
@@ -247,6 +244,6 @@ def build(doc) -> str:
 	return "".join(out)
 
 
-def grishma_escp(doc) -> str:
+def narayani_escp(doc) -> str:
 	"""Jinja entry point for the raw_commands template."""
 	return build(doc)

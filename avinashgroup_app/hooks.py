@@ -163,6 +163,7 @@ jinja = {
         "avinashgroup_app.custom_code.printing.escp_avinash_slip.avinash_slip_escp",
         "avinashgroup_app.custom_code.printing.escp_grishma.grishma_escp",
         "avinashgroup_app.custom_code.printing.escp_gandaki.gandaki_escp",
+        "avinashgroup_app.custom_code.printing.escp_narayani.narayani_escp",
         "avinashgroup_app.custom_code.SalesInvoice.print_count.invoice_copy_titles",
     ],
 }
