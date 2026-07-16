@@ -50,11 +50,11 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # number on a real Grishma form.
 POS = {
 	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (39.0, 27.0),  # -2mm left; -4mm more up per user (3.1->2.7cm)
+	"invoice_no":   (39.0, 33.0),  # -2mm left; +2mm down per user (from original)
 	"ref_inv":      (74.0, 46.7),
 	"trans_date":   (198.0, 37.0),  # x=198 is the empirical rightmost: at x>=200 the
 	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 46.0),  # same column as trans date
+	"invoice_date": (198.0, 44.0),  # same column as trans date; -2mm up per user
 	"do_no":        (193.0, 41.5),
 	"customer":     (58.0, 51.0),  # starts 5.8cm from left, 5.1cm from top per user
 	"address":      (58.0, 56.0),  # same left start as customer name
@@ -69,14 +69,14 @@ POS = {
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        134.0,   # right edge for qty; -5mm then -1cm more left per user
-	"r_rate":       167.0,   # -5mm then -1cm more left per user
+	"r_qty":        144.0,   # right edge for qty; -5mm left per user
+	"r_rate":       177.0,   # -5mm left per user
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       95.0,   # +3mm then +2mm more down per user
-	"y_taxable":    101.0,  # +3mm then +2mm more down per user
-	"y_vat":        106.0,  # net after user nudges (-3mm up latest)
-	"y_grand":      114.0,  # +2mm down per user (2x)
+	"y_disc":       92.0,   # -1mm up per user
+	"y_taxable":    98.0,   # -1mm up per user
+	"y_vat":        104.0,  # -2mm then -1mm more up per user
+	"y_grand":      113.0,  # -1mm up per user
 }
 
 ROWS_PER_PAGE = 2
