@@ -53,11 +53,11 @@ POS = {
 	"trans_date":   (198.0, 37.0),  # 19.8cm: latest start where the full date fits
 	                                # before the 215.4mm head limit (box is at 20.4
 	                                # but the head can't reach 22.1cm)
-	"invoice_date": (198.0, 43.0),  # same column as trans date; 2mm up again per user
+	"invoice_date": (198.0, 45.0),  # same column as trans date; +2mm down per user
 	"do_no":        (193.0, 41.5),
 	"customer":     (57.0, 51.0),  # -1mm left per user
 	"address":      (57.0, 56.0),  # same left start as customer name; -1mm left
-	"pan":          (57.0, 61.0),  # same left start as customer name; -1mm left
+	"pan":          (57.0, 63.0),  # same left start as customer name; -1mm left; +2mm down
 	"body_top":     (0, 82.0),   # first item row; +2mm more down per user
 	"row_h":        4.8,
 	"words":        (21.0, 96.1),  # amount in words; -3cm left; +4mm down per user
