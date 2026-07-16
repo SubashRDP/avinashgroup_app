@@ -65,7 +65,11 @@ POS = {
 	"words":        (51.0, 92.1),  # amount in words; +3mm left, +2mm down per user
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        17.0,    # +2mm per user
-	"c_part":       29.0,    # particulars start right after S.No.; +4mm per user
+	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
+	                         # (vertically follows the item), same x as the heading below
+	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
+	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
+	                               # above the item rows); same x as the HS values
 	"r_qty":        149.0,   # right edge for qty; +1mm per user
 	"r_rate":       182.0,
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
@@ -210,15 +214,20 @@ def build(doc) -> str:
 		_el(el, P["customer"][0], P["customer"][1], (doc.customer_name or "")[:34])
 		_el(el, P["address"][0], P["address"][1], address[:34])
 		_el(el, P["pan"][0], P["pan"][1], doc.get("tax_id") or "")
+		# "H.S. Code" column heading (the form has no pre-printed HS column)
+		_el(el, P["hs_label"][0], P["hs_label"][1], "H.S. Code")
 
 		base_sno = (pno - 1) * ROWS_PER_PAGE
 		for i, it in enumerate(page_items):
 			y = P["body_top"][1] + i * P["row_h"]
-			# particulars: description, UOM, (price list) — no HS column on this form
+			# particulars: description, UOM, (price list)
 			desc = frappe.utils.strip_html(frappe.utils.cstr(it.description or it.item_name or it.item_code)).replace("\n", " ").strip()
 			part = ", ".join(p for p in (desc, it.uom or "", f"({price_list})" if price_list else "") if p)
+			hs = frappe.db.get_value("Item", it.item_code, "custom_hs_code") or ""
 			_el(el, P["c_sno"], y, str(base_sno + i + 1))
-			_el(el, P["c_part"], y, part[:55])
+			# HS code: its own column, no border, on the item's row line
+			_el(el, P["c_hs"], y, str(hs)[:8])
+			_el(el, P["c_part"], y, part[:50])
 			_el(el, P["r_qty"], y, _qty(it.qty), right=True)
 			_el(el, P["r_rate"], y, _money(it.rate), right=True)
 			_el(el, P["r_amt"], y, _money(it.amount), right=True)
