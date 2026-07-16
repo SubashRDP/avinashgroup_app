@@ -48,19 +48,19 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # Gandaki form.
 POS = {
 	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (41.0, 33.0),  # left start decreased 2mm per user (4.3 -> 4.1cm)
+	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user
 	"ref_inv":      (74.0, 46.7),
 	"trans_date":   (198.0, 37.0),  # 19.8cm: latest start where the full date fits
 	                                # before the 215.4mm head limit (box is at 20.4
 	                                # but the head can't reach 22.1cm)
 	"invoice_date": (198.0, 43.0),  # same column as trans date; 2mm up again per user
 	"do_no":        (193.0, 41.5),
-	"customer":     (58.0, 51.0),  # starts 5.8cm from left, 5.1cm from top per user
-	"address":      (58.0, 56.0),  # same left start as customer name
-	"pan":          (58.0, 61.0),  # same left start as customer name
-	"body_top":     (0, 80.0),   # first item row; +5mm per user
+	"customer":     (57.0, 51.0),  # -1mm left per user
+	"address":      (57.0, 56.0),  # same left start as customer name; -1mm left
+	"pan":          (57.0, 61.0),  # same left start as customer name; -1mm left
+	"body_top":     (0, 82.0),   # first item row; +2mm more down per user
 	"row_h":        4.8,
-	"words":        (51.0, 92.1),  # amount in words; +3mm left, +2mm down per user
+	"words":        (21.0, 96.1),  # amount in words; -3cm left; +4mm down per user
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        17.0,    # +2mm per user
 	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
@@ -68,14 +68,14 @@ POS = {
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        149.0,   # right edge for qty; +1mm per user
-	"r_rate":       182.0,
+	"r_qty":        139.0,   # right edge for qty; -1cm left per user
+	"r_rate":       172.0,   # -1cm left per user
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       90.0,
-	"y_taxable":    96.0,
-	"y_vat":        102.0,
-	"y_grand":      110.0,
+	"y_disc":       93.5,   # +0.5mm then +3mm more down per user
+	"y_taxable":    101.0,  # "total" +0.5cm down per user
+	"y_vat":        105.0,  # +3mm down per user
+	"y_grand":      111.0,  # +1mm down per user
 }
 
 ROWS_PER_PAGE = 2
