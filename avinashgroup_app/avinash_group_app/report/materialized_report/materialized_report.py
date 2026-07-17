@@ -7,7 +7,10 @@ from frappe import _
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
-	return get_columns(), get_data(filters)
+	data = get_data(filters)
+	# With zero rows the desk hides the table entirely ("Nothing to show");
+	# a single blank row keeps the column headers visible.
+	return get_columns(), data or [{}]
 
 
 def get_columns():

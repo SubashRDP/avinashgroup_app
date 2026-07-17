@@ -1,13 +1,16 @@
 {#- ============================================================================
-Grihalaxmi Metal Industries — A4 portrait Sales Invoice (plain paper, laser)
+Grihalaxmi Metal Industries — A4 portrait SALES RETURN (plain paper, laser)
 =============================================================================
-Layout traced from the legacy software's "sales invoice GLMI 81-82" PDF.
-SALES direction only — returns print with the dedicated
-grihalaxmi_invoice_return.html format ("Grihalaxmi Invoice A4 Return").
+Return counterpart of grihalaxmi_invoice.html ("Grihalaxmi Invoice A4") —
+same traced layout, but the header follows the annotated legacy bill:
 
-  1st print -> TAX INVOICE, 2nd -> INVOICE, later prints COPY OF ORIGINAL n
-  (invoice_copy_titles / print_count, one sheet per print event)
+  title  -> "Sales Return" (bold, 2pt bigger than the invoice copy title),
+            no printed date/time stamp
+  right  -> Sales Return Date / Sales Return Miti / Invoice No. (the return's
+            own branch name) / Ref Invoice No. + Ref. Invoice Date (the
+            original invoice's branch name and date); no Mode of payment
 
+All figures print positive — the document type states the direction.
 Company furniture (name, logo, VAT number) comes off the Company record so
 the format follows renames/logo swaps; only the Off/Fac address lines are
 template defaults (no Address records exist for GLMI).
@@ -30,6 +33,13 @@ template defaults (no Address records exist for GLMI).
 {%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
 {%- set address = address | striptags -%}
 {%- set address = address.strip().rstrip(', ') if address else '' -%}
+{#- Ref Invoice No. shows the original the way that invoice prints its own
+    number: its branch name, falling back to the docname. -#}
+{%- set ref_invoice_no = (frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_branch_name')
+                          if doc.return_against else '') or doc.return_against -%}
+{%- set ref_invoice_date = (frappe.utils.formatdate(frappe.db.get_value('Sales Invoice', doc.return_against, 'posting_date'), 'yyyy-MM-dd')
+                            if doc.return_against else '') -%}
+
 {#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
 {%- if not ns2.vat -%}
@@ -43,7 +53,7 @@ template defaults (no Address records exist for GLMI).
 {%- set taxable = doc.get('custom_total_amount_including_excise') or doc.net_total -%}
 {%- set grand_total = doc.rounded_total or doc.grand_total -%}
 
-{#- GLMI prints ONE sheet per print event: TAX INVOICE first, then copies -#}
+{#- every return print is a single "Sales Return" sheet -#}
 {%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}
 
 {%- set rows_per_page = rows_per_page | default(8) -%}
@@ -70,14 +80,16 @@ template defaults (no Address records exist for GLMI).
   .glm-head .logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
   .glm-head .cname { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 22pt; }
   .glm-head .caddr { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 10pt; line-height: 1.35; }
-  .glm-copy { text-align: right; font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.3; }
+  /* return title: bold and 2pt bigger than the invoice copy title (9.5pt) */
+  .glm-copy { text-align: right; font-family: 'Courier New', Courier, monospace;
+    font-weight: bold; font-size: 11.5pt; line-height: 1.3; }
   .glm-vat { text-align: center; font-weight: bold; font-size: 11pt; margin: 1mm 0 3mm; }
 
   .glm-info { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 4mm; }
   .glm-info td { padding: 0.6mm 0; vertical-align: top; }
   .glm-info .l { width: 32mm; }
   .glm-info .c { width: 3mm; text-align: center; }
-  .glm-info .rl { width: 28mm; }
+  .glm-info .rl { width: 32mm; white-space: nowrap; }
   .glm-info .rv { width: 48mm; white-space: nowrap; }
 
   table.glm-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
@@ -127,11 +139,11 @@ template defaults (no Address records exist for GLMI).
   <table class="glm-info">
     <tr>
       <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
-      <td class="rl">Transaction Date</td><td class="c">:</td><td class="rv">{{ ad_date }}</td>
+      <td class="rl">Sales Return Date</td><td class="c">:</td><td class="rv">{{ ad_date }}</td>
     </tr>
     <tr>
       <td class="l">Customer Address</td><td class="c">:</td><td>{{ address }}</td>
-      <td class="rl">Transaction Miti</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
+      <td class="rl">Sales Return Miti</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
     </tr>
     <tr>
       <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
@@ -139,7 +151,11 @@ template defaults (no Address records exist for GLMI).
     </tr>
     <tr>
       <td class="l"></td><td class="c"></td><td></td>
-      <td class="rl">Mode of payment</td><td class="c">:</td><td class="rv">Credit</td>
+      <td class="rl">Ref Invoice No.</td><td class="c">:</td><td class="rv">{{ ref_invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l"></td><td class="c"></td><td></td>
+      <td class="rl">Ref. Invoice Date</td><td class="c">:</td><td class="rv">{{ ref_invoice_date }}</td>
     </tr>
   </table>
 

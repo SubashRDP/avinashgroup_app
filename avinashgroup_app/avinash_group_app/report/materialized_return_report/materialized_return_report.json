@@ -13,7 +13,7 @@
  "module": "Avinash Group App",
  "name": "Materialized Return Report",
  "owner": "Administrator",
- "prepared_report": 1,
+ "prepared_report": 0,
  "ref_doctype": "CBMS Bill Return",
  "report_name": "Materialized Return Report",
  "report_type": "Script Report",

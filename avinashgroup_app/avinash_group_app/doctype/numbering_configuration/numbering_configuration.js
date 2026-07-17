@@ -421,9 +421,12 @@ function render_preview(frm) {
 				if (s.static_value) push_part(s, frappe.utils.escape_html(s.static_value));
 				break;
 			case "Normal / Return Code": {
-				const normal = s.static_value || "?";
+				const normal = s.static_value;
 				const ret = s.return_value;
-				push_part(s, frappe.utils.escape_html(ret ? `${normal}|${ret}` : normal));
+				// empty normal + return code = return-only marker; normals skip it
+				if (normal && ret) push_part(s, frappe.utils.escape_html(`${normal}|${ret}`));
+				else if (normal) push_part(s, frappe.utils.escape_html(normal));
+				else if (ret) push_part(s, `<i>[${frappe.utils.escape_html(ret)}]</i>`);
 				break;
 			}
 			case "Company Abbr":
@@ -453,6 +456,13 @@ function render_preview(frm) {
 			case "Number": {
 				const len = cint(s.number_length) || 6;
 				push_part(s, "1".padStart(len, "0"));
+				has_number = true;
+				break;
+			}
+			case "Name Number": {
+				// mirrors the document name's number — no counter of its own
+				const len = cint(s.number_length) || 6;
+				push_part(s, `<i>${"1".padStart(len, "0")}</i>`);
 				has_number = true;
 				break;
 			}

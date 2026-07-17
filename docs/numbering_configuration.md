@@ -70,6 +70,7 @@ and optionally auto-fill the Document No.*
 | Document Field | any field value | `Digits` zero-pads numeric values |
 | Fetch from Link | field on a linked record (e.g. type → code) | |
 | Number | the running counter | at most one; may sit anywhere in the order |
+| Name Number | the document NAME's number (trailing digits), zero-padded to Digits | mirrors the doc-name series — no counter of its own, so voucher and name can never drift; not combinable with Number |
 
 - **Attach** (`join_previous`): glue to previous part with no separator (`0001`+`A` → `0001A`).
 - Empty segments are skipped.

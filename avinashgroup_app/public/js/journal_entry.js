@@ -1,6 +1,9 @@
 // Cache: account → [vehicle names]
 const je_account_vehicle_cache = {};
 
+// An entry needs at least one debit and one credit line to balance.
+const DEFAULT_ACCOUNT_ROWS = 2;
+
 frappe.ui.form.on('Journal Entry', {
     onload: function(frm) {
         setTimeout(() => setup_vehicle_query(frm), 50);
@@ -9,6 +12,7 @@ frappe.ui.form.on('Journal Entry', {
     refresh: function(frm) {
         setTimeout(() => setup_vehicle_query(frm), 50);
         prefetch_vehicles_for_existing_rows(frm);
+        add_default_account_rows(frm);
     },
 
     accounts_on_form_rendered: function(frm) {
@@ -31,6 +35,25 @@ frappe.ui.form.on('Journal Entry Account', {
         });
     }
 });
+
+// ── Default rows on a blank entry ──────────────────────────────
+// Only for an empty new doc: amended, duplicated, mapped-from-another-doc and
+// template-driven entries arrive with their accounts table already filled, and
+// picking a Journal Entry Template later clears the table anyway (core
+// update_jv_details), so the blank rows never survive to duplicate template rows.
+function add_default_account_rows(frm) {
+    if (!frm.is_new()) return;
+    // Run once per new doc: refresh fires repeatedly, and after the user
+    // deletes the seeded rows we must not keep re-adding them.
+    if (frm.__default_rows_added) return;
+    if ((frm.doc.accounts || []).length) return;
+
+    frm.__default_rows_added = true;
+    for (let i = 0; i < DEFAULT_ACCOUNT_ROWS; i++) {
+        frm.add_child('accounts');
+    }
+    frm.refresh_field('accounts');
+}
 
 // ── Inline grid rows ──────────────────────────────────────────
 function setup_vehicle_query(frm) {

@@ -770,7 +770,11 @@ def _rule_docno_scope(doc, rule):
         glue = bool(seg.get("join_previous"))
         stype = seg.get("segment_type")
         fld = seg.get("field")
-        is_number = stype == "Number" or (stype == "Document Field" and fld == number_field)
+        # Name Number varies per document (it mirrors the doc name's number)
+        # — it is a number position, never a scope part
+        is_number = stype in ("Number", "Name Number") or (
+            stype == "Document Field" and fld == number_field
+        )
         # custom_document_word is the glued letter tail of the number (e.g. 7A) —
         # covered by the number's wildcard — UNLESS it IS the number field itself.
         is_word_tail = (
@@ -2098,6 +2102,21 @@ def _resolve_segment(doc, seg, sep, rule=None):
         # avoid separator collision when the separator is '/'
         return fy.replace("/", "-") if sep == "/" else fy
 
+    if stype == "Name Number":
+        # Mirror of the DOCUMENT NAME's running number (its trailing digit
+        # run), zero-padded to the segment's Digits. No counter of its own —
+        # the voucher number can never drift from the name's number, even
+        # when the rule's resolved prefix equals the name-series prefix.
+        name = frappe.utils.cstr(doc.get("name") or "")
+        if doc.get("amended_from"):
+            # amended names end in -1/-2 …; the number is in the base name
+            name = re.sub(r"-\d+$", "", name)
+        m = re.search(r"(\d+)$", name)
+        if not m:
+            return ""
+        length = int(seg.get("number_length") or 0)
+        return m.group(1).zfill(length) if length else m.group(1)
+
     if stype == "Document Field":
         return frappe.utils.cstr(doc.get(seg.get("field")))
 
@@ -2169,6 +2188,22 @@ def _series_data_floor(doc, rule, resolved, sep):
     return int(row[0][0]) if row and row[0][0] is not None else 0
 
 
+# Engine voucher counters are NAMESPACED in tabSeries: a rule's resolved
+# prefix can be byte-identical to a CORE DOC-NAME series key (e.g. segments
+# Company Abbr + "SB" + Fiscal Year resolve to "NGN-SB-82/83-", exactly the
+# key make_name_with_fiscal_year's pattern feeds core getseries). Without a
+# namespace both counters share one tabSeries row and every save increments
+# it twice — names and vouchers each skip numbers and drift apart.
+ENGINE_SERIES_NAMESPACE = "ncfg:"
+
+
+def _engine_series_name(key):
+    """tabSeries row name for an engine voucher series. Continuity across the
+    namespace switch is preserved by the data-floor scan: a namespaced series
+    with no row yet starts at MAX(stored numbers) + 1."""
+    return ENGINE_SERIES_NAMESPACE + key
+
+
 def _draw_engine_series(key, digits, floor):
     """Atomic next voucher-name counter, never below the data floor — the same
     deadlock-resistant upsert as _draw_next_document_no, instead of core
@@ -2209,7 +2244,12 @@ def _resolve_segments(doc, rule, sep):
             has_number = True
         else:
             value = _pad_segment_value(seg, _resolve_segment(doc, seg, sep, rule))
-            resolved.append({"num": False, "value": value, "glue": glue})
+            part = {"num": False, "value": value, "glue": glue}
+            if seg.get("segment_type") == "Name Number" and not value:
+                # the number IS the voucher's identity — a build without it
+                # must yield None (fall through), never a truncated voucher
+                part["nn_empty"] = True
+            resolved.append(part)
     return resolved, has_number
 
 
@@ -2244,16 +2284,30 @@ def _build_from_segments(doc, rule, commit_series=True, force_scan=False):
     """
     # ONE-RULE cut-over: up to Legacy Upto the number is COPIED from the
     # rule's Legacy Source Field (the old ERP number) instead of generated.
-    # Empty source -> None, so the engine can fall through to another rule.
     if rule.get("legacy_upto"):
         doc_date = _rule_date(doc, rule)
         if doc_date and frappe.utils.getdate(doc_date) <= frappe.utils.getdate(rule["legacy_upto"]):
             source = rule.get("legacy_source_field")
             value = (frappe.utils.cstr(doc.get(source)).strip() or None) if source else None
-            return value + get_amendment_suffix(doc) if value else None
+            if value:
+                return value + get_amendment_suffix(doc)
+            # Empty source:
+            #  * source == target — the "keep the imported number" config. A
+            #    NEW document backdated into the window has nothing to keep;
+            #    generate below like any other doc instead of silently saving
+            #    it without a voucher number.
+            #  * source != target — the old number lives in another field
+            #    (e.g. narration); empty means fall through to the next
+            #    matching rule (documented behavior).
+            if source != (rule.get("target_field") or "custom_branch_name"):
+                return None
 
     sep = rule.get("separator") or "/"
     resolved, has_number = _resolve_segments(doc, rule, sep)
+    if any(r.get("nn_empty") for r in resolved):
+        # a Name Number segment couldn't resolve (doc has no name yet, or the
+        # name carries no number) — never store a voucher without its number
+        return None
     if not has_number:
         # pass-through: rebuilt from the same (copied) inputs, so an amendment
         # would collide with its cancelled original — the -1/-2 suffix from the
@@ -2263,8 +2317,25 @@ def _build_from_segments(doc, rule, commit_series=True, force_scan=False):
         return value + get_amendment_suffix(doc) if value else None
 
     key_parts = [r["value"] for r in resolved if not r["num"] and r.get("value")]
-    series_key = sep.join(key_parts) + sep
+    raw_key = sep.join(key_parts) + sep
     number_len = next((r["len"] for r in resolved if r["num"]), 6)
+
+    # NAME-MIRROR: when the rule's series IS the document name's series — the
+    # name is exactly this prefix + a digit run (e.g. rule parts NGN, SB,
+    # 82/83 and name NGN-SB-82/83-00004) — the voucher takes the NAME's
+    # number (padded to the rule's Digits) instead of drawing its own.
+    # One series must never be counted twice: drawing here would double-step
+    # the shared counter and make name and voucher drift apart.
+    doc_name = frappe.utils.cstr(doc.get("name") or "")
+    if doc_name.startswith(raw_key):
+        m = re.match(r"^(\d+)(-\d+)?$", doc_name[len(raw_key):])  # -N = amendment
+        if m:
+            seq = ("%0" + str(int(number_len)) + "d") % int(m.group(1))
+            return _join_parts(
+                [(seq if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
+            )
+
+    series_key = _engine_series_name(raw_key)
 
     # Same fast path as _draw_next_document_no: skip the O(n) data-floor scan
     # while the series is verified; floor=0 leaves the counter authoritative.
@@ -2381,7 +2452,9 @@ def _renumber_if_scope_changed(doc, rule, target):
 
     sep = rule.get("separator") or "/"
     resolved, _ = _resolve_segments(doc, rule, sep)
-    new_key = sep.join(r["value"] for r in resolved if not r["num"] and r.get("value")) + sep
+    new_key = _engine_series_name(
+        sep.join(r["value"] for r in resolved if not r["num"] and r.get("value")) + sep
+    )
     if old_key == new_key:
         return
 
@@ -2523,7 +2596,7 @@ def _parse_engine_number(doc, rule, value):
     # exact current shape (same segments non-empty then and now)
     if num_index is not None and len(parts) == display_count and parts[num_index].isdigit():
         key = sep.join(parts[:num_index] + parts[num_index + 1:]) + sep
-        return key, int(parts[num_index])
+        return _engine_series_name(key), int(parts[num_index])
 
     # shape changed (e.g. a Branch Abbr that was empty is now filled): the
     # counter is the single all-digit part of the configured width.
@@ -2531,7 +2604,7 @@ def _parse_engine_number(doc, rule, value):
     if len(digit_idx) == 1:
         i = digit_idx[0]
         key = sep.join(parts[:i] + parts[i + 1:]) + sep
-        return key, int(parts[i])
+        return _engine_series_name(key), int(parts[i])
 
     return None, None
 

@@ -54,6 +54,8 @@ defaults.
     number: its branch name, falling back to the docname. -#}
 {%- set ref_invoice_no = (frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_branch_name')
                           if doc.return_against else '') or doc.return_against -%}
+{#- Reference Invoice Date: the original invoice's BS miti (return only). -#}
+{%- set ref_invoice_date = miti_fmt(frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_invoice_miti')) if doc.return_against else '' -%}
 
 {#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
@@ -78,7 +80,7 @@ defaults.
 {%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}
 {%- set print_stamp = frappe.utils.now_datetime().strftime('%d/%m/%Y %I:%M:%S%p') -%}
 
-{%- set rows_per_page = rows_per_page | default(8) -%}
+{%- set rows_per_page = rows_per_page | default(4) -%}
 
 {%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
 {%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
@@ -104,7 +106,7 @@ defaults.
 
   .glm-head { position: relative; text-align: center; }
   .glm-head .logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
-  .glm-head .cname { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 17pt; }
+  .glm-head .cname { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 17pt; margin-top: 4mm; }
   .glm-head .caddr { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 9pt; line-height: 1.2; }
   /* copy label flows right-aligned under the address (its original spot) */
   .glm-copy { text-align: right; font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.3; }
@@ -122,13 +124,15 @@ defaults.
   table.glm-items th { font-size: 9pt; text-align: center; }
   /* item box hugs its rows plus 30px of breathing room at the bottom */
   table.glm-items td.body { vertical-align: top; height: auto; padding: 0 0 30px; }
-  .cell-stack div { padding: 1.2mm 1.5mm 0; line-height: 1.25; white-space: nowrap; overflow: hidden; }
+  /* taller item rows: each item occupies min 8mm so ~4 items fill the sheet */
+  .cell-stack div { padding: 2.5mm 1.5mm 0; line-height: 1.3; min-height: 8mm; white-space: nowrap; overflow: hidden; }
   .cell-stack .wrap { white-space: normal; }
 
   table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.4mm 1mm; white-space: nowrap; overflow: hidden; }
   table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.4mm 1.5mm; }
   table.glm-items td.words { vertical-align: top; font-size: 9pt; }
   .words-val { padding-top: 0.8mm; line-height: 1.25; }
+  .words-hr { border: none; border-top: 0.3mm solid #000; margin: 1.5mm 0; }
 
   .glm-sign { position: relative; margin: 8.7mm 0 0 auto; width: 70mm; text-align: center; }
   .glm-sign .line { border-top: 0.3mm solid #000; margin-bottom: 1mm; }
@@ -156,10 +160,32 @@ defaults.
     {%- if company_logo -%}<img class="logo" src="{{ company_logo }}" onerror="this.style.display='none'">{%- endif -%}
     <div class="cname">{{ doc.company }}</div>
     <div class="caddr">{% for line in addr_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
-    <div class="glm-copy">{{ copy_label }}<br>{{ print_stamp }}</div>
-    {%- if company_vat %}<div class="glm-vat">Vat No:{{ company_vat }}</div>{%- endif %}
+    <div class="glm-copy">{{ copy_label }}</div>
+    {%- if company_vat %}<div class="glm-vat">VAT No:{{ company_vat }}</div>{%- endif %}
   </div>
 
+  {%- if is_cn %}
+  {#- Return (credit memo) header: no Mode of Payment; the right column carries
+      the return's own number/date and the original invoice it references. -#}
+  <table class="glm-info">
+    <tr>
+      <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
+      <td class="rl">Return Date</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer Address</td><td class="c">:</td><td>{{ address }}</td>
+      <td class="rl">Sales Return No.</td><td class="c">:</td><td class="rv">{{ invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
+      <td class="rl">Ref Invoice No.</td><td class="c">:</td><td class="rv">{{ ref_invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l"></td><td class="c"></td><td></td>
+      <td class="rl">Ref Invoice Date</td><td class="c">:</td><td class="rv">{{ ref_invoice_date }}</td>
+    </tr>
+  </table>
+  {%- else %}
   <table class="glm-info">
     <tr>
       <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
@@ -175,13 +201,10 @@ defaults.
     </tr>
     <tr>
       <td class="l">Mode of Payment</td><td class="c">:</td><td>Cash/Credit/Cheque/Other</td>
-      {%- if is_cn and doc.return_against %}
-      <td class="rl">Ref Invoice No.</td><td class="c">:</td><td class="rv">{{ ref_invoice_no }}</td>
-      {%- else %}
       <td class="rl"></td><td class="c"></td><td class="rv"></td>
-      {%- endif %}
     </tr>
   </table>
+  {%- endif %}
 
   {%- set base_sno = (page_no - 1) * rows_per_page -%}
   <table class="glm-items">
@@ -215,7 +238,7 @@ defaults.
 
     {%- if page_last %}
     <tr>
-      <td class="words" colspan="4" rowspan="5"><b>Amount In Words :</b><div class="words-val">{{ amount_words }}</div></td>
+      <td class="words" colspan="4" rowspan="5"><b>Remarks :</b> <span class="words-val">{{ doc.custom_narration or '' }}</span><hr class="words-hr"><b>Amount In Words :</b> <span class="words-val">{{ amount_words }}</span></td>
       <td class="tot-label">B. Amount</td>
       <td class="tot-val">{{ num(doc.total) }}</td>
     </tr>

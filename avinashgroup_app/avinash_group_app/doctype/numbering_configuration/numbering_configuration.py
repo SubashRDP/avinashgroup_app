@@ -182,11 +182,19 @@ class NumberingConfiguration(Document):
 
 	def validate_segments(self):
 		number_segments = 0
+		name_number_segments = 0
 		for row in self.segments or []:
 			stype = row.segment_type
 			if stype == "Number":
 				number_segments += 1
-			elif stype in ("Static Text", "Normal / Return Code") and not (row.static_value or "").strip():
+			elif stype == "Name Number":
+				name_number_segments += 1
+			elif stype == "Normal / Return Code" and not (row.static_value or "").strip():
+				# an empty NORMAL code with a return code is valid: the segment
+				# then marks returns only (normals skip it entirely)
+				if not (row.return_value or "").strip():
+					frappe.throw(_("Segment row {0}: enter the Text (normal code) or a Return Text.").format(row.idx))
+			elif stype == "Static Text" and not (row.static_value or "").strip():
 				frappe.throw(_("Segment row {0}: enter the Text (normal code).").format(row.idx))
 			elif stype in ("Document Field", "Fetch from Link") and not row.field:
 				frappe.throw(_("Segment row {0}: pick a Field.").format(row.idx))
@@ -201,7 +209,13 @@ class NumberingConfiguration(Document):
 				title=_("Too Many Number Segments"),
 			)
 
-		if number_segments == 0:
+		if number_segments and name_number_segments:
+			frappe.throw(
+				_("Use either a <b>Number</b> segment (own counter) or a <b>Name Number</b> segment (mirrors the document name's number) — not both."),
+				title=_("Conflicting Number Segments"),
+			)
+
+		if number_segments == 0 and name_number_segments == 0:
 			if not (self.segments or []):
 				frappe.throw(_("Add at least one segment."), title=_("Segments Required"))
 			# no Number segment = pass-through rule (copies the segment values

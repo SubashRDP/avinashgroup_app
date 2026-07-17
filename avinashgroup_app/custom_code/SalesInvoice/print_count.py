@@ -56,7 +56,9 @@ PRINT_OUTPUT_CMDS = {
 # event. Everything else is a "pair" format (Nepal Gas / Grishma / Avinash).
 SINGLE_SHEET_FORMATS = {
 	"Grihalaxmi Invoice A4",
+	"Grihalaxmi Invoice A4 Return",
 	"Grihalaxmi Invoice Half A4",
+	"Grihalaxmi Invoice Half A4 Return",
 }
 
 
@@ -82,7 +84,7 @@ def _titles_for(prev_sheets: int, pair: bool, is_return: bool) -> list[str]:
 	pair=False (Grihalaxmi, unchanged): one sheet per print, count == prints.
 	"""
 	if is_return:
-		return ["CREDIT MEMO"]
+		return ["Sales Return"]
 	if pair:
 		if prev_sheets <= 0:
 			return ["TAX INVOICE", "INVOICE"]

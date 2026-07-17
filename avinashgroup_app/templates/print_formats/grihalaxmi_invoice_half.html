@@ -2,12 +2,11 @@
 Grihalaxmi Metal Industries — A4 portrait Sales Invoice (plain paper, laser)
 =============================================================================
 Layout traced from the legacy software's "sales invoice GLMI 81-82" PDF.
-One template serves both directions of the document:
+SALES direction only — returns print with the dedicated
+grihalaxmi_invoice_half_return.html format ("Grihalaxmi Invoice Half A4 Return").
 
-  normal invoice -> first print is the INVOICE + TAX INVOICE pair, reprints
-                    are COPY OF ORIGINAL n (invoice_copy_titles / print_count)
-  is_return      -> CREDIT MEMO referencing return_against; all figures
-                    print positive — the document type states the direction.
+  1st print -> TAX INVOICE, 2nd -> INVOICE, later prints COPY OF ORIGINAL n
+  (invoice_copy_titles / print_count, one sheet per print event)
 
 Company furniture (name, logo, VAT number) comes off the Company record so
 the format follows renames/logo swaps; only the Off/Fac address lines are
@@ -31,7 +30,6 @@ template defaults (no Address records exist for GLMI).
 {%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
 {%- set address = address | striptags -%}
 {%- set address = address.strip().rstrip(', ') if address else '' -%}
-{%- set is_cn = doc.is_return -%}
 
 {#- Mode of payment: POS payment row wins; a submitted unpaid invoice is Credit -#}
 {%- set ns = namespace(mode='Credit') -%}
@@ -59,7 +57,6 @@ template defaults (no Address records exist for GLMI).
 
 {#- GLMI prints ONE sheet per print event: TAX INVOICE first, then copies -#}
 {%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}
-{%- set print_stamp = frappe.utils.now_datetime().strftime('%d/%m/%Y %I:%M:%S%p') -%}
 
 {%- set rows_per_page = rows_per_page | default(8) -%}
 
@@ -144,7 +141,7 @@ template defaults (no Address records exist for GLMI).
     {%- if company_logo -%}<img class="logo" src="{{ company_logo }}" onerror="this.style.display='none'">{%- endif -%}
     <div class="cname">{{ doc.company }}</div>
     <div class="caddr">{{ office_line }}<br>{{ factory_line }}</div>
-    <div class="glm-copy">{{ copy_label }}<br>{{ print_stamp }}</div>
+    <div class="glm-copy">{{ copy_label }}</div>
     {%- if company_vat %}<div class="glm-vat">Vat No:{{ company_vat }}</div>{%- endif %}
   </div>
 
@@ -165,12 +162,6 @@ template defaults (no Address records exist for GLMI).
       <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
       <td class="rl">Mode of payment</td><td class="c">:</td><td class="rv">{{ ns.mode }}</td>
     </tr>
-    {%- if is_cn and doc.return_against %}
-    <tr>
-      <td class="l"></td><td class="c"></td><td></td>
-      <td class="rl">Ref Invoice No.</td><td class="c">:</td><td class="rv">{{ doc.return_against }}</td>
-    </tr>
-    {%- endif %}
   </table>
 
   {%- set base_sno = (page_no - 1) * rows_per_page -%}

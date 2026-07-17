@@ -21,7 +21,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Segment Type",
-   "options": "Static Text\nNormal / Return Code\nDocument Field\nFetch from Link\nCompany Abbr\nBranch Abbr\nFiscal Year\nNumber",
+   "options": "Static Text\nNormal / Return Code\nDocument Field\nFetch from Link\nCompany Abbr\nBranch Abbr\nFiscal Year\nNumber\nName Number",
    "reqd": 1
   },
   {
@@ -62,8 +62,8 @@
   {
    "columns": 1,
    "default": "6",
-   "depends_on": "eval:['Number','Document Field','Fetch from Link'].includes(doc.segment_type)",
-   "description": "Digits (zero-padded). For Document Field / Fetch from Link the value is padded only when it is a plain number.",
+   "depends_on": "eval:['Number','Name Number','Document Field','Fetch from Link'].includes(doc.segment_type)",
+   "description": "Digits (zero-padded). For Document Field / Fetch from Link the value is padded only when it is a plain number. For Name Number, the document name's number is padded to this width.",
    "fieldname": "number_length",
    "fieldtype": "Int",
    "label": "Digits"
@@ -81,7 +81,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-07-08 00:00:00.000000",
+ "modified": "2026-07-17 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Numbering Segment",

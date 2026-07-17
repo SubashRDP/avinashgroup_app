@@ -1,6 +1,12 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
+// [name, year_start_date, year_end_date] of the fiscal year covering today;
+// guarded so a site with no running Fiscal Year doesn't error on report open.
+var sales_register_fy = erpnext.utils.get_fiscal_year(frappe.datetime.get_today(), false, true)
+	? erpnext.utils.get_fiscal_year(frappe.datetime.get_today(), true)
+	: [];
+
 frappe.query_reports["Sales Register Report"] = {
 	filters: [
 		{
@@ -12,17 +18,35 @@ frappe.query_reports["Sales Register Report"] = {
 			},
 		},
 		{
+			fieldname: "fiscal_year",
+			label: __("Fiscal Year"),
+			fieldtype: "Link",
+			options: "Fiscal Year",
+			default: sales_register_fy[0],
+			on_change: function (query_report) {
+				const fiscal_year = query_report.get_filter_value("fiscal_year");
+				if (!fiscal_year) return;
+				frappe.model.with_doc("Fiscal Year", fiscal_year, function () {
+					const fy_doc = frappe.model.get_doc("Fiscal Year", fiscal_year);
+					query_report.set_filter_value({
+						from_date: fy_doc.year_start_date,
+						to_date: fy_doc.year_end_date,
+					});
+				});
+			},
+		},
+		{
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
-			default: frappe.datetime.month_start(),
+			default: sales_register_fy[1] || frappe.datetime.month_start(),
 			reqd: 1,
 		},
 		{
 			fieldname: "to_date",
 			label: __("To Date"),
 			fieldtype: "Date",
-			default: frappe.datetime.now_date(),
+			default: sales_register_fy[2] || frappe.datetime.now_date(),
 			reqd: 1,
 		},
 		{
