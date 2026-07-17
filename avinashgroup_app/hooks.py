@@ -360,6 +360,9 @@ fixtures = [
             "name": ["in", ["Customer Balance Confirmation", "Vendor Balance Confirmation"]]
         },
     },
+    # Company-wise link filtering rules. Exported so a new site gets the same
+    # rules on install instead of needing them re-entered by hand.
+    "Company Filter Config",
 ]
 
 # Custom masters/config that must survive ERPNext's Transaction Deletion
