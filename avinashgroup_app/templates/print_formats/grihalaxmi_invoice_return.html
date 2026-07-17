@@ -98,6 +98,7 @@ template defaults (no Address records exist for GLMI).
   table.glm-items td.body { vertical-align: top; height: 118mm; padding: 0; overflow: hidden; }
   .cell-stack div { padding: 1.2mm 1.5mm 0; line-height: 1.25; white-space: nowrap; overflow: hidden; }
   .cell-stack .wrap { white-space: normal; }
+  .cell-stack.uom div { font-size: 8pt; position: relative; left: -2mm; }
 
   table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.9mm 1mm; white-space: nowrap; overflow: hidden; }
   table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.9mm 1.5mm; }
@@ -181,7 +182,7 @@ template defaults (no Address records exist for GLMI).
       <td class="body"><div class="cell-stack" style="text-align:center;">
         {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
-      <td class="body"><div class="cell-stack" style="text-align:center;">
+      <td class="body"><div class="cell-stack uom" style="text-align:center;">
         {%- for item in page_items %}<div>{{ item.uom or '' }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:right;">
