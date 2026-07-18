@@ -21,6 +21,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.4",
+    "/assets/avinashgroup_app/js/auto_fiscal_year.js?v=1.0",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
     "/assets/avinashgroup_app/js/ngi_print.js?v=1.1",
