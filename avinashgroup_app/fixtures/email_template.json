@@ -1,0 +1,34 @@
+[
+ {
+  "doctype": "Email Template",
+  "name": "Dynamic Approval Request",
+  "subject": "{{ doctype_label }} {{ docname }} — Your Approval Required (Level {{ current_level }})",
+  "use_html": 1,
+  "response_html": "<p>Dear {{ approver_name }},</p><p>{{ doctype_label }} <b>{{ docname }}</b> is awaiting your approval at Level {{ current_level }}.</p><p><a href=\"{{ doc_link }}\">Click here to approve or reject</a></p>",
+  "response": ""
+ },
+ {
+  "doctype": "Email Template",
+  "name": "Dynamic Approval Progress",
+  "subject": "{{ doctype_label }} {{ docname }} — Approved at Level {{ approved_level }}",
+  "use_html": 1,
+  "response_html": "<p>Hello,</p><p><b>{{ approver_name }}</b> has approved {{ doctype_label }} <b>{{ docname }}</b> at Level {{ approved_level }} of {{ total_levels }}.</p><p><a href=\"{{ doc_link }}\">Click here to open</a></p>",
+  "response": ""
+ },
+ {
+  "doctype": "Email Template",
+  "name": "Dynamic Approval Final",
+  "subject": "{{ doctype_label }} {{ docname }} — Fully Approved",
+  "use_html": 1,
+  "response_html": "<p>Hello,</p><p>{{ doctype_label }} <b>{{ docname }}</b> has been fully approved (all {{ total_levels }} levels). The final approval was made by <b>{{ approver_name }}</b>.</p><p><a href=\"{{ doc_link }}\">Click here to open</a></p>",
+  "response": ""
+ },
+ {
+  "doctype": "Email Template",
+  "name": "Dynamic Approval Rejected",
+  "subject": "{{ doctype_label }} {{ docname }} — Rejected",
+  "use_html": 1,
+  "response_html": "<p>Hello,</p><p>{{ doctype_label }} <b>{{ docname }}</b> was <b>rejected</b> by <b>{{ approver_name }}</b> at Level {{ current_level }}.</p><p><a href=\"{{ doc_link }}\">Click here to open</a></p>",
+  "response": ""
+ }
+]
