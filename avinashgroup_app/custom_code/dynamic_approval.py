@@ -262,11 +262,23 @@ def validate(doc, method=None):
 	config = _get_config_for_doc(doc)
 	if not config:
 		return
-	if doc.get("workflow_state") != "Pending Approval":
-		return
 	if doc.is_new():
 		return
 	if frappe.session.user == "Administrator":
+		return
+
+	# Once rejected the document is frozen — no field edits by anyone (Admin excepted
+	# above). Allow the reject transition itself, which flips workflow_state → Rejected
+	# on this very save (DB still holds the prior "Pending Approval" state, so
+	# has_value_changed is True); every later save while Rejected is blocked.
+	if doc.get("workflow_state") == "Rejected":
+		if not doc.has_value_changed("workflow_state"):
+			frappe.throw(
+				_("This document has been rejected and is now read-only. No changes are allowed.")
+			)
+		return
+
+	if doc.get("workflow_state") != "Pending Approval":
 		return
 
 	# Allow the workflow transition that brought the doc INTO Pending
@@ -522,19 +534,23 @@ def _dispatch_notifications(doc, config):
 					doc,
 				)
 
-	# ── 2. Rejected → requester + everyone who already approved ──────────
-	if getattr(doc.flags, "is_rejection", False) and config.get("enable_reject_notification"):
+	# ── 2. Rejected → maker (always) + already-approved earlier levels (if enabled) ──
+	if getattr(doc.flags, "is_rejection", False):
 		current_level = cint(doc.get(level_field))
 		actor_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
-		# Requester first, then approvers of levels below the one that rejected
-		# (the rejecting approver is the current level and is excluded by the helper).
+		# The maker (doc owner) is ALWAYS notified on rejection, regardless of the
+		# per-flow toggle — excluded only when the maker is also the rejecter (no
+		# self-mail). Approvers of levels below the rejecting one are added only when
+		# the flow enables reject notifications; the rejecter and any future/higher
+		# level are never included (the helper only walks levels 1..upto).
 		recipients = []
 		owner = doc.get("owner")
 		if owner and owner != frappe.session.user:
 			recipients.append(owner)
-		for u in _collect_previous_approvers(doc, config, current_level - 1):
-			if u not in recipients:
-				recipients.append(u)
+		if config.get("enable_reject_notification"):
+			for u in _collect_previous_approvers(doc, config, current_level - 1):
+				if u not in recipients:
+					recipients.append(u)
 		if recipients:
 			ctx = _notification_context(doc, approver_name=actor_name, current_level=current_level)
 			_send_templated_email(
@@ -545,7 +561,7 @@ def _dispatch_notifications(doc, config):
 				doc,
 			)
 
-	# ── 3 + 4. Progress / final → already-approved approvers ─────────────
+	# ── 3 + 4. Progress / final ──────────────────────────────────────────
 	approved_level = getattr(doc.flags, "approved_level", None)
 	if not approved_level:
 		return
@@ -553,9 +569,7 @@ def _dispatch_notifications(doc, config):
 	is_final = bool(getattr(doc.flags, "approval_is_final", False))
 	actor_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
 	total_levels = cint(doc.get(TOTAL_LEVELS_FIELD))
-	recipients = _collect_previous_approvers(doc, config, approved_level)
-	if not recipients:
-		return
+	approvers = _collect_previous_approvers(doc, config, approved_level)
 
 	ctx = _notification_context(
 		doc,
@@ -566,15 +580,32 @@ def _dispatch_notifications(doc, config):
 		is_final=is_final,
 	)
 
-	if not is_final and config.get("enable_progress_notification"):
-		_send_templated_email(
-			recipients,
-			config.get("progress_email_template") or TEMPLATE_PROGRESS,
-			TEMPLATE_PROGRESS,
-			ctx,
-			doc,
-		)
-	elif is_final and config.get("enable_final_notification"):
+	# ── 3. Progress ("X approved at level N") → already-approved approvers only.
+	# The creator is deliberately NOT mailed per step (only the final outcome).
+	if not is_final:
+		if approvers and config.get("enable_progress_notification"):
+			_send_templated_email(
+				approvers,
+				config.get("progress_email_template") or TEMPLATE_PROGRESS,
+				TEMPLATE_PROGRESS,
+				ctx,
+				doc,
+			)
+		return
+
+	# ── 4. Final ("fully approved") → the creator (owner) is ALWAYS notified of the
+	# outcome, regardless of the per-flow toggle (mirrors the mandatory reject mail).
+	# Already-approved approvers are added only when the final toggle is enabled.
+	# Owner excluded only when the creator is themselves the final approver.
+	recipients = []
+	owner = doc.get("owner")
+	if owner and owner != frappe.session.user:
+		recipients.append(owner)
+	if config.get("enable_final_notification"):
+		for u in approvers:
+			if u not in recipients:
+				recipients.append(u)
+	if recipients:
 		_send_templated_email(
 			recipients,
 			config.get("final_email_template") or TEMPLATE_FINAL,
@@ -959,15 +990,19 @@ def _create_or_update_workflow(doctype, level_field):
 		and "Rejected" in (status_df.options or "")
 	)
 
-	approved_state = {"state": "Approved", "doc_status": "1", "allow_edit": "All", "permissions": permissions}
-	rejected_state = {"state": "Rejected", "doc_status": "0", "allow_edit": "All", "permissions": permissions}
+	approved_state = {"state": "Approved", "doc_status": "1", "allow_edit": "All", "send_email": 0, "permissions": permissions}
+	rejected_state = {"state": "Rejected", "doc_status": "0", "allow_edit": "All", "send_email": 0, "permissions": permissions}
 	if bridge_status:
 		approved_state.update({"update_field": "status", "update_value": "Approved"})
 		rejected_state.update({"update_field": "status", "update_value": "Rejected"})
 
+	# send_email: 0 on every state disables Frappe's native "please-act" workflow email —
+	# it fans out to every user holding the transition's role ("All"), which would notify
+	# future/higher approvers. Notifications are handled solely by _dispatch_notifications,
+	# which is level-scoped. This is the per-state gate; send_email_alert below is the other.
 	states = [
-		{"state": "Draft",            "doc_status": "0", "allow_edit": "All", "permissions": permissions},
-		{"state": "Pending Approval", "doc_status": "0", "allow_edit": "All", "permissions": permissions},
+		{"state": "Draft",            "doc_status": "0", "allow_edit": "All", "send_email": 0, "permissions": permissions},
+		{"state": "Pending Approval", "doc_status": "0", "allow_edit": "All", "send_email": 0, "permissions": permissions},
 		approved_state,
 		rejected_state,
 	]
@@ -1032,6 +1067,9 @@ def _create_or_update_workflow(doctype, level_field):
 		for t in transitions:
 			wf.append("transitions", t)
 		wf.is_active = 1
+		# Match the create branch: keep the native workflow email off so re-running
+		# Setup Workflow never re-enables the "please-act" fan-out to future approvers.
+		wf.send_email_alert = 0
 		wf.save(ignore_permissions=True)
 		frappe.msgprint(_("Updated existing workflow: {0}").format(wf.name), alert=True)
 	else:

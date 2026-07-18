@@ -83,6 +83,11 @@
 
         }
 
+        // ── 2b. Lock the whole form once Rejected (read-only for everyone but Administrator) ──
+        if (frm.doc.workflow_state === "Rejected" && frappe.session.user !== "Administrator") {
+            frm.disable_form();
+        }
+
         // ── 3. Hide the hidden workflow-driver fields ──
         let company = frm.doc.company;
         if (!company) {
