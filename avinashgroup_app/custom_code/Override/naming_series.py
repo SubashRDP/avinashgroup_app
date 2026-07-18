@@ -1637,6 +1637,11 @@ def set_custom_name_field(doc):
         # a Numbering Configuration rule targets Voucher No. for this doc —
         # the engine (set_custom_branch_name) generates it; don't overwrite.
         return
+    # Amendment: keep the ORIGINAL's voucher number + the -1/-2 suffix instead
+    # of recomputing the base (which would drift with an edited date/type),
+    # matching the engine path and how the Document No. is already pinned.
+    if doc.get("amended_from") and _pin_amended_name(doc, "custom_name"):
+        return
     company_name = None
     if hasattr(doc, 'company') and doc.company:
         company_name = doc.company
@@ -2476,6 +2481,40 @@ def _renumber_if_scope_changed(doc, rule, target):
         doc.set(target, fresh)
 
 
+def _pin_amended_name(doc, target):
+    """An amendment is the SAME voucher re-issued after cancellation, so its
+    voucher number (the target field, e.g. custom_name) is the ORIGINAL's plus
+    the -1/-2 amendment suffix — never re-derived from the amendment's own
+    (editable) fields. Mirror of _pin_amended_docno, which pins the Document No.
+    the same way. Without this the name is rebuilt from segments/legacy on every
+    save, so editing the amendment's date (e.g. into the legacy cut-over window)
+    or its type would silently change the voucher number.
+
+    Returns True when the name was pinned; False when there is nothing to pin
+    (not an amendment, or the original carries no number) so normal generation
+    applies (e.g. amending a legacy/Grihalaxmi doc that had no custom_name).
+    """
+    parent = doc.get("amended_from")
+    if not parent:
+        return False
+    row = frappe.db.get_value(doc.doctype, parent, [target, "amended_from"], as_dict=True)
+    if not row or not row.get(target):
+        return False
+    suffix = get_amendment_suffix(doc)
+    if not suffix:
+        # Name not assigned yet (no -N to distinguish this from the original):
+        # fall through to normal generation rather than pinning to the exact
+        # original name and colliding with it on the unique index.
+        return False
+    base = frappe.utils.cstr(row.get(target))
+    if row.get("amended_from"):
+        # the parent is itself an amendment: its value ends in its own -N
+        # suffix (the final -digits); strip just that so suffixes don't stack.
+        base = re.sub(r"-\d+$", "", base)
+    doc.set(target, base + suffix)
+    return True
+
+
 def set_custom_branch_name(doc):
     """
     Sets custom_branch_name field based on branch-wise naming.
@@ -2499,6 +2538,14 @@ def set_custom_branch_name(doc):
         target = rule.get("target_field") or "custom_branch_name"
         if not doc.meta.has_field(target):
             continue
+
+        # Amendment: the voucher number is the ORIGINAL's + the -1/-2 suffix,
+        # never re-derived (which could drift with an edited date — e.g. into
+        # the legacy cut-over window — or type). Mirrors _pin_amended_docno,
+        # which already pins the Document No. this way.
+        if doc.get("amended_from") and _pin_amended_name(doc, target):
+            _validate_unique_number(doc, target)
+            return
 
         # A STORED number never changes from OUTSIDE: a client/API/import edit
         # of an already-numbered document is discarded in favor of the stored
