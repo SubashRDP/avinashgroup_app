@@ -36,7 +36,11 @@ and optionally auto-fill the Document No.*
   ALL must match for the rule to apply. The Value input adapts to the picked
   field — a Link field gets a standard link picker, a Select its options, a
   Check a Yes/No dropdown, a Date a date picker (same in the Document No.
-  conditions; `In`/`Not In` stay free text because they take a comma list).
+  conditions; under `In`/`Not In` the value becomes a **multi-select** over the
+  same source — Link records, Select options, or `1`/`0` for a Check — that
+  stores the picks as the comma-separated list the engine splits on, and you can
+  still type a value the picker didn't load. Date under `In`/`Not In` stays free
+  text, since no picker expresses a list of dates).
 - **Most specific rule wins**: specificity = (company set? +1) + (branch set? +1) +
   (number of conditions). Ties break deterministically by rule name, and tied rules
   are reported as **ambiguous** (form alert + warning on rule save) — fix by making
