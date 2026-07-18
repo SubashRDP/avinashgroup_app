@@ -1,0 +1,635 @@
+{#- ==========================================================================
+Nepal Gas Journal Voucher — Journal Entry voucher (avinashgroup_app).
+Source of truth for the "Nepal Gas Journal Voucher" standard Print Format;
+print_format/nepal_gas_journal_voucher/nepal_gas_journal_voucher.json
+only {% include %}s this file. Per-JV-type columns after Account:
+  Cash Entry / Cash-Bank-Contra / Journal Entry -> Vehicle | Party | Party Name
+  all other types                               -> Party | Party Name
+S.N. column always shown. Narration only for Cash Entry.
+=========================================================================== -#}
+<style>
+@page {
+ /* size: A4;*/
+ /* margin: 20mm 15mm 25mm 15mm; */
+  margin-bottom: 20mm;
+  
+ 
+  /* Bottom margin must be large enough for footer */
+  
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 10px;
+    color: #000;
+ 
+  }
+}
+
+body {
+  -webkit-print-color-adjust: exact; /* for color fidelity */
+  margin: 0; /* No margin on body, margins are on @page */
+  padding-bottom: 25mm; /* Padding so content doesn't overlap page footer */
+  font-size:10px !important;
+}
+ 
+ 
+ 
+ 
+ table { 
+  width: 100%; 
+  border-collapse: collapse; 
+}
+
+th, td { 
+  border:1px solid #000; 
+  padding:4px;
+  font-size:10px;
+}
+
+th { font-weight:600; }
+
+/* Header/Footer repeat per page */
+thead { display: table-header-group; }
+tfoot { display: table-footer-group; }
+
+/* Avoid splitting rows across pages */
+tr, td, th { page-break-inside: avoid; }
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ .page-break {
+    page-break-after: always;
+  }
+ 
+ .company-info h2
+ {
+    font-weight: 600;
+    margin: 0;
+    font-size: 20px;
+ }
+  .company-info h4
+  {
+     font-weight: 600;
+    margin: 2px;
+    font-size: 15px;
+  }
+   .company-info div
+   {
+         font-weight: 600;
+   }
+  
+  strong
+  {
+      font-weight:600 !important;
+  }
+  
+  
+  .title strong
+  {
+      font-size:16px;
+  }
+ 
+ .top-table tr td,.table2 tr td
+ {
+     font-size:10px !important;
+     padding: 4px 0px !important;
+ }
+ /*
+ .main-table thead {
+    border-bottom: solid #000 1px;
+    border-top: solid #000 1px;
+}
+ */
+ 
+ 
+ .main-table tr th
+ {
+     font-size:10px !important;
+     font-weight:600;
+        padding:4px !important;
+ }
+  .main-table tr td
+ {
+     font-size:10px !important;
+        padding: 4px !important;
+ 
+ }
+ 
+ .main-table.table-bordered
+ {
+    border:0px;
+ }
+ 
+ .main-table.table-bordered td, .main-table.table-bordered th {
+    border: 0px;
+}
+ 
+ 
+ .print-format .format-container,.print-format 
+ {
+     padding:0px !important;
+ }
+ 
+ 
+    .footer {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      font-size: 10px;
+      border-top: 1px solid #000;
+      padding-top: 10px;
+    }
+
+ 
+    .page-number
+    {
+    
+  position: absolute;
+  bottom: 20px;
+  width: 100%;
+  text-align: center;
+  font-size: 10px;
+  right:0;
+
+     }
+ 
+ .authorized hr
+ {
+     border-top:solid #000 1px !important;
+     margin:5px 0px;
+ }
+ 
+ 
+ 
+
+.print-format {
+ 
+padding:30px !important;
+    
+}
+
+td.texleft p {
+    text-align: left !important;
+}
+
+
+.value-color
+{
+   color: #192734; 
+}
+
+.print-format .value
+{
+    line-height:0;
+}
+
+ 
+
+.print-heading
+{
+    border-bottom:none;
+}
+  .template h2
+  
+  {
+      text-align:left;
+      text-transform: uppercase;
+    font-size: 18px !important;
+    margin-top:0px;
+    margin-bottom:0px;
+    color:#192734;
+  }
+ 
+ .template h3
+ {
+ 
+        text-transform: capitalize;
+    margin-top: 10px;
+    font-weight: 500;
+    padding: 3px;
+    font-size: 16px;
+    letter-spacing: 1.5px;
+        
+        
+        
+ }
+ 
+ .template label {
+ 
+    font-size: 10px;
+   color:#192734;
+ 
+}
+
+ 
+
+
+ .text-italic {
+    font-style: italic;
+  }
+ 
+ 
+  
+  .template td {
+    padding: 3px !important;
+    font-size:10px;
+}
+  
+  
+  .template th 
+  {
+padding: 3px !important;
+    font-size:10px;
+    font-weight:700;
+    color:#030404;
+} 
+  
+  
+  
+  .template table tbody tr.no-border-bottom td {
+    border-bottom: 0px !important;
+   border-width: 0 1px 0px 0px;
+}
+   
+
+      .main-table
+      {
+          margin-top:10px;
+          margin-bottom:0px;
+      }
+      
+      .main-table th
+      
+      {
+          color:#000;
+      }
+   
+   .main-table tr
+   {
+       height:20px !important;
+   }
+  
+  
+  .bottom-table td
+  {
+      padding:3px !important;
+      min-height:20px;
+  }
+  
+  .border-right
+  {
+      border-right:solid #030404 1px !important;
+  }
+  
+  .p-0
+  {
+      padding:0px !important;
+  }
+  
+  .top-details tr td
+  
+  {
+      display:inline-block;
+  }
+ 
+  
+  
+  p {
+    text-align: center;
+    margin: 0;
+    padding: 2px;
+  }
+
+  .template .table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+  }
+
+ 
+  .no-border, .no-border td {
+    border: none !important;
+  }
+
+  .footer-table td {
+    border: none;
+    padding-top: 30px;
+    vertical-align: top;
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .text-left {
+    text-align: left;
+  }
+
+  .text-center {
+    text-align: center;
+  }
+
+  .authorized
+  {
+      text-align:center;
+  }
+
+.authorized label span
+{
+    font-size:10px;
+}
+
+
+  .top-border {
+     border-top: dashed 0.1px #030404 !important;
+     margin-bottom: 8px;
+   
+}
+
+ .page-break {
+    page-break-after: always;
+  }
+
+.custom-color
+{
+    color:#525252 !important;
+}
+
+.text-left p
+
+{
+   text-align:left !important; 
+}
+
+
+
+  @media print 
+  {
+  @page {
+        /*size: A4;*/
+         /* margin: 20mm 15mm 25mm 15mm;*/
+           /*size: 21cm auto;*/
+
+          page-break-after: always;
+          
+         
+ 
+    }
+    
+     .page:last-child {
+      page-break-after: auto;
+    }
+    
+    .page-break {
+    page-break-after: always !important;
+  }
+
+  .footer {
+    page-break-before: always !important;
+  }
+       
+.print-format {
+ 
+padding:0px 30px;
+    
+}   
+       
+ 
+ .print-format .format-container,.print-format 
+ {
+     padding:0px !important;
+ }       
+       
+ 
+.print-format label
+{
+    font-weight:normal !important;
+}
+
+  
+       
+     .template label
+        {
+    font-size: 10px;
+   
+}
+         
+.template td, .template th 
+{
+    padding: 3px !important;
+    font-size:10px;
+}
+ 
+  
+  .top-border {
+     border-top: dashed 0.1px #030404 !important;
+     margin-bottom: 8px;
+     
+}
+ table {
+  border-collapse: collapse;
+}
+
+.template td {
+    padding: 3px !important;
+  
+}
+
+.col-xs-4 {
+    width: 33.33333333%;
+}
+
+.col-xs-1 {
+    width: 8.33333333%;
+}
+
+
+
+.authorized
+{
+    text-alight:center !important;
+}
+
+.print-container
+{
+    padding:0px !important;
+}
+
+ 
+  .top-table tr td,.table2 tr td
+ {
+     font-size:10px !important;
+     padding: 4px 0px !important;
+ }
+ 
+ .page-break {
+    page-break-after: always;
+  }
+
+  .signature-block {
+    page-break-inside: avoid;
+    margin-top: 30px;
+  }
+
+  .page-number {
+    display: none !important;
+  }
+  strong
+  {
+      font-weight:600 !important;
+  }
+  
+  }
+ 
+
+ 
+  
+  
+  
+  
+  
+  
+
+/* Force all text black */
+.print-format, .print-format * { color:#000 !important; }
+</style>
+
+{% set company = frappe.get_doc("Company", doc.company) %}
+{% set vehicle_types = ["Cash Entry", "Cash/ Bank or Contra Voucher", "Journal Entry"] %}
+{% set show_vehicle = doc.custom_p_type in vehicle_types %}
+{% set show_party = true %}
+{% set ncols = 5 + (1 if show_vehicle else 0) + (1 if show_party else 0) %}
+
+<div>
+
+<table class="main-table table table-bordered">
+    <thead>
+      <tr class="company-info">
+        <td colspan="{{ ncols }}" style="text-align:center; border:none;">
+          <h4>{{ doc.custom_p_type or "" }}</h4>
+          <h2 style="margin:5px 0;">{{ company.company_name }}</h2>
+          <div>Kathmandu</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td colspan="{{ ncols }}">
+          <div class="row top-data">
+            <div class="col-xs-6 text-left">
+              <div><strong>Reference Number :</strong> {{ doc.cheque_no or '' }}</div>
+              <div><strong>Reference Miti :</strong> {{ doc.custom_reference_miti or '' }}{% if doc.cheque_date %} ({{ frappe.utils.formatdate(doc.cheque_date, "yyyy-MM-dd") }}){% endif %}</div>
+            </div>
+            <div class="col-xs-6 text-right">
+              <div><strong>Voucher No :</strong> {{ doc.custom_name }}</div>
+              <div><strong>Posting Miti :</strong> {{ doc.custom_posting_miti or '' }}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</div>
+            </div>
+          </div>
+        </td>
+      </tr>
+
+      <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
+        <th style="width:5%; text-align:center;">S.N.</th><th style="width:{% if show_vehicle or show_party %}30%{% else %}45%{% endif %};">Account</th>{% if show_vehicle %}<th style="width:15%;">Vehicle</th>{% endif %}{% if show_party %}<th style="width:15%;">Party</th>{% endif %}
+        <th style="width:20%;">Party Name</th>
+        <th style="width:15%; text-align:right; padding-right:18px;">Debit</th>
+        <th style="width:15%; text-align:right;">Credit</th>
+      </tr>
+    </thead>
+
+    <tbody>
+    {% for row in doc.accounts %}
+  {% set acc = frappe.get_cached_doc("Account", row.account) %}
+  <tr>
+    <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
+    <td>
+      <strong>{{ acc.account_name }}</strong>
+      {% if row.user_remark and doc.custom_p_type == "Cash Entry" %}
+        <div><strong>Narration :</strong> {{ row.user_remark }}</div>
+      {% endif %}
+    </td>
+    {% if show_vehicle %}<td style="white-space:nowrap;"><strong>{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</strong></td>{% endif %}{% if show_party %}<td><strong>{{ row.party_type or "" }}</strong></td>{% endif %}
+
+    <td>
+   
+       {% if row.party %}
+    {% set party_doc = frappe.get_cached_doc(row.party_type, row.party) %}
+    <div><strong>{{ party_doc.get_title() }}</strong></div>
+  {% endif %}
+
+  {% if row.custom_subtype and not show_vehicle %}
+    <div><strong>{{ row.custom_subtype }}</strong></div>
+  {% endif %}
+      
+      
+    </td>
+
+    <td style="text-align:right; padding-right:18px;">
+      {{ row.debit_in_account_currency or "0" }}
+    </td>
+
+    <td style="text-align:right;">
+      {{ row.credit_in_account_currency or "0" }}
+    </td>
+  </tr>
+{% endfor %}
+      <tr>
+        <td></td>
+        <td></td>
+        {% if show_vehicle %}<td></td>{% endif %}{% if show_party %}<td></td>{% endif %}
+        <td><strong>Total</strong></td>
+        <td style="text-align:right;border-top:1px solid #000; padding-right:18px;">
+          <strong>{{ doc.total_debit }}</strong>
+        </td>
+        <td style="text-align:right;border-top:1px solid #000;">
+          <strong>{{ doc.total_credit }}</strong>
+        </td>
+      </tr>
+
+      <tr style="border-top:1px solid #000;border-bottom:1px solid #000;">
+        <td colspan="{{ ncols }}">
+          <strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit) }}
+        </td>
+      </tr>
+
+      <tr>
+        <td colspan="{{ ncols }}">
+          <strong>Remarks:</strong> {{ doc.remark or "" }}
+        </td>
+      </tr>
+    </tbody>
+
+
+
+     
+     </table>
+
+     <div style="page-break-inside:avoid; margin-top:12px;">
+       <table style="width:100%; border:none; color:#000;">
+          <tr>
+            <td style="width:25%; text-align:center; border:none; color:#000;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Prepared By</div>
+              <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "&nbsp;" }}</strong></div>
+            </td>
+            <td style="width:25%; text-align:center; border:none; color:#000;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Checked By</div>
+            </td>
+            <td style="width:25%; text-align:center; border:none; color:#000;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Verified By</div>
+            </td>
+            <td style="width:25%; text-align:center; border:none; color:#000;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Approved By</div>
+            </td>
+          </tr>
+        </table>
+        <div style="text-align:left; font-size:9px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+     </div>
+     </div>
