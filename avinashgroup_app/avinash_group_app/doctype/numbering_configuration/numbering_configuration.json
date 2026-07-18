@@ -178,14 +178,14 @@
    "options": "Numbering Condition"
   },
   {
-   "depends_on": "auto_document_no",
+   "depends_on": "eval:doc.auto_document_no && (doc.normal_docno_mode != 'Manual' || doc.return_docno_mode != 'Manual')",
    "description": "Separate from the Voucher No. conditions above. The DOCUMENT NO. is auto-filled only when ALL of these match. Leave empty to auto-fill for every document this rule applies to.",
    "fieldname": "document_no_conditions_section",
    "fieldtype": "Section Break",
    "label": "Auto-fill Document No. only when …"
   },
   {
-   "depends_on": "auto_document_no",
+   "depends_on": "eval:doc.auto_document_no && (doc.normal_docno_mode != 'Manual' || doc.return_docno_mode != 'Manual')",
    "fieldname": "document_no_conditions",
    "fieldtype": "Table",
    "label": "Document No. Conditions",
