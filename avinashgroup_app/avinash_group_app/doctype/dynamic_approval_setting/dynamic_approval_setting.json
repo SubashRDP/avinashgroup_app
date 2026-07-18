@@ -19,6 +19,15 @@
   "match_criteria",
   "fixed_approvers_section",
   "approvers",
+  "notifications_section",
+  "enable_approval_notification",
+  "email_template",
+  "column_break_notify_progress",
+  "enable_progress_notification",
+  "progress_email_template",
+  "column_break_notify_final",
+  "enable_final_notification",
+  "final_email_template",
   "setup_section",
   "setup_workflow_html"
  ],
@@ -117,6 +126,62 @@
    "hidden": 1,
    "label": "Approvers",
    "options": "Dynamic Approval Fixed Approver"
+  },
+  {
+   "fieldname": "notifications_section",
+   "fieldtype": "Section Break",
+   "label": "Notifications",
+   "description": "Email notifications sent as the document moves through the approval flow. Each is optional and uses its own Email Template (blank uses a built-in default)."
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_approval_notification",
+   "fieldtype": "Check",
+   "label": "Send Approval Request Email"
+  },
+  {
+   "depends_on": "eval:doc.enable_approval_notification",
+   "description": "Sent to the next approver (\"your approval is needed\"). Blank uses the default 'Dynamic Approval Request' template.",
+   "fieldname": "email_template",
+   "fieldtype": "Link",
+   "label": "Approval Request Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "column_break_notify_progress",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_progress_notification",
+   "fieldtype": "Check",
+   "label": "Send Progress Email"
+  },
+  {
+   "depends_on": "eval:doc.enable_progress_notification",
+   "description": "Sent to everyone who has already approved, on each intermediate approval (\"X has approved\"). Blank uses the default 'Dynamic Approval Progress' template.",
+   "fieldname": "progress_email_template",
+   "fieldtype": "Link",
+   "label": "Progress Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "column_break_notify_final",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_final_notification",
+   "fieldtype": "Check",
+   "label": "Send Final Approval Email"
+  },
+  {
+   "depends_on": "eval:doc.enable_final_notification",
+   "description": "Sent to everyone who approved, once the document is fully approved. Blank uses the default 'Dynamic Approval Final' template.",
+   "fieldname": "final_email_template",
+   "fieldtype": "Link",
+   "label": "Final Approval Template",
+   "options": "Email Template"
   },
   {
    "fieldname": "setup_section",
