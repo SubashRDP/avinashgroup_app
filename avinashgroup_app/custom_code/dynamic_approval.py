@@ -29,6 +29,7 @@ APPROVAL_SECTION_FIELD  = "custom_approval_section"
 TEMPLATE_APPROVAL = "Dynamic Approval Request"    # forward → next approver
 TEMPLATE_PROGRESS = "Dynamic Approval Progress"   # backward → "X has approved"
 TEMPLATE_FINAL    = "Dynamic Approval Final"      # backward → "fully approved"
+TEMPLATE_REJECT   = "Dynamic Approval Rejected"   # backward → "rejected by X"
 
 # Notification config columns on Dynamic Approval Setting — fetched alongside the
 # core config and carried through to _dispatch_notifications().
@@ -36,6 +37,7 @@ _NOTIFY_FIELDS = [
 	"enable_approval_notification", "email_template",
 	"enable_progress_notification", "progress_email_template",
 	"enable_final_notification", "final_email_template",
+	"enable_reject_notification", "reject_email_template",
 ]
 
 
@@ -520,7 +522,30 @@ def _dispatch_notifications(doc, config):
 					doc,
 				)
 
-	# ── 2 + 3. Progress / final → already-approved approvers ─────────────
+	# ── 2. Rejected → requester + everyone who already approved ──────────
+	if getattr(doc.flags, "is_rejection", False) and config.get("enable_reject_notification"):
+		current_level = cint(doc.get(level_field))
+		actor_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+		# Requester first, then approvers of levels below the one that rejected
+		# (the rejecting approver is the current level and is excluded by the helper).
+		recipients = []
+		owner = doc.get("owner")
+		if owner and owner != frappe.session.user:
+			recipients.append(owner)
+		for u in _collect_previous_approvers(doc, config, current_level - 1):
+			if u not in recipients:
+				recipients.append(u)
+		if recipients:
+			ctx = _notification_context(doc, approver_name=actor_name, current_level=current_level)
+			_send_templated_email(
+				recipients,
+				config.get("reject_email_template") or TEMPLATE_REJECT,
+				TEMPLATE_REJECT,
+				ctx,
+				doc,
+			)
+
+	# ── 3 + 4. Progress / final → already-approved approvers ─────────────
 	approved_level = getattr(doc.flags, "approved_level", None)
 	if not approved_level:
 		return
@@ -600,11 +625,12 @@ def _send_templated_email(recipients, template_name, fallback_template, context,
 	the built-in default template if the linked one is missing. All failures are
 	logged, never raised — a broken template must not block the approval save.
 	"""
-	# Resolve recipients → real email addresses, honouring the "has email" gate.
+	# Resolve recipients → real email addresses, honouring the "has email" gate
+	# and de-duplicating (distinct users may share an address).
 	emails = []
 	for user in recipients:
 		email, enabled = frappe.db.get_value("User", user, ["email", "enabled"]) or (None, 0)
-		if email and enabled:
+		if email and enabled and email not in emails:
 			emails.append(email)
 	if not emails:
 		return
@@ -661,6 +687,15 @@ def _ensure_email_templates():
 				"<p>{{ doctype_label }} <b>{{ docname }}</b> has been fully approved "
 				"(all {{ total_levels }} levels). The final approval was made by "
 				"<b>{{ approver_name }}</b>.</p>"
+				"<p><a href=\"{{ doc_link }}\">Click here to open</a></p>"
+			),
+		},
+		TEMPLATE_REJECT: {
+			"subject": "{{ doctype_label }} {{ docname }} — Rejected",
+			"response_html": (
+				"<p>Hello,</p>"
+				"<p>{{ doctype_label }} <b>{{ docname }}</b> was <b>rejected</b> by "
+				"<b>{{ approver_name }}</b> at Level {{ current_level }}.</p>"
 				"<p><a href=\"{{ doc_link }}\">Click here to open</a></p>"
 			),
 		},

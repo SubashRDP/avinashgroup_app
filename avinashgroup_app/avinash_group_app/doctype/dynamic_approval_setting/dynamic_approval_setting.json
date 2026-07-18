@@ -28,6 +28,9 @@
   "column_break_notify_final",
   "enable_final_notification",
   "final_email_template",
+  "column_break_notify_reject",
+  "enable_reject_notification",
+  "reject_email_template",
   "setup_section",
   "setup_workflow_html"
  ],
@@ -181,6 +184,24 @@
    "fieldname": "final_email_template",
    "fieldtype": "Link",
    "label": "Final Approval Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "column_break_notify_reject",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_reject_notification",
+   "fieldtype": "Check",
+   "label": "Send Rejection Email"
+  },
+  {
+   "depends_on": "eval:doc.enable_reject_notification",
+   "description": "Sent to the requester and everyone who already approved, when the document is rejected. Blank uses the default 'Dynamic Approval Rejected' template.",
+   "fieldname": "reject_email_template",
+   "fieldtype": "Link",
+   "label": "Rejection Template",
    "options": "Email Template"
   },
   {
