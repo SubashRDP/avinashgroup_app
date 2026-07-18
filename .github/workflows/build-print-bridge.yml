@@ -1,0 +1,105 @@
+name: Build Print Bridge EXE
+
+on:
+  push:
+    paths:
+      - 'print_bridge/**'
+      - '.github/workflows/build-print-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          # x64, unlike k40_bridge. That build is pinned to x86 only so its
+          # HTMS reader can use the Jet OLEDB 4.0 provider; nothing here reads
+          # an .mdb, so there is no reason to give up 64-bit.
+          architecture: 'x64'
+
+      - name: Install dependencies
+        # PowerShell does NOT fail a step when a non-final native command exits
+        # non-zero, so check $LASTEXITCODE explicitly — the k40 build shipped
+        # dependency-less exes for exactly this reason.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r print_bridge/requirements.txt
+          if ($LASTEXITCODE -ne 0) { Write-Error "requirements install failed"; exit 1 }
+
+      - name: Verify pywin32 is importable (fail fast)
+        run: python -c "import win32print; print('win32print OK')"
+
+      - name: Build EXE
+        # --noconsole: runs silently at login via schtasks. Logs go to
+        # %LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log instead.
+        run: |
+          python -m PyInstaller --onefile --noconsole --name print_bridge `
+            --hidden-import=win32print `
+            --hidden-import=win32api `
+            print_bridge/print_bridge.py
+
+      - name: Build Installer (Inno Setup)
+        # NOT continue-on-error, unlike the k40 workflow. PrintBridgeSetup.exe is
+        # the whole deliverable here — a release without it is a release nobody
+        # can install.
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" print_bridge/installer.iss
+          if ($LASTEXITCODE -ne 0) { Write-Error "Inno Setup build failed"; exit 1 }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrintBridgeSetup
+          path: |
+            print_bridge/Output/PrintBridgeSetup.exe
+            dist/print_bridge.exe
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep -oP 'VERSION = "\K[^"]+' print_bridge/print_bridge.py)
+          ISS_VERSION=$(grep -oP '#define MyAppVersion "\K[^"]+' print_bridge/installer.iss)
+          # These two drift apart silently otherwise, and Inno's AppVersion is
+          # what drives the upgrade path.
+          if [ "$VERSION" != "$ISS_VERSION" ]; then
+            echo "::error::Version mismatch: print_bridge.py=$VERSION installer.iss=$ISS_VERSION"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Detected version: $VERSION"
+
+      - name: Create / update GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: print-bridge-v${{ steps.version.outputs.version }}
+          name: Print Bridge v${{ steps.version.outputs.version }}
+          body: |
+            Raw ESC/P printing for dot-matrix invoices. Replaces QZ Tray — no
+            Allow prompt, no signing certificate, no override.crt, nothing to
+            download at run time.
+
+            **Attach the Epson and switch it on, then download
+            `PrintBridgeSetup.exe` below and run it.** That is the whole setup:
+            it installs the agent, creates the LQ310-RAW queue on the printer's
+            port, pre-grants Chrome/Edge local network access, and starts the
+            agent at login. Uninstall from Add/Remove Programs.
+
+            See `print_bridge/README.md`.
+
+            Logs: `%LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log`
+          files: |
+            print_bridge/Output/PrintBridgeSetup.exe
+            dist/print_bridge.exe
+          make_latest: 'false'
+          token: ${{ secrets.GITHUB_TOKEN }}

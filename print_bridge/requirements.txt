@@ -1,0 +1,4 @@
+# The agent itself is stdlib-only (http.server, base64, json) — nothing to
+# install at runtime beyond pywin32 for the RAW spooler calls.
+pywin32; sys_platform == "win32"
+pyinstaller

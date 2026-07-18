@@ -1502,6 +1502,18 @@ def apply_document_no(doc):
             doc.set(field, None)
         return
 
+    # Data Import must carry the number in the file: an uploaded row is only
+    # checked for duplicates, never auto-numbered. Reaching here means the row
+    # is eligible for a number but left the field blank — silently drawing one
+    # inside a background import job would be invisible and unauditable, so fail
+    # the row loudly and make the operator supply the number in the sheet.
+    if frappe.flags.in_import:
+        frappe.throw(
+            _("Document No. is blank for this {0} row. Provide it in the import "
+              "file — auto-numbering is disabled during data upload.").format(doc.doctype),
+            title=_("Missing Document Number"),
+        )
+
     doc.set(field, _draw_next_document_no(doc, scope))
     flag = field + "_manual"
     if doc.meta.has_field(flag):

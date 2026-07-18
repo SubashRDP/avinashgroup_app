@@ -127,58 +127,86 @@
 				} catch (e) {
 					mapping = [];
 				}
-				if (mapping.length === 1) {
-					frappe.ui.form
-						.qz_connect()
-						.then(function () {
-							const config = qz.configs.create(mapping[0].printer);
-							return qz.print(config, [r.message.raw_commands]);
-						})
-						.then(frappe.ui.form.qz_success)
-						.catch(function (err) {
-							frappe.ui.form.qz_fail(err);
-						});
-					return;
-				}
-				// No explicit mapping: fall back to the LQ310-RAW queue that
-				// setup-print-machine.bat (qz_security.setup_print_machine_bat)
-				// creates on every office print machine. Explicit mappings
-				// above always win; machines without the queue keep the old
-				// "set a mapping" behaviour.
-				frappe.ui.form
-					.qz_connect()
-					.then(function () {
-						return qz.printers.find();
-					})
-					.then(function (printers) {
-						const list = Array.isArray(printers) ? printers : [printers];
-						if (list.includes(DEFAULT_RAW_PRINTER)) {
-							frappe.show_alert(
-								{ message: __("Printing via {0}", [DEFAULT_RAW_PRINTER]), indicator: "blue" },
-								5
-							);
-							const config = qz.configs.create(DEFAULT_RAW_PRINTER);
-							return qz
-								.print(config, [r.message.raw_commands])
-								.then(frappe.ui.form.qz_success);
-						}
-						frappe.show_alert(
-							{
-								message: __("Printer mapping not set for {0}.", [sel.format]),
-								subtitle: __(
-									"Opening the Print view — set a printer in its Printer Settings, then print again."
-								),
-								indicator: "warning",
-							},
-							10
-						);
-						frappe.set_route("print", doctype, name);
-					})
-					.catch(function (err) {
-						frappe.ui.form.qz_fail(err);
-					});
+				// Local print bridge first — no Allow prompt, no certificate, and
+				// the bytes arrive unmangled. Only machines without the agent
+				// running fall through to the QZ Tray path below.
+				avinash.print_bridge.available().then(function (has_bridge) {
+					if (has_bridge) {
+						const printer = mapping.length === 1 ? mapping[0].printer : DEFAULT_RAW_PRINTER;
+						avinash.print_bridge
+							.print(printer, r.message.raw_commands)
+							.then(function () {
+								frappe.show_alert(
+									{ message: __("Printing via {0}", [printer]), indicator: "green" },
+									5
+								);
+							})
+							.catch(function (err) {
+								frappe.show_alert(
+									{
+										message: __("Print bridge: {0}", [err.message]),
+										indicator: "red",
+									},
+									10
+								);
+							});
+						return;
+					}
+					qz_fallback(doctype, name, sel, mapping, r.message.raw_commands);
+				});
 			},
 		});
+	}
+
+	// Legacy QZ Tray path, kept until every print machine runs the bridge.
+	function qz_fallback(doctype, name, sel, mapping, raw_commands) {
+		if (mapping.length === 1) {
+			frappe.ui.form
+				.qz_connect()
+				.then(function () {
+					const config = qz.configs.create(mapping[0].printer);
+					return qz.print(config, [raw_commands]);
+				})
+				.then(frappe.ui.form.qz_success)
+				.catch(function (err) {
+					frappe.ui.form.qz_fail(err);
+				});
+			return;
+		}
+		// No explicit mapping: fall back to the LQ310-RAW queue that the
+		// installer creates on every office print machine. Explicit mappings
+		// above always win; machines without the queue keep the old
+		// "set a mapping" behaviour.
+		frappe.ui.form
+			.qz_connect()
+			.then(function () {
+				return qz.printers.find();
+			})
+			.then(function (printers) {
+				const list = Array.isArray(printers) ? printers : [printers];
+				if (list.includes(DEFAULT_RAW_PRINTER)) {
+					frappe.show_alert(
+						{ message: __("Printing via {0}", [DEFAULT_RAW_PRINTER]), indicator: "blue" },
+						5
+					);
+					const config = qz.configs.create(DEFAULT_RAW_PRINTER);
+					return qz.print(config, [raw_commands]).then(frappe.ui.form.qz_success);
+				}
+				frappe.show_alert(
+					{
+						message: __("Printer mapping not set for {0}.", [sel.format]),
+						subtitle: __(
+							"Opening the Print view — set a printer in its Printer Settings, then print again."
+						),
+						indicator: "warning",
+					},
+					10
+				);
+				frappe.set_route("print", doctype, name);
+			})
+			.catch(function (err) {
+				frappe.ui.form.qz_fail(err);
+			});
 	}
 
 	// Open the actual print output for (doctype, name) with the selected
