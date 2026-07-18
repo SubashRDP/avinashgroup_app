@@ -1,0 +1,280 @@
+{#- ============================================================================
+Nepal Gas — half-A4 Sales Invoice (plain paper, laser)
+=============================================================================
+Layout shares the half-A4 design used by Grihalaxmi Invoice Half A4; the two
+are separate templates so either company's layout can move independently.
+One template serves both directions of the document:
+
+  normal invoice -> first print is the INVOICE + TAX INVOICE pair, reprints
+                    are COPY OF ORIGINAL n (invoice_copy_titles / print_count)
+  is_return      -> CREDIT MEMO referencing return_against; all figures
+                    print positive — the document type states the direction.
+
+Company furniture (name, logo, VAT number) comes off the Company record so
+the format follows renames/logo swaps; only the address lines are template
+defaults.
+-#}
+{%- set company = frappe.db.get_value('Company', doc.company,
+      ['company_logo', 'tax_id', 'abbr'], as_dict=True) or {} -%}
+{%- set company_logo = company.company_logo -%}
+{%- set company_vat = company.tax_id or '' -%}
+
+{#- Letterhead address lines, keyed by Company abbr. These are hardcoded from
+    the companies' printed letterheads because no Address records exist for
+    them; name / VAT / logo still come off the Company record. A company with
+    no entry here falls back to the group's Balaju office line. -#}
+{%- set letterheads = {
+      'NGN': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, E-mail: infongn@nepalgas.com.np',
+              'Branch: Mithila-9, Dhanusha, Simara, Bara, Ph.: 053-520150'],
+      'NGG': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4350416',
+              'Factory: Khairahani-9, Chitwan, Ph.: 056-583351, E-mail: info.ngg@nepalgas.com.np'],
+      'NGK': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, Factory: Baijanath-8, Banke',
+              'Ph.: 9820103702, E-mail: info.ngk@nepalgas.com.np'],
+      'GEPL': ['Regd. Office: Balaju - 16, Kathmandu',
+               'Branch: Anamnagar, Kathmandu, Branch: Chitwan'],
+    } -%}
+{%- set addr_lines = letterheads.get(company.abbr,
+      ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal']) -%}
+
+{#- ------------------------------- data --------------------------------- -#}
+{#- Miti prints as yyyy-mm-dd, which is how it is already stored. Some records
+    carry a time ('2083-01-30 00:00:00'), so drop anything after the space. -#}
+{%- macro miti_fmt(value) -%}{{ (value | string).split(' ')[0] if value else '' }}{%- endmacro -%}
+
+{%- set invoice_no = doc.get('custom_branch_name') or doc.name -%}
+{%- set bs_date = miti_fmt(doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date)) -%}
+{%- set posting_miti = miti_fmt(bs_date_str(doc.posting_date)) -%}
+{%- set customer_vat = doc.tax_id or frappe.db.get_value('Customer', doc.customer, 'tax_id') or '' -%}
+{#- customer address: address line 1 only (not the full multi-line address_display) -#}
+{%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
+{%- set address = address | striptags -%}
+{%- set address = address.strip().rstrip(', ') if address else '' -%}
+{%- set is_cn = doc.is_return -%}
+{#- Ref Invoice No. shows the original the way that invoice prints its own
+    number: its branch name, falling back to the docname. -#}
+{%- set ref_invoice_no = (frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_branch_name')
+                          if doc.return_against else '') or doc.return_against -%}
+{#- Reference Invoice Date: the original invoice's BS miti (return only). -#}
+{%- set ref_invoice_date = miti_fmt(frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_invoice_miti')) if doc.return_against else '' -%}
+
+{#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
+{%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
+{%- if not ns2.vat -%}
+  {%- for t in doc.taxes -%}
+    {%- if 'vat' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
+      {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endif -%}
+{%- set taxable = doc.net_total -%}
+{#- Price Lists carry a naming series here, so selling_price_list is a code
+    (NGI-PList-00001) — price_list_name holds the readable name (Bulk) -#}
+{%- set price_list = (frappe.db.get_value('Price List', doc.selling_price_list, 'price_list_name')
+                      if doc.selling_price_list else '') or '' -%}
+{%- set grand_total = doc.rounded_total or doc.grand_total -%}
+{#- doc.in_words is stale on some invoices (prints the total, not the grand
+    total), so derive the words from the grand total actually printed -#}
+{%- set amount_words = frappe.utils.money_in_words(grand_total | abs, doc.currency) -%}
+
+{#- ONE sheet per print event: TAX INVOICE first, then copies -#}
+{%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}
+{%- set print_stamp = frappe.utils.now_datetime().strftime('%d/%m/%Y %I:%M:%S%p') -%}
+
+{%- set rows_per_page = rows_per_page | default(4) -%}
+
+{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
+
+<style>
+  @page { size: 210mm 297mm; margin: 0; }
+  .print-format { page-width: 210mm; page-height: 297mm;
+    margin-top: 0mm; margin-bottom: 0mm; margin-left: 0mm; margin-right: 0mm; }
+  @media screen {
+    .print-format { padding: 0 !important; }
+  }
+  .print-format, .print-format p, .print-format div, .print-format td, .print-format th {
+    font-family: Arial, Helvetica, sans-serif; color: #000; }
+  .print-format .letter-head, .print-format .print-heading { display: none; }
+
+  /* Half-A4 layout: the sheet is exactly half of A4 (297mm / 2 = 148.5mm), so
+     the invoice occupies the top 50% of the page and the bottom half is blank.
+     min-height (not height) lets a long, many-item invoice grow past the half
+     instead of clipping. page-break-after keeps one copy per sheet. */
+  .glm-sheet { position: relative; width: 210mm; min-height: 148.5mm;
+    padding: 8mm 10mm; page-break-after: always; page-break-inside: avoid; }
+  .glm-sheet.last { page-break-after: auto; }
+
+  .glm-head { position: relative; text-align: center; }
+  .glm-head .logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
+  .glm-head .cname { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 17pt; margin-top: 4mm; }
+  .glm-head .caddr { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 9pt; line-height: 1.2; }
+  /* copy label flows right-aligned under the address (its original spot) */
+  .glm-copy { text-align: center; font-family: 'Courier New', Courier, monospace; font-weight: bold; font-size: 9.5pt; line-height: 1.3; }
+  .glm-vat { text-align: center; font-weight: bold; font-size: 10pt; margin: 0.5mm 0 2mm; }
+
+  .glm-info { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 4mm; }
+  .glm-info td { padding: 0.6mm 0; vertical-align: top; }
+  .glm-info .l { width: 32mm; }
+  .glm-info .c { width: 3mm; text-align: center; }
+  .glm-info .rl { width: 28mm; }
+  .glm-info .rv { width: 48mm; white-space: nowrap; }
+
+  table.glm-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
+  table.glm-items th, table.glm-items td { border: 0.35mm solid #000; padding: 1mm 1.5mm; }
+  table.glm-items th { font-size: 9pt; text-align: center; }
+  /* item box hugs its rows plus room for two more item lines (~40px each) */
+  /* !important: frappe's print css forces `.print-format td { padding: 3px !important }`,
+     which otherwise wins over this rule and collapses the item box */
+  table.glm-items td.body { vertical-align: top; height: auto; padding: 0 0 40px !important; }
+  /* taller item rows: each item occupies min 8mm so ~4 items fill the sheet */
+  .cell-stack div { padding: 2.5mm 1.5mm 0; line-height: 1.3; min-height: 8mm; white-space: nowrap; overflow: hidden; }
+  .cell-stack .wrap { white-space: normal; }
+
+  table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.4mm 1mm; white-space: nowrap; overflow: hidden; }
+  table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.4mm 1.5mm; }
+  table.glm-items td.words { vertical-align: top; font-size: 9pt; }
+  .words-val { padding-top: 0.8mm; line-height: 1.25; }
+  .words-hr { border: none; border-top: 0.3mm solid #000; margin: 1.5mm 0; }
+
+  .glm-sign { position: relative; margin: 14.4mm 0 0 auto; width: 70mm; text-align: center; }
+  .glm-sign .line { border-top: 0.3mm solid #000; margin-bottom: 1mm; }
+  .glm-sign .who { font-weight: bold; font-size: 9pt; }
+  .glm-pageno { text-align: right; margin-top: 2mm; font-size: 7.5pt; }
+</style>
+
+{#- split items into pages -#}
+{%- set item_pages = [] -%}
+{%- for i in range(0, doc.items | length, rows_per_page) -%}
+  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
+{%- endfor -%}
+{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
+
+{%- for copy_label in copy_titles -%}
+{%- set copy_last = loop.last -%}
+{%- for page_items in item_pages -%}
+{%- set is_last = copy_last and loop.last -%}
+{#- totals close every copy, not just the last one -#}
+{%- set page_last = loop.last -%}
+{%- set page_no = loop.index -%}
+<div class="glm-sheet{% if is_last %} last{% endif %}">
+
+  <div class="glm-head">
+    {%- if company_logo -%}<img class="logo" src="{{ company_logo }}" onerror="this.style.display='none'">{%- endif -%}
+    <div class="cname">{{ doc.company }}</div>
+    <div class="caddr">{% for line in addr_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+    <div class="glm-copy">{{ copy_label }}</div>
+    {%- if company_vat %}<div class="glm-vat">VAT No:{{ company_vat }}</div>{%- endif %}
+  </div>
+
+  {%- if is_cn %}
+  {#- Return (credit memo) header: no Mode of Payment; the right column carries
+      the return's own number/date and the original invoice it references. -#}
+  <table class="glm-info">
+    <tr>
+      <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
+      <td class="rl">Return Date</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer Address</td><td class="c">:</td><td>{{ address }}</td>
+      <td class="rl">Sales Return No.</td><td class="c">:</td><td class="rv">{{ invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
+      <td class="rl">Ref Invoice No.</td><td class="c">:</td><td class="rv">{{ ref_invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l"></td><td class="c"></td><td></td>
+      <td class="rl">Ref Invoice Date</td><td class="c">:</td><td class="rv">{{ ref_invoice_date }}</td>
+    </tr>
+  </table>
+  {%- else %}
+  <table class="glm-info">
+    <tr>
+      <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
+      <td class="rl">Transaction Miti</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer Address</td><td class="c">:</td><td>{{ address }}</td>
+      <td class="rl">Return Date</td><td class="c">:</td><td class="rv">{{ posting_miti }}</td>
+    </tr>
+    <tr>
+      <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
+      <td class="rl">Invoice No.</td><td class="c">:</td><td class="rv">{{ invoice_no }}</td>
+    </tr>
+    <tr>
+      <td class="l">Mode of Payment</td><td class="c">:</td><td>Cash/Credit/Cheque/Other</td>
+      <td class="rl"></td><td class="c"></td><td class="rv"></td>
+    </tr>
+  </table>
+  {%- endif %}
+
+  {%- set base_sno = (page_no - 1) * rows_per_page -%}
+  <table class="glm-items">
+    <colgroup>
+      <col style="width:9mm;"><col style="width:22mm;"><col style="width:89mm;">
+      <col style="width:12mm;"><col style="width:24mm;"><col style="width:34mm;">
+    </colgroup>
+    <tr>
+      <th>S.No.</th><th>H.S Code</th><th>Particular</th><th>Qty</th><th>Rate</th><th>Amount</th>
+    </tr>
+    <tr>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ base_sno + loop.index }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ frappe.db.get_value('Item', item.item_code, 'custom_hs_code') or '&nbsp;' }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack">
+        {%- for item in page_items %}<div>{{ item.item_name or item.item_code }}{% if item.uom %}, {{ item.uom }}{% endif %}{% if price_list %} ({{ price_list }}){% endif %}{% if item.batch_no %}<br>Batch No:&nbsp; {{ item.batch_no }}{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ num(item.rate) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ num(item.amount) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+      </div></td>
+    </tr>
+
+    {%- if page_last %}
+    <tr>
+      <td class="words" colspan="4" rowspan="5"><b>Remarks :</b> <span class="words-val">{{ doc.custom_narration or '' }}</span><hr class="words-hr"><b>Amount In Words :</b> <span class="words-val">{{ amount_words }}</span></td>
+      <td class="tot-label">Bill Amount</td>
+      <td class="tot-val">{{ num(doc.total) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">Bill Discount</td>
+      <td class="tot-val">{{ num(doc.discount_amount or 0) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">Taxable Value</td>
+      <td class="tot-val">{{ num(taxable) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">VAT @ 13%</td>
+      <td class="tot-val">{{ num(ns2.vat) }}</td>
+    </tr>
+    <tr>
+      <td class="tot-label">Net Amount</td>
+      <td class="tot-val"><b>{{ num(grand_total) }}</b></td>
+    </tr>
+    {%- else %}
+    <tr>
+      <td class="words" colspan="6"><b>Contd. on next page...</b></td>
+    </tr>
+    {%- endif %}
+  </table>
+
+  <div class="glm-sign">
+    <div class="line"></div>
+    <div class="who">For: {{ doc.company }}</div>
+  </div>
+
+  {%- if item_pages | length > 1 %}
+  <div class="glm-pageno">Page {{ page_no }}/{{ item_pages | length }}</div>
+  {%- endif %}
+</div>
+{%- endfor -%}
+{%- endfor -%}
