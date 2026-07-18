@@ -21,6 +21,25 @@ TOTAL_LEVELS_FIELD = "custom_total_approval_levels"
 APPROVAL_SETTING_FIELD  = "custom_approval_setting"
 APPROVAL_SECTION_FIELD  = "custom_approval_section"
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Notification templates  — default (fallback) Email Template names
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Each Dynamic Approval Setting may link its own Email Template per notification
+# type; when the link is blank we fall back to these auto-provisioned defaults.
+TEMPLATE_APPROVAL = "Dynamic Approval Request"    # forward → next approver
+TEMPLATE_PROGRESS = "Dynamic Approval Progress"   # backward → "X has approved"
+TEMPLATE_FINAL    = "Dynamic Approval Final"      # backward → "fully approved"
+TEMPLATE_REJECT   = "Dynamic Approval Rejected"   # backward → "rejected by X"
+
+# Notification config columns on Dynamic Approval Setting — fetched alongside the
+# core config and carried through to _dispatch_notifications().
+_NOTIFY_FIELDS = [
+	"enable_approval_notification", "email_template",
+	"enable_progress_notification", "progress_email_template",
+	"enable_final_notification", "final_email_template",
+	"enable_reject_notification", "reject_email_template",
+]
+
 
 def _is_managed_doctype(doc):
 	"""
@@ -72,7 +91,7 @@ def _get_config_for_doc(doc):
 	settings = frappe.get_all(
 		"Dynamic Approval Setting",
 		filters={"document_type": doc.doctype, "company": company, "is_active": 1},
-		fields=["name", "approver_table_fieldname", "current_level_fieldname"],
+		fields=["name", "approver_table_fieldname", "current_level_fieldname", *_NOTIFY_FIELDS],
 	)
 	if not settings:
 		return None
@@ -140,6 +159,7 @@ def _get_config_for_doc(doc):
 			"approver_table_fieldname": setting.approver_table_fieldname,
 			"current_level_fieldname": setting.current_level_fieldname,
 			"fixed_approvers": fixed,
+			**{f: setting.get(f) for f in _NOTIFY_FIELDS},
 		}
 
 	return None
@@ -150,7 +170,7 @@ def _fetch_config_by_section(setting_name, section):
 	rows = frappe.get_all(
 		"Dynamic Approval Setting",
 		filters={"name": setting_name, "is_active": 1},
-		fields=["name", "approver_table_fieldname", "current_level_fieldname"],
+		fields=["name", "approver_table_fieldname", "current_level_fieldname", *_NOTIFY_FIELDS],
 		limit=1,
 	)
 	if not rows:
@@ -168,6 +188,7 @@ def _fetch_config_by_section(setting_name, section):
 		"approver_table_fieldname": setting.approver_table_fieldname,
 		"current_level_fieldname": setting.current_level_fieldname,
 		"fixed_approvers": fixed,
+		**{f: setting.get(f) for f in _NOTIFY_FIELDS},
 	}
 
 
@@ -378,6 +399,11 @@ def before_workflow_action(doc, method=None, action=None):
 		# Check how many user levels actually exist in the table vs the highest level so far
 		# Wait! A more robust approach: Find all 'level's in the current table + fixed
 		
+		# Record which level this action just approved + whether it's the last one,
+		# so on_update can fire the progress / final notifications.
+		doc.flags.approved_level = current_level
+		doc.flags.approval_is_final = current_level >= total
+
 		if current_level < total:
 			new_level = current_level + 1
 			approver = _get_effective_approver_at_level(doc, new_level, config)
@@ -386,7 +412,7 @@ def before_workflow_action(doc, method=None, action=None):
 			doc.set(TOTAL_LEVELS_FIELD, total)
 			doc.flags.approval_level_changed = True
 			_log_approval_history(doc, f"Approved (Level {current_level})")
-			
+
 			# Force correct state in case Frappe picked the wrong transition
 			doc.workflow_state = "Pending Approval"
 			doc.docstatus = 0
@@ -454,58 +480,170 @@ def on_update(doc, method=None):
 
 			frappe.db.set_value(doc.doctype, doc.name, updates, update_modified=False)
 
-	# ── 2. Email notification on level change ────────────────────────────
-	if getattr(doc.flags, "approval_level_changed", False):
-		_send_approval_notification(doc, config)
+	# ── 2. Email notifications (approval-request / progress / final) ─────
+	_dispatch_notifications(doc, config)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  Notification
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def _send_approval_notification(doc, config):
-	"""Email the approver whose turn it now is."""
+def _dispatch_notifications(doc, config):
+	"""
+	Fire the three optional, independently-configured notifications based on the
+	flags set during before_workflow_action and the per-flow config on the Setting:
+
+	  1. Approval request → the next approver, on submit + each intermediate approve
+	     (flag: approval_level_changed).
+	  2. Progress ("X approved") → everyone who already approved, on each
+	     intermediate approve (flag: approved_level set, not final).
+	  3. Final ("fully approved") → everyone who approved, on the final approve
+	     (flag: approved_level set, is final).
+
+	Each type is gated by its own enable checkbox and may specify its own Email
+	Template (blank → built-in default). Nothing sends unless a flag is set, so a
+	plain save in Pending Approval never emails.
+	"""
 	level_field = config["current_level_fieldname"]
-	current_level = cint(doc.get(level_field))
-	current_state = doc.get("workflow_state")
 
-	if not current_level or current_state != "Pending Approval":
+	# ── 1. Approval request → next approver ──────────────────────────────
+	if getattr(doc.flags, "approval_level_changed", False) and config.get("enable_approval_notification"):
+		if doc.get("workflow_state") == "Pending Approval":
+			current_level = cint(doc.get(level_field))
+			approver_user = doc.get(CURRENT_APPROVER_FIELD)
+			if current_level and approver_user:
+				approver_name = frappe.db.get_value("User", approver_user, "full_name") or approver_user
+				ctx = _notification_context(doc, approver_name=approver_name, current_level=current_level)
+				_send_templated_email(
+					[approver_user],
+					config.get("email_template") or TEMPLATE_APPROVAL,
+					TEMPLATE_APPROVAL,
+					ctx,
+					doc,
+				)
+
+	# ── 2. Rejected → requester + everyone who already approved ──────────
+	if getattr(doc.flags, "is_rejection", False) and config.get("enable_reject_notification"):
+		current_level = cint(doc.get(level_field))
+		actor_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+		# Requester first, then approvers of levels below the one that rejected
+		# (the rejecting approver is the current level and is excluded by the helper).
+		recipients = []
+		owner = doc.get("owner")
+		if owner and owner != frappe.session.user:
+			recipients.append(owner)
+		for u in _collect_previous_approvers(doc, config, current_level - 1):
+			if u not in recipients:
+				recipients.append(u)
+		if recipients:
+			ctx = _notification_context(doc, approver_name=actor_name, current_level=current_level)
+			_send_templated_email(
+				recipients,
+				config.get("reject_email_template") or TEMPLATE_REJECT,
+				TEMPLATE_REJECT,
+				ctx,
+				doc,
+			)
+
+	# ── 3 + 4. Progress / final → already-approved approvers ─────────────
+	approved_level = getattr(doc.flags, "approved_level", None)
+	if not approved_level:
 		return
 
-	approver_user = doc.get(CURRENT_APPROVER_FIELD)
-	if not approver_user:
+	is_final = bool(getattr(doc.flags, "approval_is_final", False))
+	actor_name = frappe.db.get_value("User", frappe.session.user, "full_name") or frappe.session.user
+	total_levels = cint(doc.get(TOTAL_LEVELS_FIELD))
+	recipients = _collect_previous_approvers(doc, config, approved_level)
+	if not recipients:
 		return
 
-	approver_name = (
-		frappe.db.get_value("User", approver_user, "full_name") or approver_user
+	ctx = _notification_context(
+		doc,
+		approver_name=actor_name,
+		current_level=approved_level,
+		approved_level=approved_level,
+		total_levels=total_levels,
+		is_final=is_final,
 	)
-	doc_link = frappe.utils.get_url_to_form(doc.doctype, doc.name)
-	is_rejection = getattr(doc.flags, "is_rejection", False)
 
-	if is_rejection:
-		subject = _("{0} {1} — Rejected, Awaiting Your Re-review (Level {2})").format(
-			doc.doctype, doc.name, current_level
+	if not is_final and config.get("enable_progress_notification"):
+		_send_templated_email(
+			recipients,
+			config.get("progress_email_template") or TEMPLATE_PROGRESS,
+			TEMPLATE_PROGRESS,
+			ctx,
+			doc,
 		)
-		message = _(
-			"<p>Dear {0},</p>"
-			"<p>{1} <b>{2}</b> was rejected and is back for review at Level {3}.</p>"
-			"<p><a href=\"{4}\">Click here to open</a></p>"
-		).format(approver_name, doc.doctype, doc.name, current_level, doc_link)
-	else:
-		subject = _("{0} {1} — Your Approval Required (Level {2})").format(
-			doc.doctype, doc.name, current_level
+	elif is_final and config.get("enable_final_notification"):
+		_send_templated_email(
+			recipients,
+			config.get("final_email_template") or TEMPLATE_FINAL,
+			TEMPLATE_FINAL,
+			ctx,
+			doc,
 		)
-		message = _(
-			"<p>Dear {0},</p>"
-			"<p>{1} <b>{2}</b> is awaiting your approval at Level {3}.</p>"
-			"<p><a href=\"{4}\">Click here to approve or reject</a></p>"
-		).format(approver_name, doc.doctype, doc.name, current_level, doc_link)
+
+
+def _notification_context(doc, approver_name="", current_level=0, approved_level=0,
+						  total_levels=0, is_final=False):
+	"""Jinja render context shared by all notification templates."""
+	return {
+		"doc": doc,
+		"docname": doc.name,
+		"doctype_label": _(doc.doctype),
+		"doc_link": frappe.utils.get_url_to_form(doc.doctype, doc.name),
+		"approver_name": approver_name,
+		"current_level": current_level,
+		"approved_level": approved_level or current_level,
+		"total_levels": total_levels or cint(doc.get(TOTAL_LEVELS_FIELD)),
+		"is_final": is_final,
+	}
+
+
+def _collect_previous_approvers(doc, config, upto_level):
+	"""
+	Deduped list of approver User IDs for levels 1..upto_level (everyone who has
+	already approved), excluding the acting user — nobody gets a "you approved"
+	mail about their own just-completed action.
+	"""
+	acting_user = frappe.session.user
+	seen = set()
+	recipients = []
+	for lvl in range(1, cint(upto_level) + 1):
+		approver = _get_effective_approver_at_level(doc, lvl, config)
+		if not approver or approver == acting_user or approver in seen:
+			continue
+		seen.add(approver)
+		recipients.append(approver)
+	return recipients
+
+
+def _send_templated_email(recipients, template_name, fallback_template, context, doc):
+	"""
+	Render an Email Template and mail it to `recipients` (User IDs). Each recipient
+	is skipped unless their User record has an email and is enabled. Falls back to
+	the built-in default template if the linked one is missing. All failures are
+	logged, never raised — a broken template must not block the approval save.
+	"""
+	# Resolve recipients → real email addresses, honouring the "has email" gate
+	# and de-duplicating (distinct users may share an address).
+	emails = []
+	for user in recipients:
+		email, enabled = frappe.db.get_value("User", user, ["email", "enabled"]) or (None, 0)
+		if email and enabled and email not in emails:
+			emails.append(email)
+	if not emails:
+		return
 
 	try:
+		_ensure_email_templates()
+		if not frappe.db.exists("Email Template", template_name):
+			template_name = fallback_template
+		rendered = frappe.get_doc("Email Template", template_name).get_formatted_email(context)
 		frappe.sendmail(
-			recipients=[approver_user],
-			subject=subject,
-			message=message,
+			recipients=emails,
+			subject=rendered["subject"],
+			message=rendered["message"],
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,
 			now=False,
@@ -515,6 +653,63 @@ def _send_approval_notification(doc, config):
 			title=f"Dynamic Approval: email failed for {doc.name}",
 			message=frappe.get_traceback(),
 		)
+
+
+def _ensure_email_templates():
+	"""
+	Create-only provisioning of the three default Email Templates. Never overwrites
+	an existing one, so admin edits (and per-flow custom templates) survive
+	re-running Setup Workflow. Mirrors _ensure_history_doctype's idempotent style.
+	"""
+	defaults = {
+		TEMPLATE_APPROVAL: {
+			"subject": "{{ doctype_label }} {{ docname }} — Your Approval Required (Level {{ current_level }})",
+			"response_html": (
+				"<p>Dear {{ approver_name }},</p>"
+				"<p>{{ doctype_label }} <b>{{ docname }}</b> is awaiting your approval "
+				"at Level {{ current_level }}.</p>"
+				"<p><a href=\"{{ doc_link }}\">Click here to approve or reject</a></p>"
+			),
+		},
+		TEMPLATE_PROGRESS: {
+			"subject": "{{ doctype_label }} {{ docname }} — Approved at Level {{ approved_level }}",
+			"response_html": (
+				"<p>Hello,</p>"
+				"<p><b>{{ approver_name }}</b> has approved {{ doctype_label }} "
+				"<b>{{ docname }}</b> at Level {{ approved_level }} of {{ total_levels }}.</p>"
+				"<p><a href=\"{{ doc_link }}\">Click here to open</a></p>"
+			),
+		},
+		TEMPLATE_FINAL: {
+			"subject": "{{ doctype_label }} {{ docname }} — Fully Approved",
+			"response_html": (
+				"<p>Hello,</p>"
+				"<p>{{ doctype_label }} <b>{{ docname }}</b> has been fully approved "
+				"(all {{ total_levels }} levels). The final approval was made by "
+				"<b>{{ approver_name }}</b>.</p>"
+				"<p><a href=\"{{ doc_link }}\">Click here to open</a></p>"
+			),
+		},
+		TEMPLATE_REJECT: {
+			"subject": "{{ doctype_label }} {{ docname }} — Rejected",
+			"response_html": (
+				"<p>Hello,</p>"
+				"<p>{{ doctype_label }} <b>{{ docname }}</b> was <b>rejected</b> by "
+				"<b>{{ approver_name }}</b> at Level {{ current_level }}.</p>"
+				"<p><a href=\"{{ doc_link }}\">Click here to open</a></p>"
+			),
+		},
+	}
+	for name, body in defaults.items():
+		if frappe.db.exists("Email Template", name):
+			continue
+		frappe.get_doc({
+			"doctype": "Email Template",
+			"name": name,
+			"subject": body["subject"],
+			"use_html": 1,
+			"response_html": body["response_html"],
+		}).insert(ignore_permissions=True)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -532,6 +727,7 @@ def setup_workflow(config_name):
 	level_field = config_doc.current_level_fieldname
 
 	_ensure_history_doctype()
+	_ensure_email_templates()
 	_ensure_custom_fields(doctype, level_field, table_field)
 	_create_or_update_workflow(doctype, level_field)
 
