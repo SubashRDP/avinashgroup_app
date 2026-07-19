@@ -88,6 +88,20 @@ frappe.ui.form.on("Sales Invoice Item", {
                     const our_wh = await wh_promise;
                     if (r && r.message) r.message.warehouse = our_wh;
                     _cb && _cb.apply(this, arguments);
+                    // Force item-derived fields to refresh on EVERY item change, even on
+                    // servers whose ERPNext build doesn't blank/re-apply them (older
+                    // transaction.js leaves the previous item's UOM/accounts on the row).
+                    // We re-apply straight from the get_item_details response we just got.
+                    // Rate is intentionally left to ERPNext's price-list/pricing-rule flow.
+                    if (r && r.message) {
+                        const m = r.message;
+                        ["item_name", "description", "uom", "stock_uom", "conversion_factor",
+                         "income_account", "expense_account", "cost_center"].forEach(f => {
+                            if (m[f] !== undefined && m[f] !== null && m[f] !== "") {
+                                frappe.model.set_value(cdt, cdn, f, m[f]);
+                            }
+                        });
+                    }
                     _restore();
                 };
             }
