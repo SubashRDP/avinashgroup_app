@@ -71,6 +71,23 @@ frappe.ui.form.on("Sales Invoice Item", {
         const row = locals[cdt][cdn];
         if (!row || !row.item_code) return;
 
+
+
+        
+        // Standalone force-refresh of the item-master fields, independent of whether
+        // the server's ERPNext calls get_item_details on item change. Guarantees UOM /
+        // name / description follow the NEW item even on demo/older builds where the
+        // core handler leaves the previous item's values behind. (Accounts still come
+        // from the get_item_details interception below.)
+        frappe.db.get_value("Item", row.item_code,
+            ["sales_uom", "stock_uom", "item_name", "description"]).then(res => {
+                const it = (res && res.message) || {};
+                const new_uom = it.sales_uom || it.stock_uom;
+                if (new_uom && new_uom !== row.uom) frappe.model.set_value(cdt, cdn, "uom", new_uom);
+                if (it.item_name) frappe.model.set_value(cdt, cdn, "item_name", it.item_name);
+                if (it.description) frappe.model.set_value(cdt, cdn, "description", it.description);
+            });
+
         // Start fetching our warehouse immediately (runs in background)
         const wh_promise = _fetch_selling_wh(row.item_code, frm.doc.custom_branch);
 
