@@ -67,13 +67,34 @@ policy key handles that here.
 {
   "port": 8663,
   "default_printer": "LQ310-RAW",
-  "allowed_origins": ["https://ng-group.raindropinc.com"]
+  "allowed_origins": [
+    "https://ng-group.raindropinc.com",
+    "https://avinaslive1.raindropinc.com",
+    "https://sandboxavinas-demo.raindropinc.com",
+    "https://avinasdemo.raindropinc.com"
+  ],
+  "allow_local_test_origins": true
 }
 ```
 
 `allowed_origins` is the entire security model — the agent refuses every other
-origin. Adding one here does **not** update the browser policy key; that is set
-by the installer.
+origin. **One install serves all four sites** (production `ng-group`, which
+carries all seven companies, plus the three test sites) — they are pre-listed
+here and mirrored in the installer's browser policy, so no site prompts and none
+needs its own setup. Restart the agent after editing (Start menu, or the login
+task at next sign-in).
+
+Three ways an origin is allowed, in order:
+
+| Rule | Effect |
+| --- | --- |
+| `"allowed_origins": ["*"]` | **Allow any site** to print. Max convenience for a dedicated till that only ever opens the ERP; any page in that browser could print, so don't use it on a general-purpose PC. |
+| Exact URL in `allowed_origins` | Only the listed sites (production + any public test URLs you add here). Adding one needs **no reinstall** — edit this file and restart the agent. |
+| `allow_local_test_origins: true` | Auto-accepts loopback / LAN test sites (`localhost:8000`, `127.0.0.1`, `192.168.x.y`, any port) with no config edit, while still refusing the public internet. Set `false` to lock down to `allowed_origins` only. |
+
+Adding a public origin here does **not** update the browser policy key (set by
+the installer). Chrome 142+ will then ask for local-network permission once and
+remember it; localhost/LAN test sites are not gated at all.
 
 ## Development
 

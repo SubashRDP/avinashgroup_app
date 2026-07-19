@@ -12,10 +12,16 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
+; Every origin the ERP is served at. Production first, then the test sites.
+; Keep in lockstep with DEFAULT_ORIGINS in print_bridge.py — the agent enforces
+; the allow-list, these keys only suppress Chrome 142+'s local-network prompt.
 #define ErpOrigin "https://ng-group.raindropinc.com"
+#define TestOrigin1 "https://avinaslive1.raindropinc.com"
+#define TestOrigin2 "https://sandboxavinas-demo.raindropinc.com"
+#define TestOrigin3 "https://avinasdemo.raindropinc.com"
 
 [Setup]
 ; AppId is a stable GUID — Inno uses it to recognise an existing install for
@@ -65,11 +71,21 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 ; That is a real permission, unlike QZ Tray's prompt, which returned every
 ; session because the requests were never signed.
 Root: HKLM; Subkey: "SOFTWARE\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls"; \
-  ValueType: string; ValueName: "1"; ValueData: "{#ErpOrigin}"; \
-  Flags: uninsdeletevalue
+  ValueType: string; ValueName: "1"; ValueData: "{#ErpOrigin}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls"; \
+  ValueType: string; ValueName: "2"; ValueData: "{#TestOrigin1}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls"; \
+  ValueType: string; ValueName: "3"; ValueData: "{#TestOrigin2}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls"; \
+  ValueType: string; ValueName: "4"; ValueData: "{#TestOrigin3}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls"; \
-  ValueType: string; ValueName: "1"; ValueData: "{#ErpOrigin}"; \
-  Flags: uninsdeletevalue
+  ValueType: string; ValueName: "1"; ValueData: "{#ErpOrigin}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls"; \
+  ValueType: string; ValueName: "2"; ValueData: "{#TestOrigin1}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls"; \
+  ValueType: string; ValueName: "3"; ValueData: "{#TestOrigin2}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls"; \
+  ValueType: string; ValueName: "4"; ValueData: "{#TestOrigin3}"; Flags: uninsdeletevalue
 ; Firefox needs nothing: it exempted loopback from mixed content in 55 and has
 ; never shipped Local Network Access.
 

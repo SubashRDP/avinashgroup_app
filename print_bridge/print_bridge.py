@@ -29,6 +29,7 @@ bytes lift that constraint.
 """
 
 import base64
+import ipaddress
 import json
 import logging
 import os
@@ -36,13 +37,32 @@ import platform
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
+from urllib.parse import urlsplit
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
 DEFAULT_PRINTER = "LQ310-RAW"
-DEFAULT_ORIGINS = ["https://ng-group.raindropinc.com"]
+# Origins allowed to print out of the box: the production site plus the three
+# public test sites. All are https subdomains of raindropinc.com — PUBLIC
+# origins, so the allow_local_test_origins rule below does NOT cover them; a
+# public origin must be listed here (and mirrored in installer.iss's browser
+# policy so Chrome 142+ doesn't prompt). One install therefore prints from all
+# four with no per-machine config. Add more by editing allowed_origins in
+# config.json — no reinstall, just restart the agent.
+DEFAULT_ORIGINS = [
+	"https://ng-group.raindropinc.com",             # production — all 7 companies
+	"https://avinaslive1.raindropinc.com",          # test
+	"https://sandboxavinas-demo.raindropinc.com",   # test
+	"https://avinasdemo.raindropinc.com",           # test
+]
+# Also auto-accept loopback / LAN origins (any scheme, any port) so an ad-hoc
+# test site at http://localhost:8000, http://127.0.0.1, or http://192.168.x.y
+# prints from the same install with no config edit. Public internet is still
+# refused unless listed above. Set false in config.json to lock down to
+# allowed_origins only.
+DEFAULT_ALLOW_LOCAL_TEST = True
 
 # --dry-run writes jobs to disk instead of a printer, so the HTTP/CORS layer can
 # be exercised off-Windows.
@@ -78,7 +98,10 @@ def load_config() -> dict:
 	cfg = {
 		"port": DEFAULT_PORT,
 		"default_printer": DEFAULT_PRINTER,
+		# ["*"] means allow any origin (max convenience, dedicated till only);
+		# otherwise list the exact site URLs that may print.
 		"allowed_origins": list(DEFAULT_ORIGINS),
+		"allow_local_test_origins": DEFAULT_ALLOW_LOCAL_TEST,
 	}
 	try:
 		with open(CONFIG_FILE) as f:
@@ -93,6 +116,39 @@ def load_config() -> dict:
 
 
 CONFIG = load_config()
+
+
+def _is_local_origin(origin: str) -> bool:
+	"""True for loopback / LAN origins — a test site on this machine or the
+	office network, reached at localhost, 127.x, or a private IP (any port)."""
+	host = urlsplit(origin).hostname or ""
+	if host == "localhost" or host.endswith(".localhost"):
+		return True
+	try:
+		ip = ipaddress.ip_address(host)
+	except ValueError:
+		return False
+	return ip.is_loopback or ip.is_private
+
+
+def _origin_allowed(origin: str) -> bool:
+	"""The whole security model. Three ways an origin may print:
+
+	  1. allowed_origins contains "*"      -> allow any site (opt-in wildcard)
+	  2. allowed_origins lists it exactly  -> the production / named test sites
+	  3. it is loopback/LAN and enabled    -> ad-hoc test sites, no config edit
+
+	Matching in (2) is exact — no prefix/suffix that
+	"https://ng-group.raindropinc.com.evil.com" could satisfy.
+	"""
+	allowed = CONFIG["allowed_origins"]
+	if "*" in allowed:
+		return True
+	if origin in allowed:
+		return True
+	if CONFIG.get("allow_local_test_origins", DEFAULT_ALLOW_LOCAL_TEST) and _is_local_origin(origin):
+		return True
+	return False
 
 
 def list_printers() -> list:
@@ -143,13 +199,12 @@ class Handler(BaseHTTPRequestHandler):
 	def _origin_ok(self) -> str:
 		"""Return the request Origin if allowed, else ''.
 
-		This is the whole security model, so it is an exact match — no
-		prefix/suffix matching that "https://ng-group.raindropinc.com.evil.com"
-		could satisfy. Requests carrying a JSON content-type are preflighted by
-		the browser, so a disallowed origin never reaches _print().
+		Delegates to _origin_allowed (wildcard / exact list / loopback-LAN).
+		Requests carrying a JSON content-type are preflighted by the browser, so
+		a disallowed origin never reaches _print().
 		"""
 		origin = self.headers.get("Origin", "")
-		return origin if origin in CONFIG["allowed_origins"] else ""
+		return origin if origin and _origin_allowed(origin) else ""
 
 	def _cors(self, origin: str, preflight: bool = False) -> None:
 		self.send_header("Access-Control-Allow-Origin", origin)
