@@ -578,3 +578,48 @@ async function force_all_si_warehouses(frm) {
     
     frm.refresh_field('items');
 }
+
+
+// ---------------------------------------------------------------------------
+// List view: hide Cancel and Delete from the bulk "Actions" menu (Sales Invoice
+// ONLY). The form toolbar is handled in the refresh() handler above; this
+// covers the list-view Actions dropdown, which Frappe builds via a separate
+// mechanism (list_view.js get_actions_menu_items -> page.actions). Server-side
+// enforcement is unchanged — this only removes the UI entries.
+// ---------------------------------------------------------------------------
+frappe.listview_settings = frappe.listview_settings || {};
+(function () {
+    const doctype = "Sales Invoice";
+    const prev = frappe.listview_settings[doctype] || {};
+
+    function hide_cancel_delete(listview) {
+        // The exact labels Frappe renders for these two bulk actions.
+        const labels = [
+            __("Cancel", null, "Button in list view actions menu"),
+            __("Delete", null, "Button in list view actions menu"),
+        ];
+        // Actions menu is built during list setup; prune after render.
+        setTimeout(() => {
+            if (!listview.page || !listview.page.actions) return;
+            labels.forEach((lbl) => {
+                listview.page.actions
+                    .find(".menu-item-label")
+                    .filter((i, el) => $(el).text().trim() === lbl)
+                    .closest("li")
+                    .remove();
+            });
+        }, 300);
+    }
+
+    // Merge, preserving any onload/refresh another app may have defined.
+    frappe.listview_settings[doctype] = Object.assign({}, prev, {
+        onload(listview) {
+            if (typeof prev.onload === "function") prev.onload(listview);
+            hide_cancel_delete(listview);
+        },
+        refresh(listview) {
+            if (typeof prev.refresh === "function") prev.refresh(listview);
+            hide_cancel_delete(listview);
+        },
+    });
+})();
