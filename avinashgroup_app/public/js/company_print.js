@@ -46,9 +46,10 @@
 // trigger neither event — workflow-approved doctypes don't auto-print.
 
 (function () {
-	// Raw queue created on every office print machine by the all-in-one
-	// installer (qz_security.setup_print_machine_bat): Generic/Text Only
-	// driver, so RAW ESC/P bytes bypass the Epson driver that swallows them.
+	// Raw queue created on every office print machine by PrintBridgeSetup.exe:
+	// Generic/Text Only driver, so RAW ESC/P bytes bypass the Epson driver that
+	// swallows them. Kept as the client-side default; the agent reports its own
+	// via /ping (avinash.print_bridge.default_printer).
 	const DEFAULT_RAW_PRINTER = "LQ310-RAW";
 
 	let rules = null; // {doctype: {company: rule}}
@@ -107,12 +108,11 @@
 	// Raw (ESC/P) formats must never go through /printview — the browser
 	// print dialog renders HTML through the OS printer driver, which dumps
 	// the text at the top of the form. Send the rendered raw commands to the
-	// printer over QZ Tray instead, exactly like the Print view's printit()
-	// does. Rendering server-side bumps the IRD copy counter, same as the
-	// other routes. Uses the same localStorage printer mapping as the Print
-	// view ("Printer Settings" there); without a mapping we route to the
-	// Print view so the user can set one.
-	function qz_raw_print(doctype, name, sel) {
+	// printer through the Print Bridge instead. Rendering server-side bumps the
+	// IRD copy counter, same as the other routes. Uses the same localStorage
+	// printer mapping as the Print view ("Printer Settings" there); without a
+	// mapping the agent's default queue (LQ310-RAW) is used.
+	function raw_print(doctype, name, sel) {
 		frappe.call({
 			method: "frappe.www.printview.get_rendered_raw_commands",
 			args: { doc: doctype, name: name, print_format: sel.format },
@@ -127,9 +127,9 @@
 				} catch (e) {
 					mapping = [];
 				}
-				// Local print bridge first — no Allow prompt, no certificate, and
-				// the bytes arrive unmangled. Only machines without the agent
-				// running fall through to the QZ Tray path below.
+				// The Print Bridge is the ONLY raw transport now — QZ Tray is
+				// gone. A machine without the agent is told to install it rather
+				// than falling back to QZ's every-session prompt and instability.
 				avinash.print_bridge.available().then(function (has_bridge) {
 					if (has_bridge) {
 						const printer = mapping.length === 1 ? mapping[0].printer : DEFAULT_RAW_PRINTER;
@@ -152,61 +152,12 @@
 							});
 						return;
 					}
-					qz_fallback(doctype, name, sel, mapping, r.message.raw_commands);
+					// No agent on this machine: tell the user to install it.
+					// QZ Tray is gone (see print_bridge.js) — never launched here.
+					avinash.print_bridge.show_not_installed();
 				});
 			},
 		});
-	}
-
-	// Legacy QZ Tray path, kept until every print machine runs the bridge.
-	function qz_fallback(doctype, name, sel, mapping, raw_commands) {
-		if (mapping.length === 1) {
-			frappe.ui.form
-				.qz_connect()
-				.then(function () {
-					const config = qz.configs.create(mapping[0].printer);
-					return qz.print(config, [raw_commands]);
-				})
-				.then(frappe.ui.form.qz_success)
-				.catch(function (err) {
-					frappe.ui.form.qz_fail(err);
-				});
-			return;
-		}
-		// No explicit mapping: fall back to the LQ310-RAW queue that the
-		// installer creates on every office print machine. Explicit mappings
-		// above always win; machines without the queue keep the old
-		// "set a mapping" behaviour.
-		frappe.ui.form
-			.qz_connect()
-			.then(function () {
-				return qz.printers.find();
-			})
-			.then(function (printers) {
-				const list = Array.isArray(printers) ? printers : [printers];
-				if (list.includes(DEFAULT_RAW_PRINTER)) {
-					frappe.show_alert(
-						{ message: __("Printing via {0}", [DEFAULT_RAW_PRINTER]), indicator: "blue" },
-						5
-					);
-					const config = qz.configs.create(DEFAULT_RAW_PRINTER);
-					return qz.print(config, [raw_commands]).then(frappe.ui.form.qz_success);
-				}
-				frappe.show_alert(
-					{
-						message: __("Printer mapping not set for {0}.", [sel.format]),
-						subtitle: __(
-							"Opening the Print view — set a printer in its Printer Settings, then print again."
-						),
-						indicator: "warning",
-					},
-					10
-				);
-				frappe.set_route("print", doctype, name);
-			})
-			.catch(function (err) {
-				frappe.ui.form.qz_fail(err);
-			});
 	}
 
 	// Open the actual print output for (doctype, name) with the selected
@@ -214,7 +165,7 @@
 	// dialog. Both bump the IRD copy counter server-side.
 	function open_print(doctype, name, sel) {
 		if (sel.raw) {
-			qz_raw_print(doctype, name, sel);
+			raw_print(doctype, name, sel);
 			return;
 		}
 		let url;

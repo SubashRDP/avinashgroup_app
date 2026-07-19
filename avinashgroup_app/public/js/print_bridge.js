@@ -31,14 +31,25 @@ frappe.provide("avinash.print_bridge");
 			.finally(() => clearTimeout(timer));
 	}
 
+	// The agent's configured default queue, learned from /ping. Falls back to
+	// LQ310-RAW (what the installer creates) until the probe answers.
+	avinash.print_bridge.default_printer = "LQ310-RAW";
+
 	// Resolves true when the agent answers. Cached: a machine either has the
 	// agent or it does not, and re-probing on every print would add a round
 	// trip to the hot path. Reload picks up a freshly installed agent.
 	avinash.print_bridge.available = function () {
 		if (!probe) {
 			probe = req("/ping")
-				.then((r) => !!(r.ok && r.body.ok))
-				.catch(() => false); // not installed / not running -> caller falls back
+				.then((r) => {
+					if (r.ok && r.body.ok) {
+						if (r.body.default_printer)
+							avinash.print_bridge.default_printer = r.body.default_printer;
+						return true;
+					}
+					return false;
+				})
+				.catch(() => false); // not installed / not running
 		}
 		return probe;
 	};
@@ -69,6 +80,57 @@ frappe.provide("avinash.print_bridge");
 				throw new Error(r.body.error || __("Print bridge rejected the job"));
 			}
 			return r.body;
+		});
+	};
+
+	// One place every raw-print entry point lands (form printer icon, Print
+	// view button, print-on-submit). QZ Tray is gone: if the agent is not on
+	// this machine we tell the user to install it, we never launch QZ.
+	let _not_installed_shown = false;
+	avinash.print_bridge.show_not_installed = function () {
+		if (_not_installed_shown) return; // don't stack on repeated clicks
+		_not_installed_shown = true;
+		setTimeout(() => (_not_installed_shown = false), 4000);
+		frappe.msgprint({
+			title: __("Print Bridge not installed on this computer"),
+			indicator: "orange",
+			message: __(
+				"Raw invoices print through the Avinash Print Bridge, which isn't running on this computer yet.<br><br>1. Install <b>PrintBridgeSetup.exe</b> (printer attached &amp; switched on).<br>2. Reload this page.<br><br><a href='{0}' target='_blank' rel='noopener'>Download the installer</a>",
+				["https://github.com/SubashRDP/avinashgroup_app/releases/latest"]
+			),
+		});
+	};
+
+	// Render (doctype, name) with print_format server-side, then send the exact
+	// bytes to the agent. `printer` optional — defaults to the agent's queue.
+	avinash.print_bridge.print_raw_doc = function (doctype, name, print_format, printer) {
+		frappe.call({
+			method: "frappe.www.printview.get_rendered_raw_commands",
+			args: { doc: doctype, name: name, print_format: print_format },
+			callback: function (r) {
+				if (r.exc || !r.message) return;
+				avinash.print_bridge.available().then(function (has_bridge) {
+					if (!has_bridge) {
+						avinash.print_bridge.show_not_installed();
+						return;
+					}
+					const target = printer || avinash.print_bridge.default_printer;
+					avinash.print_bridge
+						.print(target, r.message.raw_commands)
+						.then(function () {
+							frappe.show_alert(
+								{ message: __("Printing via {0}", [target]), indicator: "green" },
+								5
+							);
+						})
+						.catch(function (err) {
+							frappe.show_alert(
+								{ message: __("Print bridge: {0}", [err.message]), indicator: "red" },
+								10
+							);
+						});
+				});
+			},
 		});
 	};
 })();

@@ -36,6 +36,23 @@
 				);
 				return;
 			}
+			// Raw ESC/P formats: stock printit() sends these over QZ Tray. QZ is
+			// gone — route through the Print Bridge instead (same transport the
+			// form printer icon uses), so the Print view button behaves the same
+			// and never launches QZ. Non-raw formats keep the stock dialog.
+			if (
+				this.is_raw_printing &&
+				this.is_raw_printing() &&
+				window.avinash &&
+				avinash.print_bridge
+			) {
+				avinash.print_bridge.print_raw_doc(
+					this.frm.doc.doctype,
+					this.frm.doc.name,
+					this.selected_format()
+				);
+				return;
+			}
 			return orig.apply(this, arguments);
 		};
 		cls.prototype._ngi_patched = true;

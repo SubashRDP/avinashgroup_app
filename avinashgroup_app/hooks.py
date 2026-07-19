@@ -28,13 +28,15 @@ app_include_js = [
     "/assets/avinashgroup_app/js/auto_fiscal_year.js?v=1.0",
     "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
-    "/assets/avinashgroup_app/js/ngi_print.js?v=1.1",
-    # must load before company_print.js — that file routes raw jobs through it
-    "/assets/avinashgroup_app/js/print_bridge.js?v=1.0",
+    # print_bridge defines avinash.print_bridge; load it before the two files
+    # that route raw jobs through it — ngi_print (Print-view button) and
+    # company_print (form printer icon). QZ Tray is fully replaced, so qz_sign.js
+    # is no longer loaded.
+    "/assets/avinashgroup_app/js/print_bridge.js?v=1.1",
+    "/assets/avinashgroup_app/js/ngi_print.js?v=1.2",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
-    "/assets/avinashgroup_app/js/company_print.js?v=1.6",
+    "/assets/avinashgroup_app/js/company_print.js?v=1.7",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
-    "/assets/avinashgroup_app/js/qz_sign.js?v=1.1",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
