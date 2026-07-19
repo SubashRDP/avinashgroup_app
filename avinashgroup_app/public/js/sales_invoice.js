@@ -595,8 +595,24 @@ async function force_all_si_warehouses(frm) {
 
 
 /**
- * Hide Cancel and Delete on the Sales Invoice FORM, for every invoice,
- * unconditionally. Server-side CBMS before_cancel/on_trash throws remain the
+ * Whether Cancel/Delete should be hidden for the CURRENT user.
+ *
+ * Administrator keeps both, so there is always a way to cancel or delete a
+ * Sales Invoice without a code change — log in as Administrator. Every other
+ * user (including System Managers) has the controls hidden.
+ *
+ * Evaluated at call time, not at file-load time: the list-view patch below is
+ * installed once during boot, and reading the session there would bake in
+ * whatever frappe.session held at that moment.
+ */
+function hide_cancel_delete_for_user() {
+    return !frappe.session || frappe.session.user !== "Administrator";
+}
+
+
+/**
+ * Hide Cancel and Delete on the Sales Invoice FORM for everyone except
+ * Administrator. Server-side CBMS before_cancel/on_trash throws remain the
  * real enforcement — this only removes the desk controls.
  *
  * Both entries are blocked at creation rather than deleted after render:
@@ -623,16 +639,18 @@ function suppress_cancel_delete(frm) {
 
         const _add_menu_item = page.add_menu_item.bind(page);
         page.add_menu_item = function (label) {
-            if (label === __("Delete")) return;
+            if (label === __("Delete") && hide_cancel_delete_for_user()) return;
             return _add_menu_item.apply(page, arguments);
         };
 
         const _set_secondary_action = page.set_secondary_action.bind(page);
         page.set_secondary_action = function (label) {
-            if (label === __("Cancel")) return page.btn_secondary;
+            if (label === __("Cancel") && hide_cancel_delete_for_user()) return page.btn_secondary;
             return _set_secondary_action.apply(page, arguments);
         };
     }
+
+    if (!hide_cancel_delete_for_user()) return;
 
     // The guards stop future additions; clear whatever a render that happened
     // before they were installed already put on screen.
@@ -676,6 +694,8 @@ function suppress_cancel_delete(frm) {
             const items = _get_actions_menu_items.apply(this, arguments) || [];
             // Sales Invoice only — every other doctype keeps its bulk actions.
             if (this.doctype !== "Sales Invoice") return items;
+            // Administrator keeps Cancel/Delete.
+            if (!hide_cancel_delete_for_user()) return items;
             // Same label + context strings list_view.js builds them with.
             const blocked = [
                 __("Cancel", null, "Button in list view actions menu"),
