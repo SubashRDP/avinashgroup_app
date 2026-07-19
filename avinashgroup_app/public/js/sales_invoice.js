@@ -24,26 +24,23 @@ frappe.ui.form.on("Sales Invoice", {
         update_total_amount_preview(frm);
         restore_return_vat(frm);
 
-        // IRD-locked invoices (CBMS-scope, on/after go-live) can never be
-        // cancelled or deleted — enforced server-side in
-        // CBMS/sales_invoice_hooks.py. Hide the desk controls so operators don't
-        // click them and hit the throw. The onload hook ships `ird_locked`.
-        if (frm.doc.__onload && frm.doc.__onload.ird_locked) {
-            // Toolbar renders after the doctype refresh handler — defer.
-            setTimeout(() => {
-                // Delete: remove the standard menu <li> by its label span.
-                const del_label = __("Delete");
-                frm.page.menu
-                    .find(".menu-item-label")
-                    .filter((i, el) => $(el).text().trim() === del_label)
-                    .closest("li")
-                    .remove();
-                // Cancel: it is the page secondary action on a submitted doc.
-                if (frm.doc.docstatus === 1) {
-                    frm.page.clear_secondary_action();
-                }
-            }, 300);
-        }
+        // Hide Cancel and Delete from the Sales Invoice form for EVERY invoice,
+        // unconditionally. (Server-side CBMS throws still enforce IRD
+        // immutability where applicable — this only removes the desk controls.)
+        // Toolbar renders after the doctype refresh handler — defer.
+        setTimeout(() => {
+            // Delete: remove the standard menu <li> by its label span.
+            const del_label = __("Delete");
+            frm.page.menu
+                .find(".menu-item-label")
+                .filter((i, el) => $(el).text().trim() === del_label)
+                .closest("li")
+                .remove();
+            // Cancel: it is the page secondary action on a submitted doc.
+            if (frm.doc.docstatus === 1) {
+                frm.page.clear_secondary_action();
+            }
+        }, 300);
     },
 
     before_save: function(frm) {
