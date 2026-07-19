@@ -16,6 +16,10 @@ app_include_js = [
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.1",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.1",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.2",
+    # Loaded globally (not doctype_js) so it survives even when another app's
+    # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
+    # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=1.0",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -47,7 +51,9 @@ doctype_js = {
     # any doctype set up via setup_workflow gets it automatically.
     # moved here from app_include_js: form-only handlers, and doctype_js gets
     # automatic cache invalidation (no manual ?v= bumps)
-    "Sales Invoice": "public/js/sales_invoice.js",
+    # "Sales Invoice": moved to app_include_js (global) — a broken doctype_js from
+    # another app was aborting the concatenated Sales Invoice form-script on some
+    # sites, which stopped these handlers from registering. Global load avoids that.
     "Payment Entry": "public/js/payment_entry.js",
     "Material Request": "public/js/material_request.js",
     "Purchase Invoice": "public/js/pi.js",
