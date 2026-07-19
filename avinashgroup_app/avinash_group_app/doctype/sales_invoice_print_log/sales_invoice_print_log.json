@@ -6,6 +6,8 @@
  "engine": "InnoDB",
  "field_order": [
   "sales_invoice",
+  "customer",
+  "customer_name",
   "branch_name",
   "company",
   "copy_number"
@@ -21,6 +23,23 @@
    "read_only": 1,
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "description": "Customer on the invoice at the time of printing.",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Customer",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "description": "Customer name on the invoice at the time of printing.",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Customer Name",
+   "read_only": 1
   },
   {
    "description": "Branch-wise invoice number (custom_branch_name) at the time of printing.",
@@ -51,7 +70,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-07-12 00:00:00.000000",
+ "modified": "2026-07-19 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Sales Invoice Print Log",

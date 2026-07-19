@@ -204,6 +204,8 @@ def _log_print(doc, start_sheet: int, titles: list[str]):
 				{
 					"doctype": "Sales Invoice Print Log",
 					"sales_invoice": doc.name,
+					"customer": doc.get("customer"),
+					"customer_name": doc.get("customer_name"),
 					"branch_name": doc.get("custom_branch_name"),
 					"company": doc.company,
 					"copy_number": start_sheet + i,

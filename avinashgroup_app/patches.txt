@@ -35,3 +35,6 @@ avinashgroup_app.patches.return_reason_mandatory
 avinashgroup_app.patches.vat_apply_on_default_13
 
 avinashgroup_app.patches.remove_sales_invoice_print_count_field
+
+avinashgroup_app.patches.add_print_log_company_creation_index
+avinashgroup_app.patches.backfill_print_log_customer

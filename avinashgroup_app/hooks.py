@@ -11,6 +11,12 @@ app_license = "mit"
 page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 
 app_include_js = [
+    # Wraps frappe.msgprint / show_alert to drop ERPNext's informational
+    # negative-stock notifications (blue "Warning on Negative Stock",
+    # green "valuation reposting in progress"). Load first so the wrapper is
+    # in place before any transaction can emit them. Does NOT affect the red
+    # blocking "Insufficient Stock" error (that is server-side).
+    "/assets/avinashgroup_app/js/suppress_negative_stock_msg.js?v=1.0",
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.1",
@@ -19,7 +25,7 @@ app_include_js = [
     # Loaded globally (not doctype_js) so it survives even when another app's
     # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
     # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=1.0",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=1.1",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
