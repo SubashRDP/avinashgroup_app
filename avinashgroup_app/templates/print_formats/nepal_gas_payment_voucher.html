@@ -1,0 +1,165 @@
+{#- ==========================================================================
+Nepal Gas Payment Voucher — Payment Entry voucher (avinashgroup_app).
+Source of truth for the "Nepal Gas Payment Voucher" standard Print Format;
+print_format/nepal_gas_payment_voucher/nepal_gas_payment_voucher.json only
+{% include %}s this file. Code-backed, built fresh (not copied from any existing).
+Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
+=========================================================================== -#}
+{% set company = frappe.get_doc("Company", doc.company) %}
+<style>
+/* Standard A4 paper (no custom page size) */
+.print-format { padding-top:30px !important; }
+.npv { color:#000; font-size:8px; }
+.npv * { color:#000 !important; }
+
+/* Header */
+.npv .pv-title   { text-align:center; font-weight:bold; font-size:15px; margin:0; }
+.npv .pv-company { text-align:center; font-weight:bold; font-size:18px; margin:4px 0 2px; }
+.npv .pv-city    { text-align:center; font-weight:bold; font-size:10px; margin:0 0 22px; }
+.npv .pv-info    { width:100%; border-collapse:collapse; }
+.npv .pv-info td { vertical-align:top; padding:2px 0; font-size:11px; }
+.npv .pv-info .r { text-align:right; }
+
+/* Paid To / Paid From accounts */
+.npv .pv-acc-title { font-weight:bold; margin-top:6px; }
+.npv .pv-acc-val   { margin:0 0 2px 0; }
+/* subtopics nested under Paid To A/C */
+.npv .pv-acc-sub { margin-left:18px; }
+
+/* Body items table */
+.npv .pv-items { width:100%; border-collapse:collapse; margin-top:8px; font-size:11px; }
+.npv .pv-items th { font-weight:bold; text-align:left; padding:3px 4px;
+                    border-top:1px solid #000; border-bottom:1px solid #000; }
+.npv .pv-items td { padding:1px 4px; vertical-align:top; }
+.npv .pv-items th.r, .npv .pv-items td.r { text-align:right; }
+.npv .pv-items tr.total td { border-top:1px solid #000; font-weight:bold; padding-top:4px; }
+
+/* In-words + remarks */
+.npv .pv-words   { border-top:1px solid #000; border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
+.npv .pv-remarks { border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
+
+/* Signatures */
+.npv .pv-sign { width:100%; border-collapse:collapse; margin-top:45px; }
+.npv .pv-sign td { width:25%; text-align:center; vertical-align:bottom; padding-top:28px; font-size:10px; }
+.npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
+</style>
+
+<div class="npv">
+
+  {#- ---------- Header (no "Paid To") ---------- -#}
+  <div class="pv-title">{{ doc.custom_p_type or "Payment" }} Voucher</div>
+  <div class="pv-company">{{ company.company_name }}</div>
+  <div class="pv-city">Kathmandu</div>
+
+  <table class="pv-info">
+    <tr>
+      <td>
+        <div><strong>Cheque No :</strong> {{ doc.reference_no or "" }}</div>
+        <div><strong>Cheque Date :</strong> {% if doc.custom_chequereference_miti %}{{ (doc.custom_chequereference_miti|string).split(" ")[0] }}{% endif %}{% if doc.reference_date %} ({{ frappe.utils.formatdate(doc.reference_date, "yyyy-MM-dd") }}){% endif %}</div>
+      </td>
+      <td class="r">
+        <div><strong>Voucher :</strong> {{ doc.custom_name or "" }}</div>
+        <div><strong>Date :</strong> {% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</div>
+      </td>
+    </tr>
+  </table>
+
+  {#- ---------- Items ---------- -#}
+  {% set show_party = doc.payment_type != "Internal Transfer" %}
+  <table class="pv-items">
+    <thead>
+      <tr>
+        <th style="width:40%;">Document Details</th>
+        {% if show_party %}<th style="width:12%;">Party Type</th>
+        <th style="width:18%;">Party</th>{% endif %}
+        <th class="r" style="width:15%;">Debit</th>
+        <th class="r" style="width:15%;">Credit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set total_deduction = doc.deductions | sum(attribute='amount') %}
+
+      {#- Paid To A/C -> Debit = received - bank charge -#}
+      <tr><td><div class="pv-acc-title">Paid To A/C</div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td><td class="r"></td></tr>
+      <tr>
+        <td><div class="pv-acc-sub"><div class="pv-acc-val">{{ doc.paid_to or "" }}</div></div></td>
+        {% if show_party %}<td>{% if doc.payment_type == "Pay" %}{{ doc.party_type or "" }}{% endif %}</td>
+        <td>{% if doc.payment_type == "Pay" %}{{ doc.party_name or "" }}{% endif %}</td>{% endif %}
+        <td class="r">{{ frappe.utils.fmt_money((doc.received_amount or 0) - total_deduction, 2) }}</td>
+        <td class="r"></td>
+      </tr>
+
+      {#- Bank Charge -> Debit = deduction -#}
+      {% if doc.deductions %}
+      <tr><td><div class="pv-acc-sub"><div class="pv-acc-title">Bank Charge</div></div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td><td class="r"></td></tr>
+      {% for d in doc.deductions %}
+      <tr>
+        <td><div class="pv-acc-sub"><div class="pv-acc-val">{{ d.account or "" }}</div></div></td>
+        {% if show_party %}<td></td><td></td>{% endif %}
+        <td class="r">{{ frappe.utils.fmt_money(d.amount, 2) }}</td>
+        <td class="r"></td>
+      </tr>
+      {% endfor %}
+      {% endif %}
+
+      {#- Paid From A/C -> Credit = paid amount -#}
+      <tr><td><div class="pv-acc-title">Paid From A/C</div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td><td class="r"></td></tr>
+      <tr>
+        <td><div class="pv-acc-val">{{ doc.paid_from or "" }}</div></td>
+        {% if show_party %}<td>{% if doc.payment_type == "Receive" %}{{ doc.party_type or "" }}{% endif %}</td>
+        <td>{% if doc.payment_type == "Receive" %}{{ doc.party_name or "" }}{% endif %}</td>{% endif %}
+        <td class="r"></td>
+        <td class="r">{{ frappe.utils.fmt_money(doc.paid_amount, 2) }}</td>
+      </tr>
+
+      {#- Total row -- reference/advance message goes INSIDE it (left of the amounts) -#}
+      <tr class="total">
+        <td>
+          {% if doc.payment_type in ("Pay", "Receive") %}
+            {% if doc.references %}
+              {% for ref in doc.references %}
+                {% set src = frappe.get_cached_doc(ref.reference_doctype, ref.reference_name) if ref.reference_name else None %}
+                {% set vno = (src.get("custom_branch_name") if (src and ref.reference_doctype == "Sales Invoice") else "") or (src.get("custom_name") if src else "") or ref.reference_name or "" %}
+                {% set pmiti = (src.get("custom_posting_miti")|string).split(" ")[0] if (src and src.get("custom_posting_miti")) else (frappe.utils.formatdate(src.posting_date, "yyyy-MM-dd") if (src and src.get("posting_date")) else "") %}
+                {% if (ref.outstanding_amount or 0)|round(2) != 0 %}{% set status = "partially" %}
+                {% elif (ref.total_amount or 0)|round(2) == (ref.allocated_amount or 0)|round(2) %}{% set status = "full" %}
+                {% else %}{% set status = "balance" %}{% endif %}
+                <div style="font-weight:normal; white-space:nowrap;">Voucher : {{ vno }}{% if pmiti %} dated {{ pmiti }}{% endif %} ({{ status }})</div>
+              {% endfor %}
+            {% else %}
+              <div style="font-weight:normal; white-space:nowrap;">Not tag, advance {{ "paid" if doc.payment_type == "Pay" else "received" }}</div>
+            {% endif %}
+          {% endif %}
+        </td>
+        {% if show_party %}<td></td><td></td>{% endif %}
+        <td class="r">{{ frappe.utils.fmt_money(doc.received_amount, 2) }}</td>
+        <td class="r">{{ frappe.utils.fmt_money(doc.paid_amount, 2) }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+
+  
+  {#- ---------- In words ---------- -#}
+  <div class="pv-words">
+    {{ frappe.utils.money_in_words(doc.paid_amount, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace("only.", "Only").replace(" only", " Only") }}
+  </div>
+
+  {#- ---------- Remarks ---------- -#}
+  <div class="pv-remarks">
+    <strong>Remarks :</strong> {{ doc.custom_remark or "" }}
+  </div>
+
+  {#- ---------- Signatures ---------- -#}
+  <table class="pv-sign">
+    <tr>
+      <td><div class="line"></div>Received by</td>
+      <td><div class="line"></div>Prepared by<div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div></td>
+      <td><div class="line"></div>Verified by</td>
+      <td><div class="line"></div>Approved by</td>
+    </tr>
+  </table>
+
+  <div style="text-align:left; font-size:7px; margin-top:10px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+
+</div>

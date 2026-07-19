@@ -350,26 +350,11 @@ function rebuild_value_control(frm, parentfield, cdn) {
 	}
 }
 
-// Link targets are preloaded to suggest values for In / Not In. A doctype with
-// more rows than this still works — the surplus just isn't suggested, and free
-// typing stays on — so no value is ever unreachable, only unlisted.
-const LINK_OPTION_LIMIT = 500;
-const link_options_cache = {};
-
-function fetch_link_options(doctype) {
-	if (!link_options_cache[doctype]) {
-		link_options_cache[doctype] = frappe.db
-			.get_list(doctype, { fields: ["name"], limit: LINK_OPTION_LIMIT, order_by: "name asc" })
-			.then((rows) => (rows || []).map((r) => r.name));
-	}
-	return link_options_cache[doctype];
-}
-
 // Smart value entry, PER ROW (rows referencing different field types coexist):
 // Link -> a real link picker over the target doctype, Select -> its options,
 // Check -> Yes/No, Date/Datetime -> date picker, anything else -> free text.
-// Under In / Not In the same sources feed a MultiSelect instead, which stores
-// the picks as the comma-separated string the server already splits on.
+// Under In / Not In the value is a plain Data box holding a comma-separated
+// list (grids have no reliable multi-select control), which the server splits.
 function set_smart_value_options(frm, cdt, cdn) {
 	const row = locals[cdt][cdn];
 	if (!frm.doc.document_type) return;
@@ -385,10 +370,6 @@ function set_smart_value_options(frm, cdt, cdn) {
 		) return;
 		value_df.fieldtype = fieldtype;
 		value_df.options = options;
-		// MultiSelect blanks any entry missing from its suggestion list unless
-		// validation is off. The list is a convenience, not the allowed set —
-		// a value the picker never loaded must still be typable.
-		value_df.ignore_validation = fieldtype === "MultiSelect" ? 1 : 0;
 		// works for either the Voucher No. (conditions) or Document No.
 		// (document_no_conditions) grid — the row knows its own parent table.
 		rebuild_value_control(frm, row.parentfield, cdn);
@@ -403,24 +384,26 @@ function set_smart_value_options(frm, cdt, cdn) {
 		return;
 	}
 
+	// In / Not In take a comma-separated LIST. A grid cell has no reliable
+	// multi-select control ("MultiSelect" is not a real Frappe fieldtype and
+	// rendered inconsistently), so use a plain Data box — type/paste the values
+	// comma-separated, e.g. "A, B, C". The server splits on commas either way.
+	if (multi) {
+		apply("Data", "");
+		return;
+	}
+
 	frappe.model.with_doctype(frm.doc.document_type, () => {
 		const df = frappe.meta.get_docfield(frm.doc.document_type, row.field);
 
 		if (df && df.fieldtype === "Check") {
-			multi ? apply("MultiSelect", ["1", "0"]) : apply("Select", "\n1\n0");
+			apply("Select", "\n1\n0");
 		} else if (df && df.fieldtype === "Select" && df.options) {
-			multi
-				? apply("MultiSelect", df.options.split("\n").filter((o) => o))
-				: apply("Select", "\n" + df.options);
+			apply("Select", "\n" + df.options);
 		} else if (df && df.fieldtype === "Link" && df.options) {
-			// async — the row may re-render before this lands, which is harmless:
-			// apply() keys off the row's docfield and no-ops if nothing changed.
-			multi
-				? fetch_link_options(df.options).then((opts) => apply("MultiSelect", opts))
-				: apply("Link", df.options);
+			apply("Link", df.options);
 		} else if (df && ["Date", "Datetime"].includes(df.fieldtype)) {
-			// no picker expresses a list of dates — fall back to typing them
-			multi ? apply("Data", "") : apply("Date", "");
+			apply("Date", "");
 		} else {
 			apply("Data", "");
 		}
