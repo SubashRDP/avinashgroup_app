@@ -1,10 +1,15 @@
 {% set company = frappe.get_doc("Company", doc.company) %}
 {% set items = doc.items %}
+{#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
+{%- macro amt(v) -%}{{ frappe.utils.fmt_money(v or 0, 2, format="#,##,###.##") }}{%- endmacro -%}
 
 <style>
 @page {
   size: A4;
-  margin-bottom: 20mm;
+  /* Large bottom margin confines all data to the TOP HALF of the A4 sheet;
+     content breaks to the next page when the top half fills, bottom stays blank.
+     152mm bottom margin => content band caps at ~48.8% of the A4 height. */
+  margin-bottom: 152mm;
   @bottom-center {
     content: "Page " counter(page) " of " counter(pages);
     font-size: 12px;
@@ -14,7 +19,7 @@
 body {
   -webkit-print-color-adjust: exact;
   margin: 0;
-  padding-bottom: 25mm;
+  padding-bottom: 0;
 }
 body { font-size:12px !important; }
 table { width: 100%; border-collapse: collapse; }
@@ -45,6 +50,9 @@ td.texleft p { text-align: left !important; }
 .main-table { margin-top:10px; margin-bottom:0px; }
 .main-table th { color:#000; }
 .main-table tr { height:20px !important; }
+/* Vendor/VAT header block: cancel the forced row height + cell padding so the two lines sit tight together */
+.top-data tr { height:auto !important; }
+.top-data tr td { padding:0 !important; line-height:1.25 !important; }
 .bottom-table td { padding:3px !important; min-height:20px; }
 .border-right { border-right:solid #030404 1px !important; }
 .p-0 { padding:0px !important; }
@@ -88,11 +96,11 @@ p { text-align: center; margin: 0; padding: 2px; }
   <!-- HEADER -->
   <thead>
     <tr class="company-info">
-      <td colspan="7" style="text-align:center; border:none;">
+      <td colspan="7" style="text-align:center; border:none; padding-bottom:0;">
         <h4>
           {% if doc.is_return %}Purchase Return{% else %}{{ doc.custom_purchase_type or "Purchase Invoice" }}{% endif %}
         </h4>
-        <h2 style="margin:5px 0;">{{ company.company_name }}</h2>
+        <h2 style="margin:3px 0 0 0;">{{ company.company_name }}</h2>
         <div>Kathmandu</div>
       </td>
     </tr>
@@ -114,7 +122,7 @@ p { text-align: center; margin: 0; padding: 2px; }
     -->
     
     <tr>
-        <td colspan="7">
+        <td colspan="7" style="padding-top:0;">
           <table style="width:100%; border:none;" class="top-data">
             <tr>
               <td style="border:none; text-align:left; padding:0;">Vendor : {{ doc.supplier_name or doc.supplier }}</td>
@@ -139,35 +147,7 @@ p { text-align: center; margin: 0; padding: 2px; }
     </tr>
   </thead>
 
-  <!-- FOOTER / SIGNATURES repeated per page -->
-  <tfoot>
-    <tr>
-      <td colspan="7" style="padding-top:10px;">
-        <table style="width:100%; border:none;">
-          <tr>
-            <td style="width:25%; text-align:center; border:none;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
-              <div>Prepared By</div>
-              <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div>
-            </td>
-            <td style="width:25%; text-align:center; border:none;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
-              <div>Checked By</div>
-            </td>
-            <td style="width:25%; text-align:center; border:none;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
-              <div>Verified By</div>
-            </td>
-            <td style="width:25%; text-align:center; border:none;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
-              <div>Approved By</div>
-            </td>
-          </tr>
-        </table>
-        <div style="text-align:left; font-size:9px; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
-      </td>
-    </tr>
-  </tfoot>
+  <!-- signatures moved out of <tfoot> into a page-fixed footer after the table (pinned at 47%) -->
 
   <!-- BODY / ITEMS -->
   <tbody>
@@ -178,8 +158,8 @@ p { text-align: center; margin: 0; padding: 2px; }
       <td>{{ item.custom_subtype }}</td>
       <td style="text-align:right;">{{ abs(item.qty) }}</td>
       <td style="text-align:center;">{{ item.uom }}</td>
-      <td style="text-align:right;">{{ abs(item.rate) }}</td>
-      <td style="text-align:right;">{{ abs(item.amount) }}</td>
+      <td style="text-align:right;">{{ amt(abs(item.rate)) }}</td>
+      <td style="text-align:right;">{{ amt(abs(item.amount)) }}</td>
     </tr>
     {% endfor %}
 
@@ -187,28 +167,28 @@ p { text-align: center; margin: 0; padding: 2px; }
     <tr>
       <td colspan="4" style="border:none;"></td>
       <td>Total Before Tax</td>
-      <td colspan="2" style="text-align:right;">{{ doc.total }}</td>
+      <td colspan="2" style="text-align:right;">{{ amt(doc.total) }}</td>
     </tr>
     <tr>
       <td colspan="4" style="border:none;"></td>
       <td>Add : VAT 13%</td>
-      <td colspan="2" style="text-align:right;">{{ doc.taxes_and_charges_added or 0 }}</td>
+      <td colspan="2" style="text-align:right;">{{ amt(doc.taxes_and_charges_added) }}</td>
     </tr>
     <tr>
       <td colspan="4" style="border:none;"></td>
       <td>Total Including Vat</td>
-      <td colspan="2" style="text-align:right;">{{ frappe.utils.flt((doc.total or 0) + (doc.taxes_and_charges_added or 0), 2) }}</td>
+      <td colspan="2" style="text-align:right;">{{ amt((doc.total or 0) + (doc.taxes_and_charges_added or 0)) }}</td>
     </tr>
     <tr>
       <td colspan="4" style="border:none;"></td>
       <td>Less : TDS</td>
-      <td colspan="2" style="text-align:right;">{{ doc.taxes_and_charges_deducted or 0 }}</td>
+      <td colspan="2" style="text-align:right;">{{ amt(doc.taxes_and_charges_deducted) }}</td>
     </tr>
     <tr>
       <td colspan="4" style="border:none;"></td>
       <td style="border-bottom:1px solid #000; border-top:1px solid #000;"><strong>Total</strong></td>
       <td colspan="2" style="border-top:1px solid #000; text-align:right;">
-        <strong>{{ doc.grand_total }}</strong>
+        <strong>{{ amt(doc.grand_total) }}</strong>
       </td>
     </tr>
     <tr style="border:solid #000 1px;">
@@ -226,6 +206,32 @@ p { text-align: center; margin: 0; padding: 2px; }
     
   </tbody>
 </table>
+
+<!-- Footer (signatories + printed-on): flows after the data, so it lands on the last page below the items -->
+<div style="margin-top:16px;">
+  <table style="width:100%; border:none;">
+    <tr>
+      <td style="width:25%; text-align:center; border:none;">
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <div>Prepared By</div>
+        <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div>
+      </td>
+      <td style="width:25%; text-align:center; border:none;">
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <div>Checked By</div>
+      </td>
+      <td style="width:25%; text-align:center; border:none;">
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <div>Verified By</div>
+      </td>
+      <td style="width:25%; text-align:center; border:none;">
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <div>Approved By</div>
+      </td>
+    </tr>
+  </table>
+  <div style="text-align:left; font-size:9px; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+</div>
 <div class="page-number"></div>
 </div>
 

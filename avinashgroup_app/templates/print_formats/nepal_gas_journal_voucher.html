@@ -9,18 +9,15 @@ S.N. column always shown. Narration only for Cash Entry.
 =========================================================================== -#}
 <style>
 @page {
- /* size: A4;*/
- /* margin: 20mm 15mm 25mm 15mm; */
-  margin-bottom: 20mm;
-  
- 
-  /* Bottom margin must be large enough for footer */
-  
+  /* Large bottom margin confines all data to the TOP HALF of the A4 sheet.
+     When the top half fills, content breaks to the next page; the bottom half
+     stays blank. (Only margin-bottom changed from the original 20mm.) */
+  margin-bottom: 152mm;
+
   @bottom-center {
     content: "Page " counter(page) " of " counter(pages);
     font-size: 10px;
     color: #000;
- 
   }
 }
 
@@ -501,6 +498,8 @@ padding:0px 30px;
 </style>
 
 {% set company = frappe.get_doc("Company", doc.company) %}
+{#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
+{%- macro amt(v) -%}{{ frappe.utils.fmt_money(v or 0, 2, format="#,##,###.##") }}{%- endmacro -%}
 {% set vehicle_types = ["Cash Entry", "Cash/ Bank or Contra Voucher", "Journal Entry"] %}
 {% set show_vehicle = doc.custom_p_type in vehicle_types %}
 {% set show_party = true %}
@@ -520,16 +519,18 @@ padding:0px 30px;
 
       <tr>
         <td colspan="{{ ncols }}">
-          <div class="row top-data">
-            <div class="col-xs-6 text-left">
-              <div><strong>Reference Number :</strong> {{ doc.cheque_no or '' }}</div>
-              <div><strong>Reference Miti :</strong> {{ doc.custom_reference_miti or '' }}{% if doc.cheque_date %} ({{ frappe.utils.formatdate(doc.cheque_date, "yyyy-MM-dd") }}){% endif %}</div>
-            </div>
-            <div class="col-xs-6 text-right">
-              <div><strong>Voucher No :</strong> {{ doc.custom_name }}</div>
-              <div><strong>Posting Miti :</strong> {{ doc.custom_posting_miti or '' }}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</div>
-            </div>
-          </div>
+          {#- Fixed 2x2 header table: Voucher No / Posting Miti stay aligned top-right
+             even when Reference Number / Reference Miti are empty. -#}
+          <table style="width:100%; border:none; border-collapse:collapse;">
+            <tr>
+              <td style="border:none; text-align:left; vertical-align:top; width:50%; padding:0;"><strong>Reference Number :</strong> {{ doc.cheque_no or '' }}</td>
+              <td style="border:none; text-align:right; vertical-align:top; width:50%; padding:0;"><strong>Voucher No :</strong> {{ doc.custom_name }}</td>
+            </tr>
+            <tr>
+              <td style="border:none; text-align:left; vertical-align:top; padding:0;"><strong>Reference Miti :</strong> {{ doc.custom_reference_miti or '' }}{% if doc.cheque_date %} ({{ frappe.utils.formatdate(doc.cheque_date, "yyyy-MM-dd") }}){% endif %}</td>
+              <td style="border:none; text-align:right; vertical-align:top; padding:0;"><strong>Posting Miti :</strong> {{ doc.custom_posting_miti or '' }}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
+            </tr>
+          </table>
         </td>
       </tr>
 
@@ -569,11 +570,11 @@ padding:0px 30px;
     </td>
 
     <td style="text-align:right; padding-right:18px;">
-      {{ row.debit_in_account_currency or "0" }}
+      {{ amt(row.debit_in_account_currency) }}
     </td>
 
     <td style="text-align:right;">
-      {{ row.credit_in_account_currency or "0" }}
+      {{ amt(row.credit_in_account_currency) }}
     </td>
   </tr>
 {% endfor %}
@@ -583,10 +584,10 @@ padding:0px 30px;
         {% if show_vehicle %}<td></td>{% endif %}{% if show_party %}<td></td>{% endif %}
         <td><strong>Total</strong></td>
         <td style="text-align:right;border-top:1px solid #000; padding-right:18px;">
-          <strong>{{ doc.total_debit }}</strong>
+          <strong>{{ amt(doc.total_debit) }}</strong>
         </td>
         <td style="text-align:right;border-top:1px solid #000;">
-          <strong>{{ doc.total_credit }}</strong>
+          <strong>{{ amt(doc.total_credit) }}</strong>
         </td>
       </tr>
 
@@ -608,24 +609,26 @@ padding:0px 30px;
      
      </table>
 
-     <div style="page-break-inside:avoid; margin-top:12px;">
+     {#- Footer (signatories + printed-on): normal block after the data, so it only
+        appears once, on the last page, below the data. -#}
+     <div style="margin-top:16px; page-break-inside:avoid;">
        <table style="width:100%; border:none; color:#000;">
           <tr>
             <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
               <div>Prepared By</div>
               <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "&nbsp;" }}</strong></div>
             </td>
             <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
               <div>Checked By</div>
             </td>
             <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
               <div>Verified By</div>
             </td>
             <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
               <div>Approved By</div>
             </td>
           </tr>
