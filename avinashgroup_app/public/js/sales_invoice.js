@@ -3,6 +3,7 @@
 frappe.ui.form.on("Sales Invoice", {
 
     onload: function(frm) {
+        lock_posting_fields(frm);
         // Apply field visibility for all existing rows on load
         if (frm.doc.items) {
             frm.doc.items.forEach(function(item) {
@@ -12,6 +13,7 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
     refresh: function(frm) {
+        lock_posting_fields(frm);
         // Apply field visibility on refresh
         if (frm.doc.items) {
             frm.doc.items.forEach(function(item) {
@@ -24,23 +26,7 @@ frappe.ui.form.on("Sales Invoice", {
         update_total_amount_preview(frm);
         restore_return_vat(frm);
 
-        // Hide Cancel and Delete from the Sales Invoice form for EVERY invoice,
-        // unconditionally. (Server-side CBMS throws still enforce IRD
-        // immutability where applicable — this only removes the desk controls.)
-        // Toolbar renders after the doctype refresh handler — defer.
-        setTimeout(() => {
-            // Delete: remove the standard menu <li> by its label span.
-            const del_label = __("Delete");
-            frm.page.menu
-                .find(".menu-item-label")
-                .filter((i, el) => $(el).text().trim() === del_label)
-                .closest("li")
-                .remove();
-            // Cancel: it is the page secondary action on a submitted doc.
-            if (frm.doc.docstatus === 1) {
-                frm.page.clear_secondary_action();
-            }
-        }, 300);
+        suppress_cancel_delete(frm);
     },
 
     before_save: function(frm) {
@@ -82,7 +68,29 @@ frappe.ui.form.on("Sales Invoice", {
         setTimeout(() => set_due_date_from_customer(frm), 0);
     },
 
+    // ERPNext's stock_controller re-opens posting_date/posting_time whenever
+    // "Edit Posting Date and Time" is ticked. Re-lock after its handler.
+    set_posting_time: function(frm) {
+        lock_posting_fields(frm);
+    },
+
+    set_posting_date_and_time_read_only: function(frm) {
+        lock_posting_fields(frm);
+    },
+
 });
+
+// Posting Date and Invoice Miti are never editable on the form, for anyone.
+// The posting date is whatever the invoice was raised on, and the BS miti is
+// derived from it server-side (custom_code/SalesInvoice/posting_miti.py), so
+// neither can be typed over. Deferred a tick so it lands after the ERPNext
+// controller handlers that toggle posting_date read_only.
+function lock_posting_fields(frm) {
+    setTimeout(() => {
+        frm.set_df_property('posting_date', 'read_only', 1);
+        frm.set_df_property('custom_invoice_miti', 'read_only', 1);
+    }, 0);
+}
 
 frappe.ui.form.on("Sales Invoice Item", {
     item_code: function(frm, cdt, cdn) {
@@ -586,46 +594,106 @@ async function force_all_si_warehouses(frm) {
 }
 
 
-// ---------------------------------------------------------------------------
-// List view: hide Cancel and Delete from the bulk "Actions" menu (Sales Invoice
-// ONLY). The form toolbar is handled in the refresh() handler above; this
-// covers the list-view Actions dropdown, which Frappe builds via a separate
-// mechanism (list_view.js get_actions_menu_items -> page.actions). Server-side
-// enforcement is unchanged — this only removes the UI entries.
-// ---------------------------------------------------------------------------
-frappe.listview_settings = frappe.listview_settings || {};
-(function () {
-    const doctype = "Sales Invoice";
-    const prev = frappe.listview_settings[doctype] || {};
+/**
+ * Hide Cancel and Delete on the Sales Invoice FORM, for every invoice,
+ * unconditionally. Server-side CBMS before_cancel/on_trash throws remain the
+ * real enforcement — this only removes the desk controls.
+ *
+ * Both entries are blocked at creation rather than deleted after render:
+ *
+ *  - Delete is a Menu item added by toolbar.js make_menu_items() together with
+ *    a Shift+Ctrl+D shortcut. Removing the <li> afterwards leaves that shortcut
+ *    live, so the invoice is still deletable from the keyboard.
+ *  - Cancel is the page SECONDARY action (toolbar.js set_page_actions). When the
+ *    doctype has a workflow it is attached only after an async
+ *    can_cancel_document xcall, so a fixed-delay prune can run too early and
+ *    the button comes back.
+ *
+ * Blocking also survives every later toolbar rebuild (save, submit, workflow
+ * transition), which a one-shot removal does not.
+ */
+function suppress_cancel_delete(frm) {
+    const page = frm.page;
+    if (!page) return;
 
-    function hide_cancel_delete(listview) {
-        // The exact labels Frappe renders for these two bulk actions.
-        const labels = [
-            __("Cancel", null, "Button in list view actions menu"),
-            __("Delete", null, "Button in list view actions menu"),
-        ];
-        // Actions menu is built during list setup; prune after render.
-        setTimeout(() => {
-            if (!listview.page || !listview.page.actions) return;
-            labels.forEach((lbl) => {
-                listview.page.actions
-                    .find(".menu-item-label")
-                    .filter((i, el) => $(el).text().trim() === lbl)
-                    .closest("li")
-                    .remove();
-            });
-        }, 300);
+    // Install once per page. frappe.views.formview keeps one page object per
+    // doctype (formview.js), so these patches only ever affect Sales Invoice.
+    if (!page.__agp_no_cancel_delete) {
+        page.__agp_no_cancel_delete = true;
+
+        const _add_menu_item = page.add_menu_item.bind(page);
+        page.add_menu_item = function (label) {
+            if (label === __("Delete")) return;
+            return _add_menu_item.apply(page, arguments);
+        };
+
+        const _set_secondary_action = page.set_secondary_action.bind(page);
+        page.set_secondary_action = function (label) {
+            if (label === __("Cancel")) return page.btn_secondary;
+            return _set_secondary_action.apply(page, arguments);
+        };
     }
 
-    // Merge, preserving any onload/refresh another app may have defined.
-    frappe.listview_settings[doctype] = Object.assign({}, prev, {
-        onload(listview) {
-            if (typeof prev.onload === "function") prev.onload(listview);
-            hide_cancel_delete(listview);
-        },
-        refresh(listview) {
-            if (typeof prev.refresh === "function") prev.refresh(listview);
-            hide_cancel_delete(listview);
-        },
-    });
+    // The guards stop future additions; clear whatever a render that happened
+    // before they were installed already put on screen.
+    const del_label = __("Delete");
+    page.menu
+        .find(".menu-item-label")
+        .filter((i, el) => $(el).text().trim() === del_label)
+        .closest("li")
+        .remove();
+    if (page.btn_secondary.attr("data-label") === __("Cancel")) {
+        page.clear_secondary_action();
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// List view: hide Cancel and Delete from the bulk "Actions" menu (Sales Invoice
+// ONLY). The form toolbar is handled in refresh() above; the list-view Actions
+// dropdown is built by a separate path (list_view.js get_actions_menu_items ->
+// set_actions_menu_items -> page.actions). Server-side enforcement is
+// unchanged — this only removes the UI entries.
+//
+// This deliberately does NOT go through frappe.listview_settings. ERPNext's own
+// sales_invoice_list.js does a wholesale
+//     frappe.listview_settings["Sales Invoice"] = { ... }
+// and it loads AFTER app_include_js, so anything merged into that object here
+// is silently replaced — verified on the running desk, where our onload was
+// simply gone. Patching get_actions_menu_items instead is immune to load order:
+// it filters the items before they are ever turned into menu entries, so there
+// is nothing to prune and nothing for a later assignment to clobber.
+// ---------------------------------------------------------------------------
+(function () {
+    function install() {
+        const LV = frappe.views && frappe.views.ListView;
+        if (!LV || typeof LV.prototype.get_actions_menu_items !== "function") return false;
+        if (LV.prototype.__agp_no_cancel_delete) return true;
+        LV.prototype.__agp_no_cancel_delete = true;
+
+        const _get_actions_menu_items = LV.prototype.get_actions_menu_items;
+        LV.prototype.get_actions_menu_items = function () {
+            const items = _get_actions_menu_items.apply(this, arguments) || [];
+            // Sales Invoice only — every other doctype keeps its bulk actions.
+            if (this.doctype !== "Sales Invoice") return items;
+            // Same label + context strings list_view.js builds them with.
+            const blocked = [
+                __("Cancel", null, "Button in list view actions menu"),
+                __("Delete", null, "Button in list view actions menu"),
+            ];
+            return items.filter((item) => !blocked.includes(item.label));
+        };
+        return true;
+    }
+
+    // ListView is normally defined by the time app_include_js runs; the retry
+    // covers a boot order where the list bundle has not landed yet. Must be
+    // installed before the first Sales Invoice list is constructed, because
+    // Frappe caches list views (frappe.views.list_view[route]) and only builds
+    // the Actions menu once per page object.
+    if (!install()) {
+        const timer = setInterval(() => { if (install()) clearInterval(timer); }, 100);
+        setTimeout(() => clearInterval(timer), 15000);
+        $(document).on("app_ready", install);
+    }
 })();

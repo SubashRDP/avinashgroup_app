@@ -25,7 +25,7 @@ app_include_js = [
     # Loaded globally (not doctype_js) so it survives even when another app's
     # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
     # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=1.3",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=1.6",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -100,7 +100,12 @@ supplier_quotation_events = {
 }
 
 sales_invoice_specific_events = {
-    "before_validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_validate_salesinvoice",
+    "before_validate": [
+        "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.before_validate_salesinvoice",
+        # posting_date and custom_invoice_miti are read-only on the form; the BS
+        # miti is derived from the posting date here so it stays fillable.
+        "avinashgroup_app.custom_code.SalesInvoice.posting_miti.set_invoice_miti",
+    ],
     # Tax pipeline runs on `validate`, NOT `before_save`: desk Save on a Sales
     # Invoice draft is escalated to Submit (save_and_submit.py), and Frappe runs
     # `before_submit` instead of `before_save` on that path — a before_save hook
