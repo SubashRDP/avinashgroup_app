@@ -21,7 +21,7 @@
  "name": "A5 Avinash Purchase Invoice",
  "owner": "Administrator",
  "page_number": "Hide",
- "pdf_generator": "wkhtmltopdf",
+ "pdf_generator": "chrome",
  "print_format_builder": 0,
  "print_format_type": "Jinja",
  "raw_printing": 0,
