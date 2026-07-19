@@ -120,8 +120,14 @@ frappe.ui.form.on("Sales Invoice Item", {
             if (opts && opts.method && opts.method.includes('get_item_details')) {
                 const _cb = opts.callback;
                 opts.callback = async function(r) {
-                    const our_wh = await wh_promise;
-                    if (r && r.message) r.message.warehouse = our_wh;
+                    // Inject our warehouse if resolved, but NEVER let a failed
+                    // warehouse lookup abort ERPNext's callback — that callback is
+                    // what applies uom, rate, description, conversion_factor, etc.
+                    // to the row. A rejected wh_promise here used to throw before
+                    // _cb ran, leaving all item fields unchanged on item change.
+                    let our_wh = '';
+                    try { our_wh = await wh_promise; } catch (e) { our_wh = ''; }
+                    if (our_wh && r && r.message) r.message.warehouse = our_wh;
                     _cb && _cb.apply(this, arguments);
                     // Force item-derived fields to refresh on EVERY item change, even on
                     // servers whose ERPNext build doesn't blank/re-apply them (older

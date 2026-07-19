@@ -297,8 +297,11 @@ function handle_item_code_change(frm, cdt, cdn) {
         if (opts && opts.method && opts.method.includes('get_item_details')) {
             const _cb = opts.callback;
             opts.callback = async function(r) {
-                const our_wh = await wh_promise;
-                if (r && r.message) r.message.warehouse = our_wh;
+                // Never let a failed warehouse lookup abort ERPNext's callback —
+                // it applies uom/rate/description/conversion factor to the row.
+                let our_wh = '';
+                try { our_wh = await wh_promise; } catch (e) { our_wh = ''; }
+                if (our_wh && r && r.message) r.message.warehouse = our_wh;
                 _cb && _cb.apply(this, arguments);
                 _restore();
             };
@@ -897,8 +900,12 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
                 )) {
                     const _cb = opts.callback;
                     opts.callback = async function(r) {
-                        const our_wh = await wh_promise;
-                        if (r && r.message) r.message.warehouse = our_wh;
+                        // Never let a failed warehouse lookup abort ERPNext's
+                        // callback — it applies uom/rate/description/conversion
+                        // factor to the row.
+                        let our_wh = '';
+                        try { our_wh = await wh_promise; } catch (e) { our_wh = ''; }
+                        if (our_wh && r && r.message) r.message.warehouse = our_wh;
                         _cb && _cb.apply(this, arguments);
                         _restore();
                     };
@@ -949,18 +956,26 @@ function set_pi_due_date_from_supplier(frm) {
  * Returns "" if not configured — caller decides whether to set or leave.
  */
 async function _fetch_buying_wh(item_code, custom_branch) {
-    let wh = '';
-    if (custom_branch) {
-        const item_doc = await frappe.db.get_doc('Item', item_code);
-        const brow = (item_doc.custom_branch_wise_warehouse || [])
-            .find(r => r.custom_branch === custom_branch);
-        if (brow) wh = brow.custom_buying_warehouse || '';
+    // Must never reject: awaited inside the get_item_details callback wrapper,
+    // where a rejection would stop item details (uom, rate, description,
+    // conversion factor) from being applied to the row.
+    try {
+        let wh = '';
+        if (custom_branch) {
+            const item_doc = await frappe.db.get_doc('Item', item_code);
+            const brow = (item_doc.custom_branch_wise_warehouse || [])
+                .find(r => r.custom_branch === custom_branch);
+            if (brow) wh = brow.custom_buying_warehouse || '';
+        }
+        if (!wh) {
+            const res = await frappe.db.get_value('Item', item_code, 'custom_buying_warehouse');
+            wh = (res && res.message && res.message.custom_buying_warehouse) || '';
+        }
+        return wh;
+    } catch (e) {
+        console.warn('buying warehouse lookup failed for', item_code, e);
+        return '';
     }
-    if (!wh) {
-        const res = await frappe.db.get_value('Item', item_code, 'custom_buying_warehouse');
-        wh = (res && res.message && res.message.custom_buying_warehouse) || '';
-    }
-    return wh;
 }
 
 /**

@@ -27,8 +27,12 @@ SELLING_WAREHOUSE_DOCTYPES.forEach(function(doctype) {
                 if (opts && opts.method && opts.method.includes('get_item_details')) {
                     const _cb = opts.callback;
                     opts.callback = async function(r) {
-                        const our_wh = await wh_promise;
-                        if (r && r.message) r.message.warehouse = our_wh;
+                        // Never let a failed warehouse lookup abort ERPNext's
+                        // callback — it applies uom/rate/description/conversion
+                        // factor to the row. See sales_invoice.js for details.
+                        let our_wh = '';
+                        try { our_wh = await wh_promise; } catch (e) { our_wh = ''; }
+                        if (our_wh && r && r.message) r.message.warehouse = our_wh;
                         _cb && _cb.apply(this, arguments);
                         _restore();
                     };
@@ -57,18 +61,26 @@ SELLING_WAREHOUSE_DOCTYPES.forEach(function(doctype) {
  * (loaded per-form after this file) can rely on it. Do NOT redefine it elsewhere.
  */
 async function _fetch_selling_wh(item_code, custom_branch) {
-    let wh = '';
-    if (custom_branch) {
-        const item_doc = await frappe.db.get_doc('Item', item_code);
-        const brow = (item_doc.custom_branch_wise_warehouse || [])
-            .find(r => r.custom_branch === custom_branch);
-        if (brow) wh = brow.custom_selling_warehouse || '';
+    // Must never reject: this promise is awaited inside the get_item_details
+    // callback wrapper, and a rejection there would stop item details (uom,
+    // rate, description, conversion factor) from being applied to the row.
+    try {
+        let wh = '';
+        if (custom_branch) {
+            const item_doc = await frappe.db.get_doc('Item', item_code);
+            const brow = (item_doc.custom_branch_wise_warehouse || [])
+                .find(r => r.custom_branch === custom_branch);
+            if (brow) wh = brow.custom_selling_warehouse || '';
+        }
+        if (!wh) {
+            const res = await frappe.db.get_value('Item', item_code, 'custom_selling_warehouse');
+            wh = (res && res.message && res.message.custom_selling_warehouse) || '';
+        }
+        return wh;
+    } catch (e) {
+        console.warn('selling warehouse lookup failed for', item_code, e);
+        return '';
     }
-    if (!wh) {
-        const res = await frappe.db.get_value('Item', item_code, 'custom_selling_warehouse');
-        wh = (res && res.message && res.message.custom_selling_warehouse) || '';
-    }
-    return wh;
 }
 
 
