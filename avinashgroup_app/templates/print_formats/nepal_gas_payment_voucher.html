@@ -9,7 +9,11 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 {#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
 {%- macro amt(v) -%}{{ frappe.utils.fmt_money(v or 0, 2, format="#,##,###.##") }}{%- endmacro -%}
 <style>
-/* Standard A4 paper (no custom page size) */
+@page {
+  size: A4;
+  /* Confine content to the top ~half of the A4 sheet; caps at ~48.8%. */
+  margin-bottom: 152mm;
+}
 .print-format { padding-top:30px !important; }
 .npv { color:#000; font-size:8px; }
 .npv * { color:#000 !important; }
@@ -17,13 +21,13 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 /* Header */
 .npv .pv-title   { text-align:center; font-weight:bold; font-size:15px; margin:0; }
 .npv .pv-company { text-align:center; font-weight:bold; font-size:18px; margin:4px 0 2px; }
-.npv .pv-city    { text-align:center; font-weight:bold; font-size:10px; margin:0 0 22px; }
+.npv .pv-city    { text-align:center; font-weight:bold; font-size:10px; margin:0 0 8px; }
 .npv .pv-info    { width:100%; border-collapse:collapse; }
 .npv .pv-info td { vertical-align:top; padding:2px 0; font-size:11px; }
 .npv .pv-info .r { text-align:right; }
 
 /* Paid To / Paid From accounts */
-.npv .pv-acc-title { font-weight:bold; margin-top:6px; }
+.npv .pv-acc-title { font-weight:bold; margin-top:1px; }
 .npv .pv-acc-val   { margin:0 0 2px 0; }
 /* subtopics nested under Paid To A/C */
 .npv .pv-acc-sub { margin-left:18px; }
@@ -41,9 +45,9 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 .npv .pv-remarks { border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
 
 /* Signatures */
-/* Whole footer (signatories + printed-on) pinned at 47% of the A4 page,
-   fixed regardless of how many rows the voucher body has. */
-.npv .pv-footer { position:absolute; top:47%; left:0; right:0; }
+/* Footer (signatories + printed-on) flows a little below the data; the print date
+   sits just under the signatures. Same look in the on-screen preview and the PDF. */
+.npv .pv-footer { margin-top:24px; }
 .npv .pv-sign { width:100%; border-collapse:collapse; }
 .npv .pv-sign td { width:25%; text-align:center; vertical-align:bottom; padding-top:38px; font-size:10px; }
 .npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
