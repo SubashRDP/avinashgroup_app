@@ -1,4 +1,3 @@
-
 {
  "align_labels_right": 0,
  "creation": "2026-07-18 00:00:00.000000",
@@ -23,6 +22,7 @@
  "name": "Nepal Gas Payment Voucher",
  "owner": "Administrator",
  "page_number": "Hide",
+ "pdf_generator": "chrome",
  "print_format_builder": 0,
  "print_format_type": "Jinja",
  "raw_printing": 0,
