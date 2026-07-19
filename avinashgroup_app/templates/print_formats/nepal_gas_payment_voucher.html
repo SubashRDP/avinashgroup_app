@@ -138,6 +138,8 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
     </tbody>
   </table>
 
+
+  
   {#- ---------- In words ---------- -#}
   <div class="pv-words">
     {{ frappe.utils.money_in_words(doc.paid_amount, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace("only.", "Only").replace(" only", " Only") }}
