@@ -12,6 +12,27 @@ The four sites the bridge accepts out of the box (v0.2.0):
 | sandbox | `https://sandboxavinas-demo.raindropinc.com` | test |
 | demo | `https://avinasdemo.raindropinc.com` | test |
 
+## Deploy the app update (ERP server, once)
+
+QZ Tray was removed from the app in favour of the bridge (commit `b0ddcfe` on
+`develop`). The print code lives on the **ERP server** that serves all four
+sites — not on the till — so it must be deployed there before any browser sees
+the QZ-free behaviour. On the bench that runs `ng-group.raindropinc.com` and the
+three test sites:
+
+```bash
+cd /path/to/frappe-bench/apps/avinashgroup_app
+git pull                       # pulls the QZ-removal commit on develop
+cd /path/to/frappe-bench
+bench build --app avinashgroup_app
+bench --site all clear-cache
+bench restart
+```
+
+Then **hard-reload** the browser (Ctrl+Shift+R) on each site. After this:
+machines with the bridge print via LQ310-RAW; machines without it show a clear
+"install PrintBridgeSetup.exe + reload" message instead of the old QZ error.
+
 ## Install (once per machine)
 
 1. **Attach the Epson LQ-310 and switch it on first.** The installer creates the
