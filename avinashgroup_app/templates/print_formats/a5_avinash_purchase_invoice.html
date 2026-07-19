@@ -1,0 +1,237 @@
+{% set company = frappe.get_doc("Company", doc.company) %}
+{% set items = doc.items %}
+
+<style>
+@page {
+  size: A4;
+  margin-bottom: 20mm;
+  @bottom-center {
+    content: "Page " counter(page) " of " counter(pages);
+    font-size: 12px;
+    color: #000;
+  }
+}
+body {
+  -webkit-print-color-adjust: exact;
+  margin: 0;
+  padding-bottom: 25mm;
+}
+body { font-size:12px !important; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border:1px solid #000; padding:4px; font-size:12px; }
+th { font-weight:bold; text-align:center; }
+thead { display: table-header-group; }
+tfoot { display: table-footer-group; }
+tr, td, th { page-break-inside: avoid; }
+.page-break { page-break-after: always; }
+.company-info h2 { font-weight: 600; margin: 0; font-size: 20px; }
+.company-info h4 { font-weight: 600; margin: 2px; font-size: 15px; }
+.company-info div { font-weight: 600; }
+.title strong { font-size:16px; }
+.top-table tr td,.table2 tr td { font-size:12px !important; padding: 4px 0px !important; }
+.main-table tr th { font-size:12px !important; font-weight:600; padding:4px !important; }
+.main-table tr td { font-size:12px !important; padding: 4px !important; }
+.main-table.table-bordered { border:0px; }
+.main-table.table-bordered td, .main-table.table-bordered th { border: 0px; }
+.print-format .format-container,.print-format { padding:0px !important; }
+.footer { position: absolute; bottom: 0; width: 100%; font-size: 12px; border-top: 1px solid #000; padding-top: 10px; }
+.page-number { position: absolute; bottom: 20px; width: 100%; text-align: center; font-size: 12px; right:0; }
+.authorized hr { border-top:solid #000 1px !important; margin:5px 0px; }
+.print-format { padding:30px !important; }
+td.texleft p { text-align: left !important; }
+.value-color { color: #192734; }
+.print-format .value { line-height:0; }
+.print-heading { border-bottom:none; }
+.main-table { margin-top:10px; margin-bottom:0px; }
+.main-table th { color:#000; }
+.main-table tr { height:20px !important; }
+.bottom-table td { padding:3px !important; min-height:20px; }
+.border-right { border-right:solid #030404 1px !important; }
+.p-0 { padding:0px !important; }
+.top-details tr td { display:inline-block; }
+p { text-align: center; margin: 0; padding: 2px; }
+.no-border, .no-border td { border: none !important; }
+.footer-table td { border: none; padding-top: 30px; vertical-align: top; }
+.text-right { text-align: right; }
+.text-left { text-align: left; }
+.text-center { text-align: center; }
+.authorized { text-align:center; }
+.top-border { border-top: dashed 0.1px #030404 !important; margin-bottom: 8px; }
+.custom-color { color:#525252 !important; }
+.text-left p { text-align:left !important; }
+.col-xs-4 { width: 33.33333333%; }
+.col-xs-8 { width: 66.66666667%; }
+.col-xs-1 { width: 8.33333333%; }
+.row { display:block; }
+.row > div { display:inline-block; vertical-align:top; }
+@media print {
+  @page { size: A4; page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .page-break { page-break-after: always !important; }
+  .footer { page-break-before: always !important; }
+  .print-format { padding:0px 30px; }
+  .print-format .format-container,.print-format { padding:0px !important; }
+  .print-format label { font-weight:normal !important; }
+  table { border-collapse: collapse; }
+  .page-number { display: none !important; }
+}
+/* Force all text black (keep your additional requirement) */
+.print-format, .print-format * { color:#000 !important; }
+</style>
+
+ 
+ 
+ <div style="font-family: Arial, sans-serif; font-size: 12px;">
+
+<!-- Main Table -->
+<table class="main-table table table-bordered">
+  <!-- HEADER -->
+  <thead>
+    <tr class="company-info">
+      <td colspan="7" style="text-align:center; border:none;">
+        <h4>
+          {% if doc.is_return %}Purchase Return{% else %}{{ doc.custom_purchase_type or "Purchase Invoice" }}{% endif %}
+        </h4>
+        <h2 style="margin:5px 0;">{{ company.company_name }}</h2>
+        <div>Kathmandu</div>
+      </td>
+    </tr>
+  
+  <!--
+    <tr>
+      <td style="border:none; width:15%;">Vendor</td>
+      <td style="border:none; width:45%;">: {{ doc.supplier_name or doc.supplier }}</td>
+      <td style="border:none; width:20%;">Invoice No</td>
+      <td style="border:none;" colspan="4">: {{ doc.name }}</td>
+    </tr>
+    <tr>
+      <td style="border:none;">VAT No</td>
+      <td style="border:none;">: {{ doc.tax_id or '' }}</td>
+      <td style="border:none;">Nepali Miti</td>
+      <td style="border:none;" colspan="4">: {{ doc.custom_nepali_miti or '' }}</td>
+    </tr>
+    
+    -->
+    
+    <tr>
+        <td colspan="7">
+          <table style="width:100%; border:none;" class="top-data">
+            <tr>
+              <td style="border:none; text-align:left; padding:0;">Vendor : {{ doc.supplier_name or doc.supplier }}</td>
+              <td style="border:none; text-align:right; padding:0;">Voucher No :  {{ doc.custom_name or doc.name }}</td>
+            </tr>
+            <tr>
+              <td style="border:none; text-align:left; padding:0;">VAT No : {{ doc.tax_id or '' }}</td>
+              <td style="border:none; text-align:right; padding:0;">Nepali Miti : {% if doc.custom_nepali_miti %}{{ (doc.custom_nepali_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
+            </tr>
+          </table>
+        </td>
+    </tr>
+    
+    <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
+      <th style="width:15px;text-align:left;">S.No</th>
+      <th style="text-align:left;">Description</th>
+      <th style="width:100px;text-align:left;">Vehicle No</th>
+      <th style="width:70px;text-align:right">Qty</th>
+      <th style="width:100px;text-align:center;">UOM</th>
+      <th style="width:70px;text-align:right;">Rate</th>
+      <th style="width:100px;text-align:right;">Amount</th>
+    </tr>
+  </thead>
+
+  <!-- FOOTER / SIGNATURES repeated per page -->
+  <tfoot>
+    <tr>
+      <td colspan="7" style="padding-top:10px;">
+        <table style="width:100%; border:none;">
+          <tr>
+            <td style="width:25%; text-align:center; border:none;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Prepared By</div>
+              <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div>
+            </td>
+            <td style="width:25%; text-align:center; border:none;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Checked By</div>
+            </td>
+            <td style="width:25%; text-align:center; border:none;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Verified By</div>
+            </td>
+            <td style="width:25%; text-align:center; border:none;">
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:20px;padding-bottom:10px;">&nbsp;</div>
+              <div>Approved By</div>
+            </td>
+          </tr>
+        </table>
+        <div style="text-align:left; font-size:9px; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+      </td>
+    </tr>
+  </tfoot>
+
+  <!-- BODY / ITEMS -->
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td style="text-align:left;">{{ loop.index }}</td>
+      <td>{{ item.description or item.item_code }}</td>
+      <td>{{ item.custom_subtype }}</td>
+      <td style="text-align:right;">{{ abs(item.qty) }}</td>
+      <td style="text-align:center;">{{ item.uom }}</td>
+      <td style="text-align:right;">{{ abs(item.rate) }}</td>
+      <td style="text-align:right;">{{ abs(item.amount) }}</td>
+    </tr>
+    {% endfor %}
+
+    <!-- TOTALS + REMARKS at the end -->
+    <tr>
+      <td colspan="4" style="border:none;"></td>
+      <td>Total Before Tax</td>
+      <td colspan="2" style="text-align:right;">{{ doc.total }}</td>
+    </tr>
+    <tr>
+      <td colspan="4" style="border:none;"></td>
+      <td>Add : VAT 13%</td>
+      <td colspan="2" style="text-align:right;">{{ doc.taxes_and_charges_added or 0 }}</td>
+    </tr>
+    <tr>
+      <td colspan="4" style="border:none;"></td>
+      <td>Total Including Vat</td>
+      <td colspan="2" style="text-align:right;">{{ frappe.utils.flt((doc.total or 0) + (doc.taxes_and_charges_added or 0), 2) }}</td>
+    </tr>
+    <tr>
+      <td colspan="4" style="border:none;"></td>
+      <td>Less : TDS</td>
+      <td colspan="2" style="text-align:right;">{{ doc.taxes_and_charges_deducted or 0 }}</td>
+    </tr>
+    <tr>
+      <td colspan="4" style="border:none;"></td>
+      <td style="border-bottom:1px solid #000; border-top:1px solid #000;"><strong>Total</strong></td>
+      <td colspan="2" style="border-top:1px solid #000; text-align:right;">
+        <strong>{{ doc.grand_total }}</strong>
+      </td>
+    </tr>
+    <tr style="border:solid #000 1px;">
+      <td colspan="7" style="border:none; padding-top:5px;">
+        {{ frappe.utils.money_in_words(doc.grand_total) }}
+     
+      </td>
+    </tr>
+    
+        <tr>
+      <td colspan="7" style="border:none; padding-top:5px;">
+        Remarks : {{ doc.custom_memo or '' }}
+      </td>
+    </tr>
+    
+  </tbody>
+</table>
+<div class="page-number"></div>
+</div>
+
+
+
+
+
+
+
