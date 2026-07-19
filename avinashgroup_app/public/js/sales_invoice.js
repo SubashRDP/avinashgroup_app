@@ -22,6 +22,7 @@ frappe.ui.form.on("Sales Invoice", {
             set_due_date_from_customer(frm);
         }
         update_total_amount_preview(frm);
+        restore_return_vat(frm);
     },
 
     before_save: function(frm) {
@@ -380,6 +381,66 @@ function is_sales_return(frm) {
         frm.doc.doctype === "Sales Invoice" &&
         frm.doc.is_return
     );
+}
+
+/**
+ * On a Sales Invoice return, custom_vat_amount is no_copy so the return mapper
+ * delivers it as 0. 'VAT 13%' rows self-heal (13% of the negative net amount),
+ * but manual 'Amount' rows do not, so the form shows VAT 0 until save. Mirror
+ * the server (restore_return_item_taxes): fetch the original row's VAT, scale
+ * to the returned qty (partial returns), apply the return sign — so the VAT
+ * shows in the UI *before* save. Already-filled rows are skipped (idempotent).
+ */
+async function restore_return_vat(frm) {
+    if (!is_sales_return(frm)) return;
+    const items = frm.doc.items || [];
+    let changed = false;
+    let need_source = false;
+
+    // Pass 1 — 'VAT 13%' rows: 13% of the (negative) net amount. No server call.
+    for (const item of items) {
+        if (flt(item.custom_vat_amount)) continue;             // already filled -> skip
+        if (item.custom_vat_apply_on === "VAT 13%") {
+            const base = flt(item.base_net_amount) + flt(item.custom_excise_value);
+            const val = flt((base * 13) / 100, 5);
+            if (val) {
+                await frappe.model.set_value(item.doctype, item.name, "custom_vat_amount", val);
+                changed = true;
+            }
+        } else if (item.custom_vat_apply_on === "Amount" && item.sales_invoice_item) {
+            need_source = true;
+        }
+    }
+
+    // Pass 2 — manual 'Amount' rows: restore from the ORIGINAL invoice.
+    // Read the parent Sales Invoice (permitted) instead of the child row directly
+    // (frappe.db.get_value on a child table throws "Not permitted").
+    if (need_source && frm.doc.return_against) {
+        let original = null;
+        try {
+            original = await frappe.db.get_doc("Sales Invoice", frm.doc.return_against);
+        } catch (e) {
+            original = null;
+        }
+        if (original) {
+            const src_by_name = {};
+            (original.items || []).forEach((it) => { src_by_name[it.name] = it; });
+            for (const item of items) {
+                if (flt(item.custom_vat_amount)) continue;
+                if (item.custom_vat_apply_on !== "Amount" || !item.sales_invoice_item) continue;
+                const src = src_by_name[item.sales_invoice_item];
+                if (!src || !flt(src.qty)) continue;
+                if (src.custom_vat_apply_on === "Amount" && flt(src.custom_vat_amount)) {
+                    const ratio = Math.abs(flt(item.qty)) / Math.abs(flt(src.qty));
+                    const val = flt(-Math.abs(flt(src.custom_vat_amount) * ratio), 5);
+                    await frappe.model.set_value(item.doctype, item.name, "custom_vat_amount", val);
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    if (changed) calculate_vat_total(frm);
 }
 
 /**
