@@ -47,7 +47,7 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 /* Signatures */
 /* Footer (signatories + printed-on) flows a little below the data; the print date
    sits just under the signatures. Same look in the on-screen preview and the PDF. */
-.npv .pv-footer { margin-top:24px; }
+.npv .pv-footer { margin-top:44px; }
 .npv .pv-sign { width:100%; border-collapse:collapse; }
 .npv .pv-sign td { width:25%; text-align:center; vertical-align:bottom; padding-top:38px; font-size:10px; }
 .npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
@@ -159,14 +159,17 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
     <strong>Remarks :</strong> {{ doc.custom_remark or "" }}
   </div>
 
-  {#- ---------- Footer: signatories + printed-on, pinned together at 47% of the page ---------- -#}
+  {#- ---------- Footer: signatories + printed-on ----------
+     Vendor Payment gets a 5th "Checked by" column; everything else keeps 4. -#}
+  {%- set signatories = ["Received by", "Prepared by", "Checked by", "Verified by", "Approved by"]
+        if doc.custom_p_type == "Vendor Payment"
+        else ["Received by", "Prepared by", "Verified by", "Approved by"] -%}
   <div class="pv-footer">
     <table class="pv-sign">
       <tr>
-        <td><div class="line"></div>Received by</td>
-        <td><div class="line"></div>Prepared by<div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div></td>
-        <td><div class="line"></div>Verified by</td>
-        <td><div class="line"></div>Approved by</td>
+        {%- for s in signatories %}
+        <td style="width:{{ (100 / (signatories|length))|round(2) }}%;"><div class="line"></div>{{ s }}{% if s == "Prepared by" %}<div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div>{% endif %}</td>
+        {%- endfor %}
       </tr>
     </table>
     <div style="text-align:left; font-size:7px; margin-top:10px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>

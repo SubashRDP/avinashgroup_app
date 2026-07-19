@@ -612,25 +612,20 @@ padding:0px 30px;
      {#- Footer (signatories + printed-on): normal block after the data, so it only
         appears once, on the last page, below the data. -#}
      <div style="margin-top:16px; page-break-inside:avoid;">
+       {#- Cash/Bank or Contra Voucher gets a 5th "Received By" column (at the front);
+          every other JV type keeps the usual 4. -#}
+       {%- set jv_sigs = ["Received By", "Prepared By", "Checked By", "Verified By", "Approved By"]
+             if doc.custom_p_type == "Cash/ Bank or Contra Voucher"
+             else ["Prepared By", "Checked By", "Verified By", "Approved By"] -%}
        <table style="width:100%; border:none; color:#000;">
           <tr>
-            <td style="width:25%; text-align:center; border:none; color:#000;">
+            {%- for s in jv_sigs %}
+            <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000;">
               <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
-              <div>Prepared By</div>
-              <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "&nbsp;" }}</strong></div>
+              <div>{{ s }}</div>
+              {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
             </td>
-            <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
-              <div>Checked By</div>
-            </td>
-            <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
-              <div>Verified By</div>
-            </td>
-            <td style="width:25%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
-              <div>Approved By</div>
-            </td>
+            {%- endfor %}
           </tr>
         </table>
         <div style="text-align:left; font-size:9px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
