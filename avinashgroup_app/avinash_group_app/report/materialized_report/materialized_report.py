@@ -35,16 +35,26 @@ def get_conditions(filters):
 	if filters.company:
 		conditions.append("bill.company = %(company)s")
 	if filters.fiscal_year:
-		# The filter is a Fiscal Year docname ("82/83"); bills store the IRD
-		# dotted form ("82.83") written by utils.cbms_fiscal_year.
+		# The report has no From/To Date filters — the date window is derived
+		# here from the selected fiscal year. The Fiscal Year docname keeps the
+		# slash form ("82/83"), so look up its AD start/end span before converting
+		# to the dotted form ("82.83") that bills store in the fiscal_year field.
+		fy = frappe.get_cached_value(
+			"Fiscal Year",
+			filters.fiscal_year,
+			["year_start_date", "year_end_date"],
+			as_dict=True,
+		)
+		if fy:
+			filters.from_date = fy.year_start_date
+			filters.to_date = fy.year_end_date
+			conditions.append("bill.invoice_date >= %(from_date)s")
+			conditions.append("bill.invoice_date <= %(to_date)s")
+
 		filters.fiscal_year = filters.fiscal_year.replace("/", ".")
 		conditions.append("bill.fiscal_year = %(fiscal_year)s")
 	if filters.sync_status:
 		conditions.append("bill.sync_status = %(sync_status)s")
-	if filters.from_date:
-		conditions.append("bill.invoice_date >= %(from_date)s")
-	if filters.to_date:
-		conditions.append("bill.invoice_date <= %(to_date)s")
 
 	return (" and " + " and ".join(conditions)) if conditions else ""
 

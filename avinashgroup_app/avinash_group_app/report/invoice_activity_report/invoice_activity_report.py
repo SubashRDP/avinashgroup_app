@@ -47,10 +47,9 @@ INCIDENTAL_FIELDS = {
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
-	if not filters.get("from_date") or not filters.get("to_date"):
-		frappe.throw(_("Please select From Date and To Date."))
 	if not frappe.has_permission("Sales Invoice", "read"):
 		frappe.throw(_("Not permitted to read Sales Invoice."), frappe.PermissionError)
+	_apply_default_dates(filters)
 
 	# Honor Company User Permissions: a user restricted to some companies only
 	# ever sees those, and cannot pull another company's data by picking it in
@@ -76,6 +75,28 @@ def execute(filters=None):
 	events.sort(key=lambda e: e["_ts"], reverse=True)
 
 	return _columns(), [_row(e) for e in events]
+
+
+def _apply_default_dates(filters):
+	"""Default the From/To window to month-to-date on the server when the report
+	runs without one. The date filters are populated from the backend — the JS
+	onload calls get_default_dates() — so the dates are never computed in the
+	browser. Defaulting here (rather than throwing) also keeps any programmatic
+	call bounded to a month instead of parsing full invoice history."""
+	today = frappe.utils.nowdate()
+	if not filters.get("to_date"):
+		filters.to_date = today
+	if not filters.get("from_date"):
+		filters.from_date = str(frappe.utils.get_first_day(today))
+
+
+@frappe.whitelist()
+def get_default_dates():
+	"""Default From/To window (month-to-date), computed on the server so the
+	report's date filters are sourced from the backend, not client JS."""
+	filters = frappe._dict()
+	_apply_default_dates(filters)
+	return {"from_date": filters.from_date, "to_date": filters.to_date}
 
 
 def _resolve_company_scope(filters):

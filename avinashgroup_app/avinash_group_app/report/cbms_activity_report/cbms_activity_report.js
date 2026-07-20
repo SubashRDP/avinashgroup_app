@@ -2,6 +2,18 @@
 // For license information, please see license.txt
 
 frappe.query_reports["CBMS Activity Report"] = {
+	onload(report) {
+		// The From/To date window is sourced from the backend (server clock),
+		// not computed in the browser — see get_default_dates() in
+		// cbms_activity_report.py.
+		frappe
+			.call(
+				"avinashgroup_app.avinash_group_app.report.cbms_activity_report.cbms_activity_report.get_default_dates"
+			)
+			.then((r) => {
+				if (r.message) report.set_filter_value(r.message);
+			});
+	},
 	filters: [
 		{
 			fieldname: "company",
@@ -14,13 +26,11 @@ frappe.query_reports["CBMS Activity Report"] = {
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
-			default: frappe.datetime.add_days(frappe.datetime.get_today(), -30),
 		},
 		{
 			fieldname: "to_date",
 			label: __("To Date"),
 			fieldtype: "Date",
-			default: frappe.datetime.get_today(),
 		},
 		{
 			fieldname: "sales_invoice",

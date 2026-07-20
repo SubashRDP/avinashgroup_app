@@ -22,7 +22,29 @@ def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	if not frappe.has_permission("CBMS Sync Log", "read"):
 		frappe.throw(_("Not permitted to read CBMS Sync Log."), frappe.PermissionError)
+	_apply_default_dates(filters)
 	return _columns(), _rows(filters)
+
+
+def _apply_default_dates(filters):
+	"""Default the From/To window (last 30 days) on the server when the report
+	runs without one. The date filters are populated from the backend — the JS
+	onload calls get_default_dates() — so this is the single source of truth and
+	also bounds any programmatic call."""
+	today = frappe.utils.nowdate()
+	if not filters.get("to_date"):
+		filters.to_date = today
+	if not filters.get("from_date"):
+		filters.from_date = frappe.utils.add_days(today, -30)
+
+
+@frappe.whitelist()
+def get_default_dates():
+	"""Default From/To window (last 30 days), computed on the server so the
+	report's date filters are sourced from the backend, not client JS."""
+	filters = frappe._dict()
+	_apply_default_dates(filters)
+	return {"from_date": filters.from_date, "to_date": filters.to_date}
 
 
 def _conditions(filters):

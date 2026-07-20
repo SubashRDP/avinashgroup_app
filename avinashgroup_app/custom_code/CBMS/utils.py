@@ -6,6 +6,7 @@ reformatted from the site's short names ("82/83") to the dotted format the IRD A
 expects ("2082.083").
 """
 
+import frappe
 import nepali_datetime
 from erpnext.accounts.utils import get_fiscal_year
 from frappe.utils import getdate
@@ -34,6 +35,26 @@ def cbms_fiscal_year(ad_date, company=None):
 	"""
 	fy = get_fiscal_year(date=getdate(ad_date), company=company, as_dict=True)
 	return fy.name.replace("/", ".")  # "82/83" -> "82.83"
+
+
+@frappe.whitelist()
+def get_fiscal_year_dates(fiscal_year):
+	"""AD start/end dates of a Fiscal Year, resolved on the server.
+
+	Report filters that turn a picked fiscal year into a date window call this so
+	the dates always come from the backend (the Fiscal Year record) rather than
+	being computed in the browser. Returns {"from_date", "to_date"} as ISO
+	strings, or {} if the fiscal year does not exist.
+	"""
+	fy = frappe.get_cached_value(
+		"Fiscal Year",
+		fiscal_year,
+		["year_start_date", "year_end_date"],
+		as_dict=True,
+	)
+	if not fy:
+		return {}
+	return {"from_date": str(fy.year_start_date), "to_date": str(fy.year_end_date)}
 
 
 def cbms_invoice_number(sales_invoice):
