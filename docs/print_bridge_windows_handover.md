@@ -71,10 +71,13 @@ $origins = @(
 )
 function Ok($b,$m){ if($b){Write-Host "PASS  $m" -f Green}else{Write-Host "FAIL  $m" -f Red} }
 
-# 1. Boot task registered, triggered At startup, running as SYSTEM (no login)
+# 1. Autostart task registered: At startup AND At logon triggers, as SYSTEM.
+#    Both triggers matter — a boot-only task never fires after "Shut down" on
+#    Fast Startup machines (that was the v0.3.2 dead-after-shutdown bug).
 $task = schtasks /Query /TN "Avinash Print Bridge" /V /FO LIST 2>$null
-Ok ($LASTEXITCODE -eq 0) "startup task 'Avinash Print Bridge' registered"
-Ok ([bool]($task -match 'At system start up|At startup')) "  trigger is At startup (no login needed)"
+Ok ($LASTEXITCODE -eq 0) "autostart task 'Avinash Print Bridge' registered"
+Ok ([bool]($task -match 'At system start up|At startup')) "  boot trigger present (no login needed)"
+Ok ([bool]($task -match 'At logon time|At log on')) "  sign-in trigger present (survives Fast Startup shutdown; needs v0.3.3+)"
 Ok ([bool]($task -match 'SYSTEM')) "  runs as SYSTEM"
 
 # 2. Agent answering on the loopback port
@@ -130,18 +133,21 @@ Tick each one:
 
 If all four print from the single install → **goal met.**
 
-## Step 3b — Reboot test (runs without login)
+## Step 3b — Shutdown AND restart test (runs without manual start)
 
-This is the fix for "dead after shutdown":
+This is the fix for "dead after shutdown". Test **both** power paths — on Fast
+Startup machines (the Windows default) they are different code paths, and the
+old boot-only task passed the restart test while failing every real shutdown:
 
-1. **Restart the computer.**
-2. **Before logging in**, the agent is already running as SYSTEM. Confirm after login
-   without starting anything: re-run the Step 2 PowerShell block — check #2 *"agent
-   answers on 127.0.0.1:8663"* should PASS immediately, and check #1 should show trigger
-   **At startup** / runs as **SYSTEM**.
+1. **Shut down completely** (Start → Power → **Shut down**), power back on, sign
+   in, and **without starting anything** re-run the Step 2 PowerShell block —
+   check #2 *"agent answers on 127.0.0.1:8663"* must PASS immediately.
+2. **Restart the computer.** Before logging in, the agent is already running as
+   SYSTEM; after login, check #2 must PASS again without starting anything.
 3. Print from any site — works with no manual start.
 
-- [ ] After a reboot, the agent is up and printing without anyone starting it
+- [ ] After a full **shutdown** + power-on, the agent is up without anyone starting it
+- [ ] After a **restart**, the agent is up without anyone starting it
 
 ## Step 4 — Report back
 

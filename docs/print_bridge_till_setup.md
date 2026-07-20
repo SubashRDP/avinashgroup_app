@@ -30,7 +30,9 @@ On the till, open this link in the browser and download **`PrintBridgeSetup.exe`
 
 **https://github.com/SubashRDP/avinashgroup_app/releases/latest**
 
-(Use the **latest** version — currently v0.3.2 or newer.)
+(Use the **latest** version — **v0.3.3 or newer**. Versions before 0.3.3 have a
+bug where the agent doesn't come back after a **shutdown** — if that's your
+symptom, just installing the latest version over the old one is the fix.)
 
 ---
 
@@ -96,12 +98,13 @@ Windows blocks freshly-downloaded, unsigned installers. Clear it **in this order
 
 ---
 
-## STEP 6 — The reboot test (this is the real goal)
+## STEP 6 — The shutdown test (this is the real goal)
 
-1. **Restart the PC.**
-2. **Before logging in**, the agent is already running (it starts at boot as
-   SYSTEM). After you log in, **print without starting anything** — it should just
-   work.
+1. **Shut down the PC completely** (Start → Power → **Shut down** — not Restart),
+   wait a few seconds, then power it back on and sign in.
+2. **Print without starting anything** — it should just work. (The agent starts
+   at boot and again at sign-in; "Shut down" and "Restart" take different paths
+   in Windows, which is why we test Shut down specifically.)
 3. **Unplug the Epson, try to print → clear "attach the printer" message.
    Plug it back in, print again → it recovers by itself, no reinstall.**
 
@@ -118,11 +121,12 @@ If Step 6 works, the till is done.
 | What you see | What it means / fix |
 |---|---|
 | "Windows cannot access the specified device, path, or file" | Installer blocked. Do **Step 2** (Unblock → Run as administrator → antivirus Allow). |
-| "Print Bridge not installed on this computer" (in browser) | Agent not running. **Step 4** — start it, or reinstall v0.3.2. |
+| "Print Bridge not installed on this computer" (in browser) | Agent not running. **Step 4** — start it, or reinstall the latest version. |
+| Worked right after install, but **dead after every shutdown** | Old version (v0.3.2 or earlier) only started at boot, and a Windows "Shut down" isn't a boot. **Install v0.3.3 or newer over it** — it also starts at sign-in. |
 | "The LQ310-RAW print queue could not be created" (during install) | Epson not attached/on at install. Attach + power on, re-run installer. |
 | `print_bridge.exe` not in Task Manager even after starting it | Send me the log file above — the agent is crashing on start. |
 | Printer moved to a different USB socket after a reboot | Handled automatically — the agent repairs the queue's port on the next startup. |
-| Prints nothing but says success | Job went to the Epson's own driver queue, not LQ310-RAW. Reinstall v0.3.2 with the printer attached. |
+| Prints nothing but says success | Job went to the Epson's own driver queue, not LQ310-RAW. Reinstall the latest version with the printer attached. |
 
 ---
 

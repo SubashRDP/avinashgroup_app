@@ -12,7 +12,7 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.3.2"
+#define MyAppVersion "0.3.3"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
 ; Every origin the ERP is served at. Production first, then the test sites.
@@ -52,7 +52,7 @@ UsePreviousTasks=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "autostart"; Description: "Start Print Bridge automatically at every startup (no login needed)"; GroupDescription: "Auto-start:"
+Name: "autostart"; Description: "Start Print Bridge automatically (at boot and at every sign-in)"; GroupDescription: "Auto-start:"
 
 [Files]
 Source: "..\dist\print_bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -93,17 +93,25 @@ Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedF
 ; The LQ310-RAW queue is created from CurStepChanged below, not here — it needs
 ; the exit code checked, and running it in both places would do it twice.
 
-; Start at BOOT as SYSTEM — /SC ONSTART /RU SYSTEM — so the agent is running
-; before and without anyone logging in (the old ONLOGON task was why it was dead
-; after a shutdown). The browser still reaches it: 127.0.0.1 is machine-wide, not
-; per-session. SYSTEM is elevated, so it can self-heal the LQ310-RAW queue with
-; Add-Printer (see _ensure_default_queue in print_bridge.py). Config and logs go
-; to %PROGRAMDATA%\AvinashPrintBridge (machine-wide) so they're the same file no
-; matter who runs the agent.
-Filename: "schtasks"; \
-  Parameters: "/Create /TN ""Avinash Print Bridge"" /TR ""\""{app}\{#MyAppExeName}\"""" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"; \
-  Flags: runhidden waituntilterminated; \
-  Tasks: autostart
+; The autostart task is registered from CurStepChanged (see [Code]), not here.
+; It needs TWO triggers, which schtasks /Create cannot express (one trigger per
+; /Create), and its exit code checked so a failure is said out loud:
+;
+;   - At BOOT, as SYSTEM: the agent runs before and without anyone logging in.
+;   - At any user's SIGN-IN: covers powering on after "Shut down". With Fast
+;     Startup (the Windows 10/11 default) a shutdown is a kernel hibernate, not
+;     a boot, so the next power-on fires no boot trigger — that was v0.3.2's
+;     "works after install, dead after every shutdown". Restart IS a real boot,
+;     which is why only shutdowns looked broken.
+;
+; Both triggers run the task as SYSTEM (elevated, so it can self-heal the
+; LQ310-RAW queue with Add-Printer — see _ensure_default_queue). The browser
+; reaches it either way: 127.0.0.1 is machine-wide, not per-session. If both
+; triggers ever fire, Task Scheduler's IgnoreNew policy skips the second start,
+; and the agent itself exits quietly when port 8663 is already bound.
+;
+; schtasks' defaults were also wrong for a long-lived agent: a task it creates
+; is KILLED after 72 hours of running. Registration below sets no time limit.
 
 Filename: "{app}\{#MyAppExeName}"; \
   Flags: nowait runascurrentuser; \
@@ -139,6 +147,36 @@ begin
   Result := True;
 end;
 
+// Register the autostart task: boot trigger + any-user sign-in trigger, as
+// SYSTEM, with NO execution time limit. See the [Run] comment for why both
+// triggers exist and why schtasks /Create couldn't do this. PowerShell's
+// ScheduledTasks module is the only stock tool that can; the whole command
+// uses single quotes inside so the one pair of double quotes around -Command
+// survives the command line.
+procedure RegisterAutostartTask();
+var
+  ResultCode: Integer;
+  PS: String;
+begin
+  PS := '$ErrorActionPreference=''Stop'';'
+    + '$a = New-ScheduledTaskAction -Execute ''' + ExpandConstant('{app}\{#MyAppExeName}') + ''';'
+    + '$t = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn));'
+    + '$p = New-ScheduledTaskPrincipal -UserId ''SYSTEM'' -RunLevel Highest;'
+    + '$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries'
+    + ' -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero);'
+    + 'Register-ScheduledTask -TaskName ''Avinash Print Bridge'''
+    + ' -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null';
+  if (not Exec('powershell.exe',
+               '-NoProfile -ExecutionPolicy Bypass -Command "' + PS + '"',
+               '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
+    MsgBox('The auto-start task could not be registered (exit code ' +
+           IntToStr(ResultCode) + ').'#13#10#13#10 +
+           'Print Bridge will NOT start by itself after a shutdown or restart ' +
+           'until this is fixed. Re-run this installer; if it fails again, ' +
+           'report the exit code above.',
+           mbError, MB_OK);
+end;
+
 // --configure fails when no Epson is attached. Say so instead of finishing
 // green and leaving someone to discover it at the counter.
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -147,6 +185,8 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
+    if WizardIsTaskSelected('autostart') then
+      RegisterAutostartTask();
     Exec(ExpandConstant('{app}\{#MyAppExeName}'), '--configure', '', SW_HIDE,
          ewWaitUntilTerminated, ResultCode);
     if ResultCode <> 0 then

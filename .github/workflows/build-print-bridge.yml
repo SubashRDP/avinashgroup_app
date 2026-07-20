@@ -134,8 +134,9 @@ jobs:
             **Attach the Epson and switch it on, then download
             `PrintBridgeSetup.exe` below and run it.** That is the whole setup:
             it installs the agent, creates the LQ310-RAW queue on the printer's
-            port, pre-grants Chrome/Edge local network access, and starts the
-            agent at login. Uninstall from Add/Remove Programs.
+            port, pre-grants Chrome/Edge local network access, and keeps the
+            agent running from boot and from sign-in — including after a full
+            shutdown. Uninstall from Add/Remove Programs.
 
             See `print_bridge/README.md`.
 

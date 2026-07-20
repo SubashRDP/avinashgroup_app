@@ -45,7 +45,9 @@ machines with the bridge print via LQ310-RAW; machines without it show a clear
 
 The installer: drops `print_bridge.exe`, creates the `LQ310-RAW` queue,
 pre-grants all four origins in the Chrome/Edge local-network policy, and
-registers a startup task that runs the agent at boot as SYSTEM (no login needed).
+registers an autostart task that runs the agent as SYSTEM at boot **and** at any
+user's sign-in (the sign-in trigger is what keeps it alive across "Shut down" on
+Fast Startup machines — needs v0.3.3+).
 
 ## Verify all 4 sites print
 

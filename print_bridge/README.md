@@ -21,8 +21,13 @@ and print an invoice.
    pipe.
 3. Pre-grants Chrome/Edge local network access for the ERP origin, so no
    permission prompt appears.
-4. Registers a **startup task that runs at boot as SYSTEM** (no login needed), so
-   the agent is always running — including after a shutdown, before anyone logs in.
+4. Registers a **scheduled task with two triggers — at boot AND at any user's
+   sign-in — running as SYSTEM**, with no execution time limit. Boot alone is not
+   enough: with Fast Startup (the Windows 10/11 default), "Shut down" hibernates
+   the kernel instead of really booting next time, so a boot-only trigger never
+   fires after a shutdown (the v0.3.2 "works until first shutdown" bug). The
+   sign-in trigger covers that path; if both fire, the second instance sees the
+   port taken and exits quietly.
 
 Uninstall from Add/Remove Programs reverses all of it except `config.json` and
 the log.
