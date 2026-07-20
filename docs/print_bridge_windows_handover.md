@@ -33,11 +33,27 @@ is what this handover confirms.
 
 1. **Attach the Epson LQ-310 and switch it ON first.** The installer creates the
    print queue on the printer's own port and will warn if it can't find it.
-2. Download **`PrintBridgeSetup.exe`** (v0.2.0 or newer) from the release page:
-   https://github.com/SubashRDP/avinashgroup_app/releases/tag/print-bridge-v0.2.0
+2. Download **`PrintBridgeSetup.exe`** (latest) from the release page:
+   https://github.com/SubashRDP/avinashgroup_app/releases/latest
 3. Run it, accept the UAC (admin) prompt. Finish the wizard.
 
 That is the whole install. **No QZ Tray, no certificate, no browser setup.**
+
+### If Windows blocks the installer
+
+The installer is unsigned, so Windows/antivirus may block a freshly-downloaded
+copy with **"Windows cannot access the specified device, path, or file"** or a
+blue **"Windows protected your PC"** box. It is not a broken file — clear the
+block:
+
+1. **Unblock:** right-click `PrintBridgeSetup.exe` → **Properties** → General tab
+   → tick **"Unblock"** at the bottom → **Apply**.
+2. **Run as administrator:** right-click → **Run as administrator**.
+3. **SmartScreen:** if the blue box appears → **More info → Run anyway**.
+4. **Antivirus quarantine:** if it still won't run, open **Windows Security →
+   Virus & threat protection → Protection history** → find `PrintBridgeSetup.exe`
+   → **Restore / Allow**; or add a **File exclusion** for it. Then re-download and
+   run.
 
 ## Step 2 — Automated self-check (PowerShell)
 
