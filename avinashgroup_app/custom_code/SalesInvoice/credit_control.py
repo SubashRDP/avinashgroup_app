@@ -212,7 +212,6 @@ def validate_sales_invoice(doc, method):
     Validates Sales Invoice against customer credit limits with advance payment consideration.
     Optimized for performance with early exits and minimal DB hits.
     """
-    return;
     # Early exit: Skip draft amendments or cancelled docs
     if doc.docstatus == 2 or doc.is_return:
         return
