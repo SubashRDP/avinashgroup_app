@@ -358,42 +358,41 @@ def _modified_summary(user_changes, row_changes):
 
 
 def _apply_invoice_context(events, filters):
-	"""Fill company/is_return/customer_name from the invoice for events whose
-	source table doesn't carry them (Version rows), then confine to the
-	company scope. Version events have no company until this lookup, so the
-	scope check must run AFTER the fill."""
-	need = {
-		e["invoice"]
-		for e in events
-		if e.get("company") is None
-		or e.get("is_return") is None
-		or e.get("customer_name") is None
-	}
+	"""Fill company/is_return/customer_name from the invoice, and keep only the
+	events whose invoice is an issued tax document: it still exists AND is
+	submitted (docstatus 1).
+
+	Version and Print Log rows outlive the invoice they describe, so an event
+	may point at an invoice that is now a draft (docstatus 0), cancelled
+	(docstatus 2), or deleted (gone entirely). The report lists issued invoices
+	only, so the lookup requires docstatus 1 — draft, cancelled and deleted
+	invoices are absent from `info` and their events are dropped. The company
+	scope is applied in the same query, so an out-of-scope invoice is likewise
+	absent and dropped (Version events have no company until this fill)."""
+	names = {e["invoice"] for e in events}
 	info = {}
-	if need:
+	if names:
+		fl = {"name": ["in", list(names)], "docstatus": 1}
+		_apply_company_scope(fl, filters)
 		for r in frappe.get_all(
 			"Sales Invoice",
-			filters={"name": ["in", list(need)]},
+			filters=fl,
 			fields=["name", "company", "is_return", "customer_name"],
 		):
 			info[r.name] = r
 
-	scope = filters.get("company_scope")
 	kept = []
 	for e in events:
 		inv = info.get(e["invoice"])
-		if inv:
-			if e.get("company") is None:
-				e["company"] = inv.company
-			if e.get("is_return") is None:
-				e["is_return"] = inv.is_return
-			if e.get("customer_name") is None:
-				e["customer_name"] = inv.customer_name
-		# Scope every event to the permitted companies. An event whose invoice
-		# no longer exists (deleted, no snapshot company) is dropped under a
-		# restricted scope rather than risk leaking it.
-		if scope and e.get("company") not in scope:
+		if not inv:
+			# Not an issued tax document — draft, cancelled, or deleted.
 			continue
+		if e.get("company") is None:
+			e["company"] = inv.company
+		if e.get("is_return") is None:
+			e["is_return"] = inv.is_return
+		if e.get("customer_name") is None:
+			e["customer_name"] = inv.customer_name
 		kept.append(e)
 	return kept
 
