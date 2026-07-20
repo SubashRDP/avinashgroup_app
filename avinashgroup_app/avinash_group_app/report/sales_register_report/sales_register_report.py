@@ -149,6 +149,12 @@ def download_pdf(filters, orientation=None, selected_columns=None, view=None):
 def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
+
+	# Show nothing until a Company is selected — the report is company-scoped and
+	# an all-companies run is not meaningful here.
+	if not _as_list(filters.get("company")):
+		return columns, []
+
 	data = get_data(filters)
 
 	# Sales Returns store amounts as negatives in the DB. Show them as positives in the register.
