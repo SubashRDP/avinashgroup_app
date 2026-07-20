@@ -28,7 +28,7 @@ import frappe
 from frappe import _
 from frappe.utils import cstr
 
-from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+from avinashgroup_app.custom_code.CBMS.utils import bs_date_str, get_fiscal_year_dates
 
 # Field changes that are side effects rather than user edits — a Version whose
 # parent-level changes are only these is not worth an audit row on its own,
@@ -49,7 +49,7 @@ def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	if not frappe.has_permission("Sales Invoice", "read"):
 		frappe.throw(_("Not permitted to read Sales Invoice."), frappe.PermissionError)
-	_apply_default_dates(filters)
+	_apply_date_window(filters)
 
 	# Honor Company User Permissions: a user restricted to some companies only
 	# ever sees those, and cannot pull another company's data by picking it in
@@ -77,26 +77,25 @@ def execute(filters=None):
 	return _columns(), [_row(e) for e in events]
 
 
-def _apply_default_dates(filters):
-	"""Default the From/To window to month-to-date on the server when the report
-	runs without one. The date filters are populated from the backend — the JS
-	onload calls get_default_dates() — so the dates are never computed in the
-	browser. Defaulting here (rather than throwing) also keeps any programmatic
-	call bounded to a month instead of parsing full invoice history."""
+def _apply_date_window(filters):
+	"""Resolve the From/To window entirely in the backend — the report has no
+	date filters in the UI. A picked Fiscal Year uses that year's AD span;
+	otherwise the window defaults to month-to-date. Month-to-date is the default
+	on purpose: a full fiscal year parses every Sales Invoice Version in range and
+	takes minutes."""
+	if filters.get("fiscal_year"):
+		fy = get_fiscal_year_dates(filters.fiscal_year)
+		if fy:
+			if not filters.get("from_date"):
+				filters.from_date = fy["from_date"]
+			if not filters.get("to_date"):
+				filters.to_date = fy["to_date"]
+
 	today = frappe.utils.nowdate()
 	if not filters.get("to_date"):
 		filters.to_date = today
 	if not filters.get("from_date"):
 		filters.from_date = str(frappe.utils.get_first_day(today))
-
-
-@frappe.whitelist()
-def get_default_dates():
-	"""Default From/To window (month-to-date), computed on the server so the
-	report's date filters are sourced from the backend, not client JS."""
-	filters = frappe._dict()
-	_apply_default_dates(filters)
-	return {"from_date": filters.from_date, "to_date": filters.to_date}
 
 
 def _resolve_company_scope(filters):
