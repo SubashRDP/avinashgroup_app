@@ -404,6 +404,14 @@ fixtures = [
             ]
         },
     },
+    # The Payment Entry "Cheque Bounce" field the cheque-bounce feature depends on.
+    # Scoped by name so this fixture ONLY ever touches this one Custom Field — it
+    # never exports or overwrites any other custom field on the site. Ships the
+    # field with the code so every site (new installs, prod, demo) has it on migrate.
+    {
+        "dt": "Custom Field",
+        "filters": {"name": ["in", ["Payment Entry-custom_cheque_bounce"]]},
+    },
 ]
 
 # Custom masters/config that must survive ERPNext's Transaction Deletion

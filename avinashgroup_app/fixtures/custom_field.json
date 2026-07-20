@@ -1,0 +1,16 @@
+[
+ {
+  "allow_on_submit": 1,
+  "doctype": "Custom Field",
+  "dt": "Payment Entry",
+  "fieldname": "custom_cheque_bounce",
+  "fieldtype": "Select",
+  "insert_after": "reference_date",
+  "label": "Cheque Bounce",
+  "module": "Avinash Group App",
+  "name": "Payment Entry-custom_cheque_bounce",
+  "no_copy": 1,
+  "options": "\nCheque Bounced",
+  "read_only": 1
+ }
+]

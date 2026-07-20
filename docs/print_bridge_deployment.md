@@ -45,7 +45,7 @@ machines with the bridge print via LQ310-RAW; machines without it show a clear
 
 The installer: drops `print_bridge.exe`, creates the `LQ310-RAW` queue,
 pre-grants all four origins in the Chrome/Edge local-network policy, and
-registers a login task so the agent is always running.
+registers a startup task that runs the agent at boot as SYSTEM (no login needed).
 
 ## Verify all 4 sites print
 
@@ -67,19 +67,19 @@ If all four print from the single install, the goal is met.
 
 ## If something doesn't print
 
-Log: `%LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log`
+Log: `%PROGRAMDATA%\AvinashPrintBridge\print_bridge.log`
 
 | Symptom | Cause / fix |
 | --- | --- |
 | Installer says the queue couldn't be created | Epson not attached / powered off. Connect it, re-run the installer. |
 | One site prompts "Allow local network" | Policy key didn't apply (rare). Click Allow once — Chrome remembers. Or confirm the origin is in `allowed_origins`. |
-| A site does nothing / falls back to QZ behaviour | Agent not running. Start "Avinash Print Bridge" from the Start menu, or check the login task. |
+| A site does nothing / falls back to QZ behaviour | Agent not running. Start "Avinash Print Bridge" from the Start menu, or reboot (the startup task relaunches it as SYSTEM). |
 | Spooler says printed, nothing moves | Job went to the Epson driver queue, not `LQ310-RAW`. Check the printer mapping in Print view. |
-| A **new** test site needs to print | Edit `%LOCALAPPDATA%\AvinashPrintBridge\config.json` → add its `https://…` origin to `allowed_origins`, restart the agent. No reinstall. Chrome may ask once. |
+| A **new** test site needs to print | Edit `%PROGRAMDATA%\AvinashPrintBridge\config.json` → add its `https://…` origin to `allowed_origins`, restart the agent. No reinstall. Chrome may ask once. |
 
 ## Config reference
 
-`%LOCALAPPDATA%\AvinashPrintBridge\config.json` (see `print_bridge/README.md`):
+`%PROGRAMDATA%\AvinashPrintBridge\config.json` (see `print_bridge/README.md`):
 
 - `allowed_origins` — the four sites are pre-listed. `["*"]` allows **any** site
   (only for a dedicated till). Exact-match; a new public site must be added here.

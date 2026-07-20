@@ -35,11 +35,12 @@ import logging
 import os
 import platform
 import sys
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.2.0"
+VERSION = "0.3.2"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -70,13 +71,30 @@ DRY_RUN = "--dry-run" in sys.argv[1:]
 
 
 def _app_dir() -> str:
+	"""First WRITABLE data dir. Preference on Windows: ProgramData (one shared,
+	machine-wide location whoever runs the agent — SYSTEM boot task or a user),
+	then LocalAppData, then temp. The write-test matters: if the SYSTEM boot task
+	created ProgramData\\AvinashPrintBridge, a plain-user launch of the agent may
+	not be able to write the log there, and opening it would crash the agent at
+	startup. Falling back keeps the agent alive rather than dying over a log path.
+	"""
 	if IS_WINDOWS:
-		base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-		d = os.path.join(base, "AvinashPrintBridge")
+		bases = [os.environ.get("PROGRAMDATA"), os.environ.get("LOCALAPPDATA")]
+		candidates = [os.path.join(b, "AvinashPrintBridge") for b in bases if b]
+		candidates.append(os.path.join(tempfile.gettempdir(), "AvinashPrintBridge"))
 	else:
-		d = os.path.join(os.path.expanduser("~"), ".avinash_print_bridge")
-	os.makedirs(d, exist_ok=True)
-	return d
+		candidates = [os.path.join(os.path.expanduser("~"), ".avinash_print_bridge")]
+	for d in candidates:
+		try:
+			os.makedirs(d, exist_ok=True)
+			probe = os.path.join(d, ".write_test")
+			with open(probe, "w"):
+				pass
+			os.remove(probe)
+			return d
+		except OSError:
+			continue
+	return tempfile.gettempdir()  # last resort — always writable
 
 
 APP_DIR = _app_dir()
@@ -85,9 +103,15 @@ LOG_FILE = os.path.join(APP_DIR, "print_bridge.log")
 
 log = logging.getLogger("print_bridge")
 log.setLevel(logging.INFO)
-_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
-_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-log.addHandler(_handler)
+# Never let logging setup crash the agent: if the file handler can't open (log
+# dir not writable in this security context), fall back to console-only. A bridge
+# that can't write a log must still print.
+try:
+	_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
+	_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+	log.addHandler(_handler)
+except OSError:
+	pass
 # PyInstaller --noconsole leaves sys.stdout as None, and StreamHandler(None)
 # blows up on the first log call — i.e. at startup, on every machine.
 if sys.stdout is not None:
@@ -172,11 +196,12 @@ def write_raw(printer: str, data: bytes) -> None:
 		with open(path, "wb") as f:
 			f.write(data)
 		log.info("[dry-run] %d bytes for %r -> %s", len(data), printer, path)
-		return
+		return printer
 
 	import win32print
 
-	h = win32print.OpenPrinter(printer)
+	target = _resolve_target(printer)
+	h = win32print.OpenPrinter(target)
 	try:
 		job = win32print.StartDocPrinter(h, 1, ("Avinash ERP invoice", None, "RAW"))
 		try:
@@ -185,9 +210,36 @@ def write_raw(printer: str, data: bytes) -> None:
 			win32print.EndPagePrinter(h)
 		finally:
 			win32print.EndDocPrinter(h)
-		log.info("printed %d bytes to %r (job %s)", len(data), printer, job)
+		log.info("printed %d bytes to %r (job %s)", len(data), target, job)
 	finally:
 		win32print.ClosePrinter(h)
+	return target
+
+
+def _resolve_target(printer: str) -> str:
+	"""Return an existing queue to open, self-healing a missing LQ310-RAW.
+
+	Windows error 1801 (invalid printer name) means the queue isn't there —
+	usually the installer ran with the Epson unplugged so the RAW queue was
+	never created, or it was removed. Recreate it (the agent must run elevated;
+	see installer.iss) before giving up. We never silently fall back to the
+	Epson's own driver queue: it swallows RAW ESC/P and the head never moves, so
+	a 'success' there would print nothing.
+	"""
+	printers = list_printers()
+	if printer in printers:
+		return printer
+	log.warning("printer %r not found; (re)creating %s", printer, DEFAULT_PRINTER)
+	_ensure_default_queue()
+	printers = list_printers()
+	if DEFAULT_PRINTER in printers:
+		return DEFAULT_PRINTER
+	raise RuntimeError(
+		"Print queue '%s' is not installed, and the %s queue could not be "
+		"created. Attach the Epson LQ-310 and switch it on, then try again — or "
+		"re-run PrintBridgeSetup.exe. Installed printers: %s"
+		% (printer, DEFAULT_PRINTER, ", ".join(printers) or "none")
+	)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -276,12 +328,12 @@ class Handler(BaseHTTPRequestHandler):
 
 		printer = req.get("printer") or CONFIG["default_printer"]
 		try:
-			write_raw(printer, data)
+			used = write_raw(printer, data)
 		except Exception as e:
 			log.exception("print failed on %r", printer)
 			self._json(500, {"ok": False, "error": str(e), "printer": printer}, origin)
 			return
-		self._json(200, {"ok": True, "bytes": len(data), "printer": printer}, origin)
+		self._json(200, {"ok": True, "bytes": len(data), "printer": used or printer}, origin)
 
 
 # -------------------------------------------------------------- configure ----
@@ -313,25 +365,47 @@ def _step(results: list, name: str, fn) -> None:
 
 
 def _install_queue() -> str:
-	"""Create the Generic / Text Only RAW queue on the Epson's port.
+	"""Create OR repair the Generic / Text Only LQ310-RAW queue. Idempotent, and
+	tolerant of a printer that isn't connected right now:
 
-	-ErrorAction Stop matters: Add-Printer raises NON-terminating errors, so
-	without it a failure is invisible and the caller reports success.
+	  - Epson present, no queue   -> create the queue on the Epson's port
+	  - Epson moved USB ports      -> repair the queue's port (Set-Printer)
+	  - Epson offline, queue kept  -> leave the queue as-is (prints when it's back)
+	  - Epson offline, no queue    -> throw (nothing to point a queue at yet)
+
+	Kept as ONE PowerShell statement chain (no newline before elseif — PowerShell
+	would treat that as a parse error). -ErrorAction Stop matters: Add-Printer
+	raises NON-terminating errors, so without it a failure is invisible.
 	"""
-	if DEFAULT_PRINTER in list_printers():
-		return f"{DEFAULT_PRINTER} already exists"
 	ps = (
 		"$ErrorActionPreference='Stop';"
 		"try { Add-PrinterDriver -Name 'Generic / Text Only' -ErrorAction Stop } catch {};"
-		"$p = Get-Printer | Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } | Select-Object -First 1;"
-		"if (-not $p) { throw 'No Epson dot-matrix printer found — attach and power it on, then re-run.' };"
-		f"Add-Printer -Name '{DEFAULT_PRINTER}' -DriverName 'Generic / Text Only' -PortName $p.PortName -ErrorAction Stop;"
-		f"Write-Output ('created on ' + $p.PortName)"
+		"$e = Get-Printer | Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } | Select-Object -First 1;"
+		"$r = Get-Printer -Name 'LQ310-RAW' -ErrorAction SilentlyContinue;"
+		"if (-not $e -and -not $r) { throw 'No Epson dot-matrix printer found - attach it and switch it on.' }"
+		" elseif (-not $e) { Write-Output ('kept ' + $r.PortName + ' - Epson offline') }"
+		" elseif (-not $r) { Add-Printer -Name 'LQ310-RAW' -DriverName 'Generic / Text Only' -PortName $e.PortName -ErrorAction Stop; Write-Output ('created on ' + $e.PortName) }"
+		" elseif ($r.PortName -ne $e.PortName) { Set-Printer -Name 'LQ310-RAW' -PortName $e.PortName -ErrorAction Stop; Write-Output ('repaired port -> ' + $e.PortName) }"
+		" else { Write-Output ('ok on ' + $r.PortName) }"
 	)
 	rc, out = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
 	if rc != 0:
 		raise RuntimeError(out.strip() or "Add-Printer failed")
 	return out.strip()
+
+
+def _ensure_default_queue() -> None:
+	"""Best-effort create/repair LQ310-RAW. Safe to call every launch — runs at
+	startup (heal after a reboot: queue lost, Epson on a different USB port, or an
+	install done with the Epson unplugged) and on a print that hit a missing queue.
+	Always runs _install_queue (which is idempotent and also repairs the port);
+	needs the agent elevated to succeed. Failures are logged, never raised."""
+	if not IS_WINDOWS or DRY_RUN:
+		return
+	try:
+		log.info("queue: %s", _install_queue())
+	except Exception as e:
+		log.warning("could not create/repair %s: %s", DEFAULT_PRINTER, e)
 
 
 def configure() -> int:
@@ -352,6 +426,9 @@ def main() -> None:
 	if "--configure" in sys.argv[1:]:
 		sys.exit(configure())
 	port = int(CONFIG["port"])
+	# Self-heal the RAW queue on every launch, so a reboot that lost it — or an
+	# install done with the Epson unplugged — still prints once the agent runs.
+	_ensure_default_queue()
 	log.info(
 		"Avinash Print Bridge %s starting on 127.0.0.1:%d (dry_run=%s, origins=%s)",
 		VERSION,
@@ -360,7 +437,13 @@ def main() -> None:
 		", ".join(CONFIG["allowed_origins"]),
 	)
 	# Bind loopback only — never 0.0.0.0. Nothing off this machine may print.
-	ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+	try:
+		ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+	except OSError as e:
+		# Port already owned by another instance (e.g. the boot task's agent is up
+		# and the installer just launched a second one post-install). That instance
+		# is serving — exit quietly instead of crashing loud.
+		log.info("127.0.0.1:%d already in use (%s); another instance is serving", port, e)
 
 
 if __name__ == "__main__":

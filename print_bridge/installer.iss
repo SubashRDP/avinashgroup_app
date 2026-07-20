@@ -12,7 +12,7 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.3.2"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
 ; Every origin the ERP is served at. Production first, then the test sites.
@@ -52,7 +52,7 @@ UsePreviousTasks=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "autostart"; Description: "Start Print Bridge automatically at login"; GroupDescription: "Auto-start:"
+Name: "autostart"; Description: "Start Print Bridge automatically at every startup (no login needed)"; GroupDescription: "Auto-start:"
 
 [Files]
 Source: "..\dist\print_bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -93,10 +93,15 @@ Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedF
 ; The LQ310-RAW queue is created from CurStepChanged below, not here — it needs
 ; the exit code checked, and running it in both places would do it twice.
 
-; Register the login task (agent must run as the logged-in user — it serves the
-; browser on that user's desktop session).
+; Start at BOOT as SYSTEM — /SC ONSTART /RU SYSTEM — so the agent is running
+; before and without anyone logging in (the old ONLOGON task was why it was dead
+; after a shutdown). The browser still reaches it: 127.0.0.1 is machine-wide, not
+; per-session. SYSTEM is elevated, so it can self-heal the LQ310-RAW queue with
+; Add-Printer (see _ensure_default_queue in print_bridge.py). Config and logs go
+; to %PROGRAMDATA%\AvinashPrintBridge (machine-wide) so they're the same file no
+; matter who runs the agent.
 Filename: "schtasks"; \
-  Parameters: "/Create /TN ""Avinash Print Bridge"" /TR ""\""{app}\{#MyAppExeName}\"""" /SC ONLOGON /RL LIMITED /F"; \
+  Parameters: "/Create /TN ""Avinash Print Bridge"" /TR ""\""{app}\{#MyAppExeName}\"""" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"; \
   Flags: runhidden waituntilterminated; \
   Tasks: autostart
 
@@ -113,7 +118,7 @@ Filename: "schtasks"; Parameters: "/Delete /TN ""Avinash Print Bridge"" /F"; \
   Flags: runhidden; RunOnceId: "DelTask"
 
 [UninstallDelete]
-; Leave {localappdata}\AvinashPrintBridge — it holds config.json and the log,
+; Leave {commonappdata}\AvinashPrintBridge — it holds config.json and the log,
 ; which are worth keeping across a reinstall.
 
 [Code]
@@ -148,7 +153,7 @@ begin
       MsgBox('The LQ310-RAW print queue could not be created.'#13#10#13#10 +
              'Usually this means the Epson printer is not attached or not ' +
              'powered on. Connect it, then re-run this installer.'#13#10#13#10 +
-             'Details: %LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log',
+             'Details: %PROGRAMDATA%\AvinashPrintBridge\print_bridge.log',
              mbError, MB_OK);
   end;
 end;
