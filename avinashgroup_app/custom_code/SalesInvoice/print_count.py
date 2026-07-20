@@ -216,3 +216,73 @@ def _log_print(doc, start_sheet: int, titles: list[str]):
 				title=f"Print log failed for Sales Invoice {doc.name}",
 				message=frappe.get_traceback(),
 			)
+
+
+def reconcile_print_counts(company=None, commit=False, limit=None):
+	"""Reset each Sales Invoice Print Count.print_count to the true sheet count.
+
+	The counter is a cached total that can drift above the Print Log (an
+	increment whose matching log insert failed, a double count). The Print Log
+	is authoritative — one row per sheet actually produced — so the correct value
+	is its highest copy_number for the invoice. This reads the log and rewrites
+	only the counter; it never touches the log itself.
+
+	DRY RUN unless commit=True: returns exactly which counters would change
+	({invoice, from, to}) and writes nothing. `company` scopes to one company's
+	invoices; `limit` caps how many are adjusted this call. Counters with no log
+	rows at all are left untouched (pre-logging history — the log can't say what
+	the true count was), and reported under `no_log`.
+	"""
+	conditions, params = "", {}
+	if company:
+		conditions = "WHERE company = %(company)s"
+		params["company"] = company
+
+	# Authoritative sheet count per invoice = highest copy_number in the log.
+	log_max = {
+		r.sales_invoice: cint(r.sheets)
+		for r in frappe.db.sql(
+			f"""
+			SELECT sales_invoice, MAX(copy_number) AS sheets
+			FROM `tabSales Invoice Print Log`
+			{conditions}
+			GROUP BY sales_invoice
+			""",
+			params,
+			as_dict=True,
+		)
+	}
+
+	drift, no_log = [], 0
+	for c in frappe.get_all(
+		"Sales Invoice Print Count", fields=["name", "print_count"]
+	):
+		actual = log_max.get(c.name)
+		if actual is None:
+			if company is None:
+				no_log += 1
+			continue
+		if cint(c.print_count) != actual:
+			drift.append({"invoice": c.name, "from": cint(c.print_count), "to": actual})
+
+	drift.sort(key=lambda d: d["invoice"])
+	if limit:
+		drift = drift[: int(limit)]
+
+	if commit:
+		for d in drift:
+			frappe.db.set_value(
+				"Sales Invoice Print Count",
+				d["invoice"],
+				"print_count",
+				d["to"],
+				update_modified=False,
+			)
+		frappe.db.commit()
+
+	return {
+		"dry_run": not commit,
+		("adjusted" if commit else "would_adjust"): len(drift),
+		"no_log_skipped": no_log,
+		"rows": drift,
+	}
