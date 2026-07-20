@@ -12,7 +12,6 @@ One row per event in an invoice's life, merged chronologically from four sources
   Printed   -> a physical print or PDF, one row per copy (Sales Invoice Print Log)
   Modified  -> a tracked post-creation change (Version), skipping submit-time
                recalculations and scheduler status updates
-  Deleted   -> a draft was removed (Deleted Document)
 
 There is deliberately no "Cancelled" operation: for IRD an issued invoice is
 never cancelled — it is reversed by a credit note, which appears as its own
@@ -72,8 +71,6 @@ def execute(filters=None):
 		events += _legacy_add_events(filters, from_dt, to_dt, already_added)
 	if operation in ("All", "Printed"):
 		events += _print_events(filters, from_dt, to_dt)
-	if operation in ("All", "Deleted"):
-		events += _deleted_events(filters, from_dt, to_dt)
 
 	events = _apply_invoice_context(events, filters)
 	events.sort(key=lambda e: e["_ts"], reverse=True)
@@ -337,45 +334,6 @@ def _modified_summary(user_changes, row_changes):
 	if row_changes:
 		parts.append(_("{0} table row change(s)").format(row_changes))
 	return ", ".join(parts)
-
-
-def _deleted_events(filters, from_dt, to_dt):
-	fl = {"deleted_doctype": "Sales Invoice", "creation": ["between", [from_dt, to_dt]]}
-	if filters.get("sales_invoice"):
-		fl["deleted_name"] = filters.sales_invoice
-
-	scope = filters.get("company_scope")
-	events = []
-	for r in frappe.get_all(
-		"Deleted Document",
-		filters=fl,
-		fields=["deleted_name", "creation", "owner", "data"],
-	):
-		company = is_return = customer_name = None
-		try:
-			doc_data = json.loads(r.data or "{}")
-			company = doc_data.get("company")
-			is_return = doc_data.get("is_return")
-			customer_name = doc_data.get("customer_name")
-		except (ValueError, TypeError):
-			pass
-		# A deleted invoice is only ever a draft; its company is known from the
-		# snapshot, so scope it here (no live Sales Invoice row to fall back on).
-		if scope and company not in scope:
-			continue
-		events.append(
-			{
-				"invoice": r.deleted_name,
-				"_ts": r.creation,
-				"user": r.owner,
-				"operation": "Deleted",
-				"company": company,
-				"is_return": is_return,
-				"customer_name": customer_name,
-				"details": _("Draft deleted"),
-			}
-		)
-	return events
 
 
 def _apply_invoice_context(events, filters):

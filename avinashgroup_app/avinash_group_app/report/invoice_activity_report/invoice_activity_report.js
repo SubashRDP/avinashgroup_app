@@ -57,7 +57,7 @@
 				fieldname: "operation",
 				label: __("Operation"),
 				fieldtype: "Select",
-				options: "All\nAdd\nPrinted\nModified\nDeleted",
+				options: "All\nAdd\nPrinted\nModified",
 				default: "All",
 			},
 			{
