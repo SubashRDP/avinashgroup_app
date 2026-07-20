@@ -79,23 +79,37 @@ def execute(filters=None):
 
 def _apply_date_window(filters):
 	"""Resolve the From/To window entirely in the backend — the report has no
-	date filters in the UI. A picked Fiscal Year uses that year's AD span;
-	otherwise the window defaults to month-to-date. Month-to-date is the default
-	on purpose: a full fiscal year parses every Sales Invoice Version in range and
-	takes minutes."""
-	if filters.get("fiscal_year"):
-		fy = get_fiscal_year_dates(filters.fiscal_year)
-		if fy:
-			if not filters.get("from_date"):
-				filters.from_date = fy["from_date"]
-			if not filters.get("to_date"):
-				filters.to_date = fy["to_date"]
+	date filters in the UI. The window is fixed to the CURRENT fiscal year (its
+	year_start_date .. year_end_date, resolved from today's date on the server);
+	a Fiscal Year filter, if picked, overrides with that year's span."""
+	fy = (
+		get_fiscal_year_dates(filters.fiscal_year)
+		if filters.get("fiscal_year")
+		else _current_fiscal_year_dates()
+	)
+	if fy:
+		if not filters.get("from_date"):
+			filters.from_date = fy["from_date"]
+		if not filters.get("to_date"):
+			filters.to_date = fy["to_date"]
 
+	# Fallback only if no Fiscal Year record covers today.
 	today = frappe.utils.nowdate()
 	if not filters.get("to_date"):
 		filters.to_date = today
 	if not filters.get("from_date"):
 		filters.from_date = str(frappe.utils.get_first_day(today))
+
+
+def _current_fiscal_year_dates():
+	"""AD start/end of the fiscal year covering today, resolved on the server."""
+	from erpnext.accounts.utils import get_fiscal_year
+
+	try:
+		fy = get_fiscal_year(frappe.utils.nowdate(), as_dict=True)
+	except Exception:
+		return {}
+	return {"from_date": str(fy.year_start_date), "to_date": str(fy.year_end_date)}
 
 
 def _resolve_company_scope(filters):

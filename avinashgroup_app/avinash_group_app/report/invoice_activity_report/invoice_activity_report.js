@@ -2,10 +2,9 @@
 // For license information, please see license.txt
 
 // No From/To Date filters — the date window is resolved entirely in the backend
-// (see _apply_date_window() in invoice_activity_report.py): a picked Fiscal Year
-// uses that year's span, otherwise it defaults to month-to-date. Month-to-date is
-// the default on purpose — this report parses every Sales Invoice Version in range
-// and a full fiscal year takes minutes.
+// (see _apply_date_window() in invoice_activity_report.py): it is fixed to the
+// current fiscal year's start..end, and a picked Fiscal Year overrides with that
+// year's span.
 frappe.query_reports["Invoice Activity Report"] = {
 	filters: [
 		{
