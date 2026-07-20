@@ -55,9 +55,11 @@ $origins = @(
 )
 function Ok($b,$m){ if($b){Write-Host "PASS  $m" -f Green}else{Write-Host "FAIL  $m" -f Red} }
 
-# 1. Agent process / login task
-$task = schtasks /Query /TN "Avinash Print Bridge" 2>$null
-Ok ($LASTEXITCODE -eq 0) "login task 'Avinash Print Bridge' registered"
+# 1. Boot task registered, triggered At startup, running as SYSTEM (no login)
+$task = schtasks /Query /TN "Avinash Print Bridge" /V /FO LIST 2>$null
+Ok ($LASTEXITCODE -eq 0) "startup task 'Avinash Print Bridge' registered"
+Ok ([bool]($task -match 'At system start up|At startup')) "  trigger is At startup (no login needed)"
+Ok ([bool]($task -match 'SYSTEM')) "  runs as SYSTEM"
 
 # 2. Agent answering on the loopback port
 try { $p = Invoke-RestMethod 'http://127.0.0.1:8663/ping' -Headers @{Origin=$origins[0]} }
@@ -112,6 +114,19 @@ Tick each one:
 
 If all four print from the single install → **goal met.**
 
+## Step 3b — Reboot test (runs without login)
+
+This is the fix for "dead after shutdown":
+
+1. **Restart the computer.**
+2. **Before logging in**, the agent is already running as SYSTEM. Confirm after login
+   without starting anything: re-run the Step 2 PowerShell block — check #2 *"agent
+   answers on 127.0.0.1:8663"* should PASS immediately, and check #1 should show trigger
+   **At startup** / runs as **SYSTEM**.
+3. Print from any site — works with no manual start.
+
+- [ ] After a reboot, the agent is up and printing without anyone starting it
+
 ## Step 4 — Report back
 
 Send back:
@@ -119,13 +134,13 @@ Send back:
 2. Whether paper physically moved on the Step 2 live print.
 3. The 4 tick-boxes from Step 3 (which sites printed, which didn't).
 4. If anything failed: the log file
-   **`%LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log`**.
+   **`%PROGRAMDATA%\AvinashPrintBridge\print_bridge.log`**.
 
 ---
 
 ## Troubleshooting
 
-Log: `%LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log`
+Log: `%PROGRAMDATA%\AvinashPrintBridge\print_bridge.log`
 
 | Symptom | Cause / fix |
 |---|---|
@@ -133,12 +148,13 @@ Log: `%LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log`
 | Step 2 check 3 (LQ310-RAW) FAIL | Same as above — the queue was never made. Re-run installer with the printer on. |
 | Live print PASS but no paper | Job reached the queue but not the printer: check the Epson is online/has paper; confirm `LQ310-RAW` port matches the Epson's USB port (`Get-Printer LQ310-RAW`). |
 | A site shows "Allow local network" prompt | Policy key missing for that origin (Step 5 FAIL). Click **Allow** once (Chrome remembers), or re-run the installer. |
-| A site does nothing / old QZ behaviour | Agent not running: start **Avinash Print Bridge** from the Start menu, or sign out/in to trigger the login task. |
-| Need a NEW site to print later | Edit `%LOCALAPPDATA%\AvinashPrintBridge\config.json` → add its `https://…` origin to `allowed_origins`, restart the agent. No reinstall. |
+| A site does nothing / old QZ behaviour | Agent not running: start **Avinash Print Bridge** from the Start menu, or reboot (the startup task relaunches it as SYSTEM). |
+| `1801` / "printer name is invalid" | LQ310-RAW queue missing. The agent self-heals it on the next print/restart if the Epson is attached; otherwise attach it and reboot, or re-run the installer. |
+| Need a NEW site to print later | Edit `%PROGRAMDATA%\AvinashPrintBridge\config.json` → add its `https://…` origin to `allowed_origins`, restart the agent. No reinstall. |
 
 ## Config reference
 
-`%LOCALAPPDATA%\AvinashPrintBridge\config.json` (created on first run):
+`%PROGRAMDATA%\AvinashPrintBridge\config.json` (created on first run):
 
 ```json
 {

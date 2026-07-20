@@ -39,7 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -71,7 +71,15 @@ DRY_RUN = "--dry-run" in sys.argv[1:]
 
 def _app_dir() -> str:
 	if IS_WINDOWS:
-		base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+		# ProgramData, not LocalAppData: the agent runs as SYSTEM (boot task), and
+		# %LOCALAPPDATA% under SYSTEM is the hidden systemprofile — config and log
+		# would be unfindable and differ from a user-context run. ProgramData is one
+		# machine-wide location whoever runs the agent.
+		base = (
+			os.environ.get("PROGRAMDATA")
+			or os.environ.get("LOCALAPPDATA")
+			or os.path.expanduser("~")
+		)
 		d = os.path.join(base, "AvinashPrintBridge")
 	else:
 		d = os.path.join(os.path.expanduser("~"), ".avinash_print_bridge")
@@ -172,11 +180,12 @@ def write_raw(printer: str, data: bytes) -> None:
 		with open(path, "wb") as f:
 			f.write(data)
 		log.info("[dry-run] %d bytes for %r -> %s", len(data), printer, path)
-		return
+		return printer
 
 	import win32print
 
-	h = win32print.OpenPrinter(printer)
+	target = _resolve_target(printer)
+	h = win32print.OpenPrinter(target)
 	try:
 		job = win32print.StartDocPrinter(h, 1, ("Avinash ERP invoice", None, "RAW"))
 		try:
@@ -185,9 +194,36 @@ def write_raw(printer: str, data: bytes) -> None:
 			win32print.EndPagePrinter(h)
 		finally:
 			win32print.EndDocPrinter(h)
-		log.info("printed %d bytes to %r (job %s)", len(data), printer, job)
+		log.info("printed %d bytes to %r (job %s)", len(data), target, job)
 	finally:
 		win32print.ClosePrinter(h)
+	return target
+
+
+def _resolve_target(printer: str) -> str:
+	"""Return an existing queue to open, self-healing a missing LQ310-RAW.
+
+	Windows error 1801 (invalid printer name) means the queue isn't there —
+	usually the installer ran with the Epson unplugged so the RAW queue was
+	never created, or it was removed. Recreate it (the agent must run elevated;
+	see installer.iss) before giving up. We never silently fall back to the
+	Epson's own driver queue: it swallows RAW ESC/P and the head never moves, so
+	a 'success' there would print nothing.
+	"""
+	printers = list_printers()
+	if printer in printers:
+		return printer
+	log.warning("printer %r not found; (re)creating %s", printer, DEFAULT_PRINTER)
+	_ensure_default_queue()
+	printers = list_printers()
+	if DEFAULT_PRINTER in printers:
+		return DEFAULT_PRINTER
+	raise RuntimeError(
+		"Print queue '%s' is not installed, and the %s queue could not be "
+		"created. Attach the Epson LQ-310 and switch it on, then try again — or "
+		"re-run PrintBridgeSetup.exe. Installed printers: %s"
+		% (printer, DEFAULT_PRINTER, ", ".join(printers) or "none")
+	)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -276,12 +312,12 @@ class Handler(BaseHTTPRequestHandler):
 
 		printer = req.get("printer") or CONFIG["default_printer"]
 		try:
-			write_raw(printer, data)
+			used = write_raw(printer, data)
 		except Exception as e:
 			log.exception("print failed on %r", printer)
 			self._json(500, {"ok": False, "error": str(e), "printer": printer}, origin)
 			return
-		self._json(200, {"ok": True, "bytes": len(data), "printer": printer}, origin)
+		self._json(200, {"ok": True, "bytes": len(data), "printer": used or printer}, origin)
 
 
 # -------------------------------------------------------------- configure ----
@@ -334,6 +370,21 @@ def _install_queue() -> str:
 	return out.strip()
 
 
+def _ensure_default_queue() -> None:
+	"""Best-effort create LQ310-RAW if missing. Safe to call every launch — used
+	at startup (self-heal after a reboot that lost the queue, or an install done
+	with the Epson unplugged) and on a print that hit a missing queue. Needs the
+	agent to run elevated to succeed; failures are logged, never raised."""
+	if not IS_WINDOWS or DRY_RUN:
+		return
+	try:
+		if DEFAULT_PRINTER in list_printers():
+			return
+		log.info("self-heal: %s", _install_queue())
+	except Exception as e:
+		log.warning("self-heal could not create %s: %s", DEFAULT_PRINTER, e)
+
+
 def configure() -> int:
 	"""Create the RAW queue. Called by installer.iss at post-install.
 
@@ -352,6 +403,9 @@ def main() -> None:
 	if "--configure" in sys.argv[1:]:
 		sys.exit(configure())
 	port = int(CONFIG["port"])
+	# Self-heal the RAW queue on every launch, so a reboot that lost it — or an
+	# install done with the Epson unplugged — still prints once the agent runs.
+	_ensure_default_queue()
 	log.info(
 		"Avinash Print Bridge %s starting on 127.0.0.1:%d (dry_run=%s, origins=%s)",
 		VERSION,
@@ -360,7 +414,13 @@ def main() -> None:
 		", ".join(CONFIG["allowed_origins"]),
 	)
 	# Bind loopback only — never 0.0.0.0. Nothing off this machine may print.
-	ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+	try:
+		ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+	except OSError as e:
+		# Port already owned by another instance (e.g. the boot task's agent is up
+		# and the installer just launched a second one post-install). That instance
+		# is serving — exit quietly instead of crashing loud.
+		log.info("127.0.0.1:%d already in use (%s); another instance is serving", port, e)
 
 
 if __name__ == "__main__":

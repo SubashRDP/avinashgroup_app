@@ -21,7 +21,8 @@ and print an invoice.
    pipe.
 3. Pre-grants Chrome/Edge local network access for the ERP origin, so no
    permission prompt appears.
-4. Registers a login task so the agent is always running.
+4. Registers a **startup task that runs at boot as SYSTEM** (no login needed), so
+   the agent is always running — including after a shutdown, before anyone logs in.
 
 Uninstall from Add/Remove Programs reverses all of it except `config.json` and
 the log.
@@ -50,7 +51,7 @@ policy key handles that here.
 
 ## Troubleshooting
 
-**Log:** `%LOCALAPPDATA%\AvinashPrintBridge\print_bridge.log`
+**Log:** `%PROGRAMDATA%\AvinashPrintBridge\print_bridge.log`
 
 | Symptom | Cause |
 | --- | --- |
@@ -61,7 +62,7 @@ policy key handles that here.
 
 ## Config
 
-`%LOCALAPPDATA%\AvinashPrintBridge\config.json`, created on first run:
+`%PROGRAMDATA%\AvinashPrintBridge\config.json`, created on first run:
 
 ```json
 {
@@ -81,8 +82,8 @@ policy key handles that here.
 origin. **One install serves all four sites** (production `ng-group`, which
 carries all seven companies, plus the three test sites) — they are pre-listed
 here and mirrored in the installer's browser policy, so no site prompts and none
-needs its own setup. Restart the agent after editing (Start menu, or the login
-task at next sign-in).
+needs its own setup. Restart the agent after editing (Start menu, or reboot — the
+startup task relaunches it as SYSTEM).
 
 Three ways an origin is allowed, in order:
 
