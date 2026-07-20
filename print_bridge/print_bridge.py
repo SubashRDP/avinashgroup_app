@@ -39,7 +39,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -349,20 +349,28 @@ def _step(results: list, name: str, fn) -> None:
 
 
 def _install_queue() -> str:
-	"""Create the Generic / Text Only RAW queue on the Epson's port.
+	"""Create OR repair the Generic / Text Only LQ310-RAW queue. Idempotent, and
+	tolerant of a printer that isn't connected right now:
 
-	-ErrorAction Stop matters: Add-Printer raises NON-terminating errors, so
-	without it a failure is invisible and the caller reports success.
+	  - Epson present, no queue   -> create the queue on the Epson's port
+	  - Epson moved USB ports      -> repair the queue's port (Set-Printer)
+	  - Epson offline, queue kept  -> leave the queue as-is (prints when it's back)
+	  - Epson offline, no queue    -> throw (nothing to point a queue at yet)
+
+	Kept as ONE PowerShell statement chain (no newline before elseif — PowerShell
+	would treat that as a parse error). -ErrorAction Stop matters: Add-Printer
+	raises NON-terminating errors, so without it a failure is invisible.
 	"""
-	if DEFAULT_PRINTER in list_printers():
-		return f"{DEFAULT_PRINTER} already exists"
 	ps = (
 		"$ErrorActionPreference='Stop';"
 		"try { Add-PrinterDriver -Name 'Generic / Text Only' -ErrorAction Stop } catch {};"
-		"$p = Get-Printer | Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } | Select-Object -First 1;"
-		"if (-not $p) { throw 'No Epson dot-matrix printer found — attach and power it on, then re-run.' };"
-		f"Add-Printer -Name '{DEFAULT_PRINTER}' -DriverName 'Generic / Text Only' -PortName $p.PortName -ErrorAction Stop;"
-		f"Write-Output ('created on ' + $p.PortName)"
+		"$e = Get-Printer | Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } | Select-Object -First 1;"
+		"$r = Get-Printer -Name 'LQ310-RAW' -ErrorAction SilentlyContinue;"
+		"if (-not $e -and -not $r) { throw 'No Epson dot-matrix printer found - attach it and switch it on.' }"
+		" elseif (-not $e) { Write-Output ('kept ' + $r.PortName + ' - Epson offline') }"
+		" elseif (-not $r) { Add-Printer -Name 'LQ310-RAW' -DriverName 'Generic / Text Only' -PortName $e.PortName -ErrorAction Stop; Write-Output ('created on ' + $e.PortName) }"
+		" elseif ($r.PortName -ne $e.PortName) { Set-Printer -Name 'LQ310-RAW' -PortName $e.PortName -ErrorAction Stop; Write-Output ('repaired port -> ' + $e.PortName) }"
+		" else { Write-Output ('ok on ' + $r.PortName) }"
 	)
 	rc, out = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
 	if rc != 0:
@@ -371,18 +379,17 @@ def _install_queue() -> str:
 
 
 def _ensure_default_queue() -> None:
-	"""Best-effort create LQ310-RAW if missing. Safe to call every launch — used
-	at startup (self-heal after a reboot that lost the queue, or an install done
-	with the Epson unplugged) and on a print that hit a missing queue. Needs the
-	agent to run elevated to succeed; failures are logged, never raised."""
+	"""Best-effort create/repair LQ310-RAW. Safe to call every launch — runs at
+	startup (heal after a reboot: queue lost, Epson on a different USB port, or an
+	install done with the Epson unplugged) and on a print that hit a missing queue.
+	Always runs _install_queue (which is idempotent and also repairs the port);
+	needs the agent elevated to succeed. Failures are logged, never raised."""
 	if not IS_WINDOWS or DRY_RUN:
 		return
 	try:
-		if DEFAULT_PRINTER in list_printers():
-			return
-		log.info("self-heal: %s", _install_queue())
+		log.info("queue: %s", _install_queue())
 	except Exception as e:
-		log.warning("self-heal could not create %s: %s", DEFAULT_PRINTER, e)
+		log.warning("could not create/repair %s: %s", DEFAULT_PRINTER, e)
 
 
 def configure() -> int:
