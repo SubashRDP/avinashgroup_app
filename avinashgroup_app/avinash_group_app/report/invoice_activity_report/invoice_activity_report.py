@@ -180,11 +180,16 @@ def _apply_company_scope(fl, filters):
 
 def _row(e):
 	ts = e["_ts"]
+	# The Add event is dated by the invoice's posting date (set in
+	# _apply_invoice_context) — its IRD date — while the Time stays the actual
+	# clock time it happened (posting_time is 00:00:00, so it carries no time).
+	# Printed / Modified use their own event timestamp for both date and time.
+	day = e.get("_date") or ts.date()
 	return {
 		"invoice_number": e["invoice"],
 		"customer_name": e.get("customer_name") or "",
-		"date": ts.date(),
-		"bs_date": bs_date_str(ts.date()),
+		"date": day,
+		"bs_date": bs_date_str(day),
 		"time": ts.strftime("%H:%M:%S"),
 		"operation": e["operation"],
 		"username": e["user"],
@@ -394,18 +399,36 @@ def _modified_summary(user_changes, row_changes):
 	return ", ".join(parts)
 
 
-def _apply_invoice_context(events, filters):
-	"""Fill company/is_return/customer_name from the invoice, and keep only the
-	events whose invoice is an issued tax document: it still exists AND is
-	submitted (docstatus 1).
+def _cbms_cutoffs(companies):
+	"""Send From Date per company, from its enabled CBMS Config (enable_from_date).
+	A company with no enabled config, or one without a date, has no cutoff — all
+	its invoices show. Returns {company: date}."""
+	if not companies:
+		return {}
+	cutoffs = {}
+	for c in frappe.get_all(
+		"CBMS Config",
+		filters={"company": ["in", list(companies)], "enable_cbms": 1},
+		fields=["company", "enable_from_date"],
+	):
+		if c.enable_from_date:
+			cutoffs[c.company] = frappe.utils.getdate(c.enable_from_date)
+	return cutoffs
 
-	Version and Print Log rows outlive the invoice they describe, so an event
-	may point at an invoice that is now a draft (docstatus 0), cancelled
-	(docstatus 2), or deleted (gone entirely). The report lists issued invoices
-	only, so the lookup requires docstatus 1 — draft, cancelled and deleted
-	invoices are absent from `info` and their events are dropped. The company
-	scope is applied in the same query, so an out-of-scope invoice is likewise
-	absent and dropped (Version events have no company until this fill)."""
+
+def _apply_invoice_context(events, filters):
+	"""Fill invoice context, date the Add event by the invoice's posting date,
+	and keep only issued invoices inside the CBMS e-billing period.
+
+	Kept only when the invoice: still exists AND is submitted (docstatus 1) —
+	Version/Print Log rows outlive drafts, cancelled and deleted invoices, all of
+	which are dropped; is within the company scope (applied in the lookup query);
+	and is posted ON OR AFTER its company's CBMS Send From Date
+	(CBMS Config.enable_from_date), so invoices predating e-billing never appear.
+
+	The Add event is re-dated to the invoice's posting_date (its IRD date) rather
+	than the submit/creation timestamp; its Time keeps the real clock time.
+	Printed / Modified are left on their own event timestamp."""
 	names = {e["invoice"] for e in events}
 	info = {}
 	if names:
@@ -414,9 +437,11 @@ def _apply_invoice_context(events, filters):
 		for r in frappe.get_all(
 			"Sales Invoice",
 			filters=fl,
-			fields=["name", "company", "is_return", "customer_name"],
+			fields=["name", "company", "is_return", "customer_name", "posting_date"],
 		):
 			info[r.name] = r
+
+	cutoffs = _cbms_cutoffs({r.company for r in info.values()})
 
 	kept = []
 	for e in events:
@@ -424,12 +449,20 @@ def _apply_invoice_context(events, filters):
 		if not inv:
 			# Not an issued tax document — draft, cancelled, or deleted.
 			continue
+		# CUTOFF: only invoices posted on/after the company's CBMS Send From Date.
+		cutoff = cutoffs.get(inv.company)
+		if cutoff and frappe.utils.getdate(inv.posting_date) < cutoff:
+			continue
 		if e.get("company") is None:
 			e["company"] = inv.company
 		if e.get("is_return") is None:
 			e["is_return"] = inv.is_return
 		if e.get("customer_name") is None:
 			e["customer_name"] = inv.customer_name
+		# The Add event is the invoice becoming a tax document — show it on the
+		# invoice's posting date, not the submit/creation timestamp.
+		if e["operation"] == "Add":
+			e["_date"] = inv.posting_date
 		kept.append(e)
 	return kept
 
