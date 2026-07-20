@@ -72,9 +72,27 @@ def execute(filters=None):
 		events += _print_events(filters, from_dt, to_dt)
 
 	events = _apply_invoice_context(events, filters)
-	events.sort(key=lambda e: e["_ts"], reverse=True)
+	events = _order_events(events)
 
 	return _columns(), [_row(e) for e in events]
+
+
+def _order_events(events):
+	"""Group events by invoice and order each invoice's events oldest -> newest,
+	so a print sequence reads Tax Invoice, Invoice, Copy of Original 1, 2, ...
+	(the Tax Invoice + Invoice pair shares a timestamp, so the sheet's copy
+	number breaks the tie). Invoices are ordered by their most recent activity,
+	newest first."""
+	from collections import defaultdict
+
+	groups = defaultdict(list)
+	for e in events:
+		groups[e["invoice"]].append(e)
+
+	ordered = []
+	for invoice in sorted(groups, key=lambda inv: max(e["_ts"] for e in groups[inv]), reverse=True):
+		ordered.extend(sorted(groups[invoice], key=lambda e: (e["_ts"], e.get("copy") or 0)))
+	return ordered
 
 
 def _apply_date_window(filters):
@@ -245,6 +263,7 @@ def _print_events(filters, from_dt, to_dt):
 			"operation": "Printed",
 			"company": r.company,
 			"customer_name": r.customer_name,
+			"copy": r.copy_number,
 			"details": _copy_title(r.copy_number),
 		}
 		for r in frappe.get_all(
@@ -263,11 +282,16 @@ def _print_events(filters, from_dt, to_dt):
 
 
 def _copy_title(n):
-	if not n or n <= 1:
+	# Sheet titles match the actual print sequence (see invoice_copy_titles in
+	# custom_code/SalesInvoice/print_count.py): the first print produces the
+	# TAX INVOICE + INVOICE pair (sheets 1 and 2), and every later sheet is a
+	# COPY OF ORIGINAL N.
+	n = n or 1
+	if n <= 1:
 		return _("Tax Invoice")
 	if n == 2:
-		return _("Copy of Original")
-	return _("Copy of Original {0}").format(n - 1)
+		return _("Invoice")
+	return _("Copy of Original {0}").format(n - 2)
 
 
 def _version_events(filters, from_dt, to_dt, operation):
