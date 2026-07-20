@@ -35,11 +35,12 @@ import logging
 import os
 import platform
 import sys
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -70,21 +71,30 @@ DRY_RUN = "--dry-run" in sys.argv[1:]
 
 
 def _app_dir() -> str:
+	"""First WRITABLE data dir. Preference on Windows: ProgramData (one shared,
+	machine-wide location whoever runs the agent — SYSTEM boot task or a user),
+	then LocalAppData, then temp. The write-test matters: if the SYSTEM boot task
+	created ProgramData\\AvinashPrintBridge, a plain-user launch of the agent may
+	not be able to write the log there, and opening it would crash the agent at
+	startup. Falling back keeps the agent alive rather than dying over a log path.
+	"""
 	if IS_WINDOWS:
-		# ProgramData, not LocalAppData: the agent runs as SYSTEM (boot task), and
-		# %LOCALAPPDATA% under SYSTEM is the hidden systemprofile — config and log
-		# would be unfindable and differ from a user-context run. ProgramData is one
-		# machine-wide location whoever runs the agent.
-		base = (
-			os.environ.get("PROGRAMDATA")
-			or os.environ.get("LOCALAPPDATA")
-			or os.path.expanduser("~")
-		)
-		d = os.path.join(base, "AvinashPrintBridge")
+		bases = [os.environ.get("PROGRAMDATA"), os.environ.get("LOCALAPPDATA")]
+		candidates = [os.path.join(b, "AvinashPrintBridge") for b in bases if b]
+		candidates.append(os.path.join(tempfile.gettempdir(), "AvinashPrintBridge"))
 	else:
-		d = os.path.join(os.path.expanduser("~"), ".avinash_print_bridge")
-	os.makedirs(d, exist_ok=True)
-	return d
+		candidates = [os.path.join(os.path.expanduser("~"), ".avinash_print_bridge")]
+	for d in candidates:
+		try:
+			os.makedirs(d, exist_ok=True)
+			probe = os.path.join(d, ".write_test")
+			with open(probe, "w"):
+				pass
+			os.remove(probe)
+			return d
+		except OSError:
+			continue
+	return tempfile.gettempdir()  # last resort — always writable
 
 
 APP_DIR = _app_dir()
@@ -93,9 +103,15 @@ LOG_FILE = os.path.join(APP_DIR, "print_bridge.log")
 
 log = logging.getLogger("print_bridge")
 log.setLevel(logging.INFO)
-_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
-_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-log.addHandler(_handler)
+# Never let logging setup crash the agent: if the file handler can't open (log
+# dir not writable in this security context), fall back to console-only. A bridge
+# that can't write a log must still print.
+try:
+	_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
+	_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+	log.addHandler(_handler)
+except OSError:
+	pass
 # PyInstaller --noconsole leaves sys.stdout as None, and StreamHandler(None)
 # blows up on the first log call — i.e. at startup, on every machine.
 if sys.stdout is not None:
