@@ -30,6 +30,8 @@
   "tax_exempted_sales",
   "sync_section",
   "sync_status",
+  "is_synced",
+  "is_realtime",
   "attempt_count",
   "last_attempt",
   "column_break_sync",
@@ -121,6 +123,7 @@
    "in_list_view": 1,
    "label": "Total Sales",
    "non_negative": 1,
+   "precision": "2",
    "read_only": 1,
    "reqd": 1
   },
@@ -129,6 +132,7 @@
    "fieldtype": "Float",
    "label": "Taxable Sales (VAT)",
    "non_negative": 1,
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -136,6 +140,7 @@
    "fieldtype": "Float",
    "label": "VAT",
    "non_negative": 1,
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -143,6 +148,7 @@
    "fieldname": "discount",
    "fieldtype": "Currency",
    "label": "Discount",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -155,6 +161,7 @@
    "fieldname": "excisable_amount",
    "fieldtype": "Float",
    "label": "Excisable Amount",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -162,6 +169,7 @@
    "fieldname": "excise",
    "fieldtype": "Float",
    "label": "Excise",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -169,6 +177,7 @@
    "fieldname": "taxable_sales_hst",
    "fieldtype": "Float",
    "label": "Taxable Sales (HST)",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -176,6 +185,7 @@
    "fieldname": "hst",
    "fieldtype": "Float",
    "label": "Health Service Tax",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -183,6 +193,7 @@
    "fieldname": "amount_for_esf",
    "fieldtype": "Float",
    "label": "Amount for ESF",
+   "precision": "2",
    "read_only": 1
   },
   {
@@ -190,23 +201,26 @@
    "fieldname": "esf",
    "fieldtype": "Float",
    "label": "Education Service Fee",
+   "precision": "2",
    "read_only": 1
   },
   {
    "default": "0",
+   "description": "Whole sales value when the customer territory is outside Nepal or the invoice currency is not NPR (zero-rated export).",
    "fieldname": "export_sales",
    "fieldtype": "Float",
    "label": "Export Sales",
-   "read_only": 1,
-   "description": "Whole sales value when the customer territory is outside Nepal or the invoice currency is not NPR (zero-rated export)."
+   "precision": "2",
+   "read_only": 1
   },
   {
    "default": "0",
+   "description": "Total of line items with VAT Apply On = \"VAT 0%\". Excluded from total_sales.",
    "fieldname": "tax_exempted_sales",
    "fieldtype": "Float",
    "label": "Tax Exempted Sales",
-   "read_only": 1,
-   "description": "Total of line items with VAT Apply On = \"VAT 0%\". Excluded from total_sales."
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "sync_section",
@@ -223,6 +237,24 @@
    "options": "Pending\nSynced\nFailed",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Ticked once IRD has accepted this bill.",
+   "fieldname": "is_synced",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Synced",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Ticked when the bill reached IRD on the invoice submit itself. A bill that only got through on a later retry is not realtime.",
+   "fieldname": "is_realtime",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Realtime",
+   "read_only": 1
   },
   {
    "default": "0",

@@ -7,7 +7,7 @@ is always safe to call from a background job without risking an unhandled-except
 
 import frappe
 import requests
-from frappe.utils import getdate
+from frappe.utils import flt, getdate
 
 from avinashgroup_app.custom_code.CBMS.activity_log import log_cbms_activity
 
@@ -38,22 +38,36 @@ RETURN_ERRORS = {
 }
 
 
+def _amount(value):
+	"""CBMS only accepts two decimal places — anything longer is rejected as an
+	invalid model. build_cbms_fields already rounds, but records written before that
+	(or by any other path) can still carry more, so every amount is rounded here too."""
+	return flt(value, 2)
+
+
 def _other_sales_fields(doc):
 	"""HST/ESF stay 0 for this business; excisable_amount, excise, export_sales and
 	tax_exempted_sales are computed on the CBMS doc by build_cbms_fields."""
 	return {
-		"excisable_amount": doc.excisable_amount or 0,
-		"excise": doc.excise or 0,
-		"taxable_sales_hst": doc.taxable_sales_hst or 0,
-		"hst": doc.hst or 0,
-		"amount_for_esf": doc.amount_for_esf or 0,
-		"esf": doc.esf or 0,
-		"export_sales": doc.export_sales or 0,
-		"tax_exempted_sales": doc.tax_exempted_sales or 0,
+		"excisable_amount": _amount(doc.excisable_amount),
+		"excise": _amount(doc.excise),
+		"taxable_sales_hst": _amount(doc.taxable_sales_hst),
+		"hst": _amount(doc.hst),
+		"amount_for_esf": _amount(doc.amount_for_esf),
+		"esf": _amount(doc.esf),
+		"export_sales": _amount(doc.export_sales),
+		"tax_exempted_sales": _amount(doc.tax_exempted_sales),
 	}
 
 
-def _build_bill_payload(bill, config):
+def _is_realtime(triggered_from):
+	"""IRD's isrealtime flag: true only when the bill goes out on the invoice submit
+	itself. Anything that got there later — the retry cron, the Sync Now button —
+	was reported after the fact and must be declared as not realtime."""
+	return triggered_from == "Submit"
+
+
+def _build_bill_payload(bill, config, is_realtime):
 	return {
 		"username": config.username,
 		"password": config.get_password("password"),
@@ -63,11 +77,11 @@ def _build_bill_payload(bill, config):
 		"fiscal_year": bill.fiscal_year,
 		"invoice_number": bill.invoice_number,
 		"invoice_date": bill.invoice_date_bs.replace("-", "."),
-		"total_sales": float(bill.total_sales or 0),
-		"taxable_sales_vat": float(bill.taxable_sales_vat or 0),
-		"vat": float(bill.vat or 0),
+		"total_sales": _amount(bill.total_sales),
+		"taxable_sales_vat": _amount(bill.taxable_sales_vat),
+		"vat": _amount(bill.vat),
 		**_other_sales_fields(bill),
-		"isrealtime": True,
+		"isrealtime": is_realtime,
 		"datetimeClient": bill.datetime_client.strftime("%Y-%m-%dT%H:%M:%S"),
 	}
 
@@ -79,7 +93,7 @@ def _buyer_pan_decimal(pan):
 	return int(pan) if pan.isdigit() else None
 
 
-def _build_return_payload(bill_return, config):
+def _build_return_payload(bill_return, config, is_realtime):
 	return {
 		"username": config.username,
 		"password": config.get_password("password"),
@@ -91,11 +105,11 @@ def _build_return_payload(bill_return, config):
 		"credit_note_number": bill_return.credit_note_number,
 		"credit_note_date": bill_return.credit_note_date_bs.replace("-", "."),
 		"reason_for_return": bill_return.reason_for_return or "Goods Returned",
-		"total_sales": float(bill_return.total_sales or 0),
-		"taxable_sales_vat": float(bill_return.taxable_sales_vat or 0),
-		"vat": float(bill_return.vat or 0),
+		"total_sales": _amount(bill_return.total_sales),
+		"taxable_sales_vat": _amount(bill_return.taxable_sales_vat),
+		"vat": _amount(bill_return.vat),
 		**_other_sales_fields(bill_return),
-		"isrealtime": True,
+		"isrealtime": is_realtime,
 		"datetimeClient": bill_return.datetime_client.strftime("%Y-%m-%dT%H:%M:%S"),
 	}
 
@@ -111,13 +125,20 @@ def _response_code(response):
 	return response.text.strip()
 
 
-def _record_result(doctype, name, sync_status, sync_response):
+def _record_result(doctype, name, sync_status, sync_response, is_realtime=False):
+	"""is_synced / is_realtime mirror the attempt that just ran: the checkbox pair is
+	what the form and the IRD-facing reports read, so they must never outlive the
+	status they describe. A Submit attempt that failed and only got through on a
+	later retry ends up is_synced=1, is_realtime=0 — which is what was reported."""
+	synced = sync_status == "Synced"
 	attempt_count = frappe.db.get_value(doctype, name, "attempt_count") or 0
 	frappe.db.set_value(
 		doctype,
 		name,
 		{
 			"sync_status": sync_status,
+			"is_synced": 1 if synced else 0,
+			"is_realtime": 1 if (synced and is_realtime) else 0,
 			"sync_response": (sync_response or "")[:500],
 			"attempt_count": attempt_count + 1,
 			"last_attempt": frappe.utils.now_datetime(),
@@ -138,14 +159,15 @@ def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry"):
 		if not config.enable_cbms:
 			return False
 
+		realtime = _is_realtime(triggered_from)
 		response = requests.post(
-			BILL_URL, json=_build_bill_payload(bill, config), timeout=REQUEST_TIMEOUT
+			BILL_URL, json=_build_bill_payload(bill, config, realtime), timeout=REQUEST_TIMEOUT
 		)
 		code = _response_code(response)
 
 		if response.status_code == 200 and code in BILL_SUCCESS_CODES:
 			log_cbms_activity(bill, "Synced", response_code=code, triggered_from=triggered_from)
-			_record_result("CBMS Bill", bill.name, "Synced", code)
+			_record_result("CBMS Bill", bill.name, "Synced", code, is_realtime=realtime)
 			return True
 
 		error = f"{code}: {BILL_ERRORS.get(code, 'Unknown error')}"
@@ -166,7 +188,12 @@ def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry"):
 			)
 		except Exception:
 			pass
-		frappe.db.set_value("CBMS Bill", cbms_bill_name, "sync_status", "Failed", update_modified=False)
+		frappe.db.set_value(
+			"CBMS Bill",
+			cbms_bill_name,
+			{"sync_status": "Failed", "is_synced": 0, "is_realtime": 0},
+			update_modified=False,
+		)
 		frappe.db.commit()
 		return False
 
@@ -252,8 +279,11 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 					frappe.db.commit()
 				return False
 
+		realtime = _is_realtime(triggered_from)
 		response = requests.post(
-			RETURN_URL, json=_build_return_payload(bill_return, config), timeout=REQUEST_TIMEOUT
+			RETURN_URL,
+			json=_build_return_payload(bill_return, config, realtime),
+			timeout=REQUEST_TIMEOUT,
 		)
 		code = _response_code(response)
 
@@ -262,7 +292,9 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 				bill_return, "Synced", details=bypass_note,
 				response_code=code, triggered_from=triggered_from,
 			)
-			_record_result("CBMS Bill Return", bill_return.name, "Synced", code)
+			_record_result(
+				"CBMS Bill Return", bill_return.name, "Synced", code, is_realtime=realtime
+			)
 			return True
 
 		error = f"{code}: {RETURN_ERRORS.get(code, 'Unknown error')}"
@@ -286,7 +318,10 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 		except Exception:
 			pass
 		frappe.db.set_value(
-			"CBMS Bill Return", cbms_bill_return_name, "sync_status", "Failed", update_modified=False
+			"CBMS Bill Return",
+			cbms_bill_return_name,
+			{"sync_status": "Failed", "is_synced": 0, "is_realtime": 0},
+			update_modified=False,
 		)
 		frappe.db.commit()
 		return False
