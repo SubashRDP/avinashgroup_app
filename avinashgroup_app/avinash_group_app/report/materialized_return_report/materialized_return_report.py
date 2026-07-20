@@ -27,6 +27,7 @@ def get_columns():
 		{"label": _("VAT"), "fieldname": "vat", "fieldtype": "Float", "width": 100},
 		{"label": _("Total Amount"), "fieldname": "total_amount", "fieldtype": "Float", "width": 130},
 		{"label": _("Sync with IRD"), "fieldname": "synced_with_ird", "fieldtype": "Check", "width": 110},
+		{"label": _("Reason for Return"), "fieldname": "reason_for_return", "fieldtype": "Data", "width": 180},
 	]
 
 
@@ -68,7 +69,8 @@ def get_data(filters):
 			bill.taxable_sales_vat as taxable_amount,
 			bill.vat,
 			(bill.total_sales + bill.tax_exempted_sales) as total_amount,
-			case when bill.sync_status = 'Synced' then 1 else 0 end as synced_with_ird
+			case when bill.sync_status = 'Synced' then 1 else 0 end as synced_with_ird,
+			bill.reason_for_return
 		from `tabCBMS Bill Return` bill
 		where 1 = 1 {conditions}
 		order by bill.fiscal_year asc, bill.credit_note_date asc, bill.credit_note_number asc
