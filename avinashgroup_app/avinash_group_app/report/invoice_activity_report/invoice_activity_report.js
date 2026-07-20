@@ -5,33 +5,44 @@
 // (see _apply_date_window() in invoice_activity_report.py): it is fixed to the
 // current fiscal year's start..end, and a picked Fiscal Year overrides with that
 // year's span.
-frappe.query_reports["Invoice Activity Report"] = {
-	filters: [
-		{
-			fieldname: "company",
-			label: __("Company"),
-			fieldtype: "Link",
-			options: "Company",
-			default: frappe.defaults.get_user_default("Company"),
-		},
-		{
-			fieldname: "fiscal_year",
-			label: __("Fiscal Year"),
-			fieldtype: "Link",
-			options: "Fiscal Year",
-		},
-		{
-			fieldname: "operation",
-			label: __("Operation"),
-			fieldtype: "Select",
-			options: "All\nAdd\nPrinted\nModified",
-			default: "All",
-		},
-		{
-			fieldname: "sales_invoice",
-			label: __("Sales Invoice"),
-			fieldtype: "Link",
-			options: "Sales Invoice",
-		},
-	],
-};
+(() => {
+	const today = frappe.datetime.get_today();
+	// Name of the fiscal year covering today (server-resolved via
+	// erpnext.utils.get_fiscal_year) — used only to default the Fiscal Year
+	// filter; guarded so a site with no running Fiscal Year doesn't error.
+	const fy = erpnext.utils.get_fiscal_year(today, false, true)
+		? erpnext.utils.get_fiscal_year(today, true)
+		: [];
+
+	frappe.query_reports["Invoice Activity Report"] = {
+		filters: [
+			{
+				fieldname: "company",
+				label: __("Company"),
+				fieldtype: "Link",
+				options: "Company",
+				default: frappe.defaults.get_user_default("Company"),
+			},
+			{
+				fieldname: "fiscal_year",
+				label: __("Fiscal Year"),
+				fieldtype: "Link",
+				options: "Fiscal Year",
+				default: fy[0],
+			},
+			{
+				fieldname: "operation",
+				label: __("Operation"),
+				fieldtype: "Select",
+				options: "All\nAdd\nPrinted\nModified",
+				default: "All",
+			},
+			{
+				fieldname: "sales_invoice",
+				label: __("Sales Invoice"),
+				fieldtype: "Link",
+				options: "Sales Invoice",
+			},
+		],
+	};
+})();
