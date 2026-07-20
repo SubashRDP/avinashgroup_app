@@ -150,10 +150,11 @@ def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
 
-	# Show nothing until a Company is selected — the report is company-scoped and
-	# an all-companies run is not meaningful here.
+	# The report is company-scoped; until a Company is selected show a prompt
+	# (the third return value is the report's message) instead of an empty table.
 	if not _as_list(filters.get("company")):
-		return columns, []
+		message = _("Please select a Company to view the report.")
+		return columns, [], message
 
 	data = get_data(filters)
 
