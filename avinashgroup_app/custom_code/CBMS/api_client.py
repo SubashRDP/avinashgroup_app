@@ -148,7 +148,7 @@ def _record_result(doctype, name, sync_status, sync_response, is_realtime=False)
 	frappe.db.commit()
 
 
-def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry"):
+def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry", timeout=REQUEST_TIMEOUT):
 	"""POST a CBMS Bill to /api/bill. Always returns True/False, never raises."""
 	try:
 		bill = frappe.get_doc("CBMS Bill", cbms_bill_name)
@@ -161,7 +161,7 @@ def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry"):
 
 		realtime = _is_realtime(triggered_from)
 		response = requests.post(
-			BILL_URL, json=_build_bill_payload(bill, config, realtime), timeout=REQUEST_TIMEOUT
+			BILL_URL, json=_build_bill_payload(bill, config, realtime), timeout=timeout
 		)
 		code = _response_code(response)
 
@@ -246,7 +246,7 @@ def _original_predates_cbms(bill_return, config):
 	return getdate(posting_date) < getdate(config.enable_from_date)
 
 
-def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
+def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry", timeout=REQUEST_TIMEOUT):
 	"""POST a CBMS Bill Return to /api/billreturn. Always returns True/False, never raises."""
 	try:
 		bill_return = frappe.get_doc("CBMS Bill Return", cbms_bill_return_name)
@@ -283,7 +283,7 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry"):
 		response = requests.post(
 			RETURN_URL,
 			json=_build_return_payload(bill_return, config, realtime),
-			timeout=REQUEST_TIMEOUT,
+			timeout=timeout,
 		)
 		code = _response_code(response)
 

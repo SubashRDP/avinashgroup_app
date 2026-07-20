@@ -26,8 +26,13 @@ no client script and no print-format change.
 1. **A Sales Invoice submission can never be blocked by CBMS.** The submit hook
    wraps everything in try/except and logs to Error Log
    (`sales_invoice_hooks.py:199-203`).
-2. **Every network call runs in a background job** (`frappe.enqueue`, queue
-   `default`, timeout 300 s), never inline (`sales_invoice_hooks.py:197-198`).
+2. **No network call ever runs inside the submit transaction.** The first
+   (realtime) send is a direct attempt made right after the transaction
+   commits, via `frappe.db.after_commit`, capped at `SUBMIT_SEND_TIMEOUT`
+   (5 s). If it doesn't succeed, the send falls back to a background job
+   (`frappe.enqueue`, queue `default`, timeout 300 s, `triggered_from
+   "Retry"`) and the 5-minute retry cron (`sales_invoice_hooks.py`,
+   `_first_send_after_commit`).
 3. **Two independent safety nets** run every 5 minutes: *retry* (CBMS docs exist
    but aren't Synced) and *reconcile* (submitted invoices with no CBMS doc at
    all).
@@ -104,15 +109,19 @@ branch number; `credit_note_date` / `_bs`; `reason_for_return` = Sales Invoice
 2. Load the enabled CBMS Config for the company (`get_cbms_config` `:18-21`);
    return if none, or if `posting_date < enable_from_date` (`in_cbms_scope`
    `:24-29`) — no retroactive reporting.
-3. `is_return` → `create_cbms_bill_return` + enqueue `send_return_to_cbms`;
-   else `create_cbms_bill` + enqueue `send_bill_to_cbms`.
+3. `is_return` → `create_cbms_bill_return` + after-commit realtime
+   `send_return_to_cbms`; else `create_cbms_bill` + after-commit realtime
+   `send_bill_to_cbms`. The realtime attempt runs synchronously in the same
+   request with a 5 s timeout; on failure/hold it enqueues the background
+   send as a Retry (so a late send is not declared realtime to IRD).
 4. Creation helpers are idempotent — they skip if a CBMS doc already exists for
    this invoice (also enforced by the `unique` constraint on `sales_invoice`).
 5. Return special case: a standalone credit note (no `return_against`) has nothing
    to reference, so creation returns None and no CBMS doc is made. A return whose
    original is not yet Synced *is* created, and `send_return_to_cbms` holds it
    until the original's CBMS Bill reaches Synced.
-6. `frappe.db.commit()` before enqueue.
+6. Nothing commits inside the hook — the send callback is registered with
+   `frappe.db.after_commit`, so a rolled-back submit discards it entirely.
 
 This hook is the **only** creator of CBMS Bills / CBMS Bill Returns. Nothing else —
 no scheduler, no patch — brings a Sales Invoice into CBMS scope.

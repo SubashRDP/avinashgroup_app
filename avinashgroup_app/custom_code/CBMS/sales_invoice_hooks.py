@@ -1,8 +1,10 @@
 """Sales Invoice doc_events for the CBMS integration.
 
-Non-negotiable rule: nothing here may ever block a Sales Invoice submission. Every code path
-either does fast, local, non-throwing work, or hands the slow network call off to a background
-job.
+Non-negotiable rule: nothing here may ever block or fail a Sales Invoice submission. Every
+code path inside the transaction does fast, local, non-throwing work. The one network call —
+the realtime first send — runs only after the transaction commits (frappe.db.after_commit),
+is capped at SUBMIT_SEND_TIMEOUT seconds, and on anything but success hands off to the
+background queue and the retry cron.
 
 This hook is also the ONLY place a CBMS Bill / CBMS Bill Return is ever created. No scheduled
 job creates them, because reporting a bill to IRD cannot be undone (once Synced, `before_cancel`
@@ -236,6 +238,40 @@ def create_cbms_bill_return(sales_invoice):
 	return doc
 
 
+# Timeout for the realtime attempt made during the submit request itself. Kept
+# well under api_client.REQUEST_TIMEOUT so a slow IRD only delays the user's
+# submit response by a few seconds before the queue takes over.
+SUBMIT_SEND_TIMEOUT = 5
+
+
+def _first_send_after_commit(method_path, kwargs):
+	"""One direct send attempt, run right after the submit transaction commits.
+	Success ends here (Synced, isrealtime=true). Anything else — failure, held
+	return, exception — hands off to the background queue; the send functions
+	themselves never raise, so the extra guard only protects the enqueue."""
+	try:
+		if frappe.get_attr(method_path)(**kwargs, timeout=SUBMIT_SEND_TIMEOUT):
+			return
+	except Exception:
+		frappe.log_error(
+			title="CBMS: realtime send on submit failed",
+			message=frappe.get_traceback(),
+		)
+	try:
+		frappe.enqueue(
+			method_path,
+			queue="default",
+			timeout=300,
+			**{**kwargs, "triggered_from": "Retry"},
+		)
+	except Exception:
+		# Queue unavailable — the 5-minute retry cron will pick the record up.
+		frappe.log_error(
+			title="CBMS: fallback enqueue after submit failed",
+			message=frappe.get_traceback(),
+		)
+
+
 def on_submit(doc, method=None):
 	lock_key = f"cbms_processing_{doc.name}"
 	if frappe.cache().get_value(lock_key):
@@ -268,23 +304,22 @@ def on_submit(doc, method=None):
 		log_cbms_activity(
 			cbms_doc,
 			"Queued",
-			details="Created on invoice submit and queued for sync",
+			details="Created on invoice submit; realtime send follows after commit",
 			triggered_from="Submit",
 		)
-		# enqueue_after_commit: the job is pushed only when the request's own
-		# transaction commits — never an explicit commit here. A mid-request
-		# commit would make the submitted invoice durable while later code in
-		# the same request can still fail: the user would see a save error, the
-		# invoice would exist anyway, and the queued job would report it to IRD
-		# (irreversible). With this flag, any failure rolls back invoice, CBMS
-		# doc and job together — an error always means nothing happened. The
-		# worker still only ever sees a committed CBMS doc.
-		frappe.enqueue(
-			enqueue_method,
-			queue="default",
-			timeout=300,
-			enqueue_after_commit=True,
-			**enqueue_kwargs,
+		# The first send is a direct, short-timeout attempt made via
+		# frappe.db.after_commit — never inside this transaction. An HTTP call
+		# before commit could report an invoice to IRD (irreversible) while the
+		# submit can still fail and roll back; after commit, invoice and CBMS
+		# doc are durable, and a rollback discards the callback entirely, so an
+		# error still means nothing happened. When the direct attempt gets
+		# through, the bill is Synced with isrealtime=true. When it doesn't
+		# (slow IRD, network down, held return), it falls back to the
+		# background queue as a Retry (a late send must not claim realtime) and
+		# the 5-minute cron keeps at it — sync_status always shows which path
+		# completed.
+		frappe.db.after_commit.add(
+			lambda: _first_send_after_commit(enqueue_method, enqueue_kwargs)
 		)
 	except Exception:
 		frappe.log_error(
