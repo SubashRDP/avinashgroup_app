@@ -150,10 +150,13 @@ def execute(filters=None):
 	filters = filters or {}
 	columns = get_columns()
 
-	# Show nothing until a Company is selected — the report is company-scoped and
-	# an all-companies run is not meaningful here.
+	# The report is company-scoped; until a Company is selected return NO columns
+	# so the report shows its centered empty state (the JS get_no_result_message
+	# override prompts "Please select a Company") instead of the datatable's own
+	# "Nothing to show". Returning columns here would render the datatable + that
+	# built-in message.
 	if not _as_list(filters.get("company")):
-		return columns, []
+		return [], []
 
 	data = get_data(filters)
 

@@ -260,6 +260,32 @@ def _print_events(filters, from_dt, to_dt):
 		fl["sales_invoice"] = filters.sales_invoice
 	_apply_company_scope(fl, filters)
 
+	rows = frappe.get_all(
+		"Sales Invoice Print Log",
+		filters=fl,
+		fields=[
+			"sales_invoice",
+			"creation",
+			"owner",
+			"company",
+			"customer_name",
+			"copy_number",
+		],
+	)
+
+	# is_return isn't stored on the Print Log — resolve it from the Sales Invoice
+	# (one query for all invoices in this batch) so a return's print row shows the
+	# "Sales Return" action + details, matching the actual printed sheet.
+	inv_names = list({r.sales_invoice for r in rows if r.sales_invoice})
+	is_return_map = {
+		si.name: si.is_return
+		for si in frappe.get_all(
+			"Sales Invoice",
+			filters={"name": ["in", inv_names]},
+			fields=["name", "is_return"],
+		)
+	} if inv_names else {}
+
 	return [
 		{
 			"invoice": r.sales_invoice,
@@ -269,28 +295,21 @@ def _print_events(filters, from_dt, to_dt):
 			"company": r.company,
 			"customer_name": r.customer_name,
 			"copy": r.copy_number,
-			"details": _copy_title(r.copy_number),
+			"is_return": is_return_map.get(r.sales_invoice, 0),
+			"details": _copy_title(r.copy_number, is_return_map.get(r.sales_invoice, 0)),
 		}
-		for r in frappe.get_all(
-			"Sales Invoice Print Log",
-			filters=fl,
-			fields=[
-				"sales_invoice",
-				"creation",
-				"owner",
-				"company",
-				"customer_name",
-				"copy_number",
-			],
-		)
+		for r in rows
 	]
 
 
-def _copy_title(n):
+def _copy_title(n, is_return=False):
 	# Sheet titles match the actual print sequence (see invoice_copy_titles in
 	# custom_code/SalesInvoice/print_count.py): the first print produces the
 	# TAX INVOICE + INVOICE pair (sheets 1 and 2), and every later sheet is a
-	# COPY OF ORIGINAL N.
+	# COPY OF ORIGINAL N. A return prints a single "Sales Return" sheet
+	# (_titles_for returns ["Sales Return"]), never an invoice copy title.
+	if is_return:
+		return _("Sales Return")
 	n = n or 1
 	if n <= 1:
 		return _("Tax Invoice")
