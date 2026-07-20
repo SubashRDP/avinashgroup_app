@@ -8,12 +8,28 @@ var sales_register_fy = erpnext.utils.get_fiscal_year(frappe.datetime.get_today(
 	: [];
 
 frappe.query_reports["Sales Register Report"] = {
+	onload(report) {
+		// The report is company-scoped. When no Company is selected, show the
+		// prompt centered in the middle (in place of the default "Nothing to
+		// show" empty state) instead of a small banner at the top.
+		const default_no_result = report.get_no_result_message.bind(report);
+		report.get_no_result_message = function () {
+			const company = report.get_filter_value("company");
+			const has_company = Array.isArray(company) ? company.length : !!company;
+			if (!has_company) {
+				return `<div class="msg-box no-border">
+					<div><img src="/assets/frappe/images/ui-states/list-empty-state.svg" alt="" class="null-state"></div>
+					<p>${__("Please select a Company to view the report.")}</p>
+				</div>`;
+			}
+			return default_no_result();
+		};
+	},
 	filters: [
 		{
 			fieldname: "company",
 			label: __("Company"),
 			fieldtype: "MultiSelectList",
-			reqd: 1,
 			get_data: function(txt) {
 				return frappe.db.get_link_options("Company", txt);
 			},
