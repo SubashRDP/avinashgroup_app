@@ -43,6 +43,29 @@ frappe.ui.form.on("Material Request", {
 });
 
 frappe.ui.form.on("Material Request", {
+	refresh: function (frm) {
+		// Mirror the RFQ form's "View → Supplier Quotation Comparison" link, but from
+		// a Material Request. Points at our Custom report (the standard one cannot
+		// filter by material_request) with this MR preset as the source document.
+		// Only Purchase requests carry supplier quotations.
+		if (frm.doc.docstatus === 1 && frm.doc.material_request_type === "Purchase") {
+			frm.add_custom_button(
+				__("Supplier Quotation Comparison"),
+				function () {
+					const today = frappe.datetime.get_today();
+					frappe.route_options = {
+						company: frm.doc.company,
+						from_date: frm.doc.transaction_date || frappe.datetime.add_months(today, -1),
+						to_date: today,
+						material_request: frm.doc.name,
+					};
+					frappe.set_route("query-report", "Custom Supplier Quotation Comparison");
+				},
+				__("View")
+			);
+		}
+	},
+
 	before_workflow_action: function (frm) {
 		const workflow = window.avinashgroup_app && window.avinashgroup_app.approval_workflow;
 		if (!workflow) return;

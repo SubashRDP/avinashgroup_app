@@ -25,6 +25,19 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: frappe.datetime.get_today(),
 		},
 		{
+			fieldtype: "Link",
+			label: __("Material Request"),
+			options: "Material Request",
+			fieldname: "material_request",
+			default: "",
+			get_query: () => {
+				const company = frappe.query_report.get_filter_value("company");
+				const filters = { docstatus: ["<", 2], material_request_type: "Purchase" };
+				if (company) filters.company = company;
+				return { filters };
+			},
+		},
+		{
 			default: "",
 			options: "Item",
 			label: __("Item"),

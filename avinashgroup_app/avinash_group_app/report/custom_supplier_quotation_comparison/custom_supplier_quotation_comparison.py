@@ -124,10 +124,19 @@ def get_data(filters):
 			& (sq_item.docstatus < 2)
 			& (sq.company == filters.get("company"))
 			& (sq.transaction_date.between(filters.get("from_date"), filters.get("to_date")))
-			& (sq_item.request_for_quotation == rfq)
 		)
 		.orderby(sq_item.item_code, sq.supplier)
 	)
+
+	# Source-document filters. A Supplier Quotation Item links directly to the
+	# Material Request and Request for Quotation it was raised from, so we match on
+	# those columns directly. A Purchase Order has no such column, so its linked RFQ
+	# is resolved first (see get_rfq_from_purchase_order) and matched the same way.
+	if filters.get("material_request"):
+		query = query.where(sq_item.material_request == filters.get("material_request"))
+
+	if rfq:
+		query = query.where(sq_item.request_for_quotation == rfq)
 
 	if filters.get("item_code"):
 		query = query.where(sq_item.item_code == filters.get("item_code"))
