@@ -201,7 +201,7 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
     <table class="pv-sign">
       <tr>
         {%- for s in signatories %}
-        <td style="width:{{ (100 / (signatories|length))|round(2) }}%;"><div class="line"></div>{{ s }}{% if s == "Prepared by" %}<div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div>{% endif %}</td>
+        <td style="width:{{ (100 / (signatories|length))|round(2) }}%;"><div class="line"></div>{{ s }}{% if s == "Prepared by" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "" }}</strong></div>{% endif %}</td>
         {%- endfor %}
       </tr>
     </table>

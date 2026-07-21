@@ -214,7 +214,7 @@ p { text-align: center; margin: 0; padding: 2px; }
       <td style="width:25%; text-align:center; border:none;">
         <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
         <div>Prepared By</div>
-        <div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "" }}</strong></div>
+        <div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "" }}</strong></div>
       </td>
       <td style="width:25%; text-align:center; border:none;">
         <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>

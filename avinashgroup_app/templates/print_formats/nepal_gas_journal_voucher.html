@@ -623,7 +623,7 @@ padding:0px 30px;
             <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000;">
               <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
               <div>{{ s }}</div>
-              {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
+              {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
             </td>
             {%- endfor %}
           </tr>
