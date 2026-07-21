@@ -77,7 +77,7 @@ function Ok($b,$m){ if($b){Write-Host "PASS  $m" -f Green}else{Write-Host "FAIL 
 $task = schtasks /Query /TN "Avinash Print Bridge" /V /FO LIST 2>$null
 Ok ($LASTEXITCODE -eq 0) "autostart task 'Avinash Print Bridge' registered"
 Ok ([bool]($task -match 'At system start up|At startup')) "  boot trigger present (no login needed)"
-Ok ([bool]($task -match 'At logon time|At log on')) "  sign-in trigger present (survives Fast Startup shutdown; needs v0.3.3+)"
+Ok ([bool]($task -match 'At logon time|At log on')) "  sign-in trigger present (survives Fast Startup shutdown; needs v0.3.4+)"
 Ok ([bool]($task -match 'SYSTEM')) "  runs as SYSTEM"
 
 # 2. Agent answering on the loopback port

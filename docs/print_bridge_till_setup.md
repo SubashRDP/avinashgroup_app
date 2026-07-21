@@ -30,8 +30,8 @@ On the till, open this link in the browser and download **`PrintBridgeSetup.exe`
 
 **https://github.com/SubashRDP/avinashgroup_app/releases/latest**
 
-(Use the **latest** version — **v0.3.3 or newer**. Versions before 0.3.3 have a
-bug where the agent doesn't come back after a **shutdown** — if that's your
+(Use the **latest** version — **v0.3.4 or newer**. Older versions have a bug
+where the agent doesn't come back after a **shutdown** — if that's your
 symptom, just installing the latest version over the old one is the fix.)
 
 ---
@@ -122,7 +122,8 @@ If Step 6 works, the till is done.
 |---|---|
 | "Windows cannot access the specified device, path, or file" | Installer blocked. Do **Step 2** (Unblock → Run as administrator → antivirus Allow). |
 | "Print Bridge not installed on this computer" (in browser) | Agent not running. **Step 4** — start it, or reinstall the latest version. |
-| Worked right after install, but **dead after every shutdown** | Old version (v0.3.2 or earlier) only started at boot, and a Windows "Shut down" isn't a boot. **Install v0.3.3 or newer over it** — it also starts at sign-in. |
+| Worked right after install, but **dead after every shutdown** | Old version only started at boot, and a Windows "Shut down" isn't a boot. **Install v0.3.4 or newer over it** — it also starts at sign-in. |
+| "The auto-start task could not be registered" (during install) | v0.3.3 only — its registration needed PowerShell, which some tills can't find. **Install v0.3.4 or newer**; if it still appears, send `C:\ProgramData\AvinashPrintBridge\task_register.log`. |
 | "The LQ310-RAW print queue could not be created" (during install) | Epson not attached/on at install. Attach + power on, re-run installer. |
 | `print_bridge.exe` not in Task Manager even after starting it | Send me the log file above — the agent is crashing on start. |
 | Printer moved to a different USB socket after a reboot | Handled automatically — the agent repairs the queue's port on the next startup. |

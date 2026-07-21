@@ -12,7 +12,7 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.3.3"
+#define MyAppVersion "0.3.4"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
 ; Every origin the ERP is served at. Production first, then the test sites.
@@ -58,6 +58,11 @@ Name: "autostart"; Description: "Start Print Bridge automatically (at boot and a
 Source: "..\dist\print_bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
+[Dirs]
+; The agent creates this itself on first run, but RegisterAutostartTask logs
+; there from [Code] before the agent has ever run — the dir must already exist.
+Name: "{commonappdata}\AvinashPrintBridge"
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
@@ -94,8 +99,9 @@ Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedF
 ; the exit code checked, and running it in both places would do it twice.
 
 ; The autostart task is registered from CurStepChanged (see [Code]), not here.
-; It needs TWO triggers, which schtasks /Create cannot express (one trigger per
-; /Create), and its exit code checked so a failure is said out loud:
+; It needs TWO triggers — carried in a task XML given to schtasks /Create /XML,
+; since one /Create can only express one trigger — and its exit code checked so
+; a failure is said out loud:
 ;
 ;   - At BOOT, as SYSTEM: the agent runs before and without anyone logging in.
 ;   - At any user's SIGN-IN: covers powering on after "Shut down". With Fast
@@ -110,8 +116,14 @@ Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\LocalNetworkAccessAllowedF
 ; triggers ever fire, Task Scheduler's IgnoreNew policy skips the second start,
 ; and the agent itself exits quietly when port 8663 is already bound.
 ;
-; schtasks' defaults were also wrong for a long-lived agent: a task it creates
-; is KILLED after 72 hours of running. Registration below sets no time limit.
+; schtasks' /Create defaults were also wrong for a long-lived agent: a task it
+; creates is KILLED after 72 hours of running. The XML sets no time limit.
+;
+; Why not PowerShell's Register-ScheduledTask (v0.3.3's approach): powershell.exe
+; is only found via PATH — it lives in System32\WindowsPowerShell\v1.0, not
+; System32 — and the first till it met had a PATH that couldn't find it (Exec
+; failed, error 2). schtasks.exe and cmd.exe are in System32 itself, which
+; CreateProcess searches BEFORE PATH, so they work on that same machine.
 
 Filename: "{app}\{#MyAppExeName}"; \
   Flags: nowait runascurrentuser; \
@@ -124,6 +136,10 @@ Filename: "{app}\{#MyAppExeName}"; \
 [UninstallRun]
 Filename: "schtasks"; Parameters: "/Delete /TN ""Avinash Print Bridge"" /F"; \
   Flags: runhidden; RunOnceId: "DelTask"
+; Only exists on machines where the XML registration failed and the two-task
+; fallback ran (see RegisterAutostartTask). Deleting a missing task is a no-op.
+Filename: "schtasks"; Parameters: "/Delete /TN ""Avinash Print Bridge Logon"" /F"; \
+  Flags: runhidden; RunOnceId: "DelTaskLogon"
 
 [UninstallDelete]
 ; Leave {commonappdata}\AvinashPrintBridge — it holds config.json and the log,
@@ -148,33 +164,73 @@ begin
 end;
 
 // Register the autostart task: boot trigger + any-user sign-in trigger, as
-// SYSTEM, with NO execution time limit. See the [Run] comment for why both
-// triggers exist and why schtasks /Create couldn't do this. PowerShell's
-// ScheduledTasks module is the only stock tool that can; the whole command
-// uses single quotes inside so the one pair of double quotes around -Command
-// survives the command line.
+// SYSTEM, with NO execution time limit — all carried in a task XML handed to
+// schtasks /Create /XML. See the [Run] comment for why the triggers exist and
+// why this is schtasks-not-PowerShell. Output goes to task_register.log so a
+// failure can be diagnosed from a WhatsApp'd file, and the last word is a
+// /Query: the only test that matters is whether the task exists afterwards.
 procedure RegisterAutostartTask();
 var
   ResultCode: Integer;
-  PS: String;
+  Exe, XmlFile, LogFile, Schtasks: String;
 begin
-  PS := '$ErrorActionPreference=''Stop'';'
-    + '$a = New-ScheduledTaskAction -Execute ''' + ExpandConstant('{app}\{#MyAppExeName}') + ''';'
-    + '$t = @((New-ScheduledTaskTrigger -AtStartup), (New-ScheduledTaskTrigger -AtLogOn));'
-    + '$p = New-ScheduledTaskPrincipal -UserId ''SYSTEM'' -RunLevel Highest;'
-    + '$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries'
-    + ' -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero);'
-    + 'Register-ScheduledTask -TaskName ''Avinash Print Bridge'''
-    + ' -Action $a -Trigger $t -Principal $p -Settings $s -Force | Out-Null';
-  if (not Exec('powershell.exe',
-               '-NoProfile -ExecutionPolicy Bypass -Command "' + PS + '"',
-               '', SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
-    MsgBox('The auto-start task could not be registered (exit code ' +
-           IntToStr(ResultCode) + ').'#13#10#13#10 +
+  Exe := ExpandConstant('{app}\{#MyAppExeName}');
+  XmlFile := ExpandConstant('{tmp}\print_bridge_task.xml');
+  LogFile := ExpandConstant('{commonappdata}\AvinashPrintBridge\task_register.log');
+  Schtasks := ExpandConstant('{sys}\schtasks.exe');
+  // ASCII-only content, so the ANSI file SaveStringToFile writes is also the
+  // valid UTF-8 the header declares. S-1-5-18 is SYSTEM by SID — locale-proof.
+  SaveStringToFile(XmlFile,
+    '<?xml version="1.0" encoding="UTF-8"?>' + #13#10 +
+    '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">' + #13#10 +
+    '  <Triggers>' + #13#10 +
+    '    <BootTrigger><Enabled>true</Enabled></BootTrigger>' + #13#10 +
+    '    <LogonTrigger><Enabled>true</Enabled></LogonTrigger>' + #13#10 +
+    '  </Triggers>' + #13#10 +
+    '  <Principals>' + #13#10 +
+    '    <Principal id="Author">' + #13#10 +
+    '      <UserId>S-1-5-18</UserId>' + #13#10 +
+    '      <RunLevel>HighestAvailable</RunLevel>' + #13#10 +
+    '    </Principal>' + #13#10 +
+    '  </Principals>' + #13#10 +
+    '  <Settings>' + #13#10 +
+    '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>' + #13#10 +
+    '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>' + #13#10 +
+    '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>' + #13#10 +
+    '    <StartWhenAvailable>true</StartWhenAvailable>' + #13#10 +
+    '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>' + #13#10 +
+    '    <Enabled>true</Enabled>' + #13#10 +
+    '  </Settings>' + #13#10 +
+    '  <Actions Context="Author">' + #13#10 +
+    '    <Exec><Command>"' + Exe + '"</Command></Exec>' + #13#10 +
+    '  </Actions>' + #13#10 +
+    '</Task>' + #13#10,
+    False);
+  // cmd.exe only for the > redirect; {cmd} is a full path, immune to PATH.
+  Exec(ExpandConstant('{cmd}'),
+       '/C ""' + Schtasks + '" /Create /TN "Avinash Print Bridge" /XML "' + XmlFile +
+       '" /F > "' + LogFile + '" 2>&1"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 0 then
+  begin
+    // Fallback: two single-trigger tasks — all the /Create CLI can express.
+    // Loses only the no-72h-limit setting; starting at all beats not starting.
+    Exec(ExpandConstant('{cmd}'),
+         '/C ""' + Schtasks + '" /Create /TN "Avinash Print Bridge" /TR "\"' + Exe +
+         '\"" /SC ONSTART /RU SYSTEM /RL HIGHEST /F >> "' + LogFile + '" 2>&1"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec(ExpandConstant('{cmd}'),
+         '/C ""' + Schtasks + '" /Create /TN "Avinash Print Bridge Logon" /TR "\"' + Exe +
+         '\"" /SC ONLOGON /RL HIGHEST /F >> "' + LogFile + '" 2>&1"',
+         '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+  Exec(Schtasks, '/Query /TN "Avinash Print Bridge"',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if ResultCode <> 0 then
+    MsgBox('The auto-start task could not be registered.'#13#10#13#10 +
            'Print Bridge will NOT start by itself after a shutdown or restart ' +
-           'until this is fixed. Re-run this installer; if it fails again, ' +
-           'report the exit code above.',
-           mbError, MB_OK);
+           'until this is fixed. Send this file for diagnosis:'#13#10 +
+           LogFile, mbError, MB_OK);
 end;
 
 // --configure fails when no Epson is attached. Say so instead of finishing

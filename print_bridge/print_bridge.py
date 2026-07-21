@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
