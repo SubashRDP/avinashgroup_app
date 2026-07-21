@@ -20,12 +20,18 @@ frappe.provide("avinash.print_bridge");
 (function () {
 	const BASE = "http://127.0.0.1:8663";
 	const TIMEOUT_MS = 2000;
+	// A print may legitimately take far longer than a probe: the agent
+	// self-heals a missing queue with PowerShell (5-10s) before spooling —
+	// exactly the "installed without the printer, first print" path. Aborting
+	// at 2s showed tills "signal is aborted without reason" while the job went
+	// on to print fine behind the abort — and a retry printed it twice.
+	const PRINT_TIMEOUT_MS = 60000;
 
 	let probe = null; // cached availability probe
 
-	function req(path, options) {
+	function req(path, options, timeout_ms) {
 		const ctl = new AbortController();
-		const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+		const timer = setTimeout(() => ctl.abort(), timeout_ms || TIMEOUT_MS);
 		return fetch(BASE + path, Object.assign({ signal: ctl.signal }, options || {}))
 			.then((r) => r.json().then((body) => ({ ok: r.ok, body })))
 			.finally(() => clearTimeout(timer));
@@ -71,16 +77,33 @@ frappe.provide("avinash.print_bridge");
 			// than silently printing corrupted output.
 			return Promise.reject(new Error(__("Print data is not a byte stream: {0}", [e.message])));
 		}
-		return req("/print", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ printer: printer, data_b64: data_b64 }),
-		}).then((r) => {
-			if (!r.ok || !r.body.ok) {
-				throw new Error(r.body.error || __("Print bridge rejected the job"));
-			}
-			return r.body;
-		});
+		return req(
+			"/print",
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ printer: printer, data_b64: data_b64 }),
+			},
+			PRINT_TIMEOUT_MS
+		)
+			.then((r) => {
+				if (!r.ok || !r.body.ok) {
+					throw new Error(r.body.error || __("Print bridge rejected the job"));
+				}
+				return r.body;
+			})
+			.catch((err) => {
+				if (err && err.name === "AbortError") {
+					// Aborting the request does NOT cancel the job server-side.
+					throw new Error(
+						__(
+							"No answer from the Print Bridge after {0} seconds. The invoice may still print — wait for the printer before trying again, or a duplicate copy can come out.",
+							[PRINT_TIMEOUT_MS / 1000]
+						)
+					);
+				}
+				throw err;
+			});
 	};
 
 	// ------------------------------------------------- failure diagnosis ----

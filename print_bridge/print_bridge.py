@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.4.0"
+VERSION = "0.4.1"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -568,7 +568,13 @@ def main() -> None:
 		pass
 	# Self-heal the RAW queue on every launch, so a reboot that lost it — or an
 	# install done with the Epson unplugged — still prints once the agent runs.
-	_ensure_default_queue()
+	# In a background thread: the PowerShell heal takes 5-10s, and a /ping that
+	# arrives during it must answer instantly, not look like "not running". A
+	# print racing the heal is fine — _resolve_target heals again if the queue
+	# is still missing, and _install_queue tolerates an already-existing queue.
+	import threading
+
+	threading.Thread(target=_ensure_default_queue, daemon=True).start()
 	log.info(
 		"Avinash Print Bridge %s starting on 127.0.0.1:%d (dry_run=%s, origins=%s)",
 		VERSION,

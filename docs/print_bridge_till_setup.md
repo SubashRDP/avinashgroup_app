@@ -129,6 +129,7 @@ If Step 6 works, the till is done.
 | "The LQ310-RAW print queue could not be created" (during install) | On v0.3.5+ this only appears for a *real* error (no-printer is just an info note now — nothing to do, first print sets it up). Old versions showed it whenever the Epson was absent: safe to ignore, or install the latest. If it appears **with the printer attached and on**, send the log. |
 | `print_bridge.exe` not in Task Manager even after starting it | Send me the log file above — the agent is crashing on start. Also check for `PORT_CONFLICT.txt` in the same folder: if it exists, another program took the agent's port and that file has the exact fix steps. |
 | Browser shows a detailed "Something is blocking…" / "Printer not connected" box | That's the built-in diagnosis (v0.4.0+) — it only appears when something is wrong. **Follow its numbered steps**; they're specific to what it found on that computer. |
+| "signal is aborted without reason" (red, in browser) | The first print was setting up the queue (takes ~10s) and the old browser code gave up at 2s. **The invoice may have printed anyway — check before printing again** (a retry can print it twice). Fixed by the ERP update; nothing to do on the till. |
 | Printer moved to a different USB socket after a reboot | Handled automatically — the agent repairs the queue's port on the next startup. |
 | Prints nothing but says success | Job went to the Epson's own driver queue, not LQ310-RAW. Reinstall the latest version with the printer attached. |
 
