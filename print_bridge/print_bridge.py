@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.3.5"
+VERSION = "0.4.0"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -100,6 +100,10 @@ def _app_dir() -> str:
 APP_DIR = _app_dir()
 CONFIG_FILE = os.path.join(APP_DIR, "config.json")
 LOG_FILE = os.path.join(APP_DIR, "print_bridge.log")
+# Breadcrumb written when a FOREIGN program owns our port (see main). A support
+# person who finds the agent "not running" looks in APP_DIR and this file tells
+# them exactly what is wrong and how to fix it. Removed on every clean bind.
+PORT_CONFLICT_FILE = os.path.join(APP_DIR, "PORT_CONFLICT.txt")
 
 log = logging.getLogger("print_bridge")
 log.setLevel(logging.INFO)
@@ -242,6 +246,84 @@ def _resolve_target(printer: str) -> str:
 	)
 
 
+def diagnose() -> dict:
+	"""Everything the browser needs to explain a broken setup to a human.
+
+	Only queried when something has already failed — the analysis lives here,
+	the wording lives in print_bridge.js. Every field is best-effort: a
+	diagnosis endpoint that can itself crash would be worse than none.
+	"""
+	printers, printer_error = [], ""
+	try:
+		printers = list_printers()
+	except Exception as e:
+		printer_error = str(e)
+	elevated = None
+	if IS_WINDOWS:
+		try:
+			import ctypes
+
+			elevated = bool(ctypes.windll.shell32.IsUserAnAdmin())
+		except Exception:
+			pass
+	return {
+		"version": VERSION,
+		"port": int(CONFIG["port"]),
+		"default_printer": CONFIG["default_printer"],
+		"queue_exists": CONFIG["default_printer"] in printers,
+		# Name-based hint only (EnumPrinters level 1 has no driver info): is
+		# anything that looks like the Epson visible to Windows at all?
+		"epson_seen": any("lq-310" in p.lower() or "epson" in p.lower() for p in printers),
+		"printers": printers,
+		"printer_error": printer_error,
+		"elevated": elevated,
+		"allowed_origins": CONFIG["allowed_origins"],
+		"config_file": CONFIG_FILE,
+		"log_file": LOG_FILE,
+		"dry_run": DRY_RUN,
+	}
+
+
+def _port_owner_is_bridge(port: int) -> bool:
+	"""True if whatever is listening on 127.0.0.1:port identifies as this agent.
+
+	Distinguishes 'another instance of us is already serving' (fine, exit
+	quietly) from 'a foreign program squats on our port' (the browser would show
+	"not installed" forever with no clue — see main). A 403 still counts as us:
+	error responses carry the same Server header.
+	"""
+	import urllib.error
+	import urllib.request
+
+	req = urllib.request.Request(
+		"http://127.0.0.1:%d/ping" % port, headers={"Origin": "http://localhost"}
+	)
+	try:
+		with urllib.request.urlopen(req, timeout=3) as resp:
+			if "AvinashPrintBridge" in (resp.headers.get("Server") or ""):
+				return True
+			return b'"version"' in resp.read(2048)
+	except urllib.error.HTTPError as e:
+		return "AvinashPrintBridge" in (e.headers.get("Server") or "")
+	except Exception:
+		return False
+
+
+def _alert_user(title: str, text: str) -> None:
+	"""Native dialog — but only when a person launched us (Start menu / double
+	click). From the SYSTEM boot/logon task there is no visible desktop
+	(session 0), so the box would block forever unseen; SESSIONNAME is only set
+	in interactive sessions."""
+	if not IS_WINDOWS or not os.environ.get("SESSIONNAME"):
+		return
+	try:
+		import ctypes
+
+		ctypes.windll.user32.MessageBoxW(None, text, title, 0x10)  # MB_ICONERROR
+	except Exception:
+		pass
+
+
 class Handler(BaseHTTPRequestHandler):
 	server_version = f"AvinashPrintBridge/{VERSION}"
 
@@ -307,6 +389,8 @@ class Handler(BaseHTTPRequestHandler):
 			except Exception as e:
 				log.exception("printer enumeration failed")
 				self._json(500, {"ok": False, "error": str(e)}, origin)
+		elif self.path == "/diag":
+			self._json(200, {"ok": True, "diag": diagnose()}, origin)
 		else:
 			self._json(404, {"ok": False, "error": "not found"}, origin)
 
@@ -438,6 +522,50 @@ def main() -> None:
 	if "--configure" in sys.argv[1:]:
 		sys.exit(configure())
 	port = int(CONFIG["port"])
+	# Bind loopback only — never 0.0.0.0. Nothing off this machine may print.
+	# Bind FIRST (before the queue self-heal): if the port is taken, everything
+	# else is moot and the answer must be diagnosed, not worked around.
+	try:
+		server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+	except OSError as e:
+		if _port_owner_is_bridge(port):
+			# Another instance of us (e.g. the boot task's agent is up and the
+			# installer just launched one more post-install). It is serving —
+			# exit quietly instead of crashing loud.
+			log.info("127.0.0.1:%d already in use (%s); another instance is serving", port, e)
+			return
+		# A FOREIGN program owns the port. Without this branch the browser says
+		# "Print Bridge not installed" forever and nobody learns why. Say what
+		# is wrong everywhere we can: the log, a breadcrumb file beside it, and
+		# a dialog when a person launched us by hand.
+		msg = (
+			"Avinash Print Bridge cannot start: another program is already "
+			"using port %d on this computer (%s).\n\n"
+			"To find and fix it:\n"
+			"  1. Open Command Prompt as administrator.\n"
+			"  2. Run:  netstat -ano | findstr :%d\n"
+			"  3. Note the number in the last column (the PID).\n"
+			"  4. Open Task Manager > Details and find that PID to see which "
+			"program it is.\n"
+			"  5. Close, reconfigure, or uninstall that program, then start "
+			"Avinash Print Bridge from the Start menu (or restart the PC).\n\n"
+			"If you are unsure which program it is, send a photo of the Task "
+			"Manager row and this file to IT.\n" % (port, e, port)
+		)
+		log.error("port conflict on 127.0.0.1:%d — foreign owner. %s", port, msg)
+		try:
+			with open(PORT_CONFLICT_FILE, "w") as f:
+				f.write(msg)
+		except OSError:
+			pass
+		_alert_user("Avinash Print Bridge - port problem", msg)
+		return
+	# Clean bind: any earlier conflict breadcrumb is stale — remove it so the
+	# diagnosis never outlives the problem.
+	try:
+		os.remove(PORT_CONFLICT_FILE)
+	except OSError:
+		pass
 	# Self-heal the RAW queue on every launch, so a reboot that lost it — or an
 	# install done with the Epson unplugged — still prints once the agent runs.
 	_ensure_default_queue()
@@ -448,14 +576,7 @@ def main() -> None:
 		DRY_RUN,
 		", ".join(CONFIG["allowed_origins"]),
 	)
-	# Bind loopback only — never 0.0.0.0. Nothing off this machine may print.
-	try:
-		ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
-	except OSError as e:
-		# Port already owned by another instance (e.g. the boot task's agent is up
-		# and the installer just launched a second one post-install). That instance
-		# is serving — exit quietly instead of crashing loud.
-		log.info("127.0.0.1:%d already in use (%s); another instance is serving", port, e)
+	server.serve_forever()
 
 
 if __name__ == "__main__":

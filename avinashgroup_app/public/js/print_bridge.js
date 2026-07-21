@@ -83,21 +83,110 @@ frappe.provide("avinash.print_bridge");
 		});
 	};
 
+	// ------------------------------------------------- failure diagnosis ----
+	// Invisible while printing works. When it doesn't, work out WHICH way it is
+	// broken and show numbered fix steps for that case only — a till operator
+	// gets one box that tells them (or IT) exactly what to do, not a generic
+	// "not installed" for every possible cause.
+
+	const LOG_PATH = "C:\\ProgramData\\AvinashPrintBridge\\print_bridge.log";
+	const CONFIG_PATH = "C:\\ProgramData\\AvinashPrintBridge\\config.json";
+	const DOWNLOAD_URL = "https://github.com/SubashRDP/avinashgroup_app/releases/latest";
+
+	// Resolves true if ANYTHING is listening on the port. mode:'no-cors' is the
+	// one probe a page can make that separates "connection refused" (rejects)
+	// from "answered but CORS/origin blocked us" (resolves opaque) — a normal
+	// fetch rejects identically in both cases.
+	function listener_exists() {
+		const ctl = new AbortController();
+		const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+		return fetch(BASE + "/ping", { mode: "no-cors", signal: ctl.signal })
+			.then(() => true)
+			.catch(() => false)
+			.finally(() => clearTimeout(timer));
+	}
+
+	let _problem_shown = false;
+	function show_problem(title, html) {
+		if (_problem_shown) return; // don't stack on repeated clicks
+		_problem_shown = true;
+		setTimeout(() => (_problem_shown = false), 4000);
+		frappe.msgprint({ title: title, indicator: "orange", message: html });
+	}
+
+	function show_unreachable() {
+		show_problem(
+			__("Print Bridge is not running on this computer"),
+			__(
+				"Raw invoices print through the Avinash Print Bridge agent, and nothing is answering on this computer (127.0.0.1:8663).<br><br><b>1.</b> Open Task Manager (Ctrl+Shift+Esc) → Details, look for <b>print_bridge.exe</b>.<br><b>2.</b> Not there → start it: Start menu → <b>Avinash Print Bridge</b>, then print again.<br><b>3.</b> Still not there after starting → it is not installed (or crashing): <a href='{0}' target='_blank' rel='noopener'>install the latest PrintBridgeSetup.exe</a>, then reload this page.<br><b>4.</b> If it keeps dying, send the log: <code>{1}</code> — and check <code>PORT_CONFLICT.txt</code> in the same folder: if present, another program is occupying the port and that file has the exact steps.",
+				[DOWNLOAD_URL, LOG_PATH]
+			)
+		);
+	}
+
+	function show_blocked() {
+		show_problem(
+			__("Something is blocking the Print Bridge on this computer"),
+			__(
+				"Port 8663 answered, but this site cannot talk to it. Two possible causes — check in order:<br><br><b>A. Another program is using port 8663.</b><br>&nbsp;&nbsp;1. Task Manager → Details: is <b>print_bridge.exe</b> running? If NOT, but the port still answers, it is a foreign program.<br>&nbsp;&nbsp;2. Command Prompt (as administrator): <code>netstat -ano | findstr :8663</code> — the last column is the PID; find it in Task Manager → Details to see which program.<br>&nbsp;&nbsp;3. Close/reconfigure that program, then start <b>Avinash Print Bridge</b> from the Start menu.<br><br><b>B. This site is not on the Print Bridge allow-list.</b> (Only applies if print_bridge.exe IS running.)<br>&nbsp;&nbsp;1. Open <code>{0}</code> in Notepad.<br>&nbsp;&nbsp;2. Add <code>{1}</code> to <code>allowed_origins</code>.<br>&nbsp;&nbsp;3. Restart the agent (Start menu → Avinash Print Bridge).<br><br>If the browser showed a <b>local network access</b> permission prompt, choose Allow and print again. Still stuck → send the log: <code>{2}</code>",
+				[CONFIG_PATH, window.location.origin, LOG_PATH]
+			)
+		);
+	}
+
+	function show_print_failed(err_message) {
+		// The agent is reachable — ask it what is actually wrong and word the
+		// box for the specific finding.
+		req("/diag")
+			.then(function (r) {
+				const d = (r.ok && r.body.ok && r.body.diag) || {};
+				if (d.queue_exists === false && d.epson_seen === false) {
+					show_problem(
+						__("Printer not connected"),
+						__(
+							"The Epson LQ-310 is not visible to Windows.<br><br><b>1.</b> Check the printer's power switch and both cable ends (power + USB).<br><b>2.</b> Print again — the print queue sets itself up automatically once the printer is seen. No reinstall needed.<br><br>If it is plugged in and on but this message persists, try a different USB port, then send the log: <code>{0}</code>",
+							[LOG_PATH]
+						)
+					);
+				} else if (d.queue_exists === false) {
+					show_problem(
+						__("Print queue missing"),
+						__(
+							"Windows sees the Epson, but the <b>{0}</b> queue is missing and the agent could not recreate it (it usually needs to be running elevated — the auto-start task does this).<br><br><b>1.</b> Restart this computer, then print again (the boot task runs the agent with the rights to fix the queue).<br><b>2.</b> If it still fails, re-run <a href='{1}' target='_blank' rel='noopener'>PrintBridgeSetup.exe</a> with the printer attached and on.<br><b>3.</b> Still stuck → send the log: <code>{2}</code><br><br>Agent said: {3}",
+							[d.default_printer || "LQ310-RAW", DOWNLOAD_URL, LOG_PATH, frappe.utils.escape_html(err_message || "")]
+						)
+					);
+				} else {
+					show_problem(
+						__("Print failed"),
+						__(
+							"The Print Bridge is running and the print queue exists, but the job failed:<br><br><b>{0}</b><br><br><b>1.</b> Check the printer is online (no blinking error light, paper loaded).<br><b>2.</b> Print again.<br><b>3.</b> If it keeps failing, send the log: <code>{1}</code>",
+							[frappe.utils.escape_html(err_message || ""), LOG_PATH]
+						)
+					);
+				}
+			})
+			.catch(function () {
+				// /diag itself unreachable (agent died between print and now, or
+				// pre-/diag agent version) — fall back to the raw error.
+				show_problem(
+					__("Print failed"),
+					__("<b>{0}</b><br><br>If this repeats, send the log: <code>{1}</code>", [
+						frappe.utils.escape_html(err_message || ""),
+						LOG_PATH,
+					])
+				);
+			});
+	}
+
 	// One place every raw-print entry point lands (form printer icon, Print
 	// view button, print-on-submit). QZ Tray is gone: if the agent is not on
-	// this machine we tell the user to install it, we never launch QZ.
-	let _not_installed_shown = false;
+	// this machine we diagnose and instruct, we never launch QZ. Kept under the
+	// old name for the callers that already use it.
 	avinash.print_bridge.show_not_installed = function () {
-		if (_not_installed_shown) return; // don't stack on repeated clicks
-		_not_installed_shown = true;
-		setTimeout(() => (_not_installed_shown = false), 4000);
-		frappe.msgprint({
-			title: __("Print Bridge not installed on this computer"),
-			indicator: "orange",
-			message: __(
-				"Raw invoices print through the Avinash Print Bridge, which isn't running on this computer yet.<br><br>1. Install <b>PrintBridgeSetup.exe</b> (printer attached &amp; switched on).<br>2. Reload this page.<br><br><a href='{0}' target='_blank' rel='noopener'>Download the installer</a>",
-				["https://github.com/SubashRDP/avinashgroup_app/releases/latest"]
-			),
+		listener_exists().then(function (exists) {
+			if (exists) show_blocked();
+			else show_unreachable();
 		});
 	};
 
@@ -128,6 +217,7 @@ frappe.provide("avinash.print_bridge");
 								{ message: __("Print bridge: {0}", [err.message]), indicator: "red" },
 								10
 							);
+							show_print_failed(err.message);
 						});
 				});
 			},

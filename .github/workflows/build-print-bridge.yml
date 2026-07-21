@@ -68,6 +68,11 @@ jobs:
               if ($r.StatusCode -ne 200) { throw "ping failed for $o (HTTP $($r.StatusCode))" }
               Write-Host "  ping OK  $o"
             }
+            # /diag answers with a structured report (the browser's failure
+            # dialogs depend on its shape)
+            $d = Invoke-RestMethod -Uri 'http://127.0.0.1:8663/diag' -Headers @{Origin=$origins[0]}
+            if (-not $d.ok -or -not $d.diag.version -or ($null -eq $d.diag.queue_exists)) { throw "diag malformed: $($d | ConvertTo-Json -Compress)" }
+            Write-Host "  diag OK  version $($d.diag.version)"
             # byte-exact print from a TEST-site origin, including 0xB0 which QZ mangled
             $s = "`e@E2E " + [char]0xB0 + " line`n"
             $raw = [Text.Encoding]::GetEncoding('ISO-8859-1').GetBytes($s)

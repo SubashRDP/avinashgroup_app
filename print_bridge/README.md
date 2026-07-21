@@ -56,6 +56,23 @@ Chrome 142 broke QZ Tray's loopback connection too
 ([qzind/tray#1368](https://github.com/qzind/tray/issues/1368)); the installer's
 policy key handles that here.
 
+## Self-diagnosis (v0.4.0+)
+
+Invisible while printing works; speaks up only when it doesn't:
+
+- **`GET /diag`** — structured health report (version, queue exists, Epson
+  visible, elevation, config paths). The ERP's `print_bridge.js` queries it
+  when a print fails and shows fix steps for the specific finding ("printer
+  not connected" vs "queue missing" vs job error) instead of one generic box.
+- **Port conflict**: if a *foreign* program owns 8663 (another agent instance
+  is fine — detected via the `Server` header and left alone), the agent writes
+  netstat-based fix instructions to the log **and**
+  `%PROGRAMDATA%\AvinashPrintBridge\PORT_CONFLICT.txt` (removed on the next
+  clean start), and shows a dialog when launched by hand from the Start menu
+  (the SYSTEM task has no visible desktop, so no dialog there). The browser
+  side separates "nothing listening" from "port answers but blocked" with a
+  `no-cors` probe and instructs accordingly.
+
 ## Troubleshooting
 
 **Log:** `%PROGRAMDATA%\AvinashPrintBridge\print_bridge.log`
@@ -63,6 +80,7 @@ policy key handles that here.
 | Symptom | Cause |
 | --- | --- |
 | Installer says the queue couldn't be created | Epson not attached / not powered on. Connect it and re-run. |
+| Agent won't stay running, `PORT_CONFLICT.txt` exists | Another program owns port 8663 — the file has the exact steps. |
 | Prints fall back to QZ Tray behaviour | Agent isn't running. Check the "Avinash Print Bridge" task, or start it from the Start menu. |
 | Chrome asks for local network permission | Policy key missing (rare). Click Allow once — Chrome remembers. |
 | Spooler says printed, nothing moves | Job went to the Epson driver queue, not LQ310-RAW. Check the printer mapping in Print view. |

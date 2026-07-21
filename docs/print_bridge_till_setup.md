@@ -127,7 +127,8 @@ If Step 6 works, the till is done.
 | Worked right after install, but **dead after every shutdown** | Old version only started at boot, and a Windows "Shut down" isn't a boot. **Install v0.3.4 or newer over it** — it also starts at sign-in. |
 | "The auto-start task could not be registered" (during install) | v0.3.3 only — its registration needed PowerShell, which some tills can't find. **Install v0.3.4 or newer**; if it still appears, send `C:\ProgramData\AvinashPrintBridge\task_register.log`. |
 | "The LQ310-RAW print queue could not be created" (during install) | On v0.3.5+ this only appears for a *real* error (no-printer is just an info note now — nothing to do, first print sets it up). Old versions showed it whenever the Epson was absent: safe to ignore, or install the latest. If it appears **with the printer attached and on**, send the log. |
-| `print_bridge.exe` not in Task Manager even after starting it | Send me the log file above — the agent is crashing on start. |
+| `print_bridge.exe` not in Task Manager even after starting it | Send me the log file above — the agent is crashing on start. Also check for `PORT_CONFLICT.txt` in the same folder: if it exists, another program took the agent's port and that file has the exact fix steps. |
+| Browser shows a detailed "Something is blocking…" / "Printer not connected" box | That's the built-in diagnosis (v0.4.0+) — it only appears when something is wrong. **Follow its numbered steps**; they're specific to what it found on that computer. |
 | Printer moved to a different USB socket after a reboot | Handled automatically — the agent repairs the queue's port on the next startup. |
 | Prints nothing but says success | Job went to the Epson's own driver queue, not LQ310-RAW. Reinstall the latest version with the printer attached. |
 
