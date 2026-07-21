@@ -38,7 +38,7 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
                     border-top:1px solid #000; border-bottom:1px solid #000; }
 .npv .pv-items td { padding:1px 4px; vertical-align:top; }
 .npv .pv-items th.r, .npv .pv-items td.r { text-align:right; }
-.npv .pv-items tr.total td { border-top:1px solid #000; font-weight:bold; padding-top:4px; }
+.npv .pv-items tr.total td { font-weight:bold; padding-top:4px; }
 
 /* In-words + remarks */
 .npv .pv-words   { border-top:1px solid #000; border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
@@ -69,6 +69,7 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
       <td class="r">
         <div><strong>Voucher :</strong> {{ doc.custom_name or "" }}</div>
         <div><strong>Date :</strong> {% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</div>
+        {% if doc.deductions %}<div><strong>Bank Charge :</strong> {{ amt(doc.deductions | sum(attribute='amount')) }}</div>{% endif %}
       </td>
     </tr>
   </table>
@@ -78,54 +79,73 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
   <table class="pv-items">
     <thead>
       <tr>
-        <th style="width:40%;">Document Details</th>
-        {% if show_party %}<th style="width:12%;">Party Type</th>
-        <th style="width:18%;">Party</th>{% endif %}
-        <th class="r" style="width:15%;">Debit</th>
-        <th class="r" style="width:15%;">Credit</th>
+        <th style="width:19%;">Document Details</th>
+        {% if show_party %}<th style="width:15%; white-space:nowrap;">Party Type</th>
+        <th style="width:32%;">Party</th>{% endif %}
+        <th class="r" style="width:34%;">Amount</th>
       </tr>
     </thead>
     <tbody>
       {% set total_deduction = doc.deductions | sum(attribute='amount') %}
 
-      {#- Paid To A/C -> Debit = received - bank charge -#}
-      <tr><td><div class="pv-acc-title">Paid To A/C</div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td><td class="r"></td></tr>
+      {#- Paid To A/C -> Amount = received - bank charge.
+         When this side carries the party (a "Pay"): show the party on the "Paid To A/C"
+         line itself and hide the account. Otherwise keep the account on its own sub-row. -#}
+      {% set paid_to_has_party = doc.payment_type == "Pay" and doc.party_type and doc.party_name %}
       <tr>
-        <td><div class="pv-acc-sub"><div class="pv-acc-val">{{ frappe.db.get_value("Account", doc.paid_to, "account_name") or doc.paid_to or "" }}</div></div></td>
-        {% if show_party %}<td>{% if doc.payment_type == "Pay" %}{{ doc.party_type or "" }}{% endif %}</td>
-        <td>{% if doc.payment_type == "Pay" %}{{ doc.party_name or "" }}{% endif %}</td>{% endif %}
-        <td class="r">{{ amt((doc.received_amount or 0) - total_deduction) }}</td>
+        {% if paid_to_has_party %}
+        <td><strong>Paid To A/C</strong></td>
+        {% if show_party %}<td>{{ doc.party_type }}</td><td>{{ doc.party_name }}</td>{% endif %}
+        {% else %}
+        {#- No party: account merges the empty Party Type + Party columns. -#}
+        <td {% if show_party %}colspan="3"{% endif %} style="white-space:nowrap;"><strong>Paid To A/C</strong><span style="margin-left:12px;">{{ frappe.db.get_value("Account", doc.paid_to, "account_name") or doc.paid_to or "" }}</span></td>
+        {% endif %}
         <td class="r"></td>
       </tr>
+      {% if not paid_to_has_party %}
+      {#- Account is now on the "Paid To A/C" line above. Keep a blank spacer row so the
+         total line does not move (same height as when the account had its own sub-row). -#}
+      <tr><td><div class="pv-acc-sub"><div class="pv-acc-val">&nbsp;</div></div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td></tr>
+      {% endif %}
 
-      {#- Bank Charge -> Debit = deduction -#}
+      {#- Bank Charge text is shown only in the header (Bank Charge : amount). We keep the
+         SAME blank rows here (no text) so the vertical gap between the header line and the
+         total line stays exactly the same as when the charge was printed in the body. -#}
       {% if doc.deductions %}
-      <tr><td><div class="pv-acc-sub"><div class="pv-acc-title">Bank Charge</div></div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td><td class="r"></td></tr>
+      <tr><td><div class="pv-acc-sub"><div class="pv-acc-title">&nbsp;</div></div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td></tr>
       {% for d in doc.deductions %}
       <tr>
-        <td><div class="pv-acc-sub"><div class="pv-acc-val">{{ frappe.db.get_value("Account", d.account, "account_name") or d.account or "" }}</div></div></td>
+        <td><div class="pv-acc-sub"><div class="pv-acc-val">&nbsp;</div></div></td>
         {% if show_party %}<td></td><td></td>{% endif %}
-        <td class="r">{{ amt(d.amount) }}</td>
         <td class="r"></td>
       </tr>
       {% endfor %}
       {% endif %}
 
-      {#- Paid From A/C -> Credit = paid amount -#}
-      <tr><td><div class="pv-acc-title">Paid From A/C</div></td>{% if show_party %}<td></td><td></td>{% endif %}<td class="r"></td><td class="r"></td></tr>
+      {#- Paid From A/C -> Amount = paid amount.
+         When this side carries the party (a "Receive"): show the party on the "Paid From A/C"
+         line itself and hide the account. Otherwise keep the account on its own sub-row. -#}
+      {% set paid_from_has_party = doc.payment_type == "Receive" and doc.party_type and doc.party_name %}
       <tr>
-        <td><div class="pv-acc-val">{{ frappe.db.get_value("Account", doc.paid_from, "account_name") or doc.paid_from or "" }}</div></td>
-        {% if show_party %}<td>{% if doc.payment_type == "Receive" %}{{ doc.party_type or "" }}{% endif %}</td>
-        <td>{% if doc.payment_type == "Receive" %}{{ doc.party_name or "" }}{% endif %}</td>{% endif %}
+        {% if paid_from_has_party %}
+        <td><strong>Paid From A/C</strong></td>
+        {% if show_party %}<td>{{ doc.party_type }}</td><td>{{ doc.party_name }}</td>{% endif %}
+        {% else %}
+        {#- No party: account merges the empty Party Type + Party columns. -#}
+        <td {% if show_party %}colspan="3"{% endif %} style="white-space:nowrap;"><strong>Paid From A/C</strong><span style="margin-left:12px;">{{ frappe.db.get_value("Account", doc.paid_from, "account_name") or doc.paid_from or "" }}</span></td>
+        {% endif %}
         <td class="r"></td>
-        <td class="r">{{ amt(doc.paid_amount) }}</td>
       </tr>
 
-      {#- Total row -- reference/advance message goes INSIDE it (left of the amounts) -#}
+      {#- Total / reference row comes immediately under Paid From so the "Voucher : ..."
+         lines sit right below it. Any blank spacer is moved BELOW this row (see end of
+         tbody) so the overall table height -- the gap between the two lines -- is unchanged. -#}
       <tr class="total">
-        <td>
+        <td {% if show_party %}colspan="3"{% endif %}>
           {% if doc.payment_type in ("Pay", "Receive") %}
             {% if doc.references %}
+              {#- A single bold "Voucher :" title, then each reference value listed under it. -#}
+              <div><strong>Voucher :</strong></div>
               {% for ref in doc.references %}
                 {% set src = frappe.get_cached_doc(ref.reference_doctype, ref.reference_name) if ref.reference_name else None %}
                 {% set vno = (src.get("custom_branch_name") if (src and ref.reference_doctype == "Sales Invoice") else "") or (src.get("custom_name") if src else "") or ref.reference_name or "" %}
@@ -133,17 +153,30 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
                 {% if (ref.outstanding_amount or 0)|round(2) != 0 %}{% set status = "partially" %}
                 {% elif (ref.total_amount or 0)|round(2) == (ref.allocated_amount or 0)|round(2) %}{% set status = "full" %}
                 {% else %}{% set status = "balance" %}{% endif %}
-                <div style="font-weight:normal; white-space:nowrap;">Voucher : {{ vno }}{% if pmiti %} dated {{ pmiti }}{% endif %} ({{ status }})</div>
+                <div style="font-weight:normal; white-space:nowrap;">{{ vno }}{% if pmiti %} dated {{ pmiti }}{% endif %} ({{ status }})</div>
               {% endfor %}
             {% else %}
-              <div style="font-weight:normal; white-space:nowrap;">Not tag, advance {{ "paid" if doc.payment_type == "Pay" else "received" }}</div>
+              <div style="white-space:nowrap;"><strong>Advance {{ "Paid" if doc.payment_type == "Pay" else "Received" }}</strong></div>
             {% endif %}
           {% endif %}
         </td>
-        {% if show_party %}<td></td><td></td>{% endif %}
-        <td class="r">{{ amt(doc.received_amount) }}</td>
-        <td class="r">{{ amt(doc.paid_amount) }}</td>
+        {#- One allocated amount per reference, in the same order as the Voucher lines on
+           the left, so each amount lines up with its own "Voucher : ..." row. -#}
+        <td class="r">
+          {% if doc.payment_type in ("Pay", "Receive") and doc.references %}
+            {#- Blank line to align with the bold "Voucher :" title on the left. -#}
+            <div>&nbsp;</div>
+            {% for ref in doc.references %}
+            <div style="font-weight:normal; white-space:nowrap;">{{ amt(ref.allocated_amount) }}</div>
+            {% endfor %}
+            {#- Small rule under the amounts, then the total of all voucher allocations. -#}
+            <div style="display:inline-block; border-top:1px solid #000; padding-top:2px; margin-top:1px; font-weight:bold; white-space:nowrap;">{{ amt(doc.references | sum(attribute='allocated_amount')) }}</div>
+          {% else %}
+            {{ amt(doc.paid_amount) }}
+          {% endif %}
+        </td>
       </tr>
+
     </tbody>
   </table>
 
@@ -172,7 +205,7 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
         {%- endfor %}
       </tr>
     </table>
-    <div style="text-align:left; font-size:7px; margin-top:10px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+    <div style="text-align:left; font-size:7px; margin-top:-4px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
   </div>
 
 </div>
