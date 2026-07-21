@@ -34,7 +34,7 @@ is what this handover confirms.
 1. **Attach the Epson LQ-310 and switch it ON first.** The installer creates the
    print queue on the printer's own port and will warn if it can't find it.
 2. Download **`PrintBridgeSetup.exe`** (latest) from the release page:
-   https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.4.1/PrintBridgeSetup.exe
+   https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.5.0/PrintBridgeSetup.exe
    (NOT the repo's "latest release" page — that slot is owned by K40 Bridge,
    a different product; the print-bridge workflow publishes with
    make_latest: false. Take the newest release named "Print Bridge vX.Y.Z".)

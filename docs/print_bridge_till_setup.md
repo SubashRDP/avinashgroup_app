@@ -28,15 +28,17 @@ The **only** thing left is getting this agent running on each till PC.
 
 On the till, open this link in the browser and download **`PrintBridgeSetup.exe`**:
 
-**https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.4.1/PrintBridgeSetup.exe**
+**https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.5.0/PrintBridgeSetup.exe**
 
 (Careful: the repo's generic "latest release" page shows a **different product**
 — K40 Bridge. Use the direct link above, or pick the newest release whose name
 starts with **Print Bridge** from the releases list.)
 
-(Use the **latest** version — **v0.4.1 or newer**. Older versions have a bug
-where the agent doesn't come back after a **shutdown** — if that's your
-symptom, just installing the latest version over the old one is the fix.)
+(Use the **latest** version — **v0.5.0 or newer**. Older versions have two bugs
+this fixes: the agent doesn't come back after a **shutdown**, and on a till where
+Windows never installed the Epson's own driver the **`LQ310-RAW` queue is never
+created** (printing silently does nothing). Installing the latest version over the
+old one is the fix for both — no manual PowerShell needed.)
 
 ---
 

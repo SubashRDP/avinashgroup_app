@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.4.1"
+VERSION = "0.5.0"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -452,26 +452,81 @@ def _install_queue() -> str:
 	"""Create OR repair the Generic / Text Only LQ310-RAW queue. Idempotent, and
 	tolerant of a printer that isn't connected right now:
 
-	  - Epson present, no queue   -> create the queue on the Epson's port
+	  - Epson present, no queue   -> create the queue on the Epson's USB port
 	  - Epson moved USB ports      -> repair the queue's port (Set-Printer)
 	  - Epson offline, queue kept  -> leave the queue as-is (prints when it's back)
 	  - Epson offline, no queue    -> throw (nothing to point a queue at yet)
 
-	Kept as ONE PowerShell statement chain (no newline before elseif — PowerShell
-	would treat that as a parse error). -ErrorAction Stop matters: Add-Printer
-	raises NON-terminating errors, so without it a failure is invisible.
+	Port discovery does NOT require the Epson's own printer driver to be installed.
+	Two things bit a fresh till and are handled here so nothing needs a manual
+	PowerShell step:
+
+	  1. The 'Generic / Text Only' driver may be absent from the driver store
+	     (Add-PrinterDriver then fails with 0x80070032). Stage it from the Windows
+	     inbox INF with pnputil and retry.
+	  2. There may be NO Epson *printer* to copy a port from — Windows loaded only
+	     the raw "USB Printing Support" function (usbprint.sys) and never installed
+	     an EPSON LQ-310 queue. usbprint still assigns the connected device a USBnnn
+	     port, recorded under its Enum key's `Device Parameters\\PortName`. Read that
+	     for a currently-present USB printer (Epson VID 04B8) so a never-driver-
+	     installed printer is bound automatically.
+
+	-PresentOnly excludes stale USBnnn ports left by printers that were unplugged,
+	so we pick the port the Epson is actually on, not an old one. Written as a real
+	multi-line script (passed as one -Command arg); -ErrorAction Stop matters
+	because Add-Printer raises NON-terminating errors that are otherwise invisible.
 	"""
-	ps = (
-		"$ErrorActionPreference='Stop';"
-		"try { Add-PrinterDriver -Name 'Generic / Text Only' -ErrorAction Stop } catch {};"
-		"$e = Get-Printer | Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } | Select-Object -First 1;"
-		"$r = Get-Printer -Name 'LQ310-RAW' -ErrorAction SilentlyContinue;"
-		"if (-not $e -and -not $r) { throw 'No Epson dot-matrix printer found - attach it and switch it on.' }"
-		" elseif (-not $e) { Write-Output ('kept ' + $r.PortName + ' - Epson offline') }"
-		" elseif (-not $r) { Add-Printer -Name 'LQ310-RAW' -DriverName 'Generic / Text Only' -PortName $e.PortName -ErrorAction Stop; Write-Output ('created on ' + $e.PortName) }"
-		" elseif ($r.PortName -ne $e.PortName) { Set-Printer -Name 'LQ310-RAW' -PortName $e.PortName -ErrorAction Stop; Write-Output ('repaired port -> ' + $e.PortName) }"
-		" else { Write-Output ('ok on ' + $r.PortName) }"
-	)
+	ps = r"""
+$ErrorActionPreference = 'Stop'
+
+# 1) Ensure the Generic / Text Only driver is staged. Add-PrinterDriver fails with
+#    0x80070032 if the inbox package was never added to the store; stage it first.
+try {
+  Add-PrinterDriver -Name 'Generic / Text Only' -ErrorAction Stop
+} catch {
+  $inf = Join-Path $env:windir 'inf\prnge001.inf'
+  if (-not (Test-Path $inf)) { $inf = Join-Path $env:windir 'inf\ntprint.inf' }
+  & pnputil.exe /add-driver $inf /install | Out-Null
+  Add-PrinterDriver -Name 'Generic / Text Only' -ErrorAction Stop
+}
+
+$queue = Get-Printer -Name 'LQ310-RAW' -ErrorAction SilentlyContinue
+$port = $null
+
+# 2a) Preferred: an installed Epson printer — copy its port.
+$epson = Get-Printer -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } |
+  Select-Object -First 1
+if ($epson) { $port = $epson.PortName }
+
+# 2b) No Epson printer installed: read the USBnnn port usbprint.sys assigned to a
+#     currently-connected USB printer, whether or not a model driver was installed.
+if (-not $port) {
+  $devs = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+    Where-Object { $_.InstanceId -like 'USBPRINT\*' -or $_.InstanceId -like 'USB\VID_04B8*' }
+  foreach ($d in $devs) {
+    $k = 'HKLM:\SYSTEM\CurrentControlSet\Enum\' + $d.InstanceId + '\Device Parameters'
+    $pn = (Get-ItemProperty -Path $k -Name PortName -ErrorAction SilentlyContinue).PortName
+    if ($pn) { $port = $pn; break }
+  }
+}
+
+# 3) Apply. Keep the exit-code contract: a message containing 'No Epson' means
+#    "printer offline, not a real failure" (configure() maps it to exit code 3).
+if (-not $port -and -not $queue) {
+  throw 'No Epson dot-matrix printer found - attach it and switch it on.'
+} elseif (-not $port) {
+  Write-Output ('kept ' + $queue.PortName + ' - Epson offline')
+} elseif (-not $queue) {
+  Add-Printer -Name 'LQ310-RAW' -DriverName 'Generic / Text Only' -PortName $port -ErrorAction Stop
+  Write-Output ('created on ' + $port)
+} elseif ($queue.PortName -ne $port) {
+  Set-Printer -Name 'LQ310-RAW' -PortName $port -ErrorAction Stop
+  Write-Output ('repaired port -> ' + $port)
+} else {
+  Write-Output ('ok on ' + $port)
+}
+"""
 	rc, out = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
 	if rc != 0:
 		raise RuntimeError(out.strip() or "Add-Printer failed")

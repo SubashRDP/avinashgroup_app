@@ -12,7 +12,7 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.4.1"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
 ; Every origin the ERP is served at. Production first, then the test sites.
