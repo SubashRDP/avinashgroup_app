@@ -30,7 +30,7 @@ On the till, open this link in the browser and download **`PrintBridgeSetup.exe`
 
 **https://github.com/SubashRDP/avinashgroup_app/releases/latest**
 
-(Use the **latest** version — **v0.3.4 or newer**. Older versions have a bug
+(Use the **latest** version — **v0.3.5 or newer**. Older versions have a bug
 where the agent doesn't come back after a **shutdown** — if that's your
 symptom, just installing the latest version over the old one is the fix.)
 
@@ -68,12 +68,14 @@ Windows blocks freshly-downloaded, unsigned installers. Clear it **in this order
 
 ## STEP 3 — Install
 
-1. **Attach the Epson LQ-310 and switch it ON** before finishing the installer.
-2. Click through the wizard to the end.
-3. If the installer shows **"The LQ310-RAW print queue could not be created"** —
-   the Epson wasn't detected. Make sure it's plugged in and powered on, then run
-   the installer again. (The agent will also create the queue by itself the next
-   time it starts with the printer attached — see Step 6.)
+1. Click through the wizard to the end. (Having the Epson LQ-310 attached and ON
+   is nice but **not required** — install with or without the printer.)
+2. If the Epson isn't attached, the installer shows an information note saying
+   the print queue will be created automatically later — that's normal, click OK.
+   The first time you print with the printer connected and switched on, the
+   queue sets itself up and that same print goes through.
+3. Only a **red error** box ("could not be created" with the printer attached
+   and on) means something is actually wrong — see Troubleshooting.
 
 ---
 
@@ -124,7 +126,7 @@ If Step 6 works, the till is done.
 | "Print Bridge not installed on this computer" (in browser) | Agent not running. **Step 4** — start it, or reinstall the latest version. |
 | Worked right after install, but **dead after every shutdown** | Old version only started at boot, and a Windows "Shut down" isn't a boot. **Install v0.3.4 or newer over it** — it also starts at sign-in. |
 | "The auto-start task could not be registered" (during install) | v0.3.3 only — its registration needed PowerShell, which some tills can't find. **Install v0.3.4 or newer**; if it still appears, send `C:\ProgramData\AvinashPrintBridge\task_register.log`. |
-| "The LQ310-RAW print queue could not be created" (during install) | Epson not attached/on at install. Attach + power on, re-run installer. |
+| "The LQ310-RAW print queue could not be created" (during install) | On v0.3.5+ this only appears for a *real* error (no-printer is just an info note now — nothing to do, first print sets it up). Old versions showed it whenever the Epson was absent: safe to ignore, or install the latest. If it appears **with the printer attached and on**, send the log. |
 | `print_bridge.exe` not in Task Manager even after starting it | Send me the log file above — the agent is crashing on start. |
 | Printer moved to a different USB socket after a reboot | Handled automatically — the agent repairs the queue's port on the next startup. |
 | Prints nothing but says success | Job went to the Epson's own driver queue, not LQ310-RAW. Reinstall the latest version with the printer attached. |

@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.3.4"
+VERSION = "0.3.5"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -413,13 +413,25 @@ def configure() -> int:
 
 	Exit code is the contract: installer.iss checks it and shows the user a real
 	message pointing at the log, instead of claiming success regardless.
+
+	  0 = queue exists / was created
+	  3 = only problem is that no Epson is attached right now — NOT a failure:
+	      the agent creates the queue by itself on any later start or print with
+	      the printer connected (_ensure_default_queue), so the installer shows
+	      an informational note instead of an error.
+	  1 = anything else (a real error worth reading the log for)
 	"""
 	if not IS_WINDOWS:
 		print("--configure is Windows-only.")
 		return 1
 	results = []
 	_step(results, f"{DEFAULT_PRINTER} print queue", _install_queue)
-	return 0 if all(ok for ok, _, _ in results) else 1
+	failures = [detail for ok, _, detail in results if not ok]
+	if not failures:
+		return 0
+	if all("No Epson" in detail for detail in failures):
+		return 3
+	return 1
 
 
 def main() -> None:

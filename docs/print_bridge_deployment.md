@@ -35,19 +35,19 @@ machines with the bridge print via LQ310-RAW; machines without it show a clear
 
 ## Install (once per machine)
 
-1. **Attach the Epson LQ-310 and switch it on first.** The installer creates the
-   `LQ310-RAW` queue on the printer's own port and will tell you if it can't find
-   the printer.
-2. Download **`PrintBridgeSetup.exe`** from the
+1. Download **`PrintBridgeSetup.exe`** from the
    [latest release](https://github.com/SubashRDP/avinashgroup_app/releases)
-   (`print-bridge-v0.2.0` or newer) and run it. Accept the admin (UAC) prompt.
-3. That's all. No QZ Tray, no certificate, no browser configuration.
+   (`print-bridge-v0.3.5` or newer) and run it. Accept the admin (UAC) prompt.
+   The Epson doesn't have to be attached: with it on, the installer creates the
+   `LQ310-RAW` queue immediately; without it, an info note says the queue will
+   be created automatically on the first print with the printer connected.
+2. That's all. No QZ Tray, no certificate, no browser configuration.
 
-The installer: drops `print_bridge.exe`, creates the `LQ310-RAW` queue,
-pre-grants all four origins in the Chrome/Edge local-network policy, and
-registers an autostart task that runs the agent as SYSTEM at boot **and** at any
-user's sign-in (the sign-in trigger is what keeps it alive across "Shut down" on
-Fast Startup machines — needs v0.3.4+).
+The installer: drops `print_bridge.exe`, creates the `LQ310-RAW` queue (now or
+on first print — see above), pre-grants all four origins in the Chrome/Edge
+local-network policy, and registers an autostart task that runs the agent as
+SYSTEM at boot **and** at any user's sign-in (the sign-in trigger is what keeps
+it alive across "Shut down" on Fast Startup machines — needs v0.3.4+).
 
 ## Verify all 4 sites print
 

@@ -18,7 +18,9 @@ and print an invoice.
 2. Creates the **LQ310-RAW** queue (Generic / Text Only driver on the Epson's
    port). The stock Epson ESC/P V4 driver *swallows* RAW jobs — the spooler
    reports success and the head never moves. Generic / Text Only is a pure byte
-   pipe.
+   pipe. No Epson attached at install time is fine (v0.3.5+ says so instead of
+   erroring): the agent creates the queue itself on the first start or print
+   with the printer connected.
 3. Pre-grants Chrome/Edge local network access for the ERP origin, so no
    permission prompt appears.
 4. Registers a **scheduled task with two triggers — at boot AND at any user's

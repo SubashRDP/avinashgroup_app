@@ -12,7 +12,7 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.3.4"
+#define MyAppVersion "0.3.5"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
 ; Every origin the ERP is served at. Production first, then the test sites.
@@ -245,7 +245,18 @@ begin
       RegisterAutostartTask();
     Exec(ExpandConstant('{app}\{#MyAppExeName}'), '--configure', '', SW_HIDE,
          ewWaitUntilTerminated, ResultCode);
-    if ResultCode <> 0 then
+    // Exit codes are configure()'s contract (see print_bridge.py): 3 = no Epson
+    // attached right now, which is NOT a failure — the agent creates the queue
+    // by itself on any later start or print with the printer connected. Tills
+    // are set up before the printer arrives often enough that scaring the
+    // installer into "re-run this" was wrong.
+    if ResultCode = 3 then
+      MsgBox('Setup is complete. The Epson printer is not attached right now, ' +
+             'so the print queue was not created yet - that is fine. It is ' +
+             'created automatically the first time a print happens with the ' +
+             'printer connected and switched on. Nothing to re-run.',
+             mbInformation, MB_OK)
+    else if ResultCode <> 0 then
       MsgBox('The LQ310-RAW print queue could not be created.'#13#10#13#10 +
              'Usually this means the Epson printer is not attached or not ' +
              'powered on. Connect it, then re-run this installer.'#13#10#13#10 +
