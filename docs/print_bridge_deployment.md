@@ -37,7 +37,9 @@ machines with the bridge print via LQ310-RAW; machines without it show a clear
 
 1. Download **`PrintBridgeSetup.exe`** from the
    [latest release](https://github.com/SubashRDP/avinashgroup_app/releases)
-   (`print-bridge-v0.3.5` or newer) and run it. Accept the admin (UAC) prompt.
+   (`print-bridge-v0.4.1` or newer — NOT the repo's "latest release" page,
+   which K40 Bridge owns; pick the newest release named "Print Bridge") and
+   run it. Accept the admin (UAC) prompt.
    The Epson doesn't have to be attached: with it on, the installer creates the
    `LQ310-RAW` queue immediately; without it, an info note says the queue will
    be created automatically on the first print with the printer connected.

@@ -28,9 +28,13 @@ The **only** thing left is getting this agent running on each till PC.
 
 On the till, open this link in the browser and download **`PrintBridgeSetup.exe`**:
 
-**https://github.com/SubashRDP/avinashgroup_app/releases/latest**
+**https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.4.1/PrintBridgeSetup.exe**
 
-(Use the **latest** version — **v0.3.5 or newer**. Older versions have a bug
+(Careful: the repo's generic "latest release" page shows a **different product**
+— K40 Bridge. Use the direct link above, or pick the newest release whose name
+starts with **Print Bridge** from the releases list.)
+
+(Use the **latest** version — **v0.4.1 or newer**. Older versions have a bug
 where the agent doesn't come back after a **shutdown** — if that's your
 symptom, just installing the latest version over the old one is the fix.)
 

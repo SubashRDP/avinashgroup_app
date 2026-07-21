@@ -114,7 +114,11 @@ frappe.provide("avinash.print_bridge");
 
 	const LOG_PATH = "C:\\ProgramData\\AvinashPrintBridge\\print_bridge.log";
 	const CONFIG_PATH = "C:\\ProgramData\\AvinashPrintBridge\\config.json";
-	const DOWNLOAD_URL = "https://github.com/SubashRDP/avinashgroup_app/releases/latest";
+	// Direct asset link, updated per print-bridge release. NOT releases/latest:
+	// that repo-wide slot belongs to K40 Bridge (its releases default
+	// make_latest, ours sets false), so "latest" serves the wrong product.
+	const DOWNLOAD_URL =
+		"https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.4.1/PrintBridgeSetup.exe";
 
 	// Resolves true if ANYTHING is listening on the port. mode:'no-cors' is the
 	// one probe a page can make that separates "connection refused" (rejects)
