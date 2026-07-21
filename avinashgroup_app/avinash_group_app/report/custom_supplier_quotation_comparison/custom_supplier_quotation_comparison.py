@@ -80,7 +80,6 @@ def validate_filters(filters):
 
 
 def get_data(filters):
-	rfq = get_rfq_from_purchase_order(filters.get("purchase_order")) 
 	"""Fetch supplier quotation data from database"""
 	sq = frappe.qb.DocType("Supplier Quotation")
 	sq_item = frappe.qb.DocType("Supplier Quotation Item")
@@ -128,24 +127,23 @@ def get_data(filters):
 		.orderby(sq_item.item_code, sq.supplier)
 	)
 
-	# Source-document filters. A Supplier Quotation Item links directly to the
-	# Material Request and Request for Quotation it was raised from, so we match on
-	# those columns directly. A Purchase Order has no such column, so its linked RFQ
-	# is resolved first (see get_rfq_from_purchase_order) and matched the same way.
-	if filters.get("material_request"):
-		query = query.where(sq_item.material_request == filters.get("material_request"))
-
-	if rfq:
-		query = query.where(sq_item.request_for_quotation == rfq)
+	# Source-document filter. A Supplier Quotation Item links directly to the
+	# Material Request it was raised from. A Purchase Order carries the Material
+	# Request on its item lines rather than on the quotation, so we resolve the PO
+	# to its Material Request(s) and match on the same column. When both filters are
+	# set we take the union — "show quotations for any of these source documents".
+	material_requests = _as_list(filters.get("material_request"))
+	if filters.get("purchase_order"):
+		material_requests += get_material_requests_from_purchase_order(filters.get("purchase_order"))
+	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
+	if material_requests:
+		query = query.where(sq_item.material_request.isin(material_requests))
 
 	if filters.get("item_code"):
 		query = query.where(sq_item.item_code == filters.get("item_code"))
 
 	if filters.get("supplier_quotation"):
 		query = query.where(sq_item.parent.isin(filters.get("supplier_quotation")))
-
-	if filters.get("request_for_quotation"):
-		query = query.where(sq_item.request_for_quotation == filters.get("request_for_quotation"))
 
 	if filters.get("supplier"):
 		query = query.where(sq.supplier.isin(filters.get("supplier")))
@@ -462,14 +460,19 @@ def set_default_supplier(item_code, supplier, company):
 
 
 @frappe.whitelist()
-def get_rfq_from_purchase_order(purchase_order):
-	"""Get RFQ linked to a Purchase Order"""
-	rfq = frappe.db.sql("""
-		SELECT DISTINCT sqi.request_for_quotation
-		FROM `tabPurchase Order Item` poi
-		JOIN `tabSupplier Quotation Item` sqi
-			ON poi.supplier_quotation = sqi.parent
-		WHERE poi.parent = %s and sqi.request_for_quotation IS NOT NULL
-	""", purchase_order)
+def get_material_requests_from_purchase_order(purchase_order):
+	"""Material Request(s) a Purchase Order was raised from, read off its item lines.
 
-	return rfq[0][0] if rfq else None
+	The approval workflow runs on the Purchase Order; approvers open the comparison
+	from there. A PO may draw on more than one Material Request, so this returns a
+	list and get_data() matches Supplier Quotation Items against all of them.
+	"""
+	rows = frappe.db.sql(
+		"""
+		SELECT DISTINCT poi.material_request
+		FROM `tabPurchase Order Item` poi
+		WHERE poi.parent = %s AND poi.material_request IS NOT NULL
+		""",
+		purchase_order,
+	)
+	return [r[0] for r in rows]

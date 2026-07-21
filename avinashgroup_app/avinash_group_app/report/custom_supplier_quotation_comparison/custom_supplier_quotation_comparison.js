@@ -83,16 +83,6 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			},
 		},
 		{
-			fieldtype: "Link",
-			label: __("Request for Quotation"),
-			options: "Request for Quotation",
-			fieldname: "request_for_quotation",
-			default: "",
-			get_query: () => {
-				return { filters: { docstatus: ["<", 2] } };
-			},
-		},
-		{
 			fieldname: "categorize_by",
 			label: __("Categorize by"),
 			fieldtype: "Select",
@@ -115,27 +105,14 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: 1,
 		},
 		{
-		fieldtype: "Link",
-		label: __("Purchase Order"),
-		options: "Purchase Order",
-		fieldname: "purchase_order",
-		default: "",
-		get_query: () => ({ filters: { docstatus: 1 } }),
-		 on_change: function () {
-        let po = frappe.query_report.get_filter_value("purchase_order");
-        if (!po) return;
-
-        frappe.call({
-            method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_rfq_from_purchase_order",
-            args: { purchase_order: po },
-            callback: function (r) {
-                if (r.message) {
-                    frappe.query_report.set_filter_value("request_for_quotation", r.message);
-                }
-            }
-        });
-    }
-	},
+			fieldtype: "Link",
+			label: __("Purchase Order"),
+			options: "Purchase Order",
+			fieldname: "purchase_order",
+			default: "",
+			// Resolved to its source Material Request(s) server-side (see get_data).
+			get_query: () => ({ filters: { docstatus: ["<", 2] } }),
+		},
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {
