@@ -8,23 +8,6 @@ var sales_register_fy = erpnext.utils.get_fiscal_year(frappe.datetime.get_today(
 	: [];
 
 frappe.query_reports["Sales Register Report"] = {
-	onload(report) {
-		// The report is company-scoped. When no Company is selected, show the
-		// prompt centered in the middle (in place of the default "Nothing to
-		// show" empty state) instead of a small banner at the top.
-		const default_no_result = report.get_no_result_message.bind(report);
-		report.get_no_result_message = function () {
-			const company = report.get_filter_value("company");
-			const has_company = Array.isArray(company) ? company.length : !!company;
-			if (!has_company) {
-				return `<div class="msg-box no-border">
-					<div><img src="/assets/frappe/images/ui-states/list-empty-state.svg" alt="" class="null-state"></div>
-					<p>${__("Please select a Company to view the report.")}</p>
-				</div>`;
-			}
-			return default_no_result();
-		};
-	},
 	filters: [
 		{
 			fieldname: "company",
@@ -142,6 +125,33 @@ frappe.query_reports["Sales Register Report"] = {
 	},
 
 	onload: function (_report) {
+		// Company-scoped report. `reqd` can't be used (Company is a MultiSelectList;
+		// its empty value [] is truthy, so Frappe's mandatory check never fires), and
+		// overriding get_no_result_message / toggle_nothing_to_show gets undone by the
+		// shared report_nepali_date.js re-renders. So watch the whole report container
+		// and, whenever no Company is set, rewrite the default "Nothing to show" text
+		// to a Company prompt. Robust to any re-render / timing.
+		const company_chosen = () => {
+			const c = _report.get_filter_value("company");
+			return Array.isArray(c) ? c.length > 0 : !!c;
+		};
+		const PROMPT = __("Please set the company first.");
+		const NOTHING = __("Nothing to show");
+		const root = (_report.page && _report.page.main && _report.page.main[0]) || document.body;
+
+		const swap = () => {
+			if (company_chosen()) return;
+			root.querySelectorAll("p").forEach((p) => {
+				if ((p.textContent || "").trim() === NOTHING) p.textContent = PROMPT;
+			});
+		};
+		new MutationObserver(swap).observe(root, {
+			childList: true,
+			subtree: true,
+			characterData: true,
+		});
+		swap();
+
 		// Resolve which columns the PRINT pdf should show, matching the report:
 		//  1) if "Pick Columns" was used in the print dialog, use those;
 		//  2) otherwise use whatever columns are still visible in the datatable
