@@ -1,0 +1,167 @@
+{#- ==========================================================================
+Nepal Gas Payment Voucher — Payment Entry voucher (avinashgroup_app).
+Source of truth for the "Nepal Gas Payment Voucher" standard Print Format;
+print_format/nepal_gas_payment_voucher/nepal_gas_payment_voucher.json only
+{% include %}s this file. Code-backed, built fresh (not copied from any existing).
+Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
+=========================================================================== -#}
+{% set company = frappe.get_doc("Company", doc.company) %}
+{#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
+{%- macro amt(v) -%}{{ frappe.utils.fmt_money(v or 0, 2, format="#,##,###.##") }}{%- endmacro -%}
+<style>
+@page {
+  size: A4;
+  /* Confine content to the top ~half of the A4 sheet; caps at ~48.8%. */
+  margin-bottom: 152mm;
+}
+.print-format { padding-top:30px !important; }
+.npv { color:#000; font-size:8px; }
+.npv * { color:#000 !important; }
+
+/* Header */
+.npv .pv-title   { text-align:center; font-weight:bold; font-size:15px; margin:0; }
+.npv .pv-company { text-align:center; font-weight:bold; font-size:18px; margin:4px 0 2px; }
+.npv .pv-city    { text-align:center; font-weight:bold; font-size:10px; margin:0 0 8px; }
+.npv .pv-info    { width:100%; border-collapse:collapse; }
+.npv .pv-info td { vertical-align:top; padding:2px 0; font-size:11px; }
+.npv .pv-info .r { text-align:right; }
+
+/* Paid To / Paid From accounts */
+.npv .pv-acc-title { font-weight:bold; margin-top:1px; }
+.npv .pv-acc-val   { margin:0 0 2px 0; }
+/* subtopics nested under Paid To A/C */
+.npv .pv-acc-sub { margin-left:18px; }
+
+/* Body items table */
+.npv .pv-items { width:100%; border-collapse:collapse; margin-top:8px; font-size:11px; }
+.npv .pv-items th { font-weight:bold; text-align:left; padding:3px 4px;
+                    border-top:1px solid #000; border-bottom:1px solid #000; }
+.npv .pv-items td { padding:1px 4px; vertical-align:top; }
+.npv .pv-items th.r, .npv .pv-items td.r { text-align:right; }
+.npv .pv-items tr.total td { font-weight:bold; padding-top:4px; }
+
+/* In-words + remarks */
+.npv .pv-words   { border-top:1px solid #000; border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
+.npv .pv-remarks { border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
+
+/* Signatures */
+/* Footer (signatories + printed-on) flows a little below the data; the print date
+   sits just under the signatures. Same look in the on-screen preview and the PDF. */
+.npv .pv-footer { margin-top:44px; }
+.npv .pv-sign { width:100%; border-collapse:collapse; }
+.npv .pv-sign td { width:25%; text-align:center; vertical-align:bottom; padding-top:38px; font-size:10px; }
+.npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
+</style>
+
+<div class="npv">
+
+  {#- ---------- Header (no "Paid To") ---------- -#}
+  <div class="pv-title">{{ doc.custom_p_type or "Payment" }} Voucher</div>
+  <div class="pv-company">{{ company.company_name }}</div>
+  <div class="pv-city">Kathmandu</div>
+
+  <table class="pv-info">
+    <tr>
+      <td>
+        <div><strong>Cheque No :</strong> {{ doc.reference_no or "" }}</div>
+        <div><strong>Cheque Date :</strong> {% if doc.custom_chequereference_miti %}{{ (doc.custom_chequereference_miti|string).split(" ")[0] }}{% endif %}{% if doc.reference_date %} ({{ frappe.utils.formatdate(doc.reference_date, "yyyy-MM-dd") }}){% endif %}</div>
+        {#- No "Paid To/From" titles. If a party exists show "Party Type : Party";
+           otherwise show the account name (account_name, falling back to the coded id). -#}
+        {% set pt_party = doc.payment_type == "Pay" and doc.party_type and doc.party_name %}
+        {% set pf_party = doc.payment_type == "Receive" and doc.party_type and doc.party_name %}
+        <div>{% if pt_party %}<strong>{{ doc.party_type }} :</strong> {{ doc.party_name }}{% else %}{{ frappe.db.get_value("Account", doc.paid_to, "account_name") or doc.paid_to or "" }}{% endif %}</div>
+        <div>{% if pf_party %}<strong>{{ doc.party_type }} :</strong> {{ doc.party_name }}{% else %}{{ frappe.db.get_value("Account", doc.paid_from, "account_name") or doc.paid_from or "" }}{% endif %}</div>
+      </td>
+      <td class="r">
+        <div><strong>Voucher :</strong> {{ doc.custom_name or "" }}</div>
+        <div><strong>Date :</strong> {% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</div>
+        {% if doc.deductions %}<div><strong>Bank Charge :</strong> {{ amt(doc.deductions | sum(attribute='amount')) }}</div>{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {#- ---------- Items ---------- -#}
+  {% set show_party = doc.payment_type != "Internal Transfer" %}
+  <table class="pv-items">
+    <thead>
+      <tr>
+        <th style="width:66%;">Document Details</th>
+        <th class="r" style="width:34%;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {#- Paid To / Paid From now live in the header, so the body starts straight at the
+         Voucher / reference block. -#}
+
+      {#- Total / reference row comes immediately under Paid From so the "Voucher : ..."
+         lines sit right below it. Any blank spacer is moved BELOW this row (see end of
+         tbody) so the overall table height -- the gap between the two lines -- is unchanged. -#}
+      <tr class="total">
+        <td>
+          {% if doc.payment_type in ("Pay", "Receive") %}
+            {% if doc.references %}
+              {#- A single bold "Voucher :" title, then each reference value listed under it. -#}
+              <div><strong>Voucher :</strong></div>
+              {% for ref in doc.references %}
+                {% set src = frappe.get_cached_doc(ref.reference_doctype, ref.reference_name) if ref.reference_name else None %}
+                {% set vno = (src.get("custom_branch_name") if (src and ref.reference_doctype == "Sales Invoice") else "") or (src.get("custom_name") if src else "") or ref.reference_name or "" %}
+                {% set pmiti = (src.get("custom_posting_miti")|string).split(" ")[0] if (src and src.get("custom_posting_miti")) else (frappe.utils.formatdate(src.posting_date, "yyyy-MM-dd") if (src and src.get("posting_date")) else "") %}
+                {% if (ref.outstanding_amount or 0)|round(2) != 0 %}{% set status = "partially" %}
+                {% elif (ref.total_amount or 0)|round(2) == (ref.allocated_amount or 0)|round(2) %}{% set status = "full" %}
+                {% else %}{% set status = "balance" %}{% endif %}
+                <div style="font-weight:normal; white-space:nowrap;">{{ vno }}{% if pmiti %} dated {{ pmiti }}{% endif %} ({{ status }})</div>
+              {% endfor %}
+            {% else %}
+              <div style="white-space:nowrap;"><strong>Advance {{ "Paid" if doc.payment_type == "Pay" else "Received" }}</strong></div>
+            {% endif %}
+          {% endif %}
+        </td>
+        {#- One allocated amount per reference, in the same order as the Voucher lines on
+           the left, so each amount lines up with its own "Voucher : ..." row. -#}
+        <td class="r">
+          {% if doc.payment_type in ("Pay", "Receive") and doc.references %}
+            {#- Blank line to align with the bold "Voucher :" title on the left. -#}
+            <div>&nbsp;</div>
+            {% for ref in doc.references %}
+            <div style="font-weight:normal; white-space:nowrap;">{{ amt(ref.allocated_amount) }}</div>
+            {% endfor %}
+            {#- Small rule under the amounts, then the total of all voucher allocations. -#}
+            <div style="display:inline-block; border-top:1px solid #000; padding-top:2px; margin-top:1px; font-weight:bold; white-space:nowrap;">{{ amt(doc.references | sum(attribute='allocated_amount')) }}</div>
+          {% else %}
+            {{ amt(doc.paid_amount) }}
+          {% endif %}
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+
+
+  
+  {#- ---------- In words ---------- -#}
+  <div class="pv-words">
+    {{ frappe.utils.money_in_words(doc.paid_amount, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace("only.", "Only").replace(" only", " Only") }}
+  </div>
+
+  {#- ---------- Remarks ---------- -#}
+  <div class="pv-remarks">
+    <strong>Remarks :</strong> {{ doc.custom_remark or "" }}
+  </div>
+
+  {#- ---------- Footer: signatories + printed-on ----------
+     Vendor Payment gets a 5th "Checked by" column; everything else keeps 4. -#}
+  {%- set signatories = ["Received by", "Prepared by", "Checked by", "Verified by", "Approved by"]
+        if doc.custom_p_type == "Vendor Payment"
+        else ["Received by", "Prepared by", "Verified by", "Approved by"] -%}
+  <div class="pv-footer">
+    <table class="pv-sign">
+      <tr>
+        {%- for s in signatories %}
+        <td style="width:{{ (100 / (signatories|length))|round(2) }}%;"><div class="line"></div>{{ s }}{% if s == "Prepared by" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "" }}</strong></div>{% endif %}</td>
+        {%- endfor %}
+      </tr>
+    </table>
+    <div style="text-align:left; font-size:7px; margin-top:-4px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+  </div>
+
+</div>
