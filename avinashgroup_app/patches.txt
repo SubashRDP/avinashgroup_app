@@ -42,3 +42,7 @@ avinashgroup_app.patches.backfill_print_log_customer
 avinashgroup_app.patches.backfill_cbms_synced_realtime_flags
 
 avinashgroup_app.patches.add_version_ref_doctype_creation_index
+
+avinashgroup_app.patches.rate_fields_precision_5
+avinashgroup_app.patches.revert_nonrate_currency_precision
+avinashgroup_app.patches.revert_custom_field_precision_2
