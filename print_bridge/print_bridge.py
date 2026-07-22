@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -266,11 +266,27 @@ def diagnose() -> dict:
 			elevated = bool(ctypes.windll.shell32.IsUserAnAdmin())
 		except Exception:
 			pass
+	# EnumPrinters level 1 has no driver info, so ask PowerShell which driver the
+	# raw queue sits on. A queue on anything but Generic / Text Only silently
+	# swallows RAW jobs — the exact "green toast, no paper" failure (F2).
+	queue_driver = ""
+	if IS_WINDOWS and CONFIG["default_printer"] in printers:
+		try:
+			rc, out = _run([
+				"powershell", "-NoProfile", "-Command",
+				"(Get-Printer -Name '%s').DriverName" % CONFIG["default_printer"],
+			])
+			if rc == 0:
+				queue_driver = out.strip()
+		except Exception:
+			pass
 	return {
 		"version": VERSION,
 		"port": int(CONFIG["port"]),
 		"default_printer": CONFIG["default_printer"],
 		"queue_exists": CONFIG["default_printer"] in printers,
+		"queue_driver": queue_driver,
+		"queue_driver_ok": (queue_driver == "Generic / Text Only") if queue_driver else None,
 		# Name-based hint only (EnumPrinters level 1 has no driver info): is
 		# anything that looks like the Epson visible to Windows at all?
 		"epson_seen": any("lq-310" in p.lower() or "epson" in p.lower() for p in printers),
@@ -454,7 +470,12 @@ def _install_queue() -> str:
 
 	  - Epson present, no queue   -> create the queue on the Epson's USB port
 	  - Epson moved USB ports      -> repair the queue's port (Set-Printer)
-	  - Epson offline, queue kept  -> leave the queue as-is (prints when it's back)
+	  - Queue on the WRONG DRIVER  -> repair the driver in place (Set-Printer).
+	    A hand-made LQ310-RAW on the Epson ESC/P driver silently swallows RAW
+	    jobs (spooler reports success, head never moves). Flipping OUR queue to
+	    Generic / Text Only never touches the Epson's own queue or its driver,
+	    so the till's normal Windows printing is unaffected.
+	  - Epson offline, queue kept  -> leave the port as-is (prints when it's back)
 	  - Epson offline, no queue    -> throw (nothing to point a queue at yet)
 
 	Port discovery does NOT require the Epson's own printer driver to be installed.
@@ -515,16 +536,31 @@ if (-not $port) {
 #    "printer offline, not a real failure" (configure() maps it to exit code 3).
 if (-not $port -and -not $queue) {
   throw 'No Epson dot-matrix printer found - attach it and switch it on.'
-} elseif (-not $port) {
-  Write-Output ('kept ' + $queue.PortName + ' - Epson offline')
+}
+
+# 3a) Wrong driver on an existing queue: the Epson driver swallows RAW jobs, so
+#     repair OUR queue's driver in place. The Epson's own queue is not touched.
+$fixes = @()
+if ($queue -and $queue.DriverName -ne 'Generic / Text Only') {
+  Set-Printer -Name 'LQ310-RAW' -DriverName 'Generic / Text Only' -ErrorAction Stop
+  $fixes += ('driver ' + $queue.DriverName + ' -> Generic / Text Only')
+}
+
+# 3b) Port.
+if (-not $port) {
+  $msg = 'kept ' + $queue.PortName + ' - Epson offline'
+  if ($fixes) { $msg += '; repaired ' + ($fixes -join ', ') }
+  Write-Output $msg
 } elseif (-not $queue) {
   Add-Printer -Name 'LQ310-RAW' -DriverName 'Generic / Text Only' -PortName $port -ErrorAction Stop
   Write-Output ('created on ' + $port)
-} elseif ($queue.PortName -ne $port) {
-  Set-Printer -Name 'LQ310-RAW' -PortName $port -ErrorAction Stop
-  Write-Output ('repaired port -> ' + $port)
 } else {
-  Write-Output ('ok on ' + $port)
+  if ($queue.PortName -ne $port) {
+    Set-Printer -Name 'LQ310-RAW' -PortName $port -ErrorAction Stop
+    $fixes += ('port -> ' + $port)
+  }
+  if ($fixes) { Write-Output ('repaired ' + ($fixes -join ', ')) }
+  else { Write-Output ('ok on ' + $port) }
 }
 """
 	rc, out = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
