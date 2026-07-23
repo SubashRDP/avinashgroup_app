@@ -801,10 +801,36 @@ def _render_comparison_html(doc):
 	currency = frappe.get_cached_value("Company", doc.get("company"), "default_currency")
 	cell = 'border:1px solid #ddd;padding:5px 10px;'
 
-	header_cells = "".join(
-		f'<th style="{cell}text-align:{"right" if c.get("fieldtype") == "Currency" else "left"};">'
-		f'{frappe.utils.escape_html(c.get("label") or "")}</th>'
-		for c in columns
+	# Two-row header: supplier name spans its Rate + Amount pair (supplier_group),
+	# fixed columns (SN / Item Name / Qty) span both rows.
+	top_cells, sub_cells = [], []
+	i = 0
+	while i < len(columns):
+		c = columns[i]
+		group = c.get("supplier_group")
+		if not group:
+			align = "right" if c.get("fieldtype") == "Currency" else "left"
+			top_cells.append(
+				f'<th rowspan="2" style="{cell}text-align:{align};vertical-align:bottom;">'
+				f'{frappe.utils.escape_html(c.get("label") or "")}</th>'
+			)
+			i += 1
+			continue
+		j = i
+		while j < len(columns) and columns[j].get("supplier_group") == group:
+			sub_cells.append(
+				f'<th style="{cell}text-align:right;">'
+				f'{frappe.utils.escape_html(columns[j].get("label") or "")}</th>'
+			)
+			j += 1
+		top_cells.append(
+			f'<th colspan="{j - i}" style="{cell}text-align:center;">'
+			f'{frappe.utils.escape_html(group)}</th>'
+		)
+		i = j
+	header_rows = (
+		f'<tr style="background:#f5f5f5;">{"".join(top_cells)}</tr>'
+		f'<tr style="background:#f5f5f5;">{"".join(sub_cells)}</tr>'
 	)
 
 	body_rows = []
@@ -829,7 +855,7 @@ def _render_comparison_html(doc):
 		f'<div style="color:#6c757d;font-size:12px;margin-bottom:6px;">'
 		f'{_("Preferred quotations only")} · {frappe.utils.escape_html(doc.get("company") or "")}</div>'
 		f'<table style="border-collapse:collapse;font-size:13px;">'
-		f'<tr style="background:#f5f5f5;">{header_cells}</tr>{"".join(body_rows)}</table>'
+		f'{header_rows}{"".join(body_rows)}</table>'
 	)
 
 

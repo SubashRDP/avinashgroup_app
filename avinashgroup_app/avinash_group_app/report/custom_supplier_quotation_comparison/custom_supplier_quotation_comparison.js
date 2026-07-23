@@ -104,6 +104,24 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: "",
 			// Resolved to its source Material Request(s) server-side (see get_data).
 			get_query: () => ({ filters: { docstatus: ["<", 2] } }),
+			// The comparison must run against the PO's company, not the user's
+			// default company - otherwise a PO from another company shows nothing.
+			on_change: (report) => {
+				const po = report.get_filter_value("purchase_order");
+				if (!po) {
+					report.refresh();
+					return;
+				}
+				frappe.db.get_value("Purchase Order", po, "company").then((r) => {
+					const company = r.message && r.message.company;
+					if (company && company !== report.get_filter_value("company")) {
+						// setting the company filter triggers the refresh itself
+						report.set_filter_value("company", company);
+					} else {
+						report.refresh();
+					}
+				});
+			},
 		},
 	],
 
@@ -130,6 +148,61 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		return value;
 	},
 
+	// Draw one spanning supplier-name cell above each Rate + Amount column pair.
+	// Injected above the datatable header on every render; scrolls with it because
+	// the datatable applies its translateX to the whole .dt-header element.
+	after_datatable_render: (datatable) => {
+		if (!datatable || !datatable.wrapper) return;
+		const $header = $(datatable.wrapper).find(".dt-header");
+		$header.find(".sq-supplier-group-row").remove();
+
+		const header_cells = $header.find(".dt-row-header .dt-cell--header").toArray();
+		if (!header_cells.length) return;
+
+		// Merge consecutive rendered header cells that share a supplier_group.
+		// Widths come from invisible "keeper" divs carrying the datatable's own
+		// .dt-cell__content--col-N classes - its width stylesheet keeps them in
+		// sync with the real columns, including later resizes / fit-columns.
+		const cols = header_cells.map((cell) => {
+			const idx = parseInt(cell.getAttribute("data-col-index"));
+			const col = (!isNaN(idx) && datatable.datamanager.getColumn(idx)) || {};
+			return { idx: idx, group: col.supplier_group || "", sq_link: col.sq_link };
+		});
+		if (!cols.some((c) => c.group)) return;
+
+		const keeper = (idx) => `<div class="dt-cell__content--col-${idx}" style="height:0;"></div>`;
+		const border = "1px solid var(--dt-border-color, #d1d8dd)";
+		let cells_html = "";
+		let i = 0;
+		while (i < cols.length) {
+			const c = cols[i];
+			if (!c.group) {
+				cells_html += `<div style="display:flex;border-right:1px solid transparent;">${keeper(c.idx)}</div>`;
+				i++;
+				continue;
+			}
+			let keepers = "";
+			let j = i;
+			while (j < cols.length && cols[j].group === c.group) {
+				keepers += keeper(cols[j].idx);
+				j++;
+			}
+			const link_attr = c.sq_link
+				? ` data-sq-link="${frappe.utils.escape_html(c.sq_link)}" title="${__("Open Supplier Quotation")}"`
+				: "";
+			cells_html += `<div class="sq-group-cell"${link_attr}
+				style="position:relative;display:flex;border-right:${border};${c.sq_link ? "cursor:pointer;" : ""}">${keepers}
+				<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+					font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 8px;">
+					${frappe.utils.escape_html(c.group)}</div></div>`;
+			i = j;
+		}
+		$header.prepend(
+			`<div class="sq-supplier-group-row"
+				style="display:flex;height:26px;background:var(--dt-header-cell-bg, #f7fafc);border-bottom:${border};">${cells_html}</div>`
+		);
+	},
+
 	onload: (report) => {
 		// Create a button for setting the default supplier
 		report.page.add_inner_button(
@@ -148,6 +221,13 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			const filter = report.get_filter("show_remarks");
 			filter.set_value(cint(filter.get_value()) ? 0 : 1);
 		});
+
+		// Supplier group cell -> open that supplier's quotation
+		$(report.page.wrapper)
+			.off("click.sq_group")
+			.on("click.sq_group", ".sq-group-cell[data-sq-link]", function () {
+				frappe.set_route("Form", "Supplier Quotation", $(this).attr("data-sq-link"));
+			});
 
 		// Supplier column header -> open that supplier's quotation
 		$(report.page.wrapper)

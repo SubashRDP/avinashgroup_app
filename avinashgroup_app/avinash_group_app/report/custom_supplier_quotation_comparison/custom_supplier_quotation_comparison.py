@@ -409,26 +409,31 @@ def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=
 		},
 	]
 
-	# Dynamic supplier columns
+	# Dynamic supplier columns. Each supplier contributes a Rate + Amount pair;
+	# `supplier_group` carries the supplier's display name so the client script
+	# (and the approval-email renderer) can draw it as one spanning header cell
+	# above the two columns.
 	for supplier in sorted(suppliers):
 		col_fieldname = frappe.scrub(supplier)
 		display = (supplier_display_name or {}).get(supplier, supplier)
 		sq_link = (supplier_sq_map or {}).get(supplier)
 		columns.append({
 			"fieldname": col_fieldname + "_rate",
-			"label": _("{0} (Rate)").format(display),
+			"label": _("Rate"),
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
 			"width": 110,
 			"sq_link": sq_link,
+			"supplier_group": display,
 		})
 		columns.append({
 			"fieldname": col_fieldname,
-			"label": _("{0} (Amount)").format(display),
+			"label": _("Amount"),
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
 			"width": 130,
 			"sq_link": sq_link,
+			"supplier_group": display,
 		})
 
 	return columns
