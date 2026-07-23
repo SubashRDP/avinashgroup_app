@@ -186,6 +186,104 @@ frappe.ui.form.on("Sales Invoice Item", {
         })();
     },
 
+    uom: function(frm, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (!row || !row.item_code || !row.uom) return;
+
+        // Re-fetch item pricing after a UOM change so the server recalculates
+        // the rate for the selected sales UOM instead of keeping the old one.
+        setTimeout(async () => {
+            try {
+                const response = await frappe.call({
+                    method: "erpnext.stock.get_item_details.get_item_details",
+                    args: {
+                        doc: frm.doc,
+                        args: {
+                            item_code: row.item_code,
+                            barcode: row.barcode,
+                            serial_no: row.serial_no,
+                            batch_no: row.batch_no,
+                            set_warehouse: frm.doc.set_warehouse,
+                            warehouse: row.warehouse,
+                            customer: frm.doc.customer || frm.doc.party_name,
+                            quotation_to: frm.doc.quotation_to,
+                            supplier: frm.doc.supplier,
+                            currency: frm.doc.currency,
+                            is_internal_supplier: frm.doc.is_internal_supplier,
+                            is_internal_customer: frm.doc.is_internal_customer,
+                            update_stock: cint(frm.doc.update_stock),
+                            conversion_rate: frm.doc.conversion_rate,
+                            price_list: frm.doc.selling_price_list || frm.doc.buying_price_list,
+                            price_list_currency: frm.doc.price_list_currency,
+                            plc_conversion_rate: frm.doc.plc_conversion_rate,
+                            company: frm.doc.company,
+                            order_type: frm.doc.order_type,
+                            is_pos: cint(frm.doc.is_pos),
+                            is_return: cint(frm.doc.is_return),
+                            is_subcontracted: frm.doc.is_subcontracted,
+                            ignore_pricing_rule: frm.doc.ignore_pricing_rule,
+                            doctype: frm.doc.doctype,
+                            name: frm.doc.name,
+                            project: row.project || frm.doc.project,
+                            qty: row.qty || 1,
+                            net_rate: row.rate,
+                            base_net_rate: row.base_net_rate,
+                            stock_qty: row.stock_qty,
+                            conversion_factor: row.conversion_factor,
+                            weight_per_unit: row.weight_per_unit,
+                            uom: row.uom,
+                            weight_uom: row.weight_uom,
+                            manufacturer: row.manufacturer,
+                            stock_uom: row.stock_uom,
+                            pos_profile: cint(frm.doc.is_pos) ? frm.doc.pos_profile : "",
+                            cost_center: row.cost_center,
+                            tax_category: frm.doc.tax_category,
+                            item_tax_template: row.item_tax_template,
+                            child_doctype: row.doctype,
+                            child_docname: row.name,
+                            is_old_subcontracting_flow: frm.doc.is_old_subcontracting_flow,
+                            use_serial_batch_fields: row.use_serial_batch_fields,
+                            serial_and_batch_bundle: row.serial_and_batch_bundle,
+                        },
+                    },
+                });
+
+                if (response && response.message) {
+                    const fields_to_update = [
+                        "item_name",
+                        "description",
+                        "uom",
+                        "stock_uom",
+                        "conversion_factor",
+                        "price_list_rate",
+                        "base_price_list_rate",
+                        "rate",
+                        "base_rate",
+                        "amount",
+                        "base_amount",
+                        "net_rate",
+                        "net_amount",
+                        "stock_qty",
+                        "stock_uom_rate",
+                        "income_account",
+                        "expense_account",
+                        "cost_center",
+                    ];
+
+                    for (const fieldname of fields_to_update) {
+                        if (response.message[fieldname] !== undefined && response.message[fieldname] !== null) {
+                            await frappe.model.set_value(cdt, cdn, fieldname, response.message[fieldname]);
+                        }
+                    }
+                }
+
+                frm.refresh_field("items");
+            } catch (e) {
+                console.error("Error in Sales Invoice UOM handler:", e);
+            }
+        }, 0);
+    },
+
     qty: function(frm, cdt, cdn) {
         setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
         setTimeout(() => apply_return_signs(frm, cdt, cdn), 350);

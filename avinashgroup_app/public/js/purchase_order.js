@@ -1,3 +1,13 @@
+function sync_required_by_to_items(frm) {
+	if (!frm.doc.schedule_date || !frm.doc.items) return;
+
+	frm.doc.items.forEach((row) => {
+		row.schedule_date = frm.doc.schedule_date;
+	});
+
+	frm.refresh_field("items");
+}
+
 frappe.ui.form.on("Purchase Order", {
 	refresh: function (frm) {
 		// The Purchase Order is where the approval workflow runs. Each approver opens
@@ -9,6 +19,8 @@ frappe.ui.form.on("Purchase Order", {
 		// Shown on any non-cancelled PO (draft or submitted) so it is available while
 		// the document is still moving through the workflow.
 		if (frm.doc.docstatus >= 2) return;
+
+		sync_required_by_to_items(frm);
 
 		const has_source_mr = (frm.doc.items || []).some((row) => row.material_request);
 		if (!has_source_mr) return;
@@ -27,5 +39,9 @@ frappe.ui.form.on("Purchase Order", {
 			},
 			__("View")
 		);
+	},
+
+	schedule_date: function (frm) {
+		sync_required_by_to_items(frm);
 	},
 });
