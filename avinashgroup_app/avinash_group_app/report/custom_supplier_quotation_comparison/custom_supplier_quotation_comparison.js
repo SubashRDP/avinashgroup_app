@@ -79,7 +79,19 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			options: "Supplier Quotation",
 			default: "",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Supplier Quotation", txt, { docstatus: ["<", 2] });
+				// Only offer quotations aligned to the selected Purchase Order
+				// (via its Material Requests) / Material Request / company.
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_supplier_quotations",
+						args: {
+							company: frappe.query_report.get_filter_value("company"),
+							purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+							material_request: frappe.query_report.get_filter_value("material_request"),
+							txt: txt,
+						},
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -104,19 +116,36 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: "",
 			// Resolved to its source Material Request(s) server-side (see get_data).
 			get_query: () => ({ filters: { docstatus: ["<", 2] } }),
-			// The comparison must run against the PO's company, not the user's
-			// default company - otherwise a PO from another company shows nothing.
+			// The comparison must run against the PO's company (not the user's
+			// default) and show which Material Request the PO was raised from -
+			// both are filled in automatically when a PO is picked.
 			on_change: (report) => {
 				const po = report.get_filter_value("purchase_order");
 				if (!po) {
 					report.refresh();
 					return;
 				}
-				frappe.db.get_value("Purchase Order", po, "company").then((r) => {
-					const company = r.message && r.message.company;
+				Promise.all([
+					frappe.db.get_value("Purchase Order", po, "company"),
+					frappe.call({
+						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_material_requests_from_purchase_order",
+						args: { purchase_order: po },
+					}),
+				]).then(([company_r, mr_r]) => {
+					const company = company_r.message && company_r.message.company;
+					const mrs = mr_r.message || [];
+					const values = {};
 					if (company && company !== report.get_filter_value("company")) {
-						// setting the company filter triggers the refresh itself
-						report.set_filter_value("company", company);
+						values.company = company;
+					}
+					// Only unambiguous with a single MR; the server unions the PO's
+					// MRs regardless, so this display default never narrows results.
+					if (mrs.length === 1 && mrs[0] !== report.get_filter_value("material_request")) {
+						values.material_request = mrs[0];
+					}
+					if (Object.keys(values).length) {
+						// setting the filters triggers the refresh itself
+						report.set_filter_value(values);
 					} else {
 						report.refresh();
 					}

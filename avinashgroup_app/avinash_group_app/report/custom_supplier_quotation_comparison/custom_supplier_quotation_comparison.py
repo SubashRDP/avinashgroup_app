@@ -52,6 +52,41 @@ def get_company_suppliers(company=None, txt=None):
 	)
 
 
+@frappe.whitelist()
+def get_supplier_quotations(company=None, purchase_order=None, material_request=None, txt=None):
+	"""Supplier Quotation options for the report filter, scoped to the selected
+	Purchase Order (via its Material Requests), Material Request and company -
+	so the dropdown only offers quotations that can actually appear in the report."""
+	material_requests = _as_list(material_request)
+	if purchase_order:
+		material_requests += get_material_requests_from_purchase_order(purchase_order)
+	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
+
+	conditions = ["sq.docstatus < 2", "(sq.name LIKE %(txt)s OR sq.supplier_name LIKE %(txt)s)"]
+	values = {"txt": f"%{(txt or '').strip()}%"}
+	if company:
+		conditions.append("sq.company = %(company)s")
+		values["company"] = company
+	if material_requests:
+		conditions.append(
+			"sq.name IN (SELECT sqi.parent FROM `tabSupplier Quotation Item` sqi"
+			" WHERE sqi.material_request IN %(material_requests)s)"
+		)
+		values["material_requests"] = tuple(material_requests)
+
+	return frappe.db.sql(
+		f"""
+		SELECT sq.name AS value, sq.supplier_name AS description
+		FROM `tabSupplier Quotation` sq
+		WHERE {" AND ".join(conditions)}
+		ORDER BY sq.transaction_date DESC
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
 def execute(filters=None):
 	if not filters:
 		return [], []

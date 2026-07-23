@@ -801,6 +801,16 @@ def _render_comparison_html(doc):
 	currency = frappe.get_cached_value("Company", doc.get("company"), "default_currency")
 	cell = 'border:1px solid #ddd;padding:5px 10px;'
 
+	# Material Request(s) this PO draws on, shown next to the company
+	from avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison import (
+		get_material_requests_from_purchase_order,
+	)
+
+	mrs = get_material_requests_from_purchase_order(doc.name)
+	mr_html = (
+		f'{_("Material Request")}: <b>{frappe.utils.escape_html(", ".join(mrs))}</b>'
+	) if mrs else ""
+
 	# Two-row header: supplier name spans its Rate + Amount pair (supplier_group),
 	# fixed columns (SN / Item Name / Qty) span both rows.
 	top_cells, sub_cells = [], []
@@ -823,9 +833,16 @@ def _render_comparison_html(doc):
 				f'{frappe.utils.escape_html(columns[j].get("label") or "")}</th>'
 			)
 			j += 1
+		# Supplier name with its Supplier Quotation number underneath, so the
+		# approver sees exactly which quotation each column pair came from.
+		sq_name = c.get("sq_link")
+		sq_html = (
+			f'<div style="font-weight:normal;font-size:11px;color:#6c757d;">'
+			f'{frappe.utils.escape_html(sq_name)}</div>'
+		) if sq_name else ""
 		top_cells.append(
 			f'<th colspan="{j - i}" style="{cell}text-align:center;">'
-			f'{frappe.utils.escape_html(group)}</th>'
+			f'{frappe.utils.escape_html(group)}{sq_html}</th>'
 		)
 		i = j
 	header_rows = (
@@ -851,9 +868,10 @@ def _render_comparison_html(doc):
 		body_rows.append(f'<tr style="{row_style}">{"".join(cells)}</tr>')
 
 	return (
-		f'<h4 style="margin:18px 0 2px;">{_("Supplier Quotation Comparison")} — {frappe.utils.escape_html(doc.name)}</h4>'
+		f'<h3 style="margin:18px 0 2px;">{frappe.utils.escape_html(doc.get("company") or "")}</h3>'
+		f'<h4 style="margin:2px 0 2px;">{_("Supplier Quotation Comparison")} — {frappe.utils.escape_html(doc.name)}</h4>'
 		f'<div style="color:#6c757d;font-size:12px;margin-bottom:6px;">'
-		f'{_("Preferred quotations only")} · {frappe.utils.escape_html(doc.get("company") or "")}</div>'
+		f'{" · ".join(x for x in [mr_html, _("Preferred quotations only")] if x)}</div>'
 		f'<table style="border-collapse:collapse;font-size:13px;">'
 		f'{header_rows}{"".join(body_rows)}</table>'
 	)
