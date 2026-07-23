@@ -28,7 +28,7 @@ The **only** thing left is getting this agent running on each till PC.
 
 On the till, open this link in the browser and download **`PrintBridgeSetup.exe`**:
 
-**https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.5.1/PrintBridgeSetup.exe**
+**https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.5.2/PrintBridgeSetup.exe**
 
 (Careful: the repo's generic "latest release" page shows a **different product**
 — K40 Bridge. Use the direct link above, or pick the newest release whose name

@@ -180,7 +180,7 @@ heals on first print) · `1` = a real error worth reading the log.
 | Config | `C:\ProgramData\AvinashPrintBridge\config.json` |
 | Port-conflict note | `C:\ProgramData\AvinashPrintBridge\PORT_CONFLICT.txt` |
 | Task-register log | `C:\ProgramData\AvinashPrintBridge\task_register.log` |
-| Installer (v0.5.1) | `https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.5.1/PrintBridgeSetup.exe` |
+| Installer (v0.5.1) | `https://github.com/SubashRDP/avinashgroup_app/releases/download/print-bridge-v0.5.2/PrintBridgeSetup.exe` |
 
 ### The four trusted sites (out of the box)
 `https://ng-group.raindropinc.com` (production) ·

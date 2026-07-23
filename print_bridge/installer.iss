@@ -12,7 +12,7 @@
 ; that is needed once the agent answers to one origin.
 
 #define MyAppName "Avinash Print Bridge"
-#define MyAppVersion "0.5.1"
+#define MyAppVersion "0.5.2"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "print_bridge.exe"
 ; Every origin the ERP is served at. Production first, then the test sites.
@@ -57,6 +57,10 @@ Name: "autostart"; Description: "Start Print Bridge automatically (at boot and a
 [Files]
 Source: "..\dist\print_bridge.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
+; Field diagnostic: double-click diagnose.bat (or the Start-menu shortcut) on a
+; till that says "printing doesn't work" — read-only, safe during business hours.
+Source: "diagnose.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "diagnose.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 ; The agent creates this itself on first run, but RegisterAutostartTask logs
@@ -65,6 +69,7 @@ Name: "{commonappdata}\AvinashPrintBridge"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Diagnose Printing"; Filename: "{app}\diagnose.bat"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Registry]

@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -493,9 +493,13 @@ def _install_queue() -> str:
 	     installed printer is bound automatically.
 
 	-PresentOnly excludes stale USBnnn ports left by printers that were unplugged,
-	so we pick the port the Epson is actually on, not an old one. Written as a real
-	multi-line script (passed as one -Command arg); -ErrorAction Stop matters
-	because Add-Printer raises NON-terminating errors that are otherwise invisible.
+	so we pick the port the Epson is actually on, not an old one. Since 0.5.2 an
+	installed Epson queue's port is only trusted when a present USB device owns it:
+	tills accumulate stale queues ("EPSON LQ-310 ESC/P2 (Copy 2)" on a dead USBnnn)
+	and Get-Printer order is arbitrary, so first-queue-wins could re-point our queue
+	at a dead port. Written as a real multi-line script (passed as one -Command
+	arg); -ErrorAction Stop matters because Add-Printer raises NON-terminating
+	errors that are otherwise invisible.
 	"""
 	ps = r"""
 $ErrorActionPreference = 'Stop'
@@ -514,22 +518,38 @@ try {
 $queue = Get-Printer -Name 'LQ310-RAW' -ErrorAction SilentlyContinue
 $port = $null
 
-# 2a) Preferred: an installed Epson printer — copy its port.
-$epson = Get-Printer -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' } |
-  Select-Object -First 1
-if ($epson) { $port = $epson.PortName }
+# 2) Ports owned by USB print devices connected RIGHT NOW. usbprint.sys records
+#    each device's USBnnn port under its Enum key; -PresentOnly excludes devices
+#    (and therefore ports) left behind by printers that were unplugged.
+$present = @()
+$devs = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+  Where-Object { $_.InstanceId -like 'USBPRINT\*' -or $_.InstanceId -like 'USB\VID_04B8*' }
+foreach ($d in $devs) {
+  $k = 'HKLM:\SYSTEM\CurrentControlSet\Enum\' + $d.InstanceId + '\Device Parameters'
+  $pn = (Get-ItemProperty -Path $k -Name PortName -ErrorAction SilentlyContinue).PortName
+  if ($pn) { $present += $pn }
+}
 
-# 2b) No Epson printer installed: read the USBnnn port usbprint.sys assigned to a
-#     currently-connected USB printer, whether or not a model driver was installed.
+# 2a) Preferred: an installed Epson queue whose port is verifiably live. A till can
+#     carry several stale Epson queues (e.g. 'EPSON LQ-310 ESC/P2 (Copy 2)' on a
+#     dead USBnnn from a replugged printer) and Get-Printer order is arbitrary, so
+#     taking the first queue blindly could re-point OUR queue at a dead port. A
+#     queue's port only counts if a present USB device owns it.
+$epsons = @(Get-Printer -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -like '*LQ-310*' -or $_.DriverName -like '*Epson*' })
+$live = $epsons | Where-Object { $_.PortName -in $present } | Select-Object -First 1
+if ($live) { $port = $live.PortName }
+
+# 2b) No queue on a live port: bind straight to a present device's port (covers a
+#     connected printer whose model driver was never installed).
+if (-not $port -and $present) { $port = $present[0] }
+
+# 2c) Nothing on USB at all: a parallel/serial Epson is invisible to usbprint, so
+#     fall back to an Epson queue on a non-USB port (LPT1:, COM1:). A stale USBnnn
+#     queue port is NEVER adopted — better to wait offline than bind a dead port.
 if (-not $port) {
-  $devs = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
-    Where-Object { $_.InstanceId -like 'USBPRINT\*' -or $_.InstanceId -like 'USB\VID_04B8*' }
-  foreach ($d in $devs) {
-    $k = 'HKLM:\SYSTEM\CurrentControlSet\Enum\' + $d.InstanceId + '\Device Parameters'
-    $pn = (Get-ItemProperty -Path $k -Name PortName -ErrorAction SilentlyContinue).PortName
-    if ($pn) { $port = $pn; break }
-  }
+  $lpt = $epsons | Where-Object { $_.PortName -notlike 'USB*' } | Select-Object -First 1
+  if ($lpt) { $port = $lpt.PortName }
 }
 
 # 3) Apply. Keep the exit-code contract: a message containing 'No Epson' means
