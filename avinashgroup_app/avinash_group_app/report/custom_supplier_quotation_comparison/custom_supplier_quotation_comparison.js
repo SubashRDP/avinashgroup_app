@@ -83,20 +83,12 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			},
 		},
 		{
-			fieldname: "categorize_by",
-			label: __("Categorize by"),
-			fieldtype: "Select",
-			options: [
-				{ label: __("Categorize by Supplier"), value: "Categorize by Supplier" },
-				{ label: __("Categorize by Item"), value: "Categorize by Item" },
-			],
-			default: __("Categorize by Supplier"),
-		},
-		{
+			// Toggled by the "Show/Hide SQ Remarks" button, not shown as a filter.
+			fieldname: "show_remarks",
+			label: __("Show SQ Remarks"),
 			fieldtype: "Check",
-			label: __("Include Expired"),
-			fieldname: "include_expired",
 			default: 0,
+			hidden: 1,
 		},
 		{
 			fieldtype: "Check",
@@ -116,18 +108,24 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {
-		value = default_formatter(value, row, column, data);
-
-		if (column.fieldname === "valid_till" && data.valid_till) {
-			if (frappe.datetime.get_diff(data.valid_till, frappe.datetime.nowdate()) <= 1) {
-				value = `<div style="color:red">${value}</div>`;
-			} else if (frappe.datetime.get_diff(data.valid_till, frappe.datetime.nowdate()) <= 7) {
-				value = `<div style="color:darkorange">${value}</div>`;
-			}
+		// Remarks row holds free text inside Currency columns - show it as plain text.
+		if (data && data.is_remarks_row && !["sn", "item_name", "qty"].includes(column.fieldname)) {
+			return value ? `<span title="${frappe.utils.escape_html(value)}">${frappe.utils.escape_html(value)}</span>` : "";
 		}
 
-		if (column.fieldname === "price_per_unit" && data.price_per_unit && data.min && data.min === 1) {
-			value = `<div style="color:green">${value}</div>`;
+		// Summary rows are quotation-level values - a per-unit Rate makes no sense there.
+		if (
+			data &&
+			(data.is_total_row || data.is_summary_row || data.is_invoice_row) &&
+			column.fieldname.endsWith("_rate")
+		) {
+			return "";
+		}
+
+		value = default_formatter(value, row, column, data);
+
+		if (data && (data.is_total_row || data.is_invoice_row)) {
+			value = `<b>${value}</b>`;
 		}
 		return value;
 	},
@@ -144,6 +142,26 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			},
 			__("Tools")
 		);
+
+		// Toggle the SQ Remarks row (server appends it when show_remarks is set)
+		report.page.add_inner_button(__("Show/Hide SQ Remarks"), () => {
+			const filter = report.get_filter("show_remarks");
+			filter.set_value(cint(filter.get_value()) ? 0 : 1);
+		});
+
+		// Supplier column header -> open that supplier's quotation
+		$(report.page.wrapper)
+			.off("click.sq_link")
+			.on("click.sq_link", ".dt-cell--header", function (e) {
+				// Ignore clicks on the column dropdown / resize handle
+				if ($(e.target).closest(".dt-dropdown, .dt-cell__resize-handle").length) return;
+				const col_index = parseInt($(this).attr("data-col-index"));
+				if (isNaN(col_index) || !report.datatable) return;
+				const col = report.datatable.datamanager.getColumn(col_index) || {};
+				if (col.sq_link) {
+					frappe.set_route("Form", "Supplier Quotation", col.sq_link);
+				}
+			});
 	},
 	make_default_supplier_dialog: (report) => {
 		// Get the name of the item to change

@@ -56,27 +56,20 @@ def execute(filters=None):
 	if not filters:
 		return [], []
 
-	validate_filters(filters)
-
 	# Get raw data
 	supplier_quotation_data = get_data(filters)
 
 	# Prepare pivoted data and get list of suppliers
-	data, suppliers, supplier_display_name = prepare_pivoted_data(supplier_quotation_data, filters)
+	data, suppliers, supplier_display_name, supplier_sq_map = prepare_pivoted_data(
+		supplier_quotation_data, filters
+	)
 
 	# Generate columns dynamically based on suppliers found
-	columns = get_columns(filters, suppliers, supplier_display_name)
+	columns = get_columns(filters, suppliers, supplier_display_name, supplier_sq_map)
 
 	message = get_message()
 
 	return columns, data, message, None
-
-
-def validate_filters(filters):
-	"""Validate and normalize filters"""
-	if not filters.get("categorize_by") and filters.get("group_by"):
-		filters["categorize_by"] = filters["group_by"]
-		filters["categorize_by"] = filters["categorize_by"].replace("Group by", "Categorize by")
 
 
 def get_data(filters):
@@ -118,13 +111,22 @@ def get_data(filters):
 			sq.total_taxes_and_charges,
 			sq.base_total_taxes_and_charges,
 		)
+		.orderby(sq_item.item_code, sq.supplier)
+	)
+
+	# custom_remarks is a site-level Custom Field; guard so the report still runs
+	# on a site where it hasn't been created yet.
+	if frappe.db.has_column("Supplier Quotation", "custom_remarks"):
+		query = query.select(sq.custom_remarks)
+
+	query = (
+		query
 		.where(
 			(sq_item.parent == sq.name)
 			& (sq_item.docstatus < 2)
 			& (sq.company == filters.get("company"))
 			& (sq.transaction_date.between(filters.get("from_date"), filters.get("to_date")))
 		)
-		.orderby(sq_item.item_code, sq.supplier)
 	)
 
 	# Source-document filter. A Supplier Quotation Item links directly to the
@@ -151,9 +153,6 @@ def get_data(filters):
 	if filters.get("preferred_quotation"):
 		query = query.where(sq.custom_preferred_quotation == 1)
 
-	if not filters.get("include_expired"):
-		query = query.where(sq.status != "Expired")
-
 	supplier_quotation_data = query.run(as_dict=True)
 
 	return supplier_quotation_data
@@ -172,7 +171,8 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# Options: 'base_rate', 'base_amount', 'rate', 'amount'
 	# ============================================
 	price_field = filters.get("price_field", "base_amount")
-	
+	rate_field = "base_rate" if price_field.startswith("base_") else "rate"
+
 	float_precision = cint(frappe.db.get_default("float_precision")) or 2
 	
 	# Data structures for pivot
@@ -193,7 +193,8 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 		
 		# Get price value based on configured field
 		price_value = flt(row.get(price_field), float_precision)
-		
+		rate_value = flt(row.get(rate_field), float_precision)
+
 		all_suppliers.add(supplier)
 		
 		if item_code not in seen_items:
@@ -212,6 +213,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 		if supplier not in item_supplier_map[item_code]:
 			item_supplier_map[item_code][supplier] = {
 				"price": price_value,
+				"rate": rate_value,
 				"qty": row.get("qty"),
 				"quotation": quotation_name,
 			}
@@ -220,10 +222,11 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			if price_value < item_supplier_map[item_code][supplier]["price"]:
 				item_supplier_map[item_code][supplier] = {
 					"price": price_value,
+					"rate": rate_value,
 					"qty": row.get("qty"),
 					"quotation": quotation_name,
 				}
-		
+
 		# Store quotation-level data (discount, taxes) per supplier
 		if supplier not in supplier_quotation_map:
 			supplier_quotation_map[supplier] = {
@@ -234,6 +237,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"total_taxes": flt(row.get("base_total_taxes_and_charges"), float_precision),
 				"grand_total": flt(row.get("base_grand_total"), float_precision),
 				"apply_discount_on": row.get("apply_discount_on"),
+				"remarks": row.get("custom_remarks"),
 			}
 
 	# Sort suppliers alphabetically for consistent column order
@@ -253,125 +257,101 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			"qty": item_meta[item_code]["qty"],
 			"is_data_row": 1,  # Mark as data row for styling
 		}
-		
+
 		sn += 1
-		
-		# Add supplier prices as columns
+
+		# Add supplier rate + amount as columns
 		for supplier in suppliers:
 			col_fieldname = frappe.scrub(supplier)
-			
+
 			if supplier in item_supplier_map[item_code]:
 				supplier_data = item_supplier_map[item_code][supplier]
 				price = supplier_data["price"]
+				row[col_fieldname + "_rate"] = supplier_data["rate"]
 				row[col_fieldname] = price
 				supplier_totals[supplier] += price
 			else:
+				row[col_fieldname + "_rate"] = None
 				row[col_fieldname] = None
-		
+
 		data.append(row)
 	
 	# ============================================
 	# SUMMARY ROWS
 	# ============================================
 	
+	def summary_row(label, **flags):
+		return {"sn": None, "item_code": None, "item_name": None, "qty": label, **flags}
+
+	def has_value(row):
+		"""True if any supplier column in the row is non-zero."""
+		return any(flt(row[frappe.scrub(s)]) for s in suppliers)
+
 	# Total row (Net Total)
-	total_row = {
-		"sn": None,
-		"item_code": None,
-		"item_name": None,
-		"qty": "Total",
-		"is_total_row": 1,
-	}
+	total_row = summary_row("Total", is_total_row=1)
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		total_row[col_fieldname] = supplier_totals[supplier]
 	data.append(total_row)
-	
+
 	# Discount on Net Total row
-	discount_net_row = {
-		"sn": None,
-		"item_code": None,
-		"item_name": None,
-		"qty": "Less: Discount (on Net Total)",
-		"is_summary_row": 1,
-	}
+	discount_net_row = summary_row("Less: Discount (on Net Total)", is_summary_row=1)
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		discount_amount = 0
-		
+
 		if supplier in supplier_quotation_map:
 			sq_data = supplier_quotation_map[supplier]
 			apply_on = sq_data.get("apply_discount_on")
-			
+
 			# Only show discount here if it's applied on Net Total
 			if apply_on == "Net Total":
 				discount_amount = flt(sq_data.get("discount_amount", 0), float_precision)
-		
+
 		discount_net_row[col_fieldname] = discount_amount
-	data.append(discount_net_row)
-	
-	# Taxable Amount row (after net discount)
-	taxable_row = {
-		"sn": None,
-		"item_code": None,
-		"item_name": None,
-		"qty": "Taxable Amount",
-		"is_summary_row": 1,
-	}
+	if has_value(discount_net_row):
+		data.append(discount_net_row)
+
+	# Taxable Amount row (after net discount) - always shown
+	taxable_row = summary_row("Taxable Amount", is_summary_row=1)
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		total = total_row[col_fieldname]
 		discount = discount_net_row[col_fieldname]
 		taxable_row[col_fieldname] = total - discount
 	data.append(taxable_row)
-	
+
 	# VAT/Tax row
-	vat_row = {
-		"sn": None,
-		"item_code": None,
-		"item_name": None,
-		"qty": "Add: VAT",
-		"is_summary_row": 1,
-	}
+	vat_row = summary_row("Add: VAT", is_summary_row=1)
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		if supplier in supplier_quotation_map:
 			vat_row[col_fieldname] = flt(supplier_quotation_map[supplier].get("total_taxes", 0), float_precision)
 		else:
 			vat_row[col_fieldname] = 0
-	data.append(vat_row)
-	
-	# Discount on Grand Total row (NEW)
-	discount_grand_row = {
-		"sn": None,
-		"item_code": None,
-		"item_name": None,
-		"qty": "Less: Discount (on Grand Total)",
-		"is_summary_row": 1,
-	}
+	if has_value(vat_row):
+		data.append(vat_row)
+
+	# Discount on Grand Total row
+	discount_grand_row = summary_row("Less: Discount (on Grand Total)", is_summary_row=1)
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		discount_amount = 0
-		
+
 		if supplier in supplier_quotation_map:
 			sq_data = supplier_quotation_map[supplier]
 			apply_on = sq_data.get("apply_discount_on")
-			
+
 			# Only show discount here if it's applied on Grand Total
 			if apply_on == "Grand Total":
 				discount_amount = flt(sq_data.get("discount_amount", 0), float_precision)
-		
+
 		discount_grand_row[col_fieldname] = discount_amount
-	data.append(discount_grand_row)
-	
-	# Invoice Amount row (Grand Total) - use DB value directly
-	invoice_row = {
-		"sn": None,
-		"item_code": None,
-		"item_name": None,
-		"qty": "Invoice Amount",
-		"is_invoice_row": 1,
-	}
+	if has_value(discount_grand_row):
+		data.append(discount_grand_row)
+
+	# Invoice Amount row (Grand Total) - use DB value directly, always shown
+	invoice_row = summary_row("Invoice Amount", is_invoice_row=1)
 	for supplier in suppliers:
 		col_fieldname = frappe.scrub(supplier)
 		if supplier in supplier_quotation_map:
@@ -385,17 +365,28 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			invoice_row[col_fieldname] = taxable + vat - discount_grand
 	data.append(invoice_row)
 
-	return data, suppliers, supplier_display_name
+	# Remarks row (toggled by the Show/Hide SQ Remarks button)
+	if cint(filters.get("show_remarks")):
+		remarks_row = summary_row("Remarks", is_remarks_row=1)
+		for supplier in suppliers:
+			col_fieldname = frappe.scrub(supplier)
+			remarks_row[col_fieldname] = (supplier_quotation_map.get(supplier) or {}).get("remarks")
+		data.append(remarks_row)
+
+	# supplier -> quotation name, used to link the column header to the document
+	supplier_sq_map = {s: supplier_quotation_map[s]["quotation"] for s in supplier_quotation_map}
+
+	return data, suppliers, supplier_display_name, supplier_sq_map
 
 
-def get_columns(filters, suppliers, supplier_display_name=None):
+def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=None):
 	"""
 	Generate columns dynamically:
 	- Fixed columns for SN, item info, qty
-	- Dynamic columns for each supplier
+	- Dynamic Rate + Amount columns for each supplier
+	- Each supplier column carries `sq_link` (its Supplier Quotation name) so the
+	  client script can open the quotation when the header is clicked
 	"""
-	company_currency = frappe.get_cached_value("Company", filters.get("company"), "default_currency")
-	
 	# Fixed columns
 	columns = [
 		{
@@ -417,19 +408,29 @@ def get_columns(filters, suppliers, supplier_display_name=None):
 			"width": 100,
 		},
 	]
-	
+
 	# Dynamic supplier columns
-	for i, supplier in enumerate(sorted(suppliers), 1):
+	for supplier in sorted(suppliers):
 		col_fieldname = frappe.scrub(supplier)
 		display = (supplier_display_name or {}).get(supplier, supplier)
+		sq_link = (supplier_sq_map or {}).get(supplier)
 		columns.append({
-			"fieldname": col_fieldname,
-			"label": display,
+			"fieldname": col_fieldname + "_rate",
+			"label": _("{0} (Rate)").format(display),
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
-			"width": 120,
+			"width": 110,
+			"sq_link": sq_link,
 		})
-	
+		columns.append({
+			"fieldname": col_fieldname,
+			"label": _("{0} (Amount)").format(display),
+			"fieldtype": "Currency",
+			"options": "Company:company:default_currency",
+			"width": 130,
+			"sq_link": sq_link,
+		})
+
 	return columns
 
 
@@ -441,6 +442,10 @@ def get_message():
 		<br>
 		<span class="indicator">
 		{_("Total includes all item amounts before discount")}
+		</span>
+		<br>
+		<span class="indicator green">
+		{_("Click a supplier column header to open its Supplier Quotation")}
 		</span>"""
 
 
