@@ -518,12 +518,28 @@ def _dispatch_notifications(doc, config):
 	"""
 	level_field = config["current_level_fieldname"]
 
+	# ── Shared extra content: approval status table, appended to every mail ──
+	# Built once per event; a rendering failure logs and degrades to a plain
+	# mail — never blocks the approval save.
+	status_html = ""
+	try:
+		status_html = _build_status_table_html(doc, config)
+	except Exception:
+		frappe.log_error(
+			title=f"Dynamic Approval: status table failed for {doc.name}",
+			message=frappe.get_traceback(),
+		)
+
 	# ── 1. Approval request → next approver ──────────────────────────────
 	if getattr(doc.flags, "approval_level_changed", False) and config.get("enable_approval_notification"):
 		if doc.get("workflow_state") == "Pending Approval":
 			current_level = cint(doc.get(level_field))
 			approver_user = doc.get(CURRENT_APPROVER_FIELD)
 			if current_level and approver_user:
+				# Purchase Order approvers decide off the Supplier Quotation
+				# Comparison — same data as the View button, preferred quotations
+				# only, attached as a PDF (inline table if PDF generation fails).
+				attachments, comparison_inline = _get_comparison_for_email(doc)
 				approver_name = frappe.db.get_value("User", approver_user, "full_name") or approver_user
 				ctx = _notification_context(doc, approver_name=approver_name, current_level=current_level)
 				_send_templated_email(
@@ -532,6 +548,8 @@ def _dispatch_notifications(doc, config):
 					TEMPLATE_APPROVAL,
 					ctx,
 					doc,
+					extra_html=status_html + comparison_inline,
+					attachments=attachments,
 				)
 
 	# ── 2. Rejected → maker (always) + already-approved earlier levels (if enabled) ──
@@ -559,6 +577,7 @@ def _dispatch_notifications(doc, config):
 				TEMPLATE_REJECT,
 				ctx,
 				doc,
+				extra_html=status_html,
 			)
 
 	# ── 3 + 4. Progress / final ──────────────────────────────────────────
@@ -590,6 +609,7 @@ def _dispatch_notifications(doc, config):
 				TEMPLATE_PROGRESS,
 				ctx,
 				doc,
+				extra_html=status_html,
 			)
 		return
 
@@ -612,6 +632,7 @@ def _dispatch_notifications(doc, config):
 			TEMPLATE_FINAL,
 			ctx,
 			doc,
+			extra_html=status_html,
 		)
 
 
@@ -629,6 +650,187 @@ def _notification_context(doc, approver_name="", current_level=0, approved_level
 		"total_levels": total_levels or cint(doc.get(TOTAL_LEVELS_FIELD)),
 		"is_final": is_final,
 	}
+
+
+def _build_status_table_html(doc, config):
+	"""
+	HTML table of the full approval chain — one row per level with the approver's
+	name and where they stand: Approved (with timestamp from the approval history),
+	Rejected, Awaiting (the level whose turn it is now), or Pending (not reached).
+
+	Derives everything from the doc + the flags set in before_workflow_action, so
+	the same table is correct for whichever notification(s) fire on this event.
+	"""
+	total = _get_total_levels(doc, config)
+	if not total:
+		return ""
+
+	level_field = config["current_level_fieldname"]
+	current_level = cint(doc.get(level_field) or 0)
+	state = doc.get("workflow_state")
+	is_rejection = bool(getattr(doc.flags, "is_rejection", False)) or state == "Rejected"
+
+	if state == "Approved":
+		approved_upto, rejected_level, awaiting_level = total, None, None
+	elif is_rejection:
+		approved_upto, rejected_level, awaiting_level = current_level - 1, current_level, None
+	else:
+		approved_upto, rejected_level, awaiting_level = current_level - 1, None, current_level
+
+	# Timestamps from the approval history child table (best effort)
+	approved_on = {}
+	rejected_on = None
+	for h in (doc.get("custom_approval_history") or []):
+		action = h.action or ""
+		if action.startswith("Approved (Level ") and action.endswith(")"):
+			approved_on[cint(action[len("Approved (Level "):-1])] = h.timestamp
+		elif action == "Approved (Final)":
+			approved_on[total] = h.timestamp
+		elif action == "Rejected":
+			rejected_on = h.timestamp
+
+	def fmt_ts(ts):
+		return frappe.utils.format_datetime(ts) if ts else ""
+
+	rows = []
+	for lvl in range(1, total + 1):
+		user = _get_effective_approver_at_level(doc, lvl, config)
+		full_name = (frappe.db.get_value("User", user, "full_name") or user or "") if user else ""
+		if rejected_level and lvl == rejected_level:
+			status, color, when = _("Rejected"), "#c0392b", fmt_ts(rejected_on)
+		elif lvl <= approved_upto:
+			status, color, when = _("Approved"), "#1e7e34", fmt_ts(approved_on.get(lvl))
+		elif awaiting_level and lvl == awaiting_level:
+			status, color, when = _("Awaiting Approval"), "#b7791f", ""
+		else:
+			status, color, when = _("Pending"), "#6c757d", ""
+		rows.append(
+			f'<tr>'
+			f'<td style="border:1px solid #ddd;padding:5px 10px;text-align:center;">{lvl}</td>'
+			f'<td style="border:1px solid #ddd;padding:5px 10px;">{frappe.utils.escape_html(full_name)}</td>'
+			f'<td style="border:1px solid #ddd;padding:5px 10px;color:{color};font-weight:bold;">{status}</td>'
+			f'<td style="border:1px solid #ddd;padding:5px 10px;">{when}</td>'
+			f'</tr>'
+		)
+
+	header = (
+		f'<tr style="background:#f5f5f5;">'
+		f'<th style="border:1px solid #ddd;padding:5px 10px;">{_("Level")}</th>'
+		f'<th style="border:1px solid #ddd;padding:5px 10px;text-align:left;">{_("Approver")}</th>'
+		f'<th style="border:1px solid #ddd;padding:5px 10px;text-align:left;">{_("Status")}</th>'
+		f'<th style="border:1px solid #ddd;padding:5px 10px;text-align:left;">{_("Date and Time")}</th>'
+		f'</tr>'
+	)
+	return (
+		f'<h4 style="margin:18px 0 6px;">{_("Approval Status")}</h4>'
+		f'<table style="border-collapse:collapse;font-size:13px;">{header}{"".join(rows)}</table>'
+	)
+
+
+# ── Supplier Quotation Comparison (Purchase Order approval mails) ─────
+
+# Quotations are raised before the PO, so look back this many months from the
+# PO date. The Material Request + preferred filters do the precise scoping.
+_COMPARISON_LOOKBACK_MONTHS = 6
+
+
+def _get_comparison_for_email(doc):
+	"""
+	Returns (attachments, inline_html) for the approval-request mail.
+
+	Purchase Order only: renders the Custom Supplier Quotation Comparison
+	(preferred quotations, scoped to this PO's Material Requests) as a landscape
+	PDF attachment. If PDF generation fails the table is inlined in the body
+	instead; if the report has no data (or errors) the mail goes without it.
+	"""
+	if doc.doctype != "Purchase Order":
+		return None, ""
+	try:
+		html = _render_comparison_html(doc)
+		if not html:
+			return None, ""
+	except Exception:
+		frappe.log_error(
+			title=f"Dynamic Approval: quotation comparison failed for {doc.name}",
+			message=frappe.get_traceback(),
+		)
+		return None, ""
+
+	try:
+		from frappe.utils.pdf import get_pdf
+		page = (
+			f'<html><head><meta charset="utf-8"></head>'
+			f'<body style="font-family:sans-serif;">{html}</body></html>'
+		)
+		pdf = get_pdf(page, {"orientation": "Landscape"})
+		return [{"fname": f"Supplier Quotation Comparison - {doc.name}.pdf", "fcontent": pdf}], ""
+	except Exception:
+		frappe.log_error(
+			title=f"Dynamic Approval: comparison PDF failed for {doc.name}",
+			message=frappe.get_traceback(),
+		)
+		return None, html  # fall back to the table inline in the email body
+
+
+def _render_comparison_html(doc):
+	"""
+	Run the Custom Supplier Quotation Comparison report server-side with the same
+	filters the PO View button uses (company + purchase_order → Material Requests,
+	preferred quotations only) and render its pivot as a self-contained HTML table.
+	Returns "" when there is nothing to compare.
+	"""
+	from avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison import (
+		execute as run_comparison,
+	)
+
+	base_date = doc.get("transaction_date") or frappe.utils.nowdate()
+	filters = frappe._dict({
+		"company": doc.get("company"),
+		"from_date": frappe.utils.add_months(base_date, -_COMPARISON_LOOKBACK_MONTHS),
+		"to_date": frappe.utils.nowdate(),
+		"purchase_order": doc.name,
+		"preferred_quotation": 1,
+	})
+	result = run_comparison(filters)
+	columns, data = result[0], result[1]
+
+	supplier_cols = [c for c in columns if c.get("fieldname") not in ("sn", "item_name", "qty")]
+	if not supplier_cols or not any(r.get("is_data_row") for r in data):
+		return ""
+
+	currency = frappe.get_cached_value("Company", doc.get("company"), "default_currency")
+	cell = 'border:1px solid #ddd;padding:5px 10px;'
+
+	header_cells = "".join(
+		f'<th style="{cell}text-align:{"right" if c.get("fieldtype") == "Currency" else "left"};">'
+		f'{frappe.utils.escape_html(c.get("label") or "")}</th>'
+		for c in columns
+	)
+
+	body_rows = []
+	for row in data:
+		if row.get("is_total_row") or row.get("is_invoice_row"):
+			row_style = "background:#f0f0f0;font-weight:bold;"
+		else:
+			row_style = ""
+		cells = []
+		for c in columns:
+			value = row.get(c.get("fieldname"))
+			if c.get("fieldtype") == "Currency":
+				text = frappe.utils.fmt_money(value, currency=currency) if value is not None else ""
+				cells.append(f'<td style="{cell}text-align:right;white-space:nowrap;">{text}</td>')
+			else:
+				text = frappe.utils.escape_html(str(value)) if value is not None else ""
+				cells.append(f'<td style="{cell}">{text}</td>')
+		body_rows.append(f'<tr style="{row_style}">{"".join(cells)}</tr>')
+
+	return (
+		f'<h4 style="margin:18px 0 2px;">{_("Supplier Quotation Comparison")} — {frappe.utils.escape_html(doc.name)}</h4>'
+		f'<div style="color:#6c757d;font-size:12px;margin-bottom:6px;">'
+		f'{_("Preferred quotations only")} · {frappe.utils.escape_html(doc.get("company") or "")}</div>'
+		f'<table style="border-collapse:collapse;font-size:13px;">'
+		f'<tr style="background:#f5f5f5;">{header_cells}</tr>{"".join(body_rows)}</table>'
+	)
 
 
 def _collect_previous_approvers(doc, config, upto_level):
@@ -649,12 +851,17 @@ def _collect_previous_approvers(doc, config, upto_level):
 	return recipients
 
 
-def _send_templated_email(recipients, template_name, fallback_template, context, doc):
+def _send_templated_email(recipients, template_name, fallback_template, context, doc,
+						  extra_html=None, attachments=None):
 	"""
 	Render an Email Template and mail it to `recipients` (User IDs). Each recipient
 	is skipped unless their User record has an email and is enabled. Falls back to
 	the built-in default template if the linked one is missing. All failures are
 	logged, never raised — a broken template must not block the approval save.
+
+	`extra_html` is appended after the rendered template body (approval status
+	table, inline report fallback) so existing/custom Email Templates need no
+	edits to carry it. `attachments` goes straight to frappe.sendmail.
 	"""
 	# Resolve recipients → real email addresses, honouring the "has email" gate
 	# and de-duplicating (distinct users may share an address).
@@ -671,10 +878,14 @@ def _send_templated_email(recipients, template_name, fallback_template, context,
 		if not frappe.db.exists("Email Template", template_name):
 			template_name = fallback_template
 		rendered = frappe.get_doc("Email Template", template_name).get_formatted_email(context)
+		message = rendered["message"]
+		if extra_html:
+			message = f"{message}{extra_html}"
 		frappe.sendmail(
 			recipients=emails,
 			subject=rendered["subject"],
-			message=rendered["message"],
+			message=message,
+			attachments=attachments or None,
 			reference_doctype=doc.doctype,
 			reference_name=doc.name,
 			now=False,

@@ -22,13 +22,6 @@
 // only says which forms have the field to manage.
 const DOCNO_DOCTYPES = ["Payment Entry", "Journal Entry", "Purchase Invoice", "Purchase Receipt"];
 
-// Fields that can change whether/what number applies (server scope inputs).
-const SCOPE_FIELDS = [
-    "custom_p_type", "custom_purchase_type", "custom_receipt_type",
-    "custom_p_type_code", "company", "custom_branch", "is_return",
-    "posting_date", "transaction_date", "custom_fiscal_year",
-];
-
 const DEBOUNCE_MS = 400;
 
 function has_docno_field(frm) {
@@ -123,6 +116,14 @@ function apply_status(frm, st) {
         // hide the field entirely so nothing provisional is ever shown. The
         // mandatory override matters: hidden fields still fail the client
         // mandatory check, and reqd alone is trumped by mandatory_depends_on.
+        // A value already in the field (typed during a Manual-mode stint
+        // before the type/scope flipped this doc to Auto, or carried in by
+        // Duplicate) is stale — the server draws its own number at save.
+        // Clear it (the field handler drops the manual flag with it) so the
+        // stale number is never kept nor silently sent.
+        if (frm.doc.custom_document_no) {
+            frm.set_value("custom_document_no", null);
+        }
         set_field(frm, { hidden: 1, reqd: 0, mandatory_depends_on: "eval:false", description: "" });
         if (st.ambiguous) {
             frappe.show_alert({
@@ -226,10 +227,18 @@ DOCNO_DOCTYPES.forEach(function (doctype) {
         }
     };
 
-    // Any scope field changing can flip auto/manual or move the preview number.
-    SCOPE_FIELDS.forEach(function (field) {
-        if (!handlers[field]) handlers[field] = schedule_status;
-    });
-
     frappe.ui.form.on(doctype, handlers);
+
+    // ANY parent-field change can flip auto/manual or move the scope: rules
+    // condition/group on admin-chosen fields (cost center, a custom field...),
+    // so a hardcoded watch list silently drifts out of date. Watch the model
+    // wildcard instead — the debounce + request token collapse change bursts
+    // (fetch_from cascades, mapped docs) into one status fetch. Our own two
+    // managed fields are excluded so apply_status's set_value can't re-trigger.
+    frappe.model.on(doctype, "*", function (fieldname, value, doc) {
+        if (fieldname === "custom_document_no" || fieldname === "custom_document_no_manual") return;
+        const frm = window.cur_frm;
+        if (!frm || frm.doc !== doc || frm.doc.docstatus !== 0) return;
+        schedule_status(frm);
+    });
 });

@@ -1639,3 +1639,73 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertEqual(
             ns._locked_group_fields(rule_all),
             ["company", "custom_branch", "custom_fiscal_year"])
+
+    def test_72_stale_manual_leftover_redrawn_on_desk_save(self):
+        # A FLAGGED manual value on a NEW desk-form save of an AUTO-mode doc is
+        # a leftover — typed during a Manual-mode stint before the type/scope
+        # flipped the doc to Auto, or carried in by Duplicate (the form hides
+        # the field in auto mode, so it cannot have been typed HERE). The auto
+        # draw wins and the flag is cleared.
+        self._require(
+            frappe.get_meta("Journal Entry").has_field("custom_document_no_manual"),
+            "needs the manual flag field")
+        orig_fd = getattr(frappe.local, "form_dict", None)
+        frappe.local.form_dict = frappe._dict({"cmd": "frappe.desk.form.save.savedocs"})
+        self.addCleanup(setattr, frappe.local, "form_dict", orig_fd)
+
+        d = self._je(custom_document_no=999999, custom_document_no_manual=1)
+        ns.apply_document_no(d)
+        self.assertNotEqual(frappe.utils.cint(d.custom_document_no), 999999)  # redrawn
+        self.assertGreater(frappe.utils.cint(d.custom_document_no), 0)
+        self.assertEqual(frappe.utils.cint(d.custom_document_no_manual), 0)   # back to auto
+
+        # An INELIGIBLE (manual-mode) doc keeps its flagged value on the same
+        # desk save — the discard applies only where auto would number the doc.
+        m = self._je(custom_p_type=JE_TYPE_OFF,
+                     custom_document_no=999999, custom_document_no_manual=1)
+        ns.apply_document_no(m)
+        self.assertEqual(frappe.utils.cint(m.custom_document_no), 999999)
+
+        # Outside the desk (import/REST/script) a flagged value is intentional
+        # data and stays verbatim even on an auto-mode doc (see test_06/56).
+        frappe.local.form_dict = frappe._dict({})
+        s = self._je(custom_document_no=999999, custom_document_no_manual=1)
+        ns.apply_document_no(s)
+        self.assertEqual(frappe.utils.cint(s.custom_document_no), 999999)
+
+    def test_73_manual_mode_duplicate_is_rejected(self):
+        # A Manual-mode doc has no auto scope, but a typed number must STILL be
+        # unique within its would-be series: a duplicate (typed again, or
+        # carried in by a copy path) is rejected, and the typing-time
+        # availability check reports it. Both were silent before
+        # ignore_eligibility — the checks bailed on the missing auto scope.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        tag = "MM" + frappe.generate_hash(length=6)
+        self._temp_rule(
+            doctype="Journal Entry", auto_document_no=1,
+            normal_docno_mode="Manual",                      # nothing auto-numbered
+            extra_segments=self._tag_segments(tag),
+            conditions=[], document_no_conditions=[],
+        )
+        big = 800000 + int(frappe.generate_hash(length=6), 16) % 90000
+        a = self._je(custom_document_no=big, custom_document_no_manual=1)
+        self.assertIsNone(ns._docno_scope(a))                # manual mode: no auto scope
+        self._balance(a).insert(ignore_permissions=True)
+        self.addCleanup(self._force_delete, "Journal Entry", a.name)
+        self.assertEqual(frappe.utils.cint(a.custom_document_no), big)   # kept
+
+        # typing-time check sees the taken number despite manual mode
+        res = ns.check_document_no_availability(doc={
+            "doctype": "Journal Entry", "company": self.company,
+            "posting_date": str(self.pdate), "voucher_type": "Journal Entry",
+            "custom_p_type": JE_TYPE, "custom_document_no": big})
+        self.assertTrue(res and res["taken"])
+        self.assertEqual(res["used_by"], a.name)
+
+        # save-time: the duplicate is rejected, not silently kept
+        b = self._je(custom_document_no=big, custom_document_no_manual=1)
+        self._balance(b)
+        with self.assertRaises(frappe.ValidationError) as cm:
+            b.insert(ignore_permissions=True)
+        self.assertIn("already used", str(cm.exception))

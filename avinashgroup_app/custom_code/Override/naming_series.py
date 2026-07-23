@@ -703,8 +703,13 @@ def format_document_number(doc):
 #     concurrently can never receive the same number.
 #
 # Manual override: custom_document_no_manual = 1 means the user typed the number
-# themselves; it is kept verbatim and only checked for uniqueness. When 0 (or
-# the flag field is not deployed yet) the number is auto-managed.
+# themselves; it is kept verbatim and only checked for uniqueness — the check
+# runs in BOTH modes (a Manual-mode doc is checked against its would-be series
+# via ignore_eligibility). When 0 (or the flag field is not deployed yet) the
+# number is auto-managed. Exception: a flagged value on a NEW desk-form save of
+# an AUTO-mode doc is a stale leftover (typed before a mode flip, or carried in
+# by Duplicate — the form hides the field in auto mode) and is discarded in
+# favour of the auto draw (_is_stale_manual_leftover).
 # ---------------------------------------------------------------------------
 
 
@@ -944,10 +949,15 @@ def _group_by_scope(doc, rule):
     }
 
 
-def _docno_scope(doc):
+def _docno_scope(doc, ignore_eligibility=False):
     """Series scope for the auto document number, or None when the doc is not
     eligible. Returns a dict — either {key, pattern, field} (prefix-matched) or
     {key, where, params} (column-filtered):
+
+    ignore_eligibility=True computes the scope even when the doc is NOT
+    auto-numbered (a Manual-mode rule, unmet Document No. conditions) — used by
+    the manual-number uniqueness check, which must see the would-be series a
+    typed number lands in. Never used for drawing a number.
 
       * When the matching rule has GROUP BY fields, the scope is those field
         values (see _group_by_scope) — fully admin-configurable grouping.
@@ -960,7 +970,7 @@ def _docno_scope(doc):
     resolvable, so the custom_name built later is correct even if the framework
     has not run its own fetch yet."""
     rule = _match_numbering_rule(doc)
-    if not _docno_eligible(doc, rule):
+    if not ignore_eligibility and not _docno_eligible(doc, rule):
         return None
 
     number_field = _docno_field(rule)  # which field holds the counter
@@ -1093,13 +1103,14 @@ def _series_row_exists(key):
     return bool(frappe.db.sql("SELECT 1 FROM `tabSeries` WHERE name = %s", key))
 
 
-def peek_next_document_no(doc):
+def peek_next_document_no(doc, ignore_eligibility=False):
     """Non-reserving preview of the number this doc would get right now.
     No lock, no side effects — safe for the live form preview. Mirrors the
     authoritative GREATEST(counter+1, data_max+1) so the preview matches what
     save assigns. Returns None when the type is not auto-numbered or the scope
-    fields are incomplete."""
-    scope = _docno_scope(doc)
+    fields are incomplete. ignore_eligibility=True previews the next free
+    number of a Manual-mode series (for duplicate-number hints)."""
+    scope = _docno_scope(doc, ignore_eligibility=ignore_eligibility)
     if not scope:
         return None
     key = _docno_series_key(doc, scope)
@@ -1116,7 +1127,7 @@ def _next_number_hint(doc):
     """A ' Next available number is N.' fragment for duplicate-number errors,
     or '' when a next number can't be determined. Best-effort — never raises."""
     try:
-        nxt = peek_next_document_no(doc)
+        nxt = peek_next_document_no(doc, ignore_eligibility=True)
     except Exception:
         nxt = None
     return f" Next available number is {nxt}." if nxt else ""
@@ -1402,6 +1413,32 @@ def _pin_amended_docno(doc):
     return False
 
 
+def _is_stale_manual_leftover(doc):
+    """True when a flagged 'manual' number on a NEW desk-form save is really a
+    leftover, not a user's entry for THIS document: the doc is AUTO-mode for
+    its rule, and the form hides the Document No. field in auto mode — so the
+    user cannot have typed the value here. It was typed during a Manual-mode
+    stint (then the type/company/scope changed, flipping the doc to Auto) or
+    carried in by a Duplicate. The rule's Auto mode is authoritative: the
+    caller discards the leftover and the normal auto draw numbers the doc.
+    Clears the manual flag so the stored doc is classified auto-drawn.
+
+    Imports / REST / script saves are never touched — a flagged value there is
+    intentional data (e.g. legacy numbers) and stays verbatim. Doctypes WITHOUT
+    the <field>_manual flag keep the legacy 'never overwrite' contract: their
+    form does not hide the field, so a present value may be a real entry."""
+    if not (doc.is_new() and _is_desk_form_save()):
+        return False
+    rule = _match_numbering_rule(doc)
+    flag = _docno_field(rule) + "_manual"
+    if not (doc.meta.has_field(flag) and frappe.utils.cint(doc.get(flag))):
+        return False
+    if not _docno_eligible(doc, rule):
+        return False
+    doc.set(flag, 0)
+    return True
+
+
 def apply_document_no(doc):
     """Authoritative, collision-free assignment of custom_document_no at save.
 
@@ -1439,8 +1476,13 @@ def apply_document_no(doc):
     if not field_df or field_df.fieldtype in frappe.model.no_value_fields + frappe.model.table_fields:
         return
 
-    if _is_manual_document_no(doc, field):
-        scope = _docno_scope(doc)
+    if _is_manual_document_no(doc, field) and not _is_stale_manual_leftover(doc):
+        # The scope for the uniqueness check ignores the rule's Auto/Manual
+        # mode: a Manual-mode doc has no auto scope (nothing is drawn for it),
+        # but a typed number must STILL be unique within its would-be series —
+        # otherwise a duplicate (typed again, or carried in by a copy path)
+        # saves clean with a number another document already holds.
+        scope = _docno_scope(doc, ignore_eligibility=True)
         # ORDER MATTERS (concurrency): bump the counter FIRST — its
         # INSERT..ON DUPLICATE KEY UPDATE takes the scope's tabSeries row lock
         # (held to commit), so a concurrent save of the same scope blocks here
@@ -1609,7 +1651,10 @@ def check_document_no_availability(doc=None, **kwargs):
         d = _client_payload_doc(doc, kwargs)
         if not d:
             return None
-        scope = _docno_scope(d)
+        # ignore_eligibility: a Manual-mode doc has no auto scope, but the
+        # number being typed must be checked against its would-be series —
+        # otherwise manual mode gets no duplicate warning at all.
+        scope = _docno_scope(d, ignore_eligibility=True)
         if not scope:
             return None
         # The form types into custom_document_no; fall back to it when the
@@ -1624,7 +1669,7 @@ def check_document_no_availability(doc=None, **kwargs):
         return {
             "taken": bool(used_by),
             "used_by": used_by,
-            "next": peek_next_document_no(d) if used_by else None,
+            "next": peek_next_document_no(d, ignore_eligibility=True) if used_by else None,
         }
     except Exception:
         return None
