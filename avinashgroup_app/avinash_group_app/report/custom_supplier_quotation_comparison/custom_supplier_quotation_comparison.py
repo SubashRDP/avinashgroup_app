@@ -27,24 +27,61 @@ def _as_list(value):
 	return [value]
 
 
-@frappe.whitelist()
-def get_company_suppliers(company=None, txt=None):
-	"""Supplier options scoped to the selected company via the supplier's custom_company."""
-	company = _as_list(company)
-	like = f"%{(txt or '').strip()}%"
-	conditions = ["(sup.name LIKE %(txt)s OR sup.supplier_name LIKE %(txt)s)"]
-	values = {"txt": like}
+def _sq_filter_scope(company=None, purchase_order=None, material_request=None,
+					 supplier_quotation=None, supplier=None, item_code=None):
+	"""Shared WHERE fragments (aliases sq / sqi) limiting quotation rows to the
+	report's current filter context. The filter-option endpoints below all build
+	on this so every dropdown only offers values that can actually appear in the
+	report for the chosen Purchase Order / Material Request / company."""
+	conditions = ["sqi.parent = sq.name", "sqi.docstatus < 2"]
+	values = {}
+
 	if company:
-		conditions.append("(sup.custom_company IN %(company)s OR COALESCE(sup.custom_company, '') = '')")
-		values["company"] = tuple(company)
-	where = " AND ".join(conditions)
+		conditions.append("sq.company = %(company)s")
+		values["company"] = company
+
+	material_requests = _as_list(material_request)
+	if purchase_order:
+		material_requests += get_material_requests_from_purchase_order(purchase_order)
+	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
+	if material_requests:
+		conditions.append("sqi.material_request IN %(material_requests)s")
+		values["material_requests"] = tuple(material_requests)
+
+	quotations = _as_list(supplier_quotation)
+	if quotations:
+		conditions.append("sq.name IN %(quotations)s")
+		values["quotations"] = tuple(quotations)
+
+	suppliers = _as_list(supplier)
+	if suppliers:
+		conditions.append("sq.supplier IN %(suppliers)s")
+		values["suppliers"] = tuple(suppliers)
+
+	if item_code:
+		conditions.append("sqi.item_code = %(item_code)s")
+		values["item_code"] = item_code
+
+	return conditions, values
+
+
+@frappe.whitelist()
+def get_filter_suppliers(company=None, purchase_order=None, material_request=None,
+						 supplier_quotation=None, item_code=None, txt=None):
+	"""Supplier options: only suppliers with a quotation in the current scope."""
+	conditions, values = _sq_filter_scope(
+		company=company, purchase_order=purchase_order, material_request=material_request,
+		supplier_quotation=supplier_quotation, item_code=item_code,
+	)
+	conditions.append("(sq.supplier LIKE %(txt)s OR sq.supplier_name LIKE %(txt)s)")
+	values["txt"] = f"%{(txt or '').strip()}%"
 
 	return frappe.db.sql(
 		f"""
-		SELECT sup.name AS value, sup.supplier_name AS description
-		FROM `tabSupplier` sup
-		WHERE {where}
-		ORDER BY sup.supplier_name
+		SELECT DISTINCT sq.supplier AS value, sq.supplier_name AS description
+		FROM `tabSupplier Quotation` sq, `tabSupplier Quotation Item` sqi
+		WHERE {" AND ".join(conditions)}
+		ORDER BY sq.supplier_name
 		LIMIT 50
 		""",
 		values,
@@ -53,31 +90,47 @@ def get_company_suppliers(company=None, txt=None):
 
 
 @frappe.whitelist()
-def get_supplier_quotations(company=None, purchase_order=None, material_request=None, txt=None):
-	"""Supplier Quotation options for the report filter, scoped to the selected
-	Purchase Order (via its Material Requests), Material Request and company -
-	so the dropdown only offers quotations that can actually appear in the report."""
-	material_requests = _as_list(material_request)
-	if purchase_order:
-		material_requests += get_material_requests_from_purchase_order(purchase_order)
-	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
-
-	conditions = ["sq.docstatus < 2", "(sq.name LIKE %(txt)s OR sq.supplier_name LIKE %(txt)s)"]
-	values = {"txt": f"%{(txt or '').strip()}%"}
-	if company:
-		conditions.append("sq.company = %(company)s")
-		values["company"] = company
-	if material_requests:
-		conditions.append(
-			"sq.name IN (SELECT sqi.parent FROM `tabSupplier Quotation Item` sqi"
-			" WHERE sqi.material_request IN %(material_requests)s)"
-		)
-		values["material_requests"] = tuple(material_requests)
+@frappe.validate_and_sanitize_search_inputs
+def get_filter_items(doctype, txt, searchfield, start, page_len, filters):
+	"""Item link-query: only items quoted in the current scope."""
+	filters = filters or {}
+	conditions, values = _sq_filter_scope(
+		company=filters.get("company"),
+		purchase_order=filters.get("purchase_order"),
+		material_request=filters.get("material_request"),
+		supplier_quotation=filters.get("supplier_quotation"),
+		supplier=filters.get("supplier"),
+	)
+	conditions.append("(sqi.item_code LIKE %(txt)s OR sqi.item_name LIKE %(txt)s)")
+	values.update({"txt": f"%{(txt or '').strip()}%", "start": cint(start), "page_len": cint(page_len) or 20})
 
 	return frappe.db.sql(
 		f"""
-		SELECT sq.name AS value, sq.supplier_name AS description
-		FROM `tabSupplier Quotation` sq
+		SELECT DISTINCT sqi.item_code, sqi.item_name
+		FROM `tabSupplier Quotation` sq, `tabSupplier Quotation Item` sqi
+		WHERE {" AND ".join(conditions)}
+		ORDER BY sqi.item_name
+		LIMIT %(start)s, %(page_len)s
+		""",
+		values,
+	)
+
+
+@frappe.whitelist()
+def get_supplier_quotations(company=None, purchase_order=None, material_request=None,
+							supplier=None, item_code=None, txt=None):
+	"""Supplier Quotation options: only quotations in the current scope."""
+	conditions, values = _sq_filter_scope(
+		company=company, purchase_order=purchase_order, material_request=material_request,
+		supplier=supplier, item_code=item_code,
+	)
+	conditions.append("(sq.name LIKE %(txt)s OR sq.supplier_name LIKE %(txt)s)")
+	values["txt"] = f"%{(txt or '').strip()}%"
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT sq.name AS value, sq.supplier_name AS description
+		FROM `tabSupplier Quotation` sq, `tabSupplier Quotation Item` sqi
 		WHERE {" AND ".join(conditions)}
 		ORDER BY sq.transaction_date DESC
 		LIMIT 50
@@ -148,11 +201,6 @@ def get_data(filters):
 		)
 		.orderby(sq_item.item_code, sq.supplier)
 	)
-
-	# custom_remarks is a site-level Custom Field; guard so the report still runs
-	# on a site where it hasn't been created yet.
-	if frappe.db.has_column("Supplier Quotation", "custom_remarks"):
-		query = query.select(sq.custom_remarks)
 
 	query = (
 		query
@@ -272,7 +320,6 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"total_taxes": flt(row.get("base_total_taxes_and_charges"), float_precision),
 				"grand_total": flt(row.get("base_grand_total"), float_precision),
 				"apply_discount_on": row.get("apply_discount_on"),
-				"remarks": row.get("custom_remarks"),
 			}
 
 	# Sort suppliers alphabetically for consistent column order
@@ -399,14 +446,6 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			discount_grand = discount_grand_row[col_fieldname]
 			invoice_row[col_fieldname] = taxable + vat - discount_grand
 	data.append(invoice_row)
-
-	# Remarks row (toggled by the Show/Hide SQ Remarks button)
-	if cint(filters.get("show_remarks")):
-		remarks_row = summary_row("Remarks", is_remarks_row=1)
-		for supplier in suppliers:
-			col_fieldname = frappe.scrub(supplier)
-			remarks_row[col_fieldname] = (supplier_quotation_map.get(supplier) or {}).get("remarks")
-		data.append(remarks_row)
 
 	# supplier -> quotation name, used to link the column header to the document
 	supplier_sq_map = {s: supplier_quotation_map[s]["quotation"] for s in supplier_quotation_map}

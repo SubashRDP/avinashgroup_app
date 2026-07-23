@@ -43,18 +43,17 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			label: __("Item"),
 			fieldname: "item_code",
 			fieldtype: "Link",
-			get_query: () => {
-				let quote = frappe.query_report.get_filter_value("supplier_quotation");
-				if (quote != "") {
-					return {
-						query: "erpnext.stock.doctype.quality_inspection.quality_inspection.item_query",
-						filters: {
-							from: "Supplier Quotation Item",
-							parent: quote,
-						},
-					};
-				}
-			},
+			// Only items quoted within the current PO / MR / company scope.
+			get_query: () => ({
+				query: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_filter_items",
+				filters: {
+					company: frappe.query_report.get_filter_value("company"),
+					purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+					material_request: frappe.query_report.get_filter_value("material_request"),
+					supplier_quotation: frappe.query_report.get_filter_value("supplier_quotation"),
+					supplier: frappe.query_report.get_filter_value("supplier"),
+				},
+			}),
 		},
 		{
 			fieldname: "supplier",
@@ -62,12 +61,18 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			fieldtype: "MultiSelectList",
 			options: "Supplier",
 			get_data: function (txt) {
-				// Scope suppliers to those with a Supplier Quotation in the selected company.
-				const company = frappe.query_report.get_filter_value("company");
+				// Only suppliers with a quotation in the current PO / MR / company scope.
 				return frappe
 					.call({
-						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_company_suppliers",
-						args: { company: company, txt: txt },
+						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_filter_suppliers",
+						args: {
+							company: frappe.query_report.get_filter_value("company"),
+							purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+							material_request: frappe.query_report.get_filter_value("material_request"),
+							supplier_quotation: frappe.query_report.get_filter_value("supplier_quotation"),
+							item_code: frappe.query_report.get_filter_value("item_code"),
+							txt: txt,
+						},
 					})
 					.then((r) => r.message || []);
 			},
@@ -88,19 +93,13 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 							company: frappe.query_report.get_filter_value("company"),
 							purchase_order: frappe.query_report.get_filter_value("purchase_order"),
 							material_request: frappe.query_report.get_filter_value("material_request"),
+							supplier: frappe.query_report.get_filter_value("supplier"),
+							item_code: frappe.query_report.get_filter_value("item_code"),
 							txt: txt,
 						},
 					})
 					.then((r) => r.message || []);
 			},
-		},
-		{
-			// Toggled by the "Show/Hide SQ Remarks" button, not shown as a filter.
-			fieldname: "show_remarks",
-			label: __("Show SQ Remarks"),
-			fieldtype: "Check",
-			default: 0,
-			hidden: 1,
 		},
 		{
 			fieldtype: "Check",
@@ -155,11 +154,6 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {
-		// Remarks row holds free text inside Currency columns - show it as plain text.
-		if (data && data.is_remarks_row && !["sn", "item_name", "qty"].includes(column.fieldname)) {
-			return value ? `<span title="${frappe.utils.escape_html(value)}">${frappe.utils.escape_html(value)}</span>` : "";
-		}
-
 		// Summary rows are quotation-level values - a per-unit Rate makes no sense there.
 		if (
 			data &&
@@ -244,12 +238,6 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			},
 			__("Tools")
 		);
-
-		// Toggle the SQ Remarks row (server appends it when show_remarks is set)
-		report.page.add_inner_button(__("Show/Hide SQ Remarks"), () => {
-			const filter = report.get_filter("show_remarks");
-			filter.set_value(cint(filter.get_value()) ? 0 : 1);
-		});
 
 		// Supplier group cell -> open that supplier's quotation
 		$(report.page.wrapper)
