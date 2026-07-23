@@ -47,6 +47,10 @@ def _sq_filter_scope(company=None, purchase_order=None, material_request=None,
 	if material_requests:
 		conditions.append("sqi.material_request IN %(material_requests)s")
 		values["material_requests"] = tuple(material_requests)
+	elif purchase_order:
+		# PO chosen but untraceable to any MR -> no quotation is aligned to it;
+		# offer nothing rather than everything (mirrors get_data).
+		conditions.append("1 = 0")
 
 	quotations = _as_list(supplier_quotation)
 	if quotations:
@@ -223,6 +227,11 @@ def get_data(filters):
 	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
 	if material_requests:
 		query = query.where(sq_item.material_request.isin(material_requests))
+	elif filters.get("purchase_order"):
+		# A Purchase Order was chosen but its item lines carry no material_request
+		# link (created directly, not from an MR). Nothing is "aligned to this PO",
+		# so show nothing - falling through would list every quotation in the window.
+		return []
 
 	if filters.get("item_code"):
 		query = query.where(sq_item.item_code == filters.get("item_code"))
@@ -253,6 +262,9 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# CONFIGURABLE: Change this to use different price field
 	# Options: 'base_rate', 'base_amount', 'rate', 'amount'
 	# ============================================
+	if not supplier_quotation_data:
+		return [], [], {}, {}
+
 	price_field = filters.get("price_field", "base_amount")
 	rate_field = "base_rate" if price_field.startswith("base_") else "rate"
 
