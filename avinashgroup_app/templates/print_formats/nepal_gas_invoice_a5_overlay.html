@@ -31,40 +31,20 @@ If the whole print is shifted, change ONLY ox / oy (mm; + = right / down) with
 one test print. If the amount still runs off the right edge on your specific
 form, nudge amt_r left a few mm. Do not touch the individual field numbers.
 -#}
+{%- set form = form | default('ngi') -%}{#- which pre-printed form: ngi, ngi_udyog, gandaki, karnali, narayani, grishma, avinash -#}
 {%- set ox = ox | default(0) -%}{#- global horizontal nudge, mm (+ = right) -#}
 {%- set oy = oy | default(0) -%}{#- global vertical nudge, mm (+ = down) -#}
-{%- set amt_r = amt_r | default(207.0) -%}{#- right edge of the amount column; <=210 to stay on A5 -#}
 {%- set rows_per_page = rows_per_page | default(2) -%}
 
 {#- A5 LANDSCAPE, 210 x 148mm. Standard size -> the driver will not rotate it. -#}
 {%- set pw = 210.0 -%}
 {%- set ph = 148.0 -%}
 
-{#- proven ESC/P column positions (true mm), amount clamped to the LQ-310 reach -#}
-{%- set P = {
-  'copy_label':   {'cx': 118.5, 'y': 37.7},
-  'invoice_no':   {'x': 35.0,  'y': 31.5},
-  'ref_inv':      {'x': 74.0,  'y': 46.7},
-  'trans_date':   {'y': 31.0},
-  'invoice_date': {'y': 36.3},
-  'do_no':        {'y': 41.5},
-  'date_r':       205.0,
-  'customer':     {'x': 52.0,  'y': 48.0},
-  'address':      {'x': 52.0,  'y': 53.0},
-  'pan':          {'x': 52.0,  'y': 58.0},
-  'body_top':     75.0,
-  'row_h':        4.8,
-  'words':        {'x': 48.0,  'y': 90.1, 'w': 90},
-  'c_sno':        15.0,
-  'c_hs':         25.0,
-  'c_part':       50.0,
-  'r_qty':        148.0,
-  'r_rate':       182.0,
-  'y_disc':       90.0,
-  'y_taxable':    96.0,
-  'y_vat':        102.0,
-  'y_grand':      110.0,
-} -%}
+{#- Coordinates come from the calibrated ESC/P map for THIS form (overlay.py ->
+    escp_*.py). One source of truth; nothing re-measured here. Every form's
+    amount is clamped to A5's width inside the helper. -#}
+{%- set P = overlay_pos(form) -%}
+{%- set amt_r = amt_r | default(P.amt_r) -%}
 
 {#- ------------------------------ data ---------------------------------- -#}
 {%- set invoice_no = doc.get('custom_branch_name') or doc.name -%}

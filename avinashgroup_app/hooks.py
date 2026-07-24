@@ -192,6 +192,7 @@ jinja = {
         "avinashgroup_app.custom_code.printing.escp_ngi_udyog.ngi_udyog_escp",
         "avinashgroup_app.custom_code.printing.escp_karnali.karnali_escp",
         "avinashgroup_app.custom_code.SalesInvoice.print_count.invoice_copy_titles",
+        "avinashgroup_app.custom_code.printing.overlay.overlay_pos",
     ],
 }
 
