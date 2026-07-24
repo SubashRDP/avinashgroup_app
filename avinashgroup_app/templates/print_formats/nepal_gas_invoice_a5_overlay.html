@@ -36,9 +36,15 @@ form, nudge amt_r left a few mm. Do not touch the individual field numbers.
 {%- set oy = oy | default(0) -%}{#- global vertical nudge, mm (+ = down) -#}
 {%- set rows_per_page = rows_per_page | default(2) -%}
 
-{#- A5 LANDSCAPE, 210 x 148mm. Standard size -> the driver will not rotate it. -#}
-{%- set pw = 210.0 -%}
-{%- set ph = 148.0 -%}
+{#- page = 'form' (default) -> 241.3 x 139.7mm, the true 9.5x5.5in form. Matches
+      the Epson queue's built-in "NGIForm" size, so CUPS prints it 1:1 with no
+      rotation and every column lands in its real box (nothing clamped).
+    page = 'a5'   -> 210 x 148mm, for a laser/plain-A5 fallback. Here the amount
+      column is pulled in to fit 210mm (see amt_r in overlay.py). -#}
+{%- set page = page | default('form') -%}
+{%- set is_a5 = (page == 'a5') -%}
+{%- set pw = 210.0 if is_a5 else 241.3 -%}
+{%- set ph = 148.0 if is_a5 else 139.7 -%}
 
 {#- Coordinates come from the calibrated ESC/P map for THIS form (overlay.py ->
     escp_*.py). One source of truth; nothing re-measured here. Every form's
