@@ -1,0 +1,373 @@
+{#- ============================================================================
+Nepal Gas — Sales Invoice on ORDINARY A5 PAPER
+=============================================================================
+STANDALONE. This file deliberately does not include or extend
+nepal_gas_invoice.html: that template drives the LIVE pre-printed dot-matrix
+formats and must not move while this one is being tested. The coordinate map P
+below is copied from it, not imported, so the two can be calibrated and
+evolved independently (same convention as escp_avinash_slip.py vs
+escp_invoice.py).
+
+WHY THIS EXISTS
+---------------
+The raw-ESC/P -> Print Bridge -> Epson LQ-310 path is not stable enough to run
+across branches that are hundreds of km apart: every failure needed either an
+on-site visit or a hand-typed PowerShell session. This format sidesteps the
+whole transport. It prints the form furniture as well as the data, so it needs
+NO pre-printed stationery, NO tractor feed, NO dot matrix and NO local agent —
+just an ordinary printer with A5 paper, through the normal PDF path.
+
+THE TWO FAILURES THIS IS BUILT TO AVOID
+---------------------------------------
+Both of the problems the team hit before have the SAME root cause: the PDF
+declared a page size (241.3 x 139.7mm, the 9.5x5.5in continuous form) that the
+printer driver did not have loaded. The driver fell back to its own media (A4)
+and improvised.
+
+1. "One page took two sheets."  A4 is 297mm long and the form is 139.7mm, so a
+   single A4 page pushed TWO forms through the tractor. Fixed here by using a
+   REAL, STANDARD sheet size: one @page == one physical A5 sheet. Nothing is
+   left for the driver to guess, and there is exactly one sheet per copy with
+   no trailing blank page (see the .last rule below).
+
+2. "The whole print came out rotated 90 degrees."  The driver believed A4
+   portrait was loaded and rotated the landscape form to make it fit.
+   Defended two ways:
+     orient = 'landscape' (default) -> A5 landscape, 210 x 148mm. Correct for
+       any printer whose tray/driver is set to A5. Reads normally.
+     orient = 'portrait'            -> A5 PORTRAIT, 148 x 210mm — the least
+       ambiguous page a driver can be handed — with the form rotated 90deg
+       INSIDE it. Nothing anywhere in the chain has to rotate, so the output
+       is deterministic on a printer locked to portrait. Turn the sheet a
+       quarter turn to read it. Use this one if rotation ever comes back.
+
+GEOMETRY
+--------
+No coordinate in P was re-measured for A5. The form is cropped to the area that
+actually carries ink and that crop is scaled by ONE uniform factor, so every
+measured position keeps its exact relationship to every other one; only the
+absolute size changes. Text scales with the boxes, so the proportions stay as
+calibrated.
+
+P itself came from a CamScanner scan of a printed Narayani form, metrically
+rectified by fitting a homography to all 22 sprocket-hole centres (0.39mm mean
+/ 0.99mm max residual), with the form furniture re-calibrated against a
+sprocket-rectified photo of a blank NGI form (0.42mm mean).
+
+If a whole print is shifted on a given printer, change only ox / oy.
+-#}
+{%- set ox = 0 -%}{#- global horizontal nudge, mm (+ = right) -#}
+{%- set oy = 0 -%}{#- global vertical nudge, mm (+ = down) -#}
+{%- set rows_per_page = rows_per_page | default(3) -%}{#- item lines in the 71.2..85.9mm body -#}
+
+{#- ------------------------- sheet geometry ------------------------------ -#}
+{%- set orient = orient | default('landscape') -%}
+{%- set is_portrait = (orient == 'portrait') -%}
+{%- set pw = 148.0 if is_portrait else 210.0 -%}
+{%- set ph = 210.0 if is_portrait else 148.0 -%}
+
+{#- Crop box on the form, in form mm. Read straight off P: ink starts at the
+    table's left rule / labels (12.0, 12.1) and ends at the SIGNATURE block
+    (sign.x 161.5 + sign.w 74 = 235.5) — which reaches further right than the
+    table's right rule (cols[6]=229) or the right logo (214.8+15.2=230).
+    Cropping at 231 chops "For: <company>" off at the sheet edge. Vertically
+    the copy label is the topmost ink (y=1.5) and the signature text the
+    lowest (y=124.1). Everything outside this box is blank paper. -#}
+{%- set cx0 = 10.0 -%}{#- left of this only the carbon-ply stub (x=4.2) sits -#}
+{%- set cy0 = 0.0 -%}
+{%- set cw = 226.0 -%}{#- 10 -> 236mm -#}
+{%- set ch = 128.0 -%}{#-  0 -> 128mm -#}
+{%- set pad = 4.0 -%}{#- unprintable-edge allowance every office printer wants -#}
+
+{#- Rotated 90deg, the crop's width runs DOWN the page, so its footprint is
+    (ch x cw); unrotated it is (cw x ch). Scale to fit whichever applies. -#}
+{%- set fit_w = ch if is_portrait else cw -%}
+{%- set fit_h = cw if is_portrait else ch -%}
+{%- set sc = [(pw - 2 * pad) / fit_w, (ph - 2 * pad) / fit_h] | min -%}
+{%- set mx = ((pw - fit_w * sc) / 2) | round(3) -%}
+{%- set my = ((ph - fit_h * sc) / 2) | round(3) -%}
+
+{%- set P = {
+  'copy_label':   {'y': 1.5,   'x': 70,   'w': 100},
+  'title':        {'y': 6.8,   'addr_y': 13.8, 'tel_y': 19.2, 'cx': 28, 'cw': 180},
+  'inv_no':       {'y': 29.2,  'x': 36,   'w': 95,  'label_x': 12.1, 'label_y': 28.4},
+  'trans_date':   {'y': 28.8,  'x': 194,  'w': 34,  'label_x': 147, 'label_y': 27.6},
+  'vat_boxes':    {'y': 37.4,  'x': 34.9, 'box_w': 4.8, 'box_h': 5.2, 'label_x': 12.1, 'label_y': 38.4, 'colon_x': 31.5},
+  'inv_date':     {'y': 34.1,  'x': 194,  'w': 34,  'label_x': 147, 'label_y': 32.8},
+  'do_no':        {'y': 39.3,  'x': 194,  'w': 34,  'label_x': 147, 'label_y': 38.1},
+  'customer':     {'y': 44.4,  'x': 55,   'w': 80,  'label_x': 12.1, 'label_y': 44.1},
+  'address':      {'y': 49.9,  'x': 55,   'w': 95,  'label_x': 12.1, 'label_y': 49.2},
+  'pan':          {'y': 54.8,  'x': 55,   'w': 70,  'label_x': 12.1, 'label_y': 54.5},
+  'colon_x':      48.6,
+  'mode':         {'label_x': 12.1, 'label_y': 59.9, 'opts_x': 50.5},
+  'table':        {'top': 65.6, 'head_bot': 71.2, 'body_bot': 85.9, 'bot': 112.4,
+                   'head_ty': 66.3, 'body_y': 72.4, 'row_h': 4.8},
+  'cols':         [12.0, 24.0, 49.2, 138.4, 162.7, 187.4, 229.0],
+  'disc':         {'ty': 87.0,  'label': '%Discount'},
+  'taxable':      {'ty': 92.9,  'label': 'Taxable Amount'},
+  'vat_amt':      {'ty': 98.7,  'label': '13% VAT'},
+  'grand':        {'ty': 106.3, 'label': 'Grand Total'},
+  'tot_rows':     [85.9, 92.0, 97.6, 103.8],
+  'words':        {'x': 52, 'y': 88.0, 'w': 84, 'label_x': 13.2, 'label_y': 87.1},
+  'sign':         {'line_y': 121.8, 'x': 161.5, 'w': 74, 'text_y': 124.1},
+  'logo_left':    {'x': 15.0,  'y': 7.5,  'w': 11.4, 'h': 15.4, 'img': '/assets/avinashgroup_app/images/ngi_emblem.png'},
+  'logo_right':   {'x': 214.8, 'y': 7.4,  'w': 15.2, 'h': 15.2, 'img': '/assets/avinashgroup_app/images/ngi_sng_logo.png'},
+  'watermark':    {'x': 82.8,  'y': 36.6, 'w': 69.5, 'h': 93.9, 'opacity': 0.18},
+} -%}
+{%- set LS = 10.5 -%}{#- furniture label size, pt (measured off the NGI form) -#}
+
+{#- ------------------------------ data ---------------------------------- -#}
+{%- set invoice_no = doc.get('custom_branch_name') or doc.name -%}
+{%- set bs_date = doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date) -%}
+{%- set bs_date = (bs_date | string).split(' ')[0] if bs_date else '' -%}
+{%- set ad_date = frappe.utils.formatdate(doc.posting_date, 'dd-MM-yyyy') -%}
+{%- set do_nos = doc.items | map(attribute='delivery_note') | select | unique | list -%}
+{%- set address = (doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
+{%- set address = address.rstrip(', ') if address else '' -%}
+{%- set is_cn = doc.is_return -%}
+
+{#- VAT: per-invoice custom total, else sum of the VAT rows in the tax table -#}
+{%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
+{%- if not ns2.vat -%}
+  {%- for t in doc.taxes -%}
+    {%- if 'vat' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
+      {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endif -%}
+{%- set grand_total = doc.rounded_total or doc.grand_total -%}
+
+{#- One sheet per title: the first print of an invoice is the INVOICE + TAX
+    INVOICE pair, reprints a single copy. Returns are credit memos and all
+    figures print positive — the document type states the direction. -#}
+{%- set copy_titles = invoice_copy_titles(doc) -%}
+
+{#- ----------------------------- helpers -------------------------------- -#}
+{%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false) -%}
+<div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
+  text-align:{{ align }}; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
+  {% if not wrap %}white-space:nowrap; overflow:hidden;{% endif %} line-height:1.2;">{{ caller() }}</div>
+{%- endmacro -%}
+
+{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
+
+{%- macro hline(x, y, w, th=0.3) -%}
+<div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm; border-top:{{ th }}mm solid #000;"></div>
+{%- endmacro -%}
+{%- macro vline(x, y, h, th=0.3) -%}
+<div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; height:{{ h }}mm; border-left:{{ th }}mm solid #000;"></div>
+{%- endmacro -%}
+
+<style>
+  /* Chrome reads @page; this format MUST render through the "chrome"
+     pdf_generator. The distro's unpatched-Qt wkhtmltopdf shrinks every length
+     by 0.7688x and ignores --disable-smart-shrinking, so it can never hold an
+     mm-exact scaled overlay. page-width/page-height are a fallback only. */
+  @page { size: {{ pw }}mm {{ ph }}mm; margin: 0; }
+  .print-format { page-width: {{ pw }}mm; page-height: {{ ph }}mm;
+    margin: 0mm; }
+
+  /* Any stray margin/padding on the wrappers pushes the last sheet past the
+     page boundary and produces a blank extra sheet — the "two papers for one
+     page" symptom, in its PDF form. Zero them all. */
+  html, body { margin: 0 !important; padding: 0 !important; }
+  .print-format, .print-format .format-container { padding: 0 !important; margin: 0 !important; }
+  .print-format .letter-head, .print-format .print-heading { display: none; }
+
+  /* Frappe's standard.css styles .print-format as an A4 portrait sheet on
+     screen. Without this the preview shows a tall page with the form hanging
+     off its edge. Screen only — does not affect what is printed. */
+  @media screen {
+    .print-format { max-width: none !important; min-height: 0 !important;
+      margin: 0 auto !important; width: {{ pw }}mm; border-radius: 0 !important; }
+    .print-format-gutter { padding: 16px 0 !important; }
+  }
+
+  .print-format, .print-format p, .print-format div { color: #000; }
+
+  /* One sheet == one physical A5 page. Every sheet forces a break EXCEPT the
+     final one: page-break-after:always on the last sheet is what emits a
+     trailing blank page. */
+  .a5-sheet { position: relative; width: {{ pw }}mm; height: {{ ph }}mm;
+    overflow: hidden; page-break-after: always; page-break-inside: avoid;
+    /* DO NOT REMOVE `contain`. Chrome's print shrink-to-fit measures the
+       UNTRANSFORMED layout width, and overflow:hidden does not stop that.
+       .a5-form is 241.3mm wide and holds the table's right rule at
+       left:229mm, so Chrome sees a ~233mm-wide document on a 210mm page and
+       silently scales EVERYTHING by 210/233 = 0.90 — the mm-exact geometry
+       quietly stops being mm-exact, and only once the job runs to a second
+       page. `size` containment makes this box's size independent of its
+       contents, so the inner overflow never reaches the page box.
+       Verified: without it a 226mm calibration bar prints 181.5mm; with it,
+       202.0mm as designed. */
+    contain: strict; }
+  .a5-sheet.last { page-break-after: auto; }
+
+  /* The form, cropped and scaled onto the sheet. Transform functions apply
+     right-to-left, so a point p on the form lands at mx + sc * (p - crop
+     origin) — the crop's corner pins to (mx, my) and everything else follows
+     at one constant ratio.
+     Portrait additionally rotates 90deg: (u,v) -> (-v,u) puts the form's x
+     axis down the page, and translateX(ch) brings it back into view. */
+  .a5-form { position: absolute; left: {{ mx }}mm; top: {{ my }}mm;
+    width: 241.3mm; height: 139.7mm;
+    transform-origin: 0 0;
+    transform: scale({{ '%.5f' | format(sc) }})
+      {%- if is_portrait %} translateX({{ ch }}mm) rotate(90deg){% endif %}
+      translate(-{{ cx0 }}mm, -{{ cy0 }}mm); }
+  .a5-ink, .a5-ink div { font-family: Arial, Helvetica, sans-serif; }
+</style>
+
+{#- split items into forms -#}
+{%- set item_pages = [] -%}
+{%- for i in range(0, doc.items | length, rows_per_page) -%}
+  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
+{%- endfor -%}
+{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
+
+{%- for copy_label in copy_titles -%}
+{%- set copy_last = loop.last -%}
+{%- for page_items in item_pages -%}
+{#- Two different "last"es, and conflating them is a real bug:
+    is_last  = last form OF THIS COPY -> totals + amount in words. Every copy
+               is a complete invoice and must carry its own. (The live
+               template keys this off the final copy instead, which leaves
+               every earlier copy with an empty totals block and a false
+               "Contd. on next form..." — see the note in the handover.)
+    is_final = last form of the WHOLE run -> the .last class, which drops the
+               trailing page break so the job cannot end on a blank sheet. -#}
+{%- set is_last = loop.last -%}
+{%- set is_final = copy_last and loop.last -%}
+{%- set page_no = loop.index -%}
+{%- set T = P.table -%}
+<div class="a5-sheet{% if is_final %} last{% endif %}"><div class="a5-form">
+
+  {#- ========================= FORM FURNITURE ========================== -#}
+  <div class="a5-ink">
+    {#- watermark first so everything else paints on top of it -#}
+    <img src="{{ P.logo_left.img }}" style="position:absolute;
+      left:{{ P.watermark.x + ox }}mm; top:{{ P.watermark.y + oy }}mm;
+      width:{{ P.watermark.w }}mm; height:{{ P.watermark.h }}mm; opacity:{{ P.watermark.opacity }};">
+    <img src="{{ P.logo_left.img }}" style="position:absolute; left:{{ P.logo_left.x + ox }}mm;
+      top:{{ P.logo_left.y + oy }}mm; width:{{ P.logo_left.w }}mm; height:{{ P.logo_left.h }}mm;">
+    <img src="{{ P.logo_right.img }}" style="position:absolute; left:{{ P.logo_right.x + ox }}mm;
+      top:{{ P.logo_right.y + oy }}mm; width:{{ P.logo_right.w }}mm; height:{{ P.logo_right.h }}mm;">
+
+    {#- No carbon-ply stub markings here: plain paper has no plies to label,
+        and the stub sits at x=4.2, outside the crop. -#}
+
+    {%- call at(30, P.title.y, 180, 'center', true, 16) %}{{ doc.company }}{% endcall -%}
+    {%- call at(30, P.title.addr_y, 180, 'center', true, 10) %}{{ head_address | default('Balaju Industrial Estate, Balaju, Kathmandu, Nepal') }}{% endcall -%}
+    {%- call at(30, P.title.tel_y, 180, 'center', true, 7.5) %}{{ head_contact | default('Tel : 01-4970416, Fax : 01-4970399, E-mail : info@nepalgas.com.np') }}{% endcall -%}
+
+    {%- call at(P.inv_no.label_x, P.inv_no.label_y, 40, 'left', false, LS) %}Invoice No.:{% endcall -%}
+    {%- call at(P.vat_boxes.label_x, P.vat_boxes.label_y, 30, 'left', false, LS) %}VAT No.{% endcall -%}
+    {%- call at(P.vat_boxes.colon_x, P.vat_boxes.label_y, 4, 'left', false, LS) %}:{% endcall -%}
+    {%- set company_vat = frappe.db.get_value('Company', doc.company, 'tax_id') or '' -%}
+    {%- for d in company_vat -%}
+      <div style="position:absolute; left:{{ P.vat_boxes.x + loop.index0 * P.vat_boxes.box_w + ox }}mm; top:{{ P.vat_boxes.y + oy }}mm;
+        width:{{ P.vat_boxes.box_w }}mm; height:{{ P.vat_boxes.box_h }}mm; border:0.3mm solid #000; text-align:center; font-size:10pt; line-height:{{ P.vat_boxes.box_h }}mm;">{{ d }}</div>
+    {%- endfor -%}
+    {%- call at(P.trans_date.label_x, P.trans_date.label_y, 43, 'right', false, LS) %}Transaction Date:{% endcall -%}
+    {%- call at(P.inv_date.label_x, P.inv_date.label_y, 43, 'right', false, LS) %}Invoice Date:{% endcall -%}
+    {%- call at(P.do_no.label_x, P.do_no.label_y, 43, 'right', false, LS) %}D/O No:{% endcall -%}
+    {%- call at(P.customer.label_x, P.customer.label_y, 45, 'left', false, LS) %}Customer's Name{% endcall -%}
+    {%- call at(P.colon_x, P.customer.label_y, 4, 'left', false, LS) %}:{% endcall -%}
+    {%- call at(P.address.label_x, P.address.label_y, 45, 'left', false, LS) %}Address{% endcall -%}
+    {%- call at(P.colon_x, P.address.label_y, 4, 'left', false, LS) %}:{% endcall -%}
+    {%- call at(P.pan.label_x, P.pan.label_y, 48, 'left', false, LS) %}Customer's Pan No.:{% endcall -%}
+    {%- call at(P.mode.label_x, P.mode.label_y, 45, 'left', false, LS) %}Mode of Payment{% endcall -%}
+    {%- call at(P.colon_x, P.mode.label_y, 4, 'left', false, LS) %}:{% endcall -%}
+    {%- call at(P.mode.opts_x, P.mode.label_y, 62, 'left', false, 12) %}Cash/Credit/Cheque/Other{% endcall -%}
+
+    {#- table frame: measured rulings -#}
+    {%- set TW = P.cols[6] - P.cols[0] -%}
+    {{ hline(P.cols[0], T.top, TW, 0.4) }}
+    {{ hline(P.cols[0], T.head_bot, TW, 0.3) }}
+    {{ hline(P.cols[0], T.body_bot, TW, 0.3) }}
+    {{ hline(P.cols[0], T.bot, TW, 0.4) }}
+    {#- left region columns stop at the body; right region columns run to the bottom -#}
+    {%- for cx in P.cols[0:4] -%}{{ vline(cx, T.top, T.body_bot - T.top, 0.4 if loop.first else 0.3) }}{%- endfor -%}
+    {{ vline(P.cols[0], T.body_bot, T.bot - T.body_bot, 0.4) }}
+    {#- in the totals block Quantity and Rate merge into one label cell, so
+        cols[4] must stop at the body — drawing it to the bottom cuts straight
+        through "Taxable Amount" / "Grand Total". -#}
+    {{ vline(P.cols[4], T.top, T.body_bot - T.top, 0.3) }}
+    {%- for cx in [P.cols[3], P.cols[5], P.cols[6]] -%}{{ vline(cx, T.top, T.bot - T.top, 0.4 if loop.last else 0.3) }}{%- endfor -%}
+    {%- set heads = ['S.No.', 'H. S. Code', 'Particular', 'Quantity', 'Rate', 'Total Price NRS'] -%}
+    {%- for h in heads -%}
+      {%- set i = loop.index0 -%}
+      {%- call at(P.cols[i], T.head_ty, P.cols[i+1] - P.cols[i], 'center', true, LS) %}{{ h }}{% endcall -%}
+    {%- endfor -%}
+    {#- totals row separators (right side only) -#}
+    {%- for ty in P.tot_rows -%}
+      {{ hline(P.cols[3], ty, P.cols[6] - P.cols[3], 0.3) }}
+    {%- endfor -%}
+    {%- for key in ['disc', 'taxable', 'vat_amt', 'grand'] -%}
+      {%- set r = P[key] -%}
+      {%- call at(P.cols[3], r.ty, P.cols[5] - P.cols[3], 'center', key == 'grand', LS) %}{{ r.label }}{% endcall -%}
+    {%- endfor -%}
+    {%- call at(P.words.label_x, P.words.label_y, 48, 'left', false, LS) %}Amount in Words :{% endcall -%}
+    {{ hline(P.sign.x, P.sign.line_y, P.sign.w, 0.3) }}
+    {#- 78mm / 10pt, not 74mm / 11.5pt: at 11.5pt the longest company name
+        ("Nepal Gas Udhyog (Narayani) Pvt. Ltd.") overruns the 74mm box and the
+        div's own overflow:hidden chops it mid-word ("Pvt. L"). 161.5+78 still
+        lands inside the 241.3mm form. -#}
+    {%- call at(P.sign.x, P.sign.text_y, 78, 'left', false, 10) %}<b><i>For:</i></b> {{ doc.company }}{% endcall -%}
+  </div>
+
+  {#- ============================== DATA =============================== -#}
+  {%- call at(P.copy_label.x, P.copy_label.y, P.copy_label.w, 'center', true, 8.5) %}{{ copy_label }}{% endcall -%}
+  {%- call at(P.inv_no.x, P.inv_no.y, P.inv_no.w, 'left', true, 9) %}{{ invoice_no }}{% endcall -%}
+  {%- if is_cn and doc.return_against -%}
+    {#- a credit note must reference the original invoice; the gap between the
+        VAT boxes (end 80.2mm) and "Transaction Date:" (starts 158mm) is the
+        only free space on the form -#}
+    {%- call at(84, P.vat_boxes.y + 1.3, 70, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
+  {%- endif -%}
+  {%- call at(P.trans_date.x, P.trans_date.y, P.trans_date.w) %}{{ bs_date }}{% endcall -%}
+  {%- call at(P.inv_date.x, P.inv_date.y, P.inv_date.w) %}{{ ad_date }}{% endcall -%}
+  {%- if do_nos -%}
+    {%- call at(P.do_no.x, P.do_no.y, P.do_no.w) %}{{ do_nos | join(', ') }}{% endcall -%}
+  {%- endif -%}
+  {%- call at(P.customer.x, P.customer.y, P.customer.w) %}{{ doc.customer_name }}{% endcall -%}
+  {%- call at(P.address.x, P.address.y, P.address.w) %}{{ address }}{% endcall -%}
+  {%- call at(P.pan.x, P.pan.y, P.pan.w) %}{{ doc.tax_id or '' }}{% endcall -%}
+
+  {#- item rows -#}
+  {%- set base_sno = (page_no - 1) * rows_per_page -%}
+  {%- for item in page_items -%}
+    {%- set ry = T.body_y + loop.index0 * T.row_h -%}
+    {%- call at(P.cols[0], ry, P.cols[1] - P.cols[0], 'center') %}{{ base_sno + loop.index }}{% endcall -%}
+    {%- set hs = frappe.db.get_value('Item', item.item_code, 'custom_hs_code') or '' -%}
+    {%- call at(P.cols[1], ry, P.cols[2] - P.cols[1], 'center') %}{{ hs }}{% endcall -%}
+    {%- call at(P.cols[2] + 1.5, ry, P.cols[3] - P.cols[2] - 3) %}{{ item.item_name or item.item_code }}{% endcall -%}
+    {%- call at(P.cols[3], ry, P.cols[4] - P.cols[3] - 2, 'right') %}{{ qty_fmt(item.qty) }} {{ item.uom or '' }}{% endcall -%}
+    {%- call at(P.cols[4], ry, P.cols[5] - P.cols[4] - 2, 'right') %}{{ num(item.rate) }}{% endcall -%}
+    {%- call at(P.cols[5], ry, P.cols[6] - P.cols[5] - 2, 'right') %}{{ num(item.amount) }}{% endcall -%}
+  {%- endfor -%}
+
+  {%- if is_last -%}
+    {%- if doc.additional_discount_percentage -%}
+      {%- call at(P.cols[5] + 1, P.disc.ty, P.cols[6] - P.cols[5] - 3, 'right') %}{{ doc.additional_discount_percentage | abs }}%{% endcall -%}
+    {%- endif -%}
+    {%- call at(P.cols[5] + 1, P.taxable.ty, P.cols[6] - P.cols[5] - 3, 'right') %}{{ num(doc.net_total) }}{% endcall -%}
+    {%- call at(P.cols[5] + 1, P.vat_amt.ty, P.cols[6] - P.cols[5] - 3, 'right') %}{{ num(ns2.vat) }}{% endcall -%}
+    {%- call at(P.cols[5] + 1, P.grand.ty, P.cols[6] - P.cols[5] - 3, 'right', true) %}{{ num(grand_total) }}{% endcall -%}
+    {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 7.5, true) %}{{ doc.in_words or '' }}{% endcall -%}
+  {%- else -%}
+    {#- the body is full on a continuation form, so this goes in the (empty)
+        Amount-in-Words cell rather than on top of the last item row -#}
+    {%- call at(P.words.label_x, P.disc.ty, 90, 'left', true) %}Contd. on next sheet...{% endcall -%}
+  {%- endif -%}
+
+  {%- if item_pages | length > 1 -%}
+    {#- y=126.5, not the 134.5 the continuous-form template uses: the crop ends
+        at 128mm, so anything below that is sliced off the A5 sheet. Sits just
+        under the signature text (124.1) and right-aligns on the table rule. -#}
+    {%- call at(195, 126.5, 34, 'right', false, 7) %}Sheet {{ page_no }}/{{ item_pages | length }}{% endcall -%}
+  {%- endif -%}
+</div></div>
+{%- endfor -%}
+{%- endfor -%}

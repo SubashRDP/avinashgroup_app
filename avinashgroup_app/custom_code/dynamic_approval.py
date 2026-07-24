@@ -267,10 +267,13 @@ def validate(doc, method=None):
 	if frappe.session.user == "Administrator":
 		return
 
-	# Once rejected the document is frozen — no field edits by anyone (Admin excepted
-	# above). Allow the reject transition itself, which flips workflow_state → Rejected
-	# on this very save (DB still holds the prior "Pending Approval" state, so
-	# has_value_changed is True); every later save while Rejected is blocked.
+	# Rejected docs end up Cancelled (docstatus 2, see _cancel_rejected_doc), so
+	# the framework itself blocks later edits. This guard covers the reject save
+	# window and any doc still sitting at Rejected/docstatus 0 from before the
+	# cancel behaviour existed. Allow the reject transition itself, which flips
+	# workflow_state → Rejected on this very save (DB still holds the prior
+	# "Pending Approval" state, so has_value_changed is True); every later save
+	# while Rejected is blocked.
 	if doc.get("workflow_state") == "Rejected":
 		if not doc.has_value_changed("workflow_state"):
 			frappe.throw(
@@ -335,6 +338,28 @@ def validate(doc, method=None):
 def before_save(doc, method=None):
 	"""Hook for initial creation logging"""
 	if doc.is_new():
+		if doc.get("amended_from") and _is_managed_doctype(doc):
+			# Amend copies every non-no_copy field, including workflow_state
+			# ("Rejected" — insert would fail workflow validation) and the old
+			# approval-history rows. The amended doc must restart the flow:
+			# back to Draft with a fresh trail. The approver hierarchy table is
+			# deliberately kept so the maker doesn't re-enter it. (The hidden
+			# level/approver fields are no_copy and reset on their own.)
+			if doc.get("workflow_state"):
+				doc.set("workflow_state", "Draft")
+			if doc.meta.has_field("custom_approval_history"):
+				doc.set("custom_approval_history", [])
+			# Depending on when the custom fields were created they may lack
+			# no_copy — zero the level-tracking fields so the amended doc never
+			# starts with the rejected doc's mid-flow values (Submit for
+			# Approval recomputes them anyway). The level field's name is
+			# config-defined, so pull it when a config resolves.
+			doc.set(CURRENT_APPROVER_FIELD, None)
+			if doc.meta.has_field(TOTAL_LEVELS_FIELD):
+				doc.set(TOTAL_LEVELS_FIELD, 0)
+			config = _get_config_for_doc(doc)
+			if config and doc.meta.has_field(config["current_level_fieldname"]):
+				doc.set(config["current_level_fieldname"], 0)
 		_log_approval_history(doc, "Created")
 
 
@@ -440,17 +465,54 @@ def before_workflow_action(doc, method=None, action=None):
 		_log_approval_history(doc, "Rejected")
 
 
+def _cancel_rejected_doc(doc):
+	"""
+	Reject → Cancelled (docstatus 2).
+
+	The workflow's Rejected state must keep doc_status "0": apply_workflow only
+	permits 0→0, 0→1, 1→1 and 1→2, so a draft can never reach Cancelled through
+	the transition itself ("Illegal Document Status"). Instead, once the reject
+	save has landed, flip docstatus straight to 2 here. The doc was never
+	submitted, so there are no on_submit side effects (GL, ledgers, status
+	hooks) to reverse — the direct DB write is the whole job. Cancelled docs
+	drop out of draft lists and the maker can Amend to fix and resubmit.
+
+	Runs inside on_update of the reject save: the parent row (docstatus 0) is
+	already written, so this UPDATE sticks. Child rows are flipped too, matching
+	what a real doc.cancel() does. update_modified=False keeps the timestamp the
+	save just wrote, so the client's reload never sees a modified-conflict.
+	"""
+	if not getattr(doc.flags, "is_rejection", False):
+		return
+	if doc.get("workflow_state") != "Rejected" or cint(doc.docstatus) != 0:
+		return
+
+	frappe.db.set_value(doc.doctype, doc.name, "docstatus", 2, update_modified=False)
+	for df in doc.meta.get_table_fields():
+		frappe.db.set_value(
+			df.options,
+			{"parent": doc.name, "parenttype": doc.doctype, "parentfield": df.fieldname},
+			"docstatus", 2, update_modified=False,
+		)
+	# Reflect on the in-memory doc so apply_workflow returns Cancelled to the client.
+	doc.docstatus = 2
+
+
 def on_update(doc, method=None):
 	"""
 	1. Re-sync current approver when the hierarchy table is edited while Pending Approval.
 	   Uses frappe.db.set_value (direct DB write) so the change is never lost regardless
 	   of what happened in the save cycle.
 	2. Send email notification when the level changes via a workflow action.
+	3. Flip rejected docs to Cancelled (see _cancel_rejected_doc).
 	"""
 	if not _is_managed_doctype(doc):
 		return
 	config = _get_config_for_doc(doc)
 	if not config:
+		# The no-config Reject path (before_workflow_action) still sets
+		# is_rejection — those docs must end Cancelled too.
+		_cancel_rejected_doc(doc)
 		return
 
 	# ── 1. Re-sync approver + total whenever doc is saved in Pending Approval ──
@@ -494,6 +556,11 @@ def on_update(doc, method=None):
 
 	# ── 2. Email notifications (approval-request / progress / final) ─────
 	_dispatch_notifications(doc, config)
+
+	# ── 3. Reject → Cancelled ────────────────────────────────────────────
+	# After the reject-mail dispatch so templates render against the doc as
+	# the rejecter saw it; the flip is a plain docstatus write either way.
+	_cancel_rejected_doc(doc)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1246,6 +1313,10 @@ def _create_or_update_workflow(doctype, level_field):
 	)
 
 	approved_state = {"state": "Approved", "doc_status": "1", "allow_edit": "All", "send_email": 0, "permissions": permissions}
+	# Rejected keeps doc_status "0" even though rejected docs end up Cancelled:
+	# apply_workflow forbids a 0→2 jump ("Illegal Document Status"), so the
+	# transition lands as a draft save and _cancel_rejected_doc (on_update)
+	# flips docstatus to 2 right after.
 	rejected_state = {"state": "Rejected", "doc_status": "0", "allow_edit": "All", "send_email": 0, "permissions": permissions}
 	if bridge_status:
 		approved_state.update({"update_field": "status", "update_value": "Approved"})
