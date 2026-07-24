@@ -1,0 +1,189 @@
+{#- ============================================================================
+Nepal Gas — DATA-ONLY overlay for PRE-PRINTED sprocket forms, on an A5 page.
+=============================================================================
+The point of this file
+----------------------
+Print onto the existing pre-printed tractor form, but WITHOUT the raw-ESC/P
+transport (which would not run reliably across machines) and WITHOUT a custom
+page size (which the driver rotates). It declares the page as plain A5 — a size
+every driver knows, so it never rotates — and prints ONLY the data, positioned
+to land in the boxes already printed on the form. It draws no boxes itself, so
+there is no doubling.
+
+Why the coordinates fit A5 (they were proven, not guessed)
+----------------------------------------------------------
+The numbers below are the column positions from the raw-ESC/P generator
+(custom_code/printing/escp_invoice.py) that already worked on the calibrated
+machine. They matter here for one reason: the LQ-310 is a NARROW-carriage
+printer whose head only reaches ~210mm, so that layout already pulls the amount
+column in to a 210mm right edge — NOT the 226mm the wide HTML form uses. That
+is the ~2cm you asked for, and it was always the correct position for this
+printer. It lands inside the amount box (which runs 187–229mm on the form) and
+inside A5's 210mm width at the same time.
+
+x = true mm from the form's LEFT edge; y = true mm from the form's TOP (the
+perforation). Both are 1:1 — NO scaling — so the data lands at real ruler
+positions in the pre-printed boxes.
+
+Aligning on your printer
+------------------------
+If the whole print is shifted, change ONLY ox / oy (mm; + = right / down) with
+one test print. If the amount still runs off the right edge on your specific
+form, nudge amt_r left a few mm. Do not touch the individual field numbers.
+-#}
+{%- set ox = ox | default(0) -%}{#- global horizontal nudge, mm (+ = right) -#}
+{%- set oy = oy | default(0) -%}{#- global vertical nudge, mm (+ = down) -#}
+{%- set amt_r = amt_r | default(207.0) -%}{#- right edge of the amount column; <=210 to stay on A5 -#}
+{%- set rows_per_page = rows_per_page | default(2) -%}
+
+{#- A5 LANDSCAPE, 210 x 148mm. Standard size -> the driver will not rotate it. -#}
+{%- set pw = 210.0 -%}
+{%- set ph = 148.0 -%}
+
+{#- proven ESC/P column positions (true mm), amount clamped to the LQ-310 reach -#}
+{%- set P = {
+  'copy_label':   {'cx': 118.5, 'y': 37.7},
+  'invoice_no':   {'x': 35.0,  'y': 31.5},
+  'ref_inv':      {'x': 74.0,  'y': 46.7},
+  'trans_date':   {'y': 31.0},
+  'invoice_date': {'y': 36.3},
+  'do_no':        {'y': 41.5},
+  'date_r':       205.0,
+  'customer':     {'x': 52.0,  'y': 48.0},
+  'address':      {'x': 52.0,  'y': 53.0},
+  'pan':          {'x': 52.0,  'y': 58.0},
+  'body_top':     75.0,
+  'row_h':        4.8,
+  'words':        {'x': 48.0,  'y': 90.1, 'w': 90},
+  'c_sno':        15.0,
+  'c_hs':         25.0,
+  'c_part':       50.0,
+  'r_qty':        148.0,
+  'r_rate':       182.0,
+  'y_disc':       90.0,
+  'y_taxable':    96.0,
+  'y_vat':        102.0,
+  'y_grand':      110.0,
+} -%}
+
+{#- ------------------------------ data ---------------------------------- -#}
+{%- set invoice_no = doc.get('custom_branch_name') or doc.name -%}
+{%- set bs_date = doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date) -%}
+{%- set bs_date = (bs_date | string).split(' ')[0] if bs_date else '' -%}
+{%- set ad_date = frappe.utils.formatdate(doc.posting_date, 'dd-MM-yyyy') -%}
+{%- set do_nos = doc.items | map(attribute='delivery_note') | select | unique | list -%}
+{%- set address = (doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
+{%- set address = address.rstrip(', ') if address else '' -%}
+{%- set is_cn = doc.is_return -%}
+
+{%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
+{%- if not ns2.vat -%}
+  {%- for t in doc.taxes -%}
+    {%- if 'vat' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
+      {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endif -%}
+{%- set grand_total = doc.rounded_total or doc.grand_total -%}
+{%- set copy_titles = invoice_copy_titles(doc) -%}
+
+{#- ----------------------------- helpers -------------------------------- -#}
+{#- left-anchored text -#}
+{%- macro at(x, y, w, align='left', bold=false, size=8.5) -%}
+<div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
+  text-align:{{ align }}; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
+  white-space:nowrap; overflow:hidden; line-height:1.1;">{{ caller() }}</div>
+{%- endmacro -%}
+{#- right-anchored text: the box ENDS at xr, so a number lands with its right
+    edge on the column rule exactly like the ESC/P right-align did -#}
+{%- macro atr(xr, y, w, bold=false, size=8.5) -%}
+<div style="position:absolute; left:{{ xr - w + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
+  text-align:right; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
+  white-space:nowrap; overflow:hidden; line-height:1.1;">{{ caller() }}</div>
+{%- endmacro -%}
+
+{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
+
+<style>
+  /* Must render through the "chrome" pdf_generator (see the format JSON):
+     wkhtmltopdf shrinks every length by 0.7688x and cannot hold mm-exact. */
+  @page { size: {{ pw }}mm {{ ph }}mm; margin: 0; }
+  .print-format { page-width: {{ pw }}mm; page-height: {{ ph }}mm; margin: 0mm; }
+  html, body { margin: 0 !important; padding: 0 !important; }
+  .print-format, .print-format .format-container { padding: 0 !important; margin: 0 !important; }
+  .print-format .letter-head, .print-format .print-heading { display: none; }
+  @media screen {
+    .print-format { max-width: none !important; min-height: 0 !important;
+      margin: 0 auto !important; width: {{ pw }}mm; border-radius: 0 !important; }
+    .print-format-gutter { padding: 16px 0 !important; }
+  }
+  .ov-sheet { position: relative; width: {{ pw }}mm; height: {{ ph }}mm;
+    overflow: hidden; page-break-after: always; page-break-inside: avoid;
+    /* keep the untransformed layout from ever driving print shrink-to-fit */
+    contain: strict; }
+  .ov-sheet.last { page-break-after: auto; }
+  .ov-sheet, .ov-sheet div { font-family: Arial, Helvetica, sans-serif; color: #000; }
+</style>
+
+{%- set item_pages = [] -%}
+{%- for i in range(0, doc.items | length, rows_per_page) -%}
+  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
+{%- endfor -%}
+{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
+
+{%- for copy_label in copy_titles -%}
+{%- set copy_last = loop.last -%}
+{%- for page_items in item_pages -%}
+{%- set is_last = loop.last -%}
+{%- set is_final = copy_last and loop.last -%}
+{%- set page_no = loop.index -%}
+<div class="ov-sheet{% if is_final %} last{% endif %}">
+
+  {#- the pre-printed roll already says TAX INVOICE, so the overlay skips
+      exactly that title; any other title is typed on -#}
+  {%- if copy_label != 'TAX INVOICE' -%}
+    {%- call at(P.copy_label.cx - 25, P.copy_label.y, 50, 'center', true, 8.5) %}{{ copy_label }}{% endcall -%}
+  {%- endif -%}
+
+  {%- call at(P.invoice_no.x, P.invoice_no.y, 90, 'left', true, 9) %}{{ invoice_no }}{% endcall -%}
+  {%- if is_cn and doc.return_against -%}
+    {%- call at(P.ref_inv.x, P.ref_inv.y, 70, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
+  {%- endif -%}
+  {%- call atr(P.date_r, P.trans_date.y, 34) %}{{ bs_date }}{% endcall -%}
+  {%- call atr(P.date_r, P.invoice_date.y, 34) %}{{ ad_date }}{% endcall -%}
+  {%- if do_nos -%}
+    {%- call atr(P.date_r, P.do_no.y, 34) %}{{ do_nos | join(', ') }}{% endcall -%}
+  {%- endif -%}
+  {%- call at(P.customer.x, P.customer.y, 90, 'left', false, 8.5) %}{{ doc.customer_name }}{% endcall -%}
+  {%- call at(P.address.x, P.address.y, 95, 'left', false, 8) %}{{ address }}{% endcall -%}
+  {%- call at(P.pan.x, P.pan.y, 70, 'left', false, 8.5) %}{{ doc.tax_id or '' }}{% endcall -%}
+
+  {#- item rows -#}
+  {%- set base_sno = (page_no - 1) * rows_per_page -%}
+  {%- for item in page_items -%}
+    {%- set ry = P.body_top + loop.index0 * P.row_h -%}
+    {%- call at(P.c_sno, ry, 8, 'center') %}{{ base_sno + loop.index }}{% endcall -%}
+    {%- set hs = frappe.db.get_value('Item', item.item_code, 'custom_hs_code') or '' -%}
+    {%- call at(P.c_hs, ry, 20, 'left') %}{{ hs }}{% endcall -%}
+    {%- call at(P.c_part, ry, P.r_qty - P.c_part - 3, 'left') %}{{ item.item_name or item.item_code }}{% endcall -%}
+    {%- call atr(P.r_qty, ry, 22) %}{{ qty_fmt(item.qty) }} {{ item.uom or '' }}{% endcall -%}
+    {%- call atr(P.r_rate, ry, 28) %}{{ num(item.rate) }}{% endcall -%}
+    {%- call atr(amt_r, ry, 30) %}{{ num(item.amount) }}{% endcall -%}
+  {%- endfor -%}
+
+  {%- if is_last -%}
+    {%- if doc.additional_discount_percentage -%}
+      {%- call atr(amt_r, P.y_disc, 30) %}{{ doc.additional_discount_percentage | abs }}%{% endcall -%}
+    {%- endif -%}
+    {%- call atr(amt_r, P.y_taxable, 30) %}{{ num(doc.net_total) }}{% endcall -%}
+    {%- call atr(amt_r, P.y_vat, 30) %}{{ num(ns2.vat) }}{% endcall -%}
+    {%- call atr(amt_r, P.y_grand, 30, true) %}{{ num(grand_total) }}{% endcall -%}
+    {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 7.5) %}{{ doc.in_words or '' }}{% endcall -%}
+  {%- else -%}
+    {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
+  {%- endif -%}
+
+</div>
+{%- endfor -%}
+{%- endfor -%}

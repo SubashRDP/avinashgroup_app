@@ -61,10 +61,23 @@ If a whole print is shifted on a given printer, change only ox / oy.
 {%- set rows_per_page = rows_per_page | default(3) -%}{#- item lines in the 71.2..85.9mm body -#}
 
 {#- ------------------------- sheet geometry ------------------------------ -#}
+{#- paper  = 'a4' (default) or 'a5'. A4 is the size already loaded in every
+             office tray, so nobody has to remember to pick a paper size in the
+             print dialog — the failure that doubled a form onto the wrong
+             stationery. A4 also has room to spare, so the form scales UP and
+             prints LARGER / more legible than the old dot-matrix slip, not
+             smaller. Use a5 only where A5 stock is deliberately loaded.
+   orient = 'landscape' (default, reads normally) or 'portrait' (form rotated
+             90deg inside a portrait sheet — the least ambiguous page a driver
+             can be handed; turn the sheet to read). Portrait is the fallback
+             if any machine still rotates the landscape output. -#}
+{%- set paper = paper | default('a4') -%}
 {%- set orient = orient | default('landscape') -%}
 {%- set is_portrait = (orient == 'portrait') -%}
-{%- set pw = 148.0 if is_portrait else 210.0 -%}
-{%- set ph = 210.0 if is_portrait else 148.0 -%}
+{%- set long = 297.0 if paper == 'a4' else 210.0 -%}
+{%- set short = 210.0 if paper == 'a4' else 148.0 -%}
+{%- set pw = short if is_portrait else long -%}
+{%- set ph = long if is_portrait else short -%}
 
 {#- Crop box on the form, in form mm. Read straight off P: ink starts at the
     table's left rule / labels (12.0, 12.1) and ends at the SIGNATURE block
