@@ -83,6 +83,7 @@ purchase_invoice_specific_events = {
     "validate": [
         "avinashgroup_app.custom_code.common.purchase_taxes_handler.validate_purchase_invoice",
         "avinashgroup_app.custom_code.vehicle_mandatory.validate_purchase_invoice",
+        "avinashgroup_app.custom_code.gas_purchase_remarks.set_transport_remarks",
     ],
 }
 
