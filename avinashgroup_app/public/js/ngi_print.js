@@ -9,20 +9,33 @@
 // this server ships the unpatched-Qt wkhtmltopdf.
 
 (function () {
-	// Must mirror CHROME_PRINT_FORMATS in custom_code/printing/chrome_pdf.py.
+	// Fallback only, for a format doc that hasn't reached locals yet. The real
+	// routing rule is the format's own pdf_generator field (see is_chrome_format)
+	// — the same rule company_print.js uses — so new chrome formats need no edit
+	// here. This list once claimed to mirror CHROME_PRINT_FORMATS in
+	// custom_code/printing/chrome_pdf.py and had drifted from it; that is the
+	// bug that sent the seven A5 Overlay formats to the browser dialog.
 	const NGI_FORMATS = [
 		"Nepal Gas Invoice Pre-Printed",
 		"Nepal Gas Invoice Plain Paper",
 		"Nepal Gas Invoice A4 Proof",
+		"Nepal Gas Invoice A4 Portrait",
 		"Avinash Invoice Pre-Printed",
 		"Grishma Invoice Pre-Printed",
 	];
+
+	function is_chrome_format(view) {
+		const format = view.selected_format();
+		const doc = view.get_print_format ? view.get_print_format(format) : null;
+		if (doc && doc.pdf_generator) return doc.pdf_generator === "chrome";
+		return NGI_FORMATS.includes(format);
+	}
 
 	function patch(cls) {
 		if (!cls || cls.prototype._ngi_patched) return cls;
 		const orig = cls.prototype.printit;
 		cls.prototype.printit = function () {
-			if (NGI_FORMATS.includes(this.selected_format())) {
+			if (is_chrome_format(this)) {
 				this.render_page("/api/method/frappe.utils.print_format.download_pdf?");
 				frappe.show_alert(
 					{

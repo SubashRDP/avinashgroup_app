@@ -89,6 +89,12 @@ POS = {
 	"y_grand":      107.0,
 }
 
+# How to read POS["copy_label"] x — build() below subtracts half the text width
+# before emitting, so the x is the CENTRE the label is centred on. The HTML
+# overlay reads this constant so both print paths anchor the title the same way
+# (see escp_grishma.py for what went wrong when the convention lived elsewhere).
+COPY_LABEL_ANCHOR = "center"
+
 ROWS_PER_PAGE = 2  # the branch format prints 2 item lines per form
 CPI = 15  # whole invoice prints at 15cpi; char cell = 1.69mm
 

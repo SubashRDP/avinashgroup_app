@@ -79,6 +79,15 @@ POS = {
 	"y_grand":      113.0,  # -1mm up per user
 }
 
+# How to read POS["copy_label"] x — build() below emits it directly, with no
+# centring arithmetic, so the x is the LEFT edge where the text starts.
+# The HTML overlay reads this constant rather than keeping its own idea of the
+# convention: until 2026-07-25 that idea lived in overlay.py, away from the
+# measurement it describes, and the two disagreed — the browser path treated
+# every form's x as a centre, printing the Grishma title about half a label
+# width left of where the ESC/P path puts it.
+COPY_LABEL_ANCHOR = "left"
+
 ROWS_PER_PAGE = 2
 CPI = 15  # whole invoice prints at 15cpi; char cell = 1.69mm
 

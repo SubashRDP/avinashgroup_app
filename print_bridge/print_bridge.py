@@ -40,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
-VERSION = "0.5.2"
+VERSION = "0.5.3"
 
 IS_WINDOWS = platform.system() == "Windows"
 DEFAULT_PORT = 8663
@@ -273,7 +273,7 @@ def diagnose() -> dict:
 	if IS_WINDOWS and CONFIG["default_printer"] in printers:
 		try:
 			rc, out = _run([
-				"powershell", "-NoProfile", "-Command",
+				_powershell(), "-NoProfile", "-Command",
 				"(Get-Printer -Name '%s').DriverName" % CONFIG["default_printer"],
 			])
 			if rc == 0:
@@ -447,6 +447,18 @@ class Handler(BaseHTTPRequestHandler):
 # installer impossible to debug, and it still printed "Done." when it failed.
 
 
+def _powershell() -> str:
+	"""Absolute path to powershell.exe. It lives in System32\\WindowsPowerShell\\
+	v1.0 — NOT System32 itself — so a bare "powershell" is only found via PATH,
+	and a real till has already shipped with a PATH that couldn't find it (see
+	the schtasks-not-PowerShell note in installer.iss). By full path it always
+	resolves; that till's queue was never created for exactly this reason."""
+	return os.path.join(
+		os.environ.get("SystemRoot", r"C:\Windows"),
+		"System32", "WindowsPowerShell", "v1.0", "powershell.exe",
+	)
+
+
 def _run(args: list) -> tuple:
 	import subprocess
 
@@ -583,7 +595,7 @@ if (-not $port) {
   else { Write-Output ('ok on ' + $port) }
 }
 """
-	rc, out = _run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
+	rc, out = _run([_powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps])
 	if rc != 0:
 		raise RuntimeError(out.strip() or "Add-Printer failed")
 	return out.strip()

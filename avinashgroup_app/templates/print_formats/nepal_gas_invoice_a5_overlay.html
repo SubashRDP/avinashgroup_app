@@ -1,67 +1,120 @@
-{#- ============================================================================
-Nepal Gas — DATA-ONLY overlay for PRE-PRINTED sprocket forms, on an A5 page.
-=============================================================================
-The point of this file
-----------------------
-Print onto the existing pre-printed tractor form, but WITHOUT the raw-ESC/P
-transport (which would not run reliably across machines) and WITHOUT a custom
-page size (which the driver rotates). It declares the page as plain A5 — a size
-every driver knows, so it never rotates — and prints ONLY the data, positioned
-to land in the boxes already printed on the form. It draws no boxes itself, so
-there is no doubling.
+{#- ===========================================================================
+     Nepal Gas — DATA-ONLY overlay for the PRE-PRINTED sprocket forms
+     ===========================================================================
+     Prints the data ONLY, positioned to land in the boxes already printed on
+     the form. It draws no boxes of its own, so nothing doubles up.
 
-Why the coordinates fit A5 (they were proven, not guessed)
-----------------------------------------------------------
-The numbers below are the column positions from the raw-ESC/P generator
-(custom_code/printing/escp_invoice.py) that already worked on the calibrated
-machine. They matter here for one reason: the LQ-310 is a NARROW-carriage
-printer whose head only reaches ~210mm, so that layout already pulls the amount
-column in to a 210mm right edge — NOT the 226mm the wide HTML form uses. That
-is the ~2cm you asked for, and it was always the correct position for this
-printer. It lands inside the amount box (which runs 187–229mm on the form) and
-inside A5's 210mm width at the same time.
+     Coordinates are true millimetres — x from the form's left edge, y from the
+     top perforation, 1:1 with no scaling — and they are not measured here:
+     overlay.py hands over the calibrated map from the form's own ESC/P builder
+     (escp_*.py), so there is one source of truth for both print paths.
 
-x = true mm from the form's LEFT edge; y = true mm from the form's TOP (the
-perforation). Both are 1:1 — NO scaling — so the data lands at real ruler
-positions in the pre-printed boxes.
+     Must render through the "chrome" pdf_generator (set in the format JSON).
+     wkhtmltopdf shrinks every length by 0.7688x and cannot hold mm-exact.
 
-Aligning on your printer
-------------------------
-If the whole print is shifted, change ONLY ox / oy (mm; + = right / down) with
-one test print. If the amount still runs off the right edge on your specific
-form, nudge amt_r left a few mm. Do not touch the individual field numbers.
--#}
-{%- set form = form | default('ngi') -%}{#- which pre-printed form: ngi, ngi_udyog, gandaki, karnali, narayani, grishma, avinash -#}
-{%- set ox = ox | default(0) -%}{#- global horizontal nudge, mm (+ = right) -#}
-{%- set oy = oy | default(0) -%}{#- global vertical nudge, mm (+ = down) -#}
-{%- set rows_per_page = rows_per_page | default(2) -%}
+     Shared by all seven forms; the wrapper format picks one with
+     {% set form = 'grishma' %}. Per-machine setup, calibration procedure and
+     the rotation troubleshooting: docs/browser_print_setup.md
 
-{#- page = 'form' (default) -> 241.3 x 139.7mm, the true 9.5x5.5in form. Matches
-      the Epson queue's built-in "NGIForm" size, so CUPS prints it 1:1 with no
-      rotation and every column lands in its real box (nothing clamped).
-    page = 'a5'   -> 210 x 148mm, for a laser/plain-A5 fallback. Here the amount
-      column is pulled in to fit 210mm (see amt_r in overlay.py). -#}
+       1. knobs   2. page geometry   3. coordinates   4. data
+       5. macros  6. styles          7. sheets
+     ========================================================================= -#}
+
+
+{#- == 1. knobs ==============================================================
+     Each is settable two ways, and they ADD: by the wrapper format
+     ({% set ox = 1.5 %}) for something permanent, or by URL param
+     (&ox=1.5&oy=-2) to trial a value on one machine without saving anything.
+
+       form           which pre-printed form — ngi, ngi_udyog, gandaki,
+                      karnali, narayani, grishma, avinash
+       page           'form' = the real 241.3 x 139.7mm (9.5 x 5.5in) sprocket
+                        form. Matches the Epson queue's built-in "NGIForm"
+                        size, so CUPS prints 1:1 and nothing is clamped.
+                      'a5'   = 210 x 148mm plain-paper fallback; the ONLY
+                        difference is that the right-hand columns are pulled in
+                        to fit 210mm (see overlay.py).
+       rot            0|90|180|270 — see §2
+       ox / oy        shift the whole print, mm (+ = right / down). When the
+                      print is offset these are the only numbers to touch —
+                      never an individual field position.
+       amt_r          right edge of the amount column, mm. Only if the amount
+                      runs off the edge of your particular form.
+       rows_per_page  item rows per sheet; the form holds 2
+       guide          1 = outline every field box (red) and the sheet edge
+                      (blue), so one test print over a real form shows exactly
+                      what sits where. Off unless the URL asks for it.
+     ========================================================================= -#}
+{%- set form = form | default('ngi') -%}
 {%- set page = page | default('form') -%}
-{%- set is_a5 = (page == 'a5') -%}
-{%- set pw = 210.0 if is_a5 else 241.3 -%}
-{%- set ph = 148.0 if is_a5 else 139.7 -%}
+{%- set rows_per_page = rows_per_page | default(2) -%}
+{%- set ox = (ox | default(0)) + (frappe.form_dict.get('ox') | float) -%}
+{%- set oy = (oy | default(0)) + (frappe.form_dict.get('oy') | float) -%}
+{%- set guide = frappe.form_dict.get('guide') | int -%}
 
-{#- Coordinates come from the calibrated ESC/P map for THIS form (overlay.py ->
-    escp_*.py). One source of truth; nothing re-measured here. Every form's
-    amount is clamped to A5's width inside the helper. -#}
-{%- set P = overlay_pos(form) -%}
+
+{#- == 2. page geometry ======================================================
+     fw x fh is the FORM: what the paper measures, and the space the
+     coordinates live in. It never changes.
+
+     pw x ph is the PAGE handed to the PDF — the same thing, except that a
+     quarter turn swaps it.
+
+     ORIENTATION RESCUE (&rot=). The PDF this template produces is already
+     correct (wider than tall, /Rotate 0), so a print that comes out sideways
+     or upside down was turned by the DRIVER or the PDF viewer, downstream of
+     everything here. Rather than chase that machine by machine, turn the
+     content to cancel it out:
+
+       rot=0    (default) the form as-is, 241.3 x 139.7mm
+       rot=90   a quarter turn clockwise into a PORTRAIT page — for a driver
+                locked to portrait (the usual cause of a "sideways" print) and
+                for a printer fed the short way
+       rot=180  same page, upside down — for a form fed in reverse
+       rot=270  the other quarter turn
+
+     The page box is swapped for 90/270 so the sheet always matches what is
+     drawn on it, leaving nothing downstream any reason to rotate again. Print
+     one of each, keep whichever comes out upright — no driver settings, no
+     reinstall. (Same idea as the cheque format's rotation knob.)
+     ========================================================================= -#}
+{%- set is_a5 = (page == 'a5') -%}
+{%- set fw = 210.0 if is_a5 else 241.3 -%}
+{%- set fh = 148.0 if is_a5 else 139.7 -%}
+
+{%- set rot = (frappe.form_dict.get('rot') | int) % 360 -%}
+{%- set rot = rot if rot in [0, 90, 180, 270] else 0 -%}
+{%- set quarter = rot in [90, 270] -%}
+{%- set pw = fh if quarter else fw -%}
+{%- set ph = fw if quarter else fh -%}
+
+
+{#- == 3. coordinates ========================================================
+     `page` is passed through so the A5 width clamps apply on the A5 fallback
+     ONLY — on the real form every column keeps its calibrated position.
+     ========================================================================= -#}
+{%- set P = overlay_pos(form, page) -%}
 {%- set amt_r = amt_r | default(P.amt_r) -%}
 
-{#- ------------------------------ data ---------------------------------- -#}
+
+{#- == 4. data =============================================================== -#}
 {%- set invoice_no = doc.get('custom_branch_name') or doc.name -%}
+{%- set is_cn = doc.is_return -%}
+{%- set copy_titles = invoice_copy_titles(doc) -%}
+
+{#- dates: BS from the stored miti (falling back to a conversion), AD from the
+    posting date -#}
 {%- set bs_date = doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date) -%}
 {%- set bs_date = (bs_date | string).split(' ')[0] if bs_date else '' -%}
 {%- set ad_date = frappe.utils.formatdate(doc.posting_date, 'dd-MM-yyyy') -%}
-{%- set do_nos = doc.items | map(attribute='delivery_note') | select | unique | list -%}
+
+{#- one line, since the address box on the form is a single ruled line -#}
 {%- set address = (doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
 {%- set address = address.rstrip(', ') if address else '' -%}
-{%- set is_cn = doc.is_return -%}
 
+{%- set do_nos = doc.items | map(attribute='delivery_note') | select | unique | list -%}
+
+{#- VAT: the stored total if there is one, otherwise summed off the tax table -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
 {%- if not ns2.vat -%}
   {%- for t in doc.taxes -%}
@@ -71,17 +124,26 @@ form, nudge amt_r left a few mm. Do not touch the individual field numbers.
   {%- endfor -%}
 {%- endif -%}
 {%- set grand_total = doc.rounded_total or doc.grand_total -%}
-{%- set copy_titles = invoice_copy_titles(doc) -%}
 
-{#- ----------------------------- helpers -------------------------------- -#}
-{#- left-anchored text -#}
+{#- items split into sheets -#}
+{%- set item_pages = [] -%}
+{%- for i in range(0, doc.items | length, rows_per_page) -%}
+  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
+{%- endfor -%}
+{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
+
+
+{#- == 5. macros ============================================================= -#}
+
+{#- at()  — text box whose LEFT edge sits at x -#}
 {%- macro at(x, y, w, align='left', bold=false, size=8.5) -%}
 <div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
   text-align:{{ align }}; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
   white-space:nowrap; overflow:hidden; line-height:1.1;">{{ caller() }}</div>
 {%- endmacro -%}
-{#- right-anchored text: the box ENDS at xr, so a number lands with its right
-    edge on the column rule exactly like the ESC/P right-align did -#}
+
+{#- atr() — text box whose RIGHT edge sits at xr, so a number lands on the
+    column rule exactly as the ESC/P right-align put it -#}
 {%- macro atr(xr, y, w, bold=false, size=8.5) -%}
 <div style="position:absolute; left:{{ xr - w + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
   text-align:right; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
@@ -91,11 +153,14 @@ form, nudge amt_r left a few mm. Do not touch the individual field numbers.
 {%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
 {%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
 
+
+{#- == 6. styles ============================================================= -#}
 <style>
-  /* Must render through the "chrome" pdf_generator (see the format JSON):
-     wkhtmltopdf shrinks every length by 0.7688x and cannot hold mm-exact. */
+  /* the page itself */
   @page { size: {{ pw }}mm {{ ph }}mm; margin: 0; }
   .print-format { page-width: {{ pw }}mm; page-height: {{ ph }}mm; margin: 0mm; }
+
+  /* strip every wrapper the desk puts around a print format */
   html, body { margin: 0 !important; padding: 0 !important; }
   .print-format, .print-format .format-container { padding: 0 !important; margin: 0 !important; }
   .print-format .letter-head, .print-format .print-heading { display: none; }
@@ -104,48 +169,90 @@ form, nudge amt_r left a few mm. Do not touch the individual field numbers.
       margin: 0 auto !important; width: {{ pw }}mm; border-radius: 0 !important; }
     .print-format-gutter { padding: 16px 0 !important; }
   }
+
+  /* one sheet = one form */
   .ov-sheet { position: relative; width: {{ pw }}mm; height: {{ ph }}mm;
     overflow: hidden; page-break-after: always; page-break-inside: avoid;
     /* keep the untransformed layout from ever driving print shrink-to-fit */
     contain: strict; }
   .ov-sheet.last { page-break-after: auto; }
   .ov-sheet, .ov-sheet div { font-family: Arial, Helvetica, sans-serif; color: #000; }
+
+  /* the form's own coordinate space, always fw x fh whatever the page is.
+     Every field sits inside it, so rotating this one box rotates the whole
+     print and no mm position has to change. transform-origin 0 0 keeps the
+     maths the plain translate below: turn about the top-left, push back on. */
+  .ov-rot { position: absolute; top: 0; left: 0;
+    width: {{ fw }}mm; height: {{ fh }}mm; transform-origin: 0 0;
+    {%- if rot == 90 %} transform: translateX({{ fh }}mm) rotate(90deg);
+    {%- elif rot == 180 %} transform: translate({{ fw }}mm, {{ fh }}mm) rotate(180deg);
+    {%- elif rot == 270 %} transform: translateY({{ fw }}mm) rotate(270deg);
+    {%- endif %} }
+  {%- if guide %}
+
+  /* &guide=1 only — calibration aid, never a normal print */
+  .ov-rot div { outline: 0.1mm solid #f00; }
+  .ov-rot { outline: 0.3mm solid #0a0; }
+  .ov-sheet { outline: 0.2mm solid #00f; }
+  {%- endif %}
 </style>
 
-{%- set item_pages = [] -%}
-{%- for i in range(0, doc.items | length, rows_per_page) -%}
-  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
-{%- endfor -%}
-{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
 
+{#- == 7. sheets =============================================================
+     One sheet per copy title per page of items: TAX INVOICE, INVOICE,
+     COPY OF INVOICE n (invoice_copy_titles is the single source of that
+     series — see custom_code/SalesInvoice/print_count.py).
+     ========================================================================= -#}
 {%- for copy_label in copy_titles -%}
 {%- set copy_last = loop.last -%}
 {%- for page_items in item_pages -%}
 {%- set is_last = loop.last -%}
 {%- set is_final = copy_last and loop.last -%}
 {%- set page_no = loop.index -%}
-<div class="ov-sheet{% if is_final %} last{% endif %}">
+<div class="ov-sheet{% if is_final %} last{% endif %}"><div class="ov-rot">
 
-  {#- the pre-printed roll already says TAX INVOICE, so the overlay skips
-      exactly that title; any other title is typed on -#}
-  {%- if copy_label != 'TAX INVOICE' -%}
-    {%- call at(P.copy_label.cx - 25, P.copy_label.y, 50, 'center', true, 8.5) %}{{ copy_label }}{% endcall -%}
+  {#- ---- title ------------------------------------------------------------
+      No roll carries a pre-printed title, on any company's stationery, so the
+      whole series is typed on. (Until 2026-07-25 this skipped exactly 'TAX
+      INVOICE'.) The anchor follows the form's own ESC/P convention — centred
+      for ngi/ngi_udyog/karnali, left for the rest — carried over by
+      overlay.py. -#}
+  {%- if P.copy_label.align == 'center' -%}
+    {%- call at(P.copy_label.x - 25, P.copy_label.y, 50, 'center', true, 8.5) %}{{ copy_label }}{% endcall -%}
+  {%- else -%}
+    {%- call at(P.copy_label.x, P.copy_label.y, 50, 'left', true, 8.5) %}{{ copy_label }}{% endcall -%}
   {%- endif -%}
 
+  {#- ---- invoice number, and what it refers to on a return ---------------- -#}
   {%- call at(P.invoice_no.x, P.invoice_no.y, 90, 'left', true, 9) %}{{ invoice_no }}{% endcall -%}
   {%- if is_cn and doc.return_against -%}
     {%- call at(P.ref_inv.x, P.ref_inv.y, 70, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
   {%- endif -%}
-  {%- call atr(P.date_r, P.trans_date.y, 34) %}{{ bs_date }}{% endcall -%}
-  {%- call atr(P.date_r, P.invoice_date.y, 34) %}{{ ad_date }}{% endcall -%}
-  {%- if do_nos -%}
-    {%- call atr(P.date_r, P.do_no.y, 34) %}{{ do_nos | join(', ') }}{% endcall -%}
+
+  {#- ---- dates and D/O ----------------------------------------------------
+      A5 right-aligns all three to one edge so they cannot run past 210mm; the
+      real form left-aligns each at its own calibrated x, which is what the
+      ESC/P builders do (they emit these with no right=True). -#}
+  {%- if P.date_r -%}
+    {%- call atr(P.date_r, P.trans_date.y, 34) %}{{ bs_date }}{% endcall -%}
+    {%- call atr(P.date_r, P.invoice_date.y, 34) %}{{ ad_date }}{% endcall -%}
+    {%- if do_nos -%}
+      {%- call atr(P.date_r, P.do_no.y, 34) %}{{ do_nos | join(', ') }}{% endcall -%}
+    {%- endif -%}
+  {%- else -%}
+    {%- call at(P.trans_date.x, P.trans_date.y, 34, 'left') %}{{ bs_date }}{% endcall -%}
+    {%- call at(P.invoice_date.x, P.invoice_date.y, 34, 'left') %}{{ ad_date }}{% endcall -%}
+    {%- if do_nos and P.do_no -%}
+      {%- call at(P.do_no.x, P.do_no.y, 34, 'left') %}{{ do_nos | join(', ') }}{% endcall -%}
+    {%- endif -%}
   {%- endif -%}
+
+  {#- ---- customer --------------------------------------------------------- -#}
   {%- call at(P.customer.x, P.customer.y, 90, 'left', false, 8.5) %}{{ doc.customer_name }}{% endcall -%}
   {%- call at(P.address.x, P.address.y, 95, 'left', false, 8) %}{{ address }}{% endcall -%}
   {%- call at(P.pan.x, P.pan.y, 70, 'left', false, 8.5) %}{{ doc.tax_id or '' }}{% endcall -%}
 
-  {#- item rows -#}
+  {#- ---- item rows -------------------------------------------------------- -#}
   {%- set base_sno = (page_no - 1) * rows_per_page -%}
   {%- for item in page_items -%}
     {%- set ry = P.body_top + loop.index0 * P.row_h -%}
@@ -158,6 +265,7 @@ form, nudge amt_r left a few mm. Do not touch the individual field numbers.
     {%- call atr(amt_r, ry, 30) %}{{ num(item.amount) }}{% endcall -%}
   {%- endfor -%}
 
+  {#- ---- totals, on the last sheet of this copy only ---------------------- -#}
   {%- if is_last -%}
     {%- if doc.additional_discount_percentage -%}
       {%- call atr(amt_r, P.y_disc, 30) %}{{ doc.additional_discount_percentage | abs }}%{% endcall -%}
@@ -170,6 +278,6 @@ form, nudge amt_r left a few mm. Do not touch the individual field numbers.
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}
 
-</div>
+</div></div>
 {%- endfor -%}
 {%- endfor -%}

@@ -65,6 +65,12 @@ POS = {
 	"y_grand":      106.0,
 }
 
+# How to read POS["copy_label"] x — build() below emits it directly, with no
+# centring arithmetic, so the x is the LEFT edge where the text starts. The HTML
+# overlay reads this constant so both print paths anchor the title the same way
+# (see escp_grishma.py for what went wrong when the convention lived elsewhere).
+COPY_LABEL_ANCHOR = "left"
+
 ROWS_PER_PAGE = 2
 CPI = 10  # default pica; char cell = 2.54mm
 

@@ -78,6 +78,12 @@ POS = {
 	"y_grand":      111.0,  # +1mm down per user
 }
 
+# How to read POS["copy_label"] x — build() below emits it directly, with no
+# centring arithmetic, so the x is the LEFT edge where the text starts. The HTML
+# overlay reads this constant so both print paths anchor the title the same way
+# (see escp_grishma.py for what went wrong when the convention lived elsewhere).
+COPY_LABEL_ANCHOR = "left"
+
 ROWS_PER_PAGE = 2
 CPI = 15  # whole invoice prints at 15cpi; char cell = 1.69mm
 

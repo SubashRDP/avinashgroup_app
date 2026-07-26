@@ -11,6 +11,8 @@ rem   diagnose.bat -WindowsTest   Windows -> queue -> printer (no agent)
 rem
 rem %~dp0 = this script's folder, so it works from the install dir, a USB
 rem stick, or a Downloads folder alike — diagnose.ps1 must sit next to it.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0diagnose.ps1" %*
+rem Full path to powershell.exe: it is NOT in System32 itself, so the bare name
+rem depends on PATH — and one till already shipped with a PATH that lost it.
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0diagnose.ps1" %*
 echo.
 pause
