@@ -20,15 +20,23 @@ the printer types with its own font and advances exactly one form per invoice.
 
 Coordinates
 -----------
-All field positions are the millimetre targets measured off a rectified scan of
-a real FACT-printed Narayani form (see nepal_gas_invoice.html for the method).
-Horizontal: ESC $ absolute positioning in 1/60in units, relative to the
-printer's column 0. On the reference print the rightmost ink sits at 227.9mm
-from the paper edge = X0 + the LQ-310's full 8.0in head travel, giving
-X0 ~= 24.7mm: the tractor holds the paper so that column 0 falls ~24.7mm from
-the left paper edge. That single offset (and Y0 for top-of-form) are the only
-calibration knobs; adjust them if a whole print is shifted, never the fields.
-Vertical: ESC J paper feeds in 1/180in units, top-of-form relative.
+POS holds the millimetre targets, measured off a rectified scan of a real
+FACT-printed Narayani form (see nepal_gas_invoice.html for the method). Every
+value is a TRUE ruler distance from the paper's top-left corner. POS is the one
+thing shared by both print paths: `overlay.py` reads it for the browser/PDF
+overlay, and build() below reads it for the ESC/P byte stream.
+
+X0_MM / Y0_MM below are ESC/P ONLY. They are consumed by _h() and _feed_to()
+to convert a ruler distance into printer motion, and by nothing else —
+`overlay.py` reads POS and never touches them. So they do NOT move the
+browser/PDF print, which is the path actually in use. A whole-sheet shift there
+is `ox`/`oy` on the format (see the shared template's header); a whole-sheet
+shift on the ESC/P path is X0_MM/Y0_MM. In both cases: shift the origin, never
+the fields.
+
+Horizontal (ESC/P): CR + spaces at the current pitch, relative to the printer's
+column 0, which X0_MM places on the paper. Vertical: ESC J paper feeds in
+1/180in units, top-of-form relative.
 
 Form length is set to 33 lines of 1/6in = 5.5in exactly, so FF lands on the
 next form's top regardless of how much was printed.
@@ -57,9 +65,9 @@ Y0_MM = -7.7  # origin unchanged from Nepal Gas per user; the -2mm "pull up" is
 # --- measured field targets (mm from paper top-left), data baseline tops --
 # Re-derived 2026-07-14 from the branch-calibrated "Avinash Sales invoice"
 # HTML format: rendered it on A4 via chrome exactly as the branches print it,
-# read the glyph boxes with pdftotext -bbox, and added X0 (page x=0 lands on
-# printer column 0 = 22mm from the paper edge). The old FACT-scan values are
-# in git history if this calibration turns out worse.
+# read the glyph boxes with pdftotext -bbox, and added X0_MM so the numbers are
+# distances from the paper edge rather than from printer column 0. The old
+# FACT-scan values are in git history if this calibration turns out worse.
 # Every y is -3mm from the Nepal Gas baseline: whole layout pulled up (2mm then
 # 1mm more) per user (origin/X0/Y0 left unchanged). x values identical to Nepal Gas.
 POS = {
