@@ -13,14 +13,41 @@
   "rotation",
   "column_break_printer",
   "tray_align",
-  "sheet_mode"
+  "sheet_mode",
+  "fields_section",
+  "fields_description",
+  "date_sb",
+  "date_x",
+  "column_break_date",
+  "date_y",
+  "column_break_date2",
+  "date_gap",
+  "payee_sb",
+  "payee_x",
+  "column_break_payee",
+  "payee_y",
+  "words_sb",
+  "words_x",
+  "column_break_words",
+  "words_y",
+  "column_break_words2",
+  "words_width",
+  "words_line_height",
+  "fig_sb",
+  "fig_x",
+  "column_break_fig",
+  "fig_y",
+  "column_break_fig2",
+  "fig_width",
+  "font_sb",
+  "font_size"
  ],
  "fields": [
   {
    "fieldname": "description",
    "fieldtype": "HTML",
    "label": "Description",
-   "options": "<p class=\"text-muted\">Moves the <b>whole</b> cheque print on the paper, for the <b>Payment Entry Cheque</b> print format.<br><br>Use this when the print lands off the cheque. <b>Do not</b> change the field positions inside the print format to fix that &mdash; those are measured from the cheque itself and are the same on every printer. Only where the printer grips the paper varies, and that is what these settings correct.<br><br>To try values without saving, add <code>&amp;dx=2.5&amp;dy=-1</code> to the print URL. Those are <i>added on top of</i> the values here.</p>"
+   "options": "<p class=\"text-muted\">Alignment for the <b>Payment Entry Cheque</b> print format.<br><br><b>This section moves the WHOLE print</b> on the paper. Use it when everything is off by the same amount &mdash; that is the printer gripping the paper differently, not a wrong measurement.<br><br>If only <i>one</i> item is wrong (the name is high, the amount is too far left), scroll down to <b>Where each item is printed on the cheque</b> and move just that item.<br><br>To try values without saving, add <code>&amp;dx=2.5&amp;dy=-1</code> to the print URL. Those are <i>added on top of</i> the values here.</p>"
   },
   {
    "fieldname": "move_section",
@@ -79,11 +106,179 @@
    "fieldtype": "Select",
    "label": "Page Size",
    "options": "a4\ncheque"
+  },
+  {
+   "fieldname": "fields_section",
+   "fieldtype": "Section Break",
+   "label": "Where each item is printed on the cheque"
+  },
+  {
+   "fieldname": "fields_description",
+   "fieldtype": "HTML",
+   "label": "Fields Description",
+   "options": "<p class=\"text-muted\">These are the <b>current</b> positions, in millimetres measured on the cheque itself: <b>From Left</b> = distance from the cheque's left edge (the logo edge), <b>From Top</b> = distance from the cheque's top edge. They are the numbers the print format is using right now &mdash; change one and reprint to move just that item.<br><br>Use these when a single item sits wrong (payee too high, amount too far left). If <b>everything</b> is off by the same amount, do not touch these &mdash; use <b>Move Right / Move Down</b> above, which shifts the whole print.<br><br>Print with <code>&amp;cheque_guide=1</code> in the URL on a blank sheet to see the outline plus a printout of these values.</p>"
+  },
+  {
+   "fieldname": "date_sb",
+   "fieldtype": "Section Break",
+   "label": "Date"
+  },
+  {
+   "default": "138",
+   "description": "mm from the cheque's LEFT edge to the first date box.",
+   "fieldname": "date_x",
+   "fieldtype": "Float",
+   "label": "Date - From Left (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_date",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "10",
+   "description": "mm from the cheque's TOP edge to the top of the digits.",
+   "fieldname": "date_y",
+   "fieldtype": "Float",
+   "label": "Date - From Top (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_date2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3.8",
+   "description": "Extra space between date digits, so they land one per box. Increase if the digits drift LEFT of their boxes as you read right.",
+   "fieldname": "date_gap",
+   "fieldtype": "Float",
+   "label": "Date - Digit Spacing (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "payee_sb",
+   "fieldtype": "Section Break",
+   "label": "Pay to (name)"
+  },
+  {
+   "default": "44",
+   "description": "mm from the cheque's LEFT edge to the start of the name.",
+   "fieldname": "payee_x",
+   "fieldtype": "Float",
+   "label": "Name - From Left (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_payee",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "21",
+   "description": "mm from the cheque's TOP edge to the top of the name.",
+   "fieldname": "payee_y",
+   "fieldtype": "Float",
+   "label": "Name - From Top (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "words_sb",
+   "fieldtype": "Section Break",
+   "label": "Amount in words"
+  },
+  {
+   "default": "29",
+   "description": "mm from the cheque's LEFT edge to the start of the words.",
+   "fieldname": "words_x",
+   "fieldtype": "Float",
+   "label": "Words - From Left (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_words",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "26.5",
+   "description": "mm from the cheque's TOP edge to the top of the FIRST line of words.",
+   "fieldname": "words_y",
+   "fieldtype": "Float",
+   "label": "Words - From Top (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_words2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "100",
+   "description": "How wide the words may run before wrapping to the second line.",
+   "fieldname": "words_width",
+   "fieldtype": "Float",
+   "label": "Words - Line Width (mm)",
+   "precision": "2"
+  },
+  {
+   "default": "7",
+   "description": "Gap between the two printed word lines on the cheque.",
+   "fieldname": "words_line_height",
+   "fieldtype": "Float",
+   "label": "Words - Line Spacing (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "fig_sb",
+   "fieldtype": "Section Break",
+   "label": "Amount in figures"
+  },
+  {
+   "default": "138",
+   "description": "mm from the cheque's LEFT edge to the start of the amount box.",
+   "fieldname": "fig_x",
+   "fieldtype": "Float",
+   "label": "Amount - From Left (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_fig",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "31",
+   "description": "mm from the cheque's TOP edge to the top of the amount.",
+   "fieldname": "fig_y",
+   "fieldtype": "Float",
+   "label": "Amount - From Top (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_fig2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "50",
+   "description": "Width of the amount box.",
+   "fieldname": "fig_width",
+   "fieldtype": "Float",
+   "label": "Amount - Box Width (mm)",
+   "precision": "2"
+  },
+  {
+   "fieldname": "font_sb",
+   "fieldtype": "Section Break",
+   "label": "Text size"
+  },
+  {
+   "default": "11",
+   "description": "Point size for all printed text. 11 is the tested value; raise only if the text looks small against the pre-printed lines.",
+   "fieldname": "font_size",
+   "fieldtype": "Float",
+   "label": "Font Size (pt)",
+   "precision": "1"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-24 12:30:00.000000",
+ "modified": "2026-07-26 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Cheque Print Alignment",
