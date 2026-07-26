@@ -119,7 +119,10 @@ def overlay_pos(form: str = "ngi", page: str = "form") -> dict:
 		"pan": xy("pan"),
 		"body_top": P["body_top"][1],
 		"row_h": P["row_h"],
-		"words": {"x": P["words"][0], "y": P["words"][1], "w": 90},
+		# words_w is the box the amount-in-words wraps inside. Per-form, because
+		# it is a property of that roll's ruled line; 90 is the historical default
+		# for forms that have not measured it.
+		"words": {"x": P["words"][0], "y": P["words"][1], "w": P.get("words_w", 90)},
 		"c_sno": P["c_sno"],
 		"c_hs": P.get("c_hs"),
 		"c_part": P["c_part"],

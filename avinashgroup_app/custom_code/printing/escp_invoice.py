@@ -54,31 +54,38 @@ Y0_MM = -7.7  # measured 2026-07-14 with the centre-circle target: the printer
 # read the glyph boxes with pdftotext -bbox, and added X0 (page x=0 lands on
 # printer column 0 = 22mm from the paper edge). The old FACT-scan values are
 # in git history if this calibration turns out worse.
+# 2026-07-26: adjusted per branch measurement of a guide sheet on the real
+# stationery. The format also carries a whole-sheet ox=-15/oy=-5, so what lands
+# on paper is each value below minus that. Per-field notes mark what moved.
 POS = {
 	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
-	"invoice_no":   (35.0, 31.5),  # starts 3.5cm from left, 1.5mm up from 3.3cm per user
+	"invoice_no":   (37.0, 32.5),  # 2mm right, 1mm down per user 2026-07-26
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (193.0, 31.0),  # printed at 12cpi so the full date fits before the 215.4mm head limit
-	"invoice_date": (193.0, 36.3),  # same column/pitch as trans date, 5.3mm below
+	"trans_date":   (205.0, 32.5),  # 1.2cm right; y matched to invoice_no so the
+	                                # two sit on one line per user 2026-07-26
+	"invoice_date": (205.0, 37.3),  # 1.2cm right, 1mm down per user 2026-07-26
 	"do_no":        (193.0, 41.5),
-	"customer":     (52.0, 48.0),  # 5.2cm from left; 2mm up from 5.0cm per user
-	"address":      (52.0, 53.0),
+	"customer":     (54.0, 49.0),  # 2mm right, 1mm down per user 2026-07-26
+	"address":      (54.0, 54.0),  # 2mm right, 1mm down per user 2026-07-26
 	"pan":          (52.0, 58.0),
-	"body_top":     (0, 75.0),  # first item row 7.5cm from top per user
+	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
 	"row_h":        4.8,
-	"words":        (48.0, 90.1),  # wraps at 13.5cm (51 chars at 15cpi), continues down
+	"words":        (50.0, 92.1),  # 2mm right, 2mm down per user 2026-07-26
+	"words_w":      75.0,    # box width; overlay only (ESC/P wraps by char count)
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        15.0,
+	"c_sno":        15.1,    # lands 0.1mm from the paper edge per user 2026-07-26
 	"c_hs":         25.0,
 	"c_part":       50.0,    # particulars box runs 5.0 -> 13.8cm (41 chars at 12cpi)
-	"r_qty":        148.0,   # right edge for qty
-	"r_rate":       182.0,
-	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
-	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       90.0,  # 1mm up per user
-	"y_taxable":    96.0,  # 1mm up per user
-	"y_vat":        102.0,
-	"y_grand":      110.0,
+	"r_qty":        170.0,   # right edge for qty; 2.2cm right per user 2026-07-26
+	"r_rate":       187.0,   # 0.5cm right per user 2026-07-26
+	"r_amt":        220.0,   # right edge; 1cm right per user 2026-07-26. NOTE this
+	                         # is past the LQ-310's 215.4mm head limit, so the raw
+	                         # ESC/P path would clip it — overlay/PDF only.
+	# totals rows: right-aligned numerics at r_amt, so they share one vertical line
+	"y_disc":       92.0,  # all four 2mm down per user 2026-07-26
+	"y_taxable":    98.0,
+	"y_vat":        104.0,
+	"y_grand":      112.0,
 }
 
 # How to read POS["copy_label"] x — build() below subtracts half the text width

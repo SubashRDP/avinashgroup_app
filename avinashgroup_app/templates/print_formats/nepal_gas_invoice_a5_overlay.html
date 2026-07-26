@@ -108,8 +108,12 @@
 {%- set bs_date = (bs_date | string).split(' ')[0] if bs_date else '' -%}
 {%- set ad_date = frappe.utils.formatdate(doc.posting_date, 'dd-MM-yyyy') -%}
 
-{#- one line, since the address box on the form is a single ruled line -#}
-{%- set address = (doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
+{#- address_line1 of the invoice's own address record: the box on the form is a
+    single ruled line, and address_display is the whole multi-line block, which
+    just gets truncated. Falls back to the block (then the city field) when the
+    invoice carries no address. -#}
+{%- set addr1 = frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '' -%}
+{%- set address = (addr1 or doc.address_display or doc.get('custom_citytown') or '') | replace('<br>', ', ') | replace('\n', ' ') | striptags -%}
 {%- set address = address.rstrip(', ') if address else '' -%}
 
 {%- set do_nos = doc.items | map(attribute='delivery_note') | select | unique | list -%}
@@ -241,7 +245,8 @@
     {%- endif -%}
   {%- else -%}
     {%- call at(P.trans_date.x, P.trans_date.y, 34, 'left') %}{{ bs_date }}{% endcall -%}
-    {%- call at(P.invoice_date.x, P.invoice_date.y, 34, 'left') %}{{ ad_date }}{% endcall -%}
+    {#- both dates are the BS miti, matching the ESC/P builders -#}
+    {%- call at(P.invoice_date.x, P.invoice_date.y, 34, 'left') %}{{ bs_date }}{% endcall -%}
     {%- if do_nos and P.do_no -%}
       {%- call at(P.do_no.x, P.do_no.y, 34, 'left') %}{{ do_nos | join(', ') }}{% endcall -%}
     {%- endif -%}
@@ -267,9 +272,10 @@
 
   {#- ---- totals, on the last sheet of this copy only ---------------------- -#}
   {%- if is_last -%}
-    {%- if doc.additional_discount_percentage -%}
-      {%- call atr(amt_r, P.y_disc, 30) %}{{ doc.additional_discount_percentage | abs }}%{% endcall -%}
-    {%- endif -%}
+    {#- always typed, 0 when there is none, so the discount line is never blank
+        and the four totals read as one column. Amount, not percentage — same as
+        the ESC/P builders, and the box sits among three other amounts. -#}
+    {%- call atr(amt_r, P.y_disc, 30) %}{{ num(doc.discount_amount or 0) }}{% endcall -%}
     {%- call atr(amt_r, P.y_taxable, 30) %}{{ num(doc.net_total) }}{% endcall -%}
     {%- call atr(amt_r, P.y_vat, 30) %}{{ num(ns2.vat) }}{% endcall -%}
     {%- call atr(amt_r, P.y_grand, 30, true) %}{{ num(grand_total) }}{% endcall -%}
