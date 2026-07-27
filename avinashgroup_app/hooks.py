@@ -40,9 +40,9 @@ app_include_js = [
     # company_print (form printer icon). QZ Tray is fully replaced, so qz_sign.js
     # is no longer loaded.
     "/assets/avinashgroup_app/js/print_bridge.js?v=1.1",
-    "/assets/avinashgroup_app/js/ngi_print.js?v=1.4",
+    "/assets/avinashgroup_app/js/ngi_print.js?v=1.5",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
-    "/assets/avinashgroup_app/js/company_print.js?v=1.8",
+    "/assets/avinashgroup_app/js/company_print.js?v=1.9",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
 ]
 

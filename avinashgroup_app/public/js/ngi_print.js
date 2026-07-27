@@ -9,6 +9,63 @@
 // this server ships the unpatched-Qt wkhtmltopdf.
 
 (function () {
+	window.avinash = window.avinash || {};
+
+	// Load the PDF into a hidden iframe and open the print dialog straight from
+	// it, so the till presses Print once instead of Print -> new tab -> Ctrl+P.
+	//
+	// The iframe is kept in the DOM while the dialog is open: removing it
+	// cancels the job. It is replaced (not stacked) on the next print, so at
+	// most one ever exists.
+	//
+	// Falls back to opening the tab, which is what this did before, if the
+	// iframe never loads or the browser refuses to print from it. Only Chrome
+	// is supported for these forms anyway (Firefox rasterises PDFs and loses
+	// the millimetres), but the fallback keeps every browser printing SOMETHING
+	// rather than silently nothing.
+	avinash.print_pdf = function (url) {
+		const old = document.getElementById("avinash-print-frame");
+		if (old) old.remove();
+
+		let settled = false;
+		const open_tab = function () {
+			if (settled) return;
+			settled = true;
+			const w = window.open(url);
+			if (!w) {
+				frappe.msgprint({
+					title: __("Print ready"),
+					indicator: "blue",
+					message: __("The browser blocked the print window. {0}", [
+						`<a href="${url}" target="_blank" rel="noopener">${__("Open print")}</a>`,
+					]),
+				});
+			}
+		};
+
+		const frame = document.createElement("iframe");
+		frame.id = "avinash-print-frame";
+		frame.style.cssText = "position:fixed; right:0; bottom:0; width:0; height:0; border:0;";
+		// a slow render must not strand the user with no print and no tab
+		const timer = setTimeout(open_tab, 15000);
+		frame.onload = function () {
+			clearTimeout(timer);
+			if (settled) return;
+			settled = true;
+			try {
+				frame.contentWindow.focus();
+				frame.contentWindow.print();
+			} catch (e) {
+				settled = false;
+				frame.remove();
+				open_tab();
+			}
+		};
+		frame.onerror = open_tab;
+		frame.src = url;
+		document.body.appendChild(frame);
+	};
+
 	// Fallback only, for a format doc that hasn't reached locals yet. The real
 	// routing rule is the format's own pdf_generator field (see is_chrome_format)
 	// — the same rule company_print.js uses — so new chrome formats need no edit
@@ -36,18 +93,31 @@
 		const orig = cls.prototype.printit;
 		cls.prototype.printit = function () {
 			if (is_chrome_format(this)) {
-				// `_ts` is a cache buster: the URL is otherwise identical on every
-				// print of an invoice, so Chrome serves its cached PDF and never
-				// reaches the server. Frappe filters call kwargs to the handler's
-				// signature, so the extra param never reaches the render.
-				this.render_page(
-					"/api/method/frappe.utils.print_format.download_pdf?_ts=" + Date.now() + "&"
+				// Same parameters render_page() would have built, plus `_ts`: a
+				// cache buster, because the URL is otherwise identical on every
+				// print of an invoice and Chrome then serves its cached PDF
+				// without ever reaching the server. Frappe filters call kwargs to
+				// the handler's signature, so `_ts` never reaches the render.
+				const p = new URLSearchParams({
+					doctype: this.frm.doc.doctype,
+					name: this.frm.doc.name,
+					format: this.selected_format(),
+					no_letterhead: this.with_letterhead() ? "0" : "1",
+					letterhead: this.get_letterhead(),
+					settings: JSON.stringify(this.additional_settings || {}),
+					_ts: Date.now(),
+				});
+				if (this.lang_code) p.set("_lang", this.lang_code);
+				avinash.print_pdf(
+					frappe.urllib.get_full_url(
+						"/api/method/frappe.utils.print_format.download_pdf?" + p
+					)
 				);
 				frappe.show_alert(
 					{
-						message: __("PDF opened in a new tab."),
+						message: __("Sending to the printer…"),
 						subtitle: __(
-							'Print it at 100% / Actual size on the 9.5" × 5.5" form — never "Fit to page".'
+							'Print at 100% / Actual size on the 9.5" × 5.5" form — never "Fit to page".'
 						),
 						indicator: "blue",
 					},

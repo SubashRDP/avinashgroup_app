@@ -199,6 +199,14 @@
 		}
 		url = frappe.urllib.get_full_url(url);
 
+		// chrome formats: straight to the print dialog via the hidden iframe in
+		// ngi_print.js (loaded before this file), so the till presses Print once.
+		// It falls back to opening the tab by itself if the browser refuses.
+		if (sel.generator === "chrome" && window.avinash && avinash.print_pdf) {
+			avinash.print_pdf(url);
+			return;
+		}
+
 		const w = window.open(url);
 		if (!w) {
 			// Popup blocked (window.open ran outside the click's user
