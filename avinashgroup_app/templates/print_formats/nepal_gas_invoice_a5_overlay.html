@@ -80,7 +80,27 @@
      ========================================================================= -#}
 {%- set is_a5 = (page == 'a5') -%}
 {%- set fw = 210.0 if is_a5 else 241.3 -%}
-{%- set fh = 148.0 if is_a5 else 139.7 -%}
+
+{#- FORM PITCH — the one number behind a print that WALKS.
+    fh is not decoration: it is how far the paper advances per sheet. The
+    printer has no idea where the perforation is; it just feeds fh and starts
+    the next sheet. So if the roll's true perforation-to-perforation distance
+    is P and we feed fh, every sheet is off by (fh - P) and the error ADDS UP:
+    feed 0.3mm short and sheet 5 prints 1.5mm high, sheet 10 3mm high. That is
+    the "it creeps up print after print" symptom, and no ox/oy can fix it —
+    an offset moves all sheets equally, it does not stop the walk.
+
+      walks UP   -> we feed too little -> RAISE fh
+      walks DOWN -> we feed too much   -> LOWER fh
+
+    Measure it, never guess: print 10 forms, measure the drift of the last one
+    in mm, divide by 10, and add that to fh. Nominal 5.5in = 139.7mm, but a
+    roll cut a hair long is exactly what produces a slow walk.
+    Trial it with &fh=140, then bake it into the wrapper for that stationery.
+    The driver's paper height must match it — that is what actually feeds the
+    paper (docs/windows_setup_form.ps1 -HeightMm). -#}
+{%- set fh_url = frappe.form_dict.get('fh') | float -%}
+{%- set fh = fh_url if fh_url else (148.0 if is_a5 else (fh | default(139.7))) -%}
 
 {%- set rot = (frappe.form_dict.get('rot') | int) % 360 -%}
 {%- set rot = rot if rot in [0, 90, 180, 270] else 0 -%}

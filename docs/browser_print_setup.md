@@ -63,6 +63,7 @@ copy.
 | Content rotated 90° / upside down on paper | driver Orientation = Landscape, or paper size not NGIForm | setup steps 1–2 — **or just use `&rot=`, see "If the orientation is wrong" below** |
 | Every copy eats two forms / blank form between copies | driver paper is A4 (297 mm feed), or (Linux) double-feed wrapper missing | setup step 2 / install the wrapper |
 | Everything shifted by a constant amount | ox/oy calibration | see "Calibrating a form" below |
+| Each sheet prints higher (or lower) than the last | page height ≠ the form's real pitch | see "If the print CREEPS" below — **not** an ox/oy job |
 | Whole form printed small (~77%) | PDF was rendered by wkhtmltopdf, not Chrome | check the format's `pdf_generator` = chrome on the site |
 | Values in wrong boxes entirely | wrong overlay format for that company's stationery | pick the overlay matching the pre-printed roll (each company has its own) |
 
@@ -89,6 +90,47 @@ Why `rot=90` usually fixes "sideways": a driver that believes portrait paper is
 loaded will rotate a landscape page to make it fit. `rot=90` hands it a portrait
 page with the form already turned inside it, so the driver has no reason to
 rotate anything and the paper comes out right.
+
+## If the print CREEPS — every sheet a little higher than the last
+
+Different from "everything is 2mm off". Here sheet 1 looks fine, sheet 5 is
+visibly high, sheet 10 is off the boxes. **`ox`/`oy` cannot fix this** — they
+shift every sheet by the same amount, they do not stop a walk.
+
+The cause is always the same: the paper advance per sheet does not equal the
+form's real perforation-to-perforation distance. The printer does not see the
+perforation; it feeds the page height it was given and starts the next sheet.
+Feed 0.3mm short and the error adds up — sheet 5 prints 1.5mm high.
+
+> Because it accumulates, the SAME machine prints differently at sheet 1 and
+> sheet 6. Two tills compared at different points in their roll look like "every
+> laptop prints differently" when there is really one fault. Before blaming a
+> machine, always ask **which sheet since the paper was loaded**.
+
+Direction:
+
+| What you see | Meaning | Do |
+| --- | --- | --- |
+| creeps **up** the form | feeding too little | **raise** the height |
+| creeps **down** the form | feeding too much | **lower** the height |
+
+Measure it — a single sheet cannot resolve 0.3mm, ten can:
+
+1. Load the paper with the perforation at the tear bar and print **10 forms**.
+2. Measure how far the 10th print sits off its boxes, in mm.
+3. Per-sheet error = that ÷ 10. New height = 139.7 + it (creeping up), or
+   139.7 − it (creeping down). E.g. 3mm high over 10 sheets → 139.7 + 0.3 =
+   **140.0**.
+4. Trial it with **`&fh=140`** on the print URL — no deploy, that machine only.
+5. It must also be set on the DRIVER, which is what actually feeds the paper:
+   `windows_setup_form.ps1 -HeightMm 140` (Linux: the PPD's `NGIForm`). If only
+   one of the two changes, the walk stays.
+6. When it holds over 10 sheets, send the number to the developer to bake into
+   that stationery's format.
+
+If the creep is large and jumpy rather than a slow walk (a whole blank form now
+and then), that is the double-feed fault instead — see the Troubleshooting
+table.
 
 ## Calibrating a form (the "print one sheet and send a photo" step)
 
