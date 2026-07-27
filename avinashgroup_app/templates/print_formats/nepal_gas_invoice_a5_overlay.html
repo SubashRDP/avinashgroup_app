@@ -133,7 +133,18 @@
     {%- endif -%}
   {%- endfor -%}
 {%- endif -%}
-{%- set grand_total = doc.rounded_total or doc.grand_total -%}
+{%- set grand_total = doc.rounded_total or doc.grand_total or 0 -%}
+
+{#- amount in words, ALWAYS spelled from the grand_total above rather than the
+    stored doc.in_words, so the words and the figure in the box can never
+    disagree: in_words is written once at save time, so it goes stale on
+    amended and legacy invoices, is blank on some imports, and follows its own
+    rounding/currency rules (base_in_words vs in_words). Same number, one
+    source. -#}
+    Spelled from the ABSOLUTE value, like every figure on the form (num() takes
+    abs too): a return's grand_total is negative, and money_in_words returns an
+    empty string for a negative, which blanked the whole line on credit notes. -#}
+{%- set in_words = frappe.utils.money_in_words(grand_total | abs, doc.currency) -%}
 
 {#- items split into sheets -#}
 {%- set item_pages = [] -%}
@@ -294,7 +305,7 @@
     {%- call atr(amt_r, P.y_grand, 30, true) %}{{ num(grand_total) }}{% endcall -%}
     {#- justified and wrapping: the words box is the one field that legitimately
         runs onto a second line, and clipping it loses the end of the amount -#}
-    {%- call at(P.words.x, P.words.y, P.words.w, 'justify', false, 7.5, true) %}{{ doc.in_words or '' }}{% endcall -%}
+    {%- call at(P.words.x, P.words.y, P.words.w, 'justify', false, 7.5, true) %}{{ in_words }}{% endcall -%}
   {%- else -%}
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}
