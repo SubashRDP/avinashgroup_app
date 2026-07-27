@@ -345,7 +345,14 @@ scheduler_events = {
 }
 
 before_request = [
-    "avinashgroup_app.custom_code.Override.auto_insert_item_price.patch_insert_item_price_set_company"
+    "avinashgroup_app.custom_code.Override.auto_insert_item_price.patch_insert_item_price_set_company",
+    "avinashgroup_app.custom_code.Override.repost_valuation_notify.patch_repost_valuation_disable_error_email",
+]
+
+# The repost runs in a background job, so the get_recipients patch must also be
+# applied worker-side; before_request alone never fires there.
+before_job = [
+    "avinashgroup_app.custom_code.Override.repost_valuation_notify.patch_repost_valuation_disable_error_email",
 ]
 
 # The distro's unpatched-Qt wkhtmltopdf shrinks every length by 0.7688x, which
