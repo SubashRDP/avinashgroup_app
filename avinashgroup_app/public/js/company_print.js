@@ -177,6 +177,14 @@
 					name: name,
 					format: sel.format,
 					no_letterhead: "0",
+					// Cache buster. Without it this URL is byte-identical on every
+					// print of an invoice, so Chrome answers from its disk cache and
+					// never asks the server -- a till kept printing a months-old
+					// layout while the server had the corrected one, and only a
+					// manual cache clear fixed it (found 2026-07-27). Frappe filters
+					// call kwargs to the handler's signature, so the extra param is
+					// dropped server-side and changes nothing about the render.
+					_ts: Date.now(),
 				});
 		} else {
 			url =

@@ -36,7 +36,13 @@
 		const orig = cls.prototype.printit;
 		cls.prototype.printit = function () {
 			if (is_chrome_format(this)) {
-				this.render_page("/api/method/frappe.utils.print_format.download_pdf?");
+				// `_ts` is a cache buster: the URL is otherwise identical on every
+				// print of an invoice, so Chrome serves its cached PDF and never
+				// reaches the server. Frappe filters call kwargs to the handler's
+				// signature, so the extra param never reaches the render.
+				this.render_page(
+					"/api/method/frappe.utils.print_format.download_pdf?_ts=" + Date.now() + "&"
+				);
 				frappe.show_alert(
 					{
 						message: __("PDF opened in a new tab."),
