@@ -160,7 +160,8 @@
     disagree: in_words is written once at save time, so it goes stale on
     amended and legacy invoices, is blank on some imports, and follows its own
     rounding/currency rules (base_in_words vs in_words). Same number, one
-    source. -#}
+    source.
+
     Spelled from the ABSOLUTE value, like every figure on the form (num() takes
     abs too): a return's grand_total is negative, and money_in_words returns an
     empty string for a negative, which blanked the whole line on credit notes. -#}
