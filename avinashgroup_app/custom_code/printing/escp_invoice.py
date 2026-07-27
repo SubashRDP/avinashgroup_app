@@ -61,9 +61,9 @@ POS = {
 	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
 	"invoice_no":   (37.0, 32.5),  # 2mm right, 1mm down per user 2026-07-26
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (204.3, 32.5),  # 1.2cm right then 0.7mm back left; y matched
-	                                # to invoice_no so the two sit on one line
-	"invoice_date": (204.3, 37.3),  # 1.2cm right less 0.7mm, 1mm down
+	"trans_date":   (199.0, 32.5),  # ends ~201.5mm physical: inside the LQ-310's
+	                                # 203.2mm (8in) print band; y matched to invoice_no
+	"invoice_date": (199.0, 37.3),  # same 8in-band pullback as trans_date
 	"do_no":        (193.0, 41.5),
 	"customer":     (54.0, 49.0),  # 2mm right, 1mm down per user 2026-07-26
 	"address":      (54.0, 54.0),  # 2mm right, 1mm down per user 2026-07-26
@@ -85,9 +85,10 @@ POS = {
 	"r_qty":        165.0,   # right edge for qty; 2.2cm right then 5mm back left
 	                         # per user 2026-07-26
 	"r_rate":       187.0,   # 0.5cm right per user 2026-07-26
-	"r_amt":        220.0,   # right edge; 1cm right per user 2026-07-26. NOTE this
-	                         # is past the LQ-310's 215.4mm head limit, so the raw
-	                         # ESC/P path would clip it — overlay/PDF only.
+	"r_amt":        216.0,   # right edge; 201mm physical after ox=-15. NOTE this
+	                         # head prints only an 8in/203.2mm band (evidence: every
+	                         # right-aligned number lost its last digit at >203mm), so
+	                         # nothing may render past ~202mm physical.
 	# totals rows: right-aligned numerics at r_amt, so they share one vertical line
 	"y_disc":       92.0,  # all four 2mm down per user 2026-07-26
 	"y_taxable":    98.0,
