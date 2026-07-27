@@ -16,8 +16,10 @@ Any change to the invoice body belongs in BOTH files.
 @page {
   size: A4;
   /* Margins leave the whole A4 sheet usable (the half-page twin instead reserves
-     the bottom 148mm). 10mm top + 6mm bottom => a 281mm content band; the footer
-     at ~97% sits just above that bottom margin, which also holds the page counter.
+     the bottom 148mm). 10mm top + 6mm bottom => a 281mm content band, which also
+     holds the page counter. NOTE the browser has the last word here: Firefox's
+     print dialog on "Margins: Default" reserves ~12.7mm at the bottom whatever
+     @page asks for, so nothing below ~284mm actually prints — see TARGET_PX.
      Both margins are stated explicitly because the footer arithmetic below is in
      mm of this band. */
   margin-top: 10mm;
@@ -129,19 +131,20 @@ p { text-align: center; margin: 0; padding: 2px; }
      LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top of
-               the band (275mm -> 285mm down the sheet = ~96% of A4, just inside the
-               6mm bottom margin). The gap to PAGE_PX is the cushion that absorbs
-               estimate error — 22px here — and .pi-spacer is clamped below so it
-               can never spend it. Pushing this nearer 98% eats the cushion, and
-               "Get PDF" (wkhtmltopdf) runs a little taller than the browser does,
-               so the signatures tip onto a page of their own.
+               the band (267mm -> 277mm down the sheet = ~93% of A4). It is NOT
+               higher because Firefox printing on "Margins: Default" reserves
+               ~12.7mm at the foot of the sheet, so a footer aimed at 285mm (96%)
+               lands inside that reserve and gets bumped to a page of its own —
+               which is exactly what happened. 93% clears it with room for the
+               row-height estimate to be a few mm out. Raise this only if the print
+               dialog's Margins are set to None.
      CH_*      characters that fit on one line of a column, for guessing wraps -#}
 {% set PAGE_PX = 1062 %}
 {% set HEAD_PX = 155 %}
 {% set LINE_PX = 16 %}
 {% set PAD_PX = 9 %}
 {% set FOOT_PX = 115 %}
-{% set TARGET_PX = 1040 %}
+{% set TARGET_PX = 1010 %}
 {% set CH_DESC = 32 %}
 {% set CH_WIDE = 100 %}
 {#- Rows per page are budgeted 25px short of the real band so the forced breaks
