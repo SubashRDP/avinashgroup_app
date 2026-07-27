@@ -82,8 +82,7 @@ POS = {
 	                         # CUPS rasterisation.
 	"c_hs":         28.0,    # 3mm right per user 2026-07-26
 	"c_part":       50.0,    # particulars box runs 5.0 -> 13.8cm (41 chars at 12cpi)
-	"r_qty":        165.0,   # right edge for qty; 2.2cm right then 5mm back left
-	                         # per user 2026-07-26
+	"r_qty":        163.0,   # right edge for qty; 2mm left per user 2026-07-27
 	"r_rate":       187.0,   # 0.5cm right per user 2026-07-26
 	"r_amt":        216.0,   # right edge; 201mm physical after ox=-15. NOTE this
 	                         # head prints only an 8in/203.2mm band (evidence: every
