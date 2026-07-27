@@ -1,3 +1,12 @@
+{#- ==========================================================================
+A5 Avinash Purchase Invoice A4 Full Page (avinashgroup_app).
+
+FULL-SHEET TWIN of a5_avinash_purchase_invoice.html: identical markup and identical
+footer-placement logic, the only differences being the @page bottom margin and the
+page geometry constants in the "Footer placement" block — this one fills the whole
+A4 sheet and drops the signatures at ~97% instead of using the top half and 48.5%.
+Any change to the invoice body belongs in BOTH files.
+=========================================================================== -#}
 {% set company = frappe.get_doc("Company", doc.company) %}
 {% set items = doc.items %}
 {#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
@@ -6,15 +15,13 @@
 <style>
 @page {
   size: A4;
-  /* Large bottom margin confines all data to the TOP HALF of the A4 sheet;
-     content breaks to the next page when the top half fills, bottom stays blank.
-     10mm top + 148mm bottom => a 139mm content band, ending at 149mm — the fold.
-     The band was 152mm/135mm until the footer at 48.5% (144mm) ended up with only
-     1mm of slack behind it and kept tipping onto a page of its own. The footer
-     arithmetic below is in mm of this band, so both margins are stated explicitly
-     rather than left to the browser's print defaults. */
+  /* Margins leave the whole A4 sheet usable (the half-page twin instead reserves
+     the bottom 148mm). 10mm top + 6mm bottom => a 281mm content band; the footer
+     at ~97% sits just above that bottom margin, which also holds the page counter.
+     Both margins are stated explicitly because the footer arithmetic below is in
+     mm of this band. */
   margin-top: 10mm;
-  margin-bottom: 148mm;
+  margin-bottom: 6mm;
   @bottom-center {
     content: "Page " counter(page) " of " counter(pages);
     font-size: 12px;
@@ -96,44 +103,45 @@ p { text-align: center; margin: 0; padding: 2px; }
    signatures spill onto a page of their own. These must stay in step with @page
    above. The @media print reset stops browsers (and webkit inside wkhtmltopdf)
    from ALSO applying them as element margins on top of the page margins. */
-.print-format { margin-top: 10mm; margin-bottom: 148mm; margin-left: 10mm; margin-right: 10mm; }
+.print-format { margin-top: 10mm; margin-bottom: 6mm; margin-left: 10mm; margin-right: 10mm; }
 @media print { .print-format { margin: 0 !important; } }
 
 /* Force all text black (keep your additional requirement) */
 .print-format, .print-format * { color:#000 !important; }
 
 /* The signatories are plain flow content preceded by .pi-spacer, an empty box
-   whose height is computed in the markup below so they land just above the fold
-   on the LAST page. Flow layout (rather than an absolute pin) is what keeps the
+   whose height is computed in the markup below so they land at the foot of the
+   LAST page. Flow layout (rather than an absolute pin) is what keeps the
    footer off the data when the invoice runs to a second page. */
 .pi-footer { page-break-inside:avoid; }
 </style>
 
 {#- ---- Footer placement -----------------------------------------------------
-   Same mechanism as the Nepal Gas Journal Voucher, re-measured for this format's
-   12px text: the height of every <tr> is estimated, the page breaks are forced to
-   match that arithmetic, and .pi-spacer pushes the signatures down to the fold on
-   the last page. Nothing is absolutely positioned, so a wrong estimate can only
+   Same mechanism as the half-page twin: the height of every <tr> is estimated, the
+   page breaks are forced to match that arithmetic, and .pi-spacer pushes the
+   signatures down to the foot of the last page. Nothing is absolutely positioned, so a wrong estimate can only
    put the footer a few mm high or low — it can't overlap the items.
 
    Heights are CSS px at 96dpi (1mm = 3.78px):
-     PAGE_PX   printable band of one page (297 - 10 top - 148 bottom = 139mm)
+     PAGE_PX   printable band of one page (297 - 10 top - 6 bottom = 281mm)
      HEAD_PX   the <thead> block, reprinted on every page (title + company +
                vendor/VAT lines + column headers)
      LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top of
-               the band (134mm -> 144mm down the sheet = 48.5% of A4, just above the
-               fold at 148.5mm). The gap to PAGE_PX is the cushion that absorbs
-               estimate error — 19px here — and .pi-spacer is clamped below so it
-               can never spend it.
+               the band (275mm -> 285mm down the sheet = ~96% of A4, just inside the
+               6mm bottom margin). The gap to PAGE_PX is the cushion that absorbs
+               estimate error — 22px here — and .pi-spacer is clamped below so it
+               can never spend it. Pushing this nearer 98% eats the cushion, and
+               "Get PDF" (wkhtmltopdf) runs a little taller than the browser does,
+               so the signatures tip onto a page of their own.
      CH_*      characters that fit on one line of a column, for guessing wraps -#}
-{% set PAGE_PX = 525 %}
+{% set PAGE_PX = 1062 %}
 {% set HEAD_PX = 155 %}
 {% set LINE_PX = 16 %}
 {% set PAD_PX = 9 %}
 {% set FOOT_PX = 115 %}
-{% set TARGET_PX = 506 %}
+{% set TARGET_PX = 1040 %}
 {% set CH_DESC = 32 %}
 {% set CH_WIDE = 100 %}
 {#- Rows per page are budgeted 25px short of the real band so the forced breaks
@@ -181,10 +189,10 @@ p { text-align: center; margin: 0; padding: 2px; }
 {%- for b in S.breaks %}
   .main-table tbody > tr:nth-child({{ b }}) { page-break-after: always; }
 {%- endfor %}
-  /* Pushes the signatures down to the fold on the last page. */
+  /* Pushes the signatures down to the foot of the last page. */
   /* Clamped to the band (less a 12px reserve) as well as to TARGET_PX, so an
      under-estimated row can't push the signatures onto a page of their own. */
-  .pi-spacer { height: {{ [0, [TARGET_PX, PAGE_PX - 12]|min - HEAD_PX - S.used - FOOT_PX]|max }}px; }
+  .pi-spacer { height: {{ [0, [TARGET_PX, PAGE_PX - 25]|min - HEAD_PX - S.used - FOOT_PX]|max }}px; }
 </style>
 
  
