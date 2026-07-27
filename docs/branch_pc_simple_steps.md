@@ -204,4 +204,12 @@ are set up the same way.
 
 3. **The printer name** you wrote down in Step 1.
 
-Send all three to the IT team together.
+4. **The Chrome version on this computer.** In Chrome, type this in the address
+   bar and press Enter:
+
+   `chrome://version`
+
+   The first line says *Google Chrome* and a number, like `144.0.7559.109`.
+   Send that number.
+
+Send all four to the IT team together.

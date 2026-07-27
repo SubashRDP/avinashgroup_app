@@ -65,7 +65,7 @@ POS = {
 	                                # 203.2mm (8in) print band; y matched to invoice_no
 	"invoice_date": (199.0, 37.3),  # same 8in-band pullback as trans_date
 	"do_no":        (193.0, 41.5),
-	"customer":     (54.0, 49.0),  # 2mm right, 1mm down per user 2026-07-26
+	"customer":     (56.0, 49.0),  # 2mm right 2026-07-26, 2mm right again 2026-07-27
 	"address":      (54.0, 54.0),  # 2mm right, 1mm down per user 2026-07-26
 	"pan":          (52.0, 58.0),
 	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
@@ -81,7 +81,7 @@ POS = {
 	                         # page. The raw ESC/P path never clips - it bypasses
 	                         # CUPS rasterisation.
 	"c_hs":         28.0,    # 3mm right per user 2026-07-26
-	"c_part":       50.0,    # particulars box runs 5.0 -> 13.8cm (41 chars at 12cpi)
+	"c_part":       52.0,    # particulars; 2mm right per user 2026-07-27
 	"r_qty":        163.0,   # right edge for qty; 2mm left per user 2026-07-27
 	"r_rate":       187.0,   # 0.5cm right per user 2026-07-26
 	"r_amt":        216.0,   # right edge; 201mm physical after ox=-15. NOTE this
