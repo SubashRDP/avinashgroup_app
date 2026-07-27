@@ -139,11 +139,15 @@
 
 {#- == 5. macros ============================================================= -#}
 
-{#- at()  — text box whose LEFT edge sits at x -#}
-{%- macro at(x, y, w, align='left', bold=false, size=8.5) -%}
+{#- at()  — text box whose LEFT edge sits at x.
+    wrap=true lets the text run onto further lines inside w instead of being
+    clipped at it; every other field is a single ruled line on the form, so
+    nowrap stays the default. -#}
+{%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false) -%}
 <div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
   text-align:{{ align }}; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
-  white-space:nowrap; overflow:hidden; line-height:1.1;">{{ caller() }}</div>
+  {% if wrap %}white-space:normal; overflow-wrap:break-word;{% else %}white-space:nowrap;{% endif %}
+  overflow:hidden; line-height:1.1;">{{ caller() }}</div>
 {%- endmacro -%}
 
 {#- atr() — text box whose RIGHT edge sits at xr, so a number lands on the
@@ -279,7 +283,9 @@
     {%- call atr(amt_r, P.y_taxable, 30) %}{{ num(doc.net_total) }}{% endcall -%}
     {%- call atr(amt_r, P.y_vat, 30) %}{{ num(ns2.vat) }}{% endcall -%}
     {%- call atr(amt_r, P.y_grand, 30, true) %}{{ num(grand_total) }}{% endcall -%}
-    {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 7.5) %}{{ doc.in_words or '' }}{% endcall -%}
+    {#- justified and wrapping: the words box is the one field that legitimately
+        runs onto a second line, and clipping it loses the end of the amount -#}
+    {%- call at(P.words.x, P.words.y, P.words.w, 'justify', false, 7.5, true) %}{{ doc.in_words or '' }}{% endcall -%}
   {%- else -%}
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}

@@ -145,6 +145,51 @@ def _page_sizes(printer: str) -> list[str]:
 	return []
 
 
+def _named_size(printer: str, w_mm: float, h_mm: float) -> str | None:
+	"""A PPD page size matching the page's own dimensions — by measurement, not
+	by name, because each machine names its 241.3x139.7 form whatever it likes
+	(NGIForm here, something else on a branch queue that predates that name).
+
+	Named sizes matter because CUPS clips Custom-size jobs by the PPD's
+	HWMargins in software — which is how the S.No column vanished from prints
+	while sitting plainly in the PDF. Among matches, a size whose ImageableArea
+	is the full sheet wins, since one with margins would clip the same way.
+	"""
+	import urllib.parse
+	import urllib.request
+
+	try:
+		with urllib.request.urlopen(
+			f"http://localhost:631/printers/{urllib.parse.quote(printer)}.ppd", timeout=5
+		) as r:
+			ppd = r.read().decode("utf-8", "replace")
+	except Exception:
+		return None  # no PPD (driverless queue) — caller falls back to Custom
+
+	w_pt, h_pt = w_mm * 72 / 25.4, h_mm * 72 / 25.4
+	dims, areas = {}, {}
+	for m in re.finditer(r'^\*PaperDimension\s+([^/:\s]+)[^:]*:\s*"\s*([\d.]+)\s+([\d.]+)', ppd, re.M):
+		dims[m.group(1)] = (float(m.group(2)), float(m.group(3)))
+	for m in re.finditer(
+		r'^\*ImageableArea\s+([^/:\s]+)[^:]*:\s*"\s*([-\d.]+)\s+([-\d.]+)\s+([\d.]+)\s+([\d.]+)', ppd, re.M
+	):
+		areas[m.group(1)] = tuple(float(m.group(i)) for i in range(2, 6))
+
+	# 2pt tolerance ~ 0.7mm: covers rounding in hand-made forms, well under the
+	# smallest deliberate size difference between real papers
+	matches = [
+		n for n, (w, h) in dims.items()
+		if n != "Custom" and abs(w - w_pt) <= 2 and abs(h - h_pt) <= 2
+	]
+
+	def _full_bleed(n):
+		a = areas.get(n)
+		return bool(a) and a[0] <= 1 and a[1] <= 1 and a[2] >= dims[n][0] - 1 and a[3] >= dims[n][1] - 1
+
+	matches.sort(key=lambda n: not _full_bleed(n))
+	return matches[0] if matches else None
+
+
 @frappe.whitelist()
 def print_now(name: str, format: str, printer: str | None = None,
               doctype: str = "Sales Invoice") -> dict:
@@ -190,7 +235,18 @@ def print_now(name: str, format: str, printer: str | None = None,
 
 	w_mm, h_mm = _page_mm(pdf)
 	sizes = _page_sizes(printer)
-	if sizes and not any(s.startswith("Custom.") for s in sizes):
+	# Prefer whichever of the queue's named sizes measures the same as the page
+	# (matched by dimension, not name — see _named_size). Custom.<w>x<h>mm is
+	# the fallback, and it carries a real cost: CUPS clips Custom-size jobs by
+	# the PPD's HWMargins (typically 6.35mm per edge), which silently eats
+	# anything near the paper edge — found 2026-07-27 when the S.No column
+	# printed through the raw path but vanished from Custom-media jobs.
+	named = _named_size(printer, w_mm, h_mm)
+	if named:
+		media = named
+	elif not sizes or any(s.startswith("Custom.") for s in sizes):
+		media = f"Custom.{w_mm:.1f}x{h_mm:.1f}mm"
+	else:
 		frappe.throw(
 			frappe._(
 				"{0} cannot be set to {1:.1f} x {2:.1f} mm — it only offers {3}. "
@@ -198,7 +254,6 @@ def print_now(name: str, format: str, printer: str | None = None,
 				"Use the PDF button and print it at 100% instead."
 			).format(printer, w_mm, h_mm, ", ".join(sizes))
 		)
-	media = f"Custom.{w_mm:.1f}x{h_mm:.1f}mm"
 
 	fd, path = tempfile.mkstemp(prefix="overlay-print-", suffix=".pdf")
 	try:

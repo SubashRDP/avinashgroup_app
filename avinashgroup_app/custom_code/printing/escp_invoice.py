@@ -61,9 +61,9 @@ POS = {
 	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
 	"invoice_no":   (37.0, 32.5),  # 2mm right, 1mm down per user 2026-07-26
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (205.0, 32.5),  # 1.2cm right; y matched to invoice_no so the
-	                                # two sit on one line per user 2026-07-26
-	"invoice_date": (205.0, 37.3),  # 1.2cm right, 1mm down per user 2026-07-26
+	"trans_date":   (204.3, 32.5),  # 1.2cm right then 0.7mm back left; y matched
+	                                # to invoice_no so the two sit on one line
+	"invoice_date": (204.3, 37.3),  # 1.2cm right less 0.7mm, 1mm down
 	"do_no":        (193.0, 41.5),
 	"customer":     (54.0, 49.0),  # 2mm right, 1mm down per user 2026-07-26
 	"address":      (54.0, 54.0),  # 2mm right, 1mm down per user 2026-07-26
@@ -73,10 +73,17 @@ POS = {
 	"words":        (50.0, 92.1),  # 2mm right, 2mm down per user 2026-07-26
 	"words_w":      75.0,    # box width; overlay only (ESC/P wraps by char count)
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        15.1,    # lands 0.1mm from the paper edge per user 2026-07-26
-	"c_hs":         25.0,
+	"c_sno":        15.1,    # box left lands 0.1mm on the page per user 2026-07-26.
+	                         # If S.No vanishes from a PRINT but is in the PDF, the
+	                         # job went out as media=Custom.<w>x<h>mm: CUPS clips
+	                         # Custom sizes by the PPD's HWMargins (6.35mm). Print
+	                         # with media=NGIForm, whose ImageableArea is the full
+	                         # page. The raw ESC/P path never clips - it bypasses
+	                         # CUPS rasterisation.
+	"c_hs":         28.0,    # 3mm right per user 2026-07-26
 	"c_part":       50.0,    # particulars box runs 5.0 -> 13.8cm (41 chars at 12cpi)
-	"r_qty":        170.0,   # right edge for qty; 2.2cm right per user 2026-07-26
+	"r_qty":        165.0,   # right edge for qty; 2.2cm right then 5mm back left
+	                         # per user 2026-07-26
 	"r_rate":       187.0,   # 0.5cm right per user 2026-07-26
 	"r_amt":        220.0,   # right edge; 1cm right per user 2026-07-26. NOTE this
 	                         # is past the LQ-310's 215.4mm head limit, so the raw
