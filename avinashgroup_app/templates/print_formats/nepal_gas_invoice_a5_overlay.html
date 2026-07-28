@@ -185,7 +185,14 @@
     returns an empty string for a negative, which blanked the whole line on
     credit notes. -#}
 {%- set spelled = frappe.utils.money_in_words(grand_total | abs, doc.currency) -%}
-{%- set in_words = doc.in_words if doc.in_words == spelled else spelled -%}
+{#- the equality check above must compare RAW strings — doc.in_words was saved
+    with num2words' own "And" ("Six Hundred And Fifty Three"), and comparing a
+    stripped form against the raw stored one would never match, permanently
+    treating every invoice as stale. Strip only for display, after the source
+    is decided: drop the capitalised "And" num2words inserts before the tens/
+    ones (per user 2026-07-28 — "Six Hundred Fifty Three"), keep the lowercase
+    "and" Frappe itself puts between the rupee and paisa amounts. -#}
+{%- set in_words = (doc.in_words if doc.in_words == spelled else spelled) | replace(' And ', ' ') -%}
 
 {#- items split into sheets -#}
 {%- set item_pages = [] -%}
