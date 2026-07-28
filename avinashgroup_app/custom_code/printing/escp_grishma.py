@@ -45,43 +45,53 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # where the first character should sit. EXCEPTION: r_qty / r_rate / r_amt are
 # RIGHT edges, because numbers are right-aligned so their digits line up in
 # the column; for those three, measure to where the number should END.
-# Initial values = the Nepal Gas 2026-07-14 calibration, with the HS Code
-# column removed (particulars pulled left to follow S.No.). Calibrate each
-# number on a real Grishma form.
+# 2026-07-28: replaced WHOLESALE with the Nepal Gas ('ngi') map, at the
+# branches' request, as the base for Grishma's own calibration. The two rolls
+# are the same 9.5x5.5in layout, and ngi carries a full day of measurements
+# taken on the Windows tills, so it is a far better starting point than
+# Grishma's own numbers were. The format also copies ngi's ox/oy, so the two
+# print identically until Grishma is measured. Anything that diverges from
+# here is Grishma-only and should say so in its comment.
 POS = {
-	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (38.0, 36.0),  # 1mm left, 3mm down per user 2026-07-28
+	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
+	"invoice_no":   (35.0, 31.0),
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 36.0),  # x=198 is the empirical rightmost: at x>=200 the
-	                                # 10th digit wraps to the next line on this rig.
-	                                # y tracks invoice_no so the two sit on one line
-	                                # (user 2026-07-28)
-	"invoice_date": (198.0, 47.0),  # same column as trans date; 3mm down, matching
-	                                # invoice_no's drop (user 2026-07-28)
+	"trans_date":   (199.0, 31.0),  # ends ~201.5mm physical: inside the LQ-310's
+	                                # 203.2mm (8in) print band; y tracks invoice_no
+	                                # so the two sit on one line
+	"invoice_date": (199.0, 37.3),  # same 8in-band pullback as trans_date
 	"do_no":        (193.0, 41.5),
 	# customer / address / pan share one left edge: three ruled lines of the same
-	# block on the form, so they start together (user 2026-07-28)
-	"customer":     (57.0, 53.0),  # 1mm left, 2mm down per user 2026-07-28
-	"address":      (57.0, 56.0),
-	"pan":          (57.0, 63.0),
-	"body_top":     (0, 84.0),   # first item row; 4mm down per user 2026-07-28
+	# block on the form, so they start together
+	"customer":     (54.0, 49.0),
+	"address":      (54.0, 54.0),
+	"pan":          (54.0, 58.0),
+	"body_top":     (0, 77.0),
 	"row_h":        4.8,
-	"words":        (31.0, 95.1),  # amount in words; -1cm more left per user
+	"words":        (20.0, 99.1),
+	"words_w":      75.0,    # box width; overlay only (ESC/P wraps by char count)
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        17.0,    # +2mm per user
-	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
-	                         # (vertically follows the item), same x as the heading below
-	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
-	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
-	                               # above the item rows); same x as the HS values
-	"r_qty":        144.0,   # right edge for qty; -5mm left per user
-	"r_rate":       177.0,   # -5mm left per user
-	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
-	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       94.0,   # all four 2mm down per user 2026-07-28
-	"y_taxable":    100.0,
-	"y_vat":        106.0,
-	"y_grand":      115.0,
+	"c_sno":        15.1,    # box left lands 0.1mm on the page. If S.No vanishes
+	                         # from a PRINT but is in the PDF, the job went out as
+	                         # media=Custom.<w>x<h>mm: CUPS clips Custom sizes by
+	                         # the PPD's HWMargins (6.35mm). Print with a NAMED
+	                         # form size, whose ImageableArea is the full page.
+	"c_hs":         28.0,
+	"hs_label":     (31.0, 70.0),  # "H.S. Code" column heading, typed once per form
+	                               # above the item rows — only when the wrapper
+	                               # sets show_hs_label
+	"c_part":       52.0,
+	"r_qty":        157.0,   # right edge for qty
+	"r_rate":       185.0,
+	"r_amt":        216.0,   # right edge; 201mm physical after ox=-15. NOTE this
+	                         # head prints only an 8in/203.2mm band (evidence: every
+	                         # right-aligned number lost its last digit at >203mm), so
+	                         # nothing may render past ~202mm physical.
+	# totals rows: right-aligned numerics at r_amt, so they share one vertical line
+	"y_disc":       90.0,
+	"y_taxable":    96.0,
+	"y_vat":        102.0,
+	"y_grand":      110.0,
 }
 
 # How to read POS["copy_label"] x — build() below emits it directly, with no
@@ -91,7 +101,8 @@ POS = {
 # measurement it describes, and the two disagreed — the browser path treated
 # every form's x as a centre, printing the Grishma title about half a label
 # width left of where the ESC/P path puts it.
-COPY_LABEL_ANCHOR = "left"
+COPY_LABEL_ANCHOR = "center"  # copied with the ngi map 2026-07-28; build()
+                              # below centres the label to match
 
 ROWS_PER_PAGE = 2
 CPI = 15  # whole invoice prints at 15cpi; char cell = 1.69mm
@@ -218,8 +229,13 @@ def build(doc) -> str:
 	for copy_label, pno, page_items in runs:
 		last = pno == len(pages)
 		el: list = []
-		# copy label starts at P["copy_label"].x (user measures where text begins)
-		_el(el, P["copy_label"][0], P["copy_label"][1], copy_label, bold=True)
+		# copy label is CENTRED on P["copy_label"].x — subtract half the text
+		# width before emitting. Changed with the ngi map 2026-07-28, and
+		# COPY_LABEL_ANCHOR below says so: that constant has to describe what
+		# this line does, or the overlay anchors the title differently from the
+		# ESC/P path (the bug found 2026-07-25).
+		_el(el, P["copy_label"][0] - len(copy_label) * 25.4 / CPI / 2,
+			P["copy_label"][1], copy_label, bold=True)
 		_el(el, P["invoice_no"][0], P["invoice_no"][1], invoice_no, bold=True)
 		_el(el, P["trans_date"][0], P["trans_date"][1], bs_date)
 		_el(el, P["invoice_date"][0], P["invoice_date"][1], bs_date)

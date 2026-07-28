@@ -61,22 +61,23 @@ CAL_MM = 200.0                 # calibration bar, well inside the page
 #   right  -> div RIGHT edge sits at x (ESC/P right=True)
 # ---------------------------------------------------------------------------
 FORMS = {
-	# escp_grishma.py: copy_label comment says "x = START of the label text",
-	# and line 208 emits it with no centring arithmetic -> left.
-	# Dates at 198.0 are emitted with no right=True -> left.
+	# escp_grishma.py: its POS map was replaced wholesale with the ngi one on
+	# 2026-07-28, so these are ngi's numbers. copy_label is now CENTRED —
+	# build() subtracts half the text width, and COPY_LABEL_ANCHOR says so.
+	# Dates at 199.0 are emitted with no right=True -> left.
 	"grishma": {
-		"copy_label":   (118.5, 40.0, 50, "left"),
-		"invoice_no":   (38.0, 36.0, 90, "left"),
-		"trans_date":   (198.0, 36.0, 34, "left"),
-		"invoice_date": (198.0, 47.0, 34, "left"),
-		"customer":     (57.0, 53.0, 90, "left"),
-		"address":      (57.0, 56.0, 95, "left"),
-		"pan":          (57.0, 63.0, 70, "left"),
-		"words":        (31.0, 95.1, 90, "left"),
-		"body_top": 84.0, "row_h": 4.8,
-		"c_sno": 17.0, "c_hs": 30.0, "c_part": 54.0,
-		"r_qty": 144.0, "r_rate": 177.0, "r_amt": 210.0,
-		"y_disc": 94.0, "y_taxable": 100.0, "y_vat": 106.0, "y_grand": 115.0,
+		"copy_label":   (118.5, 37.7, 50, "center"),
+		"invoice_no":   (35.0, 31.0, 90, "left"),
+		"trans_date":   (199.0, 31.0, 34, "left"),
+		"invoice_date": (199.0, 37.3, 34, "left"),
+		"customer":     (54.0, 49.0, 90, "left"),
+		"address":      (54.0, 54.0, 95, "left"),
+		"pan":          (54.0, 58.0, 70, "left"),
+		"words":        (20.0, 99.1, 75, "left"),
+		"body_top": 77.0, "row_h": 4.8,
+		"c_sno": 15.1, "c_hs": 28.0, "c_part": 52.0,
+		"r_qty": 157.0, "r_rate": 185.0, "r_amt": 216.0,
+		"y_disc": 90.0, "y_taxable": 96.0, "y_vat": 102.0, "y_grand": 110.0,
 	},
 	# escp_ngi_udyog.py: copy_label comment says "x = CENTRE (label is centred
 	# at emit time)", and line 226 subtracts half the text width -> center.
