@@ -59,6 +59,19 @@ def before_save_salesinvoice(doc, method=None):
     #    from the first save. The atomic save+submit makes only one pass.)
     doc.set_total_in_words()
 
+    # 10. Same story for the payment schedule: core builds it in
+    #     validate_invoice_documents_schedule(), also before this hook, so its
+    #     payment_amount/outstanding were the pre-VAT total. Core only refreshes
+    #     existing rows from grand_total on a LATER validate — which a submitted
+    #     invoice never gets — so without this the stored schedule stays pre-VAT
+    #     for good, and Payment Entry allocation and AR-by-payment-term read it.
+    #     Returns are excluded deliberately: core empties the schedule for them,
+    #     and rebuilding here would hand a credit note a payment schedule it is
+    #     not supposed to have. set_payment_schedule() itself skips POS/opening.
+    if not doc.is_return:
+        doc.set_payment_schedule()
+        doc.set_due_date()
+
 
 def before_validate_salesinvoice(doc, method=None):
     """
