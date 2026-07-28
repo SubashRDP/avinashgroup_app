@@ -207,12 +207,15 @@
 {#- at()  — text box whose LEFT edge sits at x.
     wrap=true lets the text run onto further lines inside w instead of being
     clipped at it; every other field is a single ruled line on the form, so
-    nowrap stays the default. -#}
-{%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false) -%}
+    nowrap stays the default. line_h is the CSS unitless line-height: the
+    per-line advance in mm is size(pt) * line_h / 2.8346. Default 1.1 matches
+    every existing caller; only a wrapping field with a reason to control its
+    own line pitch (see the amount-in-words call) passes something else. -#}
+{%- macro at(x, y, w, align='left', bold=false, size=8.5, wrap=false, line_h=1.1) -%}
 <div style="position:absolute; left:{{ x + ox }}mm; top:{{ y + oy }}mm; width:{{ w }}mm;
   text-align:{{ align }}; font-size:{{ size }}pt; {% if bold %}font-weight:bold;{% endif %}
   {% if wrap %}white-space:normal; overflow-wrap:break-word;{% else %}white-space:nowrap;{% endif %}
-  overflow:hidden; line-height:1.1;">{{ caller() }}</div>
+  overflow:hidden; line-height:{{ line_h }};">{{ caller() }}</div>
 {%- endmacro -%}
 
 {#- atr() — text box whose RIGHT edge sits at xr, so a number lands on the
@@ -368,7 +371,11 @@
         last -- so a two-line amount printed one loose line above a tight one
         and read as crooked on the form. -#}
     {%- if show_words -%}
-      {%- call at(P.words.x, P.words.y, P.words.w, 'left', true, 9, true) %}{{ in_words }}{% endcall -%}
+      {#- line_h=1.89 -> 6mm per wrapped line at 9pt, matching the totals'
+          row spacing, so line 1 lands on the taxable row and line 2 on the
+          vat row instead of straggling 1-2mm off either — the near-miss
+          that was disturbing paper registration on those two rows. -#}
+      {%- call at(P.words.x, P.words.y, P.words.w, 'left', true, 9, true, 1.89) %}{{ in_words }}{% endcall -%}
     {%- endif -%}
   {%- else -%}
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}

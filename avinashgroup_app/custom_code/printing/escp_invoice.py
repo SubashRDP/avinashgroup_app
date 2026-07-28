@@ -73,7 +73,14 @@ POS = {
 	"pan":          (54.0, 58.0),
 	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
 	"row_h":        4.8,
-	"words":        (20.0, 99.1),  # 30mm left, 7mm down per user 2026-07-28
+	"words":        (20.0, 96.0),  # y = y_taxable per user 2026-07-28: line 1
+	                               # of the wrapped amount lands on taxable's
+	                               # row, line 2 (at 6mm pitch, see the overlay
+	                               # template's words call) on vat's row. Was
+	                               # 99.1, whose wrapped line 2 landed 0.5mm off
+	                               # vat's row — a near-miss, not a clean shared
+	                               # line, and the two totals that print
+	                               # slanted are exactly taxable and vat.
 	"words_w":      90.0,    # box width, 75->90mm per user 2026-07-28: the paper's
 	                         # own box has 9cm of room from where the text starts.
 	                         # Large amounts still wrap to 2+ lines regardless of
