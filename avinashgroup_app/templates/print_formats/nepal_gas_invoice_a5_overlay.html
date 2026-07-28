@@ -155,17 +155,24 @@
 {%- endif -%}
 {%- set grand_total = doc.rounded_total or doc.grand_total or 0 -%}
 
-{#- amount in words, ALWAYS spelled from the grand_total above rather than the
-    stored doc.in_words, so the words and the figure in the box can never
-    disagree: in_words is written once at save time, so it goes stale on
-    amended and legacy invoices, is blank on some imports, and follows its own
-    rounding/currency rules (base_in_words vs in_words). Same number, one
-    source.
+{#- amount in words: the document's own stored in_words, per the branches
+    2026-07-28 — it is what was recorded on the invoice, so it is what the
+    customer's copy carries.
 
-    Spelled from the ABSOLUTE value, like every figure on the form (num() takes
-    abs too): a return's grand_total is negative, and money_in_words returns an
-    empty string for a negative, which blanked the whole line on credit notes. -#}
-{%- set in_words = frappe.utils.money_in_words(grand_total | abs, doc.currency) -%}
+    But only when it agrees with the figure printed in the Grand Total box.
+    in_words is written once at save time, so on invoices saved before the
+    VAT-ordering fix it holds the PRE-VAT total: NGI-SB-83/84-00001 stores
+    "Two Thousand, Seven Hundred" against a grand_total of 3051.00. Printing
+    that would put two different amounts on one tax invoice, so when they
+    disagree — or when in_words is blank, as it is on imports — the figure
+    wins and the words are spelled from it.
+
+    Spelled from the ABSOLUTE value, like every figure on the form (num()
+    takes abs too): a return's grand_total is negative, and money_in_words
+    returns an empty string for a negative, which blanked the whole line on
+    credit notes. -#}
+{%- set spelled = frappe.utils.money_in_words(grand_total | abs, doc.currency) -%}
+{%- set in_words = doc.in_words if doc.in_words == spelled else spelled -%}
 
 {#- items split into sheets -#}
 {%- set item_pages = [] -%}
