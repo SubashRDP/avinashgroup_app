@@ -274,9 +274,19 @@ def build(doc) -> str:
 			_el(el, P["r_amt"], P["y_taxable"], _money(doc.net_total), right=True)
 			_el(el, P["r_amt"], P["y_vat"], _money(vat), right=True)
 			_el(el, P["r_amt"], P["y_grand"], _money(grand), bold=True, right=True)
-			# line width: words box runs 4.8 -> 13.5cm = 87mm = 51 chars at 15cpi
-			for j, line in enumerate(_wrap(doc.get("in_words") or "", 51)[:4]):
-				_el(el, P["words"][0], P["words"][1] + j * 4.3, line)
+			# amount in words: doc.in_words unless it disagrees with what grand
+			# spells out (stale on pre-VAT-fix invoices, blank on some imports),
+			# matching the overlay template's guard (nepal_gas_invoice_a5_overlay.
+			# html) so both print paths show the same wording.
+			spelled_words = frappe.utils.money_in_words(abs(grand), doc.currency)
+			words_text = doc.get("in_words") if doc.get("in_words") == spelled_words else spelled_words
+			words_text = (words_text or "").replace(" And ", " ")
+			# line width: words box runs 4.8 -> 13.5cm = 87mm = 51 chars at 15cpi.
+			# 6mm pitch, not row_h's 4.8mm: matches the overlay's line_h=1.89 fix
+			# so line 1 lands on the taxable row and line 2 on the vat row here
+			# too, if this raw path is ever brought back into use.
+			for j, line in enumerate(_wrap(words_text, 51)[:4]):
+				_el(el, P["words"][0], P["words"][1] + j * 6.0, line)
 		out.append(_emit(el))
 		out.append(FF)
 	out.append(f"{ESC}@")
