@@ -366,16 +366,18 @@
     {#- Wrapping, because this is the one field that legitimately runs onto a
         second line and clipping it loses the end of the amount.
 
-        Set like the invoice number (left, bold, 9pt) at the branches' request.
-        It was `justify`, which stretches the spacing on every line except the
-        last -- so a two-line amount printed one loose line above a tight one
-        and read as crooked on the form. -#}
+        Left-aligned, regular weight, 9pt. It was `justify`, which stretches
+        the spacing on every line except the last -- so a two-line amount
+        printed one loose line above a tight one and read as crooked on the
+        form. Bold was dropped too: LiberationSans-Bold's heavier stroke
+        printed less evenly than the regular weight used everywhere else on
+        the sheet, which read as uneven letter height across the block. -#}
     {%- if show_words -%}
       {#- line_h=1.89 -> 6mm per wrapped line at 9pt, matching the totals'
           row spacing, so line 1 lands on the taxable row and line 2 on the
           vat row instead of straggling 1-2mm off either — the near-miss
           that was disturbing paper registration on those two rows. -#}
-      {%- call at(P.words.x, P.words.y, P.words.w, 'left', true, 9, true, 1.89) %}{{ in_words }}{% endcall -%}
+      {%- call at(P.words.x, P.words.y, P.words.w, 'left', false, 9, true, 1.89) %}{{ in_words }}{% endcall -%}
     {%- endif -%}
   {%- else -%}
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
