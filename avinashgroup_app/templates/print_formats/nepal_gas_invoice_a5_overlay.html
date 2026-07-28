@@ -41,6 +41,13 @@
        amt_r          right edge of the amount column, mm. Only if the amount
                       runs off the edge of your particular form.
        rows_per_page  item rows per sheet; the form holds 2
+       show_words     false = do not print the amount in words. It is the only
+                      field that wraps to several lines, and it sits in the
+                      same band as the taxable and VAT figures, which print
+                      slanted on the tills — so it is suppressed to see whether
+                      the wrapped block is what disturbs the paper. An IRD tax
+                      invoice normally requires the amount in words: put this
+                      back once the cause is known.
        show_hs_label  true = type "H.S. Code" above the item rows, at the
                       hs_label position in that form's POS map. Off by default:
                       most stationery already carries the heading, and typing a
@@ -53,6 +60,7 @@
 {%- set page = page | default('form') -%}
 {%- set rows_per_page = rows_per_page | default(2) -%}
 {%- set show_hs_label = show_hs_label | default(false) -%}
+{%- set show_words = show_words | default(true) -%}
 {%- set ox = (ox | default(0)) + (frappe.form_dict.get('ox') | float) -%}
 {%- set oy = (oy | default(0)) + (frappe.form_dict.get('oy') | float) -%}
 {%- set guide = frappe.form_dict.get('guide') | int -%}
@@ -352,7 +360,9 @@
         It was `justify`, which stretches the spacing on every line except the
         last -- so a two-line amount printed one loose line above a tight one
         and read as crooked on the form. -#}
-    {%- call at(P.words.x, P.words.y, P.words.w, 'left', true, 9, true) %}{{ in_words }}{% endcall -%}
+    {%- if show_words -%}
+      {%- call at(P.words.x, P.words.y, P.words.w, 'left', true, 9, true) %}{{ in_words }}{% endcall -%}
+    {%- endif -%}
   {%- else -%}
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}
