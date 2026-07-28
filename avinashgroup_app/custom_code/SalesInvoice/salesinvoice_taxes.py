@@ -51,6 +51,14 @@ def before_save_salesinvoice(doc, method=None):
     # 8. Let ERPNext calculate standard totals
     doc.calculate_taxes_and_totals()
 
+    # 9. Re-word the total. ERPNext sets in_words inside AccountsController.validate(),
+    #    which runs BEFORE this doc_events `validate` hook — at that point the taxes
+    #    table is still empty on a new invoice, so it words the pre-VAT total. Now that
+    #    step 6/8 have built the taxes table and the real grand total, word it again.
+    #    (Two-request Save→Submit used to mask this: the submit pass saw the taxes rows
+    #    from the first save. The atomic save+submit makes only one pass.)
+    doc.set_total_in_words()
+
 
 def before_validate_salesinvoice(doc, method=None):
     """
