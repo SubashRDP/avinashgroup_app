@@ -324,9 +324,14 @@
     {%- call atr(amt_r, P.y_taxable, 30) %}{{ num(doc.net_total) }}{% endcall -%}
     {%- call atr(amt_r, P.y_vat, 30) %}{{ num(ns2.vat) }}{% endcall -%}
     {%- call atr(amt_r, P.y_grand, 30, true) %}{{ num(grand_total) }}{% endcall -%}
-    {#- justified and wrapping: the words box is the one field that legitimately
-        runs onto a second line, and clipping it loses the end of the amount -#}
-    {%- call at(P.words.x, P.words.y, P.words.w, 'justify', false, 7.5, true) %}{{ in_words }}{% endcall -%}
+    {#- Wrapping, because this is the one field that legitimately runs onto a
+        second line and clipping it loses the end of the amount.
+
+        Set like the invoice number (left, bold, 9pt) at the branches' request.
+        It was `justify`, which stretches the spacing on every line except the
+        last -- so a two-line amount printed one loose line above a tight one
+        and read as crooked on the form. -#}
+    {%- call at(P.words.x, P.words.y, P.words.w, 'left', true, 9, true) %}{{ in_words }}{% endcall -%}
   {%- else -%}
     {%- call at(P.c_part, P.y_disc, 90, 'left', true) %}Contd. on next form...{% endcall -%}
   {%- endif -%}
