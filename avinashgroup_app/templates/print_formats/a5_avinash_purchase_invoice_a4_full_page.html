@@ -4,31 +4,74 @@ A5 Avinash Purchase Invoice A4 Full Page (avinashgroup_app).
 FULL-SHEET TWIN of a5_avinash_purchase_invoice.html: identical markup and identical
 footer-placement logic, the only differences being the @page bottom margin and the
 page geometry constants in the "Footer placement" block — this one fills the whole
-A4 sheet and drops the signatures at ~97% instead of using the top half and 48.5%.
+A4 sheet and drops the signatures at ~93% instead of using the top half and 48.5%.
 Any change to the invoice body belongs in BOTH files.
 =========================================================================== -#}
 {% set company = frappe.get_doc("Company", doc.company) %}
 {% set items = doc.items %}
 {#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
 {%- macro amt(v) -%}{{ frappe.utils.fmt_money(v or 0, 2, format="#,##,###.##") }}{%- endmacro -%}
+{#- The page header, emitted once per page as ordinary <tbody> rows rather than
+   through a repeating <thead>. It has to be emitted rather than repeated because
+   "Page N of M" differs per page, and a <thead> renders identical content on every
+   page. @page margin boxes (@top-right) could do it, but Chrome renders those and
+   Firefox does not — verified — so neither mechanism works for both browsers. The
+   pages are already worked out here (S.breaks), so we place the header ourselves,
+   the same way loan_summary.py paginates its rows server-side. -#}
+{%- macro page_head(page_no, total_pages) -%}
+    <tr class="company-info">
+      <td colspan="7" style="text-align:center; border:none; padding-bottom:0; position:relative;">
+        {#- Corner page number. Absolutely positioned so it sits in the blank space
+           above the vendor details rather than reading as another data field, and so
+           it adds no height — HEAD_PX stays the same whatever the page count. Shown on
+           every invoice, including single-page ones. -#}
+        <div class="page-of">Page {{ page_no }} of {{ total_pages }}</div>
+        <h4>
+          {% if doc.is_return %}Purchase Return{% else %}{{ doc.custom_purchase_type or "Purchase Invoice" }}{% endif %}
+        </h4>
+        <h2>{{ company.company_name }}</h2>
+        <div>Kathmandu</div>
+      </td>
+    </tr>
+    <tr>
+        <td colspan="7" style="padding-top:0;">
+          <table style="width:100%; border:none;" class="top-data">
+            <tr>
+              <td style="border:none; text-align:left; padding:0;">Vendor : {{ doc.supplier_name or doc.supplier }}</td>
+              <td style="border:none; text-align:right; padding:0;">Voucher No :  {{ doc.custom_name or doc.name }}</td>
+            </tr>
+            <tr>
+              <td style="border:none; text-align:left; padding:0;">VAT No : {{ doc.tax_id or '' }}</td>
+              <td style="border:none; text-align:right; padding:0;">Nepali Miti : {% if doc.custom_nepali_miti %}{{ (doc.custom_nepali_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
+            </tr>
+          </table>
+        </td>
+    </tr>
+    <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
+      <th style="width:15px;text-align:left;">S.No</th>
+      <th style="text-align:left;">Description</th>
+      <th style="width:100px;text-align:left;">Vehicle No</th>
+      <th style="width:70px;text-align:right">Qty</th>
+      <th style="width:100px;text-align:center;">UOM</th>
+      <th style="width:70px;text-align:right;">Rate</th>
+      <th style="width:100px;text-align:right;">Amount</th>
+    </tr>
+{%- endmacro -%}
 
 <style>
 @page {
   size: A4;
   /* Margins leave the whole A4 sheet usable (the half-page twin instead reserves
-     the bottom 148mm). 10mm top + 6mm bottom => a 281mm content band, which also
-     holds the page counter. NOTE the browser has the last word here: Firefox's
-     print dialog on "Margins: Default" reserves ~12.7mm at the bottom whatever
-     @page asks for, so nothing below ~284mm actually prints — see TARGET_PX.
-     Both margins are stated explicitly because the footer arithmetic below is in
-     mm of this band. */
+     the bottom 148mm). 10mm top + 6mm bottom => a 281mm content band. NOTE the
+     browser has the last word here: Firefox's print dialog on "Margins: Default"
+     reserves ~12.7mm at the bottom whatever @page asks for, so nothing below
+     ~284mm actually prints — see TARGET_PX. Both margins are stated explicitly
+     because the footer arithmetic below is in mm of this band. */
   margin-top: 10mm;
   margin-bottom: 6mm;
-  @bottom-center {
-    content: "Page " counter(page) " of " counter(pages);
-    font-size: 12px;
-    color: #000;
-  }
+  /* No @bottom-center page counter: Chrome renders @page margin boxes but Firefox
+     ignores them, so the counter appeared on the Chrome print only and the two
+     browsers disagreed on the sheet. The invoice is not numbered on either now. */
 }
 body {
   -webkit-print-color-adjust: exact;
@@ -44,8 +87,20 @@ tfoot { display: table-footer-group; }
 tr, td, th { page-break-inside: avoid; }
 .page-break { page-break-after: always; }
 .company-info h2 { font-weight: 600; margin: 0; font-size: 20px; }
-.company-info h4 { font-weight: 600; margin: 2px; font-size: 15px; }
+.company-info h4 { font-weight: 600; margin: 0; font-size: 15px; }
 .company-info div { font-weight: 600; }
+/* Page number parked in the top-right corner of the header, clear of the Vendor /
+   Voucher No block so it does not read as one of the invoice's own fields. Out of
+   flow, so it costs the header no height. */
+.main-table tr.company-info .page-of { position:absolute; top:2px; right:0; font-size:10px; font-weight:400; }
+/* Header spacing. This block is emitted once per page (page_head above), so every
+   pixel here costs a row of items on every page — keep it tight. It used to also
+   have to clear Chrome's rule that a repeating <thead> taller than 25% of the band
+   is not reprinted; that no longer applies now the header is ordinary <tbody> rows,
+   but the tightening is worth keeping regardless. Re-measure HEAD_PX if changed. */
+.main-table tr.company-info h4 { line-height:1.15; }
+.main-table tr.company-info h2 { line-height:1.15; }
+.main-table tr.company-info > td { padding-top:2px !important; padding-bottom:0 !important; }
 .title strong { font-size:16px; }
 .top-table tr td,.table2 tr td { font-size:12px !important; padding: 4px 0px !important; }
 .main-table tr th { font-size:12px !important; font-weight:600; padding:4px !important; }
@@ -111,39 +166,46 @@ p { text-align: center; margin: 0; padding: 2px; }
 /* Force all text black (keep your additional requirement) */
 .print-format, .print-format * { color:#000 !important; }
 
+/* The spacer is a <tr>, so it has to out-shout .main-table tr's forced 20px height
+   and its cells' 4px padding; page-break-inside is reset because a tall row that
+   refuses to break would be bumped to a page of its own. */
+.main-table tr.pi-spacer { height:auto !important; page-break-inside:auto !important; }
+.main-table tr.pi-spacer td { padding:0 !important; border:none !important; }
 /* The signatories are plain flow content preceded by .pi-spacer, an empty box
-   whose height is computed in the markup below so they land at the foot of the
-   LAST page. Flow layout (rather than an absolute pin) is what keeps the
+   whose height is computed in the markup below so they land at the foot
+   on the LAST page. Flow layout (rather than an absolute pin) is what keeps the
    footer off the data when the invoice runs to a second page. */
 .pi-footer { page-break-inside:avoid; }
 </style>
 
 {#- ---- Footer placement -----------------------------------------------------
-   Same mechanism as the half-page twin: the height of every <tr> is estimated, the
-   page breaks are forced to match that arithmetic, and .pi-spacer pushes the
-   signatures down to the foot of the last page. Nothing is absolutely positioned, so a wrong estimate can only
+   Same mechanism as the Nepal Gas Journal Voucher, re-measured for this format's
+   12px text: the height of every <tr> is estimated, the page breaks are forced to
+   match that arithmetic, and .pi-spacer pushes the signatures down to the foot of
+   the last page. Nothing is absolutely positioned, so a wrong estimate can only
    put the footer a few mm high or low — it can't overlap the items.
 
    Heights are CSS px at 96dpi (1mm = 3.78px):
      PAGE_PX   printable band of one page (297 - 10 top - 6 bottom = 281mm)
      HEAD_PX   the <thead> block, reprinted on every page (title + company +
-               vendor/VAT lines + column headers)
+               vendor/VAT lines + column headers). Measures 124px; stated a little
+               over, like the row heights, so the breaks err early. It must stay
+               under 131px (25% of PAGE_PX) or Chrome stops reprinting it — see the
+               .company-info rules up in the stylesheet.
      LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top of
                the band (267mm -> 277mm down the sheet = ~93% of A4). It is NOT
                higher because Firefox printing on "Margins: Default" reserves
                ~12.7mm at the foot of the sheet, so a footer aimed at 285mm (96%)
-               lands inside that reserve and gets bumped to a page of its own —
-               which is exactly what happened. 93% clears it with room for the
-               row-height estimate to be a few mm out. Raise this only if the print
-               dialog's Margins are set to None.
+               lands inside that reserve and gets bumped to a page of its own.
+               93% clears it with room for the row-height estimate to be out.
      CH_*      characters that fit on one line of a column, for guessing wraps -#}
 {% set PAGE_PX = 1062 %}
-{% set HEAD_PX = 155 %}
+{% set HEAD_PX = 119 %}
 {% set LINE_PX = 16 %}
-{% set PAD_PX = 9 %}
-{% set FOOT_PX = 115 %}
+{% set PAD_PX = 12 %}
+{% set FOOT_PX = 108 %}
 {% set TARGET_PX = 1010 %}
 {% set CH_DESC = 32 %}
 {% set CH_WIDE = 100 %}
@@ -158,12 +220,13 @@ p { text-align: center; margin: 0; padding: 2px; }
 {% set LAST_CAP_PX = PAGE_PX - HEAD_PX - 8 %}
 {#- One entry per <tr> in <tbody>, in render order — the indexes double as the
    nth-child selectors used to force the page breaks below. -#}
-{% set G = namespace(items=[]) %}
+{% set G = namespace(items=[], data_count=0) %}
 {% for item in items %}
   {% set desc = (item.description or item.item_code or "")|striptags %}
   {% set lines = [1, ((desc|length) + CH_DESC - 1) // CH_DESC]|max %}
   {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
 {% endfor %}
+{% set G.data_count = G.items|length %}
 {#- Trailing rows: Total Before Tax, VAT, Total Including Vat, TDS, Total. -#}
 {% for _ in range(5) %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
@@ -171,10 +234,20 @@ p { text-align: center; margin: 0; padding: 2px; }
 {% set words = frappe.utils.money_in_words(doc.grand_total) %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.custom_memo or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
-{#- Walk the rows filling one page at a time; a row that no longer fits starts a
-   new page and the row before it gets a forced break. -#}
+{#- The closing group — the five total rows, In Words and Remarks — is measured as
+   one lump because it travels down to the foot together with the signatures rather
+   than sitting under the items. -#}
+{% set T = namespace(px=0) %}
+{% for h in G.items[G.data_count:] %}
+  {% set T.px = T.px + h %}
+{% endfor %}
+{% set TRAIL_PX = T.px %}
+{#- Walk the ITEM rows filling one page at a time; a row that no longer fits starts a
+   new page and the row before it gets a forced break. The closing rows are left out
+   of this walk — they are placed by the spacer instead, so every break index here is
+   an item row and none of them shift when the spacer row is inserted. -#}
 {% set S = namespace(used=0, idx=0, breaks=[]) %}
-{% for h in G.items %}
+{% for h in G.items[:G.data_count] %}
   {% set S.idx = S.idx + 1 %}
   {% if S.used + h > CAP_PX and S.idx > 1 %}
     {% set _add = S.breaks.append(S.idx - 1) %}
@@ -183,19 +256,24 @@ p { text-align: center; margin: 0; padding: 2px; }
     {% set S.used = S.used + h %}
   {% endif %}
 {% endfor %}
-{#- The footer needs room on the last page too; if it doesn't fit, give it a page. -#}
-{% if G.items and S.used + FOOT_PX > LAST_CAP_PX %}
-  {% set _add = S.breaks.append(S.idx) %}
+{#- The whole closing group has to fit beneath the items on the last page. If it does
+   not, the entire group moves to a page of its own — splitting it would put the
+   totals on one sheet and the signatures on the next. -#}
+{% if G.data_count and S.used + TRAIL_PX + FOOT_PX > LAST_CAP_PX %}
+  {% set _add = S.breaks.append(G.data_count) %}
   {% set S.used = 0 %}
 {% endif %}
+{% set TOTAL_PAGES = S.breaks|length + 1 %}
 <style>
-{%- for b in S.breaks %}
-  .main-table tbody > tr:nth-child({{ b }}) { page-break-after: always; }
-{%- endfor %}
-  /* Pushes the signatures down to the foot of the last page. */
-  /* Clamped to the band (less a 12px reserve) as well as to TARGET_PX, so an
-     under-estimated row can't push the signatures onto a page of their own. */
-  .pi-spacer { height: {{ [0, [TARGET_PX, PAGE_PX - 25]|min - HEAD_PX - S.used - FOOT_PX]|max }}px; }
+  /* Forced breaks are marked with a class on the row rather than nth-child: the
+     per-page header rows sit in the same <tbody>, so child positions no longer
+     line up with the item numbering the breaks were worked out from. */
+  .main-table tbody > tr.pi-break { page-break-after: always; }
+  /* Pushes the closing group (totals .. Remarks .. signatures) down to the foot of
+     the last page. Clamped to the band (less a 12px reserve) as well as to
+     TARGET_PX, so an under-estimated row can't push the group onto a page of its
+     own. !important because .main-table tr forces every row to 20px. */
+  .main-table tr.pi-spacer { height: {{ [0, [TARGET_PX, PAGE_PX - 25]|min - HEAD_PX - S.used - TRAIL_PX - FOOT_PX]|max }}px !important; }
 </style>
 
  
@@ -204,66 +282,17 @@ p { text-align: center; margin: 0; padding: 2px; }
 
 <!-- Main Table -->
 <table class="main-table table table-bordered">
-  <!-- HEADER -->
-  <thead>
-    <tr class="company-info">
-      <td colspan="7" style="text-align:center; border:none; padding-bottom:0;">
-        <h4>
-          {% if doc.is_return %}Purchase Return{% else %}{{ doc.custom_purchase_type or "Purchase Invoice" }}{% endif %}
-        </h4>
-        <h2 style="margin:3px 0 0 0;">{{ company.company_name }}</h2>
-        <div>Kathmandu</div>
-      </td>
-    </tr>
-  
-  <!--
-    <tr>
-      <td style="border:none; width:15%;">Vendor</td>
-      <td style="border:none; width:45%;">: {{ doc.supplier_name or doc.supplier }}</td>
-      <td style="border:none; width:20%;">Invoice No</td>
-      <td style="border:none;" colspan="4">: {{ doc.name }}</td>
-    </tr>
-    <tr>
-      <td style="border:none;">VAT No</td>
-      <td style="border:none;">: {{ doc.tax_id or '' }}</td>
-      <td style="border:none;">Nepali Miti</td>
-      <td style="border:none;" colspan="4">: {{ doc.custom_nepali_miti or '' }}</td>
-    </tr>
-    
-    -->
-    
-    <tr>
-        <td colspan="7" style="padding-top:0;">
-          <table style="width:100%; border:none;" class="top-data">
-            <tr>
-              <td style="border:none; text-align:left; padding:0;">Vendor : {{ doc.supplier_name or doc.supplier }}</td>
-              <td style="border:none; text-align:right; padding:0;">Voucher No :  {{ doc.custom_name or doc.name }}</td>
-            </tr>
-            <tr>
-              <td style="border:none; text-align:left; padding:0;">VAT No : {{ doc.tax_id or '' }}</td>
-              <td style="border:none; text-align:right; padding:0;">Nepali Miti : {% if doc.custom_nepali_miti %}{{ (doc.custom_nepali_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
-            </tr>
-          </table>
-        </td>
-    </tr>
-    
-    <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
-      <th style="width:15px;text-align:left;">S.No</th>
-      <th style="text-align:left;">Description</th>
-      <th style="width:100px;text-align:left;">Vehicle No</th>
-      <th style="width:70px;text-align:right">Qty</th>
-      <th style="width:100px;text-align:center;">UOM</th>
-      <th style="width:70px;text-align:right;">Rate</th>
-      <th style="width:100px;text-align:right;">Amount</th>
-    </tr>
-  </thead>
 
   <!-- signatures are not in <tfoot> (that repeats them on every page); they flow after the table, see .pi-spacer -->
 
-  <!-- BODY / ITEMS -->
+  <!-- BODY / ITEMS. There is no <thead>: page_head() is emitted here, once at the
+       top and again after every forced break, so each page carries its own header
+       with its own "Page N of M". -->
   <tbody>
+    {{ page_head(1, TOTAL_PAGES) }}
     {% for item in items %}
-    <tr>
+    {%- if loop.index0 in S.breaks %}{{ page_head(S.breaks.index(loop.index0) + 2, TOTAL_PAGES) }}{% endif %}
+    <tr class="{% if loop.index in S.breaks %}pi-break{% endif %}">
       <td style="text-align:left;">{{ loop.index }}</td>
       <td>{{ item.description or item.item_code }}</td>
       <td>{{ item.custom_subtype }}</td>
@@ -273,6 +302,14 @@ p { text-align: center; margin: 0; padding: 2px; }
       <td style="text-align:right;">{{ amt(abs(item.amount)) }}</td>
     </tr>
     {% endfor %}
+
+    {#- If the closing group was moved to a page of its own, that page needs its
+       header too — the item loop above has already ended by then. -#}
+    {%- if G.data_count in S.breaks %}{{ page_head(TOTAL_PAGES, TOTAL_PAGES) }}{% endif %}
+
+    <!-- Empty row that carries the closing group below down to the foot; height is
+         set by .pi-spacer in the computed <style> above. -->
+    <tr class="pi-spacer"><td colspan="7"></td></tr>
 
     <!-- TOTALS + REMARKS at the end -->
     <tr>
@@ -320,26 +357,33 @@ p { text-align: center; margin: 0; padding: 2px; }
 
 <!-- Footer (signatories + printed-on). .pi-spacer above it is sized in the page
      geometry block near the top of this file so the signatures land just above the
-     fold on the last page, without ever overlapping the items. -->
-<div class="pi-spacer"></div>
+     foot of the last page, without ever overlapping the items. -->
 <div class="pi-footer">
   <table style="width:100%; border:none;">
     <tr>
       <td style="width:25%; text-align:center; border:none;">
-        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <!-- padding-top is the blank signing space above the rule; it is also the
+             gap between Remarks and the signatures, so it feeds FOOT_PX. -->
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:16px;padding-bottom:10px;">&nbsp;</div>
         <div>Prepared By</div>
         <div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "" }}</strong></div>
       </td>
       <td style="width:25%; text-align:center; border:none;">
-        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <!-- padding-top is the blank signing space above the rule; it is also the
+             gap between Remarks and the signatures, so it feeds FOOT_PX. -->
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:16px;padding-bottom:10px;">&nbsp;</div>
         <div>Checked By</div>
       </td>
       <td style="width:25%; text-align:center; border:none;">
-        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <!-- padding-top is the blank signing space above the rule; it is also the
+             gap between Remarks and the signatures, so it feeds FOOT_PX. -->
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:16px;padding-bottom:10px;">&nbsp;</div>
         <div>Verified By</div>
       </td>
       <td style="width:25%; text-align:center; border:none;">
-        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+        <!-- padding-top is the blank signing space above the rule; it is also the
+             gap between Remarks and the signatures, so it feeds FOOT_PX. -->
+        <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:16px;padding-bottom:10px;">&nbsp;</div>
         <div>Approved By</div>
       </td>
     </tr>

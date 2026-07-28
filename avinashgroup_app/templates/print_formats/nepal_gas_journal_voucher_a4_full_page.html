@@ -2,32 +2,29 @@
 Nepal Gas Journal Voucher A4 Full Page — Journal Entry voucher (avinashgroup_app).
 Source of truth for the "Nepal Gas Journal Voucher A4 Full Page" standard Print Format;
 print_format/nepal_gas_journal_voucher_a4_full_page/nepal_gas_journal_voucher_a4_full_page.json
-only {% include %}s this file. Per-JV-type columns after Account:
-  Cash Entry / Cash-Bank-Contra / Journal Entry -> Vehicle | Party | Party Name
-  all other types                               -> Party | Party Name
-S.N. column always shown. Narration only for Cash Entry.
+only {% include %}s this file.
 
 FULL-SHEET TWIN of nepal_gas_journal_voucher.html: identical markup and identical
 footer-placement logic, the only differences being the @page bottom margin and the
 page geometry constants in the "Footer placement" block — this one fills the whole
 A4 sheet and drops the signatures at ~98% instead of using the top half and ~47%.
-Any change to the voucher body belongs in BOTH files.
+Any change to the voucher body belongs in BOTH files. Per-JV-type columns after Account:
+  Cash Entry / Cash-Bank-Contra / Journal Entry -> Vehicle | Party | Party Name
+  all other types                               -> Party | Party Name
+S.N. column always shown. Narration only for Cash Entry.
 =========================================================================== -#}
 <style>
 @page {
   /* Margins leave the whole A4 sheet usable (the half-page twin instead reserves
      the bottom 148mm). The 6mm bottom margin is what the signatures at ~98% sit
-     just above, and it holds the page counter below. */
+     just above. */
   /* Paper is pinned to A4: the footer arithmetic further down is in mm of an
      A4 sheet, so a Letter print would put the footer in the wrong place. */
   size: A4;
   margin: 10mm 10mm 6mm 10mm;
-
-  @bottom-center {
-    content: "Page " counter(page) " of " counter(pages);
-    font-size: 10px;
-    color: #000;
-  }
+  /* No @bottom-center page counter: Chrome renders @page margin boxes but Firefox
+     ignores them, so the counter appeared on the Chrome print only and the two
+     browsers disagreed on the sheet. The voucher is not numbered on either now. */
 }
 
 body {
@@ -83,13 +80,35 @@ tr, td, th { page-break-inside: avoid; }
   .company-info h4
   {
      font-weight: 600;
-    margin: 2px;
+    margin: 0;
     font-size: 15px;
   }
    .company-info div
    {
          font-weight: 600;
    }
+
+ /* Page number parked in the top-right corner of the header, clear of the
+    Voucher No / Posting Miti block so it does not read as one of the voucher's
+    own fields. Out of flow, so it costs the header no height. */
+ .main-table tr.company-info .page-of {
+    position:absolute; top:2px; right:0;
+    font-size:9px; font-weight:400;
+ }
+
+ /* Header spacing. This block is emitted once per page (page_head below), so every
+    pixel here costs a data row on every page — keep it tight. It used to also have
+    to clear Chrome's rule that a repeating <thead> taller than 25% of the band is
+    not reprinted; that no longer applies now the header is ordinary <tbody> rows,
+    but the tightening is worth keeping regardless. Re-measure HEAD_PX if changed. */
+ .main-table tr.company-info > td,
+ .main-table tr.voucher-meta > td { padding-top:2px !important; padding-bottom:2px !important; }
+ /* The Voucher No / Posting Miti grid sets padding:0 on its cells inline, but the
+    .main-table tr td rule below wins on !important — restate it at equal weight.
+    The .main-table tr height:20px rule below likewise lands on that grid's rows and
+    adds ~6px to each; let them size to their own text instead. */
+ .main-table tr.voucher-meta td table td { padding:0 !important; }
+ .main-table tr.voucher-meta td table tr { height:auto !important; }
   
   strong
   {
@@ -507,13 +526,24 @@ padding:0px 30px;
   
   
 
-/* Full-sheet voucher. The signatories are NOT positioned — they are plain flow
-   content preceded by .jv-spacer, an empty box whose height is computed in the
-   markup below so the signatures land at the foot of the LAST page.
-   Flow layout (rather than the absolute pin this used to use) is what keeps the
-   footer from printing on top of the data when the voucher runs to a 2nd page. */
+/* Full sheet. The closing block is NOT positioned — it is plain flow content
+   preceded by .jv-spacer, an empty row whose height is computed in the markup
+   below so the block lands at the foot of the LAST page. Flow layout
+   (rather than the absolute pin this used to use) is what keeps it from printing
+   on top of the data when the voucher runs to a 2nd page.
+
+   The block being pushed down is Total / Paid To / Cheque No / In Words / Remarks
+   AND the signatures — the spacer row sits immediately before the Total row, so
+   the whole closing group travels together and reads as one footer. It used to sit
+   after the table, which left the Total stranded up with the data and only carried
+   the signatures down. */
 .jv-sheet { position:relative; }
 .jv-footer { page-break-inside:avoid; }
+/* The spacer is a <tr>, so it has to out-shout .main-table tr's forced 20px height
+   and its cells' 4px padding; page-break-inside is reset because a tall row that
+   refuses to break would be bumped to a page of its own. */
+.main-table tr.jv-spacer { height:auto !important; page-break-inside:auto !important; }
+.main-table tr.jv-spacer td { padding:0 !important; border:none !important; }
 
 
 /* Page margins for the PDF path. "Get PDF" runs wkhtmltopdf, which ignores @page
@@ -544,6 +574,19 @@ padding:0px 30px;
 {%- if d.cheque_no or ref_date %}
       <tr><td colspan="{{ ncols }}">{% if d.cheque_no %}<strong>Cheque No:</strong> {{ d.cheque_no }}{% endif %}{% if ref_date %}{% if d.cheque_no %}&nbsp;&nbsp;&nbsp;&nbsp;{% endif %}<strong>Dated:</strong> {{ ref_date }}{% endif %}</td></tr>
 {%- endif %}
+{%- endmacro -%}
+{#- Empty row that pushes the closing block (Total .. signatures) down to the fold.
+   Height comes from .jv-spacer in the computed <style> further down. -#}
+{%- macro tail_spacer(ncols) -%}
+{%- if G.data_count in S.breaks %}{{ page_head(TOTAL_PAGES, TOTAL_PAGES) }}{% endif %}
+      <tr class="jv-spacer"><td colspan="{{ ncols }}"></td></tr>
+{%- endmacro -%}
+{#- Called immediately before every data <tr>. Counts the row so the count lines up
+   with the G.items indexes the breaks were worked out from, and emits the next
+   page's header when the previous row ended a page. -#}
+{%- macro row_start(R, S, total_pages) -%}
+{%- set R.i = R.i + 1 -%}
+{%- if (R.i - 1) in S.breaks %}{{ page_head(S.breaks.index(R.i - 1) + 2, total_pages) }}{% endif -%}
 {%- endmacro -%}
 {% set is_debit_note = doc.custom_p_type == "Debit Note" %}
 {% set is_credit_note = doc.custom_p_type == "Credit Note" %}
@@ -585,35 +628,36 @@ padding:0px 30px;
 {% set show_cash_bank_header = (is_cash_entry and cash_bank.name) or (is_cash_contra and cash_bank.count == 1) %}
 
 {#- ---- Footer placement -----------------------------------------------------
-   The signature block has to print at the foot of the sheet (~97-98% down) on the
-   LAST page, and never on top of the data. Absolute positioning can't do this: on
-   a voucher that runs to a 2nd page the box's bottom edge lands wherever the data
-   happened to end, and the signatures print over the Total / In Words rows.
+   The signature block has to print just above the fold (~49% down the sheet) on
+   the LAST page, and never on top of the data. It used to be absolutely pinned to
+   the bottom of a fixed-height .jv-sheet, which broke as soon as a voucher ran to
+   a 2nd page: the box's bottom edge landed wherever the data happened to end, so
+   the signatures printed over the Total / In Words rows.
 
    Instead, the height of every <tr> is estimated here, the page breaks are forced
    to match that arithmetic, and .jv-spacer — an empty flow box — pushes the
-   signatures down to the foot of the last page. Everything is in normal flow, so
+   signatures down to the fold on the last page. Everything is in normal flow, so
    even if the estimate is off the footer can only sit a few mm high or low; it
    can no longer overlap anything.
 
    Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
      PAGE_PX   printable height of one page (297 - 10 top - 6 bottom = 281mm)
-     HEAD_PX   the <thead> block, reprinted on every page
+     HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
+               little over, like the row heights, so the breaks err early. It must
+               stay under 131px (25% of PAGE_PX) or Chrome stops reprinting it —
+               see the .company-info rules up in the stylesheet.
      LINE_PX   one line of 10px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top
-               of the printable area (267mm -> 277mm down the sheet, i.e. ~93% of
-               A4, just inside the 6mm bottom margin). The gap to PAGE_PX is the
-               cushion that absorbs estimate error; .jv-spacer is clamped below so
-               it can never spend it. Pushing this nearer 98% eats the cushion, and
-               "Get PDF" (wkhtmltopdf) runs a little taller than the browser does,
-               so the signatures tip onto a page of their own.
+               of the printable area (132mm -> 142mm down the sheet, just above the
+               fold at 148.5mm). The gap to PAGE_PX is the cushion that absorbs
+               estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
      CH_*      characters that fit on one line of a column, for guessing wraps -#}
 {% set PAGE_PX = 1062 %}
-{% set HEAD_PX = 170 %}
+{% set HEAD_PX = 117 %}
 {% set LINE_PX = 13 %}
 {% set PAD_PX = 11 %}
-{% set FOOT_PX = 105 %}
+{% set FOOT_PX = 100 %}
 {% set TARGET_PX = 1010 %}
 {% set CH_ACC = 36 %}
 {% set CH_PARTY = 26 %}
@@ -622,19 +666,21 @@ padding:0px 30px;
    below always fire BEFORE the browser would have broken by itself — the browser
    winning that race is what puts an unplanned page between the data and the
    footer. Row heights above are rounded up for the same reason. The numbers are
-   measured off Firefox, which is what these vouchers are printed from; Chrome and
-   wkhtmltopdf don't reprint the <thead> on later pages, so there the footer lands
-   about HEAD_PX higher than TARGET_PX asks for. -#}
+   measured off a rendered voucher and hold for both Firefox and Chrome, which both
+   reprint the <thead> on every page now that it is under Chrome's 25% limit.
+   wkhtmltopdf ("Get PDF") still does not reprint it, so on that path alone the
+   footer lands about HEAD_PX higher than TARGET_PX asks for. -#}
 {% set CAP_PX = PAGE_PX - HEAD_PX - 25 %}
 {#- One entry per <tr> in <tbody>, in render order — the indexes double as the
    nth-child selectors used to force the page breaks below. -#}
-{% set G = namespace(items=[]) %}
+{% set G = namespace(items=[], data_count=0) %}
 {% if is_party_journal %}
   {#- Party Journal rows are a 4-line key-value block (Code / Name / gap / Amount /
      Document Class) rather than a single line, and end with In Words + Remarks. -#}
   {% for row in doc.accounts %}
     {% set _add = G.items.append(PAD_PX + LINE_PX * 5) %}
   {% endfor %}
+  {% set G.data_count = G.items|length %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% if doc.custom_paid_to %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
@@ -660,6 +706,7 @@ padding:0px 30px;
       {% endif %}
     {% endif %}
   {% endfor %}
+  {% set G.data_count = G.items|length %}
   {#- Trailing rows: Total, [Paid To], [Cheque No / Dated], In Words, Remarks. -#}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% if doc.custom_paid_to %}
@@ -672,10 +719,20 @@ padding:0px 30px;
   {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
   {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.user_remark or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {% endif %}
-{#- Walk the rows filling one page at a time; a row that no longer fits starts a
-   new page and the row before it gets a forced break. -#}
+{#- The closing group — Total, Paid To, Cheque No, In Words, Remarks — is measured
+   as one lump because it travels down to the fold together with the signatures
+   rather than sitting under the data. -#}
+{% set T = namespace(px=0) %}
+{% for h in G.items[G.data_count:] %}
+  {% set T.px = T.px + h %}
+{% endfor %}
+{% set TRAIL_PX = T.px %}
+{#- Walk the DATA rows filling one page at a time; a row that no longer fits starts
+   a new page and the row before it gets a forced break. The closing rows are left
+   out of this walk — they are placed by the spacer instead, so every break index
+   here is a data row and none of them shift when the spacer row is inserted. -#}
 {% set S = namespace(used=0, idx=0, breaks=[]) %}
-{% for h in G.items %}
+{% for h in G.items[:G.data_count] %}
   {% set S.idx = S.idx + 1 %}
   {% if S.used + h > CAP_PX and S.idx > 1 %}
     {% set _add = S.breaks.append(S.idx - 1) %}
@@ -684,35 +741,51 @@ padding:0px 30px;
     {% set S.used = S.used + h %}
   {% endif %}
 {% endfor %}
-{#- The footer needs room on the last page too; if it doesn't fit, give it a page. -#}
-{% if G.items and S.used + FOOT_PX > CAP_PX %}
-  {% set _add = S.breaks.append(S.idx) %}
+{#- The whole closing group has to fit beneath the data on the last page. If it does
+   not, the entire group moves to a page of its own — splitting it would put the
+   Total on one sheet and the signatures on the next. -#}
+{% if G.data_count and S.used + TRAIL_PX + FOOT_PX > CAP_PX %}
+  {% set _add = S.breaks.append(G.data_count) %}
   {% set S.used = 0 %}
 {% endif %}
-{#- Clamped to the band (less a 25px reserve) as well as to TARGET_PX, so an
-   under-estimated row can't push the signatures onto a page of their own. -#}
-{% set spacer_px = [TARGET_PX, PAGE_PX - 25]|min - HEAD_PX - S.used - FOOT_PX %}
+{#- Clamped to the band (less a 15px reserve) as well as to TARGET_PX, so an
+   under-estimated row can't push the closing group onto a page of its own. -#}
+{% set spacer_px = [TARGET_PX, PAGE_PX - 15]|min - HEAD_PX - S.used - TRAIL_PX - FOOT_PX %}
+{% set TOTAL_PAGES = S.breaks|length + 1 %}
 <style>
-{%- for b in S.breaks %}
-  .jv-sheet tbody > tr:nth-child({{ b }}) { page-break-after: always; }
-{%- endfor %}
-  /* Pushes the signatures down to the foot of the last page. */
-  .jv-spacer { height: {{ [0, spacer_px]|max }}px; }
+  /* Forced breaks are marked with a class on the row rather than nth-child: the
+     per-page header rows sit in the same <tbody>, so child positions no longer line
+     up with the row numbering the breaks were worked out from. */
+  .jv-sheet tbody > tr.jv-break { page-break-after: always; }
+  /* Pushes the closing group (Total .. Remarks .. signatures) down to the fold on
+     the last page. !important because .main-table tr forces every row to 20px. */
+  .main-table tr.jv-spacer { height: {{ [0, spacer_px]|max }}px !important; }
 </style>
 
 <div class="jv-sheet">
 
-<table class="main-table table table-bordered">
-    <thead>
+{#- The page header, emitted once per page as ordinary <tbody> rows rather than
+   through a repeating <thead>. It has to be emitted rather than repeated because
+   "Page N of M" differs per page, and a <thead> renders identical content on every
+   page. @page margin boxes (@top-right) could do it, but Chrome renders those and
+   Firefox does not — verified — so neither mechanism works for both browsers. The
+   pages are already worked out above (S.breaks), so we place the header ourselves,
+   the same way loan_summary.py paginates its rows server-side. -#}
+{%- macro page_head(page_no, total_pages) -%}
       <tr class="company-info">
-        <td colspan="{{ ncols }}" style="text-align:center; border:none;">
+        <td colspan="{{ ncols }}" style="text-align:center; border:none; position:relative;">
+          {#- Corner page number. Absolutely positioned so it sits in the blank space
+             above the voucher details rather than reading as another data field, and
+             so it adds no height — HEAD_PX stays the same whatever the page count. Shown
+             on every voucher, including single-page ones. -#}
+          <div class="page-of">Page {{ page_no }} of {{ total_pages }}</div>
           <h4>{{ doc.custom_p_type or "" }}</h4>
-          <h2 style="margin:5px 0;">{{ company.company_name }}</h2>
+          <h2>{{ company.company_name }}</h2>
           <div>Kathmandu</div>
         </td>
       </tr>
 
-      <tr>
+      <tr class="voucher-meta">
         <td colspan="{{ ncols }}">
           {#- Fixed 2x2 header table: Voucher No / Posting Miti stay aligned top-right
              even when Reference Number / Reference Miti are empty.
@@ -800,16 +873,21 @@ padding:0px 30px;
         <th style="width:15%; text-align:right;">Credit</th>
       </tr>
       {% endif %}
-    </thead>
+{%- endmacro -%}
 
+<table class="main-table table table-bordered">
+    <!-- There is no <thead>: page_head() is emitted here, once at the top and again
+         after every forced break, so each page carries its own header and number. -->
     <tbody>
+    {% set R = namespace(i=0) %}
+    {{ page_head(1, TOTAL_PAGES) }}
     {% if is_note %}
     {#- ---------- Debit/Credit Note body: Particular | Party | Party Name | Debit(Rs.) | Credit(Rs.) ---------- -#}
     {% for row in doc.accounts %}
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
@@ -818,6 +896,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
     {% endfor %}
+{{ tail_spacer(ncols) }}
       <tr class="jv-total">
         {#- "Total" label right-aligned across S.N. + Particular + Party + Party Name so it sits just left of the figures. -#}
         <td colspan="4" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
@@ -843,7 +922,7 @@ padding:0px 30px;
       {% set sn.i = sn.i + 1 %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
@@ -852,13 +931,14 @@ padding:0px 30px;
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
       {% if row.user_remark %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
       {% endif %}
       {% endif %}
     {% endfor %}
+{{ tail_spacer(ncols) }}
       <tr class="jv-total">
         <td colspan="4" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
         <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
@@ -883,7 +963,7 @@ padding:0px 30px;
       {% if acc.account_type not in ["Cash", "Bank"] %}
       {% set sn.i = sn.i + 1 %}
       {% set amount = row.debit_in_account_currency or row.credit_in_account_currency or 0 %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
@@ -892,13 +972,14 @@ padding:0px 30px;
         <td style="text-align:right;">{% if amount %}{{ amt(amount) }}{% endif %}</td>
       </tr>
       {% if row.user_remark %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
       {% endif %}
       {% endif %}
     {% endfor %}
+{{ tail_spacer(ncols) }}
       <tr class="jv-total">
         <td colspan="5" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
         <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
@@ -918,7 +999,7 @@ padding:0px 30px;
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
@@ -928,6 +1009,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
     {% endfor %}
+{{ tail_spacer(ncols) }}
       <tr class="jv-total">
         <td colspan="5" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
         <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
@@ -956,7 +1038,7 @@ padding:0px 30px;
       {% set pname = frappe.get_cached_doc(row.party_type, row.party).get_title() if row.party else "" %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      <tr>
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td colspan="{{ ncols }}" style="padding:8px 0 0 0;">
           <table style="width:100%; border:none; border-collapse:collapse;">
             <tr>
@@ -990,6 +1072,7 @@ padding:0px 30px;
         </td>
       </tr>
     {% endfor %}
+{{ tail_spacer(ncols) }}
       {#- In-words + total amount -#}
       <tr>
         <td colspan="{{ ncols }}" style="border-top:1px solid #000; padding-top:6px;">
@@ -1009,7 +1092,7 @@ padding:0px 30px;
     {% else %}
     {% for row in doc.accounts %}
   {% set acc = frappe.get_cached_doc("Account", row.account) %}
-  <tr>
+  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
     <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
     <td>
       <strong>{{ acc.account_name }}</strong>
@@ -1042,6 +1125,7 @@ padding:0px 30px;
     </td>
   </tr>
 {% endfor %}
+{{ tail_spacer(ncols) }}
       <tr>
         <td></td>
         <td></td>
@@ -1076,11 +1160,11 @@ padding:0px 30px;
      
      </table>
 
-     {#- Footer (signatories + printed-on). .jv-spacer above it is sized in the page
-        geometry block near the top of this file so the signatures land just above
-        the foot of the sheet (~97%) on the last page, without ever overlapping
-        the data. -#}
-     <div class="jv-spacer"></div>
+     {#- Footer (signatories + printed-on). The .jv-spacer row inside the table above,
+        just before the Total row, is sized in the page geometry block near the top
+        of this file — it carries the whole closing group (Total .. Remarks .. these
+        signatures) down to the fold (~49%) on the last page without ever
+        overlapping the data. -#}
      <div class="jv-footer">
        {#- Cash/Bank or Contra Voucher gets a 5th "Received By" column (at the front);
           every other JV type keeps the usual 4. -#}
@@ -1091,7 +1175,9 @@ padding:0px 30px;
           <tr>
             {%- for s in jv_sigs %}
             <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000;">
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:30px;padding-bottom:10px;">&nbsp;</div>
+              {#- padding-top is the blank signing space above the rule; it is also
+                 the gap between Remarks and the signatures, so it feeds FOOT_PX. -#}
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:16px;padding-bottom:10px;">&nbsp;</div>
               <div>{{ s }}</div>
               {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
             </td>
