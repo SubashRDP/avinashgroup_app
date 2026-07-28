@@ -73,7 +73,7 @@ POS = {
 	"pan":          (54.0, 58.0),
 	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
 	"row_h":        4.8,
-	"words":        (50.0, 92.1),  # 2mm right, 2mm down per user 2026-07-26
+	"words":        (20.0, 99.1),  # 30mm left, 7mm down per user 2026-07-28
 	"words_w":      75.0,    # box width; overlay only (ESC/P wraps by char count)
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        15.1,    # box left lands 0.1mm on the page per user 2026-07-26.
