@@ -41,6 +41,10 @@
        amt_r          right edge of the amount column, mm. Only if the amount
                       runs off the edge of your particular form.
        rows_per_page  item rows per sheet; the form holds 2
+       show_hs_label  true = type "H.S. Code" above the item rows, at the
+                      hs_label position in that form's POS map. Off by default:
+                      most stationery already carries the heading, and typing a
+                      second one over it is worse than omitting it.
        guide          1 = outline every field box (red) and the sheet edge
                       (blue), so one test print over a real form shows exactly
                       what sits where. Off unless the URL asks for it.
@@ -48,6 +52,7 @@
 {%- set form = form | default('ngi') -%}
 {%- set page = page | default('form') -%}
 {%- set rows_per_page = rows_per_page | default(2) -%}
+{%- set show_hs_label = show_hs_label | default(false) -%}
 {%- set ox = (ox | default(0)) + (frappe.form_dict.get('ox') | float) -%}
 {%- set oy = (oy | default(0)) + (frappe.form_dict.get('oy') | float) -%}
 {%- set guide = frappe.form_dict.get('guide') | int -%}
@@ -305,6 +310,15 @@
   {%- call at(P.customer.x, P.customer.y, 90, 'left', false, 8.5) %}{{ doc.customer_name }}{% endcall -%}
   {%- call at(P.address.x, P.address.y, 95, 'left', false, 8) %}{{ address }}{% if phone %}{{ ', ' if address }}Ph: {{ phone }}{% endif %}{% endcall -%}
   {%- call at(P.pan.x, P.pan.y, 70, 'left', false, 8.5) %}{{ doc.tax_id or '' }}{% endcall -%}
+
+  {#- ---- "H.S. Code" column heading ---------------------------------------
+      Typed once per form, above the item rows. Opt-in per format: four rolls
+      declare hs_label in their POS map, but only the wrapper that asks for it
+      gets it printed, because whether the stationery already carries a printed
+      heading is a property of the paper, not of the coordinate map. -#}
+  {%- if show_hs_label and P.hs_label -%}
+    {%- call at(P.hs_label.x, P.hs_label.y, 30, 'left', true, 8.5) %}H.S. Code{% endcall -%}
+  {%- endif -%}
 
   {#- ---- item rows -------------------------------------------------------- -#}
   {%- set base_sno = (page_no - 1) * rows_per_page -%}

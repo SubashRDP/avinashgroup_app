@@ -84,6 +84,10 @@ POS = {
 	                         # page. The raw ESC/P path never clips - it bypasses
 	                         # CUPS rasterisation.
 	"c_hs":         28.0,    # 3mm right per user 2026-07-26
+	"hs_label":     (31.0, 70.0),  # "H.S. Code" column heading, typed once per
+	                               # form above the item rows. Placed 7mm above
+	                               # body_top and 4mm left of invoice_no per user
+	                               # 2026-07-28; the roll has no printed heading.
 	"c_part":       52.0,    # particulars; 2mm right per user 2026-07-27
 	"r_qty":        157.0,   # right edge for qty; 4mm further left per user 2026-07-27
 	"r_rate":       185.0,   # 2mm left per user 2026-07-27

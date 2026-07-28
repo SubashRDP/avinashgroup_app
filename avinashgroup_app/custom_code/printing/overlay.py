@@ -125,6 +125,10 @@ def overlay_pos(form: str = "ngi", page: str = "form") -> dict:
 		"words": {"x": P["words"][0], "y": P["words"][1], "w": P.get("words_w", 90)},
 		"c_sno": P["c_sno"],
 		"c_hs": P.get("c_hs"),
+		# "H.S. Code" column heading, typed once per form above the item rows.
+		# Only the rolls whose stationery lacks a printed heading declare it;
+		# None for the rest and the template skips it.
+		"hs_label": xy("hs_label"),
 		"c_part": P["c_part"],
 		"r_qty": P["r_qty"],
 		"r_rate": P["r_rate"],
