@@ -74,7 +74,12 @@ POS = {
 	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
 	"row_h":        4.8,
 	"words":        (20.0, 99.1),  # 30mm left, 7mm down per user 2026-07-28
-	"words_w":      75.0,    # box width; overlay only (ESC/P wraps by char count)
+	"words_w":      90.0,    # box width, 75->90mm per user 2026-07-28: the paper's
+	                         # own box has 9cm of room from where the text starts.
+	                         # Large amounts still wrap to 2+ lines regardless of
+	                         # width (per user); this only reduces the line count,
+	                         # it does not eliminate wrapping. Overlay only (the
+	                         # ESC/P path wraps by character count, not width).
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        15.1,    # box left lands 0.1mm on the page per user 2026-07-26.
 	                         # If S.No vanishes from a PRINT but is in the PDF, the
