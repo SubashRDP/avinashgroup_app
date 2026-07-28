@@ -15,11 +15,9 @@
      rather than left to the browser's print defaults. */
   margin-top: 10mm;
   margin-bottom: 148mm;
-  @bottom-center {
-    content: "Page " counter(page) " of " counter(pages);
-    font-size: 12px;
-    color: #000;
-  }
+  /* No @bottom-center page counter: Chrome renders @page margin boxes but Firefox
+     ignores them, so the counter appeared on the Chrome print only and the two
+     browsers disagreed on the sheet. The invoice is not numbered on either now. */
 }
 body {
   -webkit-print-color-adjust: exact;
@@ -35,8 +33,19 @@ tfoot { display: table-footer-group; }
 tr, td, th { page-break-inside: avoid; }
 .page-break { page-break-after: always; }
 .company-info h2 { font-weight: 600; margin: 0; font-size: 20px; }
-.company-info h4 { font-weight: 600; margin: 2px; font-size: 15px; }
+.company-info h4 { font-weight: 600; margin: 0; font-size: 15px; }
 .company-info div { font-weight: 600; }
+/* Chrome reprints a <thead> on later pages only while it is at most 25% of the
+   printable band — 131px of this format's 525px band. At its natural spacing the
+   header measured 140px, so Chrome printed it on page 1 only: later pages lost the
+   company name, vendor line and column titles, and the footer arithmetic (which
+   assumes HEAD_PX on every page) left a blank band behind. Firefox has no such rule
+   and reprinted it either way, so this only ever showed up in Chrome. The rules
+   below hold the header near 122px with every line still present. Re-measure
+   HEAD_PX if you change them, and keep the total under 131px. */
+.main-table thead tr.company-info h4 { line-height:1.15; }
+.main-table thead tr.company-info h2 { line-height:1.15; }
+.main-table thead tr.company-info > td { padding-top:2px !important; padding-bottom:0 !important; }
 .title strong { font-size:16px; }
 .top-table tr td,.table2 tr td { font-size:12px !important; padding: 4px 0px !important; }
 .main-table tr th { font-size:12px !important; font-weight:600; padding:4px !important; }
@@ -119,7 +128,10 @@ p { text-align: center; margin: 0; padding: 2px; }
    Heights are CSS px at 96dpi (1mm = 3.78px):
      PAGE_PX   printable band of one page (297 - 10 top - 148 bottom = 139mm)
      HEAD_PX   the <thead> block, reprinted on every page (title + company +
-               vendor/VAT lines + column headers)
+               vendor/VAT lines + column headers). Measures 124px; stated a little
+               over, like the row heights, so the breaks err early. It must stay
+               under 131px (25% of PAGE_PX) or Chrome stops reprinting it — see the
+               .company-info rules up in the stylesheet.
      LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top of
@@ -129,7 +141,7 @@ p { text-align: center; margin: 0; padding: 2px; }
                can never spend it.
      CH_*      characters that fit on one line of a column, for guessing wraps -#}
 {% set PAGE_PX = 525 %}
-{% set HEAD_PX = 155 %}
+{% set HEAD_PX = 130 %}
 {% set LINE_PX = 16 %}
 {% set PAD_PX = 9 %}
 {% set FOOT_PX = 115 %}
@@ -200,7 +212,7 @@ p { text-align: center; margin: 0; padding: 2px; }
         <h4>
           {% if doc.is_return %}Purchase Return{% else %}{{ doc.custom_purchase_type or "Purchase Invoice" }}{% endif %}
         </h4>
-        <h2 style="margin:3px 0 0 0;">{{ company.company_name }}</h2>
+        <h2>{{ company.company_name }}</h2>
         <div>Kathmandu</div>
       </td>
     </tr>

@@ -18,12 +18,9 @@ S.N. column always shown. Narration only for Cash Entry.
      A4 sheet, so a Letter print would put the footer in the wrong place. */
   size: A4;
   margin: 10mm 10mm 148mm 10mm;
-
-  @bottom-center {
-    content: "Page " counter(page) " of " counter(pages);
-    font-size: 10px;
-    color: #000;
-  }
+  /* No @bottom-center page counter: Chrome renders @page margin boxes but Firefox
+     ignores them, so the counter appeared on the Chrome print only and the two
+     browsers disagreed on the sheet. The voucher is not numbered on either now. */
 }
 
 body {
@@ -79,13 +76,30 @@ tr, td, th { page-break-inside: avoid; }
   .company-info h4
   {
      font-weight: 600;
-    margin: 2px;
+    margin: 0;
     font-size: 15px;
   }
    .company-info div
    {
          font-weight: 600;
    }
+
+ /* Chrome reprints a <thead> on later pages only while it is at most 25% of the
+    printable band — 131px of this format's 525px band. At its natural spacing the
+    header measured 156px, so Chrome printed it on page 1 only: later pages lost
+    the company name, voucher number and column titles, and the footer arithmetic
+    (which assumes HEAD_PX on every page) left a blank band behind. Firefox has no
+    such rule and reprinted it either way, so this only ever showed up in Chrome.
+    The rules below hold the header near 120px with every line still present.
+    Re-measure HEAD_PX if you change them, and keep the total under 131px. */
+ .main-table thead tr.company-info > td,
+ .main-table thead tr.voucher-meta > td { padding-top:2px !important; padding-bottom:2px !important; }
+ /* The Voucher No / Posting Miti grid sets padding:0 on its cells inline, but the
+    .main-table tr td rule below wins on !important — restate it at equal weight.
+    The .main-table tr height:20px rule below likewise lands on that grid's rows and
+    adds ~6px to each; let them size to their own text instead. */
+ .main-table thead td table td { padding:0 !important; }
+ .main-table thead td table tr { height:auto !important; }
   
   strong
   {
@@ -595,7 +609,10 @@ padding:0px 30px;
 
    Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
      PAGE_PX   printable height of one page (297 - 10 top - 148 bottom = 139mm)
-     HEAD_PX   the <thead> block, reprinted on every page
+     HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
+               little over, like the row heights, so the breaks err early. It must
+               stay under 131px (25% of PAGE_PX) or Chrome stops reprinting it —
+               see the .company-info rules up in the stylesheet.
      LINE_PX   one line of 10px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top
@@ -604,7 +621,7 @@ padding:0px 30px;
                estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
      CH_*      characters that fit on one line of a column, for guessing wraps -#}
 {% set PAGE_PX = 525 %}
-{% set HEAD_PX = 170 %}
+{% set HEAD_PX = 126 %}
 {% set LINE_PX = 13 %}
 {% set PAD_PX = 11 %}
 {% set FOOT_PX = 105 %}
@@ -616,9 +633,10 @@ padding:0px 30px;
    below always fire BEFORE the browser would have broken by itself — the browser
    winning that race is what puts an unplanned page between the data and the
    footer. Row heights above are rounded up for the same reason. The numbers are
-   measured off Firefox, which is what these vouchers are printed from; Chrome and
-   wkhtmltopdf don't reprint the <thead> on later pages, so there the footer lands
-   about HEAD_PX higher than TARGET_PX asks for. -#}
+   measured off a rendered voucher and hold for both Firefox and Chrome, which both
+   reprint the <thead> on every page now that it is under Chrome's 25% limit.
+   wkhtmltopdf ("Get PDF") still does not reprint it, so on that path alone the
+   footer lands about HEAD_PX higher than TARGET_PX asks for. -#}
 {% set CAP_PX = PAGE_PX - HEAD_PX - 25 %}
 {#- One entry per <tr> in <tbody>, in render order — the indexes double as the
    nth-child selectors used to force the page breaks below. -#}
@@ -701,12 +719,12 @@ padding:0px 30px;
       <tr class="company-info">
         <td colspan="{{ ncols }}" style="text-align:center; border:none;">
           <h4>{{ doc.custom_p_type or "" }}</h4>
-          <h2 style="margin:5px 0;">{{ company.company_name }}</h2>
+          <h2>{{ company.company_name }}</h2>
           <div>Kathmandu</div>
         </td>
       </tr>
 
-      <tr>
+      <tr class="voucher-meta">
         <td colspan="{{ ncols }}">
           {#- Fixed 2x2 header table: Voucher No / Posting Miti stay aligned top-right
              even when Reference Number / Reference Miti are empty.
