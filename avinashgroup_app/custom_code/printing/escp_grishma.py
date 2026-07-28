@@ -50,16 +50,21 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # number on a real Grishma form.
 POS = {
 	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (39.0, 33.0),  # -2mm left; +2mm down per user (from original)
+	"invoice_no":   (38.0, 36.0),  # 1mm left, 3mm down per user 2026-07-28
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 37.0),  # x=198 is the empirical rightmost: at x>=200 the
-	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 44.0),  # same column as trans date; -2mm up per user
+	"trans_date":   (198.0, 36.0),  # x=198 is the empirical rightmost: at x>=200 the
+	                                # 10th digit wraps to the next line on this rig.
+	                                # y tracks invoice_no so the two sit on one line
+	                                # (user 2026-07-28)
+	"invoice_date": (198.0, 47.0),  # same column as trans date; 3mm down, matching
+	                                # invoice_no's drop (user 2026-07-28)
 	"do_no":        (193.0, 41.5),
-	"customer":     (58.0, 51.0),  # starts 5.8cm from left, 5.1cm from top per user
-	"address":      (58.0, 56.0),  # same left start as customer name
-	"pan":          (58.0, 63.0),  # same left start as customer name; +2mm down per user
-	"body_top":     (0, 80.0),   # first item row; +5mm per user
+	# customer / address / pan share one left edge: three ruled lines of the same
+	# block on the form, so they start together (user 2026-07-28)
+	"customer":     (57.0, 53.0),  # 1mm left, 2mm down per user 2026-07-28
+	"address":      (57.0, 56.0),
+	"pan":          (57.0, 63.0),
+	"body_top":     (0, 84.0),   # first item row; 4mm down per user 2026-07-28
 	"row_h":        4.8,
 	"words":        (31.0, 95.1),  # amount in words; -1cm more left per user
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
@@ -73,10 +78,10 @@ POS = {
 	"r_rate":       177.0,   # -5mm left per user
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       92.0,   # -1mm up per user
-	"y_taxable":    98.0,   # -1mm up per user
-	"y_vat":        104.0,  # -2mm then -1mm more up per user
-	"y_grand":      113.0,  # -1mm up per user
+	"y_disc":       94.0,   # all four 2mm down per user 2026-07-28
+	"y_taxable":    100.0,
+	"y_vat":        106.0,
+	"y_grand":      115.0,
 }
 
 # How to read POS["copy_label"] x — build() below emits it directly, with no

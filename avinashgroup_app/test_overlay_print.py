@@ -66,17 +66,17 @@ FORMS = {
 	# Dates at 198.0 are emitted with no right=True -> left.
 	"grishma": {
 		"copy_label":   (118.5, 40.0, 50, "left"),
-		"invoice_no":   (39.0, 33.0, 90, "left"),
-		"trans_date":   (198.0, 37.0, 34, "left"),
-		"invoice_date": (198.0, 44.0, 34, "left"),
-		"customer":     (58.0, 51.0, 90, "left"),
-		"address":      (58.0, 56.0, 95, "left"),
-		"pan":          (58.0, 63.0, 70, "left"),
+		"invoice_no":   (38.0, 36.0, 90, "left"),
+		"trans_date":   (198.0, 36.0, 34, "left"),
+		"invoice_date": (198.0, 47.0, 34, "left"),
+		"customer":     (57.0, 53.0, 90, "left"),
+		"address":      (57.0, 56.0, 95, "left"),
+		"pan":          (57.0, 63.0, 70, "left"),
 		"words":        (31.0, 95.1, 90, "left"),
-		"body_top": 80.0, "row_h": 4.8,
+		"body_top": 84.0, "row_h": 4.8,
 		"c_sno": 17.0, "c_hs": 30.0, "c_part": 54.0,
 		"r_qty": 144.0, "r_rate": 177.0, "r_amt": 210.0,
-		"y_disc": 92.0, "y_taxable": 98.0, "y_vat": 104.0, "y_grand": 113.0,
+		"y_disc": 94.0, "y_taxable": 100.0, "y_vat": 106.0, "y_grand": 115.0,
 	},
 	# escp_ngi_udyog.py: copy_label comment says "x = CENTRE (label is centred
 	# at emit time)", and line 226 subtracts half the text width -> center.
@@ -239,13 +239,16 @@ def layer_a(form, html, doc):
 	at("customer", doc.customer_name)
 	at("pan", doc.tax_id or "")
 
-	# dates: left-anchored at their own x on the form page (NOT clamped to 205)
+	# dates: left-anchored at their own x on the form page (NOT clamped to 205).
+	# Matched on x as well as y: a form may deliberately put the transaction date
+	# on the same line as the invoice number (both ngi and grishma do), and
+	# selecting by y alone then picks whichever div the renderer emitted first.
 	x, y, w, _ = E["trans_date"]
-	date_divs = [z for z in d if near(z[1], y, 0.001)]
+	date_divs = [z for z in d if near(z[1], y, 0.001) and near(z[0], x, 0.001)]
 	check(
 		f"{form}: trans_date left-anchored at {x}",
-		bool(date_divs) and near(date_divs[0][0], x, 0.001) and date_divs[0][3] == "left",
-		"" if date_divs and near(date_divs[0][0], x, 0.001) else f"got {date_divs[:1]}",
+		bool(date_divs) and date_divs[0][3] == "left",
+		"" if date_divs else f"no div at x={x} y={y}; that row holds {[(z[0], z[6]) for z in d if near(z[1], y, 0.001)]}",
 	)
 
 	# item row 1: column anchors straight off the ESC/P map
