@@ -54,7 +54,7 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # here is Grishma-only and should say so in its comment.
 POS = {
 	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
-	"invoice_no":   (35.0, 31.0),
+	"invoice_no":   (33.0, 32.0),
 	"ref_inv":      (74.0, 46.7),
 	"trans_date":   (199.0, 36.0),  # ends ~201.5mm physical: inside the LQ-310's
 	                                # 203.2mm (8in) print band. Grishma-only: 5mm
@@ -69,9 +69,9 @@ POS = {
 	"do_no":        (193.0, 44.5),
 	# customer / address / pan share one left edge: three ruled lines of the same
 	# block on the form, so they start together
-	"customer":     (54.0, 49.0),
-	"address":      (54.0, 54.0),
-	"pan":          (54.0, 58.0),
+	"customer":     (53.0, 49.0),
+	"address":      (53.0, 54.0),
+	"pan":          (53.0, 59.0),
 	"body_top":     (0, 79.0),  # Grishma-only: item block 2mm down per user
 	                            # 2026-07-29 (ngi keeps 77.0)
 	"row_h":        4.8,
@@ -84,14 +84,14 @@ POS = {
 	                         # the PPD's HWMargins (6.35mm). Print with a NAMED
 	                         # form size, whose ImageableArea is the full page.
 	"c_hs":         28.0,
-	"hs_label":     (31.0, 72.0),  # "H.S. Code" column heading, typed once per form
+	"hs_label":     (29.0, 72.0),  # "H.S. Code" column heading, typed once per form
 	                               # above the item rows — only when the wrapper
 	                               # sets show_hs_label. Grishma-only: 2mm down
 	                               # per user 2026-07-29 (ngi keeps 70.0), moving
 	                               # with the item block so the gap to it holds
 
 	"c_part":       52.0,
-	"r_qty":        157.0,   # right edge for qty
+	"r_qty":        152.0,   # right edge for qty
 	"r_rate":       185.0,
 	"r_amt":        216.0,   # right edge; 201mm physical after ox=-15. NOTE this
 	                         # head prints only an 8in/203.2mm band (evidence: every
