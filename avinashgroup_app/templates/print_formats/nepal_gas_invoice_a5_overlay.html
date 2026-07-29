@@ -61,6 +61,9 @@
 {%- set rows_per_page = rows_per_page | default(2) -%}
 {%- set show_hs_label = show_hs_label | default(false) -%}
 {%- set show_words = show_words | default(true) -%}
+{#- false = invoice number in regular weight. Default true (bold) keeps the
+    six other forms as they were; ngi turned it off 2026-07-29 per user. -#}
+{%- set invoice_no_bold = invoice_no_bold | default(true) -%}
 {%- set ox = (ox | default(0)) + (frappe.form_dict.get('ox') | float) -%}
 {%- set oy = (oy | default(0)) + (frappe.form_dict.get('oy') | float) -%}
 {%- set guide = frappe.form_dict.get('guide') | int -%}
@@ -300,7 +303,7 @@
   {%- endif -%}
 
   {#- ---- invoice number, and what it refers to on a return ---------------- -#}
-  {%- call at(P.invoice_no.x, P.invoice_no.y, 90, 'left', true, 9) %}{{ invoice_no }}{% endcall -%}
+  {%- call at(P.invoice_no.x, P.invoice_no.y, 90, 'left', invoice_no_bold, 9) %}{{ invoice_no }}{% endcall -%}
   {%- if is_cn and doc.return_against -%}
     {%- call at(P.ref_inv.x, P.ref_inv.y, 70, 'left', false, 7) %}Ref Inv: {{ doc.return_against }}{% endcall -%}
   {%- endif -%}

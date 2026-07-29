@@ -68,7 +68,8 @@ POS = {
 	"do_no":        (193.0, 41.5),
 	# customer / address / pan share one left edge per user 2026-07-27: they are
 	# three ruled lines of the same block on the form, so they start together
-	"customer":     (53.0, 49.0),
+	"customer":     (53.0, 48.0),  # 1mm up per user 2026-07-29; also evens the
+	                               # block to 5mm/5mm against address and pan
 	"address":      (53.0, 53.0),
 	"pan":          (53.0, 58.0),
 	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
