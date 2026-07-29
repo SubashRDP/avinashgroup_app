@@ -65,8 +65,8 @@ POS = {
 	                                # the same BS miti at 8.5pt (~3mm tall), so
 	                                # they overlap. If that is not intended, one
 	                                # of the two has to move as well.
-	"invoice_date": (199.0, 37.3),  # same 8in-band pullback as trans_date
-	"do_no":        (193.0, 41.5),
+	"invoice_date": (199.0, 42.3),  # same 8in-band pullback as trans_date
+	"do_no":        (193.0, 44.5),
 	# customer / address / pan share one left edge: three ruled lines of the same
 	# block on the form, so they start together
 	"customer":     (54.0, 49.0),
