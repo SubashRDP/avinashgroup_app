@@ -2,11 +2,12 @@
 # For license information, please see license.txt
 
 import json
+import os
 from collections import defaultdict
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt
+from frappe.utils import cint, flt, fmt_money
 
 
 def _as_list(value):
@@ -538,6 +539,86 @@ def get_message():
 		<span class="indicator green">
 		{_("Click a supplier column header to open its Supplier Quotation")}
 		</span>"""
+
+
+@frappe.whitelist()
+def download_pdf(filters, view=None):
+	"""Print / PDF of the comparison in document form: company + title header,
+	one Rate/Amount column pair per supplier (quotation number under the
+	supplier's name) and the same summary rows as the on-screen report.
+	Both menu entries call this — Print opens it inline (view=1), PDF downloads."""
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+
+	columns, data = execute(filters)[:2]
+
+	# Rebuild the supplier column pairs from the dynamic columns: everything
+	# after the three fixed columns (SN / Item Name / Qty) comes in Rate+Amount
+	# pairs that share a supplier_group and sq_link.
+	groups = []
+	for col in columns[3:]:
+		if col["fieldname"].endswith("_rate"):
+			groups.append({
+				"display": col.get("supplier_group") or "",
+				"sq": col.get("sq_link"),
+				"rate_field": col["fieldname"],
+				"amount_field": col["fieldname"][: -len("_rate")],
+			})
+
+	report_title = "Supplier Quotation Comparison"
+	if filters.get("purchase_order"):
+		report_title += " — {0}".format(filters.purchase_order)
+
+	subline_parts = []
+	material_requests = _as_list(filters.get("material_request"))
+	if filters.get("purchase_order"):
+		material_requests += get_material_requests_from_purchase_order(filters.purchase_order)
+	material_requests = list(dict.fromkeys(mr for mr in material_requests if mr))
+	if material_requests:
+		subline_parts.append("Material Request: {0}".format(", ".join(material_requests)))
+	if cint(filters.get("preferred_quotation")):
+		subline_parts.append("Preferred quotations only")
+
+	currency = frappe.get_cached_value("Company", filters.get("company"), "default_currency")
+
+	def fmt(value):
+		return fmt_money(flt(value), 2, currency) if value is not None else ""
+
+	template_path = os.path.join(os.path.dirname(__file__), "supplier_quotation_comparison_pdf.html")
+	with open(template_path) as f:
+		template_content = f.read()
+
+	html = frappe.render_template(
+		template_content,
+		{
+			"company": filters.get("company"),
+			"report_title": report_title,
+			"subline_parts": subline_parts,
+			"groups": groups,
+			"data": data,
+			"fmt": fmt,
+		},
+	)
+
+	# The three fixed columns plus up to three supplier pairs sit comfortably on
+	# portrait A4; beyond that the pairs get too narrow, so flip to landscape.
+	orientation = "Portrait" if len(groups) <= 3 else "Landscape"
+	pdf_data = get_pdf(html, {
+		"page-size": "A4",
+		"orientation": orientation,
+		"margin-top": "10mm",
+		"margin-right": "10mm",
+		"margin-bottom": "12mm",
+		"margin-left": "10mm",
+		"encoding": "UTF-8",
+	})
+
+	frappe.response.filename = "supplier_quotation_comparison.pdf"
+	frappe.response.filecontent = pdf_data
+	# view=1 (Print) -> open inline in the browser tab; otherwise download the file.
+	frappe.response.type = "pdf" if cint(view) else "download"
 
 
 # ============================================

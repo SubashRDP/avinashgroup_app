@@ -1,8 +1,12 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
+import json
+
 import frappe
 from frappe import _
+
+from avinashgroup_app.utils.report_excel import send_report_xlsx
 
 
 def execute(filters=None):
@@ -89,4 +93,21 @@ def get_data(filters):
 		""".format(conditions=get_conditions(filters)),
 		filters,
 		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def export_xlsx(filters):
+	"""Excel download with the company letterhead above the table and a totals
+	row below it. Replaces the built-in Export menu — see materialized_return_report.js."""
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+
+	columns, data = execute(filters)
+	send_report_xlsx(
+		columns,
+		data,
+		filters.get("company"),
+		"MATERIALIZED RETURN REPORT",
+		"materialized_return_report.xlsx",
 	)

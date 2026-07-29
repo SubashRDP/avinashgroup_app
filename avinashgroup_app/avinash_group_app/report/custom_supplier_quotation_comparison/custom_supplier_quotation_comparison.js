@@ -227,6 +227,20 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	},
 
 	onload: (report) => {
+		// Menu -> Print / PDF both render the server-side comparison document
+		// (supplier column groups + summary rows) instead of the generic report
+		// printout. Print opens the PDF inline for printing; PDF downloads it.
+		const comparison_pdf_url = (view) => {
+			const filters = frappe.query_report.get_filter_values(true);
+			return (
+				"/api/method/avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.download_pdf" +
+				"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+				(view ? "&view=1" : "")
+			);
+		};
+		report.print_report = () => window.open(comparison_pdf_url(1));
+		report.pdf_report = () => window.open(comparison_pdf_url(0));
+
 		// Create a button for setting the default supplier
 		report.page.add_inner_button(
 			__("Select Default Supplier"),

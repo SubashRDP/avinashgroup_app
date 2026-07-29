@@ -1,0 +1,72 @@
+<style>
+	body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #000; }
+	.company { font-size: 13pt; font-weight: bold; }
+	.title { font-size: 10.5pt; font-weight: bold; margin-top: 1px; }
+	.subline { font-size: 8pt; color: #555; margin: 2px 0 8px 0; }
+	table { width: 100%; border-collapse: collapse; }
+	th, td { border: 1px solid #b0b0b0; padding: 3px 6px; vertical-align: top; }
+	th { background: #f2f2f2; }
+	.sup-group { text-align: center; }
+	.sq-no { font-size: 7.5pt; font-weight: normal; color: #555; }
+	.no-border { border: none; background: none; }
+	.num { text-align: right; white-space: nowrap; }
+	.summary-label { font-weight: normal; }
+	.total-row td { font-weight: bold; background: #f2f2f2; }
+	.invoice-row td { font-weight: bold; background: #f2f2f2; border-top: 2px solid #444; }
+</style>
+
+<div class="company">{{ company }}</div>
+<div class="title">{{ report_title }}</div>
+{% if subline_parts %}
+<div class="subline">{{ subline_parts | join(" &nbsp;&middot;&nbsp; ") }}</div>
+{% endif %}
+
+{% if not groups %}
+<p>No supplier quotations found for the selected filters.</p>
+{% else %}
+<table>
+	<thead>
+		<tr>
+			<th class="no-border" colspan="3"></th>
+			{% for g in groups %}
+			<th class="sup-group" colspan="2">
+				{{ g.display }}
+				{% if g.sq %}<div class="sq-no">{{ g.sq }}</div>{% endif %}
+			</th>
+			{% endfor %}
+		</tr>
+		<tr>
+			<th style="width: 30px;">SN</th>
+			<th>Item Name</th>
+			<th style="width: 55px;">Qty</th>
+			{% for g in groups %}
+			<th class="num" style="width: 85px;">Rate</th>
+			<th class="num" style="width: 100px;">Amount</th>
+			{% endfor %}
+		</tr>
+	</thead>
+	<tbody>
+		{% for row in data %}
+		{% if row.is_data_row %}
+		<tr>
+			<td class="num">{{ row.sn }}</td>
+			<td>{{ row.item_name or row.item_code or "" }}</td>
+			<td class="num">{{ row.qty }}</td>
+			{% for g in groups %}
+			<td class="num">{{ fmt(row.get(g.rate_field)) }}</td>
+			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
+			{% endfor %}
+		</tr>
+		{% else %}
+		<tr class="{{ 'total-row' if row.is_total_row else ('invoice-row' if row.is_invoice_row else '') }}">
+			<td class="summary-label" colspan="3">{{ row.qty }}</td>
+			{% for g in groups %}
+			<td></td>
+			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
+			{% endfor %}
+		</tr>
+		{% endif %}
+		{% endfor %}
+	</tbody>
+</table>
+{% endif %}
