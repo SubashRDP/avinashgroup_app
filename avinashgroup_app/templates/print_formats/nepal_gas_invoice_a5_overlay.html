@@ -194,8 +194,11 @@
     treating every invoice as stale. Strip only for display, after the source
     is decided: drop the capitalised "And" num2words inserts before the tens/
     ones (per user 2026-07-28 — "Six Hundred Fifty Three"), keep the lowercase
-    "and" Frappe itself puts between the rupee and paisa amounts. -#}
-{%- set in_words = (doc.in_words if doc.in_words == spelled else spelled) | replace(' And ', ' ') -%}
+    "and" Frappe itself puts between the rupee and paisa amounts. Commas go
+    too (per user 2026-07-29): num2words groups Indian-style ("One Lakh, Sixty
+    Thousand, Three Hundred"), and the form's words line reads as one phrase.
+    Dropping the comma alone leaves the space, so no double spacing. -#}
+{%- set in_words = (doc.in_words if doc.in_words == spelled else spelled) | replace(' And ', ' ') | replace(',', '') -%}
 
 {#- items split into sheets -#}
 {%- set item_pages = [] -%}

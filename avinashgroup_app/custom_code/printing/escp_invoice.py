@@ -288,7 +288,7 @@ def build(doc) -> str:
 			# html) so both print paths show the same wording.
 			spelled_words = frappe.utils.money_in_words(abs(grand), doc.currency)
 			words_text = doc.get("in_words") if doc.get("in_words") == spelled_words else spelled_words
-			words_text = (words_text or "").replace(" And ", " ")
+			words_text = (words_text or "").replace(" And ", " ").replace(",", "")
 			# line width: words box runs 4.8 -> 13.5cm = 87mm = 51 chars at 15cpi.
 			# 6mm pitch, not row_h's 4.8mm: matches the overlay's line_h=1.89 fix
 			# so line 1 lands on the taxable row and line 2 on the vat row here
