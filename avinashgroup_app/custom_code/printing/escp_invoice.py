@@ -110,7 +110,14 @@ POS = {
 	# totals rows: right-aligned numerics at r_amt, so they share one vertical line
 	"y_disc":       90.0,  # all four 2mm up per user 2026-07-27
 	"y_taxable":    96.0,
-	"y_vat":        102.0,
+	"y_vat":        104.0,  # 2mm down per user 2026-07-29, this row alone. NOTE
+	                        # this breaks the words/vat co-linearity set up on
+	                        # 07-28: the wrapped amount-in-words still steps 6mm
+	                        # from y_taxable (line_h=1.89 in the overlay
+	                        # template), so line 2 stays at 102.0 and now sits
+	                        # 2mm ABOVE this row instead of on it. If the two are
+	                        # meant to share a line again, the words pitch has to
+	                        # move with it — 8mm needs line_h=2.52.
 	"y_grand":      110.0,
 }
 
