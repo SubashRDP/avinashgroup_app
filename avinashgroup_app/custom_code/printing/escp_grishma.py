@@ -56,9 +56,15 @@ POS = {
 	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
 	"invoice_no":   (35.0, 31.0),
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (199.0, 31.0),  # ends ~201.5mm physical: inside the LQ-310's
-	                                # 203.2mm (8in) print band; y tracks invoice_no
-	                                # so the two sit on one line
+	"trans_date":   (199.0, 36.0),  # ends ~201.5mm physical: inside the LQ-310's
+	                                # 203.2mm (8in) print band. Grishma-only: 5mm
+	                                # down per user 2026-07-29, so it NO LONGER
+	                                # tracks invoice_no (31.0) the way ngi's does.
+	                                # WARNING this leaves only 1.3mm to
+	                                # invoice_date at 37.3, and both fields print
+	                                # the same BS miti at 8.5pt (~3mm tall), so
+	                                # they overlap. If that is not intended, one
+	                                # of the two has to move as well.
 	"invoice_date": (199.0, 37.3),  # same 8in-band pullback as trans_date
 	"do_no":        (193.0, 41.5),
 	# customer / address / pan share one left edge: three ruled lines of the same
@@ -66,7 +72,8 @@ POS = {
 	"customer":     (54.0, 49.0),
 	"address":      (54.0, 54.0),
 	"pan":          (54.0, 58.0),
-	"body_top":     (0, 77.0),
+	"body_top":     (0, 79.0),  # Grishma-only: item block 2mm down per user
+	                            # 2026-07-29 (ngi keeps 77.0)
 	"row_h":        4.8,
 	"words":        (20.0, 99.1),
 	"words_w":      75.0,    # box width; overlay only (ESC/P wraps by char count)
@@ -77,9 +84,12 @@ POS = {
 	                         # the PPD's HWMargins (6.35mm). Print with a NAMED
 	                         # form size, whose ImageableArea is the full page.
 	"c_hs":         28.0,
-	"hs_label":     (31.0, 70.0),  # "H.S. Code" column heading, typed once per form
+	"hs_label":     (31.0, 72.0),  # "H.S. Code" column heading, typed once per form
 	                               # above the item rows — only when the wrapper
-	                               # sets show_hs_label
+	                               # sets show_hs_label. Grishma-only: 2mm down
+	                               # per user 2026-07-29 (ngi keeps 70.0), moving
+	                               # with the item block so the gap to it holds
+
 	"c_part":       52.0,
 	"r_qty":        157.0,   # right edge for qty
 	"r_rate":       185.0,
