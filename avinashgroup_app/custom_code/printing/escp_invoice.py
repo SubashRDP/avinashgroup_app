@@ -59,18 +59,18 @@ Y0_MM = -7.7  # measured 2026-07-14 with the centre-circle target: the printer
 # on paper is each value below minus that. Per-field notes mark what moved.
 POS = {
 	"copy_label":   (118.5, 37.7),  # x = CENTRE (label is centred at emit time)
-	"invoice_no":   (35.0, 31.0),  # 2mm left, 1.5mm up per user 2026-07-27
+	"invoice_no":   (33.0, 32.0),  # 2mm left, 1.5mm up per user 2026-07-27
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (199.0, 31.0),  # ends ~201.5mm physical: inside the LQ-310's
+	"trans_date":   (199.0, 32.0),  # ends ~201.5mm physical: inside the LQ-310's
 	                                # 203.2mm (8in) print band; y tracks invoice_no so
 	                                # the two sit on one line (user 2026-07-27)
 	"invoice_date": (199.0, 37.3),  # same 8in-band pullback as trans_date
 	"do_no":        (193.0, 41.5),
 	# customer / address / pan share one left edge per user 2026-07-27: they are
 	# three ruled lines of the same block on the form, so they start together
-	"customer":     (54.0, 49.0),
-	"address":      (54.0, 54.0),
-	"pan":          (54.0, 58.0),
+	"customer":     (53.0, 49.0),
+	"address":      (53.0, 53.0),
+	"pan":          (53.0, 58.0),
 	"body_top":     (0, 77.0),  # item block 2mm down per user 2026-07-26
 	"row_h":        4.8,
 	"words":        (20.0, 96.0),  # y = y_taxable per user 2026-07-28: line 1
@@ -101,8 +101,8 @@ POS = {
 	                               # body_top and 4mm left of invoice_no per user
 	                               # 2026-07-28; the roll has no printed heading.
 	"c_part":       52.0,    # particulars; 2mm right per user 2026-07-27
-	"r_qty":        157.0,   # right edge for qty; 4mm further left per user 2026-07-27
-	"r_rate":       185.0,   # 2mm left per user 2026-07-27
+	"r_qty":        154.0,   # right edge for qty; 4mm further left per user 2026-07-27
+	"r_rate":       181.0,   # 2mm left per user 2026-07-27
 	"r_amt":        216.0,   # right edge; 201mm physical after ox=-15. NOTE this
 	                         # head prints only an 8in/203.2mm band (evidence: every
 	                         # right-aligned number lost its last digit at >203mm), so
