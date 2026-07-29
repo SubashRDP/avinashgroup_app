@@ -715,7 +715,7 @@ padding:0px 30px;
   {% if doc.cheque_no or doc.custom_reference_miti or doc.cheque_date %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
-  {% set words = frappe.utils.money_in_words(doc.total_debit) %}
+  {% set words = frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
   {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
   {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.user_remark or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {% endif %}
@@ -905,7 +905,7 @@ padding:0px 30px;
       </tr>
       {{ paid_cheque(doc, ncols) }}
       <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee") }}</td>
+        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
       </tr>
       <tr style="border-top:1px solid #000;">
         <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
@@ -946,7 +946,7 @@ padding:0px 30px;
       </tr>
       {{ paid_cheque(doc, ncols) }}
       <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee") }}</td>
+        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
       </tr>
       <tr style="border-top:1px solid #000;">
         <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
@@ -986,7 +986,7 @@ padding:0px 30px;
       </tr>
       {{ paid_cheque(doc, ncols) }}
       <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee") }}</td>
+        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
       </tr>
       <tr style="border-top:1px solid #000; border-bottom:1px solid #000;">
         <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
@@ -1017,7 +1017,7 @@ padding:0px 30px;
       </tr>
       {{ paid_cheque(doc, ncols) }}
       <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee") }}</td>
+        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
       </tr>
       <tr style="border-top:1px solid #000;">
         <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
@@ -1078,7 +1078,7 @@ padding:0px 30px;
         <td colspan="{{ ncols }}" style="border-top:1px solid #000; padding-top:6px;">
           <table style="width:100%; border:none; border-collapse:collapse;">
             <tr>
-              <td style="border:none;"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee") }}</td>
+              <td style="border:none;"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
               <td style="border:none; text-align:right;">Nepalese Rupee</td>
               <td style="border:none; text-align:right; width:20%;">{{ amt(doc.total_debit) }}</td>
             </tr>
@@ -1143,7 +1143,7 @@ padding:0px 30px;
 
       <tr style="border-top:1px solid #000;border-bottom:1px solid #000;">
         <td colspan="{{ ncols }}">
-          <strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit) }}
+          <strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}
         </td>
       </tr>
 

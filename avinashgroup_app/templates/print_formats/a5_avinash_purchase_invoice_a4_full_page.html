@@ -231,7 +231,7 @@ p { text-align: center; margin: 0; padding: 2px; }
 {% for _ in range(5) %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
 {% endfor %}
-{% set words = frappe.utils.money_in_words(doc.grand_total) %}
+{% set words = frappe.utils.money_in_words(doc.grand_total).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.custom_memo or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {#- The closing group — the five total rows, In Words and Remarks — is measured as
@@ -341,7 +341,7 @@ p { text-align: center; margin: 0; padding: 2px; }
     </tr>
     <tr style="border:solid #000 1px;">
       <td colspan="7" style="border:none; padding-top:5px;">
-        {{ frappe.utils.money_in_words(doc.grand_total) }}
+        {{ frappe.utils.money_in_words(doc.grand_total).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}
      
       </td>
     </tr>
