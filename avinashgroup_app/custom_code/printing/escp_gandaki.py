@@ -51,22 +51,23 @@ Y0_MM = -12.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
 # Gandaki form.
 POS = {
 	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user
+	"invoice_no":   (36.0, 32.0),  # -3mm left, +1mm down per user 2026-07-30 (was 39,31)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 37.0),  # 19.8cm: latest start where the full date fits
+	"trans_date":   (198.0, 39.0),  # +2mm down per user 2026-07-30 (was 37). 19.8cm: latest start where the full date fits
 	                                # before the 215.4mm head limit (box is at 20.4
 	                                # but the head can't reach 22.1cm)
-	"invoice_date": (198.0, 45.0),  # same column as trans date; +2mm down per user
+	"invoice_date": (198.0, 47.0),  # +2mm more down per user 2026-07-30 (was 45); same column as trans date
 	"do_no":        (193.0, 41.5),
-	"customer":     (57.0, 51.0),  # -1mm left per user
-	"address":      (57.0, 56.0),  # same left start as customer name; -1mm left
-	"pan":          (57.0, 63.0),  # same left start as customer name; -1mm left; +2mm down
-	"body_top":     (0, 82.0),   # first item row; +2mm more down per user
+	"customer":     (55.0, 54.0),  # -2mm left, +3mm down per user 2026-07-30 (was 57,51)
+	"address":      (55.0, 59.0),  # -2mm left, +3mm down per user 2026-07-30 (was 57,56); same left start as customer name
+	"pan":          (55.0, 66.0),  # -2mm left, +3mm down per user 2026-07-30 (was 57,63); same left start as customer name
+	"body_top":     (0, 85.0),   # +3mm more down per user 2026-07-30 (was 82); first item row
 	"row_h":        4.8,
-	"words":        (21.0, 96.1),  # amount in words; -3cm left per user. NOTE: the y
-	                               # here is unused -- build() drives the words baseline
-	                               # off y_taxable so it aligns exactly with the taxable
-	                               # amount row (per user 2026-07-30). x (21.0) is used.
+	"words":        (21.0, 103.0),  # amount in words; -3cm left per user. y kept == y_taxable:
+	                               # the ESC/P build() binds the baseline to y_taxable directly
+	                               # (so this y is moot there), but the A5 overlay reads this y,
+	                               # so it must equal y_taxable to land line 1 on the taxable row
+	                               # (per user 2026-07-30). Update together with y_taxable.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        17.0,    # +2mm per user
 	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
@@ -78,10 +79,10 @@ POS = {
 	"r_rate":       162.0,   # -1cm, then -1cm more left per user 2026-07-30
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       93.5,   # +0.5mm then +3mm more down per user
-	"y_taxable":    101.0,  # "total" +0.5cm down per user
-	"y_vat":        105.0,  # +3mm down per user
-	"y_grand":      111.0,  # +1mm down per user
+	"y_disc":       96.5,   # +3mm more down per user 2026-07-30 (was 93.5)
+	"y_taxable":    103.0,  # +2mm down per user 2026-07-30 (was 101)
+	"y_vat":        108.0,  # +3mm down per user 2026-07-30 (was 105)
+	"y_grand":      114.0,  # +3mm down per user 2026-07-30 (was 111)
 }
 
 # How to read POS["copy_label"] x — build() below emits it directly, with no
