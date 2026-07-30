@@ -47,19 +47,19 @@ Y0_MM = -17.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
 # column removed (particulars pulled left to follow S.No.). Calibrate each
 # number on a real Grishma form.
 POS = {
-	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
+	"copy_label":   (118.5, 44.0),  # y = same height as invoice_date per user 2026-07-30 (was 40)
 	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 37.0),  # x=198 is the empirical rightmost: at x>=200 the
+	"trans_date":   (198.0, 39.0),  # +2mm down per user 2026-07-30 (was 37). x=198 empirical rightmost: at x>=200 the
 	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 46.0),  # same column as trans date
+	"invoice_date": (198.0, 44.0),  # -2mm up per user 2026-07-30 (was 46); same column as trans date
 	"do_no":        (193.0, 41.5),
-	"customer":     (58.0, 51.0),  # starts 5.8cm from left, 5.1cm from top per user
-	"address":      (58.0, 56.0),  # same left start as customer name
-	"pan":          (58.0, 63.0),  # same left start as customer name; +2mm down per user
+	"customer":     (58.0, 54.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
+	"address":      (58.0, 59.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
+	"pan":          (58.0, 65.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
 	"body_top":     (0, 80.0),   # first item row; +5mm per user
 	"row_h":        4.8,
-	"words":        (31.0, 95.1),  # amount in words; -1cm more left per user
+	"words":        (31.0, 102.0),  # amount in words; y set == y_taxable so line 1 lands on the taxable row per user 2026-07-30 (was 95.1). Keep equal to y_taxable if that moves.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        17.0,    # +2mm per user
 	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
@@ -71,10 +71,10 @@ POS = {
 	"r_rate":       177.0,   # -5mm left per user
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       93.0,   # +3mm down per user
-	"y_taxable":    99.0,   # +3mm down per user
-	"y_vat":        107.0,  # net position after user nudges (-1mm up latest)
-	"y_grand":      114.0,  # +2mm down per user (2x)
+	"y_disc":       96.0,   # +3mm down per user 2026-07-30 (was 93)
+	"y_taxable":    102.0,  # +3mm down per user 2026-07-30 (was 99)
+	"y_vat":        109.0,  # +2mm down per user 2026-07-30 (was 107)
+	"y_grand":      116.0,  # +2mm down per user 2026-07-30 (was 114)
 }
 
 # How to read POS["copy_label"] x — build() below emits it directly, with no
