@@ -50,7 +50,7 @@ Y0_MM = -12.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
 # Initial values = the Grishma calibration; calibrate each number on a real
 # Gandaki form.
 POS = {
-	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
+	"copy_label":   (114.5, 40.0),  # -4mm left per user 2026-07-30 (was 118.5). x = START of the label text
 	"invoice_no":   (36.0, 32.0),  # -3mm left, +1mm down per user 2026-07-30 (was 39,31)
 	"ref_inv":      (74.0, 46.7),
 	"trans_date":   (198.0, 39.0),  # +2mm down per user 2026-07-30 (was 37). 19.8cm: latest start where the full date fits
@@ -69,11 +69,11 @@ POS = {
 	                               # so it must equal y_taxable to land line 1 on the taxable row
 	                               # (per user 2026-07-30). Update together with y_taxable.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        17.0,    # +2mm per user
-	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
+	"c_sno":        14.0,    # -3mm left per user 2026-07-30 (was 17). NOTE ESC/P clamps this to X0=17; the shift shows on the A5 overlay (no wall)
+	"c_hs":         26.0,    # -4mm left per user 2026-07-30 (was 30). HS code column, no border; value prints ON each item row
 	                         # (vertically follows the item), same x as the heading below
-	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
-	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
+	"c_part":       50.0,    # -4mm left per user 2026-07-30 (was 54); particulars column
+	"hs_label":     (26.0, 70.0),  # -4mm left (matches c_hs), +4mm up per user 2026-07-30 (was 30,74). "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
 	"r_qty":        129.0,   # right edge for qty; -1cm, then -1cm more left per user 2026-07-30
 	"r_rate":       162.0,   # -1cm, then -1cm more left per user 2026-07-30
