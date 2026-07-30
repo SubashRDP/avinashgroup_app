@@ -241,6 +241,17 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		report.print_report = () => window.open(comparison_pdf_url(1));
 		report.pdf_report = () => window.open(comparison_pdf_url(0));
 
+		// Menu -> Export: custom Excel that keeps the supplier-group header row
+		// (supplier name merged above its Rate/Amount pair), which the stock
+		// export drops. Instance-level override, this report only.
+		report.export_report = () => {
+			const filters = frappe.query_report.get_filter_values(true);
+			window.open(
+				"/api/method/avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.export_xlsx" +
+				"?filters=" + encodeURIComponent(JSON.stringify(filters))
+			);
+		};
+
 		// Create a button for setting the default supplier
 		report.page.add_inner_button(
 			__("Select Default Supplier"),

@@ -74,7 +74,7 @@ defaults.
 {%- set grand_total = doc.rounded_total or doc.grand_total -%}
 {#- doc.in_words is stale on some invoices (prints the total, not the grand
     total), so derive the words from the grand total actually printed -#}
-{%- set amount_words = frappe.utils.money_in_words(grand_total | abs, doc.currency) -%}
+{%- set amount_words = frappe.utils.money_in_words(grand_total | abs, doc.currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") -%}
 
 {#- ONE sheet per print event: TAX INVOICE first, then copies -#}
 {%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}

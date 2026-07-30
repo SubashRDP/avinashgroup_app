@@ -115,9 +115,11 @@ def send_report_xlsx(columns, data, company, title, filename):
 			totals[f] += flt(d.get(f))
 
 	if data:
-		rows.append(
-			[flt(totals[c["fieldname"]], 2) if c["fieldname"] in totals else "" for c in columns]
-		)
+		total_row = [
+			flt(totals[c["fieldname"]], 2) if c["fieldname"] in totals else "" for c in columns
+		]
+		total_row[0] = _("Total")
+		rows.append(total_row)
 
 	xlsx = make_xlsx(rows, title.title())
 	xlsx = _center_letterhead(xlsx, letterhead_row_count, len(columns))
@@ -176,8 +178,6 @@ def _export_sales_invoice_vat_register():
 		if isinstance(filters, str):
 			filters = json.loads(filters)
 
-	company = _company_from_filters(filters)
-
 	if isinstance(filters, dict):
 		filters["docstatus"] = ["!=", 2]
 	else:
@@ -188,6 +188,7 @@ def _export_sales_invoice_vat_register():
 		filters=filters,
 		fields=[
 			"name",
+			"company",
 			"is_return",
 			"posting_date",
 			"custom_invoice_miti",
@@ -203,6 +204,12 @@ def _export_sales_invoice_vat_register():
 		order_by="posting_date asc, name asc",
 		limit_page_length=0,
 	)
+
+	# Letterhead company comes from the exported rows themselves — this works
+	# for selected-rows exports and for "like" filters alike. Rows spanning
+	# more than one company get no letterhead rather than a wrong one.
+	companies = {inv.company for inv in invoices}
+	company = companies.pop() if len(companies) == 1 else None
 
 	data = [
 		{
@@ -223,29 +230,6 @@ def _export_sales_invoice_vat_register():
 	]
 
 	send_report_xlsx(SALES_INVOICE_VAT_COLUMNS, data, company, "VAT REGISTER", "vat_register.xlsx")
-
-
-def _company_from_filters(filters):
-	"""The company a list-view export is filtered to, else None.
-
-	List-view filters arrive as a JSON list of [doctype, fieldname, operator,
-	value] (older clients may send 3-item rows or a plain dict)."""
-	if not filters:
-		return None
-	if isinstance(filters, str):
-		filters = json.loads(filters)
-
-	if isinstance(filters, dict):
-		value = filters.get("company")
-		return value if isinstance(value, str) else None
-
-	for row in filters:
-		if not isinstance(row, (list, tuple)) or len(row) < 3:
-			continue
-		fieldname, operator, value = row[-3], row[-2], row[-1]
-		if fieldname == "company" and operator == "=" and isinstance(value, str):
-			return value
-	return None
 
 
 def _center_letterhead(xlsx_file, row_count, table_width):
