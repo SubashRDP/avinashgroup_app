@@ -1,5 +1,10 @@
 frappe.ui.form.on("Material Request", {
 	refresh: function(frm) {
+		// Drop "Purchase Order" from the Create menu — this group buys through the
+		// RFQ / Supplier Quotation flow, not a direct MR → PO. ERPNext adds the
+		// button in its own refresh, so remove it after that runs.
+		setTimeout(() => frm.remove_custom_button(__("Purchase Order"), __("Create")), 0);
+
 		// Override get_item_data to force custom_buying_warehouse after ERPNext sets it
 		const _orig = frm.events.get_item_data;
 		frm.events.get_item_data = async function(frm, item, overwrite_warehouse) {

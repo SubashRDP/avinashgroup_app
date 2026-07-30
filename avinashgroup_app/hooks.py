@@ -65,7 +65,9 @@ doctype_js = {
     # sites, which stopped these handlers from registering. Global load avoids that.
     "Payment Entry": "public/js/payment_entry.js",
     "Material Request": "public/js/material_request.js",
-    "Purchase Order": "public/js/purchase_order.js",
+    "Purchase Order": ["public/js/purchase_order.js", "public/js/back_to_material_request.js"],
+    "Request for Quotation": "public/js/back_to_material_request.js",
+    "Supplier Quotation": "public/js/back_to_material_request.js",
     "Purchase Invoice": "public/js/pi.js",
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
