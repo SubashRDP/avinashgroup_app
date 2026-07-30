@@ -1,0 +1,112 @@
+{
+ "actions": [],
+ "creation": "2026-07-29 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "column_break_creds",
+  "token",
+  "sender_identity",
+  "api_url",
+  "message_section",
+  "message_template",
+  "test_section",
+  "test_mobile_no",
+  "column_break_test",
+  "send_test_sms"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "description": "Off by default. SMS is only sent on Sales Invoice submit when this is checked.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_creds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Sparrow SMS account token, from your Sparrow SMS dashboard.",
+   "fieldname": "token",
+   "fieldtype": "Password",
+   "label": "Token"
+  },
+  {
+   "description": "Sparrow's approved sender identity (the \"from\" value).",
+   "fieldname": "sender_identity",
+   "fieldtype": "Data",
+   "label": "Sender Identity"
+  },
+  {
+   "default": "https://api.sparrowsms.com/v2/sms/",
+   "description": "Sparrow SMS API endpoint. Leave as default unless Sparrow changes it.",
+   "fieldname": "api_url",
+   "fieldtype": "Data",
+   "label": "API URL"
+  },
+  {
+   "fieldname": "message_section",
+   "fieldtype": "Section Break",
+   "label": "Message"
+  },
+  {
+   "default": "Dear {{ doc.customer_name }}, your invoice {{ doc.name }} of Rs. {{ doc.grand_total }} has been generated. Thank you - {{ doc.company }}.",
+   "description": "Jinja template rendered against the submitted Sales Invoice (as `doc`). Example: {{ doc.customer_name }}, {{ doc.name }}, {{ doc.grand_total }}, {{ doc.company }}.",
+   "fieldname": "message_template",
+   "fieldtype": "Code",
+   "label": "Message Template",
+   "options": "Jinja"
+  },
+  {
+   "fieldname": "test_section",
+   "fieldtype": "Section Break",
+   "label": "Test"
+  },
+  {
+   "description": "If set, ALL Sales Invoice SMS are redirected here instead of the real customer number — safe way to test the full pipeline. Leave blank for real sends.",
+   "fieldname": "test_mobile_no",
+   "fieldtype": "Data",
+   "label": "Test Mobile No",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "column_break_test",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Sends a one-off test message straight to Test Mobile No, to check the Sparrow SMS credentials/connectivity on their own.",
+   "fieldname": "send_test_sms",
+   "fieldtype": "Button",
+   "label": "Send Test SMS"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-07-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Sparrow SMS",
+ "name": "Sparrow SMS Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

@@ -137,6 +137,10 @@ cbms_sales_invoice_events = {
     "on_trash": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.on_trash",
 }
 
+sparrow_sms_sales_invoice_events = {
+    "on_submit": "avinashgroup_app.custom_code.SalesInvoice.sms_notify.on_submit",
+}
+
 quotation_events = {
     "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_quotation",
     "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_quotation",
@@ -234,6 +238,9 @@ for _event, _handler in sales_invoice_specific_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
 
 for _event, _handler in cbms_sales_invoice_events.items():
+    _add_doc_event("Sales Invoice", _event, _handler)
+
+for _event, _handler in sparrow_sms_sales_invoice_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
 
 for _event, _handler in quotation_events.items():
@@ -435,6 +442,7 @@ company_data_to_be_ignored = [
     "Payment - Receipt Type",
     "CBMS Config",
     "Company Print Template",
+    "Sparrow SMS Settings",
     "Dynamic Approval Setting",
     "Nepal BS Period",
     "Sub-Ledger Category",
