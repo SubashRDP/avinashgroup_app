@@ -57,7 +57,7 @@ POS = {
 	"customer":     (58.0, 54.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
 	"address":      (58.0, 59.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
 	"pan":          (58.0, 65.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
-	"body_top":     (0, 84.0),   # +4mm down per user 2026-07-30 (was 80); first item row
+	"body_top":     (0, 86.0),   # +4mm then +2mm more down per user 2026-07-30 (was 80); first item row
 	"row_h":        4.8,
 	"words":        (31.0, 102.0),  # amount in words; y set == y_taxable so line 1 lands on the taxable row per user 2026-07-30 (was 95.1). Keep equal to y_taxable if that moves.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
@@ -67,9 +67,9 @@ POS = {
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        144.0,   # right edge for qty; -5mm left per user
-	"r_rate":       177.0,   # -5mm left per user
-	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
+	"r_qty":        148.0,   # +4mm right per user 2026-07-30 (was 144)
+	"r_rate":       181.0,   # +4mm right per user 2026-07-30 (was 177)
+	"r_amt":        212.0,   # +2mm right per user 2026-07-30 (was 210). Still <= 215.4mm head limit (X0+203.2)
 	# totals rows: right-aligned numerics at r_amt
 	"y_disc":       96.0,   # +3mm down per user 2026-07-30 (was 93)
 	"y_taxable":    102.0,  # +3mm down per user 2026-07-30 (was 99)
