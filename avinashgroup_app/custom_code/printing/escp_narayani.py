@@ -57,7 +57,7 @@ POS = {
 	"customer":     (58.0, 54.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
 	"address":      (58.0, 59.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
 	"pan":          (58.0, 65.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
-	"body_top":     (0, 80.0),   # first item row; +5mm per user
+	"body_top":     (0, 84.0),   # +4mm down per user 2026-07-30 (was 80); first item row
 	"row_h":        4.8,
 	"words":        (31.0, 102.0),  # amount in words; y set == y_taxable so line 1 lands on the taxable row per user 2026-07-30 (was 95.1). Keep equal to y_taxable if that moves.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
