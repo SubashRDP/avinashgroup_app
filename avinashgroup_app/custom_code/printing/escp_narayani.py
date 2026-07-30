@@ -34,8 +34,9 @@ FF = "\x0c"
 X0_MM = 12.0  # column 0 sits 12mm from the paper's left edge on this rig
               # (measured 2026-07-14, centre-circle target). Max reachable
               # ink: X0 + 203.2mm head travel = 215.4mm.
-Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
-              # (measured 2026-07-14, centre-circle target).
+Y0_MM = -17.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
+               # measured 2026-07-14, centre-circle target), minus 10mm to pull
+               # the whole Narayani print 1cm up per user 2026-07-30.
 
 # --- field targets (mm from the form's top-left corner) -------------------
 # CONVENTION: every x is where the text STARTS (its left edge) — measure to
