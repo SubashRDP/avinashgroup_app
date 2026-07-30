@@ -12,6 +12,18 @@
 		: [];
 
 	frappe.query_reports["Materialized Report"] = {
+		onload(report) {
+			// The built-in Export produces a bare table; replace it with a
+			// server-built Excel that carries the company letterhead and a totals
+			// row. Instance-level override only — other reports are unaffected.
+			report.export_report = function () {
+				const filters = frappe.query_report.get_filter_values(true);
+				const url =
+					"/api/method/avinashgroup_app.avinash_group_app.report.materialized_report.materialized_report.export_xlsx" +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters));
+				window.open(url);
+			};
+		},
 		filters: [
 			{
 				fieldname: "company",
