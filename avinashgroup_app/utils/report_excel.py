@@ -133,6 +133,7 @@ SALES_INVOICE_VAT_COLUMNS = [
 	{"label": "Date", "fieldname": "date", "fieldtype": "Date"},
 	{"label": "BS Date", "fieldname": "bs_date", "fieldtype": "Data"},
 	{"label": "Document Number", "fieldname": "document_number", "fieldtype": "Data"},
+	{"label": "Return Against", "fieldname": "return_against", "fieldtype": "Data"},
 	{"label": "Customer Name", "fieldname": "customer_name", "fieldtype": "Data"},
 	{"label": "Customer PAN", "fieldname": "customer_pan", "fieldtype": "Data"},
 	{"label": "Total Qty", "fieldname": "total_qty", "fieldtype": "Float"},
@@ -192,6 +193,9 @@ def _export_sales_invoice_vat_register():
 			"is_return",
 			"posting_date",
 			"custom_invoice_miti",
+			"custom_branch_name",
+			"return_against",
+			"customer",
 			"customer_name",
 			"tax_id",
 			"total_qty",
@@ -205,6 +209,38 @@ def _export_sales_invoice_vat_register():
 		limit_page_length=0,
 	)
 
+	# Fall back to the Customer record's PAN when the invoice carries none.
+	# Batched into a single query keyed by customer.
+	missing_pan_customers = {inv.customer for inv in invoices if not inv.tax_id and inv.customer}
+	customer_pan = (
+		dict(
+			frappe.get_all(
+				"Customer",
+				filters=[["name", "in", list(missing_pan_customers)]],
+				fields=["name", "tax_id"],
+				as_list=True,
+			)
+		)
+		if missing_pan_customers
+		else {}
+	)
+
+	# For returns, `return_against` stores the original invoice's doc name; show
+	# that invoice's custom branch name ("Invoice No.") instead. Batched.
+	return_against_names = {inv.return_against for inv in invoices if inv.return_against}
+	return_against_branch = (
+		dict(
+			frappe.get_all(
+				"Sales Invoice",
+				filters=[["name", "in", list(return_against_names)]],
+				fields=["name", "custom_branch_name"],
+				as_list=True,
+			)
+		)
+		if return_against_names
+		else {}
+	)
+
 	# Letterhead company comes from the exported rows themselves — this works
 	# for selected-rows exports and for "like" filters alike. Rows spanning
 	# more than one company get no letterhead rather than a wrong one.
@@ -216,9 +252,14 @@ def _export_sales_invoice_vat_register():
 			"transaction_type": "Credit Memo" if inv.is_return else "Invoice",
 			"date": inv.posting_date,
 			"bs_date": inv.custom_invoice_miti,
-			"document_number": inv.name,
+			"document_number": inv.custom_branch_name or inv.name,
+			"return_against": (
+				(return_against_branch.get(inv.return_against) or inv.return_against)
+				if inv.return_against
+				else ""
+			),
 			"customer_name": inv.customer_name,
-			"customer_pan": inv.tax_id,
+			"customer_pan": inv.tax_id or customer_pan.get(inv.customer),
 			"total_qty": inv.total_qty,
 			"discount_amount": inv.base_discount_amount,
 			"gross_amount": inv.base_total,
