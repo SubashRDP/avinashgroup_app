@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+	body { font-family: Arial, sans-serif; font-size: 6.75pt; color: #000; }
+	table { font-size: 6.75pt; }
+	.page { page-break-after: always; }
+	.page:last-child { page-break-after: auto; }
+
+	.hdr { margin-bottom: 6px; }
+	.hdr table { width: 100%; border-collapse: collapse; }
+	.hdr td { padding: 0; border: none; vertical-align: top; }
+	.hdr .company { font-weight: bold; font-size: 9pt; }
+	.hdr .book { font-weight: bold; font-size: 11pt; }
+	.hdr .sub { color: #000; font-size: 7.5pt; }
+	.hdr .r { text-align: right; }
+	.hdr .page-no { font-weight: bold; margin-top: 5px; }
+
+	table { width: 100%; border-collapse: collapse; }
+	th { border-top: 1px solid #000; border-bottom: 1px solid #000; text-align: left; padding: 3px 4px; font-size: 9pt; }
+	td { padding: 1px 4px; vertical-align: top; }
+	.num { text-align: right; white-space: nowrap; }
+	.acct-head td { font-weight: bold; border-bottom: 1px solid #bbb; padding-top: 4px; }
+	.sub-line { color: #000; font-size: 7pt; }
+	.closing td { font-weight: bold; border-top: 1px solid #000; }
+	.day-closing td { font-weight: bold; }
+	.opening td { font-weight: bold; }
+
+	.params { margin-top: 4px; }
+	.params .title { font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 4px; }
+	.params table td { padding: 2px 8px 2px 0; font-size: 7.5pt; }
+</style>
+</head>
+<body>
+
+{%- macro header(book, page_no) -%}
+<div class="hdr">
+	<table>
+		<tr>
+			<td class="company">{{ company_name }}{% if fy_label %} FY [{{ fy_label }}]{% endif %}</td>
+			<td class="r">
+				<div class="book">{{ book }}</div>
+				{% if accounting_period %}<div class="sub">Accounting Period : {{ accounting_period }}</div>{% endif %}
+				<div class="sub page-no">Page {{ page_no }}/{{ total_pages }}</div>
+			</td>
+		</tr>
+		<tr>
+			<td class="sub">From {{ from_bs }} To {{ to_bs }} &nbsp;&nbsp; (All parameters listed at end of Report)</td>
+			<td class="r sub">Amount in Nepalese Rupee ( {{ currency }} )</td>
+		</tr>
+	</table>
+</div>
+{%- endmacro -%}
+
+{% for s in sections %}
+<div class="page">
+	{{ header(s.book, s.seq) }}
+	<table>
+		<thead>
+			<tr>
+				<th style="width:12%;">Voucher Date</th>
+				<th style="width:14%;">Voucher Number</th>
+				<th>Particulars</th>
+				<th class="num" style="width:13%;">Receipt</th>
+				<th class="num" style="width:13%;">Payment</th>
+				<th class="num" style="width:14%;">Balance</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr class="acct-head">
+				<td>{{ s.seq }}</td>
+				<td colspan="5">{{ s.account }} (Account Code : {{ s.code }})</td>
+			</tr>
+			<tr class="opening">
+				<td colspan="3">Opening Balance</td>
+				<td class="num"></td><td class="num"></td>
+				<td class="num">{{ fmt(s.opening) }}</td>
+			</tr>
+
+			{% if not s.has_txns %}
+			<tr>
+				<td colspan="3">No Transactions exist for the specified period.</td>
+				<td class="num"></td><td class="num"></td>
+				<td class="num">{{ fmt(s.opening) }}</td>
+			</tr>
+			{% endif %}
+
+			{% for g in s.date_groups %}
+				{% for t in g.txns %}
+				<tr>
+					<td>{{ g.bs_date }}</td>
+					<td>{{ t.voucher_no }}</td>
+					<td>
+						{{ t.against or "" }}
+						{% if t.party_line %}<div class="sub-line">{{ t.party_line }}</div>{% endif %}
+						{% if show_narration and t.narration %}<div class="sub-line">Narration : {{ t.narration }}</div>{% endif %}
+					</td>
+					<td class="num">{{ fmt(t.debit) if t.debit else "" }}</td>
+					<td class="num">{{ fmt(t.credit) if t.credit else "" }}</td>
+					<td class="num">{{ fmt(t.balance) }}</td>
+				</tr>
+				{% endfor %}
+				<tr class="day-closing">
+					<td colspan="3">Day Closing</td>
+					<td class="num"></td><td class="num"></td>
+					<td class="num">{{ fmt(g.day_closing) }}</td>
+				</tr>
+			{% endfor %}
+
+			<tr class="closing">
+				<td colspan="3">Closing Balance</td>
+				<td class="num"></td><td class="num"></td>
+				<td class="num">{{ fmt(s.closing) }}</td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+{% endfor %}
+
+<div class="page params">
+	{{ header(sections[0].book if sections else "Bank Book", total_pages) }}
+	<div class="params">
+		<div class="title">Report Parameters</div>
+		<table>
+			<tr><td>Date Range :</td><td>From {{ from_bs }} To {{ to_bs }}</td><td>Currency :</td><td>{{ currency }}</td></tr>
+			<tr><td>Accounts :</td><td>{{ sections|length }} cash / bank ledger(s)</td><td>Reconciliation :</td><td>No</td></tr>
+		</table>
+	</div>
+</div>
+</body>
+</html>
