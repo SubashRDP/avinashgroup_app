@@ -9,8 +9,6 @@
   "token",
   "sender_identity",
   "api_url",
-  "message_section",
-  "message_template",
   "test_section",
   "test_mobile_no",
   "column_break_test",
@@ -19,7 +17,7 @@
  "fields": [
   {
    "default": "0",
-   "description": "Off by default. SMS is only sent on Sales Invoice submit when this is checked.",
+   "description": "Master switch for every SMS Notification Rule. Off by default; nothing is sent while this is unchecked. What gets sent, and on which document event, is defined by the rules — not here.",
    "fieldname": "enabled",
    "fieldtype": "Check",
    "in_list_view": 1,
@@ -32,7 +30,7 @@
   {
    "description": "Sparrow SMS account token, from your Sparrow SMS dashboard.",
    "fieldname": "token",
-   "fieldtype": "Password",
+   "fieldtype": "Data",
    "label": "Token"
   },
   {
@@ -49,25 +47,12 @@
    "label": "API URL"
   },
   {
-   "fieldname": "message_section",
-   "fieldtype": "Section Break",
-   "label": "Message"
-  },
-  {
-   "default": "Dear {{ doc.customer_name }}, your invoice {{ doc.name }} of Rs. {{ doc.grand_total }} has been generated. Thank you - {{ doc.company }}.",
-   "description": "Jinja template rendered against the submitted Sales Invoice (as `doc`). Example: {{ doc.customer_name }}, {{ doc.name }}, {{ doc.grand_total }}, {{ doc.company }}.",
-   "fieldname": "message_template",
-   "fieldtype": "Code",
-   "label": "Message Template",
-   "options": "Jinja"
-  },
-  {
    "fieldname": "test_section",
    "fieldtype": "Section Break",
    "label": "Test"
   },
   {
-   "description": "If set, ALL Sales Invoice SMS are redirected here instead of the real customer number — safe way to test the full pipeline. Leave blank for real sends.",
+   "description": "Used ONLY by the Send Test SMS button beside it. It does not affect invoice sends or the Sales Invoice SMS Test page — those always go to the number the rule resolves.",
    "fieldname": "test_mobile_no",
    "fieldtype": "Data",
    "label": "Test Mobile No",
@@ -86,7 +71,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-07-30 00:00:00.000000",
+ "modified": "2026-08-03 11:00:00.000000",
  "modified_by": "Administrator",
  "module": "Sparrow SMS",
  "name": "Sparrow SMS Settings",

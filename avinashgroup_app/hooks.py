@@ -137,10 +137,6 @@ cbms_sales_invoice_events = {
     "on_trash": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.on_trash",
 }
 
-sparrow_sms_sales_invoice_events = {
-    "on_submit": "avinashgroup_app.custom_code.SalesInvoice.sms_notify.on_submit",
-}
-
 quotation_events = {
     "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_quotation",
     "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_quotation",
@@ -240,9 +236,6 @@ for _event, _handler in sales_invoice_specific_events.items():
 for _event, _handler in cbms_sales_invoice_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
 
-for _event, _handler in sparrow_sms_sales_invoice_events.items():
-    _add_doc_event("Sales Invoice", _event, _handler)
-
 for _event, _handler in quotation_events.items():
     _add_doc_event("Quotation", _event, _handler)
 
@@ -315,6 +308,13 @@ _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.v
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
 _add_doc_event("*", "before_workflow_action", "avinashgroup_app.custom_code.dynamic_approval.before_workflow_action")
+
+# Sparrow SMS: which doctype/event sends an SMS is data, not code — see the
+# SMS Notification Rule doctype. Same cached-gate discipline as above.
+_add_doc_event("*", "on_submit", "avinashgroup_app.sparrow_sms.sms_dispatch.on_submit")
+_add_doc_event("*", "on_cancel", "avinashgroup_app.sparrow_sms.sms_dispatch.on_cancel")
+_add_doc_event("*", "after_insert", "avinashgroup_app.sparrow_sms.sms_dispatch.after_insert")
+_add_doc_event("*", "on_update", "avinashgroup_app.sparrow_sms.sms_dispatch.on_update")
 
 override_doctype_class = {
     "Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",

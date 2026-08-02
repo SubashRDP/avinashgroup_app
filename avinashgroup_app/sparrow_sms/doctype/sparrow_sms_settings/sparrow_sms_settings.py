@@ -20,9 +20,9 @@ def send_test_sms():
 	if not settings.token:
 		frappe.throw(_("Set a Token first."))
 
-	from avinashgroup_app.custom_code.SalesInvoice.sms_notify import send_sms
+	from avinashgroup_app.sparrow_sms.sms_dispatch import send_sms
 
-	message = "This is a test message from Sparrow SMS settings on avinas1."
+	message = "This is a test message from Sparrow SMS settings."
 	ok = send_sms(settings.test_mobile_no, message, reference="Sparrow SMS Settings test")
 	if ok:
 		frappe.msgprint(_("Test SMS sent to {0}.").format(settings.test_mobile_no))
