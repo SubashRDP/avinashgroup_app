@@ -34,8 +34,9 @@ FF = "\x0c"
 X0_MM = 12.0  # column 0 sits 12mm from the paper's left edge on this rig
               # (measured 2026-07-14, centre-circle target). Max reachable
               # ink: X0 + 203.2mm head travel = 215.4mm.
-Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
-              # (measured 2026-07-14, centre-circle target).
+Y0_MM = -17.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
+               # measured 2026-07-14, centre-circle target), minus 10mm to pull
+               # the whole Narayani print 1cm up per user 2026-07-30.
 
 # --- field targets (mm from the form's top-left corner) -------------------
 # CONVENTION: every x is where the text STARTS (its left edge) — measure to
@@ -46,19 +47,19 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # column removed (particulars pulled left to follow S.No.). Calibrate each
 # number on a real Grishma form.
 POS = {
-	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
+	"copy_label":   (118.5, 44.0),  # y = same height as invoice_date per user 2026-07-30 (was 40)
 	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 37.0),  # x=198 is the empirical rightmost: at x>=200 the
+	"trans_date":   (198.0, 39.0),  # +2mm down per user 2026-07-30 (was 37). x=198 empirical rightmost: at x>=200 the
 	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 46.0),  # same column as trans date
+	"invoice_date": (198.0, 44.0),  # -2mm up per user 2026-07-30 (was 46); same column as trans date
 	"do_no":        (193.0, 41.5),
-	"customer":     (58.0, 51.0),  # starts 5.8cm from left, 5.1cm from top per user
-	"address":      (58.0, 56.0),  # same left start as customer name
-	"pan":          (58.0, 63.0),  # same left start as customer name; +2mm down per user
-	"body_top":     (0, 80.0),   # first item row; +5mm per user
+	"customer":     (58.0, 54.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
+	"address":      (58.0, 59.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
+	"pan":          (58.0, 65.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
+	"body_top":     (0, 86.0),   # +4mm then +2mm more down per user 2026-07-30 (was 80); first item row
 	"row_h":        4.8,
-	"words":        (31.0, 95.1),  # amount in words; -1cm more left per user
+	"words":        (31.0, 102.0),  # amount in words; y set == y_taxable so line 1 lands on the taxable row per user 2026-07-30 (was 95.1). Keep equal to y_taxable if that moves.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        17.0,    # +2mm per user
 	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
@@ -66,14 +67,14 @@ POS = {
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        144.0,   # right edge for qty; -5mm left per user
-	"r_rate":       177.0,   # -5mm left per user
-	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
+	"r_qty":        148.0,   # +4mm right per user 2026-07-30 (was 144)
+	"r_rate":       181.0,   # +4mm right per user 2026-07-30 (was 177)
+	"r_amt":        212.0,   # +2mm right per user 2026-07-30 (was 210). Still <= 215.4mm head limit (X0+203.2)
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       93.0,   # +3mm down per user
-	"y_taxable":    99.0,   # +3mm down per user
-	"y_vat":        107.0,  # net position after user nudges (-1mm up latest)
-	"y_grand":      114.0,  # +2mm down per user (2x)
+	"y_disc":       96.0,   # +3mm down per user 2026-07-30 (was 93)
+	"y_taxable":    102.0,  # +3mm down per user 2026-07-30 (was 99)
+	"y_vat":        109.0,  # +2mm down per user 2026-07-30 (was 107)
+	"y_grand":      116.0,  # +2mm down per user 2026-07-30 (was 114)
 }
 
 # How to read POS["copy_label"] x — build() below emits it directly, with no

@@ -541,6 +541,74 @@ def get_message():
 		</span>"""
 
 
+def _supplier_groups(columns):
+	"""The dynamic Rate+Amount column pairs, one per supplier, rebuilt from the
+	columns: everything after the three fixed ones shares a supplier_group."""
+	groups = []
+	for col in columns[3:]:
+		if col["fieldname"].endswith("_rate"):
+			groups.append({
+				"display": col.get("supplier_group") or "",
+				"sq": col.get("sq_link"),
+				"rate_field": col["fieldname"],
+				"amount_field": col["fieldname"][: -len("_rate")],
+			})
+	return groups
+
+
+@frappe.whitelist()
+def export_xlsx(filters):
+	"""Excel export with the supplier-group header row the stock export drops:
+	each supplier's name sits merged and centered above its Rate+Amount pair."""
+	from io import BytesIO
+
+	from frappe.utils.xlsxutils import make_xlsx
+	from openpyxl import load_workbook
+	from openpyxl.styles import Alignment, Font
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+
+	columns, data = execute(filters)[:2]
+	groups = _supplier_groups(columns)
+
+	supplier_row = ["", "", ""]
+	for g in groups:
+		supplier_row += [g["display"], ""]
+	label_row = ["SN", "Item Name", "Qty"]
+	for _g in groups:
+		label_row += ["Rate", "Amount"]
+
+	rows = [supplier_row, label_row]
+	for d in data:
+		if not isinstance(d, dict) or not d:
+			continue
+		row = [d.get("sn"), d.get("item_name") or d.get("item_code"), d.get("qty")]
+		for g in groups:
+			row += [d.get(g["rate_field"]), d.get(g["amount_field"])]
+		rows.append(row)
+
+	xlsx = make_xlsx(rows, "Supplier Quotation Comparison")
+
+	# Merge each supplier's name across its Rate+Amount pair and center it.
+	# make_xlsx works on a write-only workbook, so restyle by reopening the file.
+	wb = load_workbook(xlsx)
+	ws = wb.active
+	col = 4
+	for _g in groups:
+		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
+		cell = ws.cell(row=1, column=col)
+		cell.alignment = Alignment(horizontal="center")
+		cell.font = Font(bold=True)
+		col += 2
+	out = BytesIO()
+	wb.save(out)
+
+	frappe.response.filename = "supplier_quotation_comparison.xlsx"
+	frappe.response.filecontent = out.getvalue()
+	frappe.response.type = "binary"
+
+
 @frappe.whitelist()
 def download_pdf(filters, view=None):
 	"""Print / PDF of the comparison in document form: company + title header,
@@ -553,19 +621,7 @@ def download_pdf(filters, view=None):
 		filters = frappe._dict(json.loads(filters))
 
 	columns, data = execute(filters)[:2]
-
-	# Rebuild the supplier column pairs from the dynamic columns: everything
-	# after the three fixed columns (SN / Item Name / Qty) comes in Rate+Amount
-	# pairs that share a supplier_group and sq_link.
-	groups = []
-	for col in columns[3:]:
-		if col["fieldname"].endswith("_rate"):
-			groups.append({
-				"display": col.get("supplier_group") or "",
-				"sq": col.get("sq_link"),
-				"rate_field": col["fieldname"],
-				"amount_field": col["fieldname"][: -len("_rate")],
-			})
+	groups = _supplier_groups(columns)
 
 	report_title = "Supplier Quotation Comparison"
 	if filters.get("purchase_order"):

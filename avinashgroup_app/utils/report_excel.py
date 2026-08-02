@@ -115,9 +115,11 @@ def send_report_xlsx(columns, data, company, title, filename):
 			totals[f] += flt(d.get(f))
 
 	if data:
-		rows.append(
-			[flt(totals[c["fieldname"]], 2) if c["fieldname"] in totals else "" for c in columns]
-		)
+		total_row = [
+			flt(totals[c["fieldname"]], 2) if c["fieldname"] in totals else "" for c in columns
+		]
+		total_row[0] = _("Total")
+		rows.append(total_row)
 
 	xlsx = make_xlsx(rows, title.title())
 	xlsx = _center_letterhead(xlsx, letterhead_row_count, len(columns))
@@ -131,6 +133,7 @@ SALES_INVOICE_VAT_COLUMNS = [
 	{"label": "Date", "fieldname": "date", "fieldtype": "Date"},
 	{"label": "BS Date", "fieldname": "bs_date", "fieldtype": "Data"},
 	{"label": "Document Number", "fieldname": "document_number", "fieldtype": "Data"},
+	{"label": "Return Against", "fieldname": "return_against", "fieldtype": "Data"},
 	{"label": "Customer Name", "fieldname": "customer_name", "fieldtype": "Data"},
 	{"label": "Customer PAN", "fieldname": "customer_pan", "fieldtype": "Data"},
 	{"label": "Total Qty", "fieldname": "total_qty", "fieldtype": "Float"},
@@ -176,8 +179,6 @@ def _export_sales_invoice_vat_register():
 		if isinstance(filters, str):
 			filters = json.loads(filters)
 
-	company = _company_from_filters(filters)
-
 	if isinstance(filters, dict):
 		filters["docstatus"] = ["!=", 2]
 	else:
@@ -188,9 +189,13 @@ def _export_sales_invoice_vat_register():
 		filters=filters,
 		fields=[
 			"name",
+			"company",
 			"is_return",
 			"posting_date",
 			"custom_invoice_miti",
+			"custom_branch_name",
+			"return_against",
+			"customer",
 			"customer_name",
 			"tax_id",
 			"total_qty",
@@ -204,14 +209,57 @@ def _export_sales_invoice_vat_register():
 		limit_page_length=0,
 	)
 
+	# Fall back to the Customer record's PAN when the invoice carries none.
+	# Batched into a single query keyed by customer.
+	missing_pan_customers = {inv.customer for inv in invoices if not inv.tax_id and inv.customer}
+	customer_pan = (
+		dict(
+			frappe.get_all(
+				"Customer",
+				filters=[["name", "in", list(missing_pan_customers)]],
+				fields=["name", "tax_id"],
+				as_list=True,
+			)
+		)
+		if missing_pan_customers
+		else {}
+	)
+
+	# For returns, `return_against` stores the original invoice's doc name; show
+	# that invoice's custom branch name ("Invoice No.") instead. Batched.
+	return_against_names = {inv.return_against for inv in invoices if inv.return_against}
+	return_against_branch = (
+		dict(
+			frappe.get_all(
+				"Sales Invoice",
+				filters=[["name", "in", list(return_against_names)]],
+				fields=["name", "custom_branch_name"],
+				as_list=True,
+			)
+		)
+		if return_against_names
+		else {}
+	)
+
+	# Letterhead company comes from the exported rows themselves — this works
+	# for selected-rows exports and for "like" filters alike. Rows spanning
+	# more than one company get no letterhead rather than a wrong one.
+	companies = {inv.company for inv in invoices}
+	company = companies.pop() if len(companies) == 1 else None
+
 	data = [
 		{
 			"transaction_type": "Credit Memo" if inv.is_return else "Invoice",
 			"date": inv.posting_date,
 			"bs_date": inv.custom_invoice_miti,
-			"document_number": inv.name,
+			"document_number": inv.custom_branch_name or inv.name,
+			"return_against": (
+				(return_against_branch.get(inv.return_against) or inv.return_against)
+				if inv.return_against
+				else ""
+			),
 			"customer_name": inv.customer_name,
-			"customer_pan": inv.tax_id,
+			"customer_pan": inv.tax_id or customer_pan.get(inv.customer),
 			"total_qty": inv.total_qty,
 			"discount_amount": inv.base_discount_amount,
 			"gross_amount": inv.base_total,
@@ -223,29 +271,6 @@ def _export_sales_invoice_vat_register():
 	]
 
 	send_report_xlsx(SALES_INVOICE_VAT_COLUMNS, data, company, "VAT REGISTER", "vat_register.xlsx")
-
-
-def _company_from_filters(filters):
-	"""The company a list-view export is filtered to, else None.
-
-	List-view filters arrive as a JSON list of [doctype, fieldname, operator,
-	value] (older clients may send 3-item rows or a plain dict)."""
-	if not filters:
-		return None
-	if isinstance(filters, str):
-		filters = json.loads(filters)
-
-	if isinstance(filters, dict):
-		value = filters.get("company")
-		return value if isinstance(value, str) else None
-
-	for row in filters:
-		if not isinstance(row, (list, tuple)) or len(row) < 3:
-			continue
-		fieldname, operator, value = row[-3], row[-2], row[-1]
-		if fieldname == "company" and operator == "=" and isinstance(value, str):
-			return value
-	return None
 
 
 def _center_letterhead(xlsx_file, row_count, table_width):

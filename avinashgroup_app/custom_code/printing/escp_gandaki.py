@@ -33,11 +33,14 @@ ESC = "\x1b"
 FF = "\x0c"
 
 # --- calibration ---------------------------------------------------------
-X0_MM = 12.0  # column 0 sits 12mm from the paper's left edge on this rig
-              # (measured 2026-07-14, centre-circle target). Max reachable
-              # ink: X0 + 203.2mm head travel = 215.4mm.
-Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
-              # (measured 2026-07-14, centre-circle target).
+X0_MM = 17.0  # base rig 12mm (column 0 from the paper's left edge, measured
+              # 2026-07-14, centre-circle target) + 5mm to shift the whole
+              # Gandaki print 0.5cm left per user 2026-07-30. S.No. (x=17) now
+              # lands right at the 12mm margin; do not raise this further or the
+              # left columns clamp. Max reachable ink: X0 + 203.2mm = 220.2mm.
+Y0_MM = -12.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
+               # measured 2026-07-14, centre-circle target), minus 5mm to pull
+               # the whole Gandaki print 0.5cm up per user 2026-07-30.
 
 # --- field targets (mm from the form's top-left corner) -------------------
 # CONVENTION: every x is where the text STARTS (its left edge) — measure to
@@ -47,35 +50,39 @@ Y0_MM = -7.7  # printer registers top-of-form 7.7mm below the perforation
 # Initial values = the Grishma calibration; calibrate each number on a real
 # Gandaki form.
 POS = {
-	"copy_label":   (118.5, 40.0),  # x = START of the label text; 4cm from top per user
-	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user
+	"copy_label":   (114.5, 40.0),  # -4mm left per user 2026-07-30 (was 118.5). x = START of the label text
+	"invoice_no":   (36.0, 32.0),  # -3mm left, +1mm down per user 2026-07-30 (was 39,31)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 37.0),  # 19.8cm: latest start where the full date fits
+	"trans_date":   (198.0, 39.0),  # +2mm down per user 2026-07-30 (was 37). 19.8cm: latest start where the full date fits
 	                                # before the 215.4mm head limit (box is at 20.4
 	                                # but the head can't reach 22.1cm)
-	"invoice_date": (198.0, 45.0),  # same column as trans date; +2mm down per user
+	"invoice_date": (198.0, 47.0),  # +2mm more down per user 2026-07-30 (was 45); same column as trans date
 	"do_no":        (193.0, 41.5),
-	"customer":     (57.0, 51.0),  # -1mm left per user
-	"address":      (57.0, 56.0),  # same left start as customer name; -1mm left
-	"pan":          (57.0, 63.0),  # same left start as customer name; -1mm left; +2mm down
-	"body_top":     (0, 82.0),   # first item row; +2mm more down per user
+	"customer":     (55.0, 54.0),  # -2mm left, +3mm down per user 2026-07-30 (was 57,51)
+	"address":      (55.0, 59.0),  # -2mm left, +3mm down per user 2026-07-30 (was 57,56); same left start as customer name
+	"pan":          (55.0, 66.0),  # -2mm left, +3mm down per user 2026-07-30 (was 57,63); same left start as customer name
+	"body_top":     (0, 85.0),   # +3mm more down per user 2026-07-30 (was 82); first item row
 	"row_h":        4.8,
-	"words":        (21.0, 96.1),  # amount in words; -3cm left; +4mm down per user
+	"words":        (21.0, 103.0),  # amount in words; -3cm left per user. y kept == y_taxable:
+	                               # the ESC/P build() binds the baseline to y_taxable directly
+	                               # (so this y is moot there), but the A5 overlay reads this y,
+	                               # so it must equal y_taxable to land line 1 on the taxable row
+	                               # (per user 2026-07-30). Update together with y_taxable.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        17.0,    # +2mm per user
-	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
+	"c_sno":        14.0,    # -3mm left per user 2026-07-30 (was 17). NOTE ESC/P clamps this to X0=17; the shift shows on the A5 overlay (no wall)
+	"c_hs":         26.0,    # -4mm left per user 2026-07-30 (was 30). HS code column, no border; value prints ON each item row
 	                         # (vertically follows the item), same x as the heading below
-	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
-	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
+	"c_part":       50.0,    # -4mm left per user 2026-07-30 (was 54); particulars column
+	"hs_label":     (26.0, 70.0),  # -4mm left (matches c_hs), +4mm up per user 2026-07-30 (was 30,74). "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        139.0,   # right edge for qty; -1cm left per user
-	"r_rate":       172.0,   # -1cm left per user
+	"r_qty":        129.0,   # right edge for qty; -1cm, then -1cm more left per user 2026-07-30
+	"r_rate":       162.0,   # -1cm, then -1cm more left per user 2026-07-30
 	"r_amt":        210.0,   # right edge; X0+203.2mm head travel = 215.4mm hard limit
 	# totals rows: right-aligned numerics at r_amt
-	"y_disc":       93.5,   # +0.5mm then +3mm more down per user
-	"y_taxable":    101.0,  # "total" +0.5cm down per user
-	"y_vat":        105.0,  # +3mm down per user
-	"y_grand":      111.0,  # +1mm down per user
+	"y_disc":       96.5,   # +3mm more down per user 2026-07-30 (was 93.5)
+	"y_taxable":    103.0,  # +2mm down per user 2026-07-30 (was 101)
+	"y_vat":        108.0,  # +3mm down per user 2026-07-30 (was 105)
+	"y_grand":      114.0,  # +3mm down per user 2026-07-30 (was 111)
 }
 
 # How to read POS["copy_label"] x — build() below emits it directly, with no
@@ -211,7 +218,7 @@ def build(doc) -> str:
 		el: list = []
 		# copy label starts at P["copy_label"].x (user measures where text begins)
 		_el(el, P["copy_label"][0], P["copy_label"][1], copy_label, bold=True)
-		_el(el, P["invoice_no"][0], P["invoice_no"][1], invoice_no, bold=True)
+		_el(el, P["invoice_no"][0], P["invoice_no"][1], invoice_no)  # bold removed per user 2026-07-30
 		_el(el, P["trans_date"][0], P["trans_date"][1], bs_date)
 		_el(el, P["invoice_date"][0], P["invoice_date"][1], bs_date)
 		_el(el, P["do_no"][0], P["do_no"][1], do_nos[:12])
@@ -244,8 +251,16 @@ def build(doc) -> str:
 			_el(el, P["r_amt"], P["y_vat"], _money(vat), right=True)
 			_el(el, P["r_amt"], P["y_grand"], _money(grand), bold=True, right=True)
 			# line width: words box runs 4.8 -> 13.5cm = 87mm = 51 chars at 15cpi
+			# amount in words: line 1 sits on the taxable-amount baseline and line 2
+			# on the 13% VAT baseline, EXACTLY (driven off y_taxable / y_vat, not a
+			# fixed offset), so they line up with those totals rows with zero drift
+			# per user 2026-07-30. Further lines continue below at the same
+			# taxable->vat pitch. Only the x of POS["words"] is used now.
+			_word_ys = [P["y_taxable"], P["y_vat"]]
+			_word_pitch = P["y_vat"] - P["y_taxable"]
 			for j, line in enumerate(_wrap(doc.get("in_words") or "", 51)[:4]):
-				_el(el, P["words"][0], P["words"][1] + j * 4.3, line)
+				_wy = _word_ys[j] if j < len(_word_ys) else P["y_vat"] + (j - 1) * _word_pitch
+				_el(el, P["words"][0], _wy, line)
 		out.append(_emit(el))
 		out.append(FF)
 	out.append(f"{ESC}@")
