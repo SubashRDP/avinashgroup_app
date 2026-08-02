@@ -110,6 +110,7 @@ def build_sections(filters):
 
 		sections.append({
 			"account": acc.name,
+			"account_name": acc.account_name,
 			"account_type": acc.account_type,
 			"code": acc.account_number or "",
 			"opening": opening,
@@ -129,7 +130,7 @@ def get_data(filters):
 	data = []
 	for s in sections:
 		data.append({
-			"particulars": "{0}{1}".format(f"{s['code']}  " if s["code"] else "", s["account"]),
+			"particulars": s["account_name"],
 			"currency": currency, "is_account_header": 1, "bold": 1,
 		})
 		data.append({
@@ -238,6 +239,37 @@ def _bs(posting_date):
 	return f"{bs.year}/{bs.month:02d}/{bs.day:02d}"
 
 
+def _party_name_map(rows):
+	"""{party_id: display name} so the report shows 'Ram Traders' instead of the
+	Customer/Supplier/Employee ID. IDs appear in gle.party, and for the row on the
+	cash/bank account itself (the one this report reads) in gle.against."""
+	ids = set()
+	for r in rows:
+		if r.party:
+			ids.add(r.party)
+		if r.against:
+			ids.update(p.strip() for p in r.against.split(",") if p.strip())
+	if not ids:
+		return {}
+
+	out = {}
+	for doctype, field in (
+		("Customer", "customer_name"),
+		("Supplier", "supplier_name"),
+		("Employee", "employee_name"),
+	):
+		for d in frappe.get_all(doctype, filters={"name": ["in", list(ids)]}, fields=["name", field]):
+			out[d.name] = d.get(field) or d.name
+	return out
+
+
+def _replace_party_ids(text, party_names):
+	"""Swap any party IDs inside a comma-separated against/party string for names."""
+	if not text:
+		return text
+	return ", ".join(party_names.get(p.strip(), p.strip()) for p in text.split(",") if p.strip())
+
+
 def _transactions(account_names, from_date, to_date):
 	"""{account: [txn dicts in date order]} for the period.
 
@@ -250,13 +282,18 @@ def _transactions(account_names, from_date, to_date):
 	rows = frappe.db.sql(
 		"""
 		SELECT
-			gle.account, gle.posting_date, gle.voucher_type, gle.voucher_no,
-			gle.against, gle.debit, gle.credit, gle.party,
+			gle.account, gle.posting_date, gle.voucher_type,
+			COALESCE(je.custom_name, pe.custom_name, pi.custom_name, gle.voucher_no) AS voucher_no,
+			gle.against, gle.debit, gle.credit, gle.party, gle.party_type,
 			gle.remarks AS gl_remarks,
 			je.custom_paid_to, je.user_remark, je.cheque_no, je.cheque_date
 		FROM `tabGL Entry` gle
 		LEFT JOIN `tabJournal Entry` je
 			ON gle.voucher_type = 'Journal Entry' AND je.name = gle.voucher_no
+		LEFT JOIN `tabPayment Entry` pe
+			ON gle.voucher_type = 'Payment Entry' AND pe.name = gle.voucher_no
+		LEFT JOIN `tabPurchase Invoice` pi
+			ON gle.voucher_type = 'Purchase Invoice' AND pi.name = gle.voucher_no
 		WHERE gle.account IN %(accounts)s
 		  AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
 		  AND gle.is_cancelled = 0
@@ -267,11 +304,15 @@ def _transactions(account_names, from_date, to_date):
 		as_dict=True,
 	)
 
+	party_names = _party_name_map(rows)
+
 	out = {}
 	for r in rows:
 		# Party name for the Paid:/Recd: line — the JE's "Paid to" when present,
 		# else the GL Entry party (supplier/customer), else the contra account.
-		party_name = r.custom_paid_to or r.party or r.against or ""
+		against_display = _replace_party_ids(r.against, party_names)
+		party_display = party_names.get(r.party, r.party)
+		party_name = r.custom_paid_to or party_display or against_display or ""
 		if party_name:
 			is_receipt = bool(flt(r.debit))
 			party_line = "{0} : {1}".format(_("Recd") if is_receipt else _("Paid"), party_name)
@@ -288,7 +329,7 @@ def _transactions(account_names, from_date, to_date):
 		out.setdefault(r.account, []).append({
 			"posting_date": r.posting_date,
 			"voucher_no": r.voucher_no,
-			"against": r.against,
+			"against": against_display,
 			"debit": r.debit,
 			"credit": r.credit,
 			"party_line": party_line,
