@@ -27,17 +27,24 @@ NOT a year register — it is an invoice-number-contains-"79" search export
 all 1478 sharing the identical timestamp 2024-03-03 15:19:10 (one bulk action
 fanned out, not real prints).
 
-Two defenses handle that file (and protect any future bad export):
+That batch event IS counted — a batch reprint produces real sheets, and for a
+copy-number counter one sheet too many is safer than one too few (it can never
+reuse a copy number). Pass drop_batch_events=True to exclude it instead; either
+way the summary reports what was found.
 
-  - phantom events are dropped automatically: any exact timestamp shared by
-    more than PHANTOM_SHARE_LIMIT event rows is treated as a bulk artifact,
-    and those rows are excluded from the totals (reported in the summary);
-  - only_prefix limits the import to invoice numbers starting with a prefix,
-    so the old-format invoices can be imported from the mixed file without
-    touching the /80-81 ones already covered by the real 80-81 register.
+Three knobs handle that file (and any future mixed export):
+
+  - mode: "add" (default) adds this register's sheets to an existing counter;
+    "max" raises the counter to this register's total instead. Use "max" when
+    the register OVERLAPS one already imported — the 1478-row file shares 580
+    invoices with the 80-81 register, and adding would count those twice.
+    "max" is also idempotent, so re-running it is harmless;
+  - only_prefix limits the import to invoice numbers starting with a prefix
+    (e.g. "NGI/" for the old-format invoices only);
+  - drop_batch_events excludes batch events from the totals.
 
 DRY RUN unless commit=True — always inspect the dry-run summary first.
-NOT idempotent: running commit=True twice adds the legacy sheets twice.
+In mode="add", running commit=True twice adds the legacy sheets twice.
 
 Usage (from the bench directory):
 
@@ -50,10 +57,10 @@ Usage (from the bench directory):
     avinashgroup_app.legacy_print_import.import_legacy_print_counts.run \
     --kwargs "{'commit': True}"
 
-  # old-format invoices from the mixed "79.80" search export:
+  # the mixed "79.80" search export, AFTER the 80-81 register is in:
   bench --site <site> execute \
     avinashgroup_app.legacy_print_import.import_legacy_print_counts.run \
-    --kwargs "{'xls_path': '<folder>/79.80 NGI.xls', 'only_prefix': 'NGI/'}"
+    --kwargs "{'xls_path': '<folder>/79.80 NGI.xls', 'mode': 'max'}"
 """
 
 import json
@@ -68,13 +75,16 @@ INVOICE_HEADER = "Invoice Number"
 COPIES_HEADER = "No of Copy Printed"
 DATE_HEADER = "Date & Time of Print"
 
-# An exact print timestamp legitimately repeats only within one batch of
-# copies; the same instant on more rows than this across the register is a
-# bulk-action artifact (the "79.80" file has one instant on 1478 invoices).
-PHANTOM_SHARE_LIMIT = 3
+# An exact print timestamp that repeats on more rows than this across the
+# register is a batch event: one action logged against every invoice at the
+# same instant (the "79.80" file has one such instant on 1478 invoices).
+# Counted like any other print unless drop_batch_events is set — a batch
+# reprint produces real sheets, and for a copy-number counter an extra sheet
+# is the safe direction to err in.
+BATCH_SHARE_LIMIT = 3
 
 
-def parse_register(xls_path, phantom_info=None):
+def parse_register(xls_path, drop_batch_events=False, info=None):
     """Old invoice number -> total sheets printed, from a register export.
 
     Layout (both the 19- and 11-column exports): a header row names the
@@ -82,9 +92,9 @@ def parse_register(xls_path, phantom_info=None):
     and each print event follows on its own row with the copy count in the
     "No of Copy Printed" column.
 
-    Event rows whose exact timestamp is shared by more than
-    PHANTOM_SHARE_LIMIT rows are dropped as bulk artifacts; pass a dict as
-    phantom_info to receive what was dropped.
+    Batch events (an exact timestamp shared by more than BATCH_SHARE_LIMIT
+    rows) are reported in the info dict and, with drop_batch_events, excluded
+    from the totals.
     """
     import xlrd
 
@@ -121,33 +131,37 @@ def parse_register(xls_path, phantom_info=None):
             if ts:
                 timestamp_rows[ts] = timestamp_rows.get(ts, 0) + 1
 
-    phantom_ts = {ts for ts, n in timestamp_rows.items() if n > PHANTOM_SHARE_LIMIT}
+    batch_ts = {ts for ts, n in timestamp_rows.items() if n > BATCH_SHARE_LIMIT}
 
     totals = {}
-    dropped_events = dropped_sheets = 0
+    batch_events = batch_sheets = 0
     for invoice_no, copies, ts in events:
         totals.setdefault(invoice_no, 0)
-        if ts in phantom_ts:
-            dropped_events += 1
-            dropped_sheets += copies
-            continue
+        if ts in batch_ts:
+            batch_events += 1
+            batch_sheets += copies
+            if drop_batch_events:
+                continue
         totals[invoice_no] += copies
 
-    if phantom_info is not None:
+    if info is not None:
         from datetime import datetime, timedelta
 
-        phantom_info["phantom_timestamps"] = [
-            str(datetime(1899, 12, 30) + timedelta(days=ts)) for ts in sorted(phantom_ts)
+        info["batch_timestamps"] = [
+            str(datetime(1899, 12, 30) + timedelta(days=ts)) for ts in sorted(batch_ts)
         ]
-        phantom_info["phantom_events_dropped"] = dropped_events
-        phantom_info["phantom_sheets_dropped"] = dropped_sheets
+        info["batch_events"] = batch_events
+        info["batch_sheets"] = batch_sheets
+        info["batch_events_dropped"] = drop_batch_events
     return totals
 
 
-def run(xls_path=None, commit=False, only_prefix=None):
+def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, mode="add"):
+    if mode not in ("add", "max"):
+        frappe.throw("mode must be 'add' or 'max'")
     xls_path = xls_path or DEFAULT_XLS
-    phantom_info = {}
-    totals = parse_register(xls_path, phantom_info=phantom_info)
+    info = {}
+    totals = parse_register(xls_path, drop_batch_events=drop_batch_events, info=info)
     skipped_by_prefix = 0
     if only_prefix:
         skipped_by_prefix = sum(1 for no in totals if not no.startswith(only_prefix))
@@ -177,13 +191,17 @@ def run(xls_path=None, commit=False, only_prefix=None):
         if not si:
             unmatched.append(old_no)
         elif si in existing:
+            was = existing[si]
+            to = max(was, sheets) if mode == "max" else was + sheets
+            if to == was:  # 'max' and the counter already covers this register
+                continue
             updates.append(
                 {
                     "invoice": si,
                     "old_no": old_no,
-                    "from": existing[si],
-                    "add": sheets,
-                    "to": existing[si] + sheets,
+                    "from": was,
+                    "add": to - was,
+                    "to": to,
                 }
             )
         else:
@@ -210,9 +228,10 @@ def run(xls_path=None, commit=False, only_prefix=None):
     result = {
         "dry_run": not commit,
         "xls_path": xls_path,
+        "mode": mode,
         "only_prefix": only_prefix,
         "skipped_by_prefix": skipped_by_prefix,
-        **phantom_info,
+        **info,
         "excel_invoices": len(totals),
         ("inserted" if commit else "would_insert"): len(inserts),
         ("updated" if commit else "would_update"): len(updates),
@@ -226,6 +245,9 @@ def run(xls_path=None, commit=False, only_prefix=None):
         result["warning"] = (
             "updates ADD legacy sheets to existing counters - if this import "
             "already ran once, committing again will double-count"
+            if mode == "add"
+            else "updates RAISE counters to this register's total; re-running "
+            "changes nothing"
         )
     print(json.dumps(result, indent=1, default=str))
     return result
