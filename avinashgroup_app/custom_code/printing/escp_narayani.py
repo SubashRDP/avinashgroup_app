@@ -48,27 +48,29 @@ Y0_MM = -17.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
 # number on a real Grishma form.
 POS = {
 	"copy_label":   (118.5, 44.0),  # y = same height as invoice_date per user 2026-07-30 (was 40)
-	"invoice_no":   (39.0, 31.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
+	"invoice_no":   (39.0, 34.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 39.0),  # +2mm down per user 2026-07-30 (was 37). x=198 empirical rightmost: at x>=200 the
+	"trans_date":   (198.0, 34.0),  # +2mm down per user 2026-07-30 (was 37). x=198 empirical rightmost: at x>=200 the
 	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 44.0),  # -2mm up per user 2026-07-30 (was 46); same column as trans date
+	"invoice_date": (198.0, 41.0),  # -2mm up per user 2026-07-30 (was 46); same column as trans date
 	"do_no":        (193.0, 41.5),
-	"customer":     (58.0, 54.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
-	"address":      (58.0, 59.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
-	"pan":          (58.0, 65.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
-	"body_top":     (0, 86.0),   # +4mm then +2mm more down per user 2026-07-30 (was 80); first item row
+	"customer":     (58.0, 51.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
+	"address":      (58.0, 56.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
+	"pan":          (58.0, 64.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
+	"body_top":     (0, 83.0),   # +4mm then +2mm more down per user 2026-07-30 (was 80); first item row
 	"row_h":        4.8,
 	"words":        (31.0, 102.0),  # amount in words; y set == y_taxable so line 1 lands on the taxable row per user 2026-07-30 (was 95.1). Keep equal to y_taxable if that moves.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
-	"c_sno":        17.0,    # +2mm per user
+	"c_sno":        15.1,    # matched to NGI's c_sno per user 2026-08-03 (was 17.0).
+	                         # Same value as escp_invoice.py, and reachable on the
+	                         # ESC/P path too: X0_MM is 12.0 on both, so nothing clamps.
 	"c_hs":         30.0,    # HS code column, no border; value prints ON each item row
 	                         # (vertically follows the item), same x as the heading below
 	"c_part":       54.0,    # particulars: 2cm right for HS code, then +3mm, +2mm more per user
 	"hs_label":     (30.0, 74.0),  # "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
-	"r_qty":        148.0,   # +4mm right per user 2026-07-30 (was 144)
-	"r_rate":       181.0,   # +4mm right per user 2026-07-30 (was 177)
+	"r_qty":        152.0,   # +4mm right per user 2026-07-30 (was 144)
+	"r_rate":       184.0,   # +4mm right per user 2026-07-30 (was 177)
 	"r_amt":        212.0,   # +2mm right per user 2026-07-30 (was 210). Still <= 215.4mm head limit (X0+203.2)
 	# totals rows: right-aligned numerics at r_amt
 	"y_disc":       96.0,   # +3mm down per user 2026-07-30 (was 93)
