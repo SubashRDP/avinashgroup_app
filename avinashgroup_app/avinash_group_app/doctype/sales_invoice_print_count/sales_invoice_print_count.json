@@ -11,19 +11,20 @@
  ],
  "fields": [
   {
+   "description": "Fixed once saved - the record is named after the invoice. To move a count to a different invoice, delete this row and add a new one.",
    "fieldname": "sales_invoice",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Sales Invoice",
    "options": "Sales Invoice",
-   "read_only": 1,
+   "read_only_depends_on": "eval:!doc.__islocal",
    "reqd": 1,
-   "unique": 1,
-   "search_index": 1
+   "search_index": 1,
+   "unique": 1
   },
   {
-   "description": "Branch-wise invoice number (custom_branch_name) at the last print.",
+   "description": "Branch-wise invoice number, filled in from the invoice.",
    "fieldname": "branch_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -32,37 +33,42 @@
    "read_only": 1
   },
   {
-   "description": "Number of times this invoice has actually been printed or downloaded (incremented on every real print; drives the IRD copy title).",
+   "description": "Sheets printed for this invoice so far. The next print is numbered from here, so raising it skips copy numbers and lowering it repeats them. Every change is kept in the document's version history.",
    "fieldname": "print_count",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Print Count",
-   "read_only": 1
+   "non_negative": 1
   }
  ],
- "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-07-15 11:30:00.000000",
+ "modified": "2026-08-03 16:30:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Sales Invoice Print Count",
  "owner": "Administrator",
  "permissions": [
   {
+   "create": 1,
    "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager"
+   "role": "System Manager",
+   "write": 1
   },
   {
+   "create": 1,
+   "delete": 1,
    "export": 1,
+   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Accounts Manager"
+   "role": "Accounts Manager",
+   "write": 1
   },
   {
    "export": 1,
@@ -79,5 +85,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }
