@@ -78,6 +78,7 @@ def before_validate_salesinvoice(doc, method=None):
     Before-validate hook for Sales Invoice
     """
     apply_return_qty_sign(doc)
+    allow_zero_qty_rows(doc)
 
 
 def ensure_vat_apply_on_defaults(doc):
@@ -250,6 +251,44 @@ def apply_return_qty_sign(doc):
 
     for item in doc.items:
         item.qty = -abs(flt(getattr(item, "qty", 0)) or 0)
+
+
+def allow_zero_qty_rows(doc):
+    """
+    Let a Sales Invoice carry qty=0 item rows when the setting permits it.
+
+    ERPNext throws InvalidQtyError from validate_qty_is_not_zero (accounts_controller)
+    on any zero-qty row, unless doc.flags.allow_zero_qty is set. Core only exempts
+    returns (is_return) and rate adjustments (is_debit_note); a debit note is the
+    wrong shape for a plain zero row, because with qty=0 it bills item.amount = rate,
+    inventing revenue on a row that is meant to carry none.
+
+    Gate: Selling Settings -> "Allow Sales Invoice with Zero Quantity"
+    (custom_allow_zero_qty_in_sales_invoice), the missing sibling of ERPNext's own
+    allow_zero_qty_in_quotation / _sales_order. Off by default: on the desk a qty-0
+    row is nearly always a typo, and a zero-value invoice that gets submitted is
+    reported to IRD like any other.
+
+    frappe.flags.allow_zero_qty_si stays as a per-session override so a one-off bulk
+    load can run without flipping a site-wide setting (and without leaving it on).
+
+    Read through get_cached_value, not db.get_single_value — this runs on every save
+    of every invoice, including six-figure bulk imports.
+
+    Runs on before_validate, so the flag is re-set on every save AND every submit —
+    core re-runs validate on the submit path too.
+    """
+    if getattr(doc, "doctype", None) != "Sales Invoice":
+        return
+
+    if frappe.flags.get("allow_zero_qty_si"):
+        doc.flags.allow_zero_qty = True
+        return
+
+    if frappe.get_cached_value(
+        "Selling Settings", "Selling Settings", "custom_allow_zero_qty_in_sales_invoice"
+    ):
+        doc.flags.allow_zero_qty = True
 
 
 def update_taxes_table(doc):

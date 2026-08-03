@@ -431,7 +431,19 @@ fixtures = [
     # field with the code so every site (new installs, prod, demo) has it on migrate.
     {
         "dt": "Custom Field",
-        "filters": {"name": ["in", ["Payment Entry-custom_cheque_bounce"]]},
+        "filters": {
+            "name": [
+                "in",
+                [
+                    "Payment Entry-custom_cheque_bounce",
+                    # Selling Settings toggle that lets Sales Invoices carry qty=0
+                    # rows (ERPNext ships this checkbox for Quotation/Sales Order
+                    # but not Sales Invoice). Read by
+                    # salesinvoice_taxes.allow_zero_qty_rows.
+                    "Selling Settings-custom_allow_zero_qty_in_sales_invoice",
+                ],
+            ]
+        },
     },
 ]
 

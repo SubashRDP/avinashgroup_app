@@ -46,3 +46,5 @@ avinashgroup_app.patches.add_version_ref_doctype_creation_index
 avinashgroup_app.patches.rate_fields_precision_5
 avinashgroup_app.patches.revert_nonrate_currency_precision
 avinashgroup_app.patches.revert_custom_field_precision_2
+
+avinashgroup_app.patches.allow_zero_qty_in_sales_invoice_setting
