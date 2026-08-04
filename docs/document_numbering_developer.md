@@ -201,6 +201,21 @@ never be silently renumbered.
 The **voucher number** (`set_custom_branch_name`) follows the same rule, without
 needing the flag: a value arriving from outside — import row, REST, script — is
 stored **as given** and never re-derived, and a duplicate within its scope throws.
+
+Measured through frappe's real importer (Payment Entry, `avinas`, 2026-08-04) with
+four rows where the second duplicated the first: **the duplicate row failed alone.**
+Rows 3 and 4 imported normally and the name series continued without a gap
+(`-00001`, then `-00002`, `-00003`). A rejected row does NOT poison the rest of the
+batch: the `tabSeries` cascade in `sales_invoice_bulk_import.md` §4 needs the
+counter to be **already behind `max(name)`**, and a rolled-back row returns the
+counter to a value still at or above the committed maximum, so it cannot create
+that state by itself. The operator sees, per row, in the import log:
+
+    Number RTN/… is already used by NGG-PAYREC-83/84-00001 in <company> / 83/84.
+    Correct the number in the source data.
+
+Not covered by that run: `Submit After Import = 1`, which live uses. The throw
+happens during validate, before submit, so submission should be unaffected.
 It used to be cleared and replaced with a freshly generated number whenever the
 value was already held by another document, which silently discarded 417 imported
 NGK return numbers on 2026-08-03 (their legacy `RTN/…` numbers collided with NGI's
