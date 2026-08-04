@@ -1789,6 +1789,33 @@ class TestDocumentNumbering(FrappeTestCase):
         ns.set_custom_branch_name(b)
         self.assertEqual(b.get(target), value)
 
+    def test_74b_legacy_number_may_repeat_in_another_fiscal_year(self):
+        # The legacy counters restarted every year: NGK holds NGK/000001 in
+        # 77/78 AND again in 79/80. Same company, same number, different year is
+        # therefore NOT a duplicate — 362 rows of a pending import depend on it.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        prev = frappe.get_all(
+            "Fiscal Year", filters={"year_end_date": ["<", self.pdate]},
+            fields=["name", "year_start_date"], order_by="year_end_date desc", limit=1)
+        self._require(bool(prev), "needs an earlier fiscal year")
+        target = self.scoped_target
+        self._legacy_passthrough_rule(target)
+        value = "RTN/" + frappe.generate_hash(length=6)
+
+        a = self._insert_je(**{target: value})                      # current year
+        self.assertEqual(a.get(target), value)
+
+        # same company, same number, EARLIER fiscal year: kept
+        b = self._je(**{"posting_date": prev[0].year_start_date, target: value})
+        ns.set_custom_branch_name(b)
+        self.assertEqual(b.get(target), value)
+
+        # and the same year still collides
+        c = self._je(**{target: value})
+        with self.assertRaises(frappe.ValidationError):
+            ns.set_custom_branch_name(c)
+
     def test_75_duplicate_in_same_company_throws(self):
         # Inside ONE company the number is still unique — and a duplicate is
         # REJECTED, never replaced by a generated number.

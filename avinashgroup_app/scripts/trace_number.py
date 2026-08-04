@@ -164,7 +164,7 @@ def _classify(doc, field, value, rules):
         print("         rule '{0}' is counterless here (legacy window / pass-through),".format(
             rule["name"]))
         print("         which is exactly the config that keeps imported numbers.")
-    _report_scope(doc, field, value)
+    _report_scope(doc, field, value, rule)
     return {"verdict": "supplied", "rule": rule["name"]}
 
 
@@ -239,12 +239,20 @@ def _report_discarded_input(doc, field, value, rule):
             print("         group-wide match and generated a new one — this is that bug.")
 
 
-def _report_scope(doc, field, value):
-    scope = ns._number_scope_filters(doc, field)
-    print("  " + _IDENT.format("scope") + (
-        "per company ({0})".format(doc.get("company")) if scope.get("company")
-        else "group-wide (field is DB-unique, or no company field)"))
-    other = ns._other_doc_with_number(doc, field)
+def _report_scope(doc, field, value, rule=None):
+    scope = ns._number_scope_filters(doc, field, rule)
+    if not scope.get("company"):
+        print("  " + _IDENT.format("scope") +
+              "group-wide (field is DB-unique, or no company field)")
+    elif len(scope) > 1:
+        fy = ns.get_fiscal_year_from_date(
+            ns._rule_date(doc, rule) if rule else ns._doc_date(doc))
+        print("  " + _IDENT.format("scope") +
+              "per company + fiscal year ({0} / {1})".format(doc.get("company"), fy))
+    else:
+        print("  " + _IDENT.format("scope") +
+              "per company ({0}) — fiscal year unresolved".format(doc.get("company")))
+    other = ns._other_doc_with_number(doc, field, rule)
     if other:
         print("  " + _IDENT.format("clash") + "{0} holds the same value IN SCOPE".format(other))
 

@@ -2467,11 +2467,21 @@ def _rule_dict_from_config(cfg):
     }
 
 
-def _number_scope_filters(doc, target):
+def _number_scope_filters(doc, target, rule=None):
     """Extra filters restricting a number-uniqueness check to the document's own
-    COMPANY. A legacy number is only unique within the company that issued it —
-    the old ERPs numbered each company independently, so NGI's RTN/000001 and
-    NGK's RTN/000001 are different documents and both must be storable.
+    COMPANY and FISCAL YEAR — the grain the legacy data actually uses.
+
+    The old ERPs numbered each company independently AND restarted the counter
+    every year, so the same string legitimately names several documents:
+    NGI's RTN/000001 is not NGK's, and NGK holds NGK/000001 in both 77/78 and
+    79/80. Both must be storable; only a repeat inside one company-year is a
+    duplicate.
+
+    The year is matched as a DATE RANGE on the rule's date field, not on the
+    stored custom_fiscal_year column, which is empty on older rows — same
+    approach as _group_by_scope. When the year cannot be resolved (no date, or
+    no Fiscal Year row spans it) the scope falls back to company alone rather
+    than to nothing.
 
     Exception: when the target field carries a DB UNIQUE index the database
     enforces group-wide uniqueness anyway (custom_name on Journal Entry /
@@ -2484,18 +2494,41 @@ def _number_scope_filters(doc, target):
     df = doc.meta.get_field(target)
     if df and df.get("unique"):
         return {}
-    if doc.meta.has_field("company") and doc.get("company"):
-        return {"company": doc.get("company")}
-    return {}
+    if not (doc.meta.has_field("company") and doc.get("company")):
+        return {}
+
+    filters = {"company": doc.get("company")}
+    date_col, bounds = _fiscal_year_bounds(doc, rule)
+    if date_col and bounds:
+        filters[date_col] = ["between", [bounds[0], bounds[1]]]
+    return filters
 
 
-def _number_belongs_to_other_doc(doc, target):
+def _fiscal_year_bounds(doc, rule=None):
+    """(date column, (year_start, year_end)) for the document's fiscal year, or
+    (None, None) when it cannot be resolved. The column is the rule's Document
+    Date Field when it has one, else the posting/transaction date."""
+    date_col = _safe_col((rule or {}).get("date_field"))
+    if not (date_col and doc.meta.has_field(date_col)):
+        date_col = "posting_date" if doc.meta.has_field("posting_date") else (
+            "transaction_date" if doc.meta.has_field("transaction_date") else None)
+    if not date_col:
+        return None, None
+    fy = get_fiscal_year_from_date(doc.get(date_col))
+    if not fy:
+        return None, None
+    bounds = frappe.get_cached_value("Fiscal Year", fy,
+                                     ["year_start_date", "year_end_date"])
+    return (date_col, bounds) if bounds else (None, None)
+
+
+def _number_belongs_to_other_doc(doc, target, rule=None):
     """True if the target field holds a number already used by another document
     IN THE SAME UNIQUENESS SCOPE (see _number_scope_filters)."""
-    return bool(_other_doc_with_number(doc, target))
+    return bool(_other_doc_with_number(doc, target, rule))
 
 
-def _other_doc_with_number(doc, target):
+def _other_doc_with_number(doc, target, rule=None):
     """Name of the other document holding this number, or None.
 
     Cancelled documents (docstatus = 2) are ignored so an amendment can reuse
@@ -2506,7 +2539,7 @@ def _other_doc_with_number(doc, target):
         return None
 
     filters = {target: value, "docstatus": ["<", 2]}
-    filters.update(_number_scope_filters(doc, target))
+    filters.update(_number_scope_filters(doc, target, rule))
     if doc.name:
         filters["name"] = ["!=", doc.name]
 
@@ -2539,11 +2572,15 @@ def _validate_unique_number(doc, target, rule=None):
     if not value or value == doc.name:
         return
 
-    existing = _other_doc_with_number(doc, target)
+    existing = _other_doc_with_number(doc, target, rule)
     if existing:
+        scope_filters = _number_scope_filters(doc, target, rule)
         scope = ""
-        if _number_scope_filters(doc, target).get("company"):
+        if scope_filters.get("company"):
             scope = f" in {doc.get('company')}"
+            fy = get_fiscal_year_from_date(_rule_date(doc, rule) if rule else _doc_date(doc))
+            if fy and len(scope_filters) > 1:
+                scope += f" / {fy}"
         frappe.throw(
             f"Number {value} is already used by {existing}{scope}."
             f"{_duplicate_number_hint(doc, rule)}",
@@ -2676,7 +2713,7 @@ def set_custom_branch_name(doc):
         number = _build_from_segments(doc, rule)
         if number:
             doc.set(target, number)
-            if _number_belongs_to_other_doc(doc, target):
+            if _number_belongs_to_other_doc(doc, target, rule):
                 # A FRESH draw can only collide when the counter lags numbers
                 # stored behind its back (raw-SQL write, restored backup) and
                 # the fast path skipped the healing scan. Rescan and redraw

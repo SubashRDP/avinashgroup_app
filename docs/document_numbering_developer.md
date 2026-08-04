@@ -132,10 +132,20 @@ silent data corruption. Corollary: blank names must be `None`, never `''`
 (multiple NULLs are legal under a unique index; two `''` are not).
 
 **Uniqueness SCOPE (`_number_scope_filters`).** A voucher number is unique **per
-company**, not group-wide: the old ERPs numbered each company independently, so
-NGI's `RTN/000001` and NGK's `RTN/000001` are different documents and both must be
-storable. `_other_doc_with_number` / `_validate_unique_number` therefore filter by
-`company`.
+company per fiscal year**, not group-wide — the grain the legacy data actually
+uses. The old ERPs numbered each company independently *and restarted the counter
+every year*: NGI's `RTN/000001` is not NGK's, and NGK holds `NGK/000001` in both
+77/78 and 79/80. All of those must be storable; only a repeat inside one
+company-year is a duplicate. `_other_doc_with_number` /
+`_validate_unique_number` therefore filter by `company` plus a **date range** for
+the fiscal year — the range, not the stored `custom_fiscal_year` column, which is
+empty on older rows (same approach as `_group_by_scope`). An unresolvable year
+falls back to company alone, never to nothing.
+
+Watch for the shape trap: FY 78/79's NGK numbers are space-padded (`NGK/     1`)
+while 77/78 and 79/80 are zero-padded (`NGK/000001`). Different strings, so 78/79
+never collided — the padding, not the scope, is why the bug surfaced only on
+returns.
 
 Exception — a target field that carries a **DB unique index** (`custom_name` on
 PE/JE/PI/PR) stays group-wide: the database enforces group-wide uniqueness

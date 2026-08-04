@@ -27,10 +27,14 @@ import frappe
 
 # The damage is identifiable by shape: a generated number (ABBR-CODE-nnnnnn-FY)
 # on a document that also carries a legacy number in custom_fact_numbering.
-PATTERN = "%-SRTN-______-%"
+# REGEXP, not a LIKE on '%-SRTN-______-%': returns are what got hit on
+# 2026-08-03, but a normal invoice (SB) renumbered the same way must not be
+# missed. A legitimately generated number is excluded by the two conditions
+# below, not by the shape — it has no custom_fact_numbering to differ from.
+PATTERN = r"^[A-Za-z]+-[A-Za-z]+-[0-9]{4,}-"
 
 WHERE = """
-    custom_branch_name LIKE %(pattern)s
+    custom_branch_name REGEXP %(pattern)s
     AND IFNULL(custom_fact_numbering, '') != ''
     AND custom_branch_name != custom_fact_numbering
 """
