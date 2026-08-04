@@ -48,3 +48,5 @@ avinashgroup_app.patches.revert_nonrate_currency_precision
 avinashgroup_app.patches.revert_custom_field_precision_2
 
 avinashgroup_app.patches.allow_zero_qty_in_sales_invoice_setting
+
+avinashgroup_app.patches.sparrow_sms_token_as_data
