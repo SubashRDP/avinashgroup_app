@@ -6,7 +6,16 @@
 The old NGI billing software exports a "Sale Invoice Register" (.xls) listing,
 per invoice, every print event with "No of Copy Printed". The migration stored
 the old software's invoice number (e.g. NGI000001/82-83) in the Sales Invoice's
-custom_branch_name, so each register row maps to exactly one migrated invoice.
+custom_branch_name.
+
+That number identifies one invoice only within a COMPANY and a FISCAL YEAR — the
+old ERPs numbered each company independently and restarted the counter every year
+(NGK holds NGK/000001 in both 77/78 and 79/80). The NGI register format embeds
+both (the NGI prefix and the /82-83 suffix), so its rows do resolve uniquely; a
+register whose numbers carry neither does not. Pass company= to narrow the
+lookup. Any register number that still matches several invoices is reported under
+ambiguous_register_rows and imported for NONE of them, rather than crediting the
+sheets to whichever invoice the scan happened to return last.
 
 Per invoice this sums the copies over all its print events (the old software
 counted the first print as 2 — the TAX INVOICE + INVOICE pair — same sheet
@@ -156,7 +165,8 @@ def parse_register(xls_path, drop_batch_events=False, info=None):
     return totals
 
 
-def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, mode="add"):
+def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, mode="add",
+        company=None):
     if mode not in ("add", "max"):
         frappe.throw("mode must be 'add' or 'max'")
     xls_path = xls_path or DEFAULT_XLS
@@ -167,14 +177,29 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         skipped_by_prefix = sum(1 for no in totals if not no.startswith(only_prefix))
         totals = {no: n for no, n in totals.items() if no.startswith(only_prefix)}
 
-    # old software invoice number (stored in custom_branch_name) -> SI name
-    mapping = {
-        (old_no or "").strip(): name
-        for old_no, name in frappe.db.sql(
-            "SELECT custom_branch_name, name FROM `tabSales Invoice` "
-            "WHERE IFNULL(custom_branch_name, '') != ''"
-        )
-    }
+    # old software invoice number (stored in custom_branch_name) -> SI name.
+    #
+    # The number is only unique PER COMPANY PER FISCAL YEAR — the old ERPs
+    # numbered each company independently and restarted every year (NGK holds
+    # NGK/000001 in both 77/78 and 79/80). NGI's register format embeds the year
+    # (NGI000001/82-83) and the company (the NGI prefix), which is why a bare
+    # dict worked for it; a register whose numbers carry neither can match more
+    # than one invoice. Pass company= to narrow the lookup, and any number that
+    # STILL matches several invoices is reported as ambiguous and skipped —
+    # never resolved by guessing, which a plain dict does silently by keeping
+    # whichever row the scan returned last.
+    rows = frappe.db.sql(
+        "SELECT custom_branch_name, name, company FROM `tabSales Invoice` "
+        "WHERE IFNULL(custom_branch_name, '') != ''"
+        + (" AND company = %s" if company else ""),
+        (company,) if company else (),
+    )
+    holders = {}
+    for old_no, name, si_company in rows:
+        holders.setdefault((old_no or "").strip(), []).append(
+            "{0} ({1})".format(name, si_company))
+    mapping = {k: v[0].split(" (")[0] for k, v in holders.items() if len(v) == 1}
+    ambiguous = {k: v for k, v in holders.items() if len(v) > 1}
 
     existing = {
         r.name: cint(r.print_count)
@@ -183,12 +208,17 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         )
     }
 
-    inserts, updates, unmatched = [], [], []
+    inserts, updates, unmatched, ambiguous_hits = [], [], [], []
     for old_no, sheets in totals.items():
         if not sheets:
             continue
         si = mapping.get(old_no)
-        if not si:
+        if not si and old_no in ambiguous:
+            # several invoices hold this number: counting it would credit sheets
+            # to an arbitrary one. Report it and import nothing for this row.
+            ambiguous_hits.append({"old_no": old_no, "sheets": sheets,
+                                   "candidates": ambiguous[old_no][:5]})
+        elif not si:
             unmatched.append(old_no)
         elif si in existing:
             was = existing[si]
@@ -231,15 +261,26 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         "mode": mode,
         "only_prefix": only_prefix,
         "skipped_by_prefix": skipped_by_prefix,
+        "company": company or "(all companies)",
         **info,
         "excel_invoices": len(totals),
         ("inserted" if commit else "would_insert"): len(inserts),
         ("updated" if commit else "would_update"): len(updates),
         "unmatched": len(unmatched),
         "unmatched_invoices": unmatched[:50],
+        "ambiguous_numbers_in_db": len(ambiguous),
+        "ambiguous_register_rows": len(ambiguous_hits),
+        "ambiguous_detail": ambiguous_hits[:20],
         "total_sheets": sum(r["print_count"] for r in inserts)
         + sum(r["add"] for r in updates),
     }
+    if ambiguous_hits:
+        result["ambiguous_warning"] = (
+            "{0} register row(s) name a number held by SEVERAL invoices and were "
+            "SKIPPED — the number is only unique per company per fiscal year. "
+            "Re-run with company='<the register's company>', or import a register "
+            "whose numbers carry the year.".format(len(ambiguous_hits))
+        )
     if updates:
         result["update_rows"] = updates[:50]
         result["warning"] = (
