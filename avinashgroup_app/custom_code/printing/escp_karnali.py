@@ -70,7 +70,14 @@ POS = {
 	"pan":          (52.0, 58.0),
 	"body_top":     (0, 75.0),  # first item row 7.5cm from top per user
 	"row_h":        4.8,
-	"words":        (48.0, 90.1),  # wraps at 13.5cm (51 chars at 15cpi), continues down
+	"words":        (48.0, 96.0),  # wraps at 13.5cm (51 chars at 15cpi), continues down.
+	                               # y kept == y_taxable: the ESC/P build() binds the baseline
+	                               # to y_taxable directly (so this y is moot there), but the
+	                               # A5 overlay reads this y, so it must equal y_taxable to
+	                               # land line 1 on the taxable row. Was 90.1 — which is
+	                               # y_disc, the DISCOUNT row, so every line missed a totals
+	                               # row and cost the head its own swing. Update together
+	                               # with y_taxable.
 	# column anchors inside the table (left x for left-aligned, right x for numeric)
 	"c_sno":        15.0,
 	"c_hs":         25.0,
@@ -246,8 +253,19 @@ def build(doc) -> str:
 			_el(el, P["r_amt"], P["y_vat"], _money(vat), right=True)
 			_el(el, P["r_amt"], P["y_grand"], _money(grand), bold=True, right=True)
 			# line width: words box runs 4.8 -> 13.5cm = 87mm = 51 chars at 15cpi
+			# amount in words: line 1 sits on the taxable-amount baseline and line 2
+			# on the 13% VAT baseline, EXACTLY (driven off y_taxable / y_vat, not a
+			# fixed offset), so they line up with those totals rows with zero drift.
+			# Each line then shares the head's pass with the figure beside it — the
+			# old fixed 4.3mm step against a 6mm totals pitch put every line between
+			# rows, costing a swing each, and the till fails on the extra swing.
+			# Further lines continue below at the same taxable->vat pitch. Only the
+			# x of POS["words"] is used now.
+			_word_ys = [P["y_taxable"], P["y_vat"]]
+			_word_pitch = P["y_vat"] - P["y_taxable"]
 			for j, line in enumerate(_wrap(doc.get("in_words") or "", 51)[:4]):
-				_el(el, P["words"][0], P["words"][1] + j * 4.3, line)
+				_wy = _word_ys[j] if j < len(_word_ys) else P["y_vat"] + (j - 1) * _word_pitch
+				_el(el, P["words"][0], _wy, line)
 		out.append(_emit(el))
 		out.append(FF)
 	out.append(f"{ESC}@")
