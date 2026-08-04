@@ -81,6 +81,19 @@ class TestDocumentNumbering(FrappeTestCase):
                     cls.abbr = frappe.get_cached_value("Company", name, "abbr")
                     break
 
+        # A second company, for the per-company uniqueness scope. Only ever set
+        # on unsaved docs, so it needs no accounts of its own.
+        cls.company2 = next(
+            (
+                name
+                for name in frappe.get_all(
+                    "Company", filters={"abbr": ["is", "set"]}, order_by="name", pluck="name"
+                )
+                if name != cls.company
+            ),
+            None,
+        )
+
         cls.branches = frappe.get_all("Branch", pluck="name", limit=2)
         cls.accounts = (
             frappe.get_all(
@@ -93,6 +106,23 @@ class TestDocumentNumbering(FrappeTestCase):
         cls.has_rules = bool(frappe.db.exists("DocType", "Numbering Configuration"))
         if cls.has_rules:
             cls._heal_quarantine_leftovers()
+        # Company-scoped uniqueness only applies to targets WITHOUT a DB unique
+        # index, and custom_name carries one on every audited doctype
+        # (add_unique_custom_name_index). Create a plain non-unique Data field to
+        # act as the target for those tests, and remove it afterwards.
+        cls.scoped_target = "custom_test_voucher_no"
+        cls._created_target_field = None
+        if not frappe.get_meta("Journal Entry").has_field(cls.scoped_target):
+            cf = frappe.get_doc({
+                "doctype": "Custom Field", "dt": "Journal Entry",
+                "fieldname": cls.scoped_target, "label": "Test Voucher No",
+                "fieldtype": "Data",
+            }).insert(ignore_permissions=True)
+            frappe.db.commit()
+            frappe.clear_cache(doctype="Journal Entry")
+            cls._created_target_field = cf.name
+            cls.addClassCleanup(cls._drop_created_target_field)
+
         # The branch-grouping tests need a real custom_branch column on Payment
         # Entry (group-by scope and field locks read doc.meta). Not every site
         # deploys it — create it for the run and remove it afterwards.
@@ -107,6 +137,14 @@ class TestDocumentNumbering(FrappeTestCase):
             frappe.clear_cache(doctype="Payment Entry")
             cls._created_branch_field = cf.name
             cls.addClassCleanup(cls._drop_created_branch_field)
+
+    @classmethod
+    def _drop_created_target_field(cls):
+        if cls._created_target_field and frappe.db.exists("Custom Field", cls._created_target_field):
+            frappe.delete_doc("Custom Field", cls._created_target_field,
+                              force=1, ignore_permissions=True)
+            frappe.db.commit()
+            frappe.clear_cache(doctype="Journal Entry")
 
     @classmethod
     def _drop_created_branch_field(cls):
@@ -249,7 +287,8 @@ class TestDocumentNumbering(FrappeTestCase):
                    target="custom_name", separator="-", auto_document_no=0,
                    document_no_conditions=None, document_no_field=None,
                    duplicate_action=None, normal_docno_mode=None, return_docno_mode=None,
-                   docno_group_by=None, raw_segments=False):
+                   docno_group_by=None, raw_segments=False,
+                   legacy_upto=None, legacy_source_field=None):
         segments = list(extra_segments)
         if not raw_segments:
             segments += [
@@ -266,6 +305,8 @@ class TestDocumentNumbering(FrappeTestCase):
             "return_docno_mode": return_docno_mode or "Auto",
             "document_no_field": document_no_field or "custom_document_no",
             "duplicate_action": duplicate_action or "Throw Error",
+            "legacy_upto": legacy_upto,
+            "legacy_source_field": legacy_source_field,
             "conditions": conditions,
             "document_no_conditions": document_no_conditions or [],
             "docno_group_by": [
@@ -1708,4 +1749,83 @@ class TestDocumentNumbering(FrappeTestCase):
         self._balance(b)
         with self.assertRaises(frappe.ValidationError) as cm:
             b.insert(ignore_permissions=True)
+        self.assertIn("already used", str(cm.exception))
+
+    # ------------------------------------------- 74-76  per-company uniqueness
+    def _legacy_passthrough_rule(self, target):
+        """A rule shaped like the live Sales Invoice one: inside its legacy window
+        the number is COPIED from the target field itself (the "keep the imported
+        number" config), so no counter is involved."""
+        return self._temp_rule(
+            doctype="Journal Entry", target=target, raw_segments=True,
+            legacy_upto=frappe.utils.add_years(self.pdate, 1),
+            legacy_source_field=target,
+            extra_segments=[
+                {"segment_type": "Company Abbr"},
+                {"segment_type": "Number", "number_length": 6},
+                {"segment_type": "Fiscal Year"},
+            ],
+            conditions=[{"field": "custom_p_type", "value": JE_TYPE}],
+        )
+
+    def test_74_legacy_number_may_repeat_in_another_company(self):
+        # The old ERPs numbered each company independently, so the SAME legacy
+        # number can legitimately arrive for two companies (NGI's RTN/000001 and
+        # NGK's RTN/000001 are different invoices). It must be kept verbatim for
+        # both — not treated as a copied number and renumbered, which silently
+        # discarded 417 imported NGK return numbers.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        self._require(bool(self.company2), "needs a second company")
+        target = self.scoped_target
+        self._legacy_passthrough_rule(target)
+        value = "RTN/" + frappe.generate_hash(length=6)
+
+        a = self._insert_je(**{target: value})
+        self.assertEqual(a.get(target), value)                      # kept as given
+
+        # same number, other company: kept, no throw, no renumber
+        b = self._je(**{"company": self.company2, target: value})
+        ns.set_custom_branch_name(b)
+        self.assertEqual(b.get(target), value)
+
+    def test_75_duplicate_in_same_company_throws(self):
+        # Inside ONE company the number is still unique — and a duplicate is
+        # REJECTED, never replaced by a generated number.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        target = self.scoped_target
+        self._legacy_passthrough_rule(target)
+        value = "RTN/" + frappe.generate_hash(length=6)
+
+        a = self._insert_je(**{target: value})
+
+        b = self._je(**{target: value})
+        with self.assertRaises(frappe.ValidationError) as cm:
+            ns.set_custom_branch_name(b)
+        self.assertIn("already used", str(cm.exception))
+        self.assertIn(a.name, str(cm.exception))
+        self.assertEqual(b.get(target), value)     # NOT silently renumbered
+
+    def test_76_globally_unique_target_stays_group_wide(self):
+        # custom_name carries a DB UNIQUE index (add_unique_custom_name_index),
+        # so the database enforces group-wide uniqueness whatever Python thinks.
+        # The check must stay group-wide there — scoping it below the constraint
+        # would only turn a readable error into an IntegrityError.
+        self._require(self.has_rules, "Numbering Configuration not installed")
+        self._require(len(self.accounts) >= 2, "needs two accounts")
+        self._require(bool(self.company2), "needs a second company")
+        self._require(
+            bool(frappe.get_meta("Journal Entry").get_field("custom_name").get("unique")),
+            "custom_name is not DB-unique on this site",
+        )
+        self._legacy_passthrough_rule("custom_name")
+        value = "RTN/" + frappe.generate_hash(length=6)
+
+        a = self._insert_je(custom_name=value)
+        self.assertEqual(a.custom_name, value)
+
+        b = self._je(company=self.company2, custom_name=value)
+        with self.assertRaises(frappe.ValidationError) as cm:
+            ns.set_custom_branch_name(b)
         self.assertIn("already used", str(cm.exception))

@@ -1780,9 +1780,10 @@ def validate_custom_name_unique(doc):
         return
 
     if _engine_owns_field(doc, "custom_name"):
-        # engine-owned Voucher No.: set_custom_branch_name first clears
-        # numbers carried over by copy paths, THEN runs its own uniqueness
-        # guard — throwing here would reject the doc before that cleanup.
+        # engine-owned Voucher No.: set_custom_branch_name runs its own
+        # uniqueness guard, which knows the number's scope (per company unless
+        # the field is DB-unique) and reports the rule's next free number.
+        # Checking here too would reject on a wider scope with a worse message.
         return
 
     custom_name = getattr(doc, "custom_name", None)
@@ -2466,37 +2467,86 @@ def _rule_dict_from_config(cfg):
     }
 
 
+def _number_scope_filters(doc, target):
+    """Extra filters restricting a number-uniqueness check to the document's own
+    COMPANY. A legacy number is only unique within the company that issued it —
+    the old ERPs numbered each company independently, so NGI's RTN/000001 and
+    NGK's RTN/000001 are different documents and both must be storable.
+
+    Exception: when the target field carries a DB UNIQUE index the database
+    enforces group-wide uniqueness anyway (custom_name on Journal Entry /
+    Payment Entry / Purchase Invoice / Purchase Receipt — see
+    patches/add_unique_custom_name_index.py). Scoping the Python check below the
+    DB constraint would only trade a readable error for an IntegrityError, so
+    those fields stay group-wide. Doctypes without a company field also stay
+    group-wide (unchanged behaviour).
+    """
+    df = doc.meta.get_field(target)
+    if df and df.get("unique"):
+        return {}
+    if doc.meta.has_field("company") and doc.get("company"):
+        return {"company": doc.get("company")}
+    return {}
+
+
 def _number_belongs_to_other_doc(doc, target):
-    """True if the target field holds a number already used by another document."""
-    value = doc.get(target)
-    if not value or value == doc.name:
-        return False
-
-    filters = {target: value, "docstatus": ["<", 2]}
-    if doc.name:
-        filters["name"] = ["!=", doc.name]
-    return bool(frappe.db.get_value(doc.doctype, filters, "name"))
+    """True if the target field holds a number already used by another document
+    IN THE SAME UNIQUENESS SCOPE (see _number_scope_filters)."""
+    return bool(_other_doc_with_number(doc, target))
 
 
-def _validate_unique_number(doc, target):
-    """No two documents of a doctype may share a generated number.
+def _other_doc_with_number(doc, target):
+    """Name of the other document holding this number, or None.
 
     Cancelled documents (docstatus = 2) are ignored so an amendment can reuse
     a freed number, mirroring validate_custom_name_unique above.
     """
     value = doc.get(target)
     if not value or value == doc.name:
-        return
+        return None
 
     filters = {target: value, "docstatus": ["<", 2]}
+    filters.update(_number_scope_filters(doc, target))
     if doc.name:
         filters["name"] = ["!=", doc.name]
 
-    existing = frappe.db.get_value(doc.doctype, filters, "name")
+    return frappe.db.get_value(doc.doctype, filters, "name")
+
+
+def _duplicate_number_hint(doc, rule):
+    """Advice fragment for a duplicate-number error.
+
+    A counter rule can offer the number it would draw next (peeked, nothing
+    reserved). A counterless rule — pass-through, or a document inside the
+    rule's legacy window — has no counter to offer: its number is copied from
+    the source data, so that is where the correction belongs. The Document No.
+    hint (_next_number_hint) is deliberately not used here: it peeks the
+    custom_document_no series, which many doctypes (Sales Invoice) never use.
+    """
+    if not rule or _is_counterless(doc, rule):
+        return " Correct the number in the source data."
+    try:
+        nxt = _build_from_segments(doc, rule, commit_series=False)
+    except Exception:
+        nxt = None
+    hint = f" Next available number is {nxt}." if nxt else ""
+    return hint + " Leave the field empty to get the next number automatically."
+
+
+def _validate_unique_number(doc, target, rule=None):
+    """No two documents of a doctype may share a number within its scope."""
+    value = doc.get(target)
+    if not value or value == doc.name:
+        return
+
+    existing = _other_doc_with_number(doc, target)
     if existing:
+        scope = ""
+        if _number_scope_filters(doc, target).get("company"):
+            scope = f" in {doc.get('company')}"
         frappe.throw(
-            f"Number {value} is already used by {existing}.{_next_number_hint(doc)} "
-            f"Leave the field empty to get the next number automatically.",
+            f"Number {value} is already used by {existing}{scope}."
+            f"{_duplicate_number_hint(doc, rule)}",
             title="Duplicate Document Number",
         )
 
@@ -2589,7 +2639,7 @@ def set_custom_branch_name(doc):
         # the legacy cut-over window — or type). Mirrors _pin_amended_docno,
         # which already pins the Document No. this way.
         if doc.get("amended_from") and _pin_amended_name(doc, target):
-            _validate_unique_number(doc, target)
+            _validate_unique_number(doc, target, rule)
             return
 
         # A STORED number never changes from OUTSIDE: a client/API/import edit
@@ -2603,13 +2653,11 @@ def set_custom_branch_name(doc):
             if stored and doc.get(target) != stored:
                 doc.set(target, stored)
 
-        # A NEW document arriving with another document's number means the
-        # value was carried over by a copy path that bypassed no_copy
-        # (server copy_doc, API, import). Clear it so a fresh number is
-        # generated — new data must never keep an old number.
-        if doc.is_new() and _number_belongs_to_other_doc(doc, target):
-            doc.set(target, None)
-
+        # A number arriving from OUTSIDE (import row, REST, script) is stored as
+        # GIVEN — never re-derived, and never replaced by a generated one. When
+        # it duplicates another document's number the save is rejected below
+        # instead: silently renumbering an import row loses the number the
+        # source data carried, with nothing in the import log to show it.
         if doc.get(target):
             # already numbered (generate once) — but drafts still track their
             # inputs: counterless values (pass-through / legacy copy) follow
@@ -2622,7 +2670,7 @@ def set_custom_branch_name(doc):
                         doc.set(target, fresh)
                 else:
                     _renumber_if_scope_changed(doc, rule, target)
-            _validate_unique_number(doc, target)
+            _validate_unique_number(doc, target, rule)
             return
 
         number = _build_from_segments(doc, rule)
@@ -2637,7 +2685,7 @@ def set_custom_branch_name(doc):
                 healed = _build_from_segments(doc, rule, force_scan=True)
                 if healed:
                     doc.set(target, healed)
-            _validate_unique_number(doc, target)
+            _validate_unique_number(doc, target, rule)
             return
         # rule matched but produced nothing (e.g. empty source field) ->
         # fall through to the next matching rule.

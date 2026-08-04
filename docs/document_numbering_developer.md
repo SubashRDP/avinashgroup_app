@@ -131,6 +131,27 @@ exist). Even a path that evades all Python checks becomes an IntegrityError, not
 silent data corruption. Corollary: blank names must be `None`, never `''`
 (multiple NULLs are legal under a unique index; two `''` are not).
 
+**Uniqueness SCOPE (`_number_scope_filters`).** A voucher number is unique **per
+company**, not group-wide: the old ERPs numbered each company independently, so
+NGI's `RTN/000001` and NGK's `RTN/000001` are different documents and both must be
+storable. `_other_doc_with_number` / `_validate_unique_number` therefore filter by
+`company`.
+
+Exception — a target field that carries a **DB unique index** (`custom_name` on
+PE/JE/PI/PR) stays group-wide: the database enforces group-wide uniqueness
+regardless, so scoping the Python check below the constraint would only trade a
+readable error for an IntegrityError. Doctypes without a `company` field also stay
+group-wide. `custom_branch_name` has no unique index, so Sales Invoice is the
+field this scope actually governs.
+
+Not yet DB-enforced: `custom_branch_name` has only a plain lookup index, so the
+per-company rule rests on the Python check alone and two simultaneous saves can
+still slip through. The durable shape is a composite `UNIQUE (company,
+custom_branch_name)`, created in a patch and re-asserted from the `after_migrate`
+hook — frappe's schema sync drops a unique index whose leading column's field is
+not itself marked `unique` (`frappe/database/schema.py`), which is why ERPNext
+re-creates `Bin`'s `unique_item_warehouse` in `on_doctype_update()`.
+
 **Delete/revert:** `_revert_document_no_series` steps the counter back **only**
 when the deleted doc held the scope's highest number, was auto-drawn (stored
 manual flag = 0), wasn't an amendment, and its stored number still parses into
@@ -166,6 +187,14 @@ consistently forever.
 Import extras: the duplicate policy's bump is **disabled** under
 `frappe.flags.in_import` — a duplicate row must fail visibly in the import log,
 never be silently renumbered.
+
+The **voucher number** (`set_custom_branch_name`) follows the same rule, without
+needing the flag: a value arriving from outside — import row, REST, script — is
+stored **as given** and never re-derived, and a duplicate within its scope throws.
+It used to be cleared and replaced with a freshly generated number whenever the
+value was already held by another document, which silently discarded 417 imported
+NGK return numbers on 2026-08-03 (their legacy `RTN/…` numbers collided with NGI's
+across companies, and the import log showed success).
 
 ---
 
