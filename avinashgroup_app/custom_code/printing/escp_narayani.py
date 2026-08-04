@@ -47,15 +47,15 @@ Y0_MM = -17.7  # base rig offset -7.7 (top-of-form 7.7mm below the perforation,
 # column removed (particulars pulled left to follow S.No.). Calibrate each
 # number on a real Grishma form.
 POS = {
-	"copy_label":   (118.5, 44.0),  # y = same height as invoice_date per user 2026-07-30 (was 40)
-	"invoice_no":   (39.0, 34.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
+	"copy_label":   (116.5, 44.0),  # y = same height as invoice_date per user 2026-07-30 (was 40)
+	"invoice_no":   (39.0, 37.0),  # -2mm left, -2mm up per user (4.1->3.9cm, 3.3->3.1cm)
 	"ref_inv":      (74.0, 46.7),
-	"trans_date":   (198.0, 34.0),  # +2mm down per user 2026-07-30 (was 37). x=198 empirical rightmost: at x>=200 the
+	"trans_date":   (198.0, 37.0),  # +2mm down per user 2026-07-30 (was 37). x=198 empirical rightmost: at x>=200 the
 	                                # 10th digit wraps to the next line on this rig
-	"invoice_date": (198.0, 41.0),  # -2mm up per user 2026-07-30 (was 46); same column as trans date
+	"invoice_date": (198.0, 44.0),  # -2mm up per user 2026-07-30 (was 46); same column as trans date
 	"do_no":        (193.0, 41.5),
-	"customer":     (58.0, 51.0),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
-	"address":      (58.0, 56.0),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
+	"customer":     (58.0, 53.5),  # +3mm down per user 2026-07-30 (was 51); starts 5.8cm from left
+	"address":      (58.0, 58.5),  # +3mm down per user 2026-07-30 (was 56); same left start as customer name
 	"pan":          (58.0, 64.0),  # +2mm down per user 2026-07-30 (was 63); same left start as customer name
 	"body_top":     (0, 83.0),   # +4mm then +2mm more down per user 2026-07-30 (was 80); first item row
 	"row_h":        4.8,
