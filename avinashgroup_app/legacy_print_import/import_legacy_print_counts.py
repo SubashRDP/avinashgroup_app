@@ -74,6 +74,7 @@ Usage (from the bench directory):
 
 import json
 import os
+from datetime import datetime, timedelta
 
 import frappe
 from frappe.utils import cint
@@ -83,6 +84,10 @@ DEFAULT_XLS = os.path.join(os.path.dirname(__file__), "82-83 NGI.xls")
 INVOICE_HEADER = "Invoice Number"
 COPIES_HEADER = "No of Copy Printed"
 DATE_HEADER = "Date & Time of Print"
+USER_HEADER = "Printed by User"
+
+# Excel serial-date epoch (datemode 0 workbooks, which these registers are).
+EXCEL_EPOCH = datetime(1899, 12, 30)
 
 # An exact print timestamp that repeats on more rows than this across the
 # register is a batch event: one action logged against every invoice at the
@@ -93,23 +98,39 @@ DATE_HEADER = "Date & Time of Print"
 BATCH_SHARE_LIMIT = 3
 
 
-def parse_register(xls_path, drop_batch_events=False, info=None):
-    """Old invoice number -> total sheets printed, from a register export.
+def excel_datetime(serial):
+    """Excel serial date -> datetime, or None when the cell held no usable date."""
+    if not isinstance(serial, (int, float)) or not serial:
+        return None
+    return EXCEL_EPOCH + timedelta(days=serial)
+
+
+def read_register_events(xls_path, drop_batch_events=False, info=None):
+    """Every print event in a register export, in file order.
 
     Layout (both the 19- and 11-column exports): a header row names the
     columns; below it, an invoice row carries the invoice number in column A
-    and each print event follows on its own row with the copy count in the
-    "No of Copy Printed" column.
+    and each print event follows on its own row with the printing user, the
+    copy count and the print timestamp in their named columns. Column
+    POSITIONS differ between registers (the 81-82 file puts copies at 7 and the
+    timestamp at 10, the others at 14 and 17), which is why they are located by
+    header text rather than by index.
+
+    Returns (events, invoices):
+      events   - [{"invoice_no", "user", "timestamp", "copies"}], one per print
+                 event, timestamp a datetime or None
+      invoices - every invoice number the register lists, including those with
+                 no print event at all
 
     Batch events (an exact timestamp shared by more than BATCH_SHARE_LIMIT
-    rows) are reported in the info dict and, with drop_batch_events, excluded
-    from the totals.
+    rows) are reported in the info dict and, with drop_batch_events, left out
+    of the returned events.
     """
     import xlrd
 
     sheet = xlrd.open_workbook(xls_path).sheet_by_index(0)
 
-    copies_col = date_col = header_row = None
+    copies_col = date_col = user_col = header_row = None
     for r in range(sheet.nrows):
         for c in range(sheet.ncols):
             head = str(sheet.cell_value(r, c)).strip()
@@ -117,12 +138,15 @@ def parse_register(xls_path, drop_batch_events=False, info=None):
                 copies_col, header_row = c, r
             elif head == DATE_HEADER:
                 date_col = c
+            elif head == USER_HEADER:
+                user_col = c
         if copies_col is not None:
             break
     if copies_col is None:
         frappe.throw(f"'{COPIES_HEADER}' header not found in {xls_path}")
 
-    events = []  # (invoice_no, copies, timestamp)
+    events = []
+    invoices = []
     timestamp_rows = {}
     current = None
     for r in range(header_row + 1, sheet.nrows):
@@ -131,38 +155,86 @@ def parse_register(xls_path, drop_batch_events=False, info=None):
             break
         if invoice_no and invoice_no != INVOICE_HEADER:
             current = invoice_no
-            events.append((current, 0, None))  # register the invoice itself
+            invoices.append(current)  # register the invoice itself
             continue
         copies = sheet.cell_value(r, copies_col)
         if current and copies:
-            ts = sheet.cell_value(r, date_col) if date_col is not None else None
-            events.append((current, cint(copies), ts))
-            if ts:
-                timestamp_rows[ts] = timestamp_rows.get(ts, 0) + 1
+            serial = sheet.cell_value(r, date_col) if date_col is not None else None
+            events.append(
+                {
+                    "invoice_no": current,
+                    "user": (
+                        str(sheet.cell_value(r, user_col)).strip()
+                        if user_col is not None
+                        else ""
+                    ),
+                    "timestamp": excel_datetime(serial),
+                    "copies": cint(copies),
+                    "_serial": serial,
+                }
+            )
+            if serial:
+                timestamp_rows[serial] = timestamp_rows.get(serial, 0) + 1
 
     batch_ts = {ts for ts, n in timestamp_rows.items() if n > BATCH_SHARE_LIMIT}
+    batch_events = sum(1 for e in events if e["_serial"] in batch_ts)
+    batch_sheets = sum(e["copies"] for e in events if e["_serial"] in batch_ts)
 
-    totals = {}
-    batch_events = batch_sheets = 0
-    for invoice_no, copies, ts in events:
-        totals.setdefault(invoice_no, 0)
-        if ts in batch_ts:
-            batch_events += 1
-            batch_sheets += copies
-            if drop_batch_events:
-                continue
-        totals[invoice_no] += copies
+    if drop_batch_events:
+        events = [e for e in events if e["_serial"] not in batch_ts]
 
     if info is not None:
-        from datetime import datetime, timedelta
-
-        info["batch_timestamps"] = [
-            str(datetime(1899, 12, 30) + timedelta(days=ts)) for ts in sorted(batch_ts)
-        ]
+        info["batch_timestamps"] = [str(excel_datetime(ts)) for ts in sorted(batch_ts)]
         info["batch_events"] = batch_events
         info["batch_sheets"] = batch_sheets
         info["batch_events_dropped"] = drop_batch_events
+    return events, invoices
+
+
+def parse_register(xls_path, drop_batch_events=False, info=None):
+    """Old invoice number -> total sheets printed, from a register export.
+
+    The per-invoice view of read_register_events, which is what the print-count
+    import needs. Invoices the register lists but never printed come back as 0.
+    """
+    events, invoices = read_register_events(
+        xls_path, drop_batch_events=drop_batch_events, info=info
+    )
+    totals = {no: 0 for no in invoices}
+    for e in events:
+        totals.setdefault(e["invoice_no"], 0)
+        totals[e["invoice_no"]] += e["copies"]
     return totals
+
+
+def resolve_register_invoices(company=None):
+    """Old software invoice number (stored in custom_branch_name) -> SI name.
+
+    The number is only unique PER COMPANY PER FISCAL YEAR — the old ERPs
+    numbered each company independently and restarted every year (NGK holds
+    NGK/000001 in both 77/78 and 79/80). NGI's register format embeds the year
+    (NGI000001/82-83) and the company (the NGI prefix), which is why a bare
+    dict works for it; a register whose numbers carry neither can match more
+    than one invoice. Pass company= to narrow the lookup.
+
+    Returns (mapping, ambiguous). A number held by several invoices lands in
+    `ambiguous` and NOT in `mapping`, so callers skip it rather than resolving
+    it by guessing — which a plain dict does silently by keeping whichever row
+    the scan returned last.
+    """
+    rows = frappe.db.sql(
+        "SELECT custom_branch_name, name, company FROM `tabSales Invoice` "
+        "WHERE IFNULL(custom_branch_name, '') != ''"
+        + (" AND company = %s" if company else ""),
+        (company,) if company else (),
+    )
+    holders = {}
+    for old_no, name, si_company in rows:
+        holders.setdefault((old_no or "").strip(), []).append(
+            "{0} ({1})".format(name, si_company))
+    mapping = {k: v[0].split(" (")[0] for k, v in holders.items() if len(v) == 1}
+    ambiguous = {k: v for k, v in holders.items() if len(v) > 1}
+    return mapping, ambiguous
 
 
 def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, mode="add",
@@ -177,29 +249,7 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         skipped_by_prefix = sum(1 for no in totals if not no.startswith(only_prefix))
         totals = {no: n for no, n in totals.items() if no.startswith(only_prefix)}
 
-    # old software invoice number (stored in custom_branch_name) -> SI name.
-    #
-    # The number is only unique PER COMPANY PER FISCAL YEAR — the old ERPs
-    # numbered each company independently and restarted every year (NGK holds
-    # NGK/000001 in both 77/78 and 79/80). NGI's register format embeds the year
-    # (NGI000001/82-83) and the company (the NGI prefix), which is why a bare
-    # dict worked for it; a register whose numbers carry neither can match more
-    # than one invoice. Pass company= to narrow the lookup, and any number that
-    # STILL matches several invoices is reported as ambiguous and skipped —
-    # never resolved by guessing, which a plain dict does silently by keeping
-    # whichever row the scan returned last.
-    rows = frappe.db.sql(
-        "SELECT custom_branch_name, name, company FROM `tabSales Invoice` "
-        "WHERE IFNULL(custom_branch_name, '') != ''"
-        + (" AND company = %s" if company else ""),
-        (company,) if company else (),
-    )
-    holders = {}
-    for old_no, name, si_company in rows:
-        holders.setdefault((old_no or "").strip(), []).append(
-            "{0} ({1})".format(name, si_company))
-    mapping = {k: v[0].split(" (")[0] for k, v in holders.items() if len(v) == 1}
-    ambiguous = {k: v for k, v in holders.items() if len(v) > 1}
+    mapping, ambiguous = resolve_register_invoices(company)
 
     existing = {
         r.name: cint(r.print_count)
@@ -292,3 +342,224 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         )
     print(json.dumps(result, indent=1, default=str))
     return result
+
+
+PRINT_LOG_FIELDS = (
+    "name",
+    "creation",
+    "modified",
+    "modified_by",
+    "owner",
+    "docstatus",
+    "idx",
+    "sales_invoice",
+    "customer",
+    "customer_name",
+    "branch_name",
+    "company",
+    "copy_number",
+    "printed_by",
+)
+
+
+def run_print_log_backfill(xls_path=None, commit=False, only_prefix=None,
+                           drop_batch_events=False, company=None, limit=None):
+    """Recreate the old software's print history as Sales Invoice Print Log rows.
+
+    run() above imports only the per-invoice sheet TOTAL, into Sales Invoice
+    Print Count. The register also names, for every print event, who printed it
+    and when — the "Printed by User" and "Date & Time of Print" columns — and
+    that is what the Materialized Report's Printed / Printed Time / Printed By
+    columns and the Invoice Activity Report's audit trail read. This replays
+    those events into the Print Log.
+
+    One row per SHEET, matching print_count.py: an event that printed 2 copies
+    becomes two rows sharing its timestamp and user, and copy_number runs
+    1..n across all of an invoice's events in chronological order.
+
+    The register's user names (ASHISH, NDILLI) go into `printed_by` verbatim.
+    They are names in the OLD software, not Frappe users — ASHISH alone matches
+    two live accounts — so nothing is mapped to a User and `owner` stays the
+    account running the import.
+
+    IDEMPOTENT: an invoice that already has any Print Log row is skipped whole,
+    so a second run inserts nothing and a partially-logged invoice is never
+    given a duplicate sheet history.
+
+    DRY RUN unless commit=True — always inspect the dry-run summary first.
+
+    Usage (from the bench directory):
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_print_import.import_legacy_print_counts.run_print_log_backfill
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_print_import.import_legacy_print_counts.run_print_log_backfill \\
+        --kwargs "{'commit': True}"
+    """
+    xls_path = xls_path or DEFAULT_XLS
+    info = {}
+    events, _invoices = read_register_events(
+        xls_path, drop_batch_events=drop_batch_events, info=info
+    )
+
+    skipped_by_prefix = 0
+    if only_prefix:
+        before = len(events)
+        events = [e for e in events if e["invoice_no"].startswith(only_prefix)]
+        skipped_by_prefix = before - len(events)
+
+    # An event with no usable timestamp cannot be placed in the sheet order and
+    # would have to invent a `creation` — report it instead of guessing.
+    undated = [e for e in events if not e["timestamp"]]
+    events = [e for e in events if e["timestamp"]]
+
+    mapping, ambiguous = resolve_register_invoices(company)
+
+    by_invoice = {}
+    unmatched, ambiguous_hits = set(), []
+    for e in events:
+        old_no = e["invoice_no"]
+        si = mapping.get(old_no)
+        if not si:
+            if old_no in ambiguous:
+                ambiguous_hits.append({"old_no": old_no, "candidates": ambiguous[old_no][:5]})
+            else:
+                unmatched.add(old_no)
+            continue
+        by_invoice.setdefault(si, []).append(e)
+
+    already_logged = _invoices_with_print_log(list(by_invoice))
+    skipped_existing = [si for si in by_invoice if si in already_logged]
+    for si in skipped_existing:
+        del by_invoice[si]
+
+    targets = sorted(by_invoice)
+    if limit:
+        targets = targets[: int(limit)]
+
+    details = _invoice_details(targets)
+    now = frappe.utils.now()
+    user = frappe.session.user
+
+    rows, sample = [], []
+    for si in targets:
+        d = details.get(si) or {}
+        sheet = 0
+        for e in sorted(by_invoice[si], key=lambda e: e["timestamp"]):
+            for _copy in range(e["copies"]):
+                sheet += 1
+                rows.append(
+                    (
+                        frappe.generate_hash(length=10),
+                        e["timestamp"],
+                        now,
+                        user,
+                        user,
+                        0,
+                        0,
+                        si,
+                        d.get("customer"),
+                        d.get("customer_name"),
+                        d.get("custom_branch_name"),
+                        d.get("company"),
+                        sheet,
+                        e["user"] or None,
+                    )
+                )
+                if len(sample) < 5:
+                    sample.append(
+                        {
+                            "invoice": si,
+                            "branch_name": d.get("custom_branch_name"),
+                            "copy_number": sheet,
+                            "creation": str(e["timestamp"]),
+                            "printed_by": e["user"],
+                        }
+                    )
+
+    if commit and rows:
+        frappe.db.bulk_insert("Sales Invoice Print Log", list(PRINT_LOG_FIELDS), rows)
+        frappe.db.commit()
+
+    result = {
+        "dry_run": not commit,
+        "xls_path": xls_path,
+        "only_prefix": only_prefix,
+        "skipped_by_prefix": skipped_by_prefix,
+        "company": company or "(all companies)",
+        **info,
+        "register_events": len(events),
+        "undated_events_skipped": len(undated),
+        "invoices_matched": len(by_invoice) + len(skipped_existing),
+        "invoices_already_logged_skipped": len(skipped_existing),
+        "invoices_to_backfill": len(targets),
+        ("inserted_rows" if commit else "would_insert_rows"): len(rows),
+        "unmatched_numbers": len(unmatched),
+        "unmatched_sample": sorted(unmatched)[:50],
+        "ambiguous_register_rows": len(ambiguous_hits),
+        "ambiguous_detail": ambiguous_hits[:20],
+        "printers": _printer_tally(by_invoice, targets),
+        "sample_rows": sample,
+    }
+    if ambiguous_hits:
+        result["ambiguous_warning"] = (
+            "{0} register row(s) name a number held by SEVERAL invoices and were "
+            "SKIPPED — the number is only unique per company per fiscal year. "
+            "Re-run with company='<the register's company>'.".format(len(ambiguous_hits))
+        )
+    if limit and len(by_invoice) > len(targets):
+        result["limit_warning"] = (
+            "limit={0} applied: {1} matched invoices were NOT backfilled this "
+            "run".format(limit, len(by_invoice) - len(targets))
+        )
+    print(json.dumps(result, indent=1, default=str))
+    return result
+
+
+def _invoices_with_print_log(invoices):
+    """Subset of `invoices` that already has at least one Print Log row."""
+    if not invoices:
+        return set()
+    found = set()
+    for chunk in _chunks(invoices, 5000):
+        found.update(
+            r[0]
+            for r in frappe.db.sql(
+                "SELECT DISTINCT sales_invoice FROM `tabSales Invoice Print Log` "
+                "WHERE sales_invoice IN %s",
+                (tuple(chunk),),
+            )
+        )
+    return found
+
+
+def _invoice_details(invoices):
+    """customer / customer_name / branch_name / company per invoice, for the Log
+    row's denormalized columns (print_count.py stores the same snapshot)."""
+    details = {}
+    for chunk in _chunks(invoices, 5000):
+        for r in frappe.db.sql(
+            "SELECT name, customer, customer_name, custom_branch_name, company "
+            "FROM `tabSales Invoice` WHERE name IN %s",
+            (tuple(chunk),),
+            as_dict=True,
+        ):
+            details[r.name] = r
+    return details
+
+
+def _printer_tally(by_invoice, targets):
+    """How many sheets each register user accounts for in this run — the quickest
+    check that printed_by came through rather than landing empty."""
+    tally = {}
+    for si in targets:
+        for e in by_invoice[si]:
+            name = e["user"] or "(blank)"
+            tally[name] = tally.get(name, 0) + e["copies"]
+    return dict(sorted(tally.items(), key=lambda kv: kv[1], reverse=True))
+
+
+def _chunks(seq, size):
+    for i in range(0, len(seq), size):
+        yield seq[i : i + size]

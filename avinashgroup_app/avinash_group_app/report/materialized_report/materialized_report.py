@@ -1,12 +1,32 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
+"""Materialized Report — the IRD "VAT Annexure 7" sales book.
+
+The layout reproduces the annexure the old NGI billing software exported, so the
+group can retire that software: 21 columns in its order, BS dates with slashes,
+Yes/No instead of checkboxes, and (via export_xlsx) its letterhead block and
+Indian-grouped number formatting.
+
+Row source is CBMS Bill — one row per bill actually reported to the IRD. The
+print columns come from Sales Invoice Print Log, which holds one row per SHEET,
+so several rows per invoice; the query collapses that to the EARLIEST sheet,
+reading its timestamp and its printer from the same row (taking them separately
+could pair a reprinter's name with the original print's time).
+
+Three columns have no source and are always blank: Payment Method, VAT Refund
+Amount and Transaction Id. They are empty in every row of the software's own
+export too — placeholders kept so the column layout matches.
+"""
+
 import json
+import re
 
 import frappe
 from frappe import _
 
-from avinashgroup_app.utils.report_excel import send_report_xlsx
+from avinashgroup_app.custom_code.CBMS.utils import bs_date_str, bs_datetime_str, bs_long_date
+from avinashgroup_app.utils.report_excel import send_annexure7_xlsx
 
 
 def execute(filters=None):
@@ -18,18 +38,31 @@ def execute(filters=None):
 
 
 def get_columns():
+	def col(label, fieldname, width, fieldtype="Data"):
+		return {"label": _(label), "fieldname": fieldname, "fieldtype": fieldtype, "width": width}
+
 	return [
-		{"label": _("Fiscal Year"), "fieldname": "fiscal_year", "fieldtype": "Link", "options": "Fiscal Year", "width": 100},
-		{"label": _("Invoice Number"), "fieldname": "invoice_number", "fieldtype": "Data", "width": 130},
-		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data", "width": 200},
-		{"label": _("Customer PAN"), "fieldname": "customer_pan", "fieldtype": "Data", "width": 130},
-		{"label": _("Invoice Date"), "fieldname": "invoice_date", "fieldtype": "Data", "width": 110},
-		{"label": _("Discount Amount"), "fieldname": "discount_amount", "fieldtype": "Float", "width": 130},
-		{"label": _("Gross Amount"), "fieldname": "gross_amount", "fieldtype": "Float", "width": 130},
-		{"label": _("Taxable Amount"), "fieldname": "taxable_amount", "fieldtype": "Float", "width": 130},
-		{"label": _("VAT"), "fieldname": "vat", "fieldtype": "Float", "width": 100},
-		{"label": _("Total Amount"), "fieldname": "total_amount", "fieldtype": "Float", "width": 130},
-		{"label": _("Sync with IRD"), "fieldname": "synced_with_ird", "fieldtype": "Check", "width": 110},
+		col("Fiscal Year", "fiscal_year", 100),
+		col("Sale Invoice Number", "invoice_number", 170),
+		col("Sale Invoice Date", "invoice_date", 130),
+		col("Customer Name", "customer_name", 220),
+		col("PAN", "customer_pan", 110),
+		col("Amount", "amount", 130, "Float"),
+		col("Discount", "discount", 110, "Float"),
+		col("Taxable Amount", "taxable_amount", 130, "Float"),
+		col("Tax Amount", "tax_amount", 120, "Float"),
+		col("Total Amount", "total_amount", 130, "Float"),
+		col("Sync with IRD", "synced_with_ird", 110),
+		col("Printed", "printed", 80),
+		col("Active", "active", 80),
+		col("Printed Time", "printed_time", 180),
+		col("Entered By", "entered_by", 150),
+		col("Printed By", "printed_by", 150),
+		col("Realtime", "realtime", 90),
+		col("Payment Method", "payment_method", 130),
+		col("VAT Refund Amount (if any)", "vat_refund_amount", 170),
+		col("Transaction Id (if any)", "transaction_id", 170),
+		col("Sync with IRD Date & Time", "synced_at", 190),
 	]
 
 
@@ -43,12 +76,7 @@ def get_conditions(filters):
 		# here from the selected fiscal year. The Fiscal Year docname keeps the
 		# slash form ("82/83"), so look up its AD start/end span before converting
 		# to the dotted form ("82.83") that bills store in the fiscal_year field.
-		fy = frappe.get_cached_value(
-			"Fiscal Year",
-			filters.fiscal_year,
-			["year_start_date", "year_end_date"],
-			as_dict=True,
-		)
+		fy = fiscal_year_span(filters.fiscal_year)
 		if fy:
 			filters.from_date = fy.year_start_date
 			filters.to_date = fy.year_end_date
@@ -63,25 +91,61 @@ def get_conditions(filters):
 	return (" and " + " and ".join(conditions)) if conditions else ""
 
 
+def fiscal_year_span(fiscal_year):
+	"""AD start/end dates of a Fiscal Year record, or None."""
+	return frappe.get_cached_value(
+		"Fiscal Year",
+		fiscal_year,
+		["year_start_date", "year_end_date"],
+		as_dict=True,
+	)
+
+
 def get_data(filters):
-	# total_amount is the invoice grand total: CBMS `total_sales` excludes exempt
-	# sales (see build_cbms_fields), so adding them back reconstitutes it. Gross is
-	# that total before VAT, which keeps Gross + VAT = Total on every row.
-	return frappe.db.sql(
+	# amount is the invoice total before VAT and total_amount the grand total:
+	# CBMS `total_sales` excludes exempt sales (see build_cbms_fields), so adding
+	# them back reconstitutes the total, which keeps Amount + Tax = Total on
+	# every row.
+	#
+	# The two print subqueries share one ORDER BY ... LIMIT 1, so both read the
+	# SAME Log row — the invoice's earliest sheet. printed_by falls back through
+	# the row's owner for sheets logged before the printed_by field existed.
+	rows = frappe.db.sql(
 		"""
 		select
-			replace(bill.fiscal_year, '.', '/') as fiscal_year,
+			bill.fiscal_year,
 			bill.invoice_number,
-			bill.buyer_name as customer_name,
-			bill.buyer_pan as customer_pan,
-			bill.invoice_date_bs as invoice_date,
-			bill.discount as discount_amount,
-			(bill.total_sales + bill.tax_exempted_sales - bill.vat) as gross_amount,
-			bill.taxable_sales_vat as taxable_amount,
+			bill.invoice_date_bs,
+			bill.buyer_name,
+			bill.buyer_pan,
+			(bill.total_sales + bill.tax_exempted_sales - bill.vat) as amount,
+			bill.discount,
+			bill.taxable_sales_vat,
 			bill.vat,
 			(bill.total_sales + bill.tax_exempted_sales) as total_amount,
-			case when bill.sync_status = 'Synced' then 1 else 0 end as synced_with_ird
+			bill.sync_status,
+			bill.is_realtime,
+			bill.last_attempt,
+			si.docstatus,
+			coalesce(nullif(u.full_name, ''), si.owner) as entered_by,
+			(
+				select l.creation
+				from `tabSales Invoice Print Log` l
+				where l.sales_invoice = bill.sales_invoice
+				order by l.creation asc, l.copy_number asc
+				limit 1
+			) as printed_time,
+			(
+				select coalesce(nullif(l.printed_by, ''), nullif(pu.full_name, ''), l.owner)
+				from `tabSales Invoice Print Log` l
+				left join `tabUser` pu on pu.name = l.owner
+				where l.sales_invoice = bill.sales_invoice
+				order by l.creation asc, l.copy_number asc
+				limit 1
+			) as printed_by
 		from `tabCBMS Bill` bill
+		left join `tabSales Invoice` si on si.name = bill.sales_invoice
+		left join `tabUser` u on u.name = si.owner
 		where 1 = 1 {conditions}
 		order by bill.fiscal_year asc, bill.invoice_date asc, bill.invoice_number asc
 		""".format(conditions=get_conditions(filters)),
@@ -89,19 +153,102 @@ def get_data(filters):
 		as_dict=True,
 	)
 
+	return [_format_row(r) for r in rows]
+
+
+def _format_row(r):
+	return {
+		"fiscal_year": fiscal_year_display(r.fiscal_year),
+		"invoice_number": r.invoice_number,
+		# stored as "2083-04-01"; the annexure writes it with slashes
+		"invoice_date": r.invoice_date_bs.replace("-", "/") if r.invoice_date_bs else None,
+		"customer_name": r.buyer_name,
+		"customer_pan": r.buyer_pan,
+		"amount": r.amount,
+		"discount": r.discount,
+		"taxable_amount": r.taxable_sales_vat,
+		"tax_amount": r.vat,
+		"total_amount": r.total_amount,
+		"synced_with_ird": _yes_no(r.sync_status == "Synced"),
+		"printed": _yes_no(r.printed_time),
+		# A bill exists only for a submitted invoice, so anything not cancelled
+		# is active. A bill whose invoice has been deleted outright counts as
+		# inactive rather than crashing the row.
+		"active": _yes_no(r.docstatus is not None and r.docstatus != 2),
+		"printed_time": bs_datetime_str(r.printed_time, twelve_hour=True),
+		"entered_by": r.entered_by,
+		"printed_by": r.printed_by,
+		"realtime": _yes_no(r.is_realtime),
+		# No source for these three — left null rather than blank-string so the
+		# cell is genuinely empty, as it is in the legacy export.
+		"payment_method": None,
+		"vat_refund_amount": None,
+		"transaction_id": None,
+		# last_attempt is stamped on EVERY sync attempt, failures included, so it
+		# is only a sync time once the bill actually reached the IRD. A Failed or
+		# Pending bill reports no time rather than the moment it last failed.
+		"synced_at": bs_datetime_str(r.last_attempt) if r.sync_status == "Synced" else None,
+	}
+
+
+def _yes_no(value):
+	return "Yes" if value else "No"
+
+
+def fiscal_year_display(fiscal_year):
+	"""Bill fiscal year as the annexure prints it: "82.83" -> "2082-83".
+
+	Bills store the Fiscal Year name with a dot ("82.83"); the record itself is
+	named with a slash. Both are accepted, and anything that is not a two-part
+	two-digit year is passed through untouched.
+	"""
+	if not fiscal_year:
+		return ""
+	parts = re.split(r"[./-]", fiscal_year)
+	if len(parts) == 2 and all(len(p) == 2 and p.isdigit() for p in parts):
+		return f"20{parts[0]}-{parts[1]}"
+	return fiscal_year
+
 
 @frappe.whitelist()
 def export_xlsx(filters):
-	"""Excel download with the company letterhead above the table and a totals
-	row below it. Replaces the built-in Export menu — see materialized_report.js."""
+	"""Excel download in the legacy VAT Annexure 7 layout — company letterhead
+	block above the table, a totals row below it. Replaces the built-in Export
+	menu; see materialized_report.js."""
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 
 	columns, data = execute(filters)
-	send_report_xlsx(
+	send_annexure7_xlsx(
 		columns,
 		data,
 		filters.get("company"),
-		"MATERIALIZED REPORT",
 		"materialized_report.xlsx",
+		**_header_context(filters),
 	)
+
+
+def _header_context(filters):
+	"""Fiscal year and date range for the annexure's letterhead block.
+
+	Read straight from the filters rather than from execute()'s copy, which
+	derives the same window but does not hand it back.
+	"""
+	fiscal_year = filters.get("fiscal_year")
+	fy = fiscal_year_span(fiscal_year) if fiscal_year else None
+	return {
+		"fy_display": fiscal_year_display(fiscal_year) if fiscal_year else "",
+		"period": (
+			"{0} - {1}".format(
+				bs_date_str(fy.year_start_date, sep="/"),
+				bs_date_str(fy.year_end_date, sep="/"),
+			)
+			if fy
+			else ""
+		),
+		"date_range": (
+			"{0} to {1}".format(bs_long_date(fy.year_start_date), bs_long_date(fy.year_end_date))
+			if fy
+			else ""
+		),
+	}

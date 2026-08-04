@@ -267,6 +267,7 @@ def _print_events(filters, from_dt, to_dt):
 			"sales_invoice",
 			"creation",
 			"owner",
+			"printed_by",
 			"company",
 			"customer_name",
 			"copy_number",
@@ -290,7 +291,12 @@ def _print_events(filters, from_dt, to_dt):
 		{
 			"invoice": r.sales_invoice,
 			"_ts": r.creation,
-			"user": r.owner,
+			# printed_by is the display name; owner is the user id. Rows
+			# backfilled from the old billing software carry that software's
+			# own user name in printed_by and the import runner in owner, so
+			# preferring owner here would report every pre-Frappe print as
+			# "Administrator".
+			"user": r.printed_by or r.owner,
 			"operation": "Printed",
 			"company": r.company,
 			"customer_name": r.customer_name,
@@ -503,8 +509,12 @@ def _columns():
 			"align": "center"},
 		{"label": _("Operation"), "fieldname": "operation", "fieldtype": "Data", "width": 100,
 			"align": "center"},
-		{"label": _("Username"), "fieldname": "username", "fieldtype": "Link",
-			"options": "User", "width": 150, "align": "center"},
+		# Data, not Link -> User: Printed rows backfilled from the old billing
+		# software name a user of THAT software (ASHISH, NDILLI), which has no
+		# Frappe User record to link to. Add/Modified rows still show a user id,
+		# just not as a clickable link.
+		{"label": _("Username"), "fieldname": "username", "fieldtype": "Data",
+			"width": 150, "align": "center"},
 		{"label": _("Action"), "fieldname": "action", "fieldtype": "Data", "width": 110,
 			"align": "center"},
 		{"label": _("Details"), "fieldname": "details", "fieldtype": "Data", "width": 280},

@@ -9,7 +9,7 @@ expects ("2082.083").
 import frappe
 import nepali_datetime
 from erpnext.accounts.utils import get_fiscal_year
-from frappe.utils import getdate
+from frappe.utils import get_datetime, getdate
 
 
 def to_bs_date(ad_date):
@@ -22,6 +22,46 @@ def bs_date_str(ad_date, sep="-"):
 	"""BS date as e.g. "2082-03-17" (sep="-") or "2082.03.17" (sep=".")."""
 	bs = to_bs_date(ad_date)
 	return f"{bs.year:04d}{sep}{bs.month:02d}{sep}{bs.day:02d}"
+
+
+# BS month names, index 0 == Baisakh (month 1). Kept here rather than imported
+# from rdp_common_app so the CBMS date path stays on nepali_datetime alone —
+# that app's copy sits next to a second, different BS conversion library.
+BS_MONTH_NAMES = (
+	"Baisakh",
+	"Jestha",
+	"Ashadh",
+	"Shrawan",
+	"Bhadra",
+	"Ashwin",
+	"Kartik",
+	"Mangsir",
+	"Poush",
+	"Magh",
+	"Falgun",
+	"Chaitra",
+)
+
+
+def bs_long_date(ad_date):
+	"""BS date in the long form the IRD annexure header uses: "Shrawan 1, 2082"."""
+	bs = to_bs_date(ad_date)
+	return f"{BS_MONTH_NAMES[bs.month - 1]} {bs.day}, {bs.year}"
+
+
+def bs_datetime_str(ad_datetime, sep="/", twelve_hour=False):
+	"""BS date + clock time, e.g. "2082/04/01 10:54:12", or with twelve_hour
+	"2082/04/01 10:53:33 AM".
+
+	The date converts to BS; the time is carried over unchanged (BS and AD share
+	a clock). Returns None for a missing timestamp, so a report cell stays
+	genuinely empty rather than holding a blank string.
+	"""
+	if not ad_datetime:
+		return None
+	ad_datetime = get_datetime(ad_datetime)
+	time_fmt = "%I:%M:%S %p" if twelve_hour else "%H:%M:%S"
+	return f"{bs_date_str(ad_datetime.date(), sep=sep)} {ad_datetime.strftime(time_fmt)}"
 
 
 def cbms_fiscal_year(ad_date, company=None):
