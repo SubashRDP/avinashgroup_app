@@ -179,7 +179,7 @@ def get_columns():
 	return [
 		{"fieldname": "date",          "label": _("Date"),           "fieldtype": "Date",     "width": 100},
 		{"fieldname": "miti",          "label": _("Miti"),           "fieldtype": "Data",     "width": 120},
-		{"fieldname": "bill_no",       "label": _("Bill No"),        "fieldtype": "Link",     "options": "Sales Invoice", "width": 170},
+		{"fieldname": "bill_no",       "label": _(\"Bill No\"),        "fieldtype": "Data",     "width": 170},
 		{"fieldname": "customer",      "label": _("Customer Name"),  "fieldtype": "Data",     "width": 180},
 		{"fieldname": "vat_number",    "label": _("VAT Number"),     "fieldtype": "Data",     "width": 130},
 		{"fieldname": "total_sales",   "label": _("Total Sales"),    "fieldtype": "Currency", "width": 130},
@@ -210,7 +210,7 @@ def get_data(filters):
 		SELECT
 			si.posting_date                                                                                                               AS date,
 			SUBSTRING_INDEX(si.custom_invoice_miti, ' ', 1)                                                                               AS miti,
-			si.name                                                                                                                        AS bill_no,
+			COALESCE(si.custom_branch_name, si.name)                                                                                      AS bill_no,
 			si.customer_name                                                                                                               AS customer,
 			c.tax_id                                                                                                                       AS vat_number,
 			si.custom_total_amount_including_excise                                                                                        AS total_sales,
