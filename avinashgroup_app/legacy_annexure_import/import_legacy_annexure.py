@@ -189,19 +189,57 @@ def _fiscal_year_dotted(rows, override=None):
         bits = tail.split("-")
         if len(bits) == 2 and all(len(b) == 2 and b.isdigit() for b in bits):
             return f"{bits[0]}.{bits[1]}"
+
+    # 79/80 predates the year suffix — its numbers are a bare "NGI/030020". Fall
+    # back to the sheet's own Fiscal Year column, which reads "2079-81": four
+    # digits for the opening year, then the year TWO on (the legacy header's
+    # two-year accounting window). The fiscal year is opening..opening+1.
+    for row in rows:
+        printed = str(row[COL["fiscal_year"]] or "").strip()
+        head = printed.split("-")[0]
+        if len(head) == 4 and head.isdigit():
+            start = int(head) % 100
+            return f"{start:02d}.{(start + 1) % 100:02d}"
     return None
 
 
-def _resolve_invoices(numbers, company=None):
+def _fiscal_year_span(fy_dotted):
+    """AD start/end of the Fiscal Year a bill's dotted year names ("82.83").
+
+    Fiscal Year records are named with a slash. Returns None when the site has
+    no record for that year, in which case the caller falls back to matching on
+    the number and company alone.
+    """
+    if not fy_dotted:
+        return None
+    return frappe.db.get_value(
+        "Fiscal Year",
+        fy_dotted.replace(".", "/"),
+        ["year_start_date", "year_end_date"],
+        as_dict=True,
+    )
+
+
+def _resolve_invoices(numbers, company=None, from_date=None, to_date=None):
     """old invoice number (custom_branch_name) -> Sales Invoice row.
 
-    A number is unique only per company per fiscal year, so a number held by
-    several invoices is reported and skipped rather than resolved by guessing.
+    A legacy number identifies an invoice only within a COMPANY and a FISCAL
+    YEAR — the old ERPs numbered each company separately and restarted the
+    series every year, which is the same scope the numbering engine works in
+    (custom_code/Override/naming_series.py). NGK/000001 exists in both 77/78 and
+    79/80; NGI000004/82-83 could repeat under another company.
+
+    So the lookup is narrowed by company and by the sheet's fiscal year, applied
+    as a posting-date window. Inside that scope the number is unique, and a
+    number that still resolves to several invoices is reported rather than
+    guessed at.
     """
     holders = {}
     filters = {"custom_branch_name": ["in", list(numbers)]}
     if company:
         filters["company"] = company
+    if from_date and to_date:
+        filters["posting_date"] = ["between", [from_date, to_date]]
     for r in frappe.get_all(
         "Sales Invoice",
         filters=filters,
@@ -238,7 +276,13 @@ def run(path, company=None, fiscal_year=None, commit=False, limit=None,
         frappe.throw(f"Could not determine the fiscal year from {path}")
 
     numbers = {str(r[COL["invoice_number"]]).strip() for r in rows}
-    mapping, ambiguous = _resolve_invoices(numbers, company)
+    span = _fiscal_year_span(fy)
+    mapping, ambiguous = _resolve_invoices(
+        numbers,
+        company,
+        from_date=span.year_start_date if span else None,
+        to_date=span.year_end_date if span else None,
+    )
 
     already = set()
     matched_names = [inv.name for inv in mapping.values()]
@@ -392,3 +436,119 @@ def _chunks(seq, size):
     seq = list(seq)
     for i in range(0, len(seq), size):
         yield seq[i : i + size]
+
+
+DEFAULT_FOLDER = "/home/sijan/Downloads"
+SHEET_GLOB = "Materialized Report_*.xlsx"
+
+
+def _peek_fiscal_year(path):
+    """Fiscal year of a sheet without reading all 36,000 rows.
+
+    Streams the first data rows only and stops at the first invoice number that
+    carries a year. Used to spot the same year exported twice — the folder holds
+    "82.83", "82.83(1)" and "82.83(2)", which are byte-for-byte the same export.
+    """
+    import openpyxl.styles.colors as colors
+
+    original = colors.RGB.__set__
+    colors.RGB.__set__ = lambda self, instance, value: instance.__dict__.__setitem__(
+        self.name, value
+    )
+    try:
+        from openpyxl import load_workbook
+
+        wb = load_workbook(path, read_only=True, data_only=True)
+        ws = wb.active
+        head = []
+        for i, row in enumerate(ws.iter_rows(min_row=FIRST_DATA_ROW, values_only=True)):
+            head.append(row)
+            if i >= 50:
+                break
+        wb.close()
+        return _fiscal_year_dotted([r for r in head if r[COL["invoice_number"]]])
+    except Exception:
+        return None
+    finally:
+        colors.RGB.__set__ = original
+
+
+def run_all(folder=DEFAULT_FOLDER, paths=None, company=None, commit=False,
+            unsynced_status="Synced", with_print_log=True):
+    """Import every annexure sheet in one go — the whole history, one command.
+
+    Picks up `Materialized Report_*.xlsx` from `folder` (or an explicit `paths`
+    list), keeps ONE file per fiscal year, and runs them oldest year first so
+    the earliest invoices are in place before the later ones.
+
+    Same rules as run(): DRY RUN unless commit=True, and an invoice that already
+    has a CBMS Bill is skipped, so this is safe to repeat and safe to resume
+    after an interruption.
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_annexure_import.import_legacy_annexure.run_all \\
+        --kwargs "{'company': 'Nepal Gas Udhyog Pvt. Ltd.', 'commit': True}"
+    """
+    import glob
+    import os
+
+    if paths is None:
+        paths = sorted(glob.glob(os.path.join(folder, SHEET_GLOB)))
+    if not paths:
+        frappe.throw(f"No annexure sheets found in {folder}")
+
+    # One file per fiscal year. Where a year appears more than once the plain
+    # name wins over a "(1)" copy — same export, downloaded twice.
+    chosen = {}
+    duplicates = []
+    for path in paths:
+        fy = _peek_fiscal_year(path)
+        if not fy:
+            duplicates.append({"path": path, "reason": "no fiscal year found — skipped"})
+            continue
+        if fy not in chosen or len(os.path.basename(path)) < len(os.path.basename(chosen[fy])):
+            if fy in chosen:
+                duplicates.append({"path": chosen[fy], "reason": f"duplicate of {fy}"})
+            chosen[fy] = path
+        else:
+            duplicates.append({"path": path, "reason": f"duplicate of {fy}"})
+
+    results = []
+    for fy in sorted(chosen):
+        results.append(
+            run(
+                path=chosen[fy],
+                company=company,
+                commit=commit,
+                unsynced_status=unsynced_status,
+                with_print_log=with_print_log,
+            )
+        )
+
+    created_key = "bills_" + ("created" if commit else "to_create")
+    logs_key = "print_log_rows_" + ("created" if commit else "to_create")
+    summary = {
+        "dry_run": not commit,
+        "years": sorted(chosen),
+        "files_used": {fy: os.path.basename(p) for fy, p in sorted(chosen.items())},
+        "files_skipped": duplicates,
+        "sheet_rows_total": sum(r["sheet_rows"] for r in results),
+        created_key: sum(r[created_key] for r in results),
+        logs_key: sum(r[logs_key] for r in results),
+        "skipped_already_have_a_bill": sum(r["skipped_already_have_a_bill"] for r in results),
+        "skipped_invoice_not_in_erpnext": sum(
+            r["skipped_invoice_not_in_erpnext"] for r in results
+        ),
+        "per_year": {
+            r["fiscal_year"]: {
+                "sheet_rows": r["sheet_rows"],
+                created_key: r[created_key],
+                logs_key: r[logs_key],
+                "not_in_erpnext": r["skipped_invoice_not_in_erpnext"],
+            }
+            for r in results
+        },
+    }
+    print("\n===== ALL YEARS =====")
+    print(json.dumps(summary, indent=1, default=str))
+    return summary
