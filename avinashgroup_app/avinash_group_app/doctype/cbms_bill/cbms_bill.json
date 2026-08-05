@@ -10,6 +10,7 @@
   "invoice_date",
   "invoice_date_bs",
   "fiscal_year",
+  "created_by",
   "column_break_parties",
   "buyer_name",
   "buyer_pan",
@@ -88,6 +89,14 @@
    "label": "Fiscal Year",
    "read_only": 1,
    "reqd": 1
+  },
+  {
+   "description": "Who entered the invoice, as a display name. The bill's own `owner` is whoever caused the bill to be written — the scheduler, a backfill run, an import — which is not the same person. Data rather than a User link so it reads the same way as Sales Invoice Print Log.printed_by, and so a renamed or deleted user cannot blank an IRD record.",
+   "fieldname": "created_by",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Created By",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_parties",
@@ -289,7 +298,7 @@
   }
  ],
  "links": [],
- "modified": "2026-07-01 00:00:00.000000",
+ "modified": "2026-08-05 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "CBMS Bill",

@@ -173,6 +173,10 @@ def build_cbms_fields(sales_invoice):
 		"buyer_pan": customer_pan or "",
 		"seller_pan": seller_pan or "",
 		"fiscal_year": utils.cbms_fiscal_year(sales_invoice.posting_date, sales_invoice.company),
+		# Stamped from the INVOICE's owner, not the session: a bill can be written
+		# by the retry scheduler or a backfill run long after the clerk entered the
+		# invoice, and the annexure's "Entered By" means the clerk.
+		"created_by": utils.user_display_name(sales_invoice.owner),
 		"total_sales": flt(total_sales, 2),
 		"taxable_sales_vat": flt(taxable_sales, 2),
 		"vat": flt(vat, 2),

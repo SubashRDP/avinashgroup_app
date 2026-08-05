@@ -107,6 +107,13 @@ def get_data(filters):
 	# them back reconstitutes the total, which keeps Amount + Tax = Total on
 	# every row.
 	#
+	# Entered By comes off the bill's own created_by, stamped from the invoice's
+	# owner when the bill was written (sales_invoice_hooks.build_cbms_fields).
+	# The report does not go to Sales Invoice, nor to tabUser, to resolve it.
+	# The Sales Invoice join that remains serves Active alone: whether the
+	# invoice was later cancelled is a fact about the invoice, with no copy on
+	# the bill.
+	#
 	# The two print subqueries share one ORDER BY ... LIMIT 1, so both read the
 	# SAME Log row — the invoice's earliest sheet. printed_by falls back through
 	# the row's owner for sheets logged before the printed_by field existed.
@@ -126,8 +133,8 @@ def get_data(filters):
 			bill.sync_status,
 			bill.is_realtime,
 			bill.last_attempt,
+			bill.created_by as entered_by,
 			si.docstatus,
-			coalesce(nullif(u.full_name, ''), si.owner) as entered_by,
 			(
 				select l.creation
 				from `tabSales Invoice Print Log` l
@@ -145,7 +152,6 @@ def get_data(filters):
 			) as printed_by
 		from `tabCBMS Bill` bill
 		left join `tabSales Invoice` si on si.name = bill.sales_invoice
-		left join `tabUser` u on u.name = si.owner
 		where 1 = 1 {conditions}
 		order by bill.fiscal_year asc, bill.invoice_date asc, bill.invoice_number asc
 		""".format(conditions=get_conditions(filters)),

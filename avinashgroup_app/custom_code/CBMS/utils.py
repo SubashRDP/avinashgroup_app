@@ -12,6 +12,19 @@ from erpnext.accounts.utils import get_fiscal_year
 from frappe.utils import get_datetime, getdate
 
 
+def user_display_name(user):
+	"""A user's full name for CBMS Bill.created_by, falling back to the user id.
+
+	The bill stores a NAME, not a User link, so the annexure's "Entered By"
+	column survives a user being renamed, disabled or deleted — an IRD record
+	must not lose its author, and the legacy print history it sits beside
+	carries names from the old software that were never Frappe users at all.
+	"""
+	if not user:
+		return None
+	return frappe.db.get_value("User", user, "full_name") or user
+
+
 def to_bs_date(ad_date):
 	"""Convert a Gregorian date (date, datetime or "YYYY-MM-DD" string — doc fields can
 	be any of these depending on where the doc came from) to a nepali_datetime.date."""
