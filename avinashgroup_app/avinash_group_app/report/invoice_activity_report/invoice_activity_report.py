@@ -456,17 +456,22 @@ def _apply_invoice_context(events, filters):
 
 	The Add event is re-dated to the invoice's posting_date (its IRD date) rather
 	than the submit/creation timestamp; its Time keeps the real clock time.
-	Printed / Modified are left on their own event timestamp."""
+	Printed / Modified are left on their own event timestamp.
+
+	The Add event's user is re-read from the invoice's custom_created_by, the
+	app-wide audit field naming the clerk who entered it. The Version row it was
+	built from carries whoever performed the submit, which for API-created
+	invoices is the API user on every row — Administrator on all 48,837 of
+	avinas1's. Modified keeps its own Version owner: that IS who edited."""
 	names = {e["invoice"] for e in events}
 	info = {}
 	if names:
 		fl = {"name": ["in", list(names)], "docstatus": 1}
 		_apply_company_scope(fl, filters)
-		for r in frappe.get_all(
-			"Sales Invoice",
-			filters=fl,
-			fields=["name", "company", "is_return", "customer_name", "posting_date"],
-		):
+		fields = ["name", "company", "is_return", "customer_name", "posting_date"]
+		if frappe.get_meta("Sales Invoice").has_field("custom_created_by"):
+			fields.append("custom_created_by")
+		for r in frappe.get_all("Sales Invoice", filters=fl, fields=fields):
 			info[r.name] = r
 
 	cutoffs = _cbms_cutoffs({r.company for r in info.values()})
@@ -491,6 +496,7 @@ def _apply_invoice_context(events, filters):
 		# invoice's posting date, not the submit/creation timestamp.
 		if e["operation"] == "Add":
 			e["_date"] = inv.posting_date
+			e["user"] = inv.get("custom_created_by") or e["user"]
 		kept.append(e)
 	return kept
 

@@ -173,10 +173,18 @@ def build_cbms_fields(sales_invoice):
 		"buyer_pan": customer_pan or "",
 		"seller_pan": seller_pan or "",
 		"fiscal_year": utils.cbms_fiscal_year(sales_invoice.posting_date, sales_invoice.company),
-		# Stamped from the INVOICE's owner, not the session: a bill can be written
-		# by the retry scheduler or a backfill run long after the clerk entered the
+		# Stamped from the INVOICE, not the session: a bill can be written by the
+		# retry scheduler or a backfill run long after the clerk entered the
 		# invoice, and the annexure's "Entered By" means the clerk.
-		"created_by": utils.user_display_name(sales_invoice.owner),
+		#
+		# custom_created_by ahead of owner, because owner is NOT the clerk here —
+		# invoices created through the API carry the API user (Administrator on
+		# every one of avinas1's 48,837 invoices) while custom_created_by, the
+		# app-wide audit field, holds the person. owner is only the fallback for
+		# a site without that field.
+		"created_by": utils.user_display_name(
+			sales_invoice.get("custom_created_by") or sales_invoice.owner
+		),
 		"total_sales": flt(total_sales, 2),
 		"taxable_sales_vat": flt(taxable_sales, 2),
 		"vat": flt(vat, 2),
