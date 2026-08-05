@@ -148,6 +148,43 @@ def _record_result(doctype, name, sync_status, sync_response, is_realtime=False)
 	frappe.db.commit()
 
 
+def _predates_send_from_date(config, document_date, doc, triggered_from):
+	"""True when a document dated before the company's Send From Date must not
+	be transmitted — the last gate before an irreversible POST to the IRD.
+
+	Send From Date used to be enforced only where bills are CREATED
+	(sales_invoice_hooks.in_cbms_scope, backfill). That guards the normal path,
+	where no bill exists for a historical invoice and so nothing can be sent.
+	It guards nothing once a bill row exists by another route — a legacy import,
+	a hand-made record, a restore — because the send path never consulted the
+	date. This closes that: out of scope is out of scope, however the row got
+	here.
+
+	Judged on the document's OWN date. A credit note raised today against a
+	pre-CBMS invoice is in scope and still sends, which is what
+	_original_predates_cbms is there to allow.
+
+	Logged only for a human-initiated attempt. The retry job re-reads the same
+	rows every cycle, and recording a refusal each time would bury the log it
+	is meant to serve.
+
+	Deliberately does not import in_cbms_scope from sales_invoice_hooks (that
+	module imports this one); `<` here is the exact complement of its `>=`."""
+	if not config.enable_from_date or not document_date:
+		return False
+	if getdate(document_date) >= getdate(config.enable_from_date):
+		return False
+
+	if triggered_from != "Retry":
+		log_cbms_activity(
+			doc,
+			"Held",
+			details="Posted before the company's Send From Date — not reported to IRD",
+			triggered_from=triggered_from,
+		)
+	return True
+
+
 def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry", timeout=REQUEST_TIMEOUT):
 	"""POST a CBMS Bill to /api/bill. Always returns True/False, never raises."""
 	try:
@@ -157,6 +194,8 @@ def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry", timeout=REQUEST_TI
 
 		config = frappe.get_doc("CBMS Config", {"company": bill.company})
 		if not config.enable_cbms:
+			return False
+		if _predates_send_from_date(config, bill.invoice_date, bill, triggered_from):
 			return False
 
 		realtime = _is_realtime(triggered_from)
@@ -255,6 +294,13 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry", timeout=R
 
 		config = frappe.get_doc("CBMS Config", {"company": bill_return.company})
 		if not config.enable_cbms:
+			return False
+		# The return's OWN date, not the original's: a credit note raised today
+		# against a pre-CBMS invoice is in scope and must still be sent, which
+		# is exactly what _original_predates_cbms below allows for.
+		if _predates_send_from_date(
+			config, bill_return.credit_note_date, bill_return, triggered_from
+		):
 			return False
 
 		original_synced = frappe.db.get_value(
