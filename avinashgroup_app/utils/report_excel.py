@@ -241,7 +241,11 @@ def _annexure7_letterhead(ws, company, width, fy_display, period, date_range):
 		rows[2][0] if len(rows) > 2 else "",
 	]
 	right_lines = [
-		_("VAT Annexure 7"),
+		# The legacy export printed "VAT Annexure 7" here. Left blank on purpose:
+		# the sheet is not being presented as that document. The row stays so the
+		# accounting period and the currency note keep their positions — and so
+		# the block still balances the company name opposite it.
+		"",
 		"{0} : {1}".format(_("Accounting Period"), period) if period else "",
 		_("Amount in Nepalese Rupee (NPR)"),
 	]

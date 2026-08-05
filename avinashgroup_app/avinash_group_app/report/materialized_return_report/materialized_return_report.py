@@ -194,9 +194,10 @@ def export_xlsx(filters):
 	"""Excel download with the company letterhead above the table and a totals
 	row below it. Replaces the built-in Export menu — see materialized_return_report.js.
 
-	Deliberately NOT the sales annexure builder: that one prints "VAT Annexure 7"
-	in its header block, which is the sales book's heading, and there is no
-	reference export for the credit-note annexure to copy a heading from.
+	Deliberately NOT the sales annexure builder: that one reproduces the legacy
+	sales export's sheet — its column widths, its Indian digit grouping, its
+	totals under three named columns — none of which was measured against a
+	credit-note export, because there is no legacy credit-note export.
 	"""
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
