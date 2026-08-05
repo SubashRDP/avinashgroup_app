@@ -54,6 +54,7 @@ Usage (from the bench directory):
 """
 
 import json
+import os
 
 import frappe
 import nepali_datetime
@@ -438,8 +439,12 @@ def _chunks(seq, size):
         yield seq[i : i + size]
 
 
-DEFAULT_FOLDER = "/home/sijan/Downloads"
-SHEET_GLOB = "Materialized Report_*.xlsx"
+# The sheets travel with the code, in sheets/ next to this file — the same way
+# legacy_print_import ships its registers. A one-off historical load has no
+# value without the exact file it was run from, and a path into somebody's
+# Downloads folder does not survive the trip to a server.
+DEFAULT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sheets")
+SHEET_GLOB = "*.xlsx"
 
 
 def _peek_fiscal_year(path):
@@ -490,7 +495,6 @@ def run_all(folder=DEFAULT_FOLDER, paths=None, company=None, commit=False,
         --kwargs "{'company': 'Nepal Gas Udhyog Pvt. Ltd.', 'commit': True}"
     """
     import glob
-    import os
 
     if paths is None:
         paths = sorted(glob.glob(os.path.join(folder, SHEET_GLOB)))
