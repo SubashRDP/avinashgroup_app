@@ -456,6 +456,108 @@ def _chunks(seq, size):
         yield seq[i : i + size]
 
 
+# Bill field -> (Sales Invoice field, is it a number)
+VERIFY_FIELDS = (
+    ("total_sales", "grand_total", True),
+    ("taxable_sales_vat", "net_total", True),
+    ("vat", "total_taxes_and_charges", True),
+    ("discount", "discount_amount", True),
+    ("buyer_name", "customer_name", False),
+    ("invoice_date", "posting_date", False),
+)
+
+
+def verify(company=None, fiscal_year=None, tolerance=0.01, samples=5):
+    """Compare every imported CBMS Bill against its own Sales Invoice.
+
+    The bills carry what the OLD software recorded; the invoices carry what
+    ERPNext holds today. Nothing has ever checked the two against each other —
+    the import copied the sheet verbatim, by design, so that the report would
+    reproduce it. This is where the two stories are held up side by side.
+
+    A mismatch is not automatically an import fault. An invoice amended after
+    the legacy export, a customer renamed since, a differently-rounded discount
+    — each shows up here and each means something different. The point is to
+    see WHICH field disagrees and on how many rows, then judge.
+
+    Read-only. Reports counts per field with a few examples of each.
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_annexure_import.import_legacy_annexure.verify \\
+        --kwargs "{'company': 'Nepal Gas Udhyog Pvt. Ltd.'}"
+    """
+    conditions, params = [], {}
+    if company:
+        conditions.append("bill.company = %(company)s")
+        params["company"] = company
+    if fiscal_year:
+        conditions.append("bill.fiscal_year = %(fiscal_year)s")
+        params["fiscal_year"] = fiscal_year.replace("/", ".")
+    where = (" and " + " and ".join(conditions)) if conditions else ""
+
+    rows = frappe.db.sql(
+        """
+        select
+            bill.invoice_number, bill.sales_invoice, bill.fiscal_year,
+            bill.total_sales, bill.taxable_sales_vat, bill.vat, bill.discount,
+            bill.buyer_name, bill.invoice_date,
+            si.name as si_name, si.grand_total, si.net_total,
+            si.total_taxes_and_charges, si.discount_amount,
+            si.customer_name, si.posting_date, si.docstatus
+        from `tabCBMS Bill` bill
+        left join `tabSales Invoice` si on si.name = bill.sales_invoice
+        where 1 = 1 {where}
+        """.format(where=where),
+        params,
+        as_dict=True,
+    )
+
+    import collections
+
+    counts = collections.Counter()
+    examples = collections.defaultdict(list)
+    orphans, cancelled = [], []
+
+    for r in rows:
+        if not r.si_name:
+            orphans.append(r.invoice_number)
+            continue
+        if r.docstatus == 2:
+            cancelled.append(r.invoice_number)
+        for bill_field, si_field, numeric in VERIFY_FIELDS:
+            bill_value, si_value = r.get(bill_field), r.get(si_field)
+            if numeric:
+                same = abs(flt(bill_value) - flt(si_value)) <= tolerance
+            else:
+                same = str(bill_value or "").strip() == str(si_value or "").strip()
+            if not same:
+                counts[bill_field] += 1
+                if len(examples[bill_field]) < samples:
+                    examples[bill_field].append(
+                        {
+                            "invoice_number": r.invoice_number,
+                            "sales_invoice": r.sales_invoice,
+                            "bill": str(bill_value),
+                            "sales_invoice_value": str(si_value),
+                        }
+                    )
+
+    result = {
+        "bills_checked": len(rows),
+        "company": company or "(all)",
+        "fiscal_year": fiscal_year or "(all)",
+        "tolerance": tolerance,
+        "bills_whose_invoice_is_missing": len(orphans),
+        "bills_on_cancelled_invoices": len(cancelled),
+        "mismatches": {
+            bill_field: counts[bill_field] for bill_field, _, _ in VERIFY_FIELDS
+        },
+        "examples": {k: v for k, v in examples.items()},
+    }
+    print(json.dumps(result, indent=1, default=str))
+    return result
+
+
 # The sheets travel with the code, in sheets/ next to this file — the same way
 # legacy_print_import ships its registers. A one-off historical load has no
 # value without the exact file it was run from, and a path into somebody's
