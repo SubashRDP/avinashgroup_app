@@ -267,6 +267,7 @@ def _print_events(filters, from_dt, to_dt):
 			"sales_invoice",
 			"creation",
 			"owner",
+			"printed_by",
 			"company",
 			"customer_name",
 			"copy_number",
@@ -290,7 +291,12 @@ def _print_events(filters, from_dt, to_dt):
 		{
 			"invoice": r.sales_invoice,
 			"_ts": r.creation,
-			"user": r.owner,
+			# printed_by is the display name; owner is the user id. Rows
+			# backfilled from the old billing software carry that software's
+			# own user name in printed_by and the import runner in owner, so
+			# preferring owner here would report every pre-Frappe print as
+			# "Administrator".
+			"user": r.printed_by or r.owner,
 			"operation": "Printed",
 			"company": r.company,
 			"customer_name": r.customer_name,
@@ -450,17 +456,28 @@ def _apply_invoice_context(events, filters):
 
 	The Add event is re-dated to the invoice's posting_date (its IRD date) rather
 	than the submit/creation timestamp; its Time keeps the real clock time.
-	Printed / Modified are left on their own event timestamp."""
+	Printed / Modified are left on their own event timestamp.
+
+	The Add event's user AND clock time are re-read from the invoice's
+	custom_created_by / custom_created_on — the app-wide audit pair naming the
+	clerk who entered it and the moment they did. The Version row it was built
+	from carries whoever performed the submit and when, which for API-created
+	invoices is the API user on every row (Administrator on all 48,837 of
+	avinas1's) at import time rather than entry time.
+
+	Modified keeps its own Version owner and timestamp: that IS who edited, and
+	when. Printed likewise stays on the Print Log row — neither the Print Log
+	nor the CBMS doctypes carry the custom audit pair, and for an event log the
+	row's own author is the actor anyway."""
 	names = {e["invoice"] for e in events}
 	info = {}
 	if names:
 		fl = {"name": ["in", list(names)], "docstatus": 1}
 		_apply_company_scope(fl, filters)
-		for r in frappe.get_all(
-			"Sales Invoice",
-			filters=fl,
-			fields=["name", "company", "is_return", "customer_name", "posting_date"],
-		):
+		fields = ["name", "company", "is_return", "customer_name", "posting_date"]
+		meta = frappe.get_meta("Sales Invoice")
+		fields += [f for f in ("custom_created_by", "custom_created_on") if meta.has_field(f)]
+		for r in frappe.get_all("Sales Invoice", filters=fl, fields=fields):
 			info[r.name] = r
 
 	cutoffs = _cbms_cutoffs({r.company for r in info.values()})
@@ -485,6 +502,8 @@ def _apply_invoice_context(events, filters):
 		# invoice's posting date, not the submit/creation timestamp.
 		if e["operation"] == "Add":
 			e["_date"] = inv.posting_date
+			e["user"] = inv.get("custom_created_by") or e["user"]
+			e["_ts"] = inv.get("custom_created_on") or e["_ts"]
 		kept.append(e)
 	return kept
 
@@ -503,8 +522,12 @@ def _columns():
 			"align": "center"},
 		{"label": _("Operation"), "fieldname": "operation", "fieldtype": "Data", "width": 100,
 			"align": "center"},
-		{"label": _("Username"), "fieldname": "username", "fieldtype": "Link",
-			"options": "User", "width": 150, "align": "center"},
+		# Data, not Link -> User: Printed rows backfilled from the old billing
+		# software name a user of THAT software (ASHISH, NDILLI), which has no
+		# Frappe User record to link to. Add/Modified rows still show a user id,
+		# just not as a clickable link.
+		{"label": _("Username"), "fieldname": "username", "fieldtype": "Data",
+			"width": 150, "align": "center"},
 		{"label": _("Action"), "fieldname": "action", "fieldtype": "Data", "width": 110,
 			"align": "center"},
 		{"label": _("Details"), "fieldname": "details", "fieldtype": "Data", "width": 280},

@@ -41,6 +41,11 @@ Each actual print inserts one Sales Invoice Print Log row per sheet (who, when,
 which sheet number) — the per-event trail behind the Invoice Activity Report.
 Logging must never block the print: a failure goes to the Error Log and the
 print proceeds.
+
+"Who" is recorded twice on purpose: `owner` is the real user id, and
+`printed_by` is the display name. The Materialized Report and the pre-Frappe
+history backfilled from the old NGI billing software both need a name, and that
+software's user names (ASHISH, NDILLI) are not Frappe users.
 """
 
 import frappe
@@ -200,8 +205,24 @@ def _add_print_count_doc(doc, sheets: int) -> int:
 		return _stored_count(name)
 
 
+def _session_display_name() -> str:
+	"""Display name of the user doing the printing, for Print Log.printed_by.
+
+	The row's `owner` already carries the user id; printed_by carries the name a
+	report shows, so live rows read the same way as the legacy rows backfilled
+	from the old billing software (which only ever recorded a name). Falls back
+	to the user id, and never raises — this runs on the print path.
+	"""
+	user = frappe.session.user
+	try:
+		return frappe.db.get_value("User", user, "full_name") or user
+	except Exception:
+		return user
+
+
 def _log_print(doc, start_sheet: int, titles: list[str]):
 	"""One Sales Invoice Print Log row per sheet, numbered from start_sheet+1."""
+	printed_by = _session_display_name()
 	for i, _title in enumerate(titles, 1):
 		try:
 			frappe.get_doc(
@@ -213,6 +234,7 @@ def _log_print(doc, start_sheet: int, titles: list[str]):
 					"branch_name": doc.get("custom_branch_name"),
 					"company": doc.company,
 					"copy_number": start_sheet + i,
+					"printed_by": printed_by,
 				}
 			).insert(ignore_permissions=True)
 		except Exception:
