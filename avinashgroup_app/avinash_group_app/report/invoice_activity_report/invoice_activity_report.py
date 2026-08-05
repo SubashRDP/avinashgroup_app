@@ -458,19 +458,25 @@ def _apply_invoice_context(events, filters):
 	than the submit/creation timestamp; its Time keeps the real clock time.
 	Printed / Modified are left on their own event timestamp.
 
-	The Add event's user is re-read from the invoice's custom_created_by, the
-	app-wide audit field naming the clerk who entered it. The Version row it was
-	built from carries whoever performed the submit, which for API-created
-	invoices is the API user on every row — Administrator on all 48,837 of
-	avinas1's. Modified keeps its own Version owner: that IS who edited."""
+	The Add event's user AND clock time are re-read from the invoice's
+	custom_created_by / custom_created_on — the app-wide audit pair naming the
+	clerk who entered it and the moment they did. The Version row it was built
+	from carries whoever performed the submit and when, which for API-created
+	invoices is the API user on every row (Administrator on all 48,837 of
+	avinas1's) at import time rather than entry time.
+
+	Modified keeps its own Version owner and timestamp: that IS who edited, and
+	when. Printed likewise stays on the Print Log row — neither the Print Log
+	nor the CBMS doctypes carry the custom audit pair, and for an event log the
+	row's own author is the actor anyway."""
 	names = {e["invoice"] for e in events}
 	info = {}
 	if names:
 		fl = {"name": ["in", list(names)], "docstatus": 1}
 		_apply_company_scope(fl, filters)
 		fields = ["name", "company", "is_return", "customer_name", "posting_date"]
-		if frappe.get_meta("Sales Invoice").has_field("custom_created_by"):
-			fields.append("custom_created_by")
+		meta = frappe.get_meta("Sales Invoice")
+		fields += [f for f in ("custom_created_by", "custom_created_on") if meta.has_field(f)]
 		for r in frappe.get_all("Sales Invoice", filters=fl, fields=fields):
 			info[r.name] = r
 
@@ -497,6 +503,7 @@ def _apply_invoice_context(events, filters):
 		if e["operation"] == "Add":
 			e["_date"] = inv.posting_date
 			e["user"] = inv.get("custom_created_by") or e["user"]
+			e["_ts"] = inv.get("custom_created_on") or e["_ts"]
 		kept.append(e)
 	return kept
 
