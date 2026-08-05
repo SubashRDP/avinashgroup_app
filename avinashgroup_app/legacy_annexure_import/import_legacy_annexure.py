@@ -256,6 +256,23 @@ def _resolve_invoices(numbers, company=None, from_date=None, to_date=None):
     return mapping, ambiguous
 
 
+def _log_name(sales_invoice):
+    """Print Log docname for an imported row: the invoice's own name with a
+    suffix, e.g. "NGI-SB-79/80-00010-L1".
+
+    Was frappe.generate_hash(length=10), which collided on live: ten hex
+    characters over ~92,000 rows is a birthday collision waiting to happen, and
+    it aborted the 81/82 load with "Duplicate entry ... for key 'PRIMARY'".
+    Deriving the name from the invoice makes a collision impossible rather than
+    unlikely, and makes a re-run land on the same names instead of new ones.
+
+    One row per invoice is written by this importer (the sheet records a single
+    print time), hence the fixed suffix. Doc names allow 140 characters; an
+    invoice name is nowhere near that.
+    """
+    return f"{sales_invoice}-L1"
+
+
 def _entered_by(invoice):
     """Clerk name for CBMS Bill.created_by — the invoice's audit field, resolved
     to a full name, with owner only as a fallback."""
@@ -360,7 +377,7 @@ def run(path, company=None, fiscal_year=None, commit=False, limit=None,
                 printed_rows += 1
                 logs.append(
                     (
-                        frappe.generate_hash(length=10),
+                        _log_name(invoice.name),
                         printed_at,
                         frappe.utils.now(),
                         frappe.session.user,
