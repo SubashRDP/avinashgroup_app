@@ -762,7 +762,10 @@ padding:0px 30px;
              so it adds no height — HEAD_PX stays the same whatever the page count. Shown
              on every voucher, including single-page ones. -#}
           <div class="page-of">Page {{ page_no }} of {{ total_pages }}</div>
-          <h4>{{ doc.custom_p_type or "" }}</h4>
+          {#- Fixed title. The parent format echoes doc.custom_p_type here, which on
+             these vouchers reads "Cash/ Bank or Contra Voucher"; this format always
+             prints the Cash/Bank layout, so it always announces itself as such. -#}
+          <h4>Cash/ Bank</h4>
           <h2>{{ company.company_name }}</h2>
           <div>Kathmandu</div>
         </td>
