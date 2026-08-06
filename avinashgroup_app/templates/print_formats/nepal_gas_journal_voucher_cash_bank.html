@@ -1,11 +1,22 @@
 {#- ==========================================================================
-Nepal Gas Journal Voucher — Journal Entry voucher (avinashgroup_app).
-Source of truth for the "Nepal Gas Journal Voucher" standard Print Format;
-print_format/nepal_gas_journal_voucher/nepal_gas_journal_voucher.json
-only {% include %}s this file. Per-JV-type columns after Account:
-  Cash Entry / Cash-Bank-Contra / Journal Entry -> Vehicle | Party | Party Name
-  all other types                               -> Party | Party Name
-S.N. column always shown. Narration only for Cash Entry.
+Nepal Gas Journal Voucher Cash Bank — Journal Entry voucher (avinashgroup_app).
+Source of truth for the "Nepal Gas Journal Voucher Cash Bank" standard Print
+Format; print_format/nepal_gas_journal_voucher_cash_bank/
+nepal_gas_journal_voucher_cash_bank.json only {% include %}s this file.
+
+Created 2026-08-06 from nepal_gas_journal_voucher.html, carrying ONLY that
+file's "Cash/ Bank or Contra Voucher" branch. All the other JV-type branches
+(Cash Entry, Journal Entry, Debit/Credit Note, Party Journal) were stripped,
+so this format renders every voucher with the Cash/Bank layout regardless of
+doc.custom_p_type.
+
+Columns: S.N. | Description | Party | Party Name | Payment (5).
+The parent's Receipt (debit) + Payment (credit) pair is collapsed into ONE
+amount column headed "Payment", showing the row's own amount.
+
+The two files are independent copies, not a shared partial — a change meant
+for both must be made in both (the same rule that already applies to the A4
+Full Page twin).
 =========================================================================== -#}
 <style>
 @page {
@@ -39,8 +50,8 @@ body {
   border-collapse: collapse; 
 }
 
-th, td {
-  border:1px solid #000;
+th, td { 
+  border:1px solid #000; 
   padding:4px;
   font-size:12px;
 }
@@ -119,7 +130,7 @@ tr, td, th { page-break-inside: avoid; }
  
  .top-table tr td,.table2 tr td
  {
-     font-size:10px !important;
+     font-size:12px !important;
      padding: 4px 0px !important;
  }
  /*
@@ -140,7 +151,7 @@ tr, td, th { page-break-inside: avoid; }
  {
      font-size:12px !important;
         padding: 4px !important;
-
+ 
  }
  
  .main-table.table-bordered
@@ -163,7 +174,7 @@ tr, td, th { page-break-inside: avoid; }
       position: absolute;
       bottom: 0;
       width: 100%;
-      font-size: 10px;
+      font-size: 12px;
       border-top: 1px solid #000;
       padding-top: 10px;
     }
@@ -176,7 +187,7 @@ tr, td, th { page-break-inside: avoid; }
   bottom: 20px;
   width: 100%;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   right:0;
 
      }
@@ -244,7 +255,7 @@ td.texleft p {
  
  .template label {
  
-    font-size: 10px;
+    font-size: 12px;
    color:#192734;
  
 }
@@ -260,14 +271,14 @@ td.texleft p {
   
   .template td {
     padding: 3px !important;
-    font-size:10px;
+    font-size:12px;
 }
   
   
   .template th 
   {
 padding: 3px !important;
-    font-size:10px;
+    font-size:12px;
     font-weight:700;
     color:#030404;
 } 
@@ -368,7 +379,7 @@ padding: 3px !important;
 
 .authorized label span
 {
-    font-size:10px;
+    font-size:12px;
 }
 
 
@@ -442,14 +453,14 @@ padding:0px 30px;
        
      .template label
         {
-    font-size: 10px;
+    font-size: 12px;
    
 }
          
 .template td, .template th 
 {
     padding: 3px !important;
-    font-size:10px;
+    font-size:12px;
 }
  
   
@@ -490,7 +501,7 @@ padding:0px 30px;
  
   .top-table tr td,.table2 tr td
  {
-     font-size:10px !important;
+     font-size:12px !important;
      padding: 4px 0px !important;
  }
  
@@ -585,44 +596,28 @@ padding:0px 30px;
 {%- set R.i = R.i + 1 -%}
 {%- if (R.i - 1) in S.breaks %}{{ page_head(S.breaks.index(R.i - 1) + 2, total_pages) }}{% endif -%}
 {%- endmacro -%}
-{% set is_debit_note = doc.custom_p_type == "Debit Note" %}
-{% set is_credit_note = doc.custom_p_type == "Credit Note" %}
-{#- Debit Note and Credit Note share the same layout. -#}
-{% set is_note = is_debit_note or is_credit_note %}
-{#- Cash/Bank or Contra Voucher: S.N. | Description | Receipt | Payment. -#}
-{% set is_cash_contra = doc.custom_p_type == "Cash/ Bank or Contra Voucher" %}
-{#- Cash Entry: petty-cash style S.N. | Debit | Class | Amount. -#}
-{% set is_cash_entry = doc.custom_p_type == "Cash Entry" %}
-{#- Journal Entry: S.N. | Particular | Class | Debit(Rs.|P.) | Credit(Rs.|P.). -#}
-{% set is_journal_voucher = doc.custom_p_type == "Journal Entry" %}
-{#- Party Journal: plain key-value party blocks (no table columns). -#}
-{% set is_party_journal = doc.custom_p_type == "Party Journal" %}
-{% set vehicle_types = ["Cash Entry", "Cash/ Bank or Contra Voucher", "Journal Entry"] %}
-{% set show_vehicle = doc.custom_p_type in vehicle_types %}
-{% set show_party = true %}
-{#- Notes: 5-col. Cash/Contra & Cash Entry: 4-col. Journal Voucher: 5-col. Party Journal: 4-col. -#}
-{#- Cash Entry: S.N. | Debit | Vehicle | Party | Party Name | Amount = 6 cols.
-   Journal Voucher: S.N. | Particular | Vehicle | Party | Party Name | Debit | Credit = 7 cols. -#}
-{% set ncols = 6 if is_note else (6 if is_cash_entry else (7 if is_journal_voucher else (6 if is_cash_contra else (4 if is_party_journal else (5 + (1 if show_vehicle else 0) + (1 if show_party else 0)))))) %}
-{#- Surface the Cash/Bank account among the rows in the header as "Cash/Bank: <account name>".
-    - Cash Entry: always (first Cash/Bank-type account).
-    - Contra Voucher: only when exactly ONE row is a Cash/Bank account (bank + party). When
-      both rows are Cash/Bank (bank-to-bank transfer), leave them in the body instead.
-    cash_bank.count lets the contra block decide; .account is used to skip that row in the body. -#}
+{#- This format has ONE layout — the Cash/Bank or Contra Voucher one:
+   S.N. | Description | Party | Party Name | Receipt | Payment = 6 columns.
+   It is applied to every voucher printed with this format, whatever
+   doc.custom_p_type says. The per-type branching (Cash Entry, Journal Entry,
+   Debit/Credit Note, Party Journal) lives only in nepal_gas_journal_voucher.html
+   and is deliberately not carried here. -#}
+{% set ncols = 5 %}
+{#- Surface the Cash/Bank account among the rows in the header as "Cash/Bank: <account name>",
+    but only when exactly ONE row is a Cash/Bank account (bank + party). When both rows are
+    Cash/Bank (a bank-to-bank transfer), leave them in the body instead.
+    cash_bank.count decides that; .account is used to skip that row in the body. -#}
 {% set cash_bank = namespace(name="", account="", count=0) %}
-{% if is_cash_entry or is_cash_contra %}
-  {% for row in doc.accounts %}
-    {% if frappe.db.get_value("Account", row.account, "account_type") in ["Cash", "Bank"] %}
-      {% set cash_bank.count = cash_bank.count + 1 %}
-      {% if not cash_bank.name %}
-        {% set cash_bank.name = frappe.get_cached_doc("Account", row.account).account_name %}
-        {% set cash_bank.account = row.account %}
-      {% endif %}
+{% for row in doc.accounts %}
+  {% if frappe.db.get_value("Account", row.account, "account_type") in ["Cash", "Bank"] %}
+    {% set cash_bank.count = cash_bank.count + 1 %}
+    {% if not cash_bank.name %}
+      {% set cash_bank.name = frappe.get_cached_doc("Account", row.account).account_name %}
+      {% set cash_bank.account = row.account %}
     {% endif %}
-  {% endfor %}
-{% endif %}
-{#- Header shows Cash/Bank for Cash Entry always, and for a Contra with exactly one bank row. -#}
-{% set show_cash_bank_header = (is_cash_entry and cash_bank.name) or (is_cash_contra and cash_bank.count == 1) %}
+  {% endif %}
+{% endfor %}
+{% set show_cash_bank_header = cash_bank.count == 1 %}
 
 {#- ---- Footer placement -----------------------------------------------------
    The signature block has to print just above the fold (~49% down the sheet) on
@@ -639,11 +634,11 @@ padding:0px 30px;
 
    Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
      PAGE_PX   printable height of one page (297 - 10 top - 148 bottom = 139mm)
-     HEAD_PX   the <thead> block, reprinted on every page. Stated a little over
-               the measured height, like the row heights, so the breaks err early. It must
+     HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
+               little over, like the row heights, so the breaks err early. It must
                stay under 131px (25% of PAGE_PX) or Chrome stops reprinting it —
                see the .company-info rules up in the stylesheet.
-     LINE_PX   one line of body text; PAD_PX is a <td>'s padding + border
+     LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top
                of the printable area (132mm -> 142mm down the sheet, just above the
@@ -651,41 +646,20 @@ padding:0px 30px;
                estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
      CH_*      characters that fit on one line of a column, for guessing wraps
 
-   FONT-DERIVED (2026-08-06). These used to be hand-tuned px literals, which meant
-   every font-size change silently invalidated them: the estimate stayed the same
-   while the real rows got taller, the spacer was sized as if everything fitted, and
-   the content ran past the page edge — which is exactly how the signature block
-   ended up alone on page 2 of a Credit Note. Now only FONT_PX is set by hand, and
-   it MUST match the body font-size in the stylesheet above. Everything else scales
-   off it, so changing the size no longer moves the footer.
-
-   Characters-per-line can be computed rather than guessed because the format is
-   monospace (Courier): every glyph advances exactly 0.6em, so a column of known
-   width holds width / (0.6 x FONT_PX) characters. That is what CH_* do below.
-   The account column's width differs per JV type, so ACC_PCT is per type — a
-   single shared CH_ACC was over-generous for the narrow 24% Note/Journal column
-   and is what let "Letter of Credit (LC) A/c" wrap unpredicted. -#}
-{#- Body font size in px. Keep in step with the stylesheet's `body`/`th, td` rules. -#}
-{% set FONT_PX = 12 %}
-{#- Courier advance width is 0.6em, so one character is 0.6 x the font size. -#}
-{% set CHAR_PX = FONT_PX * 0.6 %}
-{#- Printable width: A4 210mm less the 10mm side margins = 190mm at 96dpi. -#}
-{% set CONTENT_PX = 718 %}
+   RECALIBRATED 2026-08-06 for 12px body text (this format prints 2px larger than
+   nepal_gas_journal_voucher.html, which is still on 10px and keeps the old
+   numbers). Text-driven values were scaled by 12/10: line heights up a fifth,
+   characters-per-line down a fifth. PAGE_PX / TARGET_PX / PAD_PX are page and
+   padding geometry, not text, so they are unchanged. -#}
 {% set PAGE_PX = 525 %}
-{% set LINE_PX = (FONT_PX * 1.35)|round(0, 'ceil')|int %}
+{% set HEAD_PX = 132 %}
+{% set LINE_PX = 16 %}
 {% set PAD_PX = 11 %}
-{#- Fixed parts (rules, paddings, the 20px/15px company headings) plus the lines of
-   body text each block holds, so both track the font size. At FONT_PX 12 these come
-   out at the 125 / 92 that were measured by hand off a rendered voucher. -#}
-{% set HEAD_PX = 77 + 3 * LINE_PX %}
-{% set FOOT_PX = 60 + 2 * LINE_PX %}
+{% set FOOT_PX = 92 %}
 {% set TARGET_PX = 495 %}
-{#- Width of the account/particular column, per JV type, as declared in page_head(). -#}
-{% set ACC_PCT = 35 if is_cash_contra else (30 if is_cash_entry else 24) %}
-{% set PARTY_PCT = 22 if is_note else 19 %}
-{% set CH_ACC = ((CONTENT_PX * ACC_PCT / 100) / CHAR_PX)|int %}
-{% set CH_PARTY = ((CONTENT_PX * PARTY_PCT / 100) / CHAR_PX)|int %}
-{% set CH_WIDE = (CONTENT_PX / CHAR_PX)|int %}
+{% set CH_ACC = 30 %}
+{% set CH_PARTY = 22 %}
+{% set CH_WIDE = 92 %}
 {#- Rows per page are budgeted 25px short of the real page so the forced breaks
    below always fire BEFORE the browser would have broken by itself — the browser
    winning that race is what puts an unplanned page between the data and the
@@ -698,33 +672,18 @@ padding:0px 30px;
 {#- One entry per <tr> in <tbody>, in render order — the indexes double as the
    nth-child selectors used to force the page breaks below. -#}
 {% set G = namespace(items=[], data_count=0) %}
-{% if is_party_journal %}
-  {#- Party Journal rows are a 4-line key-value block (Code / Name / gap / Amount /
-     Document Class) rather than a single line, and end with In Words + Remarks. -#}
-  {% for row in doc.accounts %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * 5) %}
-  {% endfor %}
-  {% set G.data_count = G.items|length %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX) %}
-  {% if doc.custom_paid_to %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX) %}
-  {% endif %}
-  {% if doc.cheque_no or doc.custom_reference_miti or doc.cheque_date %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX) %}
-  {% endif %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX) %}
-{% else %}
+{% if true %}
   {% for row in doc.accounts %}
     {% set acc = frappe.get_cached_doc("Account", row.account) %}
-    {%- set skipped = (is_cash_entry and acc.account_type in ["Cash", "Bank"])
-          or (is_cash_contra and show_cash_bank_header and row.account == cash_bank.account) -%}
+    {#- The header carries the single Cash/Bank row, so it is not a body row. -#}
+    {%- set skipped = show_cash_bank_header and row.account == cash_bank.account -%}
     {% if not skipped %}
       {% set pname = frappe.get_cached_doc(row.party_type, row.party).get_title() if row.party else "" %}
       {% set lines = [1, ((acc.account_name|length) + CH_ACC - 1) // CH_ACC,
                          ((pname|string|length) + CH_PARTY - 1) // CH_PARTY]|max %}
       {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
-      {#- Cash Entry and Contra print a per-row Narration on its own line. -#}
-      {% if (is_cash_entry or is_cash_contra) and row.user_remark %}
+      {#- Every row may print a Narration on its own line. -#}
+      {% if row.user_remark %}
         {% set nlines = [1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max %}
         {% set _add = G.items.append(PAD_PX + LINE_PX * nlines) %}
       {% endif %}
@@ -813,20 +772,7 @@ padding:0px 30px;
         <td colspan="{{ ncols }}">
           {#- Fixed 2x2 header table: Voucher No / Posting Miti stay aligned top-right
              even when Reference Number / Reference Miti are empty.
-             Cash Entry uses a simplified variant: Voucher # / Date on the right,
-             Cash/Bank account on the left. -#}
-          {% if is_cash_entry %}
-          <table style="width:100%; border:none; border-collapse:collapse;">
-            <tr>
-              <td style="border:none; text-align:left; vertical-align:top; width:50%; padding:0;">&nbsp;</td>
-              <td style="border:none; text-align:right; vertical-align:top; width:50%; padding:0;">{% if doc.custom_name %}<strong>Voucher No :</strong> {{ doc.custom_name }}{% endif %}</td>
-            </tr>
-            <tr>
-              <td style="border:none; text-align:left; vertical-align:top; padding:0;">{% if cash_bank.name %}<strong>Cash/Bank:</strong> {{ cash_bank.name }}{% endif %}</td>
-              <td style="border:none; text-align:right; vertical-align:top; padding:0;">{% if doc.custom_posting_miti or doc.posting_date %}<strong>Date :</strong> {% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% else %}{{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}{% endif %}{% endif %}</td>
-            </tr>
-          </table>
-          {% else %}
+             -#}
           {#- Reference Number / Reference Miti are NOT shown here — they appear in the
              footer's Cheque No / Dated block instead. Header keeps only Voucher No + Posting Miti. -#}
           <table style="width:100%; border:none; border-collapse:collapse;">
@@ -839,64 +785,19 @@ padding:0px 30px;
               <td style="border:none; text-align:right; vertical-align:top; padding:0;">{% if doc.custom_posting_miti or doc.posting_date %}<strong>Posting Miti :</strong> {% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}{% endif %}</td>
             </tr>
           </table>
-          {% endif %}
         </td>
       </tr>
 
-      {% if is_note %}
-      {#- Debit/Credit Note header: S.N. | Particular | Party | Party Name | Debit (Rs.) | Credit (Rs.) -#}
+      {#- Column header: S.N. | Description | Party | Party Name | Payment.
+         Single amount column — the parent format's Receipt/Payment pair is
+         collapsed to one, and it is headed "Payment". -#}
       <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
         <th style="width:5%; text-align:center;">S.N.</th>
-        <th style="width:24%; text-align:left;">Particular</th>
-        <th style="width:13%; text-align:left;">Party</th>
-        <th style="width:22%; text-align:left;">Party Name</th>
-        <th style="width:18%; text-align:right;">Debit (Rs.)</th>
-        <th style="width:18%; text-align:right;">Credit (Rs.)</th>
-      </tr>
-      {% elif is_cash_contra %}
-      {#- Cash/Bank or Contra header: S.N. | Description | Party | Party Name | Receipt | Payment -#}
-      <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
-        <th style="width:5%; text-align:center;">S.N.</th>
-        <th style="width:35%; text-align:left;">Description</th>
-        <th style="width:13%; text-align:left;">Party</th>
-        <th style="width:19%; text-align:left;">Party Name</th>
-        <th style="width:14%; text-align:right;">Receipt</th>
+        <th style="width:40%; text-align:left;">Description</th>
+        <th style="width:15%; text-align:left;">Party</th>
+        <th style="width:26%; text-align:left;">Party Name</th>
         <th style="width:14%; text-align:right;">Payment</th>
       </tr>
-      {% elif is_cash_entry %}
-      {#- Cash Entry header: S.N. | Debit | Vehicle | Party | Party Name | Amount -#}
-      <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
-        <th style="width:5%; text-align:center;">S.N.</th>
-        <th style="width:30%; text-align:left;">Debit</th>
-        <th style="width:15%; text-align:left;">Vehicle</th>
-        <th style="width:15%; text-align:left;">Party</th>
-        <th style="width:20%; text-align:left;">Party Name</th>
-        <th style="width:15%; text-align:right;">Amount</th>
-      </tr>
-      {% elif is_journal_voucher %}
-      {#- Journal Voucher header: S.N. | Particular | Vehicle | Party | Party Name | Debit (Rs.) | Credit (Rs.) -#}
-      <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
-        <th style="width:5%; text-align:center;">S.N.</th>
-        <th style="width:24%; text-align:left;">Particular</th>
-        <th style="width:13%; text-align:left;">Vehicle</th>
-        <th style="width:13%; text-align:left;">Party</th>
-        <th style="width:19%; text-align:left;">Party Name</th>
-        <th style="width:13%; text-align:right;">Debit (Rs.)</th>
-        <th style="width:13%; text-align:right;">Credit (Rs.)</th>
-      </tr>
-      {% elif is_party_journal %}
-      {#- Party Journal: single "PARTICULARS" header bar (no columns). -#}
-      <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
-        <th colspan="{{ ncols }}" style="text-align:left;">PARTICULARS</th>
-      </tr>
-      {% else %}
-      <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
-        <th style="width:5%; text-align:center;">S.N.</th><th style="width:{% if show_vehicle or show_party %}30%{% else %}45%{% endif %};">Account</th>{% if show_vehicle %}<th style="width:15%;">Vehicle</th>{% endif %}{% if show_party %}<th style="width:15%;">Party</th>{% endif %}
-        <th style="width:20%;">Party Name</th>
-        <th style="width:15%; text-align:right; padding-right:18px;">Debit</th>
-        <th style="width:15%; text-align:right;">Credit</th>
-      </tr>
-      {% endif %}
 {%- endmacro -%}
 
 <table class="main-table table table-bordered">
@@ -905,40 +806,14 @@ padding:0px 30px;
     <tbody>
     {% set R = namespace(i=0) %}
     {{ page_head(1, TOTAL_PAGES) }}
-    {% if is_note %}
-    {#- ---------- Debit/Credit Note body: Particular | Party | Party Name | Debit(Rs.) | Credit(Rs.) ---------- -#}
-    {% for row in doc.accounts %}
-      {% set acc = frappe.get_cached_doc("Account", row.account) %}
-      {% set dr = row.debit_in_account_currency or 0 %}
-      {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
-        <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
-        <td><strong>{{ acc.account_name }}</strong></td>
-        <td>{{ row.party_type or "" }}</td>
-        <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% elif row.custom_subtype %}{{ row.custom_subtype }}{% endif %}</td>
-        <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
-        <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
-      </tr>
-    {% endfor %}
-{{ tail_spacer(ncols) }}
-      <tr class="jv-total">
-        {#- "Total" label right-aligned across S.N. + Particular + Party + Party Name so it sits just left of the figures. -#}
-        <td colspan="4" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
-        <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
-        <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_credit) }}</strong></td>
-      </tr>
-      {{ paid_cheque(doc, ncols) }}
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
-      </tr>
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
-      </tr>
-    {% elif is_cash_contra %}
-    {#- ---------- Cash/Bank or Contra body: S.N. | Description | Receipt | Payment, with per-line Narration.
-        Receipt = debit (money received), Payment = credit (money paid).
-        When exactly one row is a Cash/Bank account (bank + party), it is shown in the header
-        (show_cash_bank_header) and skipped here; a bank-to-bank transfer keeps both rows. ---------- -#}
+    {#- ---------- Body: S.N. | Description | Party | Party Name | Payment,
+        with per-line Narration.
+        ONE amount column, headed "Payment": the separate Receipt (debit) and
+        Payment (credit) pair of the parent format is collapsed into a single
+        figure per row — the row's own amount, whichever side it falls on.
+        When exactly one row is a Cash/Bank account (bank + party), it is shown in the
+        header (show_cash_bank_header) and skipped here; a bank-to-bank transfer keeps
+        both rows. ---------- -#}
     {% set sn = namespace(i=0) %}
     {% for row in doc.accounts %}
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
@@ -951,13 +826,12 @@ padding:0px 30px;
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
         <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% endif %}</td>
-        <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
-        <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
+        <td style="text-align:right;">{{ amt(dr or cr) }}</td>
       </tr>
       {% if row.user_remark %}
       {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
-        <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
+        <td colspan="4"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
       {% endif %}
       {% endif %}
@@ -966,7 +840,6 @@ padding:0px 30px;
       <tr class="jv-total">
         <td colspan="4" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
         <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
-        <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_credit) }}</strong></td>
       </tr>
       {{ paid_cheque(doc, ncols) }}
       <tr style="border-top:1px solid #000;">
@@ -975,208 +848,6 @@ padding:0px 30px;
       <tr style="border-top:1px solid #000;">
         <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
       </tr>
-    {% elif is_cash_entry %}
-    {#- ---------- Cash Entry (petty cash) body: S.N. | Debit | Vehicle | Party | Party Name | Amount,
-        with per-line Narration. Debit = account name, Amount = the row's amount.
-        Vehicle = license plate of the linked Vehicle (custom_subtype); Party = party_type;
-        Party Name = party doc title. The Cash/Bank account is shown in the header, so its
-        row(s) are skipped here. ---------- -#}
-    {% set sn = namespace(i=0) %}
-    {% for row in doc.accounts %}
-      {% set acc = frappe.get_cached_doc("Account", row.account) %}
-      {% if acc.account_type not in ["Cash", "Bank"] %}
-      {% set sn.i = sn.i + 1 %}
-      {% set amount = row.debit_in_account_currency or row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
-        <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
-        <td><strong>{{ acc.account_name }}</strong></td>
-        <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
-        <td>{{ row.party_type or "" }}</td>
-        <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% endif %}</td>
-        <td style="text-align:right;">{% if amount %}{{ amt(amount) }}{% endif %}</td>
-      </tr>
-      {% if row.user_remark %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
-        <td></td>
-        <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
-      </tr>
-      {% endif %}
-      {% endif %}
-    {% endfor %}
-{{ tail_spacer(ncols) }}
-      <tr class="jv-total">
-        <td colspan="5" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
-        <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
-      </tr>
-      {{ paid_cheque(doc, ncols) }}
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
-      </tr>
-      <tr style="border-top:1px solid #000; border-bottom:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
-      </tr>
-    {% elif is_journal_voucher %}
-    {#- ---------- Journal Voucher body: S.N. | Particular | Vehicle | Party | Party Name | Debit(Rs.) | Credit(Rs.).
-        Particular = account name; Vehicle = license plate of linked Vehicle (custom_subtype);
-        Party = party_type; Party Name = party doc title. ---------- -#}
-    {% for row in doc.accounts %}
-      {% set acc = frappe.get_cached_doc("Account", row.account) %}
-      {% set dr = row.debit_in_account_currency or 0 %}
-      {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
-        <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
-        <td><strong>{{ acc.account_name }}</strong></td>
-        <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
-        <td>{{ row.party_type or "" }}</td>
-        <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% endif %}</td>
-        <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
-        <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
-      </tr>
-    {% endfor %}
-{{ tail_spacer(ncols) }}
-      <tr class="jv-total">
-        <td colspan="5" style="text-align:right; padding-right:14px;"><strong>Total</strong></td>
-        <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_debit) }}</strong></td>
-        <td style="text-align:right; border-top:1px solid #000;"><strong>{{ amt(doc.total_credit) }}</strong></td>
-      </tr>
-      {{ paid_cheque(doc, ncols) }}
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
-      </tr>
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
-      </tr>
-    {% elif is_party_journal %}
-    {#- ---------- Party Journal body: plain key-value block per party (no boxes).
-        Party Type label = "Vendor" for Supplier, else "Customer". Code = party id, Name = party title,
-        Debit/Credit Note Amount = the row's amount. All debit rows are listed first, then all
-        credit rows. ---------- -#}
-    {% set debit_rows = doc.accounts | selectattr("debit_in_account_currency") | list %}
-    {% set credit_rows = doc.accounts | selectattr("credit_in_account_currency") | list %}
-    {% for row in debit_rows + credit_rows %}
-      {#- Separator line between the debit section and the credit section. -#}
-      {% if debit_rows|length > 0 and loop.index == debit_rows|length + 1 %}
-      <tr><td colspan="{{ ncols }}" style="border-top:1px solid #000; padding:0; font-size:0; line-height:0;">&nbsp;</td></tr>
-      {% endif %}
-      {% set ptype = "Vendor" if row.party_type == "Supplier" else "Customer" %}
-      {% set pname = frappe.get_cached_doc(row.party_type, row.party).get_title() if row.party else "" %}
-      {% set dr = row.debit_in_account_currency or 0 %}
-      {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
-        <td colspan="{{ ncols }}" style="padding:8px 0 0 0;">
-          <table style="width:100%; border:none; border-collapse:collapse;">
-            <tr>
-              <td style="border:none; width:20%; vertical-align:top;">{{ ptype }} Code</td>
-              <td style="border:none; vertical-align:top;">: {{ row.party or "" }}</td>
-              <td style="border:none;"></td>
-              <td style="border:none; width:20%;"></td>
-            </tr>
-            <tr>
-              <td style="border:none; vertical-align:top;">{{ ptype }} Name</td>
-              <td style="border:none; vertical-align:top;">: {{ pname }}</td>
-              <td style="border:none;"></td>
-              <td style="border:none;"></td>
-            </tr>
-            <tr>
-              <td colspan="4" style="border:none; height:8px;"></td>
-            </tr>
-            <tr>
-              <td style="border:none; vertical-align:top;">{% if dr %}Debit{% else %}Credit{% endif %} Note Amount</td>
-              <td style="border:none; vertical-align:top;">:</td>
-              <td style="border:none; text-align:right; vertical-align:top;">Nepalese Rupee</td>
-              <td style="border:none; text-align:right; vertical-align:top;">{{ amt(dr or cr) }}</td>
-            </tr>
-            <tr>
-              <td style="border:none; vertical-align:top;">Document Class</td>
-              <td style="border:none; vertical-align:top;">:</td>
-              <td style="border:none;"></td>
-              <td style="border:none;"></td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    {% endfor %}
-{{ tail_spacer(ncols) }}
-      {#- In-words + total amount -#}
-      <tr>
-        <td colspan="{{ ncols }}" style="border-top:1px solid #000; padding-top:6px;">
-          <table style="width:100%; border:none; border-collapse:collapse;">
-            <tr>
-              <td style="border:none;"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
-              <td style="border:none; text-align:right;">Nepalese Rupee</td>
-              <td style="border:none; text-align:right; width:20%;">{{ amt(doc.total_debit) }}</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-      {{ paid_cheque(doc, ncols) }}
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
-      </tr>
-    {% else %}
-    {% for row in doc.accounts %}
-  {% set acc = frappe.get_cached_doc("Account", row.account) %}
-  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
-    <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
-    <td>
-      <strong>{{ acc.account_name }}</strong>
-      {% if row.user_remark and doc.custom_p_type == "Cash Entry" %}
-        <div><strong>Narration :</strong> {{ row.user_remark }}</div>
-      {% endif %}
-    </td>
-    {% if show_vehicle %}<td style="white-space:nowrap;"><strong>{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</strong></td>{% endif %}{% if show_party %}<td><strong>{{ row.party_type or "" }}</strong></td>{% endif %}
-
-    <td>
-   
-       {% if row.party %}
-    {% set party_doc = frappe.get_cached_doc(row.party_type, row.party) %}
-    <div><strong>{{ party_doc.get_title() }}</strong></div>
-  {% endif %}
-
-  {% if row.custom_subtype and not show_vehicle %}
-    <div><strong>{{ row.custom_subtype }}</strong></div>
-  {% endif %}
-      
-      
-    </td>
-
-    <td style="text-align:right; padding-right:18px;">
-      {% if row.debit_in_account_currency %}{{ amt(row.debit_in_account_currency) }}{% endif %}
-    </td>
-
-    <td style="text-align:right;">
-      {% if row.credit_in_account_currency %}{{ amt(row.credit_in_account_currency) }}{% endif %}
-    </td>
-  </tr>
-{% endfor %}
-{{ tail_spacer(ncols) }}
-      <tr>
-        <td></td>
-        <td></td>
-        {% if show_vehicle %}<td></td>{% endif %}{% if show_party %}<td></td>{% endif %}
-        <td><strong>Total</strong></td>
-        <td style="text-align:right;border-top:1px solid #000; padding-right:18px;">
-          <strong>{{ amt(doc.total_debit) }}</strong>
-        </td>
-        <td style="text-align:right;border-top:1px solid #000;">
-          <strong>{{ amt(doc.total_credit) }}</strong>
-        </td>
-      </tr>
-
-      {{ paid_cheque(doc, ncols) }}
-
-      <tr style="border-top:1px solid #000;border-bottom:1px solid #000;">
-        <td colspan="{{ ncols }}">
-          <strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}
-        </td>
-      </tr>
-
-      <tr>
-        <td colspan="{{ ncols }}">
-          <strong>Remarks:</strong> {{ doc.user_remark or "" }}
-        </td>
-      </tr>
-    {% endif %}
     </tbody>
 
 
@@ -1190,11 +861,8 @@ padding:0px 30px;
         signatures) down to the fold (~49%) on the last page without ever
         overlapping the data. -#}
      <div class="jv-footer">
-       {#- Cash/Bank or Contra Voucher gets a 5th "Received By" column (at the front);
-          every other JV type keeps the usual 4. -#}
-       {%- set jv_sigs = ["Received By", "Prepared By", "Checked By", "Verified By", "Approved By"]
-             if doc.custom_p_type == "Cash/ Bank or Contra Voucher"
-             else ["Prepared By", "Checked By", "Verified By", "Approved By"] -%}
+       {#- The Cash/Bank signature set: "Received By" in front of the usual four. -#}
+       {%- set jv_sigs = ["Received By", "Prepared By", "Checked By", "Verified By", "Approved By"] -%}
        <table style="width:100%; border:none; color:#000;">
           <tr>
             {%- for s in jv_sigs %}
@@ -1210,6 +878,6 @@ padding:0px 30px;
             {%- endfor %}
           </tr>
         </table>
-        <div style="text-align:left; font-size:11px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+        <div style="text-align:left; font-size:9px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
      </div>
      </div>
