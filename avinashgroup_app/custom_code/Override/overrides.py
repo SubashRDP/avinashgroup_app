@@ -89,6 +89,29 @@ class CustomSalesInvoice(ERPNextSalesInvoice):
 	def validate_warehouse(self):
 		_lenient_warehouse_check(self, super().validate_warehouse)
 
+	def validate_zero_qty_for_return_invoices_with_stock(self):
+		"""Let the zero-qty setting reach stock-affecting returns too.
+
+		Core skips validate_qty_is_not_zero entirely for returns (is_return is
+		checked before the call in accounts_controller.validate), so a credit
+		note has always accepted qty=0 — except when update_stock is on, where
+		this separate method throws instead. Unlike validate_qty_is_not_zero it
+		reads no flag, so "Allow Sales Invoice with Zero Quantity" could not
+		reach it. Honour the same flag here.
+
+		No stock consequence: selling_controller.update_stock_ledger skips rows
+		where flt(d.qty) is falsy, so a zero-qty row makes no Stock Ledger Entry
+		whether or not update_stock is set — it carries neither movement nor
+		value. This only removes the block, it does not change what is posted.
+
+		The flag is set on before_validate by
+		salesinvoice_taxes.allow_zero_qty_rows, which runs before validate().
+		"""
+		if self.flags.allow_zero_qty:
+			return
+
+		super().validate_zero_qty_for_return_invoices_with_stock()
+
 
 # ─── Buying Hierarchy ─────────────────────────────────────────────────────────
 
