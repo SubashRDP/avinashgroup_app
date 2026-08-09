@@ -201,8 +201,25 @@ def _yes_no(value):
 	return "Yes" if value else "No"
 
 
+# The legacy software does not print the fiscal year's own end year. Up to
+# 78/79 it prints start+1 (the real end year); from 79/80 on it prints start+2.
+# Verified against all 28 Annexure-7 exports of the NG-Group drop — 265,700
+# rows across NGI, NGN, NGG, NGK and Grishma — where the value is identical for
+# every company holding a given year, so it is a property of the year, not of
+# the company:
+#
+#     2075-76  2076-77  2077-78  2078-79 | 2079-81  2080-82  2081-83  2082-84
+#                                  +1    |    +2
+#
+# Almost certainly an off-by-one in the old software's Fiscal Year master,
+# entered when 79/80 was set up and carried forward since. It is reproduced
+# rather than corrected: these sheets are what was filed with the IRD, and the
+# report exists to match them.
+FY_END_OFFSET_CHANGES_AT = 79
+
+
 def fiscal_year_display(fiscal_year):
-	"""Bill fiscal year as the annexure prints it: "82.83" -> "2082-83".
+	"""Bill fiscal year as the annexure prints it: "82.83" -> "2082-84".
 
 	Bills store the Fiscal Year name with a dot ("82.83"); the record itself is
 	named with a slash. Both are accepted, and anything that is not a two-part
@@ -212,7 +229,9 @@ def fiscal_year_display(fiscal_year):
 		return ""
 	parts = re.split(r"[./-]", fiscal_year)
 	if len(parts) == 2 and all(len(p) == 2 and p.isdigit() for p in parts):
-		return f"20{parts[0]}-{parts[1]}"
+		start = int(parts[0])
+		offset = 2 if start >= FY_END_OFFSET_CHANGES_AT else 1
+		return f"20{parts[0]}-{(start + offset) % 100:02d}"
 	return fiscal_year
 
 
