@@ -73,7 +73,7 @@ POS = {
 	"c_hs":         26.0,    # -4mm left per user 2026-07-30 (was 30). HS code column, no border; value prints ON each item row
 	                         # (vertically follows the item), same x as the heading below
 	"c_part":       50.0,    # -4mm left per user 2026-07-30 (was 54); particulars column
-	"hs_label":     (26.0, 70.0),  # -4mm left (matches c_hs), +4mm up per user 2026-07-30 (was 30,74). "H.S. Code" column heading (printed once per form,
+	"hs_label":     (26.0, 74.0),  # -4mm left (matches c_hs), +4mm up per user 2026-07-30 (was 30,74). "H.S. Code" column heading (printed once per form,
 	                               # above the item rows); same x as the HS values
 	"r_qty":        129.0,   # right edge for qty; -1cm, then -1cm more left per user 2026-07-30
 	"r_rate":       162.0,   # -1cm, then -1cm more left per user 2026-07-30
