@@ -286,7 +286,7 @@ p { text-align: center; margin: 0; padding: 2px; }
     <tr class="{% if loop.index in S.breaks %}pi-break{% endif %}">
       <td style="text-align:left;">{{ loop.index }}</td>
       <td>{{ item.description or item.item_code }}</td>
-      <td>{{ item.custom_subtype }}</td>
+      <td style="white-space:nowrap;">{% if item.custom_subtype %}{{ frappe.db.get_value("Vehicle", item.custom_subtype, "license_plate") }}{% endif %}</td>
       <td style="text-align:right;">{{ abs(item.qty) }}</td>
       <td style="text-align:center;">{{ item.uom }}</td>
       <td style="text-align:right;">{{ amt(abs(item.rate)) }}</td>
