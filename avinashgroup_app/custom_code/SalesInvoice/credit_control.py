@@ -259,6 +259,36 @@ def validate_sales_invoice(doc, method):
           AND payment_type IN ('Receive', 'Internal Transfer')
     """, customer)[0][0])
 
+    # Unlinked Journal Entry rows on the Debtors / customer-advance accounts.
+    # Rows referenced against an invoice are excluded — their effect is already
+    # inside that invoice's outstanding_amount. Net credit means the customer
+    # has deposited money, so it joins the advance pool and nets against the
+    # oldest bills exactly like a Payment Entry advance. Net debit is extra
+    # debt with no bill behind it, so it can only be added in the amount check.
+    je_net = flt(frappe.db.sql("""
+        SELECT IFNULL(SUM(jea.debit - jea.credit), 0)
+        FROM `tabJournal Entry Account` jea
+        INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+        WHERE je.docstatus = 1
+          AND jea.party_type = 'Customer'
+          AND jea.party = %s
+          AND IFNULL(jea.reference_name, '') = ''
+          AND jea.account IN (
+              SELECT name FROM `tabAccount`
+              WHERE account_name IN (
+                  'Debtors A/c - Domestic',
+                  'Advance Received',
+                  'Advance From Customer'
+              )
+          )
+    """, customer)[0][0])
+
+    je_debit = 0.0
+    if je_net < 0:
+        advance += -je_net
+    else:
+        je_debit = je_net
+
     # ============================================================
     # 3. FETCH UNPAID INVOICES (FIFO Order, Optimized)
     # ============================================================
@@ -347,14 +377,15 @@ def validate_sales_invoice(doc, method):
     
     # CHECK 3: Amount Limit (Requires Calculation)
     if amount_limit:
-        final_exposure = total_unpaid + new_invoice_amount
-        
+        final_exposure = total_unpaid + je_debit + new_invoice_amount
+
         if final_exposure > amount_limit:
-            available_credit = amount_limit - total_unpaid
+            available_credit = amount_limit - total_unpaid - je_debit
             frappe.throw(
                 f"<b>Credit Limit: Amount Exceeded</b><br><br>"
                 f"Customer: <b>{customer}</b><br>"
                 f"Current Outstanding: <b>₹{total_unpaid:,.2f}</b><br>"
+                f"Journal Debit Adjustment: <b>₹{je_debit:,.2f}</b><br>"
                 f"New Invoice Amount: <b>₹{new_invoice_amount:,.2f}</b><br>"
                 f"Total Exposure: <b>₹{final_exposure:,.2f}</b><br>"
                 f"Maximum Credit Limit: <b>₹{amount_limit:,.2f}</b><br>"

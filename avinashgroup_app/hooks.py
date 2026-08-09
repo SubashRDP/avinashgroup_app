@@ -19,7 +19,7 @@ app_include_js = [
     "/assets/avinashgroup_app/js/suppress_negative_stock_msg.js?v=1.0",
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.2",
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.8",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.1",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.3",
     # Loaded globally (not doctype_js) so it survives even when another app's

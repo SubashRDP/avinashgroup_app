@@ -28,7 +28,7 @@ body {
   margin: 0; /* No margin on body, margins are on @page */
   padding-bottom: 0; /* was 25mm — kept at 0 so it doesn't add height below the
                         fixed-height .jv-sheet box. */
-  font-size:10px !important;
+  font-size:12px !important;
 }
  
  
@@ -39,10 +39,10 @@ body {
   border-collapse: collapse; 
 }
 
-th, td { 
-  border:1px solid #000; 
+th, td {
+  border:1px solid #000;
   padding:4px;
-  font-size:10px;
+  font-size:12px;
 }
 
 th { font-weight:600; }
@@ -132,15 +132,15 @@ tr, td, th { page-break-inside: avoid; }
  
  .main-table tr th
  {
-     font-size:10px !important;
+     font-size:12px !important;
      font-weight:600;
         padding:4px !important;
  }
   .main-table tr td
  {
-     font-size:10px !important;
-        padding: 4px !important;
- 
+     font-size:12px !important;
+        padding: 1px 4px !important;
+
  }
  
  .main-table.table-bordered
@@ -552,8 +552,9 @@ padding:0px 30px;
 .print-format { margin-top: 10mm; margin-bottom: 148mm; margin-left: 10mm; margin-right: 10mm; }
 @media print { .print-format { margin: 0 !important; } }
 
-/* Force all text black */
-.print-format, .print-format * { color:#000 !important; }
+/* Force all text black, and typewriter (monospace) throughout — matches the
+   "Purchase typewriter test" Purchase Invoice format. */
+.print-format, .print-format * { color:#000 !important; font-family:"Courier New", Courier, monospace !important; }
 </style>
 
 {% set company = frappe.get_doc("Company", doc.company) %}
@@ -638,26 +639,53 @@ padding:0px 30px;
 
    Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
      PAGE_PX   printable height of one page (297 - 10 top - 148 bottom = 139mm)
-     HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
-               little over, like the row heights, so the breaks err early. It must
+     HEAD_PX   the <thead> block, reprinted on every page. Stated a little over
+               the measured height, like the row heights, so the breaks err early. It must
                stay under 131px (25% of PAGE_PX) or Chrome stops reprinting it —
                see the .company-info rules up in the stylesheet.
-     LINE_PX   one line of 10px text; PAD_PX is a <td>'s padding + border
+     LINE_PX   one line of body text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top
                of the printable area (132mm -> 142mm down the sheet, just above the
                fold at 148.5mm). The gap to PAGE_PX is the cushion that absorbs
                estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
-     CH_*      characters that fit on one line of a column, for guessing wraps -#}
+     CH_*      characters that fit on one line of a column, for guessing wraps
+
+   FONT-DERIVED (2026-08-06). These used to be hand-tuned px literals, which meant
+   every font-size change silently invalidated them: the estimate stayed the same
+   while the real rows got taller, the spacer was sized as if everything fitted, and
+   the content ran past the page edge — which is exactly how the signature block
+   ended up alone on page 2 of a Credit Note. Now only FONT_PX is set by hand, and
+   it MUST match the body font-size in the stylesheet above. Everything else scales
+   off it, so changing the size no longer moves the footer.
+
+   Characters-per-line can be computed rather than guessed because the format is
+   monospace (Courier): every glyph advances exactly 0.6em, so a column of known
+   width holds width / (0.6 x FONT_PX) characters. That is what CH_* do below.
+   The account column's width differs per JV type, so ACC_PCT is per type — a
+   single shared CH_ACC was over-generous for the narrow 24% Note/Journal column
+   and is what let "Letter of Credit (LC) A/c" wrap unpredicted. -#}
+{#- Body font size in px. Keep in step with the stylesheet's `body`/`th, td` rules. -#}
+{% set FONT_PX = 12 %}
+{#- Courier advance width is 0.6em, so one character is 0.6 x the font size. -#}
+{% set CHAR_PX = FONT_PX * 0.6 %}
+{#- Printable width: A4 210mm less the 10mm side margins = 190mm at 96dpi. -#}
+{% set CONTENT_PX = 718 %}
 {% set PAGE_PX = 525 %}
-{% set HEAD_PX = 117 %}
-{% set LINE_PX = 13 %}
+{% set LINE_PX = (FONT_PX * 1.35)|round(0, 'ceil')|int %}
 {% set PAD_PX = 11 %}
-{% set FOOT_PX = 100 %}
+{#- Fixed parts (rules, paddings, the 20px/15px company headings) plus the lines of
+   body text each block holds, so both track the font size. At FONT_PX 12 these come
+   out at the 125 / 92 that were measured by hand off a rendered voucher. -#}
+{% set HEAD_PX = 77 + 3 * LINE_PX %}
+{% set FOOT_PX = 60 + 2 * LINE_PX %}
 {% set TARGET_PX = 495 %}
-{% set CH_ACC = 36 %}
-{% set CH_PARTY = 26 %}
-{% set CH_WIDE = 110 %}
+{#- Width of the account/particular column, per JV type, as declared in page_head(). -#}
+{% set ACC_PCT = 35 if is_cash_contra else (30 if is_cash_entry else 24) %}
+{% set PARTY_PCT = 22 if is_note else 19 %}
+{% set CH_ACC = ((CONTENT_PX * ACC_PCT / 100) / CHAR_PX)|int %}
+{% set CH_PARTY = ((CONTENT_PX * PARTY_PCT / 100) / CHAR_PX)|int %}
+{% set CH_WIDE = (CONTENT_PX / CHAR_PX)|int %}
 {#- Rows per page are budgeted 25px short of the real page so the forced breaks
    below always fire BEFORE the browser would have broken by itself — the browser
    winning that race is what puts an unplanned page between the data and the
@@ -1170,16 +1198,18 @@ padding:0px 30px;
        <table style="width:100%; border:none; color:#000;">
           <tr>
             {%- for s in jv_sigs %}
-            <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000;">
+            <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000; padding-top:0;">
               {#- padding-top is the blank signing space above the rule; it is also
-                 the gap between Remarks and the signatures, so it feeds FOOT_PX. -#}
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:16px;padding-bottom:10px;">&nbsp;</div>
+                 the gap between Remarks and the signatures, so it feeds FOOT_PX.
+                 Tightened 16px -> 6px (and the cell's own 4px top padding to 0) to
+                 close the gap under Remarks; FOOT_PX below drops by the same 14px. -#}
+              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:6px;padding-bottom:10px;">&nbsp;</div>
               <div>{{ s }}</div>
               {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
             </td>
             {%- endfor %}
           </tr>
         </table>
-        <div style="text-align:left; font-size:9px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+        <div style="text-align:left; font-size:11px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
      </div>
      </div>

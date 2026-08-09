@@ -20,6 +20,9 @@ def before_save_purchase_document(doc, method=None):
     # 0. Ensure Apply On defaults are set
     ensure_apply_on_defaults(doc)
 
+    # 0.5. Derive excise value from percentage where that mode is selected
+    calculate_item_excise_values(doc)
+
     # 1. Calculate item-level totals (respects manual excise)
     calculate_custom_total(doc)
 
@@ -98,6 +101,24 @@ def ensure_apply_on_defaults(doc):
             item.custom_tds_apply_on = 'Percentage (%)'
 
 
+
+
+def calculate_item_excise_values(doc):
+    """
+    Excise Apply On = 'Percentage (%)': custom_excise_value is derived as
+    base_net_amount x custom_excise_duty_rate / 100.
+    'Amount' or blank: the manually entered custom_excise_value is kept as-is.
+    The fields exist only on Purchase Invoice Item, so other purchase
+    doctypes fall through untouched.
+    """
+    for item in doc.items:
+        excise_apply_on = getattr(item, 'custom_excise_apply_on', None)
+        if excise_apply_on == 'Percentage (%)':
+            rate = flt(getattr(item, 'custom_excise_duty_rate', 0)) or 0
+            item.custom_excise_value = flt(flt(item.base_net_amount) * rate / 100, 5)
+        elif excise_apply_on == 'Amount':
+            # rate belongs to Percentage mode only (mirrors TDS Amount mode)
+            item.custom_excise_duty_rate = 0
 
 
 def calculate_custom_total(doc):
@@ -290,6 +311,9 @@ def update_taxes_table(doc):
         update_or_create_tax_row(doc, excise_account, total_excise, position,
                                  f"Excise Duty - {doc.company}", "Actual", "Add")
         position += 1
+    else:
+        # Remove any stale excise rows (total_excise is now 0, e.g. on a duplicated document)
+        remove_excise_tax_rows(doc)
 
     if vat_account and total_vat != 0:
         update_or_create_tax_row(doc, vat_account, total_vat, position,
@@ -304,6 +328,32 @@ def update_taxes_table(doc):
     else:
         # Remove any stale TDS rows (total_tds is now 0 or no account found)
         remove_tds_tax_rows(doc)
+
+
+def remove_excise_tax_rows(doc):
+    """Remove all excise tax rows (accounts named 'Excise Duty') from the taxes table"""
+    if not doc.taxes:
+        return
+
+    excise_accounts = set(frappe.get_all(
+        "Account",
+        filters={"account_name": "Excise Duty", "company": doc.company},
+        pluck="name",
+    ))
+    if not excise_accounts:
+        return
+
+    rows_to_remove = [
+        row for row in doc.taxes
+        if row.account_head in excise_accounts
+    ]
+
+    for row in rows_to_remove:
+        doc.taxes.remove(row)
+
+    if rows_to_remove:
+        for idx, tax_row in enumerate(doc.taxes):
+            tax_row.idx = idx + 1
 
 
 def remove_tds_tax_rows(doc):

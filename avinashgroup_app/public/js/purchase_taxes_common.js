@@ -145,6 +145,15 @@ PURCHASE_DOCTYPES.forEach(function(doctype) {
             frm.refresh_field('items');
         },
 
+        custom_excise_apply_on: async function(frm, cdt, cdn) {
+            await handle_excise_apply_on_change(frm, cdt, cdn);
+            calculate_item_excise_value(frm, cdt, cdn);
+        },
+
+        custom_excise_duty_rate: function(frm, cdt, cdn) {
+            calculate_item_excise_value(frm, cdt, cdn);
+        },
+
         custom_vat_apply_on: async function(frm, cdt, cdn) {
             await handle_vat_apply_on_change(frm, cdt, cdn);
             calculate_item_vat_amount(frm, cdt, cdn);
@@ -226,6 +235,7 @@ DOCTYPES_WITH_TAXES.forEach(function(doctype) {
  * Common onload handler
  */
 function purchase_taxes_onload(frm) {
+    remove_stale_excise_rows(frm);
     if (frm.doc.items) {
         frm.doc.items.forEach(function(item) {
             if (should_apply_vat_default(frm) && !item.custom_vat_apply_on) {
@@ -239,6 +249,31 @@ function purchase_taxes_onload(frm) {
         });
     }
     frm.refresh_field('items');
+}
+
+/**
+ * Drop excise rows (accounts named "Excise Duty") from the taxes table of an
+ * unsaved document whose items carry no excise value. Duplicate copies the
+ * taxes table but not the items' excise values, leaving a zero-amount excise
+ * row behind; the server (purchase_taxes_handler.update_taxes_table) removes
+ * it on save, this removes it as soon as the copied form opens.
+ */
+function remove_stale_excise_rows(frm) {
+    if (!frm.is_new() || !(frm.doc.taxes || []).length) return;
+
+    const has_item_excise = (frm.doc.items || []).some(function(item) {
+        return flt(item.custom_excise_value);
+    });
+    if (has_item_excise) return;
+
+    const kept = frm.doc.taxes.filter(function(row) {
+        return !(row.account_head || "").includes("Excise Duty");
+    });
+    if (kept.length === frm.doc.taxes.length) return;
+
+    frm.doc.taxes = kept;
+    frm.doc.taxes.forEach(function(row, i) { row.idx = i + 1; });
+    frm.refresh_field("taxes");
 }
 
 /**
@@ -379,6 +414,30 @@ function handle_item_code_change(frm, cdt, cdn) {
 /**
  * Handle VAT apply_on change
  */
+async function handle_excise_apply_on_change(frm, cdt, cdn) {
+    // Mode switch starts clean — no rate or amount left over from the other mode
+    await frappe.model.set_value(cdt, cdn, "custom_excise_duty_rate", 0);
+    await frappe.model.set_value(cdt, cdn, "custom_excise_value", 0);
+
+    setTimeout(() => {
+        frm.refresh_field('items');
+    }, 100);
+}
+
+/**
+ * Calculate excise value for a single line item, VAT-style: immediately on
+ * rate/mode change. Percentage (%) -> excise = net amount x rate / 100.
+ * Chains into calculate_item_custom_total via the custom_excise_value trigger.
+ */
+function calculate_item_excise_value(frm, cdt, cdn) {
+    const row = locals[cdt][cdn];
+    if (!row || row.custom_excise_apply_on !== 'Percentage (%)') return;
+
+    const base = flt(row.base_net_amount) || flt(row.net_amount) || flt(row.amount);
+    const excise = flt(base * flt(row.custom_excise_duty_rate) / 100, 5);
+    frappe.model.set_value(cdt, cdn, 'custom_excise_value', excise);
+}
+
 async function handle_vat_apply_on_change(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
 
@@ -568,6 +627,19 @@ function calculate_total_amount_including_excise(frm) {
 function calculate_item_custom_total(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     if (!row) return;
+
+    // Percentage mode: excise value is derived, not typed.
+    // base_net_amount is 0 on a row ERPNext has not recalculated yet, so fall
+    // back to net_amount/amount for the live preview; the server recomputes
+    // from base_net_amount on save either way.
+    if (row.custom_excise_apply_on === 'Percentage (%)') {
+        const base = flt(row.base_net_amount) || flt(row.net_amount) || flt(row.amount);
+        const excise = flt(base * flt(row.custom_excise_duty_rate) / 100, 5);
+        if (flt(row.custom_excise_value) !== excise) {
+            frappe.model.set_value(cdt, cdn, 'custom_excise_value', excise);
+            return; // the custom_excise_value handler re-enters here with the fresh value
+        }
+    }
 
     const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 5);
     frappe.model.set_value(cdt, cdn, 'custom_total', custom_total);
