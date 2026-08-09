@@ -675,3 +675,90 @@ def run_all(folder=DEFAULT_FOLDER, paths=None, company=None, commit=False,
     print("\n===== ALL YEARS =====")
     print(json.dumps(summary, indent=1, default=str))
     return summary
+
+
+# sheets/annex7/<KEY>/ holds one company's Annexure-7 exports.
+ANNEX7_FOLDER = os.path.join(DEFAULT_FOLDER, "annex7")
+ANNEX7_COMPANIES = {
+    "NGI": "Nepal Gas Udhyog Pvt. Ltd.",
+    "NGG": "Nepal Gas Udhyog (Gandaki) Pvt. Ltd.",
+    "NGK": "Nepal Gas Udhyog (Karnali) Pvt. Ltd.",
+    "NGN": "Nepal Gas Udhyog (Narayani) Pvt. Ltd.",
+    "GE": "Grishma Enterprises Pvt. Ltd.",
+}
+
+
+def run_group(folder=ANNEX7_FOLDER, companies=None, commit=False,
+              unsynced_status="Synced", with_print_log=True):
+    """Import every company's annexures in one go — the whole group, one command.
+
+    run_all() handles one company; this walks sheets/annex7/<KEY>/ and calls it
+    per company, so each sheet is matched against that company's invoices. That
+    scoping is what makes the legacy numbers resolve: the old software numbered
+    each company independently and restarted every fiscal year, so NGK/000001
+    and NGG/KTM numbers repeat both across companies and across years.
+
+    Same rules as run(): DRY RUN unless commit=True, and an invoice that already
+    has a CBMS Bill is skipped whole — so this is safe to repeat, safe to resume
+    after an interruption, and safe to re-run once the missing exports arrive.
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_annexure_import.import_legacy_annexure.run_group \\
+        --kwargs "{'commit': True}"
+    """
+    import glob
+
+    keys = companies or sorted(ANNEX7_COMPANIES)
+    results, missing = [], []
+    for key in keys:
+        company = ANNEX7_COMPANIES.get(key)
+        if not company:
+            frappe.throw(f"Unknown annexure folder '{key}'")
+        paths = sorted(glob.glob(os.path.join(folder, key, SHEET_GLOB)))
+        if not paths:
+            missing.append(key)
+            continue
+        out = run_all(
+            folder=os.path.join(folder, key),
+            paths=paths,
+            company=company,
+            commit=commit,
+            unsynced_status=unsynced_status,
+            with_print_log=with_print_log,
+        )
+        out["_key"], out["_company"] = key, company
+        results.append(out)
+
+    created_key = "bills_" + ("created" if commit else "to_create")
+    logs_key = "print_log_rows_" + ("created" if commit else "to_create")
+
+    def total(field):
+        return sum(r.get(field) or 0 for r in results)
+
+    summary = {
+        "dry_run": not commit,
+        "companies": {r["_key"]: r["_company"] for r in results},
+        "folders_empty": missing,
+        "years_by_company": {r["_key"]: r.get("years") for r in results},
+        "sheet_rows_total": total("sheet_rows_total"),
+        created_key: total(created_key),
+        logs_key: total(logs_key),
+        "skipped_already_have_a_bill": total("skipped_already_have_a_bill"),
+        "skipped_invoice_not_in_erpnext": total("skipped_invoice_not_in_erpnext"),
+        "per_company": {
+            r["_key"]: {
+                "company": r["_company"],
+                "years": r.get("years"),
+                "sheet_rows": r.get("sheet_rows_total"),
+                created_key: r.get(created_key),
+                logs_key: r.get(logs_key),
+                "not_in_erpnext": r.get("skipped_invoice_not_in_erpnext"),
+                "already_have_a_bill": r.get("skipped_already_have_a_bill"),
+                "per_year": r.get("per_year"),
+            }
+            for r in results
+        },
+    }
+    print("\n===== ALL COMPANIES =====")
+    print(json.dumps(summary, indent=1, default=str))
+    return summary

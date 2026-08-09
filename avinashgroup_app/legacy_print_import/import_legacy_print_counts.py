@@ -79,7 +79,20 @@ from datetime import datetime, timedelta
 import frappe
 from frappe.utils import cint
 
-DEFAULT_XLS = os.path.join(os.path.dirname(__file__), "82-83 NGI.xls")
+REGISTER_FOLDER = os.path.join(os.path.dirname(__file__), "registers")
+DEFAULT_XLS = os.path.join(REGISTER_FOLDER, "NGI", "82.83 NGI.xls")
+
+# registers/<KEY>/ holds one company's exports. The live fiscal year is NOT
+# here: the "Sharwan Latest" exports in the same drop cover 83/84, which
+# ERPNext is already counting through print_count.py, so importing them would
+# double the live counters.
+REGISTER_COMPANIES = {
+    "NGI": "Nepal Gas Udhyog Pvt. Ltd.",
+    "NGG": "Nepal Gas Udhyog (Gandaki) Pvt. Ltd.",
+    "NGK": "Nepal Gas Udhyog (Karnali) Pvt. Ltd.",
+    "NGN": "Nepal Gas Udhyog (Narayani) Pvt. Ltd.",
+    "GE": "Grishma Enterprises Pvt. Ltd.",
+}
 
 INVOICE_HEADER = "Invoice Number"
 COPIES_HEADER = "No of Copy Printed"
@@ -105,6 +118,58 @@ def excel_datetime(serial):
     return EXCEL_EPOCH + timedelta(days=serial)
 
 
+def _open_grid(path):
+    """(nrows, ncols, cell(r, c)) for a register in either workbook format.
+
+    Most registers are .xls and are read with xlrd. The NGI 79/80 register
+    arrived as .xlsx, which xlrd 2.0 refuses outright ("Excel xlsx file; not
+    supported"), so that one goes through openpyxl. Both are presented as the
+    same read-only cell grid, and callers stay format-blind.
+
+    openpyxl rows are ragged — a trailing empty cell is simply absent — so they
+    are padded to the widest row; the register readers index fixed columns.
+    """
+    if path.lower().endswith((".xlsx", ".xlsm")):
+        from openpyxl import load_workbook
+
+        wb = load_workbook(path, read_only=True, data_only=True)
+        ws = wb.active
+        grid = [list(r) for r in ws.iter_rows(values_only=True)]
+        wb.close()
+        ncols = max((len(r) for r in grid), default=0)
+        grid = [r + [None] * (ncols - len(r)) for r in grid]
+        return len(grid), ncols, lambda r, c: ("" if grid[r][c] is None else grid[r][c])
+
+    import xlrd
+
+    sheet = xlrd.open_workbook(path).sheet_by_index(0)
+    return sheet.nrows, sheet.ncols, sheet.cell_value
+
+
+def register_datetime(value):
+    """Print timestamp from a register cell.
+
+    The .xls registers store it as an Excel serial. The .xlsx one stores it as
+    a real datetime (or a string), which excel_datetime cannot read — it would
+    return None for every event and leave the whole file looking like one batch
+    instant. Anything unrecognised is None, as before.
+    """
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M:%S",
+                    "%m/%d/%Y %H:%M:%S", "%d-%m-%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        return None
+    return excel_datetime(value)
+
+
 def read_register_events(xls_path, drop_batch_events=False, info=None):
     """Every print event in a register export, in file order.
 
@@ -126,14 +191,12 @@ def read_register_events(xls_path, drop_batch_events=False, info=None):
     rows) are reported in the info dict and, with drop_batch_events, left out
     of the returned events.
     """
-    import xlrd
-
-    sheet = xlrd.open_workbook(xls_path).sheet_by_index(0)
+    nrows, ncols, cell_value = _open_grid(xls_path)
 
     copies_col = date_col = user_col = header_row = None
-    for r in range(sheet.nrows):
-        for c in range(sheet.ncols):
-            head = str(sheet.cell_value(r, c)).strip()
+    for r in range(nrows):
+        for c in range(ncols):
+            head = str(cell_value(r, c)).strip()
             if head == COPIES_HEADER:
                 copies_col, header_row = c, r
             elif head == DATE_HEADER:
@@ -149,26 +212,26 @@ def read_register_events(xls_path, drop_batch_events=False, info=None):
     invoices = []
     timestamp_rows = {}
     current = None
-    for r in range(header_row + 1, sheet.nrows):
-        invoice_no = str(sheet.cell_value(r, 0)).strip()
+    for r in range(header_row + 1, nrows):
+        invoice_no = str(cell_value(r, 0)).strip()
         if invoice_no == "Report Parameters":  # footer block ends the register
             break
         if invoice_no and invoice_no != INVOICE_HEADER:
             current = invoice_no
             invoices.append(current)  # register the invoice itself
             continue
-        copies = sheet.cell_value(r, copies_col)
+        copies = cell_value(r, copies_col)
         if current and copies:
-            serial = sheet.cell_value(r, date_col) if date_col is not None else None
+            serial = cell_value(r, date_col) if date_col is not None else None
             events.append(
                 {
                     "invoice_no": current,
                     "user": (
-                        str(sheet.cell_value(r, user_col)).strip()
+                        str(cell_value(r, user_col)).strip()
                         if user_col is not None
                         else ""
                     ),
-                    "timestamp": excel_datetime(serial),
+                    "timestamp": register_datetime(serial),
                     "copies": cint(copies),
                     "_serial": serial,
                 }
@@ -184,7 +247,9 @@ def read_register_events(xls_path, drop_batch_events=False, info=None):
         events = [e for e in events if e["_serial"] not in batch_ts]
 
     if info is not None:
-        info["batch_timestamps"] = [str(excel_datetime(ts)) for ts in sorted(batch_ts)]
+        info["batch_timestamps"] = [
+            str(register_datetime(ts)) for ts in sorted(batch_ts, key=str)
+        ]
         info["batch_events"] = batch_events
         info["batch_sheets"] = batch_sheets
         info["batch_events_dropped"] = drop_batch_events
@@ -563,3 +628,89 @@ def _printer_tally(by_invoice, targets):
 def _chunks(seq, size):
     for i in range(0, len(seq), size):
         yield seq[i : i + size]
+
+
+def run_group(folder=REGISTER_FOLDER, companies=None, commit=False,
+              drop_batch_events=False, with_print_log=False):
+    """Import every register in registers/<KEY>/ — the whole group, one command.
+
+    Each company's registers are resolved against that company's invoices, which
+    is what makes the legacy numbers unambiguous: NGK/000001 exists in several
+    fiscal years and NGG/KTM numbers repeat across companies.
+
+    ALWAYS mode="max". A register lists every print event of every invoice it
+    names, so for any one invoice a single register already holds the complete
+    total; "add" would double-count the invoices two registers share. Several
+    files here are search exports rather than year registers and overlap heavily
+    (NGN 79/80 carries 16,771 invoices against that year's 9,823), and NGI's
+    registers were already imported once on ng-group. "max" is idempotent, so
+    this command is safe to repeat and safe to resume.
+
+    DRY RUN unless commit=True.
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_print_import.import_legacy_print_counts.run_group \\
+        --kwargs "{'commit': True}"
+    """
+    import glob
+
+    keys = companies or sorted(REGISTER_COMPANIES)
+    results, missing = [], []
+    for key in keys:
+        company = REGISTER_COMPANIES.get(key)
+        if not company:
+            frappe.throw(f"Unknown register folder '{key}'")
+        paths = sorted(glob.glob(os.path.join(folder, key, "*.xls*")))
+        if not paths:
+            missing.append(key)
+            continue
+        for path in paths:
+            out = run(
+                xls_path=path,
+                commit=commit,
+                drop_batch_events=drop_batch_events,
+                mode="max",
+                company=company,
+            )
+            out["_file"] = f"{key}/{os.path.basename(path)}"
+            out["_company"] = company
+            results.append(out)
+            if with_print_log:
+                log = run_print_log_backfill(
+                    xls_path=path, commit=commit, company=company
+                )
+                log["_file"] = out["_file"]
+                results.append(log)
+
+    def total(*fields):
+        return sum(r.get(f) or 0 for r in results for f in fields)
+
+    inserted_key = "counters_inserted" if commit else "counters_to_insert"
+    updated_key = "counters_raised" if commit else "counters_to_raise"
+    summary = {
+        "dry_run": not commit,
+        "mode": "max",
+        "folders_empty": missing,
+        "files": [r["_file"] for r in results],
+        "register_invoices": total("excel_invoices"),
+        inserted_key: total("inserted", "would_insert"),
+        updated_key: total("updated", "would_update"),
+        "sheets_applied": total("total_sheets"),
+        "unmatched_register_rows": total("unmatched"),
+        "ambiguous_register_rows": total("ambiguous_register_rows"),
+        "batch_events_counted": total("batch_events"),
+        "per_file": [
+            {
+                "file": r["_file"],
+                "register_invoices": r.get("excel_invoices"),
+                "insert": r.get("inserted", r.get("would_insert")),
+                "raise": r.get("updated", r.get("would_update")),
+                "sheets": r.get("total_sheets"),
+                "unmatched": r.get("unmatched"),
+                "ambiguous": r.get("ambiguous_register_rows"),
+            }
+            for r in results
+        ],
+    }
+    print(json.dumps(summary, indent=1, default=str))
+    return summary
