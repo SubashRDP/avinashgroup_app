@@ -103,11 +103,7 @@ def _emit(elems: list) -> str:
 	for y_mm, x_mm, s, bold in sorted(elems, key=lambda e: (e[0], e[1])):
 		out.append(_feed_to(st, y_mm))
 		out.append(_h(x_mm))
-		if bold:
-			out.append(f"{ESC}E")
-		out.append(s)
-		if bold:
-			out.append(f"{ESC}F")
+		out.append(s)  # regular weight everywhere; bold flag intentionally ignored
 		out.append("\r")
 	return "".join(out)
 
