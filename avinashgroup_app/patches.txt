@@ -52,3 +52,5 @@ avinashgroup_app.patches.allow_zero_qty_in_sales_invoice_setting
 avinashgroup_app.patches.sparrow_sms_token_as_data
 
 avinashgroup_app.patches.backfill_cbms_created_by
+
+avinashgroup_app.patches.allow_expected_grand_total_on_submit
