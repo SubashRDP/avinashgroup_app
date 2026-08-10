@@ -90,6 +90,42 @@ function lock_posting_fields(frm) {
     }, 0);
 }
 
+// Direct Item Price lookup for the row's exact UOM. Fallback for servers where
+// the get_item_details pipeline returns/leaves 0 for per-UOM prices even though
+// a matching Item Price row exists.
+async function fetch_uom_price(frm, row) {
+    const res = await frappe.call({
+        method: "frappe.client.get_list",
+        args: {
+            doctype: "Item Price",
+            filters: {
+                item_code: row.item_code,
+                price_list: frm.doc.selling_price_list,
+                uom: row.uom,
+                selling: 1,
+            },
+            fields: ["price_list_rate"],
+            order_by: "valid_from desc",
+            limit_page_length: 1,
+        },
+    });
+    const hit = res && res.message && res.message[0];
+    return hit ? flt(hit.price_list_rate) : 0;
+}
+
+// If every earlier writer left the rate at 0 but an Item Price exists for the
+// row's exact UOM, apply it. Never touches a non-zero rate.
+async function ensure_rate_from_item_price(frm, cdt, cdn) {
+    const row = locals[cdt] && locals[cdt][cdn];
+    if (!row || !row.item_code || !row.uom || flt(row.rate)) return;
+    const direct = await fetch_uom_price(frm, row);
+    if (direct) {
+        await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
+        await frappe.model.set_value(cdt, cdn, "rate", direct);
+        frm.refresh_field("items");
+    }
+}
+
 frappe.ui.form.on("Sales Invoice Item", {
     item_code: function(frm, cdt, cdn) {
         const row = locals[cdt][cdn];
@@ -179,12 +215,17 @@ frappe.ui.form.on("Sales Invoice Item", {
 
                 frappe.after_ajax(() => toggle_vat_fields(frm, cdt, cdn));
                 frm.refresh_field('items');
+
+                // Runs after the get_item_details flow has settled; fills the
+                // rate only when everything before it left 0.
+                setTimeout(() => ensure_rate_from_item_price(frm, cdt, cdn), 1200);
             } catch(e) {
                 console.error("Error in item_code handler:", e);
                 _restore();
             }
         })();
     },
+
 
     uom: function(frm, cdt, cdn) {
         const row = locals[cdt][cdn];
@@ -278,6 +319,8 @@ frappe.ui.form.on("Sales Invoice Item", {
                 }
 
                 frm.refresh_field("items");
+
+                await ensure_rate_from_item_price(frm, cdt, cdn);
             } catch (e) {
                 console.error("Error in Sales Invoice UOM handler:", e);
             }
