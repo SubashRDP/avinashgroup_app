@@ -1,8 +1,9 @@
 {#- ==========================================================================
-Nepal Gas Journal Voucher Cash Bank — Journal Entry voucher (avinashgroup_app).
-Source of truth for the "Nepal Gas Journal Voucher Cash Bank" standard Print
-Format; print_format/nepal_gas_journal_voucher_cash_bank/
-nepal_gas_journal_voucher_cash_bank.json only {% include %}s this file.
+NG Cash Payment(CV) Voucher — Journal Entry voucher (avinashgroup_app).
+Source of truth for the "NG Cash Payment(CV) Voucher" standard Print
+Format (formerly "Nepal Gas Journal Voucher Cash Bank");
+print_format/ng_cash_payment_cv_voucher/ng_cash_payment_cv_voucher.json
+only {% include %}s this file.
 
 Created 2026-08-06 from nepal_gas_journal_voucher.html, carrying ONLY that
 file's "Cash/ Bank or Contra Voucher" branch. All the other JV-type branches
@@ -765,7 +766,7 @@ padding:0px 30px;
           {#- Fixed title. The parent format echoes doc.custom_p_type here, which on
              these vouchers reads "Cash/ Bank or Contra Voucher"; this format always
              prints the Cash/Bank layout, so it always announces itself as such. -#}
-          <h4>Cash/ Bank</h4>
+          <h4>Cash Voucher</h4>
           <h2>{{ company.company_name }}</h2>
           <div>Kathmandu</div>
         </td>
@@ -773,20 +774,31 @@ padding:0px 30px;
 
       <tr class="voucher-meta">
         <td colspan="{{ ncols }}">
-          {#- Fixed 2x2 header table: Voucher No / Posting Miti stay aligned top-right
+          {#- Fixed 2x2 header table: Voucher No / Posting Miti stay aligned top-left
              even when Reference Number / Reference Miti are empty.
              -#}
           {#- Reference Number / Reference Miti are NOT shown here — they appear in the
              footer's Cheque No / Dated block instead. Header keeps only Voucher No + Posting Miti. -#}
+          {#- Full-width label/value rows: title pinned to the left page edge,
+             value pinned to the right page edge. -#}
           <table style="width:100%; border:none; border-collapse:collapse;">
+            {% if doc.custom_name %}
             <tr>
-              <td style="border:none; text-align:left; vertical-align:top; width:50%; padding:0;">&nbsp;</td>
-              <td style="border:none; text-align:right; vertical-align:top; width:50%; padding:0;">{% if doc.custom_name %}<strong>Voucher No :</strong> {{ doc.custom_name }}{% endif %}</td>
+              <td style="border:none; text-align:left; padding:0;"><strong>Voucher No :</strong></td>
+              <td style="border:none; text-align:right; padding:0;">{{ doc.custom_name }}</td>
             </tr>
+            {% endif %}
+            {% if doc.custom_posting_miti or doc.posting_date %}
             <tr>
-              <td style="border:none; text-align:left; vertical-align:top; padding:0;">{% if show_cash_bank_header %}<strong>Cash/Bank:</strong> {{ cash_bank.name }}{% endif %}</td>
-              <td style="border:none; text-align:right; vertical-align:top; padding:0;">{% if doc.custom_posting_miti or doc.posting_date %}<strong>Posting Miti :</strong> {% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}{% endif %}</td>
+              <td style="border:none; text-align:left; padding:0;"><strong>Posting Miti :</strong></td>
+              <td style="border:none; text-align:right; padding:0;">{% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
             </tr>
+            {% endif %}
+            {% if show_cash_bank_header %}
+            <tr>
+              <td colspan="2" style="border:none; text-align:left; padding:0;"><strong>Cash/Bank:</strong> {{ cash_bank.name }}</td>
+            </tr>
+            {% endif %}
           </table>
         </td>
       </tr>

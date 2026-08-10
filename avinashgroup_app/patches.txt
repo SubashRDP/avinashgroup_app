@@ -4,6 +4,7 @@
 avinashgroup_app.patches.create_document_generator_roles
 avinashgroup_app.patches.rename_vocher_number_settings
 avinashgroup_app.patches.skip_broken_hrms_advance_ledger_patch
+avinashgroup_app.patches.rename_ng_cash_payment_cv_voucher
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
