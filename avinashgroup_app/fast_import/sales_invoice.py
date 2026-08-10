@@ -224,7 +224,7 @@ class FastImporter(Importer):
 		return new_doc
 
 
-def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
+def submit_drafts(filters=None, limit=None, do_repost=True, batch=200, pause=0):
 	"""Submit existing draft Sales Invoices on the fast path.
 
 	Importing with `submit_after_import = 0` is fast for the wrong reason: a
@@ -246,8 +246,11 @@ def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
 	draft should not strand the other 9,999. Nothing is rolled back on failure
 	beyond the offending document.
 	"""
-	criteria = {"docstatus": 0}
-	criteria.update(filters or {})
+	# List-of-conditions, not a dict: failed_names below adds a second condition
+	# on `name`, and a dict would silently overwrite a caller-supplied one.
+	criteria = [["docstatus", "=", 0]]
+	for field, value in (filters or {}).items():
+		criteria.append([field] + value if isinstance(value, list) else [field, "=", value])
 
 	pending = frappe.db.count("Sales Invoice", criteria)
 	if not pending:
@@ -266,9 +269,9 @@ def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
 
 	with suppressed_reposts(), deferred_future_sle() as watermarks:
 		while done + len(failed_names) < target:
-			page_filters = dict(criteria)
+			page_filters = list(criteria)
 			if failed_names:
-				page_filters["name"] = ["not in", failed_names]
+				page_filters.append(["name", "not in", failed_names])
 
 			page = frappe.get_all(
 				"Sales Invoice",
@@ -304,6 +307,13 @@ def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
 			if len(failed_names) >= 500:
 				print("\nSTOPPING: 500+ failures — something is systematically wrong.")
 				break
+
+			# Throttle: idle between pages so the run shares the box rather than
+			# saturating it. The commit above has already landed, so the pause
+			# holds no locks and no open transaction — other users are free to
+			# work through it.
+			if pause:
+				time.sleep(pause)
 
 		bins_touched = dict(watermarks)
 
