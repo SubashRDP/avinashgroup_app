@@ -224,6 +224,84 @@ class FastImporter(Importer):
 		return new_doc
 
 
+def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
+	"""Submit existing draft Sales Invoices on the fast path.
+
+	Importing with `submit_after_import = 0` is fast for the wrong reason: a
+	draft writes no Stock Ledger Entry, so the whole ledger cost is postponed
+	to submit rather than avoided. Submitting ~10,000 backdated drafts through
+	the desk pays it all at once, at ~47,000 row rewrites each, on a bin that
+	has grown while the drafts accumulated.
+
+	This applies the same deferral to the submit side: skip the per-document
+	future-SLE rewrite, then repost each affected (item, warehouse) once.
+
+	:param filters: extra filters on Sales Invoice, e.g.
+	        {"company": "Nepal Gas Udhyog (Narayani) Pvt. Ltd.",
+	         "naming_series": "NGN-SB-78/79-"}. docstatus=0 is always applied.
+	:param limit: stop after this many (use a small number for a first run).
+	:param batch: commit every N documents rather than every one.
+
+	Failures are collected and reported rather than aborting the run — one bad
+	draft should not strand the other 9,999. Nothing is rolled back on failure
+	beyond the offending document.
+	"""
+	criteria = {"docstatus": 0}
+	criteria.update(filters or {})
+
+	names = frappe.get_all(
+		"Sales Invoice",
+		filters=criteria,
+		pluck="name",
+		order_by="posting_date asc, name asc",
+		limit_page_length=limit or 0,
+	)
+	if not names:
+		print("no draft Sales Invoices match those filters.")
+		return {}
+
+	print(f"submitting {len(names)} draft(s), oldest posting date first")
+
+	failures = []
+	started = time.monotonic()
+	with suppressed_reposts(), deferred_future_sle() as watermarks:
+		for index, name in enumerate(names, start=1):
+			try:
+				frappe.get_doc("Sales Invoice", name).submit()
+			except Exception as exc:
+				failures.append((name, str(exc)[:200]))
+				frappe.db.rollback()
+				continue
+
+			if index % batch == 0:
+				frappe.db.commit()
+				rate = (time.monotonic() - started) * 1000 / index
+				print(f"  {index}/{len(names)}  {rate:.0f} ms/doc  {len(failures)} failed")
+		frappe.db.commit()
+		bins_touched = dict(watermarks)
+
+	elapsed = time.monotonic() - started
+	done = len(names) - len(failures)
+	print(f"\nsubmitted {done}/{len(names)} in {elapsed / 60:.1f} min"
+	      f"  ({elapsed * 1000 / max(done, 1):.0f} ms/doc)")
+
+	if failures:
+		print(f"\n{len(failures)} failed:")
+		for name, message in failures[:20]:
+			print(f"  {name}: {message}")
+		if len(failures) > 20:
+			print(f"  ... and {len(failures) - 20} more")
+
+	if not do_repost:
+		print("\ndo_repost=False — ledger balances above the watermarks are STALE.")
+		return {"watermarks": bins_touched, "failures": failures}
+
+	print(f"\nreposting {len(bins_touched)} (item, warehouse) pair(s)...")
+	repost(bins_touched)
+	print("done — ledger and bins recomputed.")
+	return {"watermarks": bins_touched, "failures": failures}
+
+
 def run(data_import, do_repost=True):
 	"""Import a saved Data Import document on the fast path.
 
