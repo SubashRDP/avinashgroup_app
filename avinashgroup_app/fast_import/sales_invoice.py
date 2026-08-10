@@ -249,47 +249,66 @@ def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
 	criteria = {"docstatus": 0}
 	criteria.update(filters or {})
 
-	names = frappe.get_all(
-		"Sales Invoice",
-		filters=criteria,
-		pluck="name",
-		order_by="posting_date asc, name asc",
-		limit_page_length=limit or 0,
-	)
-	if not names:
+	pending = frappe.db.count("Sales Invoice", criteria)
+	if not pending:
 		print("no draft Sales Invoices match those filters.")
 		return {}
 
-	print(f"submitting {len(names)} draft(s), oldest posting date first")
+	target = min(limit, pending) if limit else pending
+	print(f"{pending} draft(s) match; submitting {target}, oldest posting date first")
 
 	failures = []
+	# Failed documents stay docstatus=0, so the next page would fetch them
+	# again forever. Excluding them by name is what terminates the loop.
+	failed_names = []
+	done = 0
 	started = time.monotonic()
-	with suppressed_reposts(), deferred_future_sle() as watermarks:
-		for index, name in enumerate(names, start=1):
-			# Savepoint per document, NOT a bare rollback(): commits happen every
-			# `batch` documents, so a bare rollback would discard every successful
-			# submit since the last commit while still counting them as done.
-			# A watermark recorded by a document that then failed is harmless —
-			# reposting from too early a point only recomputes more rows.
-			mark = f"fast_submit_{index}"
-			frappe.db.savepoint(mark)
-			try:
-				frappe.get_doc("Sales Invoice", name).submit()
-			except Exception as exc:
-				failures.append((name, str(exc)[:200]))
-				frappe.db.rollback(save_point=mark)
-				continue
 
-			if index % batch == 0:
-				frappe.db.commit()
-				rate = (time.monotonic() - started) * 1000 / index
-				print(f"  {index}/{len(names)}  {rate:.0f} ms/doc  {len(failures)} failed")
-		frappe.db.commit()
+	with suppressed_reposts(), deferred_future_sle() as watermarks:
+		while done + len(failed_names) < target:
+			page_filters = dict(criteria)
+			if failed_names:
+				page_filters["name"] = ["not in", failed_names]
+
+			page = frappe.get_all(
+				"Sales Invoice",
+				filters=page_filters,
+				pluck="name",
+				order_by="posting_date asc, name asc",
+				limit_page_length=min(batch, target - done - len(failed_names)),
+			)
+			if not page:
+				break  # nothing left that hasn't already failed
+
+			for name in page:
+				# Savepoint per document, NOT a bare rollback(): the commit below
+				# covers the whole page, so a bare rollback would discard every
+				# successful submit in it while still counting them as done.
+				# A watermark left by a document that then failed is harmless —
+				# reposting from too early a point only recomputes more rows.
+				mark = f"fast_submit_{done + len(failed_names)}"
+				frappe.db.savepoint(mark)
+				try:
+					frappe.get_doc("Sales Invoice", name).submit()
+				except Exception as exc:
+					failures.append((name, str(exc)[:200]))
+					failed_names.append(name)
+					frappe.db.rollback(save_point=mark)
+					continue
+				done += 1
+
+			frappe.db.commit()
+			rate = (time.monotonic() - started) * 1000 / max(done, 1)
+			print(f"  {done}/{target}  {rate:.0f} ms/doc  {len(failures)} failed")
+
+			if len(failed_names) >= 500:
+				print("\nSTOPPING: 500+ failures — something is systematically wrong.")
+				break
+
 		bins_touched = dict(watermarks)
 
 	elapsed = time.monotonic() - started
-	done = len(names) - len(failures)
-	print(f"\nsubmitted {done}/{len(names)} in {elapsed / 60:.1f} min"
+	print(f"\nsubmitted {done}/{target} in {elapsed / 60:.1f} min"
 	      f"  ({elapsed * 1000 / max(done, 1):.0f} ms/doc)")
 
 	if failures:
