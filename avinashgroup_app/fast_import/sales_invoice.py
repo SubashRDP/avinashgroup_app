@@ -266,11 +266,18 @@ def submit_drafts(filters=None, limit=None, do_repost=True, batch=200):
 	started = time.monotonic()
 	with suppressed_reposts(), deferred_future_sle() as watermarks:
 		for index, name in enumerate(names, start=1):
+			# Savepoint per document, NOT a bare rollback(): commits happen every
+			# `batch` documents, so a bare rollback would discard every successful
+			# submit since the last commit while still counting them as done.
+			# A watermark recorded by a document that then failed is harmless —
+			# reposting from too early a point only recomputes more rows.
+			mark = f"fast_submit_{index}"
+			frappe.db.savepoint(mark)
 			try:
 				frappe.get_doc("Sales Invoice", name).submit()
 			except Exception as exc:
 				failures.append((name, str(exc)[:200]))
-				frappe.db.rollback()
+				frappe.db.rollback(save_point=mark)
 				continue
 
 			if index % batch == 0:
