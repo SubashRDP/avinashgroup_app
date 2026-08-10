@@ -119,11 +119,24 @@ async function ensure_rate_from_item_price(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
     if (!row || !row.item_code || !row.uom || flt(row.rate)) return;
     const direct = await fetch_uom_price(frm, row);
-    if (direct) {
+    // Re-read the row: the rate may have been filled while we were fetching.
+    const fresh = locals[cdt] && locals[cdt][cdn];
+    if (direct && fresh && !flt(fresh.rate)) {
+        console.log(`[avinashgroup] rate fallback: ${fresh.item_code} / ${fresh.uom} -> ${direct}`);
         await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
         await frappe.model.set_value(cdt, cdn, "rate", direct);
         frm.refresh_field("items");
     }
+}
+
+// The zero-writer can land at unpredictable times (slow servers stretch the
+// get_item_details roundtrips), so a single delayed check can run too early —
+// while the doomed first rate is still on the row — and wrongly conclude all is
+// well. Check repeatedly instead; each pass is a no-op once a rate is set.
+function schedule_rate_checks(frm, cdt, cdn) {
+    [800, 2000, 3500, 5500].forEach((ms) =>
+        setTimeout(() => ensure_rate_from_item_price(frm, cdt, cdn), ms)
+    );
 }
 
 frappe.ui.form.on("Sales Invoice Item", {
@@ -216,9 +229,7 @@ frappe.ui.form.on("Sales Invoice Item", {
                 frappe.after_ajax(() => toggle_vat_fields(frm, cdt, cdn));
                 frm.refresh_field('items');
 
-                // Runs after the get_item_details flow has settled; fills the
-                // rate only when everything before it left 0.
-                setTimeout(() => ensure_rate_from_item_price(frm, cdt, cdn), 1200);
+                schedule_rate_checks(frm, cdt, cdn);
             } catch(e) {
                 console.error("Error in item_code handler:", e);
                 _restore();
@@ -319,11 +330,11 @@ frappe.ui.form.on("Sales Invoice Item", {
                 }
 
                 frm.refresh_field("items");
-
-                await ensure_rate_from_item_price(frm, cdt, cdn);
             } catch (e) {
                 console.error("Error in Sales Invoice UOM handler:", e);
             }
+            // Outside the try: must run even when the roundtrip above failed.
+            schedule_rate_checks(frm, cdt, cdn);
         }, 0);
     },
 
