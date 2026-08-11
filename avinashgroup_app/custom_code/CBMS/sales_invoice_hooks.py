@@ -242,7 +242,13 @@ def create_cbms_bill_return(sales_invoice):
 			"credit_note_number": utils.cbms_invoice_number(sales_invoice),
 			"credit_note_date": sales_invoice.posting_date,
 			"credit_note_date_bs": utils.bs_date_str(sales_invoice.posting_date),
-			"reason_for_return": sales_invoice.get("custom_reason_for_return") or "Goods Returned",
+			# Truncated to the Data field's 140-char limit. The invoice's reason is a
+			# free-text field with no such cap, so a long narration used to abort the
+			# whole insert with CharacterLengthExceededError -- the return then had no
+			# CBMS record at all, which is far worse than a clipped reason.
+			"reason_for_return": (
+				sales_invoice.get("custom_reason_for_return") or "Goods Returned"
+			)[:140],
 		}
 	)
 	doc = frappe.get_doc({"doctype": "CBMS Bill Return", **fields})
