@@ -180,12 +180,16 @@ def _add_print_count_doc(doc, sheets: int) -> int:
 	"""
 	name = doc.name
 	branch = doc.get("custom_branch_name")
+	company = doc.get("company")
 	try:
 		if frappe.db.exists("Sales Invoice Print Count", name):
+			# raw SQL so the increment is atomic — this bypasses the controller's
+			# validate(), so branch_name/company must be set here too.
 			frappe.db.sql(
 				"UPDATE `tabSales Invoice Print Count` "
-				"SET print_count = print_count + %s, branch_name = %s WHERE name = %s",
-				(sheets, branch, name),
+				"SET print_count = print_count + %s, branch_name = %s, company = %s "
+				"WHERE name = %s",
+				(sheets, branch, company, name),
 			)
 			return _stored_count(name)
 		frappe.get_doc(
@@ -193,6 +197,7 @@ def _add_print_count_doc(doc, sheets: int) -> int:
 				"doctype": "Sales Invoice Print Count",
 				"sales_invoice": name,
 				"branch_name": branch,
+				"company": company,
 				"print_count": sheets,
 			}
 		).insert(ignore_permissions=True)

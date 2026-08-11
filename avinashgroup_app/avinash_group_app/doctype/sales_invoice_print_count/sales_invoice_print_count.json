@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "sales_invoice",
+  "company",
   "branch_name",
   "print_count"
  ],
@@ -22,6 +23,17 @@
    "reqd": 1,
    "search_index": 1,
    "unique": 1
+  },
+  {
+   "description": "Company of the invoice, filled in from the invoice.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "description": "Branch-wise invoice number, filled in from the invoice.",
@@ -43,7 +55,7 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-03 16:30:00.000000",
+ "modified": "2026-08-12 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Sales Invoice Print Count",

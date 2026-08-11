@@ -8,11 +8,18 @@ from frappe.model.document import Document
 
 class SalesInvoicePrintCount(Document):
 	def validate(self):
-		# branch_name mirrors the invoice, so it is never typed in by hand.
-		self.branch_name = (
-			frappe.db.get_value("Sales Invoice", self.sales_invoice, "custom_branch_name")
-			or ""
+		# branch_name and company mirror the invoice, so neither is ever typed in by hand.
+		row = (
+			frappe.db.get_value(
+				"Sales Invoice",
+				self.sales_invoice,
+				["custom_branch_name", "company"],
+				as_dict=True,
+			)
+			or {}
 		)
+		self.branch_name = row.get("custom_branch_name") or ""
+		self.company = row.get("company") or ""
 
 	def on_trash(self):
 		"""Deleting the counter resets the invoice to "never printed".
