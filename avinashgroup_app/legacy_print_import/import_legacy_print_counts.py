@@ -82,10 +82,17 @@ from frappe.utils import cint
 REGISTER_FOLDER = os.path.join(os.path.dirname(__file__), "registers")
 DEFAULT_XLS = os.path.join(REGISTER_FOLDER, "NGI", "82.83 NGI.xls")
 
-# registers/<KEY>/ holds one company's exports. The live fiscal year is NOT
-# here: the "Sharwan Latest" exports in the same drop cover 83/84, which
-# ERPNext is already counting through print_count.py, so importing them would
-# double the live counters.
+# registers/<KEY>/ holds one company's exports.
+#
+# The "Sharwan Latest" exports in the same drop cover the live fiscal year
+# 83/84, which ERPNext is also counting through print_count.py. That is only a
+# double-count if the SAME invoice was printed in both systems, and under
+# mode="max" not even then. GE's was checked invoice-by-invoice before being
+# added as "83.84 Shrawan Grishma.xls": its 567 rows are prints the old
+# software made during the 2026-07-17..2026-08-06 cutover, and they do not
+# intersect the invoices ERPNext has printed. Run the same check before adding
+# any other company's — resolve the register against that company's invoices
+# and confirm zero collisions with existing Sales Invoice Print Count rows.
 REGISTER_COMPANIES = {
     "NGI": "Nepal Gas Udhyog Pvt. Ltd.",
     "NGG": "Nepal Gas Udhyog (Gandaki) Pvt. Ltd.",
