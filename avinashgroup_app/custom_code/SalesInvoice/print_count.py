@@ -51,6 +51,8 @@ software's user names (ASHISH, NDILLI) are not Frappe users.
 import frappe
 from frappe.utils import cint
 
+from avinashgroup_app.utils.fiscal_year_utils import fiscal_year_for_date
+
 # /api/method endpoints that produce a physical/file output of the document.
 PRINT_OUTPUT_CMDS = {
 	"frappe.utils.print_format.download_pdf",
@@ -181,15 +183,17 @@ def _add_print_count_doc(doc, sheets: int) -> int:
 	name = doc.name
 	branch = doc.get("custom_branch_name")
 	company = doc.get("company")
+	fiscal_year = fiscal_year_for_date(doc.get("posting_date"))
 	try:
 		if frappe.db.exists("Sales Invoice Print Count", name):
 			# raw SQL so the increment is atomic — this bypasses the controller's
-			# validate(), so branch_name/company must be set here too.
+			# validate(), so branch_name/company/fiscal_year must be set here too.
 			frappe.db.sql(
 				"UPDATE `tabSales Invoice Print Count` "
-				"SET print_count = print_count + %s, branch_name = %s, company = %s "
+				"SET print_count = print_count + %s, branch_name = %s, company = %s, "
+				"fiscal_year = %s "
 				"WHERE name = %s",
-				(sheets, branch, company, name),
+				(sheets, branch, company, fiscal_year, name),
 			)
 			return _stored_count(name)
 		frappe.get_doc(
@@ -198,6 +202,7 @@ def _add_print_count_doc(doc, sheets: int) -> int:
 				"sales_invoice": name,
 				"branch_name": branch,
 				"company": company,
+				"fiscal_year": fiscal_year,
 				"print_count": sheets,
 			}
 		).insert(ignore_permissions=True)

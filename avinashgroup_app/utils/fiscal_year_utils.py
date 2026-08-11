@@ -25,3 +25,36 @@ def get_default_fiscal_year():
 
 	fy = frappe.db.get_value("Fiscal Year", {"docstatus": 1}, "name")
 	return fy or None
+
+
+def fiscal_year_for_date(posting_date):
+	"""Name of the Fiscal Year spanning `posting_date`, or None.
+
+	The books run on the Bikram Sambat calendar, so a year is "82/83" and
+	starts mid-July. Returns None rather than throwing when no row spans the
+	date — callers here are filling in a descriptive field, and a missing
+	Fiscal Year row must never take down a print or an import.
+	"""
+	if not posting_date:
+		return None
+	for row in _fiscal_year_ranges():
+		if row.year_start_date <= posting_date <= row.year_end_date:
+			return row.name
+	return None
+
+
+def _fiscal_year_ranges():
+	"""Every Fiscal Year row as (name, year_start_date, year_end_date), cached.
+
+	Read once per request: resolving a whole legacy register asks this for tens
+	of thousands of invoices.
+	"""
+	rows = frappe.local.__dict__.get("_agapp_fiscal_year_ranges")
+	if rows is None:
+		rows = frappe.get_all(
+			"Fiscal Year",
+			fields=["name", "year_start_date", "year_end_date"],
+			order_by="year_start_date",
+		)
+		frappe.local._agapp_fiscal_year_ranges = rows
+	return rows

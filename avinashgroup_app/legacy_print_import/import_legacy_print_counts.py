@@ -74,10 +74,13 @@ Usage (from the bench directory):
 
 import json
 import os
+import re
 from datetime import datetime, timedelta
 
 import frappe
 from frappe.utils import cint
+
+from avinashgroup_app.utils.fiscal_year_utils import fiscal_year_for_date
 
 REGISTER_FOLDER = os.path.join(os.path.dirname(__file__), "registers")
 DEFAULT_XLS = os.path.join(REGISTER_FOLDER, "NGI", "82.83 NGI.xls")
@@ -284,30 +287,68 @@ def parse_register(xls_path, drop_batch_events=False, info=None):
     return totals
 
 
+# A register number that names its own fiscal year, e.g. NGI000001/82-83 or
+# BHT000001/81-82. Anchored at the end so a number that merely contains digits
+# cannot be mistaken for one. The separator varies — NGG's 79.80 register holds
+# five numbers written NGG000001/80.81 with a dot.
+NUMBER_FISCAL_YEAR = re.compile(r"(\d{2})[-/.](\d{2})\s*$")
+
+# The fiscal year in a register FILENAME: "80.81 NGN.xls", "NGK 79.80.xls",
+# "83.84 Shrawan NGI.xls".
+FILE_FISCAL_YEAR = re.compile(r"(?<!\d)(\d{2})\.(\d{2})(?!\d)")
+
+
+def register_fiscal_year(xls_path):
+    """Fiscal year a register file covers, e.g. "79/80", or None.
+
+    Taken from the FILENAME, not the sheet header: the header names the year
+    the report was run under, which drifts — GE's 83/84 Shrawan export still
+    says "FY [2082.083]" while every number in it is an 83-84 one.
+    """
+    match = FILE_FISCAL_YEAR.search(os.path.basename(xls_path))
+    return "{0}/{1}".format(*match.groups()) if match else None
+
+
+def number_fiscal_year(old_no, file_fiscal_year):
+    """Fiscal year a single register number belongs to.
+
+    A number that carries its own year wins — the year-register files are not
+    pure, they spill into the next year (GE's 80.81 export holds 1367 bare
+    80/81 numbers AND 376 explicit /81-82 ones, NGN's 79.80 export 9817 bare
+    plus 6954 /80-81). A bare number belongs to the file's own year.
+    """
+    match = NUMBER_FISCAL_YEAR.search((old_no or "").strip())
+    return "{0}/{1}".format(*match.groups()) if match else file_fiscal_year
+
+
 def resolve_register_invoices(company=None):
-    """Old software invoice number (stored in custom_branch_name) -> SI name.
+    """(old invoice number, fiscal year) -> SI name.
 
     The number is only unique PER COMPANY PER FISCAL YEAR — the old ERPs
-    numbered each company independently and restarted every year (NGK holds
-    NGK/000001 in both 77/78 and 79/80). NGI's register format embeds the year
-    (NGI000001/82-83) and the company (the NGI prefix), which is why a bare
-    dict works for it; a register whose numbers carry neither can match more
-    than one invoice. Pass company= to narrow the lookup.
+    numbered each company independently and restarted every year, so NGN/007208
+    names four different invoices (76/77, 77/78, 78/79 and 79/80) and
+    KTM/00001 three. Company comes from the company= argument; the year is what
+    this key adds, and it is what makes the older bare-numbered registers
+    resolvable at all.
 
-    Returns (mapping, ambiguous). A number held by several invoices lands in
-    `ambiguous` and NOT in `mapping`, so callers skip it rather than resolving
-    it by guessing — which a plain dict does silently by keeping whichever row
-    the scan returned last.
+    Returns (mapping, ambiguous), both keyed by that pair. A number still held
+    by several invoices WITHIN one company and year lands in `ambiguous` and
+    NOT in `mapping`, so callers skip it rather than resolving it by guessing —
+    which a plain dict does silently by keeping whichever row the scan returned
+    last. That guess is not hypothetical: it put 2,616 counters on NGN 79/80
+    invoices on 2026-08-10, each holding the max of four unrelated invoices'
+    print histories.
     """
     rows = frappe.db.sql(
-        "SELECT custom_branch_name, name, company FROM `tabSales Invoice` "
-        "WHERE IFNULL(custom_branch_name, '') != ''"
+        "SELECT custom_branch_name, name, company, posting_date "
+        "FROM `tabSales Invoice` WHERE IFNULL(custom_branch_name, '') != ''"
         + (" AND company = %s" if company else ""),
         (company,) if company else (),
     )
     holders = {}
-    for old_no, name, si_company in rows:
-        holders.setdefault((old_no or "").strip(), []).append(
+    for old_no, name, si_company, posting_date in rows:
+        key = ((old_no or "").strip(), fiscal_year_for_date(posting_date))
+        holders.setdefault(key, []).append(
             "{0} ({1})".format(name, si_company))
     mapping = {k: v[0].split(" (")[0] for k, v in holders.items() if len(v) == 1}
     ambiguous = {k: v for k, v in holders.items() if len(v) > 1}
@@ -327,6 +368,7 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         totals = {no: n for no, n in totals.items() if no.startswith(only_prefix)}
 
     mapping, ambiguous = resolve_register_invoices(company)
+    file_fiscal_year = register_fiscal_year(xls_path)
 
     existing = {
         r.name: cint(r.print_count)
@@ -339,12 +381,15 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
     for old_no, sheets in totals.items():
         if not sheets:
             continue
-        si = mapping.get(old_no)
-        if not si and old_no in ambiguous:
-            # several invoices hold this number: counting it would credit sheets
-            # to an arbitrary one. Report it and import nothing for this row.
-            ambiguous_hits.append({"old_no": old_no, "sheets": sheets,
-                                   "candidates": ambiguous[old_no][:5]})
+        key = (old_no, number_fiscal_year(old_no, file_fiscal_year))
+        si = mapping.get(key)
+        if not si and key in ambiguous:
+            # several invoices hold this number in this very year: counting it
+            # would credit sheets to an arbitrary one. Report it and import
+            # nothing for this row.
+            ambiguous_hits.append({"old_no": old_no, "fiscal_year": key[1],
+                                   "sheets": sheets,
+                                   "candidates": ambiguous[key][:5]})
         elif not si:
             unmatched.append(old_no)
         elif si in existing:
@@ -395,18 +440,26 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
         ("updated" if commit else "would_update"): len(updates),
         "unmatched": len(unmatched),
         "unmatched_invoices": unmatched[:50],
+        "fiscal_year": file_fiscal_year,
         "ambiguous_numbers_in_db": len(ambiguous),
         "ambiguous_register_rows": len(ambiguous_hits),
         "ambiguous_detail": ambiguous_hits[:20],
         "total_sheets": sum(r["print_count"] for r in inserts)
         + sum(r["add"] for r in updates),
     }
+    if not file_fiscal_year:
+        result["fiscal_year_warning"] = (
+            "No fiscal year in the filename, so bare register numbers (those not "
+            "carrying their own /82-83 suffix) cannot be placed in a year and will "
+            "look ambiguous. Rename the file to include it, e.g. '80.81 NGN.xls'."
+        )
     if ambiguous_hits:
         result["ambiguous_warning"] = (
-            "{0} register row(s) name a number held by SEVERAL invoices and were "
-            "SKIPPED — the number is only unique per company per fiscal year. "
-            "Re-run with company='<the register's company>', or import a register "
-            "whose numbers carry the year.".format(len(ambiguous_hits))
+            "{0} register row(s) name a number held by SEVERAL invoices of the SAME "
+            "company AND fiscal year, and were SKIPPED. Company and year already "
+            "narrow the lookup, so this is a genuine duplicate in the data rather "
+            "than the year-restart collision — inspect ambiguous_detail.".format(
+                len(ambiguous_hits))
         )
     if updates:
         result["update_rows"] = updates[:50]
@@ -417,6 +470,66 @@ def run(xls_path=None, commit=False, only_prefix=None, drop_batch_events=False, 
             else "updates RAISE counters to this register's total; re-running "
             "changes nothing"
         )
+    print(json.dumps(result, indent=1, default=str))
+    return result
+
+
+def backfill_fiscal_year(commit=False, company=None):
+    """Fill Sales Invoice Print Count.fiscal_year on rows written before it existed.
+
+    The field mirrors the invoice's posting date, so this is pure derivation —
+    it changes no count. Rows whose invoice has no Fiscal Year row spanning its
+    posting date are reported and left alone.
+
+    DRY RUN unless commit=True.
+
+      bench --site <site> execute \\
+        avinashgroup_app.legacy_print_import.import_legacy_print_counts.backfill_fiscal_year \\
+        --kwargs "{'commit': True}"
+    """
+    filters = {"fiscal_year": ["in", ["", None]]}
+    if company:
+        filters["company"] = company
+    rows = frappe.get_all(
+        "Sales Invoice Print Count", filters=filters, fields=["name", "sales_invoice"]
+    )
+    dates = dict(
+        frappe.db.sql(
+            "SELECT name, posting_date FROM `tabSales Invoice` "
+            "WHERE IFNULL(custom_branch_name, '') != ''"
+            + (" AND company = %s" if company else ""),
+            (company,) if company else (),
+        )
+    )
+    by_year, no_year = {}, []
+    for row in rows:
+        year = fiscal_year_for_date(dates.get(row.sales_invoice))
+        if year:
+            by_year.setdefault(year, []).append(row.name)
+        else:
+            no_year.append(row.name)
+
+    if commit:
+        for year, names in by_year.items():
+            for chunk in _chunks(names, 500):
+                frappe.db.sql(
+                    "UPDATE `tabSales Invoice Print Count` SET fiscal_year = %s "
+                    "WHERE name IN ({0})".format(", ".join(["%s"] * len(chunk))),
+                    [year] + list(chunk),
+                )
+        frappe.db.commit()
+
+    result = {
+        "dry_run": not commit,
+        "company": company or "(all companies)",
+        "counters_without_fiscal_year": len(rows),
+        ("updated" if commit else "would_update"): sum(
+            len(v) for v in by_year.values()
+        ),
+        "by_fiscal_year": {k: len(v) for k, v in sorted(by_year.items())},
+        "no_fiscal_year_row_for_posting_date": len(no_year),
+        "no_fiscal_year_sample": no_year[:20],
+    }
     print(json.dumps(result, indent=1, default=str))
     return result
 
@@ -492,15 +605,21 @@ def run_print_log_backfill(xls_path=None, commit=False, only_prefix=None,
     events = [e for e in events if e["timestamp"]]
 
     mapping, ambiguous = resolve_register_invoices(company)
+    file_fiscal_year = register_fiscal_year(xls_path)
 
     by_invoice = {}
     unmatched, ambiguous_hits = set(), []
+    seen_ambiguous = set()
     for e in events:
         old_no = e["invoice_no"]
-        si = mapping.get(old_no)
+        key = (old_no, number_fiscal_year(old_no, file_fiscal_year))
+        si = mapping.get(key)
         if not si:
-            if old_no in ambiguous:
-                ambiguous_hits.append({"old_no": old_no, "candidates": ambiguous[old_no][:5]})
+            if key in ambiguous:
+                if key not in seen_ambiguous:
+                    seen_ambiguous.add(key)
+                    ambiguous_hits.append({"old_no": old_no, "fiscal_year": key[1],
+                                           "candidates": ambiguous[key][:5]})
             else:
                 unmatched.add(old_no)
             continue
