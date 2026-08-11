@@ -179,7 +179,7 @@ def get_columns():
 	return [
 		{"fieldname": "date",          "label": _("Date"),           "fieldtype": "Date",     "width": 100},
 		{"fieldname": "miti",          "label": _("Miti"),           "fieldtype": "Data",     "width": 120},
-		{"fieldname": "bill_no",       "label": _(\"Bill No\"),        "fieldtype": "Data",     "width": 170},
+		{"fieldname": "bill_no",       "label": _("Bill No"),        "fieldtype": "Data",     "width": 170},
 		{"fieldname": "customer",      "label": _("Customer Name"),  "fieldtype": "Data",     "width": 180},
 		{"fieldname": "vat_number",    "label": _("VAT Number"),     "fieldtype": "Data",     "width": 130},
 		{"fieldname": "total_sales",   "label": _("Total Sales"),    "fieldtype": "Currency", "width": 130},
