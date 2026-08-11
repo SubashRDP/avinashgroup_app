@@ -87,12 +87,17 @@ DEFAULT_XLS = os.path.join(REGISTER_FOLDER, "NGI", "82.83 NGI.xls")
 # The "Sharwan Latest" exports in the same drop cover the live fiscal year
 # 83/84, which ERPNext is also counting through print_count.py. That is only a
 # double-count if the SAME invoice was printed in both systems, and under
-# mode="max" not even then. GE's was checked invoice-by-invoice before being
-# added as "83.84 Shrawan Grishma.xls": its 567 rows are prints the old
-# software made during the 2026-07-17..2026-08-06 cutover, and they do not
-# intersect the invoices ERPNext has printed. Run the same check before adding
-# any other company's — resolve the register against that company's invoices
-# and confirm zero collisions with existing Sales Invoice Print Count rows.
+# mode="max" not even then. All five were checked invoice-by-invoice against
+# ng-group before being added as "83.84 Shrawan <X>.xls": they record prints
+# the old software made while running alongside ERPNext through the
+# 2026-07-17..2026-08-06 cutover, every number resolves, and NONE of them
+# touch an invoice ERPNext had already printed (each company had only its
+# first 83/84 invoice + return counted, GE 4 rows and the rest 2 each).
+#
+#   GE 567 inv/1064 sheets, NGI 481/853, NGG 299/586, NGK 283/572, NGN 1036/2127
+#
+# They are month views ending 2026-08-05/06, not full-year registers — re-pull
+# and re-run to pick up later prints; mode="max" makes that safe.
 REGISTER_COMPANIES = {
     "NGI": "Nepal Gas Udhyog Pvt. Ltd.",
     "NGG": "Nepal Gas Udhyog (Gandaki) Pvt. Ltd.",
