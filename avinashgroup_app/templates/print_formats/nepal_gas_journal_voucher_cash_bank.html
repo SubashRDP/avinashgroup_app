@@ -117,6 +117,54 @@ tr, td, th { page-break-inside: avoid; }
     adds ~6px to each; let them size to their own text instead. */
  .main-table tr.voucher-meta td table td { padding:0 !important; }
  .main-table tr.voucher-meta td table tr { height:auto !important; }
+ .voucher-meta-table {
+    width: auto;
+    border: none;
+    border-collapse: collapse;
+    table-layout: fixed;
+ }
+ .voucher-meta-wrap {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 12px;
+  }
+ .voucher-left-block {
+    flex: 1 1 auto;
+    text-align: left;
+    white-space: nowrap;
+    padding-top: 2px;
+  }
+ .voucher-right-block {
+    flex: 0 0 auto;
+  }
+ .voucher-meta-wrap .voucher-meta-table {
+    display: table;
+  }
+ .voucher-cashbank-row {
+    white-space: nowrap;
+    text-align: left;
+    padding-top: 2px;
+  }
+ .voucher-meta-table td {
+    border: none !important;
+    padding: 0 !important;
+    vertical-align: top;
+    white-space: nowrap;
+ }
+ .voucher-meta-table .voucher-label {
+    width: 19%;
+    text-align: left;
+  }
+ .voucher-meta-table .voucher-colon {
+    width: 3%;
+    text-align: center;
+  }
+ .voucher-meta-table .voucher-value {
+    width: 78%;
+    text-align: right;
+  }
   
   strong
   {
@@ -781,25 +829,31 @@ padding:0px 30px;
              footer's Cheque No / Dated block instead. Header keeps only Voucher No + Posting Miti. -#}
           {#- Full-width label/value rows: title pinned to the left page edge,
              value pinned to the right page edge. -#}
-          <table style="width:100%; border:none; border-collapse:collapse;">
+          <div class="voucher-meta-wrap">
+            {% if show_cash_bank_header %}
+            <div class="voucher-left-block">
+              <strong>Cash/Bank :</strong> {{ cash_bank.name }}
+            </div>
+            {% endif %}
+            <div class="voucher-right-block">
+            <table class="voucher-meta-table">
             {% if doc.custom_name %}
             <tr>
-              <td style="border:none; text-align:left; padding:0;"><strong>Voucher No :</strong></td>
-              <td style="border:none; text-align:right; padding:0;">{{ doc.custom_name }}</td>
+              <td class="voucher-label"><strong>Voucher No</strong></td>
+              <td class="voucher-colon"><strong>:</strong></td>
+              <td class="voucher-value">{{ doc.custom_name }}</td>
             </tr>
             {% endif %}
             {% if doc.custom_posting_miti or doc.posting_date %}
             <tr>
-              <td style="border:none; text-align:left; padding:0;"><strong>Posting Miti :</strong></td>
-              <td style="border:none; text-align:right; padding:0;">{% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
-            </tr>
-            {% endif %}
-            {% if show_cash_bank_header %}
-            <tr>
-              <td colspan="2" style="border:none; text-align:left; padding:0;"><strong>Cash/Bank:</strong> {{ cash_bank.name }}</td>
+              <td class="voucher-label"><strong>Posting Miti</strong></td>
+              <td class="voucher-colon"><strong>:</strong></td>
+              <td class="voucher-value">{% if doc.custom_posting_miti %}{{ (doc.custom_posting_miti|string).split(" ")[0] }}{% endif %}{% if doc.posting_date %} ({{ frappe.utils.formatdate(doc.posting_date, "yyyy-MM-dd") }}){% endif %}</td>
             </tr>
             {% endif %}
           </table>
+            </div>
+          </div>
         </td>
       </tr>
 
