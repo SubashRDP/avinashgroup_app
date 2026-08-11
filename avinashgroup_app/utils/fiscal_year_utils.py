@@ -49,7 +49,9 @@ def _fiscal_year_ranges():
 	Read once per request: resolving a whole legacy register asks this for tens
 	of thousands of invoices.
 	"""
-	rows = frappe.local.__dict__.get("_agapp_fiscal_year_ranges")
+	# getattr with a default, NOT frappe.local.__dict__ — frappe.local is a
+	# werkzeug Local proxy and does not expose __dict__.
+	rows = getattr(frappe.local, "_agapp_fiscal_year_ranges", None)
 	if rows is None:
 		rows = frappe.get_all(
 			"Fiscal Year",
