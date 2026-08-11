@@ -299,9 +299,20 @@ def run(limit=None):
 
 
 def verify():
-    """Read-only. For every watermarked pair, compare Bin.actual_qty
-    against the last Stock Ledger Entry's qty_after_transaction. They
-    must agree. Any mismatch means repost() did not finish."""
+    """Read-only. For every watermarked pair, check three numbers agree.
+
+    The important one is sum_of_moves -- SUM(actual_qty) over the ledger.
+    It is derived from the movements themselves, so it is independent of
+    the denormalized running balance and cannot go stale with it.
+
+    An earlier version of this compared only Bin.actual_qty against the
+    last row's qty_after_transaction. Those are not independent: during a
+    deferred run update_bin_qty assigns Bin *from* that same last row via
+    get_actual_qty(). Both go stale together and the check passes while
+    the ledger is wrong -- observed on GEPL-ITEM-00066 reporting agreement
+    at -2052813.2 when the true balance was -3186069.2. Never compare a
+    value against something that was copied from it.
+    """
     import frappe
 
     marks = _load_marks()
@@ -311,29 +322,34 @@ def verify():
 
     bad = []
     for item_code, warehouse in sorted(marks.keys()):
-        bin_qty = frappe.db.get_value(
-            "Bin", {"item_code": item_code, "warehouse": warehouse},
-            "actual_qty")
         row = frappe.db.sql(
             """
-            SELECT qty_after_transaction FROM `tabStock Ledger Entry`
-            WHERE item_code = %s AND warehouse = %s AND is_cancelled = 0
-            ORDER BY posting_datetime DESC, creation DESC LIMIT 1
+            SELECT
+              (SELECT SUM(actual_qty) FROM `tabStock Ledger Entry`
+               WHERE item_code = %(i)s AND warehouse = %(w)s
+                 AND is_cancelled = 0),
+              (SELECT qty_after_transaction FROM `tabStock Ledger Entry`
+               WHERE item_code = %(i)s AND warehouse = %(w)s
+                 AND is_cancelled = 0
+               ORDER BY posting_datetime DESC, creation DESC LIMIT 1),
+              (SELECT actual_qty FROM `tabBin`
+               WHERE item_code = %(i)s AND warehouse = %(w)s)
             """,
-            (item_code, warehouse),
+            {"i": item_code, "w": warehouse},
         )
-        sle_qty = row[0][0] if row else None
+        moves, running, bin_qty = row[0] if row else (None, None, None)
 
-        if bin_qty is None or sle_qty is None:
+        if None in (moves, running, bin_qty):
             match = "?"
-        elif abs(float(bin_qty) - float(sle_qty)) < 0.001:
+        elif (abs(float(moves) - float(running)) < 0.001
+              and abs(float(moves) - float(bin_qty)) < 0.001):
             match = "ok"
         else:
             match = "MISMATCH"
-            bad.append((item_code, warehouse, bin_qty, sle_qty))
+            bad.append((item_code, warehouse, moves, running, bin_qty))
 
-        print("%-8s bin=%-14s sle=%-14s  %s @ %s"
-              % (match, bin_qty, sle_qty, item_code, warehouse))
+        print("%-8s moves=%-15s running=%-15s bin=%-15s  %s @ %s"
+              % (match, moves, running, bin_qty, item_code, warehouse))
 
     print("")
     if bad:
