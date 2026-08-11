@@ -45,12 +45,20 @@ MARKS_FILE = ""
 
 def marks_path():
     """Absolute path of the watermark file. Printed so it is never a
-    mystery where an interrupted run left its state."""
+    mystery where an interrupted run left its state.
+
+    frappe.get_site_path() returns a path relative to the bench root, so
+    resolving it here keeps repost() working even if the console that
+    picks up an interrupted run was started from a different directory.
+    """
+    import os
+
     if MARKS_FILE:
-        return MARKS_FILE
+        return os.path.abspath(MARKS_FILE)
+
     import frappe
 
-    return frappe.get_site_path("fast_submit_marks.json")
+    return os.path.abspath(frappe.get_site_path("fast_submit_marks.json"))
 
 
 def scope():
