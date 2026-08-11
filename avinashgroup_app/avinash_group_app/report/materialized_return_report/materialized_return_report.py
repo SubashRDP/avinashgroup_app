@@ -28,6 +28,8 @@ from avinashgroup_app.avinash_group_app.report.materialized_report.materialized_
 	_yes_no,
 	fiscal_year_display,
 	fiscal_year_span,
+	strip_totals_row,
+	totals_row,
 )
 from avinashgroup_app.custom_code.CBMS.utils import bs_datetime_str
 from avinashgroup_app.utils.report_excel import send_report_xlsx
@@ -35,10 +37,16 @@ from avinashgroup_app.utils.report_excel import send_report_xlsx
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
+	columns = get_columns()
 	data = get_data(filters)
+	if data:
+		# Every amount column, labelled in the first one — the same last row
+		# send_report_xlsx writes, so the table and its export agree.
+		float_fields = [c["fieldname"] for c in columns if c["fieldtype"] == "Float"]
+		data.append(totals_row(data, float_fields, columns[0]["fieldname"]))
 	# With zero rows the desk hides the table entirely ("Nothing to show");
 	# a single blank row keeps the column headers visible.
-	return get_columns(), data or [{}]
+	return columns, data or [{}]
 
 
 def get_columns():
@@ -205,7 +213,7 @@ def export_xlsx(filters):
 	columns, data = execute(filters)
 	send_report_xlsx(
 		columns,
-		data,
+		strip_totals_row(data),
 		filters.get("company"),
 		"MATERIALIZED RETURN REPORT",
 		"materialized_return_report.xlsx",

@@ -24,17 +24,41 @@ import re
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 from avinashgroup_app.custom_code.CBMS.utils import bs_date_str, bs_datetime_str, bs_long_date
-from avinashgroup_app.utils.report_excel import send_annexure7_xlsx
+from avinashgroup_app.utils.report_excel import ANNEXURE7_TOTAL_FIELDS, send_annexure7_xlsx
 
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	data = get_data(filters)
+	if data:
+		# The three columns the exported sheet totals, labelled in the same column
+		# it labels them in — the table's last row is the sheet's last row.
+		data.append(totals_row(data, ANNEXURE7_TOTAL_FIELDS, "customer_pan", label=_("Totals")))
 	# With zero rows the desk hides the table entirely ("Nothing to show");
 	# a single blank row keeps the column headers visible.
 	return get_columns(), data or [{}]
+
+
+def totals_row(data, fields, label_field, label=None):
+	"""Grand-total row to append to a report's data.
+
+	`is_total_row` marks it for two readers: export_xlsx drops it before handing
+	the rows to a workbook builder that sums them and writes its own totals row
+	(without this the last row would be counted twice), and the desk's Print view
+	renders the row's first column as "Total".
+	"""
+	row = {label_field: label or _("Total"), "is_total_row": 1}
+	for field in fields:
+		row[field] = flt(sum(flt(d.get(field)) for d in data), 2)
+	return row
+
+
+def strip_totals_row(data):
+	"""The rows of `data` that came from the query — no appended totals row."""
+	return [d for d in data if not d.get("is_total_row")]
 
 
 def get_columns():
@@ -246,7 +270,7 @@ def export_xlsx(filters):
 	columns, data = execute(filters)
 	send_annexure7_xlsx(
 		columns,
-		data,
+		strip_totals_row(data),
 		filters.get("company"),
 		"materialized_report.xlsx",
 		**_header_context(filters),
