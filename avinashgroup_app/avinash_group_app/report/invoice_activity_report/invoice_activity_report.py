@@ -140,6 +140,12 @@ def _resolve_company_scope(filters):
 	"""
 	allowed = _allowed_companies()
 	picked = filters.get("company")
+	if not picked:
+		# The filter is reqd in the JS, so this only fires for a call that
+		# bypasses the form — the API, a Prepared Report, a script. Without it an
+		# unrestricted user gets every company's activity blended into one list,
+		# which reads as a bug rather than as "no filter applied".
+		frappe.throw(_("Select a Company."), frappe.MandatoryError)
 	if picked:
 		if allowed is not None and picked not in allowed:
 			frappe.throw(

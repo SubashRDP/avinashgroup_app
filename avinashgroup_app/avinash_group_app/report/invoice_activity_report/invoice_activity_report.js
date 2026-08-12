@@ -22,6 +22,12 @@
 				fieldtype: "Link",
 				options: "Company",
 				default: frappe.defaults.get_user_default("Company"),
+				// Required, because blank does not mean "no filter" here — it
+				// means every company the user may see, which for an
+				// unrestricted user is all of them. The report is read
+				// per-company, so an empty filter silently mixes companies
+				// together.
+				reqd: 1,
 			},
 			{
 				fieldname: "fiscal_year",
