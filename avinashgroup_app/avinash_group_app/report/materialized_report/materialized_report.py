@@ -24,7 +24,7 @@ import re
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 from avinashgroup_app.custom_code.CBMS.utils import bs_date_str, bs_datetime_str, bs_long_date
 from avinashgroup_app.utils.report_excel import ANNEXURE7_TOTAL_FIELDS, send_annexure7_xlsx
@@ -87,6 +87,10 @@ def get_columns():
 		col("VAT Refund Amount (if any)", "vat_refund_amount", 170),
 		col("Transaction Id (if any)", "transaction_id", 170),
 		col("Sync with IRD Date & Time", "synced_at", 190),
+		# Sheets printed for this invoice, from Sales Invoice Print Count. Not
+		# part of the IRD annexure layout — it sits last so the 21 columns before
+		# it stay in the order the filed sheets use.
+		col("Print Count", "print_count", 110, "Int"),
 	]
 
 
@@ -173,9 +177,15 @@ def get_data(filters):
 				where l.sales_invoice = bill.sales_invoice
 				order by l.creation asc, l.copy_number asc
 				limit 1
-			) as printed_by
+			) as printed_by,
+			pc.print_count
 		from `tabCBMS Bill` bill
 		left join `tabSales Invoice` si on si.name = bill.sales_invoice
+		-- Sales Invoice Print Count holds at most one row per invoice
+		-- (sales_invoice is unique, and the doctype autonames from it), so this
+		-- join cannot fan the result out. LEFT because a counter only exists once
+		-- an invoice has actually been printed.
+		left join `tabSales Invoice Print Count` pc on pc.sales_invoice = bill.sales_invoice
 		where 1 = 1 {conditions}
 		order by bill.fiscal_year asc, bill.invoice_date asc, bill.invoice_number asc
 		""".format(conditions=get_conditions(filters)),
@@ -218,6 +228,10 @@ def _format_row(r):
 		# is only a sync time once the bill actually reached the IRD. A Failed or
 		# Pending bill reports no time rather than the moment it last failed.
 		"synced_at": bs_datetime_str(r.last_attempt) if r.sync_status == "Synced" else None,
+		# 0 rather than null for a never-printed invoice: the Printed column
+		# already says No, and a blank here would read as "unknown" instead of
+		# "none".
+		"print_count": cint(r.print_count),
 	}
 
 
