@@ -74,7 +74,10 @@ def _build_bill_payload(bill, config, is_realtime):
 		"seller_pan": bill.seller_pan,
 		"buyer_pan": bill.buyer_pan or "",
 		"buyer_name": bill.buyer_name or "",
-		"fiscal_year": bill.fiscal_year,
+		# CBMS wants the dotted form ("82.83"); the record stores our Fiscal Year
+		# name ("82/83"). Converted here so the payload is unchanged from the
+		# 248,966 bills the IRD has already accepted.
+		"fiscal_year": (bill.fiscal_year or "").replace("/", "."),
 		"invoice_number": bill.invoice_number,
 		"invoice_date": bill.invoice_date_bs.replace("-", "."),
 		"total_sales": _amount(bill.total_sales),
@@ -100,7 +103,7 @@ def _build_return_payload(bill_return, config, is_realtime):
 		"seller_pan": bill_return.seller_pan,
 		"buyer_pan": _buyer_pan_decimal(bill_return.buyer_pan),
 		"buyer_name": bill_return.buyer_name or "",
-		"fiscal_year": bill_return.fiscal_year,
+		"fiscal_year": (bill_return.fiscal_year or "").replace("/", "."),
 		"ref_invoice_number": bill_return.ref_invoice_number,
 		"credit_note_number": bill_return.credit_note_number,
 		"credit_note_date": bill_return.credit_note_date_bs.replace("-", "."),
