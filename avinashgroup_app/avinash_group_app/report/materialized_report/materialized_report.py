@@ -226,32 +226,27 @@ def _yes_no(value):
 
 
 def fiscal_year_display(fiscal_year):
-	"""Bill fiscal year for display: "82.83" -> "2082-83".
+	"""Bill fiscal year in the short dotted form the records carry: "82.83".
 
-	Bills store the Fiscal Year name with a dot ("82.83"); the record itself is
-	named with a slash. Both are accepted, and anything that is not a two-part
-	two-digit year is passed through untouched.
+	Bills store the Fiscal Year name with a dot ("82.83"); the Fiscal Year
+	record itself is named with a slash ("82/83"), which is what the report's
+	filter shows. Both are accepted and normalised to the dot, so the column and
+	the filter name the same year in the same shape.
 
-	NOTE — this deliberately does NOT match the legacy annexure sheets. The old
-	software printed the wrong end year from 79/80 onward: 2079-81, 2080-82,
-	2081-83, 2082-84, i.e. start+2 rather than start+1, while 75/76 through
-	78/79 printed correctly. That was verified against all 28 Annexure-7 exports
-	of the NG-Group drop (265,700 rows across NGI, NGN, NGG, NGK and Grishma),
-	and the value is identical for every company holding a given year, so it is
-	a property of the year and not of the company — almost certainly an
-	off-by-one entered in its Fiscal Year master when 79/80 was set up and
-	carried forward since.
+	Anything that is not a two-part two-digit year passes through untouched.
 
-	This report used to reproduce that so it tied out against what was filed.
-	Operator decision 2026-08-12: print the true end year instead. Anyone
-	reconciling this report against a filed annexure for 79/80 or later will
-	therefore see the end year differ by one; the underlying rows still match.
+	Earlier versions expanded this to a four-digit span. Up to 2026-08-12 that
+	reproduced an off-by-one in the OLD software's Fiscal Year master — from
+	79/80 on it printed start+2, so 82.83 read "2082-84" — kept deliberately so
+	the report tied out against the Annexure-7 sheets filed with the IRD. That
+	expansion is gone; if a four-digit span is ever wanted again, note that the
+	filed sheets and the true year disagree for 79/80 onward.
 	"""
 	if not fiscal_year:
 		return ""
 	parts = re.split(r"[./-]", fiscal_year)
 	if len(parts) == 2 and all(len(p) == 2 and p.isdigit() for p in parts):
-		return f"20{parts[0]}-{parts[1]}"
+		return f"{parts[0]}.{parts[1]}"
 	return fiscal_year
 
 
