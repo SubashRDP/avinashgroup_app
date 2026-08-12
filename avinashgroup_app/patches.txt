@@ -55,3 +55,4 @@ avinashgroup_app.patches.sparrow_sms_token_as_data
 avinashgroup_app.patches.backfill_cbms_created_by
 
 avinashgroup_app.patches.allow_expected_grand_total_on_submit
+avinashgroup_app.patches.update_cheque_print_format
