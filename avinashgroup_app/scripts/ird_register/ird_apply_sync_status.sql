@@ -22,6 +22,7 @@
 -- the only trace, so leave it in place.
 
 SET SQL_BIG_SELECTS = 1;
+SET SQL_SAFE_UPDATES = 0;   -- bench mariadb turns this on; the UPDATEs below match on joins, not a keyed WHERE
 
 -- ird_reconcile.sql builds this; repeated here so running the two out of order
 -- fails on the register being absent rather than on a missing lookup table.

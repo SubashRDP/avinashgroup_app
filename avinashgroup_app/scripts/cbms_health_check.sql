@@ -34,9 +34,13 @@ WITH scoped AS (
     FROM `tabSales Invoice` si
     JOIN `tabCBMS Config` cfg
       ON cfg.company = si.company
-     AND cfg.enable_cbms = 1
      AND cfg.enable_from_date IS NOT NULL
      AND si.posting_date >= cfg.enable_from_date
+     -- Deliberately NOT filtered on enable_cbms. The switch being off does not
+     -- un-file the bills already sent, and a company can sit disabled for weeks
+     -- during a backfill; requiring 1 here emptied this CTE on ng-group and the
+     -- coverage checks below silently evaluated nothing, which reads exactly
+     -- like a pass. The disabled state is reported as its own INFO row instead.
     LEFT JOIN `tabFiscal Year` fy
       ON si.posting_date BETWEEN fy.year_start_date AND fy.year_end_date
     WHERE si.docstatus = 1
