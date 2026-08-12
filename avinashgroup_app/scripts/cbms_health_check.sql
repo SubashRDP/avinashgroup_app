@@ -12,6 +12,15 @@
 -- is on or after enable_from_date. An invoice outside that window is SUPPOSED
 -- to have no CBMS record, so counting it as missing would bury the real gaps.
 
+-- `bench mariadb` opens the console with MAX_JOIN_SIZE set, and this sweeps
+-- every Sales Invoice against every CBMS record, so it trips the guard
+-- (ERROR 1104) before it reads a row. Session-scoped: affects this run only.
+SET SQL_BIG_SELECTS = 1;
+
+-- GROUP_CONCAT truncates at 1024 bytes by default and does it SILENTLY. Every
+-- sample here is cut to 200 chars anyway, but raise it so the cut is ours.
+SET SESSION group_concat_max_len = 8192;
+
 WITH scoped AS (
     SELECT
         si.name,
