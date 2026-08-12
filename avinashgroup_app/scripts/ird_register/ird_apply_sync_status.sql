@@ -25,7 +25,7 @@ SET SQL_BIG_SELECTS = 1;
 
 -- ird_reconcile.sql builds this; repeated here so running the two out of order
 -- fails on the register being absent rather than on a missing lookup table.
-CREATE TABLE IF NOT EXISTS zz_ird_company (abbr varchar(8) PRIMARY KEY, company varchar(140));
+CREATE TABLE IF NOT EXISTS zz_ird_company (abbr varchar(8) PRIMARY KEY, company varchar(140)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 INSERT IGNORE INTO zz_ird_company VALUES
   ('NGI', 'Nepal Gas Udhyog Pvt. Ltd.'),
   ('NGG', 'Nepal Gas Udhyog (Gandaki) Pvt. Ltd.'),
@@ -39,7 +39,7 @@ CREATE TABLE zz_ird_first (
   abbr varchar(8), kind varchar(12), invoice_number varchar(64),
   first_synced_at datetime,
   PRIMARY KEY (abbr, kind, invoice_number)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 AS SELECT abbr, kind, invoice_number, MIN(synced_at) AS first_synced_at
    FROM zz_ird_filed GROUP BY abbr, kind, invoice_number;
 

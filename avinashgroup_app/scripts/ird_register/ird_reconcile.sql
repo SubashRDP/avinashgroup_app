@@ -14,7 +14,7 @@ SET SESSION group_concat_max_len = 8192;
 
 -- Company names as they appear on ng-group.
 DROP TABLE IF EXISTS zz_ird_company;
-CREATE TABLE zz_ird_company (abbr varchar(8) PRIMARY KEY, company varchar(140));
+CREATE TABLE zz_ird_company (abbr varchar(8) PRIMARY KEY, company varchar(140)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 INSERT INTO zz_ird_company VALUES
   ('NGI', 'Nepal Gas Udhyog Pvt. Ltd.'),
   ('NGG', 'Nepal Gas Udhyog (Gandaki) Pvt. Ltd.'),
