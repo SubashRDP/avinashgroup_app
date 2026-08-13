@@ -2383,21 +2383,12 @@ def _build_from_segments(doc, rule, commit_series=True, force_scan=False):
     raw_key = sep.join(key_parts) + sep
     number_len = next((r["len"] for r in resolved if r["num"]), 6)
 
-    # NAME-MIRROR: when the rule's series IS the document name's series — the
-    # name is exactly this prefix + a digit run (e.g. rule parts NGN, SB,
-    # 82/83 and name NGN-SB-82/83-00004) — the voucher takes the NAME's
-    # number (padded to the rule's Digits) instead of drawing its own.
-    # One series must never be counted twice: drawing here would double-step
-    # the shared counter and make name and voucher drift apart.
-    doc_name = frappe.utils.cstr(doc.get("name") or "")
-    if doc_name.startswith(raw_key):
-        m = re.match(r"^(\d+)(-\d+)?$", doc_name[len(raw_key):])  # -N = amendment
-        if m:
-            seq = ("%0" + str(int(number_len)) + "d") % int(m.group(1))
-            return _join_parts(
-                [(seq if r["num"] else r.get("value"), r["glue"]) for r in resolved], sep
-            )
-
+    # A Number segment ALWAYS draws this rule's own counter, even when raw_key
+    # equals the document name's prefix. Taking the number from the name is
+    # what the Name Number segment is for — the mirror is chosen per rule, not
+    # inferred from a prefix collision (which left such a series with no
+    # counter to reset). Old mirrored numbers are safe: the first draw seeds
+    # from _series_data_floor, MAX(stored) + 1.
     series_key = _engine_series_name(raw_key)
 
     # Same fast path as _draw_next_document_no: skip the O(n) data-floor scan

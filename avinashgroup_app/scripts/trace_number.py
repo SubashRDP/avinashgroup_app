@@ -138,11 +138,13 @@ def _classify(doc, field, value, rules):
             print("  " + _IDENT.format("counter now") + str(ns._series_current(key)))
             if _mirrors_the_name(doc, rule):
                 print("  " + _IDENT.format("note") +
-                      "the rule's prefix IS the document name's prefix, so the")
+                      "the rule's prefix IS the document name's prefix. Numbers")
                 print("  " + _IDENT.format("") +
-                      "number is taken from the NAME — no counter of its own,")
+                      "drawn before 2026-08-13 were COPIED from the name and had")
                 print("  " + _IDENT.format("") +
-                      "which is why the series counter can read 0.")
+                      "no counter, so the series counter can read 0 for them.")
+                print("  " + _IDENT.format("") +
+                      "Since then the rule draws its own counter like any other.")
             _report_discarded_input(doc, field, value, rule)
             return {"verdict": "generated", "rule": rule["name"],
                     "series": key, "counter": counter}
@@ -169,9 +171,13 @@ def _classify(doc, field, value, rules):
 
 
 def _mirrors_the_name(doc, rule):
-    """True when the rule's resolved prefix is also the document NAME's prefix —
-    the NAME-MIRROR path in _build_from_segments, where the voucher takes the
-    name's number instead of drawing its own (one series counted once)."""
+    """True when the rule's resolved prefix is also the document NAME's prefix.
+
+    Historical explainer only. _build_from_segments used to copy the name's
+    number in this case (the NAME-MIRROR path, removed 2026-08-13 so every
+    Number segment draws its own ncfg: counter and stays resettable). Numbers
+    stored before that still carry the name's number, and this is what tells
+    you so."""
     try:
         sep = rule.get("separator") or "/"
         resolved, has_number = ns._resolve_segments(doc, rule, sep)
