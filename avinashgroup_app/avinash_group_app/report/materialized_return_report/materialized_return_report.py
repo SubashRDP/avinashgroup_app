@@ -25,8 +25,10 @@ import frappe
 from frappe import _
 
 from avinashgroup_app.avinash_group_app.report.materialized_report.materialized_report import (
+	FISCAL_YEAR_CONDITION,
 	_yes_no,
 	fiscal_year_display,
+	fiscal_year_forms,
 	fiscal_year_span,
 	strip_totals_row,
 	totals_row,
@@ -84,9 +86,8 @@ def get_conditions(filters):
 		conditions.append("bill.company = %(company)s")
 	if filters.fiscal_year:
 		# The report has no From/To Date filters — the date window is derived
-		# here from the selected fiscal year. The Fiscal Year docname keeps the
-		# slash form ("82/83"), so look up its AD start/end span before converting
-		# to the dotted form ("82.83") that bills store in the fiscal_year field.
+		# here from the selected fiscal year, whose AD start/end span comes off
+		# the Fiscal Year record (named with a slash, "82/83").
 		fy = fiscal_year_span(filters.fiscal_year)
 		if fy:
 			filters.from_date = fy.year_start_date
@@ -94,8 +95,8 @@ def get_conditions(filters):
 			conditions.append("bill.credit_note_date >= %(from_date)s")
 			conditions.append("bill.credit_note_date <= %(to_date)s")
 
-		filters.fiscal_year = filters.fiscal_year.replace("/", ".")
-		conditions.append("bill.fiscal_year = %(fiscal_year)s")
+		filters.update(fiscal_year_forms(filters.fiscal_year))
+		conditions.append(FISCAL_YEAR_CONDITION)
 	if filters.sync_status:
 		conditions.append("bill.sync_status = %(sync_status)s")
 

@@ -101,9 +101,8 @@ def get_conditions(filters):
 		conditions.append("bill.company = %(company)s")
 	if filters.fiscal_year:
 		# The report has no From/To Date filters — the date window is derived
-		# here from the selected fiscal year. The Fiscal Year docname keeps the
-		# slash form ("82/83"), so look up its AD start/end span before converting
-		# to the dotted form ("82.83") that bills store in the fiscal_year field.
+		# here from the selected fiscal year, whose AD start/end span comes off
+		# the Fiscal Year record (named with a slash, "82/83").
 		fy = fiscal_year_span(filters.fiscal_year)
 		if fy:
 			filters.from_date = fy.year_start_date
@@ -111,8 +110,8 @@ def get_conditions(filters):
 			conditions.append("bill.invoice_date >= %(from_date)s")
 			conditions.append("bill.invoice_date <= %(to_date)s")
 
-		filters.fiscal_year = filters.fiscal_year.replace("/", ".")
-		conditions.append("bill.fiscal_year = %(fiscal_year)s")
+		filters.update(fiscal_year_forms(filters.fiscal_year))
+		conditions.append(FISCAL_YEAR_CONDITION)
 	if filters.sync_status:
 		conditions.append("bill.sync_status = %(sync_status)s")
 
@@ -127,6 +126,30 @@ def fiscal_year_span(fiscal_year):
 		["year_start_date", "year_end_date"],
 		as_dict=True,
 	)
+
+
+# CBMS records carry the year in one of two shapes, and both are live data.
+# Everything written before 1429ad2 reached the site (2026-08-12) holds the
+# dotted form the IRD uses, "83.84" — 277,000-odd rows. Everything written
+# since holds the Fiscal Year docname itself, "83/84". Matching only one shape
+# silently drops the other, which is what hid the newest bills from this report.
+#
+# Two literals rather than replace() on the column, so the comparison stays
+# index-friendly on a table this size.
+FISCAL_YEAR_CONDITION = "bill.fiscal_year in (%(fiscal_year_dot)s, %(fiscal_year_slash)s)"
+
+
+def fiscal_year_forms(fiscal_year):
+	"""Both stored spellings of a fiscal year, for FISCAL_YEAR_CONDITION.
+
+	Accepts either shape and does not touch `fiscal_year` itself — callers still
+	need the original docname to look the Fiscal Year record up (export_xlsx
+	resolves its letterhead dates from the filters after execute() has run).
+	"""
+	return {
+		"fiscal_year_dot": fiscal_year.replace("/", "."),
+		"fiscal_year_slash": fiscal_year.replace(".", "/"),
+	}
 
 
 def get_data(filters):
