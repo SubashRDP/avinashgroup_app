@@ -78,22 +78,23 @@ def bs_datetime_str(ad_datetime, sep="/", twelve_hour=False):
 
 
 def cbms_fiscal_year(ad_date, company=None):
-	"""Fiscal-year for a posting date, as OUR Fiscal Year names it: "82/83".
+	"""Fiscal-year for a posting date, in the dotted form CBMS uses: "82.83".
 
 	Finds the Fiscal Year record the posting date falls in (year_start_date..
 	year_end_date, respecting company-specific fiscal years) and returns its name
-	unchanged, so the value on a CBMS record is the same string as the Fiscal Year
-	doctype's — a link the reports and the annexure can rely on.
+	with the slash swapped for a dot.
 
-	CBMS itself wants the dotted form ("82.83"). That conversion now happens in
-	api_client's payload builders, at the moment of transmission, so what the IRD
-	receives is byte-identical to the 248,966 bills it has already accepted.
+	The dot is the format everywhere it counts: it is what api_client sends, and
+	what all but a handful of the stored records carry. Between 2026-08-12 and
+	2026-08-13 this returned fy.name unchanged and 20 records were written as
+	"83/84" — invisible to any report filtering on the dotted form. Storing the
+	dot keeps one spelling from the write through to the payload.
 
 	Raises FiscalYearError if no record covers the date, so a missing Fiscal Year
 	surfaces in the Error Log instead of a wrong year being reported to IRD.
 	"""
 	fy = get_fiscal_year(date=getdate(ad_date), company=company, as_dict=True)
-	return fy.name
+	return (fy.name or "").replace("/", ".")
 
 
 @frappe.whitelist()
