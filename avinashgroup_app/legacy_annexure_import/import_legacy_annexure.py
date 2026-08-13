@@ -491,8 +491,15 @@ def verify(company=None, fiscal_year=None, tolerance=0.01, samples=5):
         conditions.append("bill.company = %(company)s")
         params["company"] = company
     if fiscal_year:
-        conditions.append("bill.fiscal_year = %(fiscal_year)s")
-        params["fiscal_year"] = fiscal_year.replace("/", ".")
+        # Bills carry the year either dotted ("82.83", the form the IRD payload
+        # uses and nearly every stored record has) or as the Fiscal Year docname
+        # ("82/83", written since 1429ad2 reached the site). Match both, or the
+        # verification silently omits whichever shape it did not ask for.
+        conditions.append(
+            "bill.fiscal_year in (%(fiscal_year_dot)s, %(fiscal_year_slash)s)"
+        )
+        params["fiscal_year_dot"] = fiscal_year.replace("/", ".")
+        params["fiscal_year_slash"] = fiscal_year.replace(".", "/")
     where = (" and " + " and ".join(conditions)) if conditions else ""
 
     rows = frappe.db.sql(
