@@ -27,6 +27,7 @@ from frappe import _
 from avinashgroup_app.avinash_group_app.report.materialized_report.materialized_report import (
 	FISCAL_YEAR_CONDITION,
 	_yes_no,
+	company_scope,
 	fiscal_year_display,
 	fiscal_year_forms,
 	fiscal_year_span,
@@ -82,8 +83,10 @@ def get_columns():
 def get_conditions(filters):
 	conditions = []
 
-	if filters.company:
-		conditions.append("bill.company = %(company)s")
+	scope = company_scope(filters, "CBMS Bill Return", "Sales Invoice")
+	if scope:
+		filters.company_scope = scope
+		conditions.append("bill.company in %(company_scope)s")
 	if filters.fiscal_year:
 		# The report has no From/To Date filters — the date window is derived
 		# here from the selected fiscal year, whose AD start/end span comes off

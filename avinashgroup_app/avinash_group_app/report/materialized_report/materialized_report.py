@@ -97,8 +97,10 @@ def get_columns():
 def get_conditions(filters):
 	conditions = []
 
-	if filters.company:
-		conditions.append("bill.company = %(company)s")
+	scope = company_scope(filters, "CBMS Bill", "Sales Invoice")
+	if scope:
+		filters.company_scope = scope
+		conditions.append("bill.company in %(company_scope)s")
 	if filters.fiscal_year:
 		# The report has no From/To Date filters — the date window is derived
 		# here from the selected fiscal year, whose AD start/end span comes off
@@ -116,6 +118,56 @@ def get_conditions(filters):
 		conditions.append("bill.sync_status = %(sync_status)s")
 
 	return (" and " + " and ".join(conditions)) if conditions else ""
+
+
+def company_scope(filters, *applicable_doctypes):
+	"""Companies this report run may read, as a tuple for an SQL `in`, or None.
+
+	A Script Report runs raw SQL, so nothing applies User Permissions on our
+	behalf the way a list view or `get_list` would. Without this, a user limited
+	to one company could pick any other — or clear the filter and read all seven
+	at once, export included, since export_xlsx is whitelisted and reachable by
+	URL.
+
+	A picked company must fall inside the permitted set, else the run is refused
+	rather than quietly emptied, so a user who follows a link or a saved filter
+	for another company is told why. A blank filter narrows to the permitted set
+	instead of throwing: for an unrestricted user that is None, and the report
+	stays group-wide exactly as before.
+	"""
+	allowed = allowed_companies(*applicable_doctypes)
+	picked = filters.get("company")
+	if picked:
+		if allowed is not None and picked not in allowed:
+			frappe.throw(
+				_("You do not have access to company {0}.").format(picked),
+				frappe.PermissionError,
+			)
+		return (picked,)
+	return tuple(allowed) if allowed else None
+
+
+def allowed_companies(*applicable_doctypes):
+	"""Company names the current user may see, from Company User Permissions.
+
+	None means unrestricted — the Administrator, or a user with no Company user
+	permission at all (Frappe's "no user permission == see everything" rule).
+
+	A user permission may be narrowed to one doctype through Applicable For; such
+	a row only counts when it names a doctype this report actually reads, which
+	is what Frappe itself would do for a query on that table.
+	"""
+	if frappe.session.user == "Administrator":
+		return None
+	from frappe.core.doctype.user_permission.user_permission import get_user_permissions
+
+	scopes = set(applicable_doctypes)
+	companies = [
+		p.get("doc")
+		for p in (get_user_permissions().get("Company") or [])
+		if p.get("doc") and (not p.get("applicable_for") or p.get("applicable_for") in scopes)
+	]
+	return companies or None
 
 
 def fiscal_year_span(fiscal_year):
