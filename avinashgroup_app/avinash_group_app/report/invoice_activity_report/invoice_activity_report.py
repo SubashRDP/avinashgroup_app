@@ -192,7 +192,9 @@ def _row(e):
 	# Printed / Modified use their own event timestamp for both date and time.
 	day = e.get("_date") or ts.date()
 	return {
-		"invoice_number": e["invoice"],
+		# The voucher number the branch actually issued (custom_branch_name),
+		# falling back to the doc name — same rule as Sales Register's Bill No.
+		"invoice_number": e.get("branch_name") or e["invoice"],
 		"customer_name": e.get("customer_name") or "",
 		"date": day,
 		"bs_date": bs_date_str(day),
@@ -482,7 +484,11 @@ def _apply_invoice_context(events, filters):
 		_apply_company_scope(fl, filters)
 		fields = ["name", "company", "is_return", "customer_name", "posting_date"]
 		meta = frappe.get_meta("Sales Invoice")
-		fields += [f for f in ("custom_created_by", "custom_created_on") if meta.has_field(f)]
+		fields += [
+			f
+			for f in ("custom_created_by", "custom_created_on", "custom_branch_name")
+			if meta.has_field(f)
+		]
 		for r in frappe.get_all("Sales Invoice", filters=fl, fields=fields):
 			info[r.name] = r
 
@@ -504,6 +510,9 @@ def _apply_invoice_context(events, filters):
 			e["is_return"] = inv.is_return
 		if e.get("customer_name") is None:
 			e["customer_name"] = inv.customer_name
+		# Displayed as the Invoice Number; events stay keyed/grouped by the doc
+		# name, which is the only value guaranteed unique.
+		e["branch_name"] = inv.get("custom_branch_name") or inv.name
 		# The Add event is the invoice becoming a tax document — show it on the
 		# invoice's posting date, not the submit/creation timestamp.
 		if e["operation"] == "Add":
@@ -516,8 +525,12 @@ def _apply_invoice_context(events, filters):
 
 def _columns():
 	return [
-		{"label": _("Invoice Number"), "fieldname": "invoice_number", "fieldtype": "Link",
-			"options": "Sales Invoice", "width": 200},
+		# Data, not Link -> Sales Invoice: the value shown is custom_branch_name,
+		# the number the branch issued, which only equals the doc name on the
+		# companies that mirror it. A Link column would render dead links for
+		# the rest, so nothing is linked rather than some.
+		{"label": _("Invoice Number"), "fieldname": "invoice_number", "fieldtype": "Data",
+			"width": 200},
 		{"label": _("Customer Name"), "fieldname": "customer_name", "fieldtype": "Data",
 			"width": 180},
 		{"label": _("Date"), "fieldname": "date", "fieldtype": "Date", "width": 100,
