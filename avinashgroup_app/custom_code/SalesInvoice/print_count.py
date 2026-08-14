@@ -11,9 +11,9 @@ templates and the ESC/P builders both call it.
 Sheet-based series (pair=True — Nepal Gas / Grishma / Avinash dot-matrix):
 
 	1st print -> TAX INVOICE + INVOICE   (one print event, TWO sheets)
-	2nd print -> COPY OF INVOICE 1
-	3rd print -> COPY OF INVOICE 2
-	nth print -> COPY OF INVOICE (n - 1)
+	2nd print -> COPY OF ORIGINAL 1
+	3rd print -> COPY OF ORIGINAL 2
+	nth print -> COPY OF ORIGINAL (n - 1)
 
 The counter counts SHEETS, so the two-sheet original pair advances the count
 by 2 (the first print leaves the count at 2), and each later single-sheet copy
@@ -22,8 +22,8 @@ adds 1.
 Single-sheet series (pair=False — Grihalaxmi A4/Half, Nepal Gas Half) follows
 the SAME order as the dot-matrix pair, one sheet per print:
 
-	1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF INVOICE 1,
-	4th -> COPY OF INVOICE 2, ...
+	1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF ORIGINAL 1,
+	4th -> COPY OF ORIGINAL 2, ...
 
 No pre-printed roll carries a title, on any company's stationery, so every
 sheet's title is typed by the format (2026-07-25 — the overlays used to skip
@@ -86,11 +86,11 @@ def _titles_for(prev_sheets: int, pair: bool, is_return: bool) -> list[str]:
 	Returns always print a single "Sales Return".
 
 	pair=True: first print is the TAX INVOICE + INVOICE pair (two sheets),
-	every later print a single COPY OF INVOICE N; the count is sheets:
+	every later print a single COPY OF ORIGINAL N; the count is sheets:
 
 		prev 0  -> [TAX INVOICE, INVOICE]   (count -> 2)
-		prev 2  -> [COPY OF INVOICE 1]      (count -> 3)
-		prev n  -> [COPY OF INVOICE n - 1]
+		prev 2  -> [COPY OF ORIGINAL 1]     (count -> 3)
+		prev n  -> [COPY OF ORIGINAL n - 1]
 
 	pair=False (Grihalaxmi, unchanged): one sheet per print, count == prints.
 	"""
@@ -99,17 +99,17 @@ def _titles_for(prev_sheets: int, pair: bool, is_return: bool) -> list[str]:
 	if pair:
 		if prev_sheets <= 0:
 			return ["TAX INVOICE", "INVOICE"]
-		# after the 2-sheet pair prev is 2 -> COPY OF INVOICE 1; guard against
+		# after the 2-sheet pair prev is 2 -> COPY OF ORIGINAL 1; guard against
 		# legacy counts of 1 (old event-based scheme) so we never show "0".
-		return [f"COPY OF INVOICE {max(1, prev_sheets - 1)}"]
+		return [f"COPY OF ORIGINAL {max(1, prev_sheets - 1)}"]
 	# pair=False (single-sheet: Grihalaxmi A4/Half, Nepal Gas Half). Follows the
 	# same order as the dot-matrix pair, spread one sheet per print:
-	#   1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF INVOICE 1, ...
+	#   1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF ORIGINAL 1, ...
 	if prev_sheets == 0:
 		return ["TAX INVOICE"]
 	if prev_sheets == 1:
 		return ["INVOICE"]
-	return [f"COPY OF INVOICE {prev_sheets - 1}"]
+	return [f"COPY OF ORIGINAL {prev_sheets - 1}"]
 
 
 def invoice_copy_titles(doc, pair=True) -> list[str]:

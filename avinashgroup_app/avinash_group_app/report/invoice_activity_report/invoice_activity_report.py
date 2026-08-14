@@ -318,7 +318,7 @@ def _copy_title(n, is_return=False):
 	# Sheet titles match the actual print sequence (see invoice_copy_titles in
 	# custom_code/SalesInvoice/print_count.py): the first print produces the
 	# TAX INVOICE + INVOICE pair (sheets 1 and 2), and every later sheet is a
-	# COPY OF INVOICE N. A return prints a single "Sales Return" sheet
+	# COPY OF ORIGINAL N. A return prints a single "Sales Return" sheet
 	# (_titles_for returns ["Sales Return"]), never an invoice copy title.
 	# This maps a STORED sheet number to a label, where _titles_for maps a print
 	# event to a series — different jobs, so the wording is deliberately
@@ -330,7 +330,7 @@ def _copy_title(n, is_return=False):
 		return _("Tax Invoice")
 	if n == 2:
 		return _("Invoice")
-	return _("Copy of Invoice {0}").format(n - 2)
+	return _("Copy of Original {0}").format(n - 2)
 
 
 def _version_events(filters, from_dt, to_dt, operation):

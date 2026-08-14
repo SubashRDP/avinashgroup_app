@@ -386,12 +386,12 @@ def series_checks():
 	from avinashgroup_app.custom_code.SalesInvoice.print_count import _titles_for
 	cases = [
 		((0, True, 0), ["TAX INVOICE", "INVOICE"]),
-		((2, True, 0), ["COPY OF INVOICE 1"]),
-		((3, True, 0), ["COPY OF INVOICE 2"]),
-		((4, True, 0), ["COPY OF INVOICE 3"]),
+		((2, True, 0), ["COPY OF ORIGINAL 1"]),
+		((3, True, 0), ["COPY OF ORIGINAL 2"]),
+		((4, True, 0), ["COPY OF ORIGINAL 3"]),
 		((0, False, 0), ["TAX INVOICE"]),
 		((1, False, 0), ["INVOICE"]),
-		((2, False, 0), ["COPY OF INVOICE 1"]),
+		((2, False, 0), ["COPY OF ORIGINAL 1"]),
 		((9, True, 1), ["Sales Return"]),
 	]
 	for args, want in cases:
