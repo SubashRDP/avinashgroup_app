@@ -150,9 +150,10 @@ defaults.
 
   .glm-info { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 4mm; }
   .glm-info td { padding: 0.6mm 0; vertical-align: top; }
-  .glm-info .l { width: 32mm; }
+  /* labels never wrap to a second line, whatever font the machine substitutes */
+  .glm-info .l { width: 32mm; white-space: nowrap; }
   .glm-info .c { width: 3mm; text-align: center; }
-  .glm-info .rl { width: 28mm; }
+  .glm-info .rl { width: 28mm; white-space: nowrap; }
   .glm-info .rv { width: 48mm; white-space: nowrap; }
 
   table.glm-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
@@ -164,7 +165,9 @@ defaults.
   .cell-stack div { padding: 2.5mm 1.5mm 0; line-height: 1.3; min-height: 8mm; white-space: nowrap; overflow: hidden; }
   .cell-stack .wrap { white-space: normal; }
 
-  table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.4mm 1mm; white-space: nowrap; overflow: hidden; }
+  /* no overflow:hidden — a wider substituted font must not truncate the label
+     ("Taxable Amoun"); worst case it runs a hair into the value cell's padding */
+  table.glm-items td.tot-label { font-weight: bold; font-size: 8.5pt; padding: 0.4mm 1mm; white-space: nowrap; }
   table.glm-items td.tot-val { text-align: right; font-size: 9pt; padding: 0.4mm 1.5mm; }
   table.glm-items td.words { vertical-align: top; font-size: 9pt; }
   .words-val { padding-top: 0.8mm; line-height: 1.25; }
@@ -173,9 +176,12 @@ defaults.
   /* computer-generated note floats left so the signature keeps its original
      position: 8.7mm below the table, right side — same as before the redesign */
   .glm-cgen { float: left; font-size: 8.5pt; margin-top: 1.5mm; }
-  .glm-sign { position: relative; margin: 8.7mm 0 0 auto; width: 70mm; text-align: center; }
+  /* nowrap keeps "Pvt. Ltd." on the same line whatever font the machine
+     substitutes for Arial (the server's wider face was wrapping it); the
+     6mm right margin pulls the block in from the page edge */
+  .glm-sign { position: relative; margin: 8.7mm 6mm 0 auto; width: 80mm; text-align: center; }
   .glm-sign .line { border-top: 0.3mm solid #000; margin-bottom: 1mm; }
-  .glm-sign .who { font-weight: bold; font-size: 9pt; }
+  .glm-sign .who { font-weight: bold; font-size: 9pt; white-space: nowrap; }
   .glm-pageno { clear: both; text-align: right; margin-top: 2mm; font-size: 7.5pt; }
 </style>
 
