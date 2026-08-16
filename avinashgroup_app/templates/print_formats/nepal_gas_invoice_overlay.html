@@ -101,28 +101,35 @@ defaults.
 {%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
 
 <style>
-  @page { size: 210mm 297mm; margin: 0; }
-  .print-format { page-width: 210mm; page-height: 297mm;
-    margin-top: 0mm; margin-bottom: 0mm; margin-left: 0mm; margin-right: 0mm; }
+  /* Page defaults to 210 x 148mm — the same size the A5 Overlay formats print
+     on, so the tills' drivers reuse the overlay's custom form with no new
+     setup. A wrapper format may override page_w/page_h/pad_x/pad_y before
+     including this template (the fanfold format sets the 241.3 x 139.7mm
+     continuous-form size). */
+  @page { size: {{ page_w }}mm {{ page_h }}mm; margin: 0; }
+  .print-format { page-width: {{ page_w }}mm; page-height: {{ page_h }}mm; margin: 0; }
+
+  /* strip every wrapper the desk puts around a print format — in PRINT media
+     too, not just on screen: the desk's body margins / format padding sit
+     above and below each sheet, and on a page that already fills the paper
+     they push every sheet's tail onto an extra blank page (same rules as the
+     data-only overlay template, where they are proven on the tills) */
+  html, body { margin: 0 !important; padding: 0 !important; }
+  .print-format, .print-format .format-container { padding: 0 !important; margin: 0 !important; }
   @media screen {
-    .print-format { padding: 0 !important; }
+    .print-format { max-width: none !important; min-height: 0 !important;
+      margin: 0 auto !important; width: {{ page_w }}mm; border-radius: 0 !important; }
+    .print-format-gutter { padding: 16px 0 !important; }
   }
   .print-format, .print-format p, .print-format div, .print-format td, .print-format th {
     font-family: Arial, Helvetica, sans-serif; color: #000; }
   .print-format .letter-head, .print-format .print-heading { display: none; }
 
-  /* Page defaults to 210 x 148mm — the same size the A5 Overlay formats print
-     on, so the tills' drivers reuse the overlay's custom form with no new
-     setup. A wrapper format may override page_w/page_h/pad_x/pad_y before
-     including this template (the fanfold format sets the 241.3 x 139.7mm
-     continuous-form size). One page == one form; nothing blank feeds through
-     after an invoice. box-sizing keeps the padding inside the page height so
-     a sheet never spills onto a second page; min-height still lets a
-     many-item invoice grow onto a following form. */
-  @page { size: {{ page_w }}mm {{ page_h }}mm; margin: 0; }
-  .print-format { page-width: {{ page_w }}mm; page-height: {{ page_h }}mm; margin: 0; }
-  .glm-sheet { position: relative; width: {{ page_w }}mm; min-height: {{ page_h }}mm;
-    box-sizing: border-box;
+  /* One sheet == one form, guaranteed: fixed height + overflow hidden means a
+     sheet can never spill onto a following page (items are already chunked at
+     rows_per_page per sheet, so nothing legitimate is ever clipped). */
+  .glm-sheet { position: relative; width: {{ page_w }}mm; height: {{ page_h }}mm;
+    box-sizing: border-box; overflow: hidden; contain: strict;
     padding: {{ pad_y }}mm {{ pad_x }}mm; page-break-after: always; page-break-inside: avoid; }
   .glm-sheet.last { page-break-after: auto; }
 
