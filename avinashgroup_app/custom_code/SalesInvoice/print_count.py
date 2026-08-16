@@ -102,7 +102,7 @@ def _titles_for(prev_sheets: int, pair: bool, is_return: bool) -> list[str]:
 		# after the 2-sheet pair prev is 2 -> COPY OF ORIGINAL 1; guard against
 		# legacy counts of 1 (old event-based scheme) so we never show "0".
 		return [f"COPY OF ORIGINAL {max(1, prev_sheets - 1)}"]
-	# pair=False (single-sheet: Grihalaxmi A4/Half, Nepal Gas Half). Follows the
+	# pair=False (single-sheet: Grihalaxmi A4/Half). Follows the
 	# same order as the dot-matrix pair, spread one sheet per print:
 	#   1st -> TAX INVOICE, 2nd -> INVOICE, 3rd -> COPY OF ORIGINAL 1, ...
 	if prev_sheets == 0:

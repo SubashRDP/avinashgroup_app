@@ -76,8 +76,8 @@ defaults.
     total), so derive the words from the grand total actually printed -#}
 {%- set amount_words = frappe.utils.money_in_words(grand_total | abs, doc.currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") -%}
 
-{#- ONE sheet per print event: TAX INVOICE first, then copies -#}
-{%- set copy_titles = invoice_copy_titles(doc, pair=false) -%}
+{#- First print is the TAX INVOICE + INVOICE pair, reprints COPY OF ORIGINAL n -#}
+{%- set copy_titles = invoice_copy_titles(doc, pair=true) -%}
 {%- set print_stamp = frappe.utils.now_datetime().strftime('%d/%m/%Y %I:%M:%S%p') -%}
 
 {%- set rows_per_page = rows_per_page | default(4) -%}
