@@ -27,6 +27,11 @@ defaults.
 {%- set page_h = page_h | default(148.0) -%}
 {%- set pad_x = pad_x | default(10) -%}
 {%- set pad_y = pad_y | default(8) -%}
+{#- shift_x slides the whole printed block left (+mm) without changing the
+    page: drivers locked to a narrower paper (Letter on the 241.3mm form)
+    clip the right edge, so the fanfold wrapper pulls the content left to
+    keep every column inside the printable window. -#}
+{%- set shift_x = shift_x | default(0) -%}
 
 {#- Letterhead address lines, keyed by Company abbr. These are hardcoded from
     the companies' printed letterheads because no Address records exist for
@@ -130,7 +135,8 @@ defaults.
      rows_per_page per sheet, so nothing legitimate is ever clipped). */
   .glm-sheet { position: relative; width: {{ page_w }}mm; height: {{ page_h }}mm;
     box-sizing: border-box; overflow: hidden; contain: strict;
-    padding: {{ pad_y }}mm {{ pad_x }}mm; page-break-after: always; page-break-inside: avoid; }
+    padding: {{ pad_y }}mm {{ pad_x + shift_x }}mm {{ pad_y }}mm {{ pad_x - shift_x }}mm;
+    page-break-after: always; page-break-inside: avoid; }
   .glm-sheet.last { page-break-after: auto; }
 
   .glm-head { position: relative; text-align: center; }
