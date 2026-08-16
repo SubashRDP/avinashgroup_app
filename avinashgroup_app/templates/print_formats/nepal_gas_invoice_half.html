@@ -19,11 +19,22 @@ defaults.
 {%- set company_logo = company.company_logo -%}
 {%- set company_vat = company.tax_id or '' -%}
 
+{#- Page geometry. Defaults are the A5-overlay sheet (210 x 148mm). A wrapper
+    format may set page_w / page_h / pad_x / pad_y before including this
+    template — "Nepal Gas Invoice Overlay" sets the 241.3 x 139.7mm
+    continuous fanfold form with wider side padding for the tractor strips. -#}
+{%- set page_w = page_w | default(210.0) -%}
+{%- set page_h = page_h | default(148.0) -%}
+{%- set pad_x = pad_x | default(10) -%}
+{%- set pad_y = pad_y | default(8) -%}
+
 {#- Letterhead address lines, keyed by Company abbr. These are hardcoded from
     the companies' printed letterheads because no Address records exist for
     them; name / VAT / logo still come off the Company record. A company with
     no entry here falls back to the group's Balaju office line. -#}
 {%- set letterheads = {
+      'NGI': ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal',
+              'Tel : 01-4970416, Fax : 01-4970399, E-mail : info@nepalgas.com.np'],
       'NGN': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, E-mail: infongn@nepalgas.com.np',
               'Branch: Mithila-9, Dhanusha, Simara, Bara, Ph.: 053-520150'],
       'NGG': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4350416',
@@ -33,6 +44,10 @@ defaults.
       'GEPL': ['Regd. Office: Balaju - 16, Kathmandu',
                'Branch: Anamnagar, Kathmandu, Branch: Chitwan'],
     } -%}
+{#- Printed title, where it differs from the ERP company name: NGI's paper
+    reads "Nepal Gas Industries", not its ERP name "Nepal Gas Udhyog". -#}
+{%- set print_titles = {'NGI': 'Nepal Gas Industries Pvt. Ltd.'} -%}
+{%- set print_title = print_titles.get(company.abbr, doc.company) -%}
 {%- set addr_lines = letterheads.get(company.abbr,
       ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal']) -%}
 
@@ -96,21 +111,35 @@ defaults.
     font-family: Arial, Helvetica, sans-serif; color: #000; }
   .print-format .letter-head, .print-format .print-heading { display: none; }
 
-  /* Half-A4 layout: the sheet is exactly half of A4 (297mm / 2 = 148.5mm), so
-     the invoice occupies the top 50% of the page and the bottom half is blank.
-     min-height (not height) lets a long, many-item invoice grow past the half
-     instead of clipping. page-break-after keeps one copy per sheet. */
-  .glm-sheet { position: relative; width: 210mm; min-height: 148.5mm;
-    padding: 8mm 10mm; page-break-after: always; page-break-inside: avoid; }
+  /* Page defaults to 210 x 148mm — the same size the A5 Overlay formats print
+     on, so the tills' drivers reuse the overlay's custom form with no new
+     setup. A wrapper format may override page_w/page_h/pad_x/pad_y before
+     including this template (the fanfold format sets the 241.3 x 139.7mm
+     continuous-form size). One page == one form; nothing blank feeds through
+     after an invoice. box-sizing keeps the padding inside the page height so
+     a sheet never spills onto a second page; min-height still lets a
+     many-item invoice grow onto a following form. */
+  @page { size: {{ page_w }}mm {{ page_h }}mm; margin: 0; }
+  .print-format { page-width: {{ page_w }}mm; page-height: {{ page_h }}mm; margin: 0; }
+  .glm-sheet { position: relative; width: {{ page_w }}mm; min-height: {{ page_h }}mm;
+    box-sizing: border-box;
+    padding: {{ pad_y }}mm {{ pad_x }}mm; page-break-after: always; page-break-inside: avoid; }
   .glm-sheet.last { page-break-after: auto; }
 
   .glm-head { position: relative; text-align: center; }
   .glm-head .logo { position: absolute; left: 0; top: 0; width: 22mm; height: 22mm; object-fit: contain; }
+  .glm-head .banner { position: absolute; right: 0; top: 0; width: 28mm; height: 9mm; object-fit: contain; }
   .glm-head .cname { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 17pt; margin-top: 4mm; }
   .glm-head .caddr { font-family: 'Times New Roman', Times, serif; font-weight: bold; font-size: 9pt; line-height: 1.2; }
-  /* copy label flows right-aligned under the address (its original spot) */
-  .glm-copy { text-align: right; font-family: 'Courier New', Courier, monospace; font-size: 9.5pt; line-height: 1.3; }
-  .glm-vat { text-align: center; font-weight: bold; font-size: 10pt; margin: 0.5mm 0 2mm; }
+  /* title bar: company VAT left, copy title (TAX INVOICE / INVOICE / COPY OF
+     ORIGINAL n) centered — the title takes the prominent middle spot */
+  .glm-titlebar { text-align: center; margin: 1mm 0 2mm; }
+  .glm-titlebar .title { font-weight: bold; font-size: 11pt; letter-spacing: 0.5px; }
+  /* VAT No: one digit per box, borders shared between neighbours, aligned on
+     the label's line like the pre-printed paper */
+  .glm-info .d { display: inline-block; width: 4.2mm; border: 0.3mm solid #000;
+    margin-left: -0.3mm; padding: 0.4mm 0; text-align: center;
+    font-size: 9.5pt; font-weight: bold; vertical-align: middle; }
 
   .glm-info { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 4mm; }
   .glm-info td { padding: 0.6mm 0; vertical-align: top; }
@@ -134,10 +163,13 @@ defaults.
   .words-val { padding-top: 0.8mm; line-height: 1.25; }
   .words-hr { border: none; border-top: 0.3mm solid #000; margin: 1.5mm 0; }
 
+  /* computer-generated note floats left so the signature keeps its original
+     position: 8.7mm below the table, right side — same as before the redesign */
+  .glm-cgen { float: left; font-size: 8.5pt; margin-top: 1.5mm; }
   .glm-sign { position: relative; margin: 8.7mm 0 0 auto; width: 70mm; text-align: center; }
   .glm-sign .line { border-top: 0.3mm solid #000; margin-bottom: 1mm; }
   .glm-sign .who { font-weight: bold; font-size: 9pt; }
-  .glm-pageno { text-align: right; margin-top: 2mm; font-size: 7.5pt; }
+  .glm-pageno { clear: both; text-align: right; margin-top: 2mm; font-size: 7.5pt; }
 </style>
 
 {#- split items into pages -#}
@@ -158,10 +190,16 @@ defaults.
 
   <div class="glm-head">
     {%- if company_logo -%}<img class="logo" src="{{ company_logo }}" onerror="this.style.display='none'">{%- endif -%}
-    <div class="cname">{{ doc.company }}</div>
+    {#- Nepal Gas brand banner top-right, like the pre-printed paper — the four
+        Nepal Gas companies only, not GLMI/GEPL/SGU -#}
+    {%- if company.abbr in ('NGI', 'NGK', 'NGG', 'NGN') -%}
+    <img class="banner" src="/assets/avinashgroup_app/images/nepal_gas_banner.jpg" onerror="this.style.display='none'">
+    {%- endif -%}
+    <div class="cname">{{ print_title }}</div>
     <div class="caddr">{% for line in addr_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
-    <div class="glm-copy">{{ copy_label }}</div>
-    {%- if company_vat %}<div class="glm-vat">VAT No:{{ company_vat }}</div>{%- endif %}
+    <div class="glm-titlebar">
+      <span class="title">{{ copy_label }}</span>
+    </div>
   </div>
 
   {%- if is_cn %}
@@ -188,16 +226,24 @@ defaults.
   {%- else %}
   <table class="glm-info">
     <tr>
-      <td class="l">Customer Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
-      <td class="rl">Transaction Miti</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
+      <td class="l">Invoice No.</td><td class="c">:</td><td>{{ invoice_no }}</td>
+      <td class="rl">Transaction Date</td><td class="c">:</td><td class="rv">{{ bs_date }}</td>
     </tr>
     <tr>
-      <td class="l">Customer Address</td><td class="c">:</td><td>{{ address }}</td>
-      <td class="rl">Return Date</td><td class="c">:</td><td class="rv">{{ posting_miti }}</td>
+      <td colspan="3" style="white-space: nowrap;">VAT No.&nbsp;&nbsp;:&nbsp;&nbsp;{% if company_vat %}{% for ch in company_vat %}<span class="d">{{ ch }}</span>{% endfor %}{% endif %}</td>
+      <td class="rl">Invoice Date</td><td class="c">:</td><td class="rv">{{ posting_miti }}</td>
     </tr>
     <tr>
-      <td class="l">Customer VAT No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
-      <td class="rl">Invoice No.</td><td class="c">:</td><td class="rv">{{ invoice_no }}</td>
+      <td class="l">Customer's Name</td><td class="c">:</td><td>{{ doc.customer_name }}</td>
+      <td class="rl"></td><td class="c"></td><td class="rv"></td>
+    </tr>
+    <tr>
+      <td class="l">Address</td><td class="c">:</td><td>{{ address }}</td>
+      <td class="rl"></td><td class="c"></td><td class="rv"></td>
+    </tr>
+    <tr>
+      <td class="l">Customer's Pan No.</td><td class="c">:</td><td>{{ customer_vat }}</td>
+      <td class="rl"></td><td class="c"></td><td class="rv"></td>
     </tr>
     <tr>
       <td class="l">Mode of Payment</td><td class="c">:</td><td>Cash/Credit/Cheque/Other</td>
@@ -209,11 +255,11 @@ defaults.
   {%- set base_sno = (page_no - 1) * rows_per_page -%}
   <table class="glm-items">
     <colgroup>
-      <col style="width:9mm;"><col style="width:22mm;"><col style="width:89mm;">
-      <col style="width:12mm;"><col style="width:24mm;"><col style="width:34mm;">
+      <col style="width:9mm;"><col style="width:22mm;"><col style="width:83mm;">
+      <col style="width:18mm;"><col style="width:24mm;"><col style="width:34mm;">
     </colgroup>
     <tr>
-      <th>S.No.</th><th>H.S Code</th><th>Particular</th><th>Qty</th><th>Rate</th><th>Amount</th>
+      <th>S.No.</th><th>H. S. Code</th><th>Particular</th><th>Quantity</th><th>Rate</th><th>Total Price NRS</th>
     </tr>
     <tr>
       <td class="body"><div class="cell-stack" style="text-align:center;">
@@ -238,24 +284,20 @@ defaults.
 
     {%- if page_last %}
     <tr>
-      <td class="words" colspan="4" rowspan="5"><b>Remarks :</b> <span class="words-val">{{ doc.custom_narration or '' }}</span><hr class="words-hr"><b>Amount In Words :</b> <span class="words-val">{{ amount_words }}</span></td>
-      <td class="tot-label">B. Amount</td>
-      <td class="tot-val">{{ num(doc.total) }}</td>
-    </tr>
-    <tr>
-      <td class="tot-label">B. Discount</td>
+      <td class="words" colspan="4" rowspan="4"><b>Amount in Words :</b> <span class="words-val">{{ amount_words }}</span></td>
+      <td class="tot-label">% Discount</td>
       <td class="tot-val">{{ num(doc.discount_amount or 0) }}</td>
     </tr>
     <tr>
-      <td class="tot-label">Taxable Value</td>
+      <td class="tot-label">Taxable Amount</td>
       <td class="tot-val">{{ num(taxable) }}</td>
     </tr>
     <tr>
-      <td class="tot-label">VAT @ 13%</td>
+      <td class="tot-label">13% VAT</td>
       <td class="tot-val">{{ num(ns2.vat) }}</td>
     </tr>
     <tr>
-      <td class="tot-label">Net Amount</td>
+      <td class="tot-label">Grand Total</td>
       <td class="tot-val"><b>{{ num(grand_total) }}</b></td>
     </tr>
     {%- else %}
@@ -265,9 +307,10 @@ defaults.
     {%- endif %}
   </table>
 
+  <div class="glm-cgen">This is computer generated invoice. Not required signature and stamp.</div>
   <div class="glm-sign">
     <div class="line"></div>
-    <div class="who">For: {{ doc.company }}</div>
+    <div class="who">For: {{ print_title }}</div>
   </div>
 
   {%- if item_pages | length > 1 %}
