@@ -19,3 +19,12 @@ try:
 except Exception:
 	import frappe
 	frappe.log_error(frappe.get_traceback(), "Regional deletion-permission patch failed to load")
+
+# Stop a blank Paid Amount from crashing Payment Entry's live allocation
+# (core v15 does arithmetic on None; see blank_paid_amount_patch for details).
+try:
+	from avinashgroup_app.custom_code.payment_entry.blank_paid_amount_patch import apply_patch as apply_paid_amount_patch
+	apply_paid_amount_patch()
+except Exception:
+	import frappe
+	frappe.log_error(frappe.get_traceback(), "Payment Entry blank paid-amount patch failed to load")
