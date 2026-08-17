@@ -101,6 +101,23 @@ DEFAULT_XLS = os.path.join(REGISTER_FOLDER, "NGI", "82.83 NGI.xls")
 #
 # They are month views ending 2026-08-05/06, not full-year registers — re-pull
 # and re-run to pick up later prints; mode="max" makes that safe.
+#
+# That re-pull happened on 2026-08-17, added as "83.84 <X> 2026-08-16.xls":
+# the same five registers run forward to 2026-08-16, 4301 invoices/8415 sheets.
+#
+#   NGI 1000/1831, NGN 1476/3025, GE 953/1813, NGG 461/912, NGK 411/834
+#
+# The Shrawan files are KEPT rather than replaced. Four of the five new exports
+# are strict supersets of their Shrawan counterpart, but GE's is not — it drops
+# 28 invoices the Shrawan file holds (/SB000289-309, INV000243-250, 49 sheets),
+# so both are needed and mode="max" merges them. NGK's new export is also the
+# stripped 6-column layout with no "Printed by User" column, so only the
+# Shrawan file can attribute those prints in run_print_log_backfill.
+#
+# 83 of the 4301 numbers do not resolve, all of them the tail of a series
+# (NGI 28, GE 16, NGG 14, NGN 13, NGK 12) — invoices the old software printed
+# on 2026-08-16 that ERPNext had not received yet when this was checked. 0
+# ambiguous. They resolve on the next re-pull; mode="max" makes that safe too.
 REGISTER_COMPANIES = {
     "NGI": "Nepal Gas Udhyog Pvt. Ltd.",
     "NGG": "Nepal Gas Udhyog (Gandaki) Pvt. Ltd.",
