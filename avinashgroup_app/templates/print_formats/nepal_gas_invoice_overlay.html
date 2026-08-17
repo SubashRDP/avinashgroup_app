@@ -32,6 +32,11 @@ defaults.
     clip the right edge, so the fanfold wrapper pulls the content left to
     keep every column inside the printable window. -#}
 {%- set shift_x = shift_x | default(0) -%}
+{#- pad_left / pad_right override the symmetric pad_x/shift_x pair when a
+    wrapper sets them directly — easier to reason about on the fanfold form,
+    where the two sides are deliberately unequal (LQ-310 head reach). -#}
+{%- set pad_left = pad_left | default(pad_x - shift_x) -%}
+{%- set pad_right = pad_right | default(pad_x + shift_x) -%}
 
 {#- Letterhead address lines, keyed by Company abbr. These are hardcoded from
     the companies' printed letterheads because no Address records exist for
@@ -135,7 +140,7 @@ defaults.
      rows_per_page per sheet, so nothing legitimate is ever clipped). */
   .glm-sheet { position: relative; width: {{ page_w }}mm; height: {{ page_h }}mm;
     box-sizing: border-box; overflow: hidden; contain: strict;
-    padding: {{ pad_y }}mm {{ pad_x + shift_x }}mm {{ pad_y }}mm {{ pad_x - shift_x }}mm;
+    padding: {{ pad_y }}mm {{ pad_right }}mm {{ pad_y }}mm {{ pad_left }}mm;
     page-break-after: always; page-break-inside: avoid; }
   .glm-sheet.last { page-break-after: auto; }
 
