@@ -107,7 +107,7 @@ defaults.
 
 {%- set rows_per_page = rows_per_page | default(4) -%}
 
-{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro num(v, p=2) -%}{{ frappe.utils.fmt_money(v | abs, p) if v is not none else '' }}{%- endmacro -%}
 {%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
 
 <style>
@@ -299,7 +299,7 @@ defaults.
         {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:right;">
-        {%- for item in page_items %}<div>{{ num(item.rate) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+        {%- for item in page_items %}<div>{{ num(item.rate, item.precision("rate")) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:right;">
         {%- for item in page_items %}<div>{{ num(item.amount) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
