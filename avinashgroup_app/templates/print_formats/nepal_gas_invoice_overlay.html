@@ -70,6 +70,9 @@ defaults.
 {%- set bs_date = miti_fmt(doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date)) -%}
 {%- set posting_miti = miti_fmt(bs_date_str(doc.posting_date)) -%}
 {%- set customer_vat = doc.tax_id or frappe.db.get_value('Customer', doc.customer, 'tax_id') or '' -%}
+{#- header Branch line: the Branch docname is a series id (NGG-Branch-00001),
+    the readable name is its `branch` field -#}
+{%- set branch_name = (frappe.db.get_value('Branch', doc.custom_branch, 'branch') or '') if doc.get('custom_branch') else '' -%}
 {#- customer address: address line 1 only (not the full multi-line address_display) -#}
 {%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
 {%- set address = address | striptags -%}
@@ -221,6 +224,7 @@ defaults.
     {%- endif -%}
     <div class="cname">{{ print_title }}</div>
     <div class="caddr">{% for line in addr_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+    {%- if branch_name %}<div class="caddr">Branch: {{ branch_name }}</div>{% endif %}
     <div class="glm-titlebar">
       <span class="title">{{ copy_label }}</span>
     </div>
