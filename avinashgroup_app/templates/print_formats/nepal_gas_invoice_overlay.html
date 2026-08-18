@@ -77,6 +77,8 @@ defaults.
 {#- header Branch line: the Branch docname is a series id (NGG-Branch-00001),
     the readable name is its `branch` field -#}
 {%- set branch_name = (frappe.db.get_value('Branch', doc.custom_branch, 'branch') or '') if doc.get('custom_branch') else '' -%}
+{#- Balaju is Head Office, not a branch — labeled differently on the header line -#}
+{%- set branch_label = 'Main Office' if branch_name == 'Balaju' else 'Branch' -%}
 {#- customer address: address line 1 only (not the full multi-line address_display) -#}
 {%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
 {%- set address = address | striptags -%}
@@ -227,7 +229,7 @@ defaults.
     <img class="banner" src="/assets/avinashgroup_app/images/nepal_gas_banner.jpg" onerror="this.style.display='none'">
     {%- endif -%}
     <div class="cname">{{ print_title }}</div>
-    <div class="caddr">{% for line in addr_lines %}{% if loop.last and branch_name %}Branch: {{ branch_name }}{% if line %}, {% endif %}{% endif %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+    <div class="caddr">{% for line in addr_lines %}{% if loop.last and branch_name %}{{ branch_label }}: {{ branch_name }}{% if line %}, {% endif %}{% endif %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
     <div class="glm-titlebar">
       <span class="title">{{ copy_label }}</span>
     </div>
