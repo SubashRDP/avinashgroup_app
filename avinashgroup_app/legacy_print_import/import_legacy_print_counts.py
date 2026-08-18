@@ -118,6 +118,14 @@ DEFAULT_XLS = os.path.join(REGISTER_FOLDER, "NGI", "82.83 NGI.xls")
 # (NGI 28, GE 16, NGG 14, NGN 13, NGK 12) — invoices the old software printed
 # on 2026-08-16 that ERPNext had not received yet when this was checked. 0
 # ambiguous. They resolve on the next re-pull; mode="max" makes that safe too.
+#
+# Third pull 2026-08-18, NGI ONLY, "83.84 NGI 2026-08-18.xls": 1090 inv/2015
+# sheets, 2026-07-17..2026-08-18. A strict superset of BOTH earlier NGI files
+# (0 dropped, 0 lower), full 19-column layout with "Printed by User" intact.
+# Delta over the live site: 11 inserts (21 sheets) + 2 raises (2 sheets), 0
+# ambiguous. 107 unmatched — a contiguous tail from NGI004423 up, because the
+# register runs to 08-18 while ERPNext's last 83/84 invoice is 2026-08-15.
+# The other four companies were NOT re-pulled in this round.
 REGISTER_COMPANIES = {
     "NGI": "Nepal Gas Udhyog Pvt. Ltd.",
     "NGG": "Nepal Gas Udhyog (Gandaki) Pvt. Ltd.",
