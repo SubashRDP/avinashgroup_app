@@ -32,6 +32,11 @@ defaults.
     clip the right edge, so the fanfold wrapper pulls the content left to
     keep every column inside the printable window. -#}
 {%- set shift_x = shift_x | default(0) -%}
+{#- pad_left / pad_right override the symmetric pad_x/shift_x pair when a
+    wrapper sets them directly — easier to reason about on the fanfold form,
+    where the two sides are deliberately unequal (LQ-310 head reach). -#}
+{%- set pad_left = pad_left | default(pad_x - shift_x) -%}
+{%- set pad_right = pad_right | default(pad_x + shift_x) -%}
 
 {#- Letterhead address lines, keyed by Company abbr. These are hardcoded from
     the companies' printed letterheads because no Address records exist for
@@ -41,13 +46,12 @@ defaults.
       'NGI': ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal',
               'Tel : 01-4970416, Fax : 01-4970399, E-mail : info@nepalgas.com.np'],
       'NGN': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, E-mail: infongn@nepalgas.com.np',
-              'Branch: Mithila-9, Dhanusha, Simara, Bara, Ph.: 053-520150'],
-      'NGG': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4350416',
-              'Factory: Khairahani-9, Chitwan, Ph.: 056-583351, E-mail: info.ngg@nepalgas.com.np'],
+              'Ph.: 053-520150'],
+      'NGG': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4350416, E-mail: info.ngg@nepalgas.com.np',
+              'Factory: Khairahani-9, Chitwan, Ph.: 056-583351'],
       'NGK': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, Factory: Baijanath-8, Banke',
               'Ph.: 9820103702, E-mail: info.ngk@nepalgas.com.np'],
-      'GEPL': ['Regd. Office: Balaju - 16, Kathmandu',
-               'Branch: Anamnagar, Kathmandu, Branch: Chitwan'],
+      'GEPL': ['Regd. Office: Balaju - 16, Kathmandu'],
     } -%}
 {#- Printed title, where it differs from the ERP company name: NGI's paper
     reads "Nepal Gas Industries", not its ERP name "Nepal Gas Udhyog". -#}
@@ -55,6 +59,11 @@ defaults.
 {%- set print_title = print_titles.get(company.abbr, doc.company) -%}
 {%- set addr_lines = letterheads.get(company.abbr,
       ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal']) -%}
+{#- Branch always prints on the line right after the address block (line 3,
+    counting the company name as line 1) — pad a blank 2nd address line for
+    companies with only one static letterhead line (GEPL, and anything not
+    in the letterheads dict) so that position is always there to prepend to. -#}
+{%- if addr_lines | length < 2 -%}{%- set addr_lines = addr_lines + [''] -%}{%- endif -%}
 
 {#- ------------------------------- data --------------------------------- -#}
 {#- Miti prints as yyyy-mm-dd, which is how it is already stored. Some records
@@ -65,6 +74,11 @@ defaults.
 {%- set bs_date = miti_fmt(doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date)) -%}
 {%- set posting_miti = miti_fmt(bs_date_str(doc.posting_date)) -%}
 {%- set customer_vat = doc.tax_id or frappe.db.get_value('Customer', doc.customer, 'tax_id') or '' -%}
+{#- header Branch line: the Branch docname is a series id (NGG-Branch-00001),
+    the readable name is its `branch` field -#}
+{%- set branch_name = (frappe.db.get_value('Branch', doc.custom_branch, 'branch') or '') if doc.get('custom_branch') else '' -%}
+{#- Balaju is Head Office, not a branch — labeled differently on the header line -#}
+{%- set branch_label = 'Main Office' if branch_name == 'Balaju' else 'Branch' -%}
 {#- customer address: address line 1 only (not the full multi-line address_display) -#}
 {%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
 {%- set address = address | striptags -%}
@@ -102,7 +116,7 @@ defaults.
 
 {%- set rows_per_page = rows_per_page | default(4) -%}
 
-{%- macro num(v) -%}{{ frappe.utils.fmt_money(v | abs, 2) if v is not none else '' }}{%- endmacro -%}
+{%- macro num(v, p=2) -%}{{ frappe.utils.fmt_money(v | abs, p) if v is not none else '' }}{%- endmacro -%}
 {%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
 
 <style>
@@ -135,7 +149,7 @@ defaults.
      rows_per_page per sheet, so nothing legitimate is ever clipped). */
   .glm-sheet { position: relative; width: {{ page_w }}mm; height: {{ page_h }}mm;
     box-sizing: border-box; overflow: hidden; contain: strict;
-    padding: {{ pad_y }}mm {{ pad_x + shift_x }}mm {{ pad_y }}mm {{ pad_x - shift_x }}mm;
+    padding: {{ pad_y }}mm {{ pad_right }}mm {{ pad_y }}mm {{ pad_left }}mm;
     page-break-after: always; page-break-inside: avoid; }
   .glm-sheet.last { page-break-after: auto; }
 
@@ -152,7 +166,7 @@ defaults.
      the label's line like the pre-printed paper */
   .glm-info .d { display: inline-block; width: 4.2mm; border: 0.3mm solid #000;
     margin-left: -0.3mm; padding: 0.4mm 0; text-align: center;
-    font-size: 9.5pt; font-weight: bold; vertical-align: middle; }
+    font-size: 9.5pt; vertical-align: middle; }
 
   .glm-info { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 4mm; }
   .glm-info td { padding: 0.6mm 0; vertical-align: top; }
@@ -160,7 +174,7 @@ defaults.
   .glm-info .l { width: 32mm; white-space: nowrap; }
   .glm-info .c { width: 3mm; text-align: center; }
   .glm-info .rl { width: 28mm; white-space: nowrap; }
-  .glm-info .rv { width: 48mm; white-space: nowrap; }
+  .glm-info .rv { width: 34mm; white-space: nowrap; }
 
   table.glm-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
   table.glm-items th, table.glm-items td { border: 0.35mm solid #000; padding: 1mm 1.5mm; }
@@ -215,7 +229,7 @@ defaults.
     <img class="banner" src="/assets/avinashgroup_app/images/nepal_gas_banner.jpg" onerror="this.style.display='none'">
     {%- endif -%}
     <div class="cname">{{ print_title }}</div>
-    <div class="caddr">{% for line in addr_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+    <div class="caddr">{% for line in addr_lines %}{% if loop.last and branch_name %}{{ branch_label }}: {{ branch_name }}{% if line %}, {% endif %}{% endif %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
     <div class="glm-titlebar">
       <span class="title">{{ copy_label }}</span>
     </div>
@@ -294,7 +308,7 @@ defaults.
         {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:right;">
-        {%- for item in page_items %}<div>{{ num(item.rate) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
+        {%- for item in page_items %}<div>{{ num(item.rate, item.precision("rate")) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:right;">
         {%- for item in page_items %}<div>{{ num(item.amount) }}{% if item.batch_no %}<br>&nbsp;{% endif %}</div>{% endfor -%}
