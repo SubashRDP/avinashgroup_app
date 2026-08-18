@@ -46,13 +46,12 @@ defaults.
       'NGI': ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal',
               'Tel : 01-4970416, Fax : 01-4970399, E-mail : info@nepalgas.com.np'],
       'NGN': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, E-mail: infongn@nepalgas.com.np',
-              'Branch: Mithila-9, Dhanusha, Simara, Bara, Ph.: 053-520150'],
-      'NGG': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4350416',
-              'Factory: Khairahani-9, Chitwan, Ph.: 056-583351, E-mail: info.ngg@nepalgas.com.np'],
+              'Ph.: 053-520150'],
+      'NGG': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4350416, E-mail: info.ngg@nepalgas.com.np',
+              'Factory: Khairahani-9, Chitwan, Ph.: 056-583351'],
       'NGK': ['Regd. Office: Kathmandu-16, Balaju, Ph.: 01-4970416, Factory: Baijanath-8, Banke',
               'Ph.: 9820103702, E-mail: info.ngk@nepalgas.com.np'],
-      'GEPL': ['Regd. Office: Balaju - 16, Kathmandu',
-               'Branch: Anamnagar, Kathmandu, Branch: Chitwan'],
+      'GEPL': ['Regd. Office: Balaju - 16, Kathmandu'],
     } -%}
 {#- Printed title, where it differs from the ERP company name: NGI's paper
     reads "Nepal Gas Industries", not its ERP name "Nepal Gas Udhyog". -#}
@@ -60,6 +59,11 @@ defaults.
 {%- set print_title = print_titles.get(company.abbr, doc.company) -%}
 {%- set addr_lines = letterheads.get(company.abbr,
       ['Balaju Industrial Estate, Balaju, Kathmandu, Nepal']) -%}
+{#- Branch always prints on the line right after the address block (line 3,
+    counting the company name as line 1) — pad a blank 2nd address line for
+    companies with only one static letterhead line (GEPL, and anything not
+    in the letterheads dict) so that position is always there to prepend to. -#}
+{%- if addr_lines | length < 2 -%}{%- set addr_lines = addr_lines + [''] -%}{%- endif -%}
 
 {#- ------------------------------- data --------------------------------- -#}
 {#- Miti prints as yyyy-mm-dd, which is how it is already stored. Some records
@@ -223,8 +227,7 @@ defaults.
     <img class="banner" src="/assets/avinashgroup_app/images/nepal_gas_banner.jpg" onerror="this.style.display='none'">
     {%- endif -%}
     <div class="cname">{{ print_title }}</div>
-    <div class="caddr">{% for line in addr_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
-    {%- if branch_name %}<div class="caddr">Branch: {{ branch_name }}</div>{% endif %}
+    <div class="caddr">{% for line in addr_lines %}{% if loop.last and branch_name %}Branch: {{ branch_name }}{% if line %}, {% endif %}{% endif %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
     <div class="glm-titlebar">
       <span class="title">{{ copy_label }}</span>
     </div>
