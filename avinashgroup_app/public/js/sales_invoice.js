@@ -121,15 +121,22 @@ async function fetch_uom_price(frm, row) {
     return hit ? flt(hit.price_list_rate) : 0;
 }
 
-// If every earlier writer left the rate at 0 but an Item Price exists for the
-// row's exact UOM, apply it. Never touches a non-zero rate.
+// If every earlier writer left the rate at 0 (or a near-zero rounding
+// artifact, e.g. -0.00115, from a core pricing computation gone wrong) but an
+// Item Price exists for the row's exact UOM, apply it. Never touches a real
+// (non-negligible) rate.
+const RATE_NEGLIGIBLE_THRESHOLD = 0.01;
+function is_rate_negligible(rate) {
+    return Math.abs(flt(rate)) <= RATE_NEGLIGIBLE_THRESHOLD;
+}
+
 async function ensure_rate_from_item_price(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
-    if (!row || !row.item_code || !row.uom || flt(row.rate)) return;
+    if (!row || !row.item_code || !row.uom || !is_rate_negligible(row.rate)) return;
     const direct = await fetch_uom_price(frm, row);
     // Re-read the row: the rate may have been filled while we were fetching.
     const fresh = locals[cdt] && locals[cdt][cdn];
-    if (direct && fresh && !flt(fresh.rate)) {
+    if (direct && fresh && is_rate_negligible(fresh.rate)) {
         console.log(`[avinashgroup] rate fallback: ${fresh.item_code} / ${fresh.uom} -> ${direct}`);
         await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
         await frappe.model.set_value(cdt, cdn, "rate", direct);
