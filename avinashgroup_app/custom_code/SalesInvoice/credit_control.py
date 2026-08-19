@@ -212,7 +212,7 @@ def validate_sales_invoice(doc, method):
     Validates Sales Invoice against customer credit limits with advance payment consideration.
     Optimized for performance with early exits and minimal DB hits.
     """
-    return
+    
     # Early exit: Skip draft amendments or cancelled docs
     if doc.docstatus == 2 or doc.is_return:
         return
@@ -393,3 +393,106 @@ def validate_sales_invoice(doc, method):
                 f"<i>Advance applied: ₹{advance:,.2f}</i>",
                 title="Credit Amount Exceeded"
             )
+
+
+@frappe.whitelist()
+def get_credit_position(customer):
+    """Read-only credit position of a customer, for the Sales Invoice form banner.
+
+    Returns the three limits and current usage: unpaid bill count, outstanding
+    after advances, and the oldest unpaid bill's age in days. Uses the same
+    advance/JE netting rules as validate_sales_invoice above, but the FIFO
+    application of advances is aggregated inside SQL (window function) so no
+    invoice rows are transferred — stays fast for customers with thousands of
+    unpaid bills.
+    """
+    if not customer:
+        return {}
+
+    limits = frappe.db.get_value(
+        "Customer",
+        customer,
+        ["custom_bill_count", "custom_days_limit", "custom_amount_limit"],
+        as_dict=True,
+    ) or {}
+
+    bill_limit = flt(limits.get("custom_bill_count"))
+    days_limit = flt(limits.get("custom_days_limit"))
+    amount_limit = flt(limits.get("custom_amount_limit"))
+    if not (bill_limit or days_limit or amount_limit):
+        return {"has_limits": 0}
+
+    advance = flt(frappe.db.sql("""
+        SELECT IFNULL(SUM(unallocated_amount), 0)
+        FROM `tabPayment Entry`
+        WHERE party_type = 'Customer'
+          AND party = %s
+          AND docstatus = 1
+          AND unallocated_amount > 0.01
+          AND payment_type IN ('Receive', 'Internal Transfer')
+    """, customer)[0][0])
+
+    je_net = flt(frappe.db.sql("""
+        SELECT IFNULL(SUM(jea.debit - jea.credit), 0)
+        FROM `tabJournal Entry Account` jea
+        INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
+        WHERE je.docstatus = 1
+          AND jea.party_type = 'Customer'
+          AND jea.party = %s
+          AND IFNULL(jea.reference_name, '') = ''
+          AND jea.account IN (
+              SELECT name FROM `tabAccount`
+              WHERE account_name IN (
+                  'Debtors A/c - Domestic',
+                  'Advance Received',
+                  'Advance From Customer'
+              )
+          )
+    """, customer)[0][0])
+
+    je_debit = 0.0
+    if je_net < 0:
+        advance += -je_net
+    else:
+        je_debit = je_net
+
+    # Advances pay off the oldest bills first (FIFO). A bill whose cumulative
+    # total stays within the advance is fully covered; the first bill past it
+    # is partially covered (cum - advance); the rest count in full.
+    usage = frappe.db.sql("""
+        SELECT
+            COUNT(*) AS unpaid_count,
+            IFNULL(SUM(CASE WHEN cum - outstanding_amount >= %(advance)s
+                            THEN outstanding_amount
+                            ELSE cum - %(advance)s END), 0) AS total_unpaid,
+            MIN(posting_date) AS oldest_date
+        FROM (
+            SELECT posting_date, outstanding_amount,
+                   SUM(outstanding_amount) OVER (ORDER BY posting_date, name) AS cum
+            FROM `tabSales Invoice`
+            WHERE customer = %(customer)s
+              AND docstatus = 1
+              AND outstanding_amount > 0.01
+              AND is_return = 0
+              AND is_internal_customer = 0
+        ) unpaid
+        WHERE cum > %(advance)s
+    """, {"customer": customer, "advance": advance}, as_dict=True)[0]
+
+    outstanding = flt(usage.total_unpaid) + je_debit
+    days_used = 0
+    if usage.oldest_date:
+        days_used = (getdate(nowdate()) - getdate(usage.oldest_date)).days
+
+    return {
+        "has_limits": 1,
+        "bill_limit": int(bill_limit),
+        "days_limit": int(days_limit),
+        "amount_limit": amount_limit,
+        "unpaid_count": int(usage.unpaid_count or 0),
+        "outstanding": outstanding,
+        "remaining_amount": (amount_limit - outstanding) if amount_limit else 0,
+        "oldest_date": str(usage.oldest_date) if usage.oldest_date else None,
+        "days_used": days_used,
+        "advance": advance,
+    }
