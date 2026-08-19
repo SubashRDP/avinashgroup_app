@@ -1,6 +1,7 @@
 frappe.ui.form.on("Sales Invoice", {
 
     onload: function(frm) {
+        install_custom_totals_hook();
         lock_posting_fields(frm);
         // Apply field visibility for all existing rows on load
         if (frm.doc.items) {
@@ -11,6 +12,7 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
     refresh: function(frm) {
+        install_custom_totals_hook();
         lock_posting_fields(frm);
         // Apply field visibility on refresh
         if (frm.doc.items) {
@@ -21,12 +23,13 @@ frappe.ui.form.on("Sales Invoice", {
         if (frm.is_new()) {
             set_due_date_from_customer(frm);
         }
-        update_total_amount_preview(frm);
+        sync_custom_totals(frm);
         restore_return_vat(frm);
         fetch_credit_banner(frm);
     },
 
     before_save: function(frm) {
+        sync_custom_totals(frm);
         return force_all_si_warehouses(frm);
     },
 
@@ -37,22 +40,19 @@ frappe.ui.form.on("Sales Invoice", {
     },
 
     base_total_taxes_and_charges: function(frm) {
-        calculate_total(frm);
+        sync_custom_totals(frm);
     },
 
     base_grand_total: function(frm) {
-        calculate_total(frm);
+        sync_custom_totals(frm);
     },
 
     taxes_and_charges: function(frm) {
-        setTimeout(() => {
-            calculate_vat_total(frm);
-            calculate_total(frm);
-        }, 500);
+        setTimeout(() => sync_custom_totals(frm), 500);
     },
 
     total_advance: function(frm) {
-        calculate_total(frm);
+        sync_custom_totals(frm);
     },
 
     customer: function(frm) {
@@ -463,22 +463,17 @@ frappe.ui.form.on("Sales Invoice Item", {
         }, 0);
     },
 
+    // qty and rate need no total handling of their own: ERPNext recalculates
+    // base_net_amount and install_custom_totals_hook() re-derives every custom
+    // total off the back of that same call, with no timer in between.
     qty: function(frm, cdt, cdn) {
-        setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
-        setTimeout(() => apply_return_signs(frm, cdt, cdn), 350);
-        frm.refresh_field('items');
-    },
-    rate: function(frm, cdt, cdn) {
-        setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
-        frm.refresh_field('items');
+        apply_return_signs(frm, cdt, cdn);
     },
     base_net_amount: function(frm, cdt, cdn) {
-        calculate_item_custom_total(frm, cdt, cdn);
-        frm.refresh_field('items');
+        sync_custom_totals(frm);
     },
     custom_excise_value: function(frm, cdt, cdn) {
-        calculate_item_custom_total(frm, cdt, cdn);
-        frm.refresh_field('items');
+        sync_custom_totals(frm);
     },
 
     custom_vat_apply_on: async function(frm, cdt, cdn) {
@@ -492,7 +487,7 @@ frappe.ui.form.on("Sales Invoice Item", {
             await frappe.model.set_value(cdt, cdn, "custom_vat_rate", 0);
         }
 
-        calculate_item_vat_amount(frm, cdt, cdn);
+        sync_custom_totals(frm);
 
         frappe.after_ajax(() => {
             toggle_vat_fields(frm, cdt, cdn);
@@ -505,23 +500,17 @@ frappe.ui.form.on("Sales Invoice Item", {
 
     custom_vat_amount: function(frm, cdt, cdn) {
         // In Amount mode: recalculate header total when user edits this field
-        calculate_vat_total(frm);
-        apply_return_signs(frm, cdt, cdn);
-        frm.refresh_field('items');
+        sync_custom_totals(frm);
     },
 
     custom_total: function(frm, cdt, cdn) {
-        calculate_total_amount_including_excise(frm);
-        calculate_item_vat_amount(frm, cdt, cdn);
-        apply_return_signs(frm, cdt, cdn);
-        frm.refresh_field('items');
+        // Total is derived, never authoritative: re-derive it (and the VAT that
+        // hangs off it) exactly as the server does on save.
+        sync_custom_totals(frm);
     },
 
     items_remove: function(frm) {
-        calculate_total(frm);
-        calculate_total_amount_including_excise(frm);
-        calculate_vat_total(frm);
-        frm.refresh_field('items');
+        sync_custom_totals(frm);
     },
     
     items_add: function(frm, cdt, cdn) {
@@ -540,24 +529,119 @@ frappe.ui.form.on("Sales Invoice Item", {
 
 frappe.ui.form.on("Sales Taxes and Charges", {
     account_head: function(frm, cdt, cdn) {
-        setTimeout(() => {
-            calculate_vat_total(frm);
-            calculate_total(frm);
-        }, 500);
+        setTimeout(() => sync_custom_totals(frm), 500);
     },
     
     tax_amount: function(frm, cdt, cdn) {
-        calculate_vat_total(frm);
+        sync_custom_totals(frm);
     },
     
     taxes_add: function(frm) {
-        calculate_vat_total(frm);
+        sync_custom_totals(frm);
     },
     
     taxes_remove: function(frm) {
-        calculate_vat_total(frm);
+        sync_custom_totals(frm);
     }
 });
+
+/**
+ * Single source of truth for every custom total on the form. Mirrors the server
+ * (salesinvoice_taxes.before_save_salesinvoice) field for field:
+ *
+ *     item.custom_total      = base_net_amount + custom_excise_value
+ *     item.custom_vat_amount = custom_total x 13%          (VAT 13%)
+ *                            = 0                           (VAT 0%)
+ *                            = whatever the user typed     (Amount)
+ *     Amount before VAT      = sum(custom_total)
+ *
+ * Values are assigned directly rather than through frappe.model.set_value: it
+ * must be safe to run during form load (no dirtying a clean document) and from
+ * inside ERPNext's own recalculation (no re-entering the trigger that called
+ * us). The grid is only refreshed when a figure actually moved.
+ */
+function sync_custom_totals(frm) {
+    if (!frm || !frm.doc || frm.doc.doctype !== "Sales Invoice") return;
+
+    const is_return = !!frm.doc.is_return;
+    let total_including_excise = 0;
+    let vat_total = 0;
+    let net_total = 0;
+    let excise_total = 0;
+    let changed = false;
+
+    (frm.doc.items || []).forEach(function(item) {
+        const base_net_amount = flt(item.base_net_amount);
+        const excise = flt(item.custom_excise_value);
+        const total = flt(base_net_amount + excise, 5);
+
+        const mode = item.custom_vat_apply_on || "VAT 13%";
+        let vat_rate;
+        let vat;
+
+        if (mode === "VAT 13%") {
+            vat_rate = 13;
+            vat = flt((total * 13) / 100, 5);
+        } else if (mode === "VAT 0%") {
+            vat_rate = 0;
+            vat = 0;
+        } else {
+            // Amount: manual entry, never recalculated
+            vat_rate = 0;
+            vat = flt(item.custom_vat_amount, 5);
+        }
+
+        if (is_return && vat > 0) vat = -Math.abs(vat);
+
+        if (flt(item.custom_total, 5) !== total) { item.custom_total = total; changed = true; }
+        if (flt(item.custom_vat_rate) !== vat_rate) { item.custom_vat_rate = vat_rate; changed = true; }
+        if (flt(item.custom_vat_amount, 5) !== vat) { item.custom_vat_amount = vat; changed = true; }
+
+        total_including_excise += total;
+        vat_total += vat;
+        net_total += base_net_amount;
+        excise_total += excise;
+    });
+
+    frm.doc.custom_total_amount_including_excise = flt(total_including_excise, 5);
+    frm.doc.custom_total_vat_amount = flt(vat_total, 5);
+    frm.doc.custom_total_amount = flt(net_total, 5);
+    frm.doc.custom_excise = flt(excise_total, 5);
+
+    if (changed) frm.refresh_field("items");
+    frm.refresh_field("custom_total_amount_including_excise");
+    frm.refresh_field("custom_total_vat_amount");
+    frm.refresh_field("custom_total_amount");
+    frm.refresh_field("custom_excise");
+    update_total_amount_preview(frm);
+}
+
+/**
+ * ERPNext writes item.base_net_amount straight onto the row object inside
+ * _calculate_taxes_and_totals, bypassing frappe.model.set_value — so the
+ * base_net_amount trigger never fires. The custom totals used to be derived by
+ * a 300 ms timer racing that write, and a qty change could leave custom_total
+ * (and the VAT computed from it) one edit behind: a row whose Amount had gone
+ * to 27,345.13 still showed Total 18,230.09 and VAT 2,369.91 instead of
+ * 3,554.87. Chain onto the recalculation itself instead, so we always derive
+ * from the base_net_amount ERPNext has just finalised. Idempotent.
+ */
+function install_custom_totals_hook() {
+    const cls = window.erpnext && erpnext.taxes_and_totals;
+    if (!cls || cls.prototype.__agi_custom_totals_hook) return;
+
+    const core_calculate = cls.prototype._calculate_taxes_and_totals;
+    cls.prototype._calculate_taxes_and_totals = function() {
+        const result = core_calculate.apply(this, arguments);
+        try {
+            sync_custom_totals(this.frm);
+        } catch (e) {
+            console.error("Error deriving Sales Invoice custom totals:", e);
+        }
+        return result;
+    };
+    cls.prototype.__agi_custom_totals_hook = true;
+}
 
 /**
  * Toggle VAT field visibility based on custom_vat_apply_on selection
@@ -606,29 +690,6 @@ function toggle_vat_fields(frm, cdt, cdn) {
 }
 
 /**
- * Calculate total amount including excise from line items
- * This sums all custom_total values from items
- */
-function calculate_total_amount_including_excise(frm) {
-    if (!frm || !frm.doc) return;
-
-    let total_including_excise = 0;
-    
-    if (frm.doc.items && frm.doc.items.length > 0) {
-        frm.doc.items.forEach(function(item) {
-            let custom_total = flt(item.custom_total) || 0;
-            total_including_excise += custom_total;
-        });
-    }
-    
-    total_including_excise = flt(total_including_excise, 5);
-
-    frm.set_value('custom_total_amount_including_excise', total_including_excise);
-    frm.refresh_field('custom_total_amount_including_excise');
-    update_total_amount_preview(frm);
-}
-
-/**
  * Fill the virtual custom_expected_grand_total field ("Total Amount"):
  *
  *   Total Amount = Total Amount Including Excise + Total VAT Amount
@@ -648,47 +709,6 @@ function update_total_amount_preview(frm) {
 
     frm.doc.custom_expected_grand_total = flt(total, 5);
     frm.refresh_field('custom_expected_grand_total');
-}
-
-/**
- * Calculate custom_total for a single line item client-side.
- * custom_total = base_net_amount + custom_excise_value
- * Must be called before calculate_item_vat_amount so VAT uses the fresh total.
- */
-function calculate_item_custom_total(frm, cdt, cdn) {
-    const row = locals[cdt][cdn];
-    if (!row) return;
-
-    const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 5);
-    frappe.model.set_value(cdt, cdn, 'custom_total', custom_total);
-    // VAT recalculates via the custom_total change handler below
-}
-
-/**
- * Calculate VAT amount for a single line item and update the header total.
- * Always derives custom_total fresh from base_net_amount + custom_excise_value
- * so it is never stale from a previous save.
- * VAT 13%  → custom_vat_amount = custom_total × 13%  (read-only)
- * VAT 0%   → custom_vat_amount = 0                    (read-only)
- * Amount   → keep whatever the user entered           (editable)
- */
-function calculate_item_vat_amount(frm, cdt, cdn) {
-    const row = locals[cdt][cdn];
-    if (!row) return;
-
-    const vat_apply_on = row.custom_vat_apply_on || 'VAT 13%';
-    // Always compute fresh — never trust row.custom_total (may be stale from last save)
-    const custom_total = flt(row.base_net_amount) + flt(row.custom_excise_value);
-
-    if (vat_apply_on === 'VAT 13%') {
-        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', flt((custom_total * 13) / 100, 5));
-    } else if (vat_apply_on === 'VAT 0%') {
-        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', 0);
-    }
-    // Amount mode: do nothing — user's manual entry is preserved
-
-    setTimeout(() => calculate_vat_total(frm), 50);
-    apply_return_signs(frm, cdt, cdn);
 }
 
 /**
@@ -778,24 +798,7 @@ async function restore_return_vat(frm) {
         }
     }
 
-    if (changed) calculate_vat_total(frm);
-}
-
-/**
- * Calculate total VAT by summing custom_vat_amount from all line items
- */
-function calculate_vat_total(frm) {
-    if (!frm || !frm.doc) return;
-
-    let vat_total = 0;
-    (frm.doc.items || []).forEach(function(item) {
-        vat_total += flt(item.custom_vat_amount) || 0;
-    });
-
-    vat_total = flt(vat_total, 5);
-    frm.set_value('custom_total_vat_amount', vat_total);
-    frm.refresh_field('custom_total_vat_amount');
-    update_total_amount_preview(frm);
+    if (changed) sync_custom_totals(frm);
 }
 
 function set_due_date_from_customer(frm) {
@@ -806,35 +809,6 @@ function set_due_date_from_customer(frm) {
         frm.set_value('due_date', frappe.datetime.add_days(posting_date, days));
 
     });
-}
-
-/**
- * Calculate totals
- */
-function calculate_total(frm) {
-    if (!frm || !frm.doc) return;
-    
-    let custom_total_excluding_excise = 0;
-    let total_excise = 0;
-    
-    if (frm.doc.items && frm.doc.items.length > 0) {
-        frm.doc.items.forEach(function(item) {
-            let base_net_amount = flt(item.base_net_amount) || 0;
-            let excise_value = flt(item.custom_excise_value) || 0;
-            
-            custom_total_excluding_excise += base_net_amount;
-            total_excise += excise_value;
-        });
-        
-        frm.doc.custom_total_amount = flt(custom_total_excluding_excise, 5);
-        frm.doc.custom_excise = flt(total_excise, 5);
-
-        frm.refresh_field('custom_total_amount');
-        frm.refresh_field('custom_excise');
-    }
-    
-    calculate_vat_total(frm);
-    calculate_total_amount_including_excise(frm);
 }
 
 
