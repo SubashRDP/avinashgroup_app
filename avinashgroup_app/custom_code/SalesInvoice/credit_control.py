@@ -203,225 +203,58 @@
 
 
 import frappe
-from frappe.utils import getdate, nowdate, flt
+from frappe.utils import getdate, nowdate, flt, fmt_money
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# SHARED CORE
+# ══════════════════════════════════════════════════════════════════════════════
+# validate_sales_invoice (enforcement) and get_credit_position (the form banner)
+# must agree exactly — a banner reading "within limit" on an invoice the save
+# then rejects is worse than no banner at all. Both therefore take their numbers
+# AND their verdict from _credit_state() below, and neither computes anything of
+# its own. Anything that changes about credit rules changes there, once.
 
-def validate_sales_invoice(doc, method):
-    """
-    Validates Sales Invoice against customer credit limits with advance payment consideration.
-    Optimized for performance with early exits and minimal DB hits.
-    """
-    
-    # Early exit: Skip draft amendments or cancelled docs
-    if doc.docstatus == 2 or doc.is_return:
-        return
-    
-    customer = doc.customer
-    today = getdate(doc.posting_date or nowdate())
-    new_invoice_amount = flt(doc.grand_total)
-    
-    # Early exit: Zero-value invoices don't affect credit
-    if new_invoice_amount <= 0:
-        return
+# Debtor and customer-advance accounts, matched by account_name so that a single
+# list covers every company. Verified against avinas1 on 2026-08-20: all seven
+# companies carry "Debtors A/c - Domestic" (143101); GEPL, GLMI and SGU use
+# "Advance Received" (347959), while NGI, NGG, NGN and NGK use "Advance From
+# Customer" (347959). NGK spells its account "Advance from Customer" — that
+# still matches, because account_name collates utf8mb4_unicode_ci.
+CREDIT_ACCOUNT_NAMES = (
+    "Debtors A/c - Domestic",
+    "Advance Received",
+    "Advance From Customer",
+)
 
-    # ============================================================
-    # 1. LOAD CUSTOMER LIMITS (Single DB Hit)
-    # ============================================================
-    limits = frappe.db.get_value(
-        "Customer",
-        customer,
-        ["custom_bill_count", "custom_days_limit", "custom_amount_limit"],
-        as_dict=True
+
+def _money(value, currency=None):
+    """Format for display. The books are NPR — never hardcode a symbol here."""
+    return fmt_money(
+        flt(value),
+        currency=currency or frappe.db.get_default("currency") or "NPR",
     )
-    
-    if not limits:
-        return
-    
-    bill_limit = flt(limits.get("custom_bill_count"))
-    days_limit = flt(limits.get("custom_days_limit"))
-    amount_limit = flt(limits.get("custom_amount_limit"))
-    
-    # Early exit: No limits configured
-    if not (bill_limit or days_limit or amount_limit):
-        return
-
-    # ============================================================
-    # 2. GET UNALLOCATED ADVANCE (Indexed Query)
-    # ============================================================
-    advance = flt(frappe.db.sql("""
-        SELECT IFNULL(SUM(unallocated_amount), 0)
-        FROM `tabPayment Entry`
-        WHERE party_type = 'Customer'
-          AND party = %s
-          AND docstatus = 1
-          AND unallocated_amount > 0.01
-          AND payment_type IN ('Receive', 'Internal Transfer')
-    """, customer)[0][0])
-
-    # Unlinked Journal Entry rows on the Debtors / customer-advance accounts.
-    # Rows referenced against an invoice are excluded — their effect is already
-    # inside that invoice's outstanding_amount. Net credit means the customer
-    # has deposited money, so it joins the advance pool and nets against the
-    # oldest bills exactly like a Payment Entry advance. Net debit is extra
-    # debt with no bill behind it, so it can only be added in the amount check.
-    je_net = flt(frappe.db.sql("""
-        SELECT IFNULL(SUM(jea.debit - jea.credit), 0)
-        FROM `tabJournal Entry Account` jea
-        INNER JOIN `tabJournal Entry` je ON je.name = jea.parent
-        WHERE je.docstatus = 1
-          AND jea.party_type = 'Customer'
-          AND jea.party = %s
-          AND IFNULL(jea.reference_name, '') = ''
-          AND jea.account IN (
-              SELECT name FROM `tabAccount`
-              WHERE account_name IN (
-                  'Debtors A/c - Domestic',
-                  'Advance Received',
-                  'Advance From Customer'
-              )
-          )
-    """, customer)[0][0])
-
-    je_debit = 0.0
-    if je_net < 0:
-        advance += -je_net
-    else:
-        je_debit = je_net
-
-    # ============================================================
-    # 3. FETCH UNPAID INVOICES (FIFO Order, Optimized)
-    # ============================================================
-    # Use indexed columns only, avoid SELECT *
-    invoices = frappe.db.sql("""
-        SELECT 
-            name,
-            posting_date,
-            outstanding_amount
-        FROM `tabSales Invoice`
-        WHERE customer = %s
-          AND docstatus = 1
-          AND outstanding_amount > 0.01
-          AND is_return = 0
-          AND is_internal_customer = 0
-          AND name != %s
-        ORDER BY posting_date ASC, name ASC
-    """, (customer, doc.name or ""), as_dict=True)
-    
-    # Early exit: No unpaid invoices
-    if not invoices:
-        return
-
-    # ============================================================
-    # 4. APPLY ADVANCE FIFO (Ultra-Fast Loop with Early Exits)
-    # ============================================================
-    remaining_advance = advance
-    unpaid_list = []
-    total_unpaid = 0.0
-    
-    for inv in invoices:
-        outstanding = flt(inv.outstanding_amount)
-        
-        # Fully covered by advance
-        if remaining_advance >= outstanding:
-            remaining_advance -= outstanding
-            continue
-        
-        # Partially covered or not covered
-        actual_unpaid = outstanding - remaining_advance
-        remaining_advance = 0
-        
-        unpaid_list.append({
-            "name": inv.name,
-            "date": inv.posting_date,
-            "amount": actual_unpaid
-        })
-        total_unpaid += actual_unpaid
-
-    # Early exit: All invoices covered by advance
-    if not unpaid_list:
-        return
-
-    # ============================================================
-    # 5. VALIDATION CHECKS (Ordered by Performance)
-    # ============================================================
-    
-    # CHECK 1: Bill Count (Fastest - Simple Comparison)
-    if bill_limit:
-        unpaid_count = len(unpaid_list)
-        if unpaid_count >= bill_limit:
-            frappe.throw(
-                f"<b>Credit Limit: Bill Count Exceeded</b><br><br>"
-                f"Customer: <b>{customer}</b><br>"
-                f"Unpaid Bills: <b>{unpaid_count}</b> (after applying ₹{advance:,.2f} advance)<br>"
-                f"Maximum Allowed: <b>{int(bill_limit)}</b><br><br>"
-                f"<i>Please clear existing invoices before creating new ones.</i>",
-                title="Credit Limit Exceeded"
-            )
-    
-    # CHECK 2: Days Limit (Fast - Date Comparison)
-    if days_limit:
-        oldest = unpaid_list[0]  # Already sorted FIFO
-        days_overdue = (today - getdate(oldest["date"])).days
-        
-        if days_overdue >= days_limit:
-            frappe.throw(
-                f"<b>Credit Limit: Days Exceeded</b><br><br>"
-                f"Customer: <b>{customer}</b><br>"
-                f"Oldest Unpaid Invoice: <b>{oldest['name']}</b><br>"
-                f"Date: <b>{oldest['date']}</b> ({days_overdue} days ago)<br>"
-                f"Maximum Days Allowed: <b>{int(days_limit)}</b><br><br>"
-                f"<i>Payment is overdue. Please collect payment before new sales.</i>",
-                title="Credit Days Exceeded"
-            )
-    
-    # CHECK 3: Amount Limit (Requires Calculation)
-    if amount_limit:
-        final_exposure = total_unpaid + je_debit + new_invoice_amount
-
-        if final_exposure > amount_limit:
-            available_credit = amount_limit - total_unpaid - je_debit
-            frappe.throw(
-                f"<b>Credit Limit: Amount Exceeded</b><br><br>"
-                f"Customer: <b>{customer}</b><br>"
-                f"Current Outstanding: <b>₹{total_unpaid:,.2f}</b><br>"
-                f"Journal Debit Adjustment: <b>₹{je_debit:,.2f}</b><br>"
-                f"New Invoice Amount: <b>₹{new_invoice_amount:,.2f}</b><br>"
-                f"Total Exposure: <b>₹{final_exposure:,.2f}</b><br>"
-                f"Maximum Credit Limit: <b>₹{amount_limit:,.2f}</b><br>"
-                f"Available Credit: <b>₹{available_credit:,.2f}</b><br><br>"
-                f"<i>Advance applied: ₹{advance:,.2f}</i>",
-                title="Credit Amount Exceeded"
-            )
 
 
-@frappe.whitelist()
-def get_credit_position(customer):
-    """Read-only credit position of a customer, for the Sales Invoice form banner.
+def _advance_pool(customer):
+    """The customer's deposited-but-unapplied money, broken down by source.
 
-    Returns the three limits and current usage: unpaid bill count, outstanding
-    after advances, and the oldest unpaid bill's age in days. Uses the same
-    advance/JE netting rules as validate_sales_invoice above, but the FIFO
-    application of advances is aggregated inside SQL (window function) so no
-    invoice rows are transferred — stays fast for customers with thousands of
-    unpaid bills.
+    Returns a dict, not a single figure, because the banner has to SHOW where
+    the money came from: a customer looking at "advance 79,232,897" needs to
+    see which part is Payment Entries and which part is journal vouchers, or
+    the number is unauditable from the form.
+
+        pe_advance  unallocated Payment Entry receipts
+        je_credit   journal net credit — deposits posted by voucher, folded
+                    into the pool and retiring bills FIFO exactly like a PE
+        je_debit    journal net debit — extra debt with no invoice behind it,
+                    so it cannot age and cannot be counted as a bill; it only
+                    ever lands in the amount check
+        advance     pe_advance + je_credit, the figure the FIFO walk consumes
+
+    je_credit and je_debit are mutually exclusive: a customer's journal rows
+    net to one direction or the other, never both.
     """
-    if not customer:
-        return {}
-
-    limits = frappe.db.get_value(
-        "Customer",
-        customer,
-        ["custom_bill_count", "custom_days_limit", "custom_amount_limit"],
-        as_dict=True,
-    ) or {}
-
-    bill_limit = flt(limits.get("custom_bill_count"))
-    days_limit = flt(limits.get("custom_days_limit"))
-    amount_limit = flt(limits.get("custom_amount_limit"))
-    if not (bill_limit or days_limit or amount_limit):
-        return {"has_limits": 0}
-
     advance = flt(frappe.db.sql("""
         SELECT IFNULL(SUM(unallocated_amount), 0)
         FROM `tabPayment Entry`
@@ -432,6 +265,9 @@ def get_credit_position(customer):
           AND payment_type IN ('Receive', 'Internal Transfer')
     """, customer)[0][0])
 
+    # Unlinked Journal Entry rows only. A row referenced against an invoice has
+    # already moved that invoice's outstanding_amount, so counting it again here
+    # would double it.
     je_net = flt(frappe.db.sql("""
         SELECT IFNULL(SUM(jea.debit - jea.credit), 0)
         FROM `tabJournal Entry Account` jea
@@ -441,33 +277,48 @@ def get_credit_position(customer):
           AND jea.party = %s
           AND IFNULL(jea.reference_name, '') = ''
           AND jea.account IN (
-              SELECT name FROM `tabAccount`
-              WHERE account_name IN (
-                  'Debtors A/c - Domestic',
-                  'Advance Received',
-                  'Advance From Customer'
-              )
+              SELECT name FROM `tabAccount` WHERE account_name IN %s
           )
-    """, customer)[0][0])
+    """, (customer, CREDIT_ACCOUNT_NAMES))[0][0])
 
-    je_debit = 0.0
-    if je_net < 0:
-        advance += -je_net
-    else:
-        je_debit = je_net
+    je_credit = -je_net if je_net < 0 else 0.0
+    je_debit = je_net if je_net > 0 else 0.0
 
-    # Advances pay off the oldest bills first (FIFO). A bill whose cumulative
-    # total stays within the advance is fully covered; the first bill past it
-    # is partially covered (cum - advance); the rest count in full.
-    usage = frappe.db.sql("""
+    return {
+        "pe_advance": advance,
+        "je_net": je_net,
+        "je_credit": je_credit,
+        "je_debit": je_debit,
+        "advance": advance + je_credit,
+    }
+
+
+def _unpaid_after_advance(customer, advance, exclude_invoice=None):
+    """Apply `advance` to the customer's unpaid bills oldest-first, in SQL.
+
+    The running total `cum` is the FIFO cursor: a bill whose cumulative total
+    stays within the advance is fully covered and drops out via `cum > advance`;
+    the first bill past the advance is partially covered and contributes
+    `cum - advance`; every bill after it contributes in full.
+
+    This is the same walk validate_sales_invoice used to do in Python, moved
+    into SQL so no invoice rows cross the wire — a customer with thousands of
+    open bills costs the same as one with three.
+    """
+    row = frappe.db.sql("""
         SELECT
             COUNT(*) AS unpaid_count,
             IFNULL(SUM(CASE WHEN cum - outstanding_amount >= %(advance)s
                             THEN outstanding_amount
                             ELSE cum - %(advance)s END), 0) AS total_unpaid,
-            MIN(posting_date) AS oldest_date
+            MIN(posting_date) AS oldest_date,
+            -- Cheapest way to carry the oldest row's NAME out of an aggregate:
+            -- posting_date renders fixed-width YYYY-MM-DD, so MIN over the
+            -- concatenation orders by date then name, exactly like the window's
+            -- ORDER BY. Constant memory, no second round trip.
+            MIN(CONCAT(posting_date, '|', name)) AS oldest_key
         FROM (
-            SELECT posting_date, outstanding_amount,
+            SELECT name, posting_date, outstanding_amount,
                    SUM(outstanding_amount) OVER (ORDER BY posting_date, name) AS cum
             FROM `tabSales Invoice`
             WHERE customer = %(customer)s
@@ -475,24 +326,237 @@ def get_credit_position(customer):
               AND outstanding_amount > 0.01
               AND is_return = 0
               AND is_internal_customer = 0
+              AND name != %(exclude)s
         ) unpaid
         WHERE cum > %(advance)s
-    """, {"customer": customer, "advance": advance}, as_dict=True)[0]
+    """, {
+        "customer": customer,
+        "advance": advance,
+        "exclude": exclude_invoice or "",
+    }, as_dict=True)[0]
 
-    outstanding = flt(usage.total_unpaid) + je_debit
-    days_used = 0
-    if usage.oldest_date:
-        days_used = (getdate(nowdate()) - getdate(usage.oldest_date)).days
+    oldest_invoice = None
+    if row.oldest_key:
+        oldest_invoice = row.oldest_key.split("|", 1)[1]
 
     return {
-        "has_limits": 1,
+        "unpaid_count": int(row.unpaid_count or 0),
+        "total_unpaid": flt(row.total_unpaid),
+        "oldest_date": row.oldest_date,
+        "oldest_invoice": oldest_invoice,
+    }
+
+
+def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, currency=None):
+    """Full credit position of `customer`, plus the verdict on an invoice of
+    `new_amount` dated `as_of`.
+
+    `blocked_by` is None, "count", "days" or "amount" — evaluated in that order,
+    because that is the order validate_sales_invoice throws in and only the
+    first one to trip is ever seen by the user.
+
+    `checks_active` is 0 when the customer has no bill left uncovered by
+    advances. In that state validate_sales_invoice returns before reaching any
+    check, so NO limit can block the save — including the amount limit. The
+    banner has to honour that too, or it will warn about a save that succeeds.
+    """
+    state = {
+        "has_limits": 0,
+        "checks_active": 0,
+        "blocked_by": None,
+        "message": None,
+        "title": None,
+        "advance": 0.0,
+        "pe_advance": 0.0,
+        "je_credit": 0.0,
+        "je_net": 0.0,
+        "je_debit": 0.0,
+        "unpaid_count": 0,
+        "total_unpaid": 0.0,
+        "outstanding": 0.0,
+        "oldest_date": None,
+        "oldest_invoice": None,
+        "days_used": 0,
+        "count_exceeded": 0,
+        "days_exceeded": 0,
+        "amount_exceeded": 0,
+    }
+
+    if not customer:
+        return state
+
+    limits = frappe.db.get_value(
+        "Customer",
+        customer,
+        ["custom_bill_count", "custom_days_limit", "custom_amount_limit"],
+        as_dict=True,
+    )
+    if not limits:
+        return state
+
+    bill_limit = flt(limits.get("custom_bill_count"))
+    days_limit = flt(limits.get("custom_days_limit"))
+    amount_limit = flt(limits.get("custom_amount_limit"))
+
+    state.update({
         "bill_limit": int(bill_limit),
         "days_limit": int(days_limit),
         "amount_limit": amount_limit,
-        "unpaid_count": int(usage.unpaid_count or 0),
-        "outstanding": outstanding,
-        "remaining_amount": (amount_limit - outstanding) if amount_limit else 0,
-        "oldest_date": str(usage.oldest_date) if usage.oldest_date else None,
-        "days_used": days_used,
+    })
+
+    if not (bill_limit or days_limit or amount_limit):
+        return state
+    state["has_limits"] = 1
+
+    today = getdate(as_of or nowdate())
+    new_amount = flt(new_amount)
+
+    pool = _advance_pool(customer)
+    advance = pool["advance"]
+    je_debit = pool["je_debit"]
+    unpaid = _unpaid_after_advance(customer, advance, exclude_invoice)
+
+    days_used = 0
+    if unpaid["oldest_date"]:
+        days_used = (today - getdate(unpaid["oldest_date"])).days
+
+    outstanding = unpaid["total_unpaid"] + je_debit
+
+    state.update({
         "advance": advance,
-    }
+        "pe_advance": pool["pe_advance"],
+        "je_credit": pool["je_credit"],
+        "je_net": pool["je_net"],
+        "je_debit": je_debit,
+        "unpaid_count": unpaid["unpaid_count"],
+        "total_unpaid": unpaid["total_unpaid"],
+        "outstanding": outstanding,
+        "oldest_date": str(unpaid["oldest_date"]) if unpaid["oldest_date"] else None,
+        "oldest_invoice": unpaid["oldest_invoice"],
+        "days_used": days_used,
+        "remaining_amount": (amount_limit - outstanding) if amount_limit else 0,
+    })
+
+    # Nothing uncovered means no check runs at all — see the docstring.
+    if not unpaid["unpaid_count"]:
+        return state
+    state["checks_active"] = 1
+
+    # CHECK 1 — bill count. Note `>=`: a limit of 5 blocks the 5th unpaid bill.
+    if bill_limit and unpaid["unpaid_count"] >= bill_limit:
+        state["count_exceeded"] = 1
+        state["blocked_by"] = "count"
+        state["title"] = "Credit Limit Exceeded"
+        state["message"] = (
+            f"<b>Credit Limit: Bill Count Exceeded</b><br><br>"
+            f"Customer: <b>{customer}</b><br>"
+            f"Unpaid Bills: <b>{unpaid['unpaid_count']}</b> "
+            f"(after applying {_money(advance, currency)} advance)<br>"
+            f"Maximum Allowed: <b>{int(bill_limit)}</b><br><br>"
+            f"<i>Please clear existing invoices before creating new ones.</i>"
+        )
+        return state
+
+    # CHECK 2 — age of the oldest bill advances did not cover. Also `>=`.
+    if days_limit and days_used >= days_limit:
+        state["days_exceeded"] = 1
+        state["blocked_by"] = "days"
+        state["title"] = "Credit Days Exceeded"
+        state["message"] = (
+            f"<b>Credit Limit: Days Exceeded</b><br><br>"
+            f"Customer: <b>{customer}</b><br>"
+            f"Oldest Unpaid Invoice: <b>{unpaid['oldest_invoice']}</b><br>"
+            f"Date: <b>{unpaid['oldest_date']}</b> ({days_used} days ago)<br>"
+            f"Maximum Days Allowed: <b>{int(days_limit)}</b><br><br>"
+            f"<i>Payment is overdue. Please collect payment before new sales.</i>"
+        )
+        return state
+
+    # CHECK 3 — total exposure, the only check that includes the new invoice.
+    # Note `>`: landing exactly on the limit is allowed.
+    if amount_limit:
+        final_exposure = unpaid["total_unpaid"] + je_debit + new_amount
+        if final_exposure > amount_limit:
+            state["amount_exceeded"] = 1
+            state["blocked_by"] = "amount"
+            state["title"] = "Credit Amount Exceeded"
+            state["message"] = (
+                f"<b>Credit Limit: Amount Exceeded</b><br><br>"
+                f"Customer: <b>{customer}</b><br>"
+                f"Current Outstanding: <b>{_money(unpaid['total_unpaid'], currency)}</b><br>"
+                f"Journal Debit Adjustment: <b>{_money(je_debit, currency)}</b><br>"
+                f"New Invoice Amount: <b>{_money(new_amount, currency)}</b><br>"
+                f"Total Exposure: <b>{_money(final_exposure, currency)}</b><br>"
+                f"Maximum Credit Limit: <b>{_money(amount_limit, currency)}</b><br>"
+                f"Available Credit: "
+                f"<b>{_money(amount_limit - unpaid['total_unpaid'] - je_debit, currency)}</b><br><br>"
+                f"<i>Advance applied: {_money(advance, currency)}</i>"
+            )
+
+    return state
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ENFORCEMENT — hooks.py doc_events["Sales Invoice"]["validate"]
+# ══════════════════════════════════════════════════════════════════════════════
+
+def validate_sales_invoice(doc, method):
+    """Block the invoice if the customer has breached a credit limit.
+
+    Runs last on the `validate` chain: the amount check reads doc.grand_total,
+    which is only final once the tax pipeline ahead of it has built the taxes
+    table. Moving this earlier would test a pre-VAT figure.
+    """
+    # Cancelled documents enforce nothing, and a credit note reduces exposure
+    # rather than consuming it.
+    if doc.docstatus == 2 or doc.is_return:
+        return
+
+    # A zero-value invoice consumes no credit.
+    new_invoice_amount = flt(doc.grand_total)
+    if new_invoice_amount <= 0:
+        return
+
+    state = _credit_state(
+        doc.customer,
+        as_of=doc.posting_date,
+        new_amount=new_invoice_amount,
+        exclude_invoice=doc.name,
+        currency=doc.currency,
+    )
+
+    if state["blocked_by"]:
+        frappe.throw(state["message"], title=state["title"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BANNER FEED — public/js/sales_invoice.js
+# ══════════════════════════════════════════════════════════════════════════════
+
+@frappe.whitelist()
+def get_credit_position(customer, posting_date=None, invoice=None):
+    """Read-only credit position for the Sales Invoice form banner.
+
+    Same core, same rules, same verdict as validate_sales_invoice — call it with
+    the form's posting_date so the days check is measured from the same day the
+    save will measure it from.
+
+    `new_amount` is deliberately 0 here: the banner recomputes the amount verdict
+    client-side as the user types, so the grand_total keystrokes do not each cost
+    a server round trip. Everything the client needs for that is in the payload —
+    `checks_active` gates it, exactly as it gates the server's own amount check.
+    """
+    if not customer:
+        return {}
+
+    state = _credit_state(
+        customer,
+        as_of=posting_date,
+        new_amount=0,
+        exclude_invoice=invoice,
+    )
+
+    if not state["has_limits"]:
+        return {"has_limits": 0}
+
+    return state
