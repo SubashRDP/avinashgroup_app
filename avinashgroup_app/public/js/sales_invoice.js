@@ -118,10 +118,16 @@ async function fetch_uom_price(frm, row) {
 async function ensure_rate_from_item_price(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
     if (!row || !row.item_code || !row.uom || flt(row.rate)) return;
+    // Remember what we are pricing. A UOM change while the roundtrip below is in
+    // flight would otherwise land the OLD uom's rate on the NEW uom -- the row is
+    // re-read after the await, but re-reading only the rate cannot catch that.
+    const uom_at_start = row.uom;
+    const item_at_start = row.item_code;
     const direct = await fetch_uom_price(frm, row);
     // Re-read the row: the rate may have been filled while we were fetching.
     const fresh = locals[cdt] && locals[cdt][cdn];
-    if (direct && fresh && !flt(fresh.rate)) {
+    if (!fresh || fresh.uom !== uom_at_start || fresh.item_code !== item_at_start) return;
+    if (direct && !flt(fresh.rate)) {
         console.log(`[avinashgroup] rate fallback: ${fresh.item_code} / ${fresh.uom} -> ${direct}`);
         await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
         await frappe.model.set_value(cdt, cdn, "rate", direct);
@@ -133,11 +139,101 @@ async function ensure_rate_from_item_price(frm, cdt, cdn) {
 // get_item_details roundtrips), so a single delayed check can run too early —
 // while the doomed first rate is still on the row — and wrongly conclude all is
 // well. Check repeatedly instead; each pass is a no-op once a rate is set.
+const pending_rate_checks = {};
+
+// Drop any checks still queued for this row. Called when the row changes again
+// (the old queue is pricing a UOM that is no longer selected) and when the user
+// types a rate by hand -- a half-typed rate reads 0, and a timer firing up to
+// 5.5s later would overwrite what they are typing.
+function cancel_rate_checks(cdn) {
+    (pending_rate_checks[cdn] || []).forEach(clearTimeout);
+    pending_rate_checks[cdn] = [];
+}
+
 function schedule_rate_checks(frm, cdt, cdn) {
-    [800, 2000, 3500, 5500].forEach((ms) =>
+    cancel_rate_checks(cdn);
+    pending_rate_checks[cdn] = [800, 2000, 3500, 5500].map((ms) =>
         setTimeout(() => ensure_rate_from_item_price(frm, cdt, cdn), ms)
     );
 }
+
+
+// ---------------------------------------------------------------------------
+// get_item_details observer
+//
+// ERPNext's own item_code handler calls get_item_details internally; there is no
+// argument we can pass to influence it, so the response has to be observed. This
+// used to be done by replacing the global frappe.call per row and restoring it on
+// a 5s timer. That nested badly: two item changes inside the same window made the
+// second capture the first's WRAPPER as the "original", so restoring left the
+// global pointing at a dead function or dropped the newer interception entirely.
+// It also caught calls it never meant to -- including the uom handler's own
+// get_item_details -- and re-applied the item master's uom over the one the user
+// had just picked.
+//
+// Instead the wrapper is installed ONCE and does nothing unless the call it sees
+// belongs to a row that registered for it, matched on child_docname + item_code.
+// ---------------------------------------------------------------------------
+const pending_item_details = {};
+
+function register_item_details_interception(frm, cdt, cdn, item_code, wh_promise) {
+    pending_item_details[cdn] = { frm, cdt, cdn, item_code, wh_promise };
+    // Safety: a registration nothing ever consumes must not live forever.
+    setTimeout(() => {
+        const e = pending_item_details[cdn];
+        if (e && e.item_code === item_code) delete pending_item_details[cdn];
+    }, 5000);
+}
+
+function unregister_item_details_interception(cdn) {
+    delete pending_item_details[cdn];
+}
+
+(function install_item_details_observer() {
+    if (frappe.__avinashgroup_gid_observer) return;
+    frappe.__avinashgroup_gid_observer = true;
+
+    const _orig = frappe.call;
+    frappe.call = function (opts) {
+        const method = opts && opts.method;
+        if (method && method.includes("get_item_details")) {
+            const call_args = (opts.args && opts.args.args) || {};
+            const entry = pending_item_details[call_args.child_docname];
+            // Only the row that registered, and only while it is still on the same
+            // item. Anything else -- another row, a stale response, the uom
+            // handler's own call -- passes through untouched.
+            if (entry && entry.item_code === call_args.item_code) {
+                const _cb = opts.callback;
+                opts.callback = async function (r) {
+                    // Inject our warehouse if resolved, but NEVER let a failed
+                    // warehouse lookup abort ERPNext's callback -- that callback is
+                    // what applies uom, rate, description, conversion_factor, etc.
+                    let our_wh = "";
+                    try { our_wh = await entry.wh_promise; } catch (e) { our_wh = ""; }
+                    if (our_wh && r && r.message) r.message.warehouse = our_wh;
+                    _cb && _cb.apply(this, arguments);
+
+                    // Re-apply item-derived fields straight from the response, for
+                    // ERPNext builds whose transaction.js leaves the previous item's
+                    // values on the row. Rate is deliberately left to ERPNext's
+                    // price-list / pricing-rule flow.
+                    const live = locals[entry.cdt] && locals[entry.cdt][entry.cdn];
+                    if (r && r.message && live && live.item_code === entry.item_code) {
+                        const m = r.message;
+                        ["item_name", "description", "uom", "stock_uom", "conversion_factor",
+                         "income_account", "expense_account", "cost_center"].forEach((f) => {
+                            if (m[f] !== undefined && m[f] !== null && m[f] !== "") {
+                                frappe.model.set_value(entry.cdt, entry.cdn, f, m[f]);
+                            }
+                        });
+                    }
+                    unregister_item_details_interception(entry.cdn);
+                };
+            }
+        }
+        return _orig.apply(frappe, arguments);
+    };
+})();
 
 frappe.ui.form.on("Sales Invoice Item", {
     item_code: function(frm, cdt, cdn) {
@@ -152,11 +248,17 @@ frappe.ui.form.on("Sales Invoice Item", {
         // name / description follow the NEW item even on demo/older builds where the
         // core handler leaves the previous item's values behind. (Accounts still come
         // from the get_item_details interception below.)
+        const item_at_fetch = row.item_code;
         frappe.db.get_value("Item", row.item_code,
             ["sales_uom", "stock_uom", "item_name", "description"]).then(res => {
+                // The row can have moved on while this was in flight -- a different
+                // item picked, or a UOM chosen by hand. Writing the item default on
+                // top of either is a value changing with no user action, so bail.
+                const fresh = locals[cdt] && locals[cdt][cdn];
+                if (!fresh || fresh.item_code !== item_at_fetch) return;
                 const it = (res && res.message) || {};
                 const new_uom = it.sales_uom || it.stock_uom;
-                if (new_uom && new_uom !== row.uom) frappe.model.set_value(cdt, cdn, "uom", new_uom);
+                if (new_uom && !fresh.uom) frappe.model.set_value(cdt, cdn, "uom", new_uom);
                 if (it.item_name) frappe.model.set_value(cdt, cdn, "item_name", it.item_name);
                 if (it.description) frappe.model.set_value(cdt, cdn, "description", it.description);
             });
@@ -164,46 +266,11 @@ frappe.ui.form.on("Sales Invoice Item", {
         // Start fetching our warehouse immediately (runs in background)
         const wh_promise = _fetch_selling_wh(row.item_code, frm.doc.custom_branch);
 
-        // SYNCHRONOUSLY wrap frappe.call before any await.
-        // When ERPNext's item_code handler calls get_item_details, we intercept the
-        // response and inject our warehouse BEFORE ERPNext sets it on locals.
-        // This eliminates the race condition that setTimeout-based approaches had.
-        const _orig = frappe.call;
-        let _restored = false;
-        const _restore = () => { if (!_restored) { frappe.call = _orig; _restored = true; } };
-        frappe.call = function(opts) {
-            if (opts && opts.method && opts.method.includes('get_item_details')) {
-                const _cb = opts.callback;
-                opts.callback = async function(r) {
-                    // Inject our warehouse if resolved, but NEVER let a failed
-                    // warehouse lookup abort ERPNext's callback — that callback is
-                    // what applies uom, rate, description, conversion_factor, etc.
-                    // to the row. A rejected wh_promise here used to throw before
-                    // _cb ran, leaving all item fields unchanged on item change.
-                    let our_wh = '';
-                    try { our_wh = await wh_promise; } catch (e) { our_wh = ''; }
-                    if (our_wh && r && r.message) r.message.warehouse = our_wh;
-                    _cb && _cb.apply(this, arguments);
-                    // Force item-derived fields to refresh on EVERY item change, even on
-                    // servers whose ERPNext build doesn't blank/re-apply them (older
-                    // transaction.js leaves the previous item's UOM/accounts on the row).
-                    // We re-apply straight from the get_item_details response we just got.
-                    // Rate is intentionally left to ERPNext's price-list/pricing-rule flow.
-                    if (r && r.message) {
-                        const m = r.message;
-                        ["item_name", "description", "uom", "stock_uom", "conversion_factor",
-                         "income_account", "expense_account", "cost_center"].forEach(f => {
-                            if (m[f] !== undefined && m[f] !== null && m[f] !== "") {
-                                frappe.model.set_value(cdt, cdn, f, m[f]);
-                            }
-                        });
-                    }
-                    _restore();
-                };
-            }
-            return _orig.apply(frappe, arguments);
-        };
-        setTimeout(_restore, 5000); // safety: restore if get_item_details is never called
+        // Register this row's interception. The observer below picks it up when
+        // ERPNext's own item_code handler fires get_item_details -- we cannot pass
+        // anything through that call, so observing its response is the only hook.
+        register_item_details_interception(frm, cdt, cdn, row.item_code, wh_promise);
+        const _restore = () => unregister_item_details_interception(cdn);
 
         // Continue with VAT defaults and visibility (async, but wrapper is already in place)
         (async () => {
@@ -344,6 +411,8 @@ frappe.ui.form.on("Sales Invoice Item", {
         frm.refresh_field('items');
     },
     rate: function(frm, cdt, cdn) {
+        // A hand-entered rate wins over the Item Price fallback.
+        cancel_rate_checks(cdn);
         setTimeout(() => calculate_item_custom_total(frm, cdt, cdn), 300);
         frm.refresh_field('items');
     },
