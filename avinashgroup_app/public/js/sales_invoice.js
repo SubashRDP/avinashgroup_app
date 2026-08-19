@@ -98,27 +98,20 @@ function lock_posting_fields(frm) {
     }, 0);
 }
 
-// Direct Item Price lookup for the row's exact UOM. Fallback for servers where
-// the get_item_details pipeline returns/leaves 0 for per-UOM prices even though
-// a matching Item Price row exists.
+// Direct Item Price lookup for the row's exact UOM/company/item group.
+// Fallback for servers where the get_item_details pipeline returns/leaves 0
+// even though a matching Item Price row exists.
 async function fetch_uom_price(frm, row) {
     const res = await frappe.call({
-        method: "frappe.client.get_list",
+        method: "avinashgroup_app.custom_code.SalesInvoice.item_price_lookup.get_rate",
         args: {
-            doctype: "Item Price",
-            filters: {
-                item_code: row.item_code,
-                price_list: frm.doc.selling_price_list,
-                uom: row.uom,
-                selling: 1,
-            },
-            fields: ["price_list_rate"],
-            order_by: "valid_from desc",
-            limit_page_length: 1,
+            item_code: row.item_code,
+            price_list: frm.doc.selling_price_list,
+            uom: row.uom,
+            company: frm.doc.company,
         },
     });
-    const hit = res && res.message && res.message[0];
-    return hit ? flt(hit.price_list_rate) : 0;
+    return flt(res && res.message);
 }
 
 // If every earlier writer left the rate at 0 (or a near-zero rounding
