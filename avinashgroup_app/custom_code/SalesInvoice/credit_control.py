@@ -304,19 +304,32 @@ def _unpaid_after_advance(customer, advance, exclude_invoice=None):
     This is the same walk validate_sales_invoice used to do in Python, moved
     into SQL so no invoice rows cross the wire — a customer with thousands of
     open bills costs the same as one with three.
+
+    `gross_outstanding` is the pre-advance total over every unpaid bill. It is
+    what lets the caller work out how much advance is LEFT once the bills are
+    covered — the headroom a prepaid customer can still bill against.
     """
     row = frappe.db.sql("""
         SELECT
-            COUNT(*) AS unpaid_count,
-            IFNULL(SUM(CASE WHEN cum - outstanding_amount >= %(advance)s
-                            THEN outstanding_amount
-                            ELSE cum - %(advance)s END), 0) AS total_unpaid,
-            MIN(posting_date) AS oldest_date,
+            -- `cum > advance` is applied per-aggregate rather than as an outer
+            -- WHERE, so the same pass also yields gross_outstanding over ALL
+            -- unpaid rows. That gross figure is what tells us how much advance
+            -- is left over once the bills are covered.
+            IFNULL(SUM(CASE WHEN cum > %(advance)s THEN 1 ELSE 0 END), 0)
+                AS unpaid_count,
+            IFNULL(SUM(CASE WHEN cum > %(advance)s
+                            THEN CASE WHEN cum - outstanding_amount >= %(advance)s
+                                      THEN outstanding_amount
+                                      ELSE cum - %(advance)s END
+                            ELSE 0 END), 0) AS total_unpaid,
+            MIN(CASE WHEN cum > %(advance)s THEN posting_date END) AS oldest_date,
             -- Cheapest way to carry the oldest row's NAME out of an aggregate:
             -- posting_date renders fixed-width YYYY-MM-DD, so MIN over the
             -- concatenation orders by date then name, exactly like the window's
             -- ORDER BY. Constant memory, no second round trip.
-            MIN(CONCAT(posting_date, '|', name)) AS oldest_key
+            MIN(CASE WHEN cum > %(advance)s
+                     THEN CONCAT(posting_date, '|', name) END) AS oldest_key,
+            IFNULL(SUM(outstanding_amount), 0) AS gross_outstanding
         FROM (
             SELECT name, posting_date, outstanding_amount,
                    SUM(outstanding_amount) OVER (ORDER BY posting_date, name) AS cum
@@ -328,7 +341,6 @@ def _unpaid_after_advance(customer, advance, exclude_invoice=None):
               AND is_internal_customer = 0
               AND name != %(exclude)s
         ) unpaid
-        WHERE cum > %(advance)s
     """, {
         "customer": customer,
         "advance": advance,
@@ -342,6 +354,7 @@ def _unpaid_after_advance(customer, advance, exclude_invoice=None):
     return {
         "unpaid_count": int(row.unpaid_count or 0),
         "total_unpaid": flt(row.total_unpaid),
+        "gross_outstanding": flt(row.gross_outstanding),
         "oldest_date": row.oldest_date,
         "oldest_invoice": oldest_invoice,
     }
@@ -355,10 +368,18 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     because that is the order validate_sales_invoice throws in and only the
     first one to trip is ever seen by the user.
 
-    `checks_active` is 0 when the customer has no bill left uncovered by
-    advances. In that state validate_sales_invoice returns before reaching any
-    check, so NO limit can block the save — including the amount limit. The
-    banner has to honour that too, or it will warn about a save that succeeds.
+    The amount limit is headroom ON TOP of whatever advance the customer has
+    left after their bills are covered:
+
+        leftover_advance = max(0, advance - gross_outstanding)
+        exposure         = total_unpaid + je_debit - leftover_advance
+        available_credit = amount_limit - exposure
+        blocked when       exposure + new_amount > amount_limit
+
+    leftover_advance and total_unpaid are never both non-zero — if any bill is
+    uncovered then FIFO consumed the whole advance — so this collapses to plain
+    "outstanding + new invoice" whenever the customer actually owes money, and
+    only changes the prepaid case.
     """
     state = {
         "has_limits": 0,
@@ -373,7 +394,11 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "je_debit": 0.0,
         "unpaid_count": 0,
         "total_unpaid": 0.0,
+        "gross_outstanding": 0.0,
+        "leftover_advance": 0.0,
         "outstanding": 0.0,
+        "exposure": 0.0,
+        "available_credit": 0.0,
         "oldest_date": None,
         "oldest_invoice": None,
         "days_used": 0,
@@ -420,7 +445,14 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     if unpaid["oldest_date"]:
         days_used = (today - getdate(unpaid["oldest_date"])).days
 
+    # Advance the bills did not consume. FIFO leaves this at 0 whenever any
+    # bill is still uncovered, so it is only ever positive for a prepaid
+    # customer -- which is exactly the case the old early exit skipped.
+    leftover_advance = max(0.0, advance - unpaid["gross_outstanding"])
+
     outstanding = unpaid["total_unpaid"] + je_debit
+    exposure = outstanding - leftover_advance
+    available_credit = (amount_limit - exposure) if amount_limit else 0
 
     state.update({
         "advance": advance,
@@ -430,16 +462,22 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "je_debit": je_debit,
         "unpaid_count": unpaid["unpaid_count"],
         "total_unpaid": unpaid["total_unpaid"],
+        "gross_outstanding": unpaid["gross_outstanding"],
+        "leftover_advance": leftover_advance,
         "outstanding": outstanding,
+        "exposure": exposure,
+        "available_credit": available_credit,
         "oldest_date": str(unpaid["oldest_date"]) if unpaid["oldest_date"] else None,
         "oldest_invoice": unpaid["oldest_invoice"],
         "days_used": days_used,
-        "remaining_amount": (amount_limit - outstanding) if amount_limit else 0,
+        "remaining_amount": available_credit,
     })
 
-    # Nothing uncovered means no check runs at all — see the docstring.
-    if not unpaid["unpaid_count"]:
-        return state
+    # The amount check now runs even with nothing uncovered -- a prepaid
+    # customer has finite headroom (their leftover advance plus the limit) and
+    # used to be able to bill any figure at all. The count and days checks stay
+    # quiet on their own at zero unpaid: 0 >= bill_limit is false, and
+    # days_used is 0 with no oldest bill.
     state["checks_active"] = 1
 
     # CHECK 1 — bill count. Note `>=`: a limit of 5 blocks the 5th unpaid bill.
@@ -475,7 +513,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     # CHECK 3 — total exposure, the only check that includes the new invoice.
     # Note `>`: landing exactly on the limit is allowed.
     if amount_limit:
-        final_exposure = unpaid["total_unpaid"] + je_debit + new_amount
+        final_exposure = exposure + new_amount
         if final_exposure > amount_limit:
             state["amount_exceeded"] = 1
             state["blocked_by"] = "amount"
@@ -485,12 +523,13 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
                 f"Customer: <b>{customer}</b><br>"
                 f"Current Outstanding: <b>{_money(unpaid['total_unpaid'], currency)}</b><br>"
                 f"Journal Debit Adjustment: <b>{_money(je_debit, currency)}</b><br>"
-                f"New Invoice Amount: <b>{_money(new_amount, currency)}</b><br>"
-                f"Total Exposure: <b>{_money(final_exposure, currency)}</b><br>"
-                f"Maximum Credit Limit: <b>{_money(amount_limit, currency)}</b><br>"
-                f"Available Credit: "
-                f"<b>{_money(amount_limit - unpaid['total_unpaid'] - je_debit, currency)}</b><br><br>"
-                f"<i>Advance applied: {_money(advance, currency)}</i>"
+                f"Advance Left Over: <b>{_money(leftover_advance, currency)}</b><br>"
+                f"Amount Limit: <b>{_money(amount_limit, currency)}</b><br>"
+                f"Available Credit: <b>{_money(available_credit, currency)}</b><br>"
+                f"New Invoice Amount: <b>{_money(new_amount, currency)}</b><br><br>"
+                f"<i>This invoice needs {_money(new_amount - available_credit, currency)} "
+                f"more credit than the customer has. Advance applied: "
+                f"{_money(advance, currency)}.</i>"
             )
 
     return state
