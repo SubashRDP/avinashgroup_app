@@ -899,35 +899,40 @@ function render_credit_banner(frm) {
     if (!p || !p.has_limits || frm.doc.docstatus !== 0) return;
 
     const rs = v => format_currency(v, frm.doc.currency || "NPR");
-    const projected = flt(p.outstanding) + flt(frm.doc.grand_total);
+
+    // p.exposure is outstanding MINUS whatever advance the bills did not use,
+    // so it goes negative for a prepaid customer. The limit is headroom on top
+    // of that, which is why available_credit can exceed the limit itself.
+    const projected = flt(p.exposure) + flt(frm.doc.grand_total);
 
     // The server evaluates count and days on its own; only the amount check
     // depends on grand_total, so that one is recomputed here as the user types
-    // rather than costing a round trip per keystroke. `checks_active` gates it
-    // exactly as it gates the server: when advances cover every bill,
-    // validate_sales_invoice returns before any check and nothing can block.
-    const amount_exceeded =
-        p.checks_active && p.amount_limit && projected > flt(p.amount_limit);
+    // rather than costing a round trip per keystroke. `>` matches the server —
+    // landing exactly on the limit is allowed.
+    const amount_exceeded = p.amount_limit && projected > flt(p.amount_limit);
 
     // Same precedence the server throws in — count, then days, then amount.
     let blocked_by = null;
-    if (p.checks_active) {
-        if (p.count_exceeded) blocked_by = "count";
-        else if (p.days_exceeded) blocked_by = "days";
-        else if (amount_exceeded) blocked_by = "amount";
-    }
+    if (p.count_exceeded) blocked_by = "count";
+    else if (p.days_exceeded) blocked_by = "days";
+    else if (amount_exceeded) blocked_by = "amount";
 
     const mark = which => (blocked_by === which ? "\u26d4 " : "");
     const parts = [];
 
     if (p.amount_limit) {
         const remaining = flt(p.amount_limit) - projected;
+        // Spell out where the headroom comes from when the customer is prepaid,
+        // so the figure on screen can be tied back to their ledger balance.
+        const basis = flt(p.leftover_advance)
+            ? ` (advance left ${rs(p.leftover_advance)} + limit ${rs(p.amount_limit)})`
+            : ` &nbsp;|&nbsp; <b>Amount Limit:</b> ${rs(p.amount_limit)}`;
         parts.push(
             mark("amount") +
             (remaining >= 0
                 ? `<b>Remaining ${rs(remaining)}</b>`
                 : `<b>Exceeded by ${rs(-remaining)}</b>`) +
-            ` &nbsp;|&nbsp; <b>Amount Limit:</b> ${rs(p.amount_limit)}`
+            basis
         );
     }
 
@@ -958,12 +963,6 @@ function render_credit_banner(frm) {
     // that one stays.
     if (flt(p.je_debit)) {
         parts.push(`<b>Journal debit:</b> ${rs(p.je_debit)} <i>(added to exposure)</i>`);
-    }
-
-    // Advances covering every bill is the state in which the server enforces
-    // nothing at all. Say so, instead of showing limits that cannot fire.
-    if (!p.checks_active) {
-        parts.push("<i>no bills outstanding \u2014 limits not applied</i>");
     }
 
     const colour = blocked_by ? "var(--red-500)" : "var(--gray-600)";

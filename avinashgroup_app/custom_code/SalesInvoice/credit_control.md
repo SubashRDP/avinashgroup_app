@@ -191,13 +191,38 @@ All three throw; the first one to trip wins and the rest never run.
 | --- | --- | --- |
 | 1 | `len(unpaid_list) >= bill_limit` | Advance-adjusted count, not raw invoice count |
 | 2 | `(today - oldest_date).days >= days_limit` | `today` = **`doc.posting_date`**, not the wall clock |
-| 3 | `total_unpaid + je_debit + grand_total > amount_limit` | The only check that includes the invoice being saved |
+| 3 | `exposure + grand_total > amount_limit`, where `exposure = total_unpaid + je_debit - leftover_advance` | The only check that includes the invoice being saved |
 
 Two boundary details that surprise people:
 
 - Checks 1 and 2 use `>=`, so a `custom_bill_count` of **5 permits only 4** unpaid
   bills — the 5th save is blocked. Likewise a 30-day limit blocks on day 30, not 31.
 - Check 3 uses `>`, so landing exactly on the amount limit is allowed.
+
+### 6a. What the amount limit means
+
+The limit is headroom **on top of** whatever advance the customer has left once
+their bills are covered:
+
+```
+leftover_advance = max(0, advance - gross_outstanding)
+exposure         = total_unpaid + je_debit - leftover_advance
+available_credit = amount_limit - exposure
+blocked when       exposure + new_invoice_amount > amount_limit
+```
+
+`leftover_advance` and `total_unpaid` are never both non-zero — if any bill is
+uncovered then FIFO consumed the whole advance — so this collapses to plain
+"outstanding + new invoice" whenever the customer actually owes money.
+
+This matches what Party Ledger Summary shows. A customer with 1,00,000 credit
+against 20,048.70 of bills closes at **79,951.30 CR**; with a limit of 1 their
+available credit is 79,952.30.
+
+Before 2026-08-20 this check was unreachable for any prepaid customer — two early
+exits returned first, so a ₨1 limit accepted an invoice of ₨10 crore. Removing
+them only affects that case; the count and days checks stay quiet at zero unpaid
+because `0 >= bill_limit` is false and `days_used` is 0.
 
 ### Worked example
 
@@ -240,14 +265,6 @@ another. If limits are meant to be per company, all three checks are wrong today
 the top of `validate_sales_invoice`. A customer holding an unreconciled credit note
 shows a higher exposure than they actually have.
 
-**The amount limit does not apply to a clean ledger.** `checks_active` is 0 when
-advances cover every bill, and `validate_sales_invoice` returns before any check —
-so a customer with nothing outstanding can be issued an invoice of any size, whatever
-`custom_amount_limit` says. The banner mirrors this and says *"no bills outstanding —
-limits not applied"* rather than warning about a save that will succeed. This is
-current behaviour, kept deliberately; changing it would start blocking invoices that
-pass today.
-
 **Cross-account journal netting.** `je_net` sums `debit - credit` across all three
 account names at once, so a debit on *Advance From Customer* nets against a credit on
 *Debtors A/c - Domestic* for the same customer. Correct if those debits are advances
@@ -264,6 +281,9 @@ being applied; wrong if they are separate receivables. Unconfirmed with accounts
   `posting_date` and the form refetches when the date changes.
 - ~~`₹` hardcoded~~ — messages use `fmt_money` with the document currency.
 - ~~The math exists twice~~ — both entry points call `_credit_state`.
+- ~~The amount limit does not apply to a clean ledger~~ — fixed 2026-08-20. The two
+  early exits that returned before the amount check are gone; a prepaid customer's
+  headroom is now `leftover_advance + amount_limit`. See §6a.
 
 ## 8. Performance
 
