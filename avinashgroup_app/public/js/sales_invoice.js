@@ -70,6 +70,9 @@ frappe.ui.form.on("Sales Invoice", {
     posting_date: function(frm) {
         // Run after core handlers so our custom due date wins
         setTimeout(() => set_due_date_from_customer(frm), 0);
+        // The days check is measured from posting_date on the server, so the
+        // banner has to be re-read whenever the date moves.
+        fetch_credit_banner(frm);
     },
 
     // ERPNext's stock_controller re-opens posting_date/posting_time whenever
@@ -878,7 +881,12 @@ function fetch_credit_banner(frm) {
     }
     frappe.call({
         method: "avinashgroup_app.custom_code.SalesInvoice.credit_control.get_credit_position",
-        args: { customer: frm.doc.customer },
+        args: {
+            customer: frm.doc.customer,
+            // Same day the server will age the oldest bill from.
+            posting_date: frm.doc.posting_date,
+            invoice: frm.doc.name
+        },
         callback: function(r) {
             frm.__credit_position = r.message || null;
             render_credit_banner(frm);
@@ -892,11 +900,30 @@ function render_credit_banner(frm) {
 
     const rs = v => format_currency(v, frm.doc.currency || "NPR");
     const projected = flt(p.outstanding) + flt(frm.doc.grand_total);
+
+    // The server evaluates count and days on its own; only the amount check
+    // depends on grand_total, so that one is recomputed here as the user types
+    // rather than costing a round trip per keystroke. `checks_active` gates it
+    // exactly as it gates the server: when advances cover every bill,
+    // validate_sales_invoice returns before any check and nothing can block.
+    const amount_exceeded =
+        p.checks_active && p.amount_limit && projected > flt(p.amount_limit);
+
+    // Same precedence the server throws in — count, then days, then amount.
+    let blocked_by = null;
+    if (p.checks_active) {
+        if (p.count_exceeded) blocked_by = "count";
+        else if (p.days_exceeded) blocked_by = "days";
+        else if (amount_exceeded) blocked_by = "amount";
+    }
+
+    const mark = which => (blocked_by === which ? "\u26d4 " : "");
     const parts = [];
 
     if (p.amount_limit) {
         const remaining = flt(p.amount_limit) - projected;
         parts.push(
+            mark("amount") +
             (remaining >= 0
                 ? `<b>Remaining ${rs(remaining)}</b>`
                 : `<b>Exceeded by ${rs(-remaining)}</b>`) +
@@ -905,20 +932,46 @@ function render_credit_banner(frm) {
     }
 
     if (p.bill_limit) {
-        parts.push(`<b>Bills:</b> ${p.unpaid_count} unpaid of ${p.bill_limit} allowed`);
+        // The server throws on >=, so the last permitted bill count is one
+        // below the limit. Say that, rather than "N of N allowed" reading fine
+        // at the exact point the save fails.
+        parts.push(
+            mark("count") +
+            `<b>Bills:</b> ${p.unpaid_count} unpaid, blocked at ${p.bill_limit}`
+        );
     }
 
     if (p.days_limit) {
         parts.push(
-            p.oldest_date
-                ? `<b>Days:</b> oldest bill ${p.days_used} days (limit ${p.days_limit})`
-                : `<b>Days:</b> no unpaid bills (limit ${p.days_limit})`
+            mark("days") +
+            (p.oldest_date
+                ? `<b>Days:</b> oldest bill ${p.days_used}, blocked at ${p.days_limit}`
+                : `<b>Days:</b> no unpaid bills (blocked at ${p.days_limit})`)
         );
     }
 
+    // The advance pool is deliberately NOT shown. It is already netted off the
+    // outstanding figure, so printing it again just widens the strip with a
+    // number the user cannot act on. get_credit_position still returns the
+    // pe_advance / je_credit / je_debit breakdown for anyone who needs it.
+    // A journal DEBIT is different — it adds to what the customer owes — so
+    // that one stays.
+    if (flt(p.je_debit)) {
+        parts.push(`<b>Journal debit:</b> ${rs(p.je_debit)} <i>(added to exposure)</i>`);
+    }
+
+    // Advances covering every bill is the state in which the server enforces
+    // nothing at all. Say so, instead of showing limits that cannot fire.
+    if (!p.checks_active) {
+        parts.push("<i>no bills outstanding \u2014 limits not applied</i>");
+    }
+
+    const colour = blocked_by ? "var(--red-500)" : "var(--gray-600)";
+    const label = blocked_by ? "Credit blocked" : "Credit";
+
     frm.dashboard.set_headline(
-        `<div style="padding:6px 10px;background:var(--bg-light-gray);border-left:4px solid var(--gray-600);color:var(--text-color);border-radius:3px;">
-            <b>Credit : </b> &nbsp; ${parts.join(" &nbsp;|&nbsp; ")}
+        `<div style="padding:6px 10px;background:var(--bg-light-gray);border-left:4px solid ${colour};color:var(--text-color);border-radius:3px;">
+            <b>${label} : </b> &nbsp; ${parts.join(" &nbsp;|&nbsp; ")}
         </div>`
     );
 }
