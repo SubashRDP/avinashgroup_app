@@ -330,10 +330,25 @@ frappe.ui.form.on("Sales Invoice Item", {
                         "cost_center",
                     ];
 
+                    // ERPNext returns 0 for these when no Pricing Rule exists (this site
+                    // has none) — it never copies Item Price's price_list_rate into rate
+                    // itself. The 800ms/2000ms/... schedule_rate_checks fallback below is
+                    // what actually fills a correct rate from Item Price. Without this
+                    // guard, a UOM change landing after that fallback already ran would
+                    // blindly reapply the server's 0 and stomp the correct rate back out.
+                    const zero_means_no_data = new Set([
+                        "price_list_rate", "base_price_list_rate", "rate", "base_rate",
+                        "amount", "base_amount", "net_rate", "net_amount", "stock_uom_rate",
+                    ]);
+
                     for (const fieldname of fields_to_update) {
-                        if (response.message[fieldname] !== undefined && response.message[fieldname] !== null) {
-                            await frappe.model.set_value(cdt, cdn, fieldname, response.message[fieldname]);
+                        const incoming = response.message[fieldname];
+                        if (incoming === undefined || incoming === null) continue;
+                        const current = (locals[cdt] && locals[cdt][cdn]) || {};
+                        if (zero_means_no_data.has(fieldname) && !flt(incoming) && flt(current[fieldname])) {
+                            continue;
                         }
+                        await frappe.model.set_value(cdt, cdn, fieldname, incoming);
                     }
                 }
 
