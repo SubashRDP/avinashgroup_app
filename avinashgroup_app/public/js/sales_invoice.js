@@ -99,8 +99,8 @@ function lock_posting_fields(frm) {
 }
 
 // Direct Item Price lookup for the row's exact UOM/company/item group.
-// Fallback for servers where the get_item_details pipeline returns/leaves 0
-// even though a matching Item Price row exists.
+// This is the single source of truth for the selling rate — core ERPNext's
+// own get_item_details rate is never trusted (see apply_backend_rate below).
 async function fetch_uom_price(frm, row) {
     const res = await frappe.call({
         method: "avinashgroup_app.custom_code.SalesInvoice.item_price_lookup.get_rate",
@@ -114,37 +114,25 @@ async function fetch_uom_price(frm, row) {
     return flt(res && res.message);
 }
 
-// If every earlier writer left the rate at 0 (or a near-zero rounding
-// artifact, e.g. -0.00115, from a core pricing computation gone wrong) but an
-// Item Price exists for the row's exact UOM, apply it. Never touches a real
-// (non-negligible) rate.
-const RATE_NEGLIGIBLE_THRESHOLD = 0.01;
-function is_rate_negligible(rate) {
-    return Math.abs(flt(rate)) <= RATE_NEGLIGIBLE_THRESHOLD;
-}
-
-async function ensure_rate_from_item_price(frm, cdt, cdn) {
+// Fetch the rate from Item Price and apply it immediately (no delay, no
+// polling, no "is it close enough to 0" guess). Previously this ran on a
+// setTimeout schedule (800ms/2000ms/3500ms/5500ms) to work around core
+// ERPNext leaving `rate` at 0 after get_item_details on some servers — but
+// that gap let core's own `rate` handler read the transient 0 and auto-set
+// discount_percentage to 100 before our fix landed, which then produced a
+// negative rate from a rounding overshoot on save. Applying the backend rate
+// synchronously, right after the item/UOM settle, closes that window instead
+// of racing to clean it up after the fact.
+async function apply_backend_rate(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
     if (!row || !row.item_code || !row.uom) return;
     const direct = await fetch_uom_price(frm, row);
-    // Re-read the row: the rate may have been filled while we were fetching.
+    // Re-read the row: item/uom may have changed again while we were fetching.
     const fresh = locals[cdt] && locals[cdt][cdn];
-    if (fresh && fresh.item_code && fresh.uom) {
-        console.log(`[avinashgroup] rate fallback: ${fresh.item_code} / ${fresh.uom} -> ${direct}`);
-        await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
-        await frappe.model.set_value(cdt, cdn, "rate", direct);
-        frm.refresh_field("items");
-    }
-}
-
-// The zero-writer can land at unpredictable times (slow servers stretch the
-// get_item_details roundtrips), so a single delayed check can run too early —
-// while the doomed first rate is still on the row — and wrongly conclude all is
-// well. Check repeatedly instead; each pass is a no-op once a rate is set.
-function schedule_rate_checks(frm, cdt, cdn) {
-    [800, 2000, 3500, 5500].forEach((ms) =>
-        setTimeout(() => ensure_rate_from_item_price(frm, cdt, cdn), ms)
-    );
+    if (!fresh || fresh.item_code !== row.item_code || fresh.uom !== row.uom) return;
+    await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
+    await frappe.model.set_value(cdt, cdn, "rate", direct);
+    frm.refresh_field("items");
 }
 
 frappe.ui.form.on("Sales Invoice Item", {
@@ -237,7 +225,7 @@ frappe.ui.form.on("Sales Invoice Item", {
                 frappe.after_ajax(() => toggle_vat_fields(frm, cdt, cdn));
                 frm.refresh_field('items');
 
-                schedule_rate_checks(frm, cdt, cdn);
+                await apply_backend_rate(frm, cdt, cdn);
             } catch(e) {
                 console.error("Error in item_code handler:", e);
                 _restore();
@@ -340,7 +328,7 @@ frappe.ui.form.on("Sales Invoice Item", {
                 console.error("Error in Sales Invoice UOM handler:", e);
             }
             // Outside the try: must run even when the roundtrip above failed.
-            schedule_rate_checks(frm, cdt, cdn);
+            await apply_backend_rate(frm, cdt, cdn);
         }, 0);
     },
 
