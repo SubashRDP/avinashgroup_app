@@ -25,6 +25,7 @@ frappe.ui.form.on("Sales Invoice", {
         }
         update_total_amount_preview(frm);
         restore_return_vat(frm);
+        fetch_credit_banner(frm);
     },
 
     before_save: function(frm) {
@@ -59,6 +60,13 @@ frappe.ui.form.on("Sales Invoice", {
     customer: function(frm) {
         // Run after core handlers so our custom due date wins
         setTimeout(() => set_due_date_from_customer(frm), 0);
+        fetch_credit_banner(frm);
+    },
+
+    grand_total: function(frm) {
+        // Re-render from the cached position so the "with this invoice"
+        // figures track the amount being entered — no server call.
+        render_credit_banner(frm);
     },
 
     posting_date: function(frm) {
@@ -741,4 +749,62 @@ async function force_all_si_warehouses(frm) {
     }
     
     frm.refresh_field('items');
+}
+
+// ── Credit position banner ─────────────────────────────────────────────────────
+// Persistent strip under the title bar showing the customer's credit limits vs
+// current usage, visible while the invoice is being filled. Display only — the
+// server-side validate hook is what actually enforces the limits.
+
+function fetch_credit_banner(frm) {
+    if (!frm.doc.customer || frm.doc.docstatus !== 0 || frm.doc.is_return) {
+        frm.__credit_position = null;
+        frm.dashboard.clear_headline();
+        return;
+    }
+    frappe.call({
+        method: "avinashgroup_app.custom_code.SalesInvoice.credit_control.get_credit_position",
+        args: { customer: frm.doc.customer },
+        callback: function(r) {
+            frm.__credit_position = r.message || null;
+            render_credit_banner(frm);
+        }
+    });
+}
+
+function render_credit_banner(frm) {
+    const p = frm.__credit_position;
+    if (!p || !p.has_limits || frm.doc.docstatus !== 0) return;
+
+    const rs = v => format_currency(v, frm.doc.currency || "NPR");
+    const projected = flt(p.outstanding) + flt(frm.doc.grand_total);
+    const parts = [];
+
+    if (p.amount_limit) {
+        const remaining = flt(p.amount_limit) - projected;
+        parts.push(
+            (remaining >= 0
+                ? `<b>Remaining ${rs(remaining)}</b>`
+                : `<b>Exceeded by ${rs(-remaining)}</b>`) +
+            ` &nbsp;|&nbsp; <b>Amount Limit:</b> ${rs(p.amount_limit)}`
+        );
+    }
+
+    if (p.bill_limit) {
+        parts.push(`<b>Bills:</b> ${p.unpaid_count} unpaid of ${p.bill_limit} allowed`);
+    }
+
+    if (p.days_limit) {
+        parts.push(
+            p.oldest_date
+                ? `<b>Days:</b> oldest bill ${p.days_used} days (limit ${p.days_limit})`
+                : `<b>Days:</b> no unpaid bills (limit ${p.days_limit})`
+        );
+    }
+
+    frm.dashboard.set_headline(
+        `<div style="padding:6px 10px;background:var(--bg-light-gray);border-left:4px solid var(--gray-600);color:var(--text-color);border-radius:3px;">
+            <b>Credit : </b> &nbsp; ${parts.join(" &nbsp;|&nbsp; ")}
+        </div>`
+    );
 }
