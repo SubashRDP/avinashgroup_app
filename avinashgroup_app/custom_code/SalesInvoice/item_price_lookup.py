@@ -1,3 +1,4 @@
+'''
 import frappe
 from frappe.utils import flt
 
@@ -67,3 +68,4 @@ def get_rate(item_code, price_list, uom=None, company=None):
 		return _find_item_price(build_filters(stock_uom))
 
 	return 0.0
+'''

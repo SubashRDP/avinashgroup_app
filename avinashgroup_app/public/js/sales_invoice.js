@@ -1,5 +1,3 @@
-
-
 frappe.ui.form.on("Sales Invoice", {
 
     onload: function(frm) {
@@ -98,42 +96,181 @@ function lock_posting_fields(frm) {
     }, 0);
 }
 
-// Direct Item Price lookup for the row's exact UOM/company/item group.
-// This is the single source of truth for the selling rate — core ERPNext's
-// own get_item_details rate is never trusted (see apply_backend_rate below).
+// Direct Item Price lookup for the row's exact UOM. Fallback for servers where
+// the get_item_details pipeline returns/leaves 0 for per-UOM prices even though
+// a matching Item Price row exists.
 async function fetch_uom_price(frm, row) {
     const res = await frappe.call({
-        method: "avinashgroup_app.custom_code.SalesInvoice.item_price_lookup.get_rate",
+        method: "frappe.client.get_list",
         args: {
-            item_code: row.item_code,
-            price_list: frm.doc.selling_price_list,
-            uom: row.uom,
-            company: frm.doc.company,
+            doctype: "Item Price",
+            filters: {
+                item_code: row.item_code,
+                price_list: frm.doc.selling_price_list,
+                uom: row.uom,
+                selling: 1,
+            },
+            fields: ["price_list_rate"],
+            order_by: "valid_from desc",
+            limit_page_length: 1,
         },
     });
-    return flt(res && res.message);
+    const hit = res && res.message && res.message[0];
+    return hit ? flt(hit.price_list_rate) : 0;
 }
 
-// Fetch the rate from Item Price and apply it immediately (no delay, no
-// polling, no "is it close enough to 0" guess). Previously this ran on a
-// setTimeout schedule (800ms/2000ms/3500ms/5500ms) to work around core
-// ERPNext leaving `rate` at 0 after get_item_details on some servers — but
-// that gap let core's own `rate` handler read the transient 0 and auto-set
-// discount_percentage to 100 before our fix landed, which then produced a
-// negative rate from a rounding overshoot on save. Applying the backend rate
-// synchronously, right after the item/UOM settle, closes that window instead
-// of racing to clean it up after the fact.
-async function apply_backend_rate(frm, cdt, cdn) {
-    const row = locals[cdt] && locals[cdt][cdn];
-    if (!row || !row.item_code || !row.uom) return;
-    const direct = await fetch_uom_price(frm, row);
-    // Re-read the row: item/uom may have changed again while we were fetching.
-    const fresh = locals[cdt] && locals[cdt][cdn];
-    if (!fresh || fresh.item_code !== row.item_code || fresh.uom !== row.uom) return;
-    await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
-    await frappe.model.set_value(cdt, cdn, "rate", direct);
-    frm.refresh_field("items");
+// If every earlier writer left the rate at 0 (or a near-zero rounding
+// artifact, e.g. -0.00115, from a core pricing computation gone wrong) but an
+// Item Price exists for the row's exact UOM, apply it. Never touches a real
+// (non-negligible) rate.
+const RATE_NEGLIGIBLE_THRESHOLD = 0.01;
+function is_rate_negligible(rate) {
+    return Math.abs(flt(rate)) <= RATE_NEGLIGIBLE_THRESHOLD;
 }
+
+// A 100% discount nobody entered. ERPNext's `rate` handler (transaction.js:31-33)
+// creates it whenever a rate of 0 is written against a populated price_list_rate:
+//     discount_percentage = (1 - 0/price_list_rate) * 100 = 100
+//     discount_amount     = price_list_rate - 0
+// It then STICKS — apply_pricing_rule_on_item (taxes_and_totals.js:30) re-subtracts
+// discount_amount on every later recompute, so correcting `rate` alone is undone on
+// the next pass. The discount has to be cleared, not the rate.
+//
+// discount_amount carries no precision override (currency precision 2) while
+// price_list_rate is precision 5, which is why the leftover shows up as a tiny
+// residue like 0.00124 (= 1774.22124 - 1774.22) rather than a clean zero.
+async function clear_bogus_full_discount(frm, cdt, cdn) {
+    const row = locals[cdt] && locals[cdt][cdn];
+    if (!row || row.is_free_item) return false;
+    const plr = flt(row.price_list_rate);
+    if (!plr || !is_rate_negligible(row.rate)) return false;
+    // Compare at the coarser of the two precisions — discount_amount is stored
+    // rounded to 2 while price_list_rate keeps 5.
+    const full_discount = flt(row.discount_percentage) >= 99.999
+        || Math.abs(flt(row.discount_amount) - plr) < 0.01;
+    if (!full_discount) return false;
+    console.log(`[avinashgroup] clearing unintended 100% discount: ${row.item_code} / ${row.uom} -> ${plr}`);
+    await frappe.model.set_value(cdt, cdn, "discount_percentage", 0);
+    await frappe.model.set_value(cdt, cdn, "discount_amount", 0);
+    await frappe.model.set_value(cdt, cdn, "rate", plr);
+    frm.refresh_field("items");
+    return true;
+}
+
+async function ensure_rate_from_item_price(frm, cdt, cdn) {
+    const row = locals[cdt] && locals[cdt][cdn];
+    if (!row || !row.item_code || !row.uom || !is_rate_negligible(row.rate)) return;
+    // The row already knows its price — it is only being cancelled out by a
+    // phantom discount. Fix that in place; no Item Price lookup needed.
+    if (await clear_bogus_full_discount(frm, cdt, cdn)) return;
+    const direct = await fetch_uom_price(frm, row);
+    // Re-read the row: the rate may have been filled while we were fetching.
+    const fresh = locals[cdt] && locals[cdt][cdn];
+    if (direct && fresh && is_rate_negligible(fresh.rate)) {
+        console.log(`[avinashgroup] rate fallback: ${fresh.item_code} / ${fresh.uom} -> ${direct}`);
+        await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
+        await frappe.model.set_value(cdt, cdn, "rate", direct);
+        frm.refresh_field("items");
+    }
+}
+
+// The zero-writer can land at unpredictable times (slow servers stretch the
+// get_item_details roundtrips), so a single delayed check can run too early —
+// while the doomed first rate is still on the row — and wrongly conclude all is
+// well. Check repeatedly instead; each pass is a no-op once a rate is set.
+function schedule_rate_checks(frm, cdt, cdn) {
+    [800, 2000, 3500, 5500].forEach((ms) =>
+        setTimeout(() => ensure_rate_from_item_price(frm, cdt, cdn), ms)
+    );
+}
+
+// Rows waiting on their own get_item_details response, keyed by child docname.
+// The warehouse lookup resolves INTO the entry, so the interceptor never awaits.
+const pending_item_details = {};
+
+function register_item_details_interception(cdn, item_code, wh_promise) {
+    const entry = { item_code: item_code, warehouse: "", promise: wh_promise };
+    pending_item_details[cdn] = entry;
+    wh_promise.then((wh) => { entry.warehouse = wh || ""; }).catch(() => { entry.warehouse = ""; });
+    // Never leak an entry if get_item_details is never called for this row.
+    setTimeout(() => { if (pending_item_details[cdn] === entry) delete pending_item_details[cdn]; }, 15000);
+    return entry;
+}
+
+// Installed ONCE, globally. The previous version wrapped frappe.call afresh on every
+// item change and restored it from inside a callback. That had three failure modes,
+// all of them observed live on ng-group:
+//
+//   1. `method.includes('get_item_details')` matches the MODULE path, so it also caught
+//      apply_price_list, get_conversion_factor, get_bin_details and 8 other methods in
+//      erpnext.stock.get_item_details — 11 in total, where 1 was intended.
+//   2. ERPNext's own callback was held behind `await wh_promise`. On a slow warehouse
+//      lookup the grid re-rendered first, the child row left `locals`, and ERPNext's
+//      price loop died with "can't access property price_list_rate, e is undefined"
+//      (taxes_and_totals.js:10). That left the row holding a price_list_rate with no
+//      rate — the state that makes ERPNext record a 100% discount.
+//   3. Restoring from inside that callback fired on whichever of the 11 methods returned
+//      first, so two overlapping item changes could reinstate a DEAD wrapper as the
+//      global frappe.call — still closed over an old row's cdt/cdn, and writing one
+//      row's response onto another. That is where conversion_factor=1 on a 14.2 KG row
+//      came from.
+//
+// Matching the exact method plus child_docname removes all three: installed once, never
+// removed, never delays a callback, and can only touch the row the response was for.
+(function install_item_details_observer() {
+    if (frappe.__avinashgroup_si_item_details_observer) return;
+    frappe.__avinashgroup_si_item_details_observer = true;
+
+    const _orig_call = frappe.call;
+    frappe.call = function (opts) {
+        const method = opts && opts.method;
+        if (method === "erpnext.stock.get_item_details.get_item_details") {
+            const call_args = (opts.args && opts.args.args) || {};
+            const cdn = call_args.child_docname;
+            const cdt = call_args.child_doctype;
+            const entry = pending_item_details[cdn];
+            if (entry && entry.item_code === call_args.item_code) {
+                const _cb = opts.callback;
+                opts.callback = function (r) {
+                    delete pending_item_details[cdn];
+                    if (entry.warehouse && r && r.message) r.message.warehouse = entry.warehouse;
+                    // Synchronous: ERPNext's callback must run in the tick it would have
+                    // run in without us. Delaying it is what let the row disappear.
+                    _cb && _cb.apply(this, arguments);
+
+                    const m = r && r.message;
+                    const fresh = locals[cdt] && locals[cdt][cdn];
+                    // Only this row, and only if it still holds the item we fetched for.
+                    if (m && fresh && fresh.item_code === entry.item_code) {
+                        // Re-apply item-derived fields for older ERPNext builds that leave
+                        // the previous item's values on the row. rate / price_list_rate are
+                        // deliberately absent: those are ERPNext's to compute, and writing
+                        // the server's hardcoded 0 into rate is what produced the 100%
+                        // discount (see clear_bogus_full_discount above).
+                        ["item_name", "description", "uom", "stock_uom", "conversion_factor",
+                         "income_account", "expense_account", "cost_center"].forEach((f) => {
+                            if (m[f] !== undefined && m[f] !== null && m[f] !== "") {
+                                frappe.model.set_value(cdt, cdn, f, m[f]);
+                            }
+                        });
+                    }
+
+                    // Warehouse still in flight: apply it when it lands rather than
+                    // holding the callback for it.
+                    if (!entry.warehouse) {
+                        entry.promise.then((wh) => {
+                            const row = locals[cdt] && locals[cdt][cdn];
+                            if (wh && row && row.item_code === entry.item_code) {
+                                frappe.model.set_value(cdt, cdn, "warehouse", wh);
+                            }
+                        }).catch(() => {});
+                    }
+                };
+            }
+        }
+        return _orig_call.apply(frappe, arguments);
+    };
+})();
 
 frappe.ui.form.on("Sales Invoice Item", {
     item_code: function(frm, cdt, cdn) {
@@ -160,46 +297,10 @@ frappe.ui.form.on("Sales Invoice Item", {
         // Start fetching our warehouse immediately (runs in background)
         const wh_promise = _fetch_selling_wh(row.item_code, frm.doc.custom_branch);
 
-        // SYNCHRONOUSLY wrap frappe.call before any await.
-        // When ERPNext's item_code handler calls get_item_details, we intercept the
-        // response and inject our warehouse BEFORE ERPNext sets it on locals.
-        // This eliminates the race condition that setTimeout-based approaches had.
-        const _orig = frappe.call;
-        let _restored = false;
-        const _restore = () => { if (!_restored) { frappe.call = _orig; _restored = true; } };
-        frappe.call = function(opts) {
-            if (opts && opts.method && opts.method.includes('get_item_details')) {
-                const _cb = opts.callback;
-                opts.callback = async function(r) {
-                    // Inject our warehouse if resolved, but NEVER let a failed
-                    // warehouse lookup abort ERPNext's callback — that callback is
-                    // what applies uom, rate, description, conversion_factor, etc.
-                    // to the row. A rejected wh_promise here used to throw before
-                    // _cb ran, leaving all item fields unchanged on item change.
-                    let our_wh = '';
-                    try { our_wh = await wh_promise; } catch (e) { our_wh = ''; }
-                    if (our_wh && r && r.message) r.message.warehouse = our_wh;
-                    _cb && _cb.apply(this, arguments);
-                    // Force item-derived fields to refresh on EVERY item change, even on
-                    // servers whose ERPNext build doesn't blank/re-apply them (older
-                    // transaction.js leaves the previous item's UOM/accounts on the row).
-                    // We re-apply straight from the get_item_details response we just got.
-                    // Rate is intentionally left to ERPNext's price-list/pricing-rule flow.
-                    if (r && r.message) {
-                        const m = r.message;
-                        ["item_name", "description", "uom", "stock_uom", "conversion_factor",
-                         "income_account", "expense_account", "cost_center"].forEach(f => {
-                            if (m[f] !== undefined && m[f] !== null && m[f] !== "") {
-                                frappe.model.set_value(cdt, cdn, f, m[f]);
-                            }
-                        });
-                    }
-                    _restore();
-                };
-            }
-            return _orig.apply(frappe, arguments);
-        };
-        setTimeout(_restore, 5000); // safety: restore if get_item_details is never called
+        // Register this row so the global observer (above) can inject our warehouse
+        // into ERPNext's get_item_details response for THIS row only. No wrapping,
+        // no restoring, no awaiting inside a callback.
+        register_item_details_interception(cdn, row.item_code, wh_promise);
 
         // Continue with VAT defaults and visibility (async, but wrapper is already in place)
         (async () => {
@@ -213,7 +314,7 @@ frappe.ui.form.on("Sales Invoice Item", {
                     }
                 });
 
-                if (!item_check.message) { _restore(); return; }
+                if (!item_check.message) { delete pending_item_details[cdn]; return; }
 
                 // Fill the VAT mode only when the row has none — never overwrite
                 // a value the user picked (VAT 0% / Amount must survive item changes).
@@ -225,10 +326,10 @@ frappe.ui.form.on("Sales Invoice Item", {
                 frappe.after_ajax(() => toggle_vat_fields(frm, cdt, cdn));
                 frm.refresh_field('items');
 
-                await apply_backend_rate(frm, cdt, cdn);
+                schedule_rate_checks(frm, cdt, cdn);
             } catch(e) {
                 console.error("Error in item_code handler:", e);
-                _restore();
+                delete pending_item_details[cdn];
             }
         })();
     },
@@ -305,20 +406,47 @@ frappe.ui.form.on("Sales Invoice Item", {
                         "conversion_factor",
                         "price_list_rate",
                         "base_price_list_rate",
+                        "rate",
+                        "base_rate",
                         "amount",
                         "base_amount",
+                        "net_rate",
+                        "net_amount",
                         "stock_qty",
+                        "stock_uom_rate",
                         "income_account",
                         "expense_account",
                         "cost_center",
                     ];
 
-                    // ERPNext can still calculate the row preview values, but the
-                    // actual selling rate is owned by our Item Price lookup only.
+                    // A zero in any of these is always "no data", never a real value.
+                    // get_item_details seeds them to 0.0 in get_basic_details and only
+                    // ever overwrites `rate` for Material Request (get_item_details.py:133),
+                    // so on a Sales Invoice the server's `rate` is unconditionally 0.
+                    //
+                    // Writing that 0 is what produced the 100% discount: ERPNext's own
+                    // `rate` handler (transaction.js:31-33) reads rate=0 against a populated
+                    // price_list_rate and concludes the whole price is a discount —
+                    //     discount_percentage = (1 - 0/1774.22124) * 100 = 100
+                    //     discount_amount     = 1774.22124 - 0 = 1774.22124
+                    // discount_amount has no precision override (currency precision 2 from
+                    // number_format) while rate/price_list_rate are precision 5, so
+                    // round_floats_in leaves 1774.22 against 1774.22124 and the next
+                    // apply_pricing_rule_on_item yields rate = 0.00124.
+                    //
+                    // The earlier guard only skipped a zero when the row ALREADY held a
+                    // non-zero rate, so a row whose price_list_rate trigger had not landed
+                    // yet still took the 0. Skip zeros outright and let ERPNext derive
+                    // rate/amount from price_list_rate, which is its job.
+                    const zero_means_no_data = new Set([
+                        "price_list_rate", "base_price_list_rate", "rate", "base_rate",
+                        "amount", "base_amount", "net_rate", "net_amount", "stock_uom_rate",
+                    ]);
 
                     for (const fieldname of fields_to_update) {
                         const incoming = response.message[fieldname];
                         if (incoming === undefined || incoming === null) continue;
+                        if (zero_means_no_data.has(fieldname) && !flt(incoming)) continue;
                         await frappe.model.set_value(cdt, cdn, fieldname, incoming);
                     }
                 }
@@ -328,7 +456,7 @@ frappe.ui.form.on("Sales Invoice Item", {
                 console.error("Error in Sales Invoice UOM handler:", e);
             }
             // Outside the try: must run even when the roundtrip above failed.
-            await apply_backend_rate(frm, cdt, cdn);
+            schedule_rate_checks(frm, cdt, cdn);
         }, 0);
     },
 
