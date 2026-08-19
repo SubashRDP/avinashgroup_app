@@ -125,11 +125,11 @@ function is_rate_negligible(rate) {
 
 async function ensure_rate_from_item_price(frm, cdt, cdn) {
     const row = locals[cdt] && locals[cdt][cdn];
-    if (!row || !row.item_code || !row.uom || !is_rate_negligible(row.rate)) return;
+    if (!row || !row.item_code || !row.uom) return;
     const direct = await fetch_uom_price(frm, row);
     // Re-read the row: the rate may have been filled while we were fetching.
     const fresh = locals[cdt] && locals[cdt][cdn];
-    if (direct && fresh && is_rate_negligible(fresh.rate)) {
+    if (fresh && fresh.item_code && fresh.uom) {
         console.log(`[avinashgroup] rate fallback: ${fresh.item_code} / ${fresh.uom} -> ${direct}`);
         await frappe.model.set_value(cdt, cdn, "price_list_rate", direct);
         await frappe.model.set_value(cdt, cdn, "rate", direct);
@@ -317,37 +317,20 @@ frappe.ui.form.on("Sales Invoice Item", {
                         "conversion_factor",
                         "price_list_rate",
                         "base_price_list_rate",
-                        "rate",
-                        "base_rate",
                         "amount",
                         "base_amount",
-                        "net_rate",
-                        "net_amount",
                         "stock_qty",
-                        "stock_uom_rate",
                         "income_account",
                         "expense_account",
                         "cost_center",
                     ];
 
-                    // ERPNext returns 0 for these when no Pricing Rule exists (this site
-                    // has none) — it never copies Item Price's price_list_rate into rate
-                    // itself. The 800ms/2000ms/... schedule_rate_checks fallback below is
-                    // what actually fills a correct rate from Item Price. Without this
-                    // guard, a UOM change landing after that fallback already ran would
-                    // blindly reapply the server's 0 and stomp the correct rate back out.
-                    const zero_means_no_data = new Set([
-                        "price_list_rate", "base_price_list_rate", "rate", "base_rate",
-                        "amount", "base_amount", "net_rate", "net_amount", "stock_uom_rate",
-                    ]);
+                    // ERPNext can still calculate the row preview values, but the
+                    // actual selling rate is owned by our Item Price lookup only.
 
                     for (const fieldname of fields_to_update) {
                         const incoming = response.message[fieldname];
                         if (incoming === undefined || incoming === null) continue;
-                        const current = (locals[cdt] && locals[cdt][cdn]) || {};
-                        if (zero_means_no_data.has(fieldname) && !flt(incoming) && flt(current[fieldname])) {
-                            continue;
-                        }
                         await frappe.model.set_value(cdt, cdn, fieldname, incoming);
                     }
                 }
