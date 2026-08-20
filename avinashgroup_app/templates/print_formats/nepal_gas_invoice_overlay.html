@@ -79,10 +79,22 @@ defaults.
 {%- set branch_name = (frappe.db.get_value('Branch', doc.custom_branch, 'branch') or '') if doc.get('custom_branch') else '' -%}
 {#- Balaju is Head Office, not a branch — labeled differently on the header line -#}
 {%- set branch_label = 'Main Office' if branch_name == 'Balaju' else 'Branch' -%}
-{#- customer address: address line 1 only (not the full multi-line address_display) -#}
-{%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '') or doc.get('custom_citytown') or '' -%}
+{#- customer address: address line 1 only (not the full multi-line address_display).
+    Falls back through: invoice's own customer_address -> custom_citytown ->
+    the customer master's primary address, for invoices that never had an
+    address linked at entry time. -#}
+{%- set customer_primary_address = frappe.db.get_value('Customer', doc.customer, 'customer_primary_address') if doc.customer else '' -%}
+{%- set address = (frappe.db.get_value('Address', doc.customer_address, 'address_line1') if doc.customer_address else '')
+    or doc.get('custom_citytown')
+    or (frappe.db.get_value('Address', customer_primary_address, 'address_line1') if customer_primary_address else '')
+    or '' -%}
 {%- set address = address | striptags -%}
 {%- set address = address.strip().rstrip(', ') if address else '' -%}
+{#- customer phone: Customer.mobile_no (fetched from its Primary Contact), falling back to the invoice's own contact_mobile -#}
+{%- set customer_mobile = frappe.db.get_value('Customer', doc.customer, 'mobile_no') or doc.get('contact_mobile') or '' -%}
+{%- set customer_mobile = customer_mobile | striptags -%}
+{%- set customer_mobile = customer_mobile.strip() if customer_mobile else '' -%}
+{%- set address = address ~ (', ' ~ customer_mobile if customer_mobile else '') -%}
 {%- set is_cn = doc.is_return -%}
 {#- Ref Invoice No. shows the original the way that invoice prints its own
     number: its branch name, falling back to the docname. -#}
