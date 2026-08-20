@@ -441,6 +441,10 @@ fixtures = [
                     # but not Sales Invoice). Read by
                     # salesinvoice_taxes.allow_zero_qty_rows.
                     "Selling Settings-custom_allow_zero_qty_in_sales_invoice",
+                    # Customer's own Mobile Number, independent of
+                    # mobile_no (which only fills in via a Primary Contact).
+                    # Read by the Nepal Gas Invoice Overlay print format.
+                    "Customer-custom_mobile_number",
                 ],
             ]
         },
