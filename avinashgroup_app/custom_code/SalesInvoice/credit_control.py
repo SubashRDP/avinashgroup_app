@@ -561,6 +561,43 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     return state
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ENFORCEMENT — hooks.py doc_events["Sales Invoice"]["validate"]
+# ══════════════════════════════════════════════════════════════════════════════
+
+def validate_sales_invoice(doc, method):
+    """Block the invoice if the customer has breached a credit limit.
+
+    Runs last on the `validate` chain: the amount check reads doc.grand_total,
+    which is only final once the tax pipeline ahead of it has built the taxes
+    table. Moving this earlier would test a pre-VAT figure.
+    """
+    # Cancelled documents enforce nothing, and a credit note reduces exposure
+    # rather than consuming it.
+    if doc.docstatus == 2 or doc.is_return:
+        return
+
+    # A zero-value invoice consumes no credit.
+    new_invoice_amount = flt(doc.grand_total)
+    if new_invoice_amount <= 0:
+        return
+
+    state = _credit_state(
+        doc.customer,
+        as_of=doc.posting_date,
+        new_amount=new_invoice_amount,
+        exclude_invoice=doc.name,
+        currency=doc.currency,
+    )
+
+    if state["blocked_by"]:
+        frappe.throw(state["message"], title=state["title"])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BANNER FEED — public/js/sales_invoice.js
+# ══════════════════════════════════════════════════════════════════════════════
+
 @frappe.whitelist()
 def get_credit_position(customer, posting_date=None, invoice=None):
     """Read-only credit position for the Sales Invoice form banner.
