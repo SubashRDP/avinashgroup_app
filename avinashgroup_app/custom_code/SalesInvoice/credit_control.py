@@ -245,6 +245,8 @@ def _advance_pool(customer):
     the number is unauditable from the form.
 
         pe_advance  unallocated Payment Entry receipts
+        cn_credit   unsettled credit notes — goods returned but not yet set
+                    against a bill; real credit the customer holds
         je_credit   journal net credit — deposits posted by voucher, folded
                     into the pool and retiring bills FIFO exactly like a PE
         je_debit    journal net debit — extra debt with no invoice behind it,
@@ -263,6 +265,23 @@ def _advance_pool(customer):
           AND docstatus = 1
           AND unallocated_amount > 0.01
           AND payment_type IN ('Receive', 'Internal Transfer')
+    """, customer)[0][0])
+
+    # Credit notes the customer still holds. A return carries a NEGATIVE
+    # outstanding_amount until it is set against a bill, so `< -0.01` picks up
+    # exactly the unsettled ones — a fully applied credit note sits at 0 and is
+    # ignored. These were previously invisible: the unpaid query filters
+    # `is_return = 0`, so a customer who had returned goods was told they owed
+    # more than they did. Verified against the Party Ledger for NGI-CUS-00739 —
+    # advance pool + credit notes reproduces the closing balance to the paisa.
+    cn_credit = flt(frappe.db.sql("""
+        SELECT IFNULL(-SUM(outstanding_amount), 0)
+        FROM `tabSales Invoice`
+        WHERE customer = %s
+          AND docstatus = 1
+          AND is_return = 1
+          AND is_internal_customer = 0
+          AND outstanding_amount < -0.01
     """, customer)[0][0])
 
     # Unlinked Journal Entry rows only. A row referenced against an invoice has
@@ -286,10 +305,14 @@ def _advance_pool(customer):
 
     return {
         "pe_advance": advance,
+        "cn_credit": cn_credit,
         "je_net": je_net,
         "je_credit": je_credit,
         "je_debit": je_debit,
-        "advance": advance + je_credit,
+        # Credit notes join the pool rather than only offsetting the amount
+        # check, so they retire bills FIFO like any other credit -- which means
+        # they relieve the bill-count check too, not just the money.
+        "advance": advance + cn_credit + je_credit,
     }
 
 
@@ -389,6 +412,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "title": None,
         "advance": 0.0,
         "pe_advance": 0.0,
+        "cn_credit": 0.0,
         "je_credit": 0.0,
         "je_net": 0.0,
         "je_debit": 0.0,
@@ -461,6 +485,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     state.update({
         "advance": advance,
         "pe_advance": pool["pe_advance"],
+        "cn_credit": pool["cn_credit"],
         "je_credit": pool["je_credit"],
         "je_net": pool["je_net"],
         "je_debit": je_debit,
