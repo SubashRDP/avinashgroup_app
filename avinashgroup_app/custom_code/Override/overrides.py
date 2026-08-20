@@ -37,6 +37,7 @@ def _restore_warehouse(doc, link_field, source_doctype):
 # ─── Selling Hierarchy ────────────────────────────────────────────────────────
 
 class SalesOrder(ERPNextSalesOrder):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -47,6 +48,7 @@ class SalesOrder(ERPNextSalesOrder):
 
 
 class DeliveryNote(ERPNextDeliveryNote):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -75,6 +77,7 @@ class CustomSalesInvoice(ERPNextSalesInvoice):
 		set_audit_fields(self)
 		super().before_submit()
 
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -116,6 +119,7 @@ class CustomSalesInvoice(ERPNextSalesInvoice):
 # ─── Buying Hierarchy ─────────────────────────────────────────────────────────
 
 class RequestforQuotation(ERPNextRequestforQuotation):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -132,6 +136,7 @@ class RequestforQuotation(ERPNextRequestforQuotation):
 
 
 class SupplierQuotation(ERPNextSupplierQuotation):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -148,6 +153,7 @@ class SupplierQuotation(ERPNextSupplierQuotation):
 
 
 class PurchaseOrder(ERPNextPurchaseOrder):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -173,6 +179,7 @@ class PurchaseOrder(ERPNextPurchaseOrder):
 
 
 class PurchaseReceipt(ERPNextPurchaseReceipt):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
@@ -183,6 +190,7 @@ class PurchaseReceipt(ERPNextPurchaseReceipt):
 
 
 class PurchaseInvoice(ERPNextPurchaseInvoice):
+	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
 		if not for_validate:
