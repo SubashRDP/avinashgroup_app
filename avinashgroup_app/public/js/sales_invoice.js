@@ -891,7 +891,18 @@ function render_credit_banner(frm) {
     else if (p.days_exceeded) blocked_by = "days";
     else if (amount_exceeded) blocked_by = "amount";
 
-    const mark = which => (blocked_by === which ? "\u26d4 " : "");
+    // Mark EVERY breached limit, not just the blocking one. The server throws
+    // on the first by precedence, but a customer can be over two limits at
+    // once and the banner should say so — showing days unmarked while it is
+    // 2,000 days overdue, just because the bill count tripped first, is how
+    // this was wrong before.
+    const over = {
+        count: !!p.count_exceeded,
+        days: !!p.days_exceeded,
+        amount: !!amount_exceeded
+    };
+    const mark = which =>
+        over[which] ? (blocked_by === which ? "\u26d4 " : "\u26a0\ufe0f ") : "";
     const parts = [];
 
     if (p.amount_limit) {

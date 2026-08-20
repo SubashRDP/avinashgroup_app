@@ -480,9 +480,28 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     # days_used is 0 with no oldest bill.
     state["checks_active"] = 1
 
-    # CHECK 1 — bill count. Note `>=`: a limit of 5 blocks the 5th unpaid bill.
-    if bill_limit and unpaid["unpaid_count"] >= bill_limit:
-        state["count_exceeded"] = 1
+    # ------------------------------------------------------------------
+    # Evaluate all three limits INDEPENDENTLY. The server throws on only the
+    # first one by precedence, but the banner has to be able to mark every
+    # limit that is actually breached — returning early here left
+    # days_exceeded at 0 for a customer who was 2,000 days overdue simply
+    # because the bill count tripped first, so the banner drew the days
+    # segment unmarked, as though it were fine.
+    # ------------------------------------------------------------------
+    # Count and days use `>=`: a limit of 5 blocks the 5th unpaid bill.
+    count_exceeded = bool(bill_limit and unpaid["unpaid_count"] >= bill_limit)
+    days_exceeded = bool(days_limit and days_used >= days_limit)
+    # Amount uses `>`: landing exactly on the limit is allowed.
+    final_exposure = exposure + new_amount
+    amount_exceeded = bool(amount_limit and final_exposure > amount_limit)
+
+    state["count_exceeded"] = int(count_exceeded)
+    state["days_exceeded"] = int(days_exceeded)
+    state["amount_exceeded"] = int(amount_exceeded)
+
+    # Precedence — count, then days, then amount. This is the order
+    # validate_sales_invoice throws in, so only the first is ever seen.
+    if count_exceeded:
         state["blocked_by"] = "count"
         state["title"] = "Credit Limit Exceeded"
         state["message"] = (
@@ -493,11 +512,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
             f"Maximum Allowed: <b>{int(bill_limit)}</b><br><br>"
             f"<i>Please clear existing invoices before creating new ones.</i>"
         )
-        return state
-
-    # CHECK 2 — age of the oldest bill advances did not cover. Also `>=`.
-    if days_limit and days_used >= days_limit:
-        state["days_exceeded"] = 1
+    elif days_exceeded:
         state["blocked_by"] = "days"
         state["title"] = "Credit Days Exceeded"
         state["message"] = (
@@ -508,69 +523,25 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
             f"Maximum Days Allowed: <b>{int(days_limit)}</b><br><br>"
             f"<i>Payment is overdue. Please collect payment before new sales.</i>"
         )
-        return state
-
-    # CHECK 3 — total exposure, the only check that includes the new invoice.
-    # Note `>`: landing exactly on the limit is allowed.
-    if amount_limit:
-        final_exposure = exposure + new_amount
-        if final_exposure > amount_limit:
-            state["amount_exceeded"] = 1
-            state["blocked_by"] = "amount"
-            state["title"] = "Credit Amount Exceeded"
-            state["message"] = (
-                f"<b>Credit Limit: Amount Exceeded</b><br><br>"
-                f"Customer: <b>{customer}</b><br>"
-                f"Current Outstanding: <b>{_money(unpaid['total_unpaid'], currency)}</b><br>"
-                f"Journal Debit Adjustment: <b>{_money(je_debit, currency)}</b><br>"
-                f"Advance Left Over: <b>{_money(leftover_advance, currency)}</b><br>"
-                f"Amount Limit: <b>{_money(amount_limit, currency)}</b><br>"
-                f"Available Credit: <b>{_money(available_credit, currency)}</b><br>"
-                f"New Invoice Amount: <b>{_money(new_amount, currency)}</b><br><br>"
-                f"<i>This invoice needs {_money(new_amount - available_credit, currency)} "
-                f"more credit than the customer has. Advance applied: "
-                f"{_money(advance, currency)}.</i>"
-            )
+    elif amount_exceeded:
+        state["blocked_by"] = "amount"
+        state["title"] = "Credit Amount Exceeded"
+        state["message"] = (
+            f"<b>Credit Limit: Amount Exceeded</b><br><br>"
+            f"Customer: <b>{customer}</b><br>"
+            f"Current Outstanding: <b>{_money(unpaid['total_unpaid'], currency)}</b><br>"
+            f"Journal Debit Adjustment: <b>{_money(je_debit, currency)}</b><br>"
+            f"Advance Left Over: <b>{_money(leftover_advance, currency)}</b><br>"
+            f"Amount Limit: <b>{_money(amount_limit, currency)}</b><br>"
+            f"Available Credit: <b>{_money(available_credit, currency)}</b><br>"
+            f"New Invoice Amount: <b>{_money(new_amount, currency)}</b><br><br>"
+            f"<i>This invoice needs {_money(new_amount - available_credit, currency)} "
+            f"more credit than the customer has. Advance applied: "
+            f"{_money(advance, currency)}.</i>"
+        )
 
     return state
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ENFORCEMENT — hooks.py doc_events["Sales Invoice"]["validate"]
-# ══════════════════════════════════════════════════════════════════════════════
-
-def validate_sales_invoice(doc, method):
-    """Block the invoice if the customer has breached a credit limit.
-
-    Runs last on the `validate` chain: the amount check reads doc.grand_total,
-    which is only final once the tax pipeline ahead of it has built the taxes
-    table. Moving this earlier would test a pre-VAT figure.
-    """
-    # Cancelled documents enforce nothing, and a credit note reduces exposure
-    # rather than consuming it.
-    if doc.docstatus == 2 or doc.is_return:
-        return
-
-    # A zero-value invoice consumes no credit.
-    new_invoice_amount = flt(doc.grand_total)
-    if new_invoice_amount <= 0:
-        return
-
-    state = _credit_state(
-        doc.customer,
-        as_of=doc.posting_date,
-        new_amount=new_invoice_amount,
-        exclude_invoice=doc.name,
-        currency=doc.currency,
-    )
-
-    if state["blocked_by"]:
-        frappe.throw(state["message"], title=state["title"])
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# BANNER FEED — public/js/sales_invoice.js
-# ══════════════════════════════════════════════════════════════════════════════
 
 @frappe.whitelist()
 def get_credit_position(customer, posting_date=None, invoice=None):

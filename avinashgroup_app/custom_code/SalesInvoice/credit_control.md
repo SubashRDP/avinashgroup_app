@@ -185,7 +185,13 @@ Three values come out and drive the three checks:
 
 ## 6. The three checks
 
-All three throw; the first one to trip wins and the rest never run.
+All three are **evaluated independently** — `count_exceeded`, `days_exceeded` and
+`amount_exceeded` are each set on their own merits. Only `blocked_by` applies
+precedence (count → days → amount), because the server throws once and the user
+sees a single message. The banner uses the individual flags so it can mark every
+breached limit: a customer 2,000 days overdue *and* over the bill count is shown
+as over both, rather than the days segment reading as healthy because the count
+tripped first.
 
 | # | Trips when | Notes |
 | --- | --- | --- |
