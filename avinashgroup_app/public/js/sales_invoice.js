@@ -51,6 +51,15 @@ frappe.ui.form.on("Sales Invoice", {
         setTimeout(() => sync_custom_totals(frm), 500);
     },
 
+    // Ticking "Include Payment (POS)" fills the default payment row via an
+    // async server round-trip (core's set_pos_data -> set_missing_values),
+    // so its own set_default_payment() runs after this handler and overwrites
+    // the row with the pre-VAT grand_total. Re-sync once that round-trip has
+    // settled, same delay convention as taxes_and_charges above.
+    is_pos: function(frm) {
+        setTimeout(() => sync_custom_totals(frm), 500);
+    },
+
     total_advance: function(frm) {
         sync_custom_totals(frm);
     },
@@ -709,6 +718,31 @@ function update_total_amount_preview(frm) {
 
     frm.doc.custom_expected_grand_total = flt(total, 5);
     frm.refresh_field('custom_expected_grand_total');
+
+    sync_pos_payment_amount(frm);
+}
+
+/**
+ * Core's set_default_payment() (taxes_and_totals.js) fills the default POS
+ * payment row's Amount from grand_total, but VAT/excise taxes are only
+ * appended server-side on save (see sync_custom_totals above) — before save,
+ * grand_total is understated by the tax amount. Re-point the default row at
+ * custom_expected_grand_total, which already includes VAT+excise, so the
+ * displayed payment Amount matches what the invoice will actually total.
+ */
+function sync_pos_payment_amount(frm) {
+    if (!frm.doc.is_pos) return;
+
+    const default_row = (frm.doc.payments || []).find(function(p) { return p.default; });
+    if (!default_row) return;
+
+    const amount = flt(frm.doc.custom_expected_grand_total, precision('amount', default_row));
+    if (flt(default_row.amount, precision('amount', default_row)) === amount) return;
+
+    frappe.model.set_value(default_row.doctype, default_row.name, 'amount', amount);
+    if (frm.cscript && frm.cscript.calculate_paid_amount) {
+        frm.cscript.calculate_paid_amount();
+    }
 }
 
 /**
@@ -870,6 +904,10 @@ function fetch_credit_banner(frm) {
 
 function render_credit_banner(frm) {
     const p = frm.__credit_position;
+    // Clear before rendering so overlapping fetch_credit_banner calls
+    // (customer + posting_date can both fire it in quick succession) never
+    // stack multiple banner divs on top of each other.
+    frm.dashboard.clear_headline();
     if (!p || !p.has_limits || frm.doc.docstatus !== 0) return;
 
     const rs = v => format_currency(v, frm.doc.currency || "NPR");

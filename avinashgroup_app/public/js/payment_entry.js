@@ -14,6 +14,19 @@ frappe.ui.form.on("Payment Entry", {
 		if (payment_type && frm.doc.payment_type !== payment_type) {
 			frm.set_value("payment_type", payment_type);
 		}
+		// Bank Customers Receipt rarely carries a real cheque number at entry
+		// time -- default it to "1" so the field isn't left blank. Track that
+		// we set it ourselves so switching away can clear it again without
+		// touching a cheque number the user actually typed in.
+		if (frm.doc.custom_p_type === "Bank Customers Receipt") {
+			if (!frm.doc.reference_no) {
+				frm.set_value("reference_no", "1");
+				frm.__auto_reference_no = true;
+			}
+		} else if (frm.__auto_reference_no) {
+			frm.set_value("reference_no", "");
+			frm.__auto_reference_no = false;
+		}
 	},
 	setup_party_query: function (frm) {
 		if (!frm.fields_dict.party) return;

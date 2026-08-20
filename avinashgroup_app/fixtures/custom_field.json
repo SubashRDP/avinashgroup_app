@@ -12,5 +12,16 @@
   "no_copy": 1,
   "options": "\nCheque Bounced",
   "read_only": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Customer",
+  "fieldname": "custom_mobile_number",
+  "fieldtype": "Data",
+  "insert_after": "customer_name",
+  "label": "Mobile Number",
+  "module": "Avinash Group App",
+  "name": "Customer-custom_mobile_number",
+  "options": "Phone"
  }
 ]

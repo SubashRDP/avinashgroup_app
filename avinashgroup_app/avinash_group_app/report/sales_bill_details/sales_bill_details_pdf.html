@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  color: #222;
+  line-height: 1.7;
+  margin: 0;
+  padding: {% if is_html_view %}20px{% else %}0{% endif %};
+  background: {% if is_html_view %}#d0d0d0{% else %}white{% endif %};
+}
+
+{% if is_html_view %}
+.page {
+  background: #fff;
+  box-sizing: border-box;
+  width:       {% if orientation == 'Portrait' %}210mm{% else %}297mm{% endif %};
+  min-height:  {% if orientation == 'Portrait' %}297mm{% else %}210mm{% endif %};
+  margin: 0 auto 12px;
+  padding: 10mm 10mm 15mm 10mm;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+@media print {
+  @page { size: {% if orientation == 'Portrait' %}210mm 297mm{% else %}297mm 210mm{% endif %}; margin: 0; }
+  body { background: white; padding: 0; }
+  .page { box-shadow: none; margin: 0 auto; }
+}
+{% endif %}
+
+.sr-company-center {
+  text-align: center;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+.sr-title-l { font-size: 13px; font-weight: bold; margin-bottom: 1px; }
+
+.sr-filters {
+  font-size: 11px;
+  color: #333;
+  margin-bottom: 4px;
+}
+.sr-filter-item  { display: inline-block; margin-right: 18px; }
+.sr-filter-label { font-weight: bold; }
+
+.sr-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
+
+table { width: 100%; border-collapse: collapse; }
+tr    { page-break-inside: avoid; }
+
+thead th {
+  background: #f0f2f5;
+  color: #222;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 6px 8px;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+thead th.r { text-align: right; }
+thead th.l { text-align: left; }
+
+td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
+.nowrap { white-space: nowrap; }
+
+.tr-total td {
+  font-weight: bold;
+  border-top: 1.5px solid #aaa;
+  border-bottom: 1.5px solid #aaa;
+}
+
+.r { text-align: right; }
+.l { text-align: left; }
+
+.sr-footer {
+  font-size: 10px;
+  color: #aaa;
+  text-align: right;
+  margin-top: 10px;
+}
+
+.sr-pageno { text-align: center; font-size: 10px; color: #555; margin-top: 8px; }
+.brk { page-break-after: always; }
+
+{% if orientation == 'Portrait' %}
+body                 { font-size: 8.5px !important; line-height: 1.35 !important; }
+
+.sr-company-center   { font-size: 12px !important; margin-bottom: 1px !important; }
+.sr-title-l          { font-size: 11px !important; margin-bottom: 1px !important; }
+
+.sr-filters          { font-size: 8.5px !important; margin-bottom: 2px !important; }
+.sr-filter-item      { margin-right: 8px !important; }
+.sr-divider          { margin: 2px 0 3px !important; }
+
+table                { table-layout: auto !important; }
+thead th             { font-size: 8.5px !important; padding: 3px 3px !important; line-height: 1.25 !important; }
+td                   { padding: 2px 3px !important; line-height: 1.3 !important; }
+td, th               { word-break: break-word !important; overflow-wrap: anywhere !important; }
+
+.tr-total td         { padding: 3px 3px !important; }
+
+.sr-footer           { font-size: 7.5px !important; margin-top: 4px !important; }
+{% endif %}
+</style>
+</head>
+<body>
+{% set companies = filters.get('company') %}
+{% if companies is string %}{% set companies = [companies] %}{% endif %}
+{% set company_label = companies | join(', ') if companies else '' %}
+
+{% set customer_label = customer_display or '' %}
+
+{# sc = selected columns list; empty means show all #}
+{% set show_all = not sc %}
+{% set s_miti             = show_all or 'miti'             in sc %}
+{% set s_invoice_number   = show_all or 'invoice_number'   in sc %}
+{% set s_customer         = show_all or 'customer'         in sc %}
+{% set s_total_qty        = show_all or 'total_qty'        in sc %}
+{% set s_amount_before_vat = show_all or 'amount_before_vat' in sc %}
+{% set s_vat_amount       = show_all or 'vat_amount'       in sc %}
+{% set s_grand_total      = show_all or 'grand_total'      in sc %}
+{% set s_vehicle_number   = show_all or 'vehicle_number'   in sc %}
+{% set s_price_list       = show_all or 'price_list'       in sc %}
+{% set s_customer_address = show_all or 'customer_address' in sc %}
+{% set s_customer_phone   = show_all or 'customer_phone'   in sc %}
+
+{# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ──
+   row_limit = rows per physical page. If rows overflow the page break, lower it;
+   portrait fits more rows because the font is smaller. #}
+{% set row_limit = 55 if orientation == 'Portrait' else 20 %}
+{% set total_rows = data | length %}
+{% set total_pages = (total_rows // row_limit) + (1 if total_rows % row_limit > 0 else 0) %}
+{% if total_pages < 1 %}{% set total_pages = 1 %}{% endif %}
+
+{% for page_num in range(total_pages) %}
+{% set start = page_num * row_limit %}
+{% set page_rows = data[start : start + row_limit] %}
+
+<div class="sheet{% if not loop.last %} brk{% endif %}{% if is_html_view %} page{% endif %}">
+
+<table>
+  <thead>
+    <tr>
+      <td colspan="10" style="padding:4px 0 0 0; border:none;">
+        <div style="text-align:right; font-size:13px; font-weight:bold;">Sales Bill Details</div>
+        {% if company_label %}
+        <div class="sr-company-center">{{ company_label }}</div>
+        {% endif %}
+        {% if customer_label %}
+        <div class="sr-title-l">Customer: {{ customer_label }}</div>
+        {% endif %}
+        <div class="sr-filters">
+          <span class="sr-filter-item">
+            <span class="sr-filter-label">From:</span>
+            {{ frappe.utils.formatdate(filters.get('from_date')) }}
+            &nbsp;<span class="sr-filter-label">To:</span>
+            {{ frappe.utils.formatdate(filters.get('to_date')) }}
+          </span>
+          {% if filters.get('invoice_no') %}
+          <span class="sr-filter-item">
+            <span class="sr-filter-label">Invoice No:</span> {{ filters.get('invoice_no') }}
+          </span>
+          {% endif %}
+        </div>
+        <hr class="sr-divider" style="margin-bottom:0;">
+      </td>
+    </tr>
+    <tr>
+      {% if s_miti %}<th class="l">Miti</th>{% endif %}
+      {% if s_invoice_number %}<th class="l">Invoice Number</th>{% endif %}
+      {% if s_customer %}<th class="l">Customer</th>{% endif %}
+      {% if s_total_qty %}<th class="r">Total Quantity</th>{% endif %}
+      {% if s_amount_before_vat %}<th class="r">Amount before VAT</th>{% endif %}
+      {% if s_vat_amount %}<th class="r">VAT Amount</th>{% endif %}
+      {% if s_grand_total %}<th class="r">Grand Total</th>{% endif %}
+      {% if s_vehicle_number %}<th class="l">Vehicle Number</th>{% endif %}
+      {% if s_price_list %}<th class="l">Price List</th>{% endif %}
+      {% if s_customer_address %}<th class="l">Customer Address</th>{% endif %}
+      {% if s_customer_phone %}<th class="l">Customer Phone</th>{% endif %}
+    </tr>
+  </thead>
+
+  <tbody>
+  {% for row in page_rows %}
+    <tr{% if row.get('bold') %} class="tr-total"{% endif %}>
+      {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
+      {% if s_invoice_number %}<td>{{ row.get('invoice_number') or '' }}</td>{% endif %}
+      {% if s_customer %}<td>{{ row.get('customer') or '' }}</td>{% endif %}
+      {% if s_total_qty %}<td class="r nowrap">{{ fmt(row.get('total_qty')) }}</td>{% endif %}
+      {% if s_amount_before_vat %}<td class="r nowrap">{{ fmt(row.get('amount_before_vat')) }}</td>{% endif %}
+      {% if s_vat_amount %}<td class="r nowrap">{{ fmt(row.get('vat_amount')) }}</td>{% endif %}
+      {% if s_grand_total %}<td class="r nowrap">{{ fmt(row.get('grand_total')) }}</td>{% endif %}
+      {% if s_vehicle_number %}<td class="nowrap">{{ row.get('vehicle_number') or '' }}</td>{% endif %}
+      {% if s_price_list %}<td>{{ row.get('price_list') or '' }}</td>{% endif %}
+      {% if s_customer_address %}<td>{{ row.get('customer_address') or '' }}</td>{% endif %}
+      {% if s_customer_phone %}<td class="nowrap">{{ row.get('customer_phone') or '' }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="sr-pageno">Page {{ page_num + 1 }} of {{ total_pages }}</div>
+
+</div>
+
+{% endfor %}
+</body>
+</html>
