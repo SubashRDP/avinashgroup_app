@@ -904,6 +904,10 @@ function fetch_credit_banner(frm) {
 
 function render_credit_banner(frm) {
     const p = frm.__credit_position;
+    // Clear before rendering so overlapping fetch_credit_banner calls
+    // (customer + posting_date can both fire it in quick succession) never
+    // stack multiple banner divs on top of each other.
+    frm.dashboard.clear_headline();
     if (!p || !p.has_limits || frm.doc.docstatus !== 0) return;
 
     const rs = v => format_currency(v, frm.doc.currency || "NPR");
