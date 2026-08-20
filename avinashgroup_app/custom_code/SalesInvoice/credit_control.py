@@ -429,7 +429,11 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "amount_limit": amount_limit,
     })
 
-    if not (bill_limit or days_limit or amount_limit):
+    # DAYS CHECK PARKED 2026-08-20 — see the commented block further down.
+    # days_limit is left out of this test on purpose: a customer carrying ONLY
+    # a days limit must count as unrestricted while the check is off.
+    # To restore: put `days_limit or` back here and uncomment the block below.
+    if not (bill_limit or amount_limit):   # or days_limit
         return state
     state["has_limits"] = 1
 
@@ -490,13 +494,16 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     # ------------------------------------------------------------------
     # Count and days use `>=`: a limit of 5 blocks the 5th unpaid bill.
     count_exceeded = bool(bill_limit and unpaid["unpaid_count"] >= bill_limit)
-    days_exceeded = bool(days_limit and days_used >= days_limit)
+    # PARKED — days check off. days_used and oldest_date are still computed
+    # above and still returned, so the banner can show the age as information.
+    # days_exceeded = bool(days_limit and days_used >= days_limit)
+    days_exceeded = False
     # Amount uses `>`: landing exactly on the limit is allowed.
     final_exposure = exposure + new_amount
     amount_exceeded = bool(amount_limit and final_exposure > amount_limit)
 
     state["count_exceeded"] = int(count_exceeded)
-    state["days_exceeded"] = int(days_exceeded)
+    state["days_exceeded"] = int(days_exceeded)   # PARKED — always 0
     state["amount_exceeded"] = int(amount_exceeded)
 
     # Precedence — count, then days, then amount. This is the order
@@ -512,17 +519,28 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
             f"Maximum Allowed: <b>{int(bill_limit)}</b><br><br>"
             f"<i>Please clear existing invoices before creating new ones.</i>"
         )
-    elif days_exceeded:
-        state["blocked_by"] = "days"
-        state["title"] = "Credit Days Exceeded"
-        state["message"] = (
-            f"<b>Credit Limit: Days Exceeded</b><br><br>"
-            f"Customer: <b>{customer}</b><br>"
-            f"Oldest Unpaid Invoice: <b>{unpaid['oldest_invoice']}</b><br>"
-            f"Date: <b>{unpaid['oldest_date']}</b> ({days_used} days ago)<br>"
-            f"Maximum Days Allowed: <b>{int(days_limit)}</b><br><br>"
-            f"<i>Payment is overdue. Please collect payment before new sales.</i>"
-        )
+    # ---- PARKED 2026-08-20: days check -------------------------------------
+    # Switched off at Sijan's request; kept verbatim so it can be brought back.
+    # To restore: uncomment this branch, restore the days_exceeded assignment
+    # above, and put `days_limit or` back in the "no limits configured" test.
+    #
+    # Known open question if it is revived: the clock runs on the oldest bill
+    # the advance did NOT cover, so a customer holding a large advance that
+    # falls a little short still ages. On ng-group, GEPL-CUS-00212 had
+    # 2,024,831 of advance, was 9,079 short, and showed 142 days.
+    #
+    # elif days_exceeded:
+    #     state["blocked_by"] = "days"
+    #     state["title"] = "Credit Days Exceeded"
+    #     state["message"] = (
+    #         f"<b>Credit Limit: Days Exceeded</b><br><br>"
+    #         f"Customer: <b>{customer}</b><br>"
+    #         f"Oldest Unpaid Invoice: <b>{unpaid['oldest_invoice']}</b><br>"
+    #         f"Date: <b>{unpaid['oldest_date']}</b> ({days_used} days ago)<br>"
+    #         f"Maximum Days Allowed: <b>{int(days_limit)}</b><br><br>"
+    #         f"<i>Payment is overdue. Please collect payment before new sales.</i>"
+    #     )
+    # ------------------------------------------------------------------------
     elif amount_exceeded:
         state["blocked_by"] = "amount"
         state["title"] = "Credit Amount Exceeded"

@@ -898,7 +898,7 @@ function render_credit_banner(frm) {
     // this was wrong before.
     const over = {
         count: !!p.count_exceeded,
-        days: !!p.days_exceeded,
+        days: !!p.days_exceeded,   // PARKED — server always sends 0
         amount: !!amount_exceeded
     };
     const mark = which =>
@@ -931,14 +931,23 @@ function render_credit_banner(frm) {
         );
     }
 
-    if (p.days_limit) {
-        parts.push(
-            mark("days") +
-            (p.oldest_date
-                ? `<b>Days:</b> oldest bill ${p.days_used}, blocked at ${p.days_limit}`
-                : `<b>Days:</b> no unpaid bills (blocked at ${p.days_limit})`)
-        );
+    // ---- PARKED 2026-08-20: days segment ---------------------------------
+    // The days check is switched off server-side (credit_control.py), so this
+    // must not render a limit or a blocked marker. The age itself is still
+    // useful, so it is shown as plain information. To restore, swap this back
+    // for the commented block and re-enable the server branch.
+    if (p.oldest_date) {
+        parts.push(`<b>Oldest unpaid:</b> ${p.days_used} days`);
     }
+    // if (p.days_limit) {
+    //     parts.push(
+    //         mark("days") +
+    //         (p.oldest_date
+    //             ? `<b>Days:</b> oldest bill ${p.days_used}, blocked at ${p.days_limit}`
+    //             : `<b>Days:</b> no unpaid bills (blocked at ${p.days_limit})`)
+    //     );
+    // }
+    // ----------------------------------------------------------------------
 
     // The advance pool is deliberately NOT shown. It is already netted off the
     // outstanding figure, so printing it again just widens the strip with a
