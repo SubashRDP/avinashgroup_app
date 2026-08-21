@@ -15,6 +15,8 @@
   "company",
   "recipient_section",
   "mobile_no",
+  "party_type",
+  "party",
   "party_name",
   "column_break_recipient",
   "raw_mobile_no",
@@ -106,10 +108,28 @@
    "search_index": 1
   },
   {
+   "description": "Set from the document the SMS was sent for — Customer for a Sales Invoice.",
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "label": "Party Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "description": "The customer themselves, so the list can be filtered down to one of them.",
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_standard_filter": 1,
+   "label": "Party",
+   "options": "party_type",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "party_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Party",
+   "label": "Party Name",
    "read_only": 1
   },
   {
@@ -213,7 +233,7 @@
  "in_create": 1,
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-21 10:00:00.000000",
+ "modified": "2026-08-21 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Sparrow SMS",
  "name": "Sparrow SMS Log",

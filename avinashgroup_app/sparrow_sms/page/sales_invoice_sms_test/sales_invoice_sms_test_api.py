@@ -53,11 +53,15 @@ def _rule_template():
 
 
 @frappe.whitelist()
-def get_customers(company, customer_group=None, only_with_mobile=0):
+def get_customers(company, customer=None, customer_group=None, only_with_mobile=0):
 	"""Customers for a company, each with the message the rule would produce."""
 	frappe.has_permission("Customer", throw=True)
 
 	filters = {"disabled": 0, "custom_company": company}
+	if customer:
+		# The page's Customer Name filter. Held to the company filter above, so a
+		# customer of another company returns nothing rather than a stray row.
+		filters["name"] = customer
 	if customer_group:
 		filters["customer_group"] = customer_group
 
@@ -172,6 +176,8 @@ def send_one(customer, mobile_no, message, company=None):
 			"reference_doctype": "Customer",
 			"reference_name": customer,
 			"company": company,
+			"party_type": "Customer",
+			"party": customer,
 			"party_name": frappe.db.get_value("Customer", customer, "customer_name"),
 			"message": message,
 		},

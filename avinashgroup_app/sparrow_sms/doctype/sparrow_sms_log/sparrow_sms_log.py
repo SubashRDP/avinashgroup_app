@@ -27,6 +27,8 @@ LOG_FIELDS = (
 	"reference_name",
 	"company",
 	"mobile_no",
+	"party_type",
+	"party",
 	"party_name",
 	"raw_mobile_no",
 	"recipient_field",
@@ -62,6 +64,10 @@ def create_log(**fields):
 			if key in LOG_FIELDS:
 				doc.set(key, value)
 		doc.flags.ignore_permissions = True
+		# `party` and `reference_name` are Dynamic Links, which Frappe validates
+		# on insert. A renamed or deleted customer must not cost us the record of
+		# a message that really was sent.
+		doc.flags.ignore_links = True
 		doc.insert(ignore_permissions=True)
 		return doc.name
 	except Exception:
@@ -134,6 +140,8 @@ def resend(log):
 			"reference_doctype": doc.reference_doctype,
 			"reference_name": doc.reference_name,
 			"company": doc.company,
+			"party_type": doc.party_type,
+			"party": doc.party,
 			"party_name": doc.party_name,
 			"recipient_field": doc.recipient_field,
 			"notification_rule": doc.notification_rule,

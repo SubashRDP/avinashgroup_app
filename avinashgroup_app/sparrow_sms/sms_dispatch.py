@@ -414,23 +414,44 @@ def _resolve_recipient(rule, doc):
 	return None, None
 
 
-def _party_name(doc):
-	"""Whoever the document is about, for the log's Party column.
+# Doctype-agnostic, in the order a document is most likely to carry them. The
+# link is what makes Party a filterable dropdown rather than a typed-in string;
+# the name is what keeps the list readable, because customers here are named by
+# series (NGI-CUS-00200) and a link column would show only that.
+PARTY_FIELDS = (
+	("Customer", "customer", "customer_name"),
+	("Supplier", "supplier", "supplier_name"),
+	("Employee", "employee", "employee_name"),
+	("Lead", "lead", "lead_name"),
+)
 
-	Sales Invoice carries `customer_name`; the rest of the doctypes a rule can
-	be pointed at carry one of the others, or nothing.
+
+def _party(doc):
+	"""Whoever the document is about: (party_type, party, party_name).
+
+	Sales Invoice gives ("Customer", "NGI-CUS-00200", "A M Kirana Store").
 	"""
-	for fieldname in ("customer_name", "supplier_name", "party_name", "employee_name", "full_name"):
+	# Payment Entry and friends already say who the party is, and say it in the
+	# same two fields this log uses.
+	if doc.get("party_type") and doc.get("party"):
+		party_type, party = doc.get("party_type"), doc.get("party")
+		name = doc.get("party_name") or frappe.db.get_value(
+			party_type, party, frappe.get_meta(party_type).get_title_field()
+		)
+		return party_type, party, str(name or party)[:140]
+
+	for party_type, link_field, name_field in PARTY_FIELDS:
+		party = doc.get(link_field)
+		if party:
+			return party_type, party, str(doc.get(name_field) or party)[:140]
+
+	# No party link to be had — fall back to whatever the document calls itself.
+	for fieldname in ("customer_name", "supplier_name", "employee_name", "full_name", "title"):
 		value = doc.get(fieldname)
 		if value:
-			return str(value)[:140]
+			return None, None, str(value)[:140]
 
-	for fieldname in ("customer", "supplier", "party", "employee"):
-		value = doc.get(fieldname)
-		if value:
-			return str(value)[:140]
-
-	return None
+	return None, None, None
 
 
 def _dispatch(doc, event):
@@ -467,12 +488,16 @@ def _dispatch(doc, event):
 
 			receiver, path = _resolve_recipient(rule, doc)
 
+			party_type, party, party_name = _party(doc)
+
 			context = {
 				"sent_via": "Automatic",
 				"reference_doctype": doc.doctype,
 				"reference_name": doc.name,
 				"company": doc.get("company"),
-				"party_name": _party_name(doc),
+				"party_type": party_type,
+				"party": party,
+				"party_name": party_name,
 				"notification_rule": rule["name"],
 				"recipient_field": path,
 				"raw_mobile_no": str(receiver or "")[:140],

@@ -29,6 +29,29 @@ class SalesInvoiceSMSTest {
 			fieldtype: "Link",
 			options: "Company",
 			reqd: 1,
+			change: () => {
+				// A customer picked under the old company is meaningless now, and
+				// clearing the input directly keeps this to a single load().
+				this.clear_customer();
+				this.load();
+			},
+		});
+
+		this.customer = this.page.add_field({
+			fieldname: "customer",
+			label: __("Customer Name"),
+			fieldtype: "Link",
+			options: "Customer",
+			// Same set the table shows, so the dropdown cannot offer a customer
+			// that would then come back as an empty list.
+			get_query: () => {
+				const filters = { disabled: 0 };
+				const company = this.company.get_value();
+				if (company) {
+					filters.custom_company = company;
+				}
+				return { filters: filters };
+			},
 			change: () => this.load(),
 		});
 
@@ -48,6 +71,13 @@ class SalesInvoiceSMSTest {
 		});
 
 		this.page.set_primary_action(__("Reload"), () => this.load());
+	}
+
+	clear_customer() {
+		this.customer.value = "";
+		if (this.customer.$input) {
+			this.customer.$input.val("");
+		}
 	}
 
 	make_body() {
@@ -80,6 +110,7 @@ class SalesInvoiceSMSTest {
 			method: `${API}.get_customers`,
 			args: {
 				company: company,
+				customer: this.customer.get_value(),
 				customer_group: this.customer_group.get_value(),
 				only_with_mobile: this.only_with_mobile.get_value() ? 1 : 0,
 			},
