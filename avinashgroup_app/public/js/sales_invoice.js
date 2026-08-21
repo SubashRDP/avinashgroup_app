@@ -960,12 +960,14 @@ function render_credit_banner(frm) {
     //
     // No mark() prefix — this segment is informational; the blocked markers
     // belong on the limits that can actually trip.
-    const owed = flt(p.exposure);
-    parts.push(
-        owed < 0
-            ? `<b>Advance balance:</b> ${rs(-owed)}`
-            : `<b>Outstanding:</b> ${rs(owed)}`
-    );
+    //
+    // Floored at 0 rather than flipping to an "Advance balance" label: the
+    // heading stays the same word on every invoice, so an operator scanning
+    // the strip reads one column and not two. A prepaid customer's advance is
+    // not lost from the screen — it still appears in the Remaining basis as
+    // "(advance left X + limit Y)".
+    const owed = Math.max(0, flt(p.exposure));
+    parts.push(`<b>Outstanding:</b> ${rs(owed)}`);
 
     if (p.amount_limit) {
         const remaining = flt(p.amount_limit) - projected;

@@ -25,7 +25,7 @@ app_include_js = [
     # Loaded globally (not doctype_js) so it survives even when another app's
     # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
     # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=3.4",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=3.5",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
