@@ -881,12 +881,63 @@ async function force_all_si_warehouses(frm) {
 // current usage, visible while the invoice is being filled. Display only — the
 // server-side validate hook is what actually enforces the limits.
 
+// Stands in for a figure we do not have yet.
+const CREDIT_DASH = "\u2014";
+
+// The strip is drawn on every draft, with or without data, because injecting
+// the headline after the round trip lands pushes the whole form down one row —
+// and that happens mid-keystroke for anyone typing quickly. Reserving the space
+// up front costs a line of grey text and keeps the fields still.
+function credit_placeholder_parts(note) {
+    const parts = [
+        `<b>Outstanding:</b> ${CREDIT_DASH}`,
+        `<b>Remaining</b> ${CREDIT_DASH}`,
+        `<b>Bills:</b> ${CREDIT_DASH}`
+    ];
+    if (note) parts.push(`<i>${note}</i>`);
+    return parts;
+}
+
+function set_credit_headline(frm, parts, blocked_by, muted) {
+    const colour = blocked_by
+        ? "var(--red-500)"
+        : (muted ? "var(--gray-300)" : "var(--gray-600)");
+    const text = muted ? "var(--text-muted)" : "var(--text-color)";
+    const label = blocked_by ? "Credit blocked" : "Credit";
+
+    frm.dashboard.set_headline(
+        `<div style="padding:6px 10px;background:var(--bg-light-gray);border-left:4px solid ${colour};color:${text};border-radius:3px;">
+            <b>${label} : </b> &nbsp; ${parts.join(" &nbsp;|&nbsp; ")}
+        </div>`
+    );
+}
+
 function fetch_credit_banner(frm) {
+    // Cached figures belong to the customer they were fetched for. Keep them
+    // across a posting_date change so the strip does not flicker, but drop
+    // them the moment the customer changes or the numbers on screen would be
+    // the previous customer's.
+    if (frm.__credit_for !== frm.doc.customer) {
+        frm.__credit_position = null;
+        frm.__credit_for = frm.doc.customer;
+    }
+
     if (!frm.doc.customer || frm.doc.docstatus !== 0 || frm.doc.is_return) {
         frm.__credit_position = null;
-        frm.dashboard.clear_headline();
+        render_credit_banner(frm);
         return;
     }
+
+    // Draw immediately, before the call, so the layout is already settled when
+    // the answer arrives — the callback only swaps text into a strip that is
+    // there.
+    render_credit_banner(frm);
+
+    // customer and posting_date can both fire this within a few milliseconds.
+    // Only the newest response may paint; an earlier one landing late would
+    // otherwise overwrite it with figures for the wrong date.
+    const seq = (frm.__credit_seq = (frm.__credit_seq || 0) + 1);
+
     frappe.call({
         method: "avinashgroup_app.custom_code.SalesInvoice.credit_control.get_credit_position",
         args: {
@@ -896,19 +947,48 @@ function fetch_credit_banner(frm) {
             invoice: frm.doc.name
         },
         callback: function(r) {
+            if (seq !== frm.__credit_seq) return;
             frm.__credit_position = r.message || null;
+            frm.__credit_for = frm.doc.customer;
             render_credit_banner(frm);
         }
     });
 }
 
 function render_credit_banner(frm) {
-    const p = frm.__credit_position;
     // Clear before rendering so overlapping fetch_credit_banner calls
     // (customer + posting_date can both fire it in quick succession) never
     // stack multiple banner divs on top of each other.
     frm.dashboard.clear_headline();
-    if (!p || !p.has_limits || frm.doc.docstatus !== 0) return;
+
+    // A submitted or cancelled invoice is past the point the limits apply and
+    // is not being edited, so there is no layout to protect — leave it bare.
+    if (frm.doc.docstatus !== 0) return;
+
+    // Every remaining path below draws SOMETHING. Nothing here may return
+    // without a headline, or the form jumps again.
+    if (frm.doc.is_return) {
+        set_credit_headline(
+            frm, credit_placeholder_parts("credit limits do not apply to returns"), null, true);
+        return;
+    }
+    if (!frm.doc.customer) {
+        set_credit_headline(
+            frm, credit_placeholder_parts("select a customer"), null, true);
+        return;
+    }
+
+    const p = frm.__credit_position;
+    if (!p) {
+        set_credit_headline(
+            frm, credit_placeholder_parts("checking\u2026"), null, true);
+        return;
+    }
+    if (!p.has_limits) {
+        set_credit_headline(
+            frm, credit_placeholder_parts("no credit limits set for this customer"), null, true);
+        return;
+    }
 
     const rs = v => format_currency(v, frm.doc.currency || "NPR");
 
@@ -1023,12 +1103,5 @@ function render_credit_banner(frm) {
         parts.push(`<b>Journal debit:</b> ${rs(p.je_debit)} <i>(added to exposure)</i>`);
     }
 
-    const colour = blocked_by ? "var(--red-500)" : "var(--gray-600)";
-    const label = blocked_by ? "Credit blocked" : "Credit";
-
-    frm.dashboard.set_headline(
-        `<div style="padding:6px 10px;background:var(--bg-light-gray);border-left:4px solid ${colour};color:var(--text-color);border-radius:3px;">
-            <b>${label} : </b> &nbsp; ${parts.join(" &nbsp;|&nbsp; ")}
-        </div>`
-    );
+    set_credit_headline(frm, parts, blocked_by, false);
 }
