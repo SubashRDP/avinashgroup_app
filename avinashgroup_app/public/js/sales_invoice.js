@@ -943,6 +943,30 @@ function render_credit_banner(frm) {
         over[which] ? (blocked_by === which ? "\u26d4 " : "\u26a0\ufe0f ") : "";
     const parts = [];
 
+    // What the customer owes, shown first so the strip reads left to right:
+    //   Limit - Outstanding - this invoice = Remaining
+    // Without it "Remaining" is derived from a figure that never appears, and
+    // the arithmetic cannot be checked from the form.
+    //
+    // p.exposure, not p.outstanding or p.gross_outstanding. It is the exact
+    // quantity the amount limit is tested against (see `projected` above), and
+    // FIFO leaves leftover_advance at 0 whenever any bill is uncovered, so it
+    // equals p.outstanding for every customer who actually owes money. It only
+    // differs for a prepaid one, where it correctly goes negative.
+    //
+    // gross_outstanding would be wrong here: _unpaid_after_advance filters
+    // is_return = 0, so it counts no credit notes and would tell a customer who
+    // returned goods they owe more than they do.
+    //
+    // No mark() prefix — this segment is informational; the blocked markers
+    // belong on the limits that can actually trip.
+    const owed = flt(p.exposure);
+    parts.push(
+        owed < 0
+            ? `<b>Advance balance:</b> ${rs(-owed)}`
+            : `<b>Outstanding:</b> ${rs(owed)}`
+    );
+
     if (p.amount_limit) {
         const remaining = flt(p.amount_limit) - projected;
         // Spell out where the headroom comes from when the customer is prepaid,
