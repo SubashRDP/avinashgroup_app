@@ -14,19 +14,40 @@ Non-negotiable rule, same as CBMS/sales_invoice_hooks.py: nothing here may ever
 block or fail the document it is attached to. Every handler is wrapped, the
 HTTP call runs only after the transaction commits, and a failed direct attempt
 falls back to the background queue.
+
+Every attempt — including the ones that never reach the gateway, because the
+customer has no phone number on file or the network was down — lands as one
+`Sparrow SMS Log` row carrying the customer, the time, the reference document
+(the Sales Invoice) and the exact text sent. That row is the answer to "did
+this customer get their invoice SMS", and it is written whether the answer is
+yes or no.
 """
 
 import re
 
 import frappe
 import requests
-from frappe.core.doctype.sms_settings.sms_settings import create_sms_log
+from frappe.utils import cint, now_datetime
+
+from avinashgroup_app.sparrow_sms.doctype.sparrow_sms_log.sparrow_sms_log import (
+	create_log,
+	update_log,
+)
 
 DEFAULT_SPARROW_SMS_URL = "https://api.sparrowsms.com/v2/sms/"
 SEND_TIMEOUT = 5
 
 CACHE_KEY_DOCTYPES = "sparrow_sms_rule_doctypes"
 CACHE_KEY_RULES = "sparrow_sms_rules::"
+
+# Sparrow has been seen to name these differently across accounts, and a log
+# that quietly drops the credit count is worse than one that tries a few keys.
+MESSAGE_ID_KEYS = ("message_id", "msg_id", "id")
+CREDIT_CONSUMED_KEYS = ("credit_consumed", "credits_consumed", "consumed")
+CREDIT_REMAINING_KEYS = ("credit_available", "credit_remaining", "remaining_credit", "balance")
+
+# Small Text columns; the gateway occasionally returns an HTML error page.
+MAX_STORED_RESPONSE = 2000
 
 RULE_FIELDS = (
 	"name",
@@ -56,24 +77,24 @@ def normalize_mobile(value):
 	return digits
 
 
-def send_sms(receiver, message, reference=None):
-	"""One direct attempt against Sparrow. Never raises."""
-	# Normalise here rather than at each call site: this is the one choke point
-	# every send passes through, and it is also what gets written to SMS Log,
-	# so the log records the number actually dialled.
-	receiver = normalize_mobile(receiver)
-	if not receiver:
-		frappe.log_error(
-			title=f"Sparrow SMS: no usable number for {reference}",
-			message="Recipient contained no digits after normalisation.",
-		)
-		return False
+def _first(payload, keys):
+	for key in keys:
+		if payload.get(key) not in (None, ""):
+			return payload[key]
+	return None
+
+
+def _call_gateway(receiver, message):
+	"""One HTTP attempt. Returns (ok, fields to record on the log row).
+
+	Never raises: an unreachable gateway is a failed SMS, not a failed invoice.
+	"""
+	result = {}
 
 	try:
 		settings = frappe.get_cached_doc("Sparrow SMS Settings")
-		api_url = settings.api_url or DEFAULT_SPARROW_SMS_URL
 		response = requests.post(
-			api_url,
+			settings.api_url or DEFAULT_SPARROW_SMS_URL,
 			data={
 				"token": settings.token,
 				"from": settings.sender_identity,
@@ -82,30 +103,130 @@ def send_sms(receiver, message, reference=None):
 			},
 			timeout=SEND_TIMEOUT,
 		)
-		ok = response.status_code == 200 and response.json().get("response_code") == 200
-	except Exception:
+	except Exception as exception:
+		# The traceback is worth keeping for a transport failure — it separates
+		# a DNS problem from a timeout from a TLS error.
 		frappe.log_error(
-			title=f"Sparrow SMS: send failed for {reference}",
+			title="Sparrow SMS: could not reach the gateway",
 			message=frappe.get_traceback(),
+		)
+		result["error"] = f"Could not reach Sparrow: {exception}"[:500]
+		return False, result
+
+	result["gateway_response"] = (response.text or "")[:MAX_STORED_RESPONSE]
+
+	try:
+		payload = response.json()
+	except Exception:
+		payload = None
+	if not isinstance(payload, dict):
+		payload = {}
+
+	message_id = _first(payload, MESSAGE_ID_KEYS)
+	if message_id is not None:
+		result["message_id"] = str(message_id)[:140]
+	result["credit_consumed"] = cint(_first(payload, CREDIT_CONSUMED_KEYS))
+	result["credit_remaining"] = cint(_first(payload, CREDIT_REMAINING_KEYS))
+
+	ok = response.status_code == 200 and payload.get("response_code") == 200
+	if not ok:
+		result["error"] = _describe_rejection(response, payload)
+
+	return ok, result
+
+
+def _describe_rejection(response, payload):
+	"""One line an operator can act on, from whatever Sparrow sent back."""
+	parts = [f"HTTP {response.status_code}"]
+
+	code = payload.get("response_code")
+	if code is not None:
+		parts.append(f"response_code {code}")
+
+	detail = payload.get("response") or payload.get("message")
+	if detail:
+		parts.append(str(detail))
+	elif response.text:
+		parts.append(response.text.strip()[:200])
+
+	return " — ".join(parts)[:500]
+
+
+def send_sms(receiver, message, reference=None, log=None, context=None):
+	"""One direct attempt against Sparrow, always logged. Never raises.
+
+	`log` names an existing `Sparrow SMS Log` row to record the outcome on —
+	that is how a queued retry updates the row its first attempt created instead
+	of writing a second one. Without it a row is created here, which is the path
+	the Send Test SMS button and the Sales Invoice SMS Test page take.
+	"""
+	# Normalise here rather than at each call site: this is the one choke point
+	# every send passes through, and it is also what gets written to the log, so
+	# the log records the number actually dialled.
+	raw = receiver
+	receiver = normalize_mobile(receiver)
+
+	context = dict(context or {})
+	context.setdefault("raw_mobile_no", str(raw or "")[:140])
+	context.setdefault("message", message)
+	context["mobile_no"] = receiver
+
+	if not log:
+		log = create_log(status="Queued", **context)
+
+	if not receiver:
+		update_log(
+			log,
+			status="Failed",
+			sent_at=now_datetime(),
+			error=f"No digits in the phone number {raw!r} — nothing to dial.",
 		)
 		return False
 
-	create_sms_log(
-		{"message": message.encode("utf-8"), "receiver_list": [receiver]},
-		[receiver] if ok else [],
+	attempts = cint(frappe.db.get_value("Sparrow SMS Log", log, "attempts")) if log else 0
+	ok, result = _call_gateway(receiver, message)
+
+	update_log(
+		log,
+		status="Sent" if ok else "Failed",
+		sent_at=now_datetime(),
+		attempts=attempts + 1,
+		**result,
 	)
-	if not ok:
-		frappe.log_error(
-			title=f"Sparrow SMS: gateway rejected send for {reference}",
-			message=response.text,
-		)
 	return ok
 
 
-def _first_send_after_commit(receiver, message, reference):
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  Post-commit send
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+def _process_after_commit(context, message, reference):
+	"""Log the attempt, then make it. Runs after the document's COMMIT.
+
+	Everything here runs in a fresh transaction that nothing else will commit,
+	and would be discarded at teardown — so each step commits explicitly. The
+	log row is committed *before* the gateway call so that a message the
+	gateway hangs on still leaves a Queued row behind, and so that the naming
+	series lock is not held across a five-second HTTP request.
+	"""
 	try:
-		if send_sms(receiver, message, reference=reference):
+		error = context.pop("error", None)
+		log = create_log(status="Failed" if error else "Queued", error=error, **context)
+		frappe.db.commit()
+
+		if error:
+			# Nothing to dial — the row is the whole point of this branch.
 			return
+
+		# The raw number, not the normalised one: send_sms normalises again
+		# (idempotently), and if there is nothing dialable in it the error it
+		# writes then names what the document actually held.
+		receiver = context.get("raw_mobile_no")
+
+		if send_sms(receiver, message, reference=reference, log=log):
+			return
+
 		try:
 			frappe.enqueue(
 				"avinashgroup_app.sparrow_sms.sms_dispatch.send_sms",
@@ -114,18 +235,19 @@ def _first_send_after_commit(receiver, message, reference):
 				receiver=receiver,
 				message=message,
 				reference=reference,
+				log=log,
 			)
 		except Exception:
 			frappe.log_error(
 				title=f"Sparrow SMS: fallback enqueue failed for {reference}",
 				message=frappe.get_traceback(),
 			)
+	except Exception:
+		frappe.log_error(
+			title=f"Sparrow SMS: dispatch failed after commit for {reference}",
+			message=frappe.get_traceback(),
+		)
 	finally:
-		# This runs from frappe.db.after_commit, i.e. the request's COMMIT has
-		# already happened. The SMS Log row written by send_sms (and any error
-		# logged along the way) therefore sits in a fresh transaction that
-		# nothing else will commit, and is discarded at teardown — the send goes
-		# out leaving no trace. Commit it explicitly.
 		try:
 			frappe.db.commit()
 		except Exception:
@@ -273,7 +395,11 @@ def _resolve_path(doc, path):
 
 
 def _resolve_recipient(rule, doc):
-	"""First recipient path that yields a value wins.
+	"""First recipient path that yields a value wins. Returns (value, path).
+
+	The path comes back with the value because the log records it: when an SMS
+	goes to a stale number, the next question is always which field it was read
+	from.
 
 	Test Mobile No deliberately has no say here. It used to short-circuit this
 	function, which meant every automatic send went to one handset while the log
@@ -283,7 +409,26 @@ def _resolve_recipient(rule, doc):
 	for path in rule.get("recipient_paths") or []:
 		value = _resolve_path(doc, path)
 		if value:
-			return value
+			return value, path
+
+	return None, None
+
+
+def _party_name(doc):
+	"""Whoever the document is about, for the log's Party column.
+
+	Sales Invoice carries `customer_name`; the rest of the doctypes a rule can
+	be pointed at carry one of the others, or nothing.
+	"""
+	for fieldname in ("customer_name", "supplier_name", "party_name", "employee_name", "full_name"):
+		value = doc.get(fieldname)
+		if value:
+			return str(value)[:140]
+
+	for fieldname in ("customer", "supplier", "party", "employee"):
+		value = doc.get(fieldname)
+		if value:
+			return str(value)[:140]
 
 	return None
 
@@ -314,23 +459,39 @@ def _dispatch(doc, event):
 			if not _condition_passes(rule, doc):
 				continue
 
-			receiver = _resolve_recipient(rule, doc)
-			if not receiver:
-				frappe.log_error(
-					title=f"Sparrow SMS: no mobile number for {doc.name}",
-					message=f"Rule {rule['name']} matched but no recipient could be resolved.",
-				)
-				continue
-
 			message = frappe.render_template(
 				rule.get("message_template") or "", {"doc": _NoNulls(doc)}
 			)
 			if not message.strip():
 				continue
 
+			receiver, path = _resolve_recipient(rule, doc)
+
+			context = {
+				"sent_via": "Automatic",
+				"reference_doctype": doc.doctype,
+				"reference_name": doc.name,
+				"company": doc.get("company"),
+				"party_name": _party_name(doc),
+				"notification_rule": rule["name"],
+				"recipient_field": path,
+				"raw_mobile_no": str(receiver or "")[:140],
+				"mobile_no": normalize_mobile(receiver),
+				"message": message,
+			}
+
+			if not receiver:
+				# Logged rather than dropped: "this customer has no phone number
+				# on file" is the single most common reason an invoice SMS never
+				# arrives, and it has to be visible next to the ones that did.
+				context["error"] = (
+					f"No phone number could be read from {doc.doctype} {doc.name}. "
+					f"Rule {rule['name']} tried: {', '.join(rule.get('recipient_paths') or []) or '(none configured)'}."
+				)
+
 			reference = f"{doc.name} ({rule['name']})"
 			frappe.db.after_commit.add(
-				lambda r=receiver, m=message, ref=reference: _first_send_after_commit(r, m, ref)
+				lambda c=context, m=message, ref=reference: _process_after_commit(c, m, ref)
 			)
 		except Exception:
 			frappe.log_error(

@@ -23,8 +23,15 @@ def send_test_sms():
 	from avinashgroup_app.sparrow_sms.sms_dispatch import send_sms
 
 	message = "This is a test message from Sparrow SMS settings."
-	ok = send_sms(settings.test_mobile_no, message, reference="Sparrow SMS Settings test")
+	ok = send_sms(
+		settings.test_mobile_no,
+		message,
+		reference="Sparrow SMS Settings test",
+		context={"sent_via": "Settings Test", "message": message},
+	)
 	if ok:
 		frappe.msgprint(_("Test SMS sent to {0}.").format(settings.test_mobile_no))
 	else:
-		frappe.msgprint(_("Send failed — check Error Log for details."), indicator="red")
+		frappe.msgprint(
+			_("Send failed — the Sparrow SMS Log row for it records why."), indicator="red"
+		)

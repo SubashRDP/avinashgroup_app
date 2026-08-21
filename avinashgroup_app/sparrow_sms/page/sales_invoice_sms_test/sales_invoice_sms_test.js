@@ -145,7 +145,12 @@ class SalesInvoiceSMSTest {
 				$btn.prop("disabled", true).text(__("Sending..."));
 				frappe.call({
 					method: `${API}.send_one`,
-					args: { customer: row.customer, mobile_no: mobile_no, message: message },
+					args: {
+						customer: row.customer,
+						mobile_no: mobile_no,
+						message: message,
+						company: row.company,
+					},
 					callback: (r) => {
 						const ok = r.message && r.message.ok;
 						$tr.find("td.action").html(
@@ -156,7 +161,7 @@ class SalesInvoiceSMSTest {
 						frappe.show_alert({
 							message: ok
 								? __("Sent to {0}", [r.message.receiver])
-								: __("Failed — see Error Log"),
+								: __("Failed — see Sparrow SMS Log"),
 							indicator: ok ? "green" : "red",
 						});
 					},

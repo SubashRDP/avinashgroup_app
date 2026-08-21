@@ -138,8 +138,8 @@ def _address_phones(customer_names):
 
 
 @frappe.whitelist()
-def send_one(customer, mobile_no, message):
-	"""Send a single row. Nothing is persisted except the SMS Log."""
+def send_one(customer, mobile_no, message, company=None):
+	"""Send a single row. Nothing is persisted except the Sparrow SMS Log."""
 	frappe.has_permission("Customer", throw=True)
 
 	from avinashgroup_app.sparrow_sms.sms_dispatch import normalize_mobile, send_sms
@@ -161,5 +161,19 @@ def send_one(customer, mobile_no, message):
 	if not receiver:
 		frappe.throw(_("{0} contains no digits.").format(mobile_no))
 
-	ok = send_sms(receiver, message, reference=f"Sales Invoice SMS Test / {customer}")
+	# The typed number, not the normalised one: send_sms normalises again, and
+	# the log's Raw Mobile No then shows what the operator actually entered.
+	ok = send_sms(
+		mobile_no,
+		message,
+		reference=f"Sales Invoice SMS Test / {customer}",
+		context={
+			"sent_via": "SMS Test Page",
+			"reference_doctype": "Customer",
+			"reference_name": customer,
+			"company": company,
+			"party_name": frappe.db.get_value("Customer", customer, "customer_name"),
+			"message": message,
+		},
+	)
 	return {"ok": ok, "receiver": receiver}

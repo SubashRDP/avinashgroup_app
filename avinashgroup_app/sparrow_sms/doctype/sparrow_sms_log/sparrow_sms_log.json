@@ -1,0 +1,252 @@
+{
+ "actions": [],
+ "autoname": "SMS-.YYYY.-.#####",
+ "creation": "2026-08-21 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "sent_at",
+  "sent_via",
+  "column_break_head",
+  "reference_doctype",
+  "reference_name",
+  "company",
+  "recipient_section",
+  "mobile_no",
+  "party_name",
+  "column_break_recipient",
+  "raw_mobile_no",
+  "recipient_field",
+  "message_section",
+  "message",
+  "delivery_section",
+  "notification_rule",
+  "attempts",
+  "column_break_delivery",
+  "message_id",
+  "credit_consumed",
+  "credit_remaining",
+  "error_section",
+  "error",
+  "gateway_response"
+ ],
+ "fields": [
+  {
+   "default": "Queued",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Queued\nSent\nFailed",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "description": "When the message was handed to the gateway. Stamped on every row, including the ones that never got that far.",
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Sent At",
+   "read_only": 1
+  },
+  {
+   "default": "Automatic",
+   "description": "Automatic = sent by an SMS Notification Rule on a document event. The rest are operator-initiated.",
+   "fieldname": "sent_via",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Sent Via",
+   "options": "Automatic\nResend\nSMS Test Page\nSettings Test",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Reference Document Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "description": "The document that triggered this SMS — normally the Sales Invoice.",
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Reference Document",
+   "options": "reference_doctype",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recipient_section",
+   "fieldtype": "Section Break",
+   "label": "Recipient"
+  },
+  {
+   "description": "The number actually dialled: bare digits, Nepali country code dropped.",
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "label": "Mobile No",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Party",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_recipient",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The number exactly as the document held it, before normalisation.",
+   "fieldname": "raw_mobile_no",
+   "fieldtype": "Data",
+   "label": "Raw Mobile No",
+   "read_only": 1
+  },
+  {
+   "description": "Which recipient path on the rule produced the number, e.g. <code>customer.mobile_no</code>.",
+   "fieldname": "recipient_field",
+   "fieldtype": "Data",
+   "label": "Resolved From",
+   "read_only": 1
+  },
+  {
+   "fieldname": "message_section",
+   "fieldtype": "Section Break",
+   "label": "Message"
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Small Text",
+   "label": "Message",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_global_search": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "delivery_section",
+   "fieldtype": "Section Break",
+   "label": "Delivery"
+  },
+  {
+   "fieldname": "notification_rule",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Notification Rule",
+   "options": "SMS Notification Rule",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "How many times the gateway has been called for this message. More than one means a first attempt failed and was retried.",
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_delivery",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Sparrow's own id for the message. Quote this when asking the vendor about a delivery.",
+   "fieldname": "message_id",
+   "fieldtype": "Data",
+   "label": "Message ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_consumed",
+   "fieldtype": "Int",
+   "label": "Credit Consumed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "credit_remaining",
+   "fieldtype": "Int",
+   "label": "Credit Remaining",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "collapsible_depends_on": "error",
+   "fieldname": "error_section",
+   "fieldtype": "Section Break",
+   "label": "Failure"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error",
+   "read_only": 1
+  },
+  {
+   "description": "Raw body returned by Sparrow, kept verbatim.",
+   "fieldname": "gateway_response",
+   "fieldtype": "Small Text",
+   "label": "Gateway Response",
+   "read_only": 1
+  }
+ ],
+ "icon": "fa fa-mobile",
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-21 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Sparrow SMS",
+ "name": "Sparrow SMS Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts User"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "party_name",
+ "track_changes": 0
+}
