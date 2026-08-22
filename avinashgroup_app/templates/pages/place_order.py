@@ -140,23 +140,56 @@ def get_item_uoms(item_code):
 	return uom_list
 
 
+def _rates_for(item_code, price_list):
+	"""Every size this price list can quote, smallest first.
+
+	A price may be stated per size ("14.2 KG") or once in the stock UOM ("Kg") and
+	converted, which is what ERPNext's own pricing does. Matching only the exact size
+	made an account whose prices are held per Kg look like it had no rates at all."""
+	if not (item_code and price_list):
+		return []
+
+	stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
+	convs = frappe.db.sql("""
+		SELECT uom, conversion_factor
+		FROM `tabUOM Conversion Detail`
+		WHERE parenttype = 'Item' AND parent = %(item)s
+		ORDER BY conversion_factor
+	""", {"item": item_code}, as_dict=True)
+
+	prices = frappe.db.sql("""
+		SELECT IFNULL(uom, '') AS uom, price_list_rate
+		FROM `tabItem Price`
+		WHERE item_code = %(item)s AND price_list = %(pl)s AND selling = 1
+		AND IFNULL(price_list_rate, 0) > 0
+	""", {"item": item_code, "pl": price_list}, as_dict=True)
+
+	by_uom = {p.uom: flt(p.price_list_rate) for p in prices}
+	# a rate quoted in the stock UOM (or with no UOM at all) prices every size
+	base = by_uom.get(stock_uom) or by_uom.get("")
+
+	sizes = []
+	for c in convs:
+		rate = by_uom.get(c.uom)
+		derived = False
+		if not rate and base:
+			rate = flt(base) * flt(c.conversion_factor)
+			derived = True
+		if rate:
+			sizes.append({
+				"uom": c.uom,
+				"rate": flt(rate),
+				"conversion_factor": flt(c.conversion_factor),
+				"derived": derived,
+			})
+	return sizes
+
+
 def _priced_uoms(item_code, price_list):
 	"""The sizes this account can actually buy: the item's UOMs that carry a selling
 	price on the customer's own price list, smallest first. Offering a size with no
 	price is a dead end — the customer picks it and the rate comes back 0.00."""
-	if not (item_code and price_list):
-		return []
-	rows = frappe.db.sql("""
-		SELECT ip.uom
-		FROM `tabItem Price` ip
-		JOIN `tabUOM Conversion Detail` ucd
-			ON ucd.parenttype = 'Item' AND ucd.parent = ip.item_code AND ucd.uom = ip.uom
-		WHERE ip.item_code = %(item)s AND ip.price_list = %(pl)s AND ip.selling = 1
-		AND IFNULL(ip.price_list_rate, 0) > 0
-		GROUP BY ip.uom, ucd.conversion_factor
-		ORDER BY ucd.conversion_factor
-	""", {"item": item_code, "pl": price_list}, as_list=True)
-	return [r[0] for r in rows]
+	return [s["uom"] for s in _rates_for(item_code, price_list)]
 
 
 @frappe.whitelist()
@@ -175,6 +208,32 @@ def get_company_item(company, customer=None):
 		"uoms": _priced_uoms(item.name, price_list) if price_list else get_item_uoms(item.name),
 		"price_list": price_list or "",
 		"narrowed": bool(price_list),
+	}
+
+
+@frappe.whitelist()
+def get_order_sheet(company, customer=None):
+	"""Everything the order sheet needs in one round trip: the company's LP Gas item
+	and each size the account can buy, with its rate. The page lists these as rows and
+	the customer writes quantities against them."""
+	item = _get_lp_gas_item(company)
+	if not item:
+		return {}
+
+	price_list = frappe.db.get_value("Customer", customer, "default_price_list") if customer else None
+	if not price_list:
+		return {
+			"item_code": item.name,
+			"item_name": item.item_name,
+			"price_list": "",
+			"sizes": [],
+		}
+
+	return {
+		"item_code": item.name,
+		"item_name": item.item_name,
+		"price_list": price_list,
+		"sizes": _rates_for(item.name, price_list),
 	}
 
 
@@ -304,13 +363,11 @@ def get_customer_defaults(customer, company=None):
 
 
 def _price_of(item_code, price_list, uom):
-	"""The selling rate for this item at this size, straight from Item Price."""
-	rate = frappe.db.get_value(
-		"Item Price",
-		{"item_code": item_code, "price_list": price_list, "selling": 1, "uom": uom},
-		"price_list_rate",
-	)
-	return flt(rate)
+	"""The selling rate for this size — the same number the page quoted."""
+	for size in _rates_for(item_code, price_list):
+		if size["uom"] == uom:
+			return flt(size["rate"])
+	return 0.0
 
 
 @frappe.whitelist()
