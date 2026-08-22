@@ -8,7 +8,16 @@ from erpnext.accounts.party import get_party_account_currency
 from erpnext.templates.pages.rfq import get_context as erpnext_get_context
 
 
+# Rendered HTML for a website page is cached by path and language only
+# (frappe/website/utils.py: cache_html) — not by user. This page is built from
+# frappe.session.user, so caching it would serve one customer their neighbour's
+# page. Frappe skips the cache when developer_mode is on, which is why this never
+# shows up locally.
+no_cache = 1
+
+
 def get_context(context):
+	context.no_cache = 1
 	erpnext_get_context(context)
 
 
