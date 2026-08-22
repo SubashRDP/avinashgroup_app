@@ -2,6 +2,668 @@
 
 {% block title %}Place Order{% endblock %}
 
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+/* ──────────────────────────────────────────────────────────────────────────
+   Place Order — Nepal Gas customer portal.
+   Identity taken from the group's own mark: crimson and navy, the flame
+   emblem, condensed signage lettering. Figures are set in a mono face so
+   quantities, rates and totals read like a weighbridge docket.
+   Committed light-only: this page sits inside the white portal shell.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+	--po-navy-900: #141F4A;
+	--po-navy-700: #233A86;
+	--po-navy-500: #435CA8;
+	--po-red-600: #D6202A;
+	--po-red-700: #AE1720;
+	--po-red-050: #FDEDEE;
+	--po-paper: #EDF0F7;
+	--po-surface: #FFFFFF;
+	--po-field: #F5F7FC;
+	--po-line: #D8DFEE;
+	--po-line-soft: #E9EDF6;
+	--po-muted: #64719B;
+
+	--po-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--po-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--po-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+	--po-radius: 14px;
+	--po-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
+}
+
+body { background: var(--po-paper); }
+
+/* The portal shell defaults to a narrow, fixed-padding container. */
+.page-content, .page_content, .container {
+	max-width: 1340px !important;
+	padding-left: 28px !important;
+	padding-right: 28px !important;
+}
+@media (max-width: 640px) {
+	.page-content, .page_content, .container {
+		padding-left: 14px !important;
+		padding-right: 14px !important;
+	}
+}
+
+.po {
+	font-family: var(--po-sans);
+	color: var(--po-navy-900);
+	padding-bottom: 40px;
+	-webkit-font-smoothing: antialiased;
+}
+.po *, .po *::before, .po *::after { box-sizing: border-box; }
+
+/* ── Masthead ──────────────────────────────────────────────────────────── */
+.po-head {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 28px 0 18px;
+	border-bottom: 1px solid var(--po-line);
+	position: relative;
+}
+.po-head::after {
+	content: "";
+	position: absolute;
+	left: 0; bottom: -1px;
+	width: 96px; height: 3px;
+	background: var(--po-red-600);
+}
+.po-mark {
+	flex: none;
+	width: 46px; height: 46px;
+	display: grid; place-items: center;
+	background: var(--po-red-600);
+	border-radius: 10px;
+	box-shadow: 0 6px 16px -8px rgba(214, 32, 42, .8);
+}
+.po-mark svg { width: 24px; height: 24px; display: block; }
+.po-head-text { min-width: 0; }
+.po-eyebrow {
+	margin: 0 0 2px;
+	font-family: var(--po-cond);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .16em;
+	text-transform: uppercase;
+	color: var(--po-navy-500);
+}
+.po-title {
+	margin: 0;
+	font-size: clamp(27px, 3.4vw, 38px);
+	font-weight: 700;
+	letter-spacing: -.02em;
+	line-height: 1.05;
+	text-wrap: balance;
+	color: var(--po-navy-900);
+}
+.po-head-aside {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	text-align: right;
+}
+.po-product {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 8px 14px;
+	border: 1px solid var(--po-line);
+	border-radius: 999px;
+	background: var(--po-surface);
+	white-space: nowrap;
+}
+.po-product b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.po-product span {
+	font-family: var(--po-cond);
+	font-size: 11px; font-weight: 600;
+	letter-spacing: .12em; text-transform: uppercase;
+	color: var(--po-muted);
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+.po-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 330px;
+	gap: 22px;
+	align-items: start;
+	margin-top: 22px;
+}
+.po-main { display: grid; gap: 18px; min-width: 0; }
+.po-side { position: sticky; top: 22px; }
+@media (max-width: 991px) {
+	.po-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+	.po-side { position: static; }
+}
+
+.po-card {
+	background: var(--po-surface);
+	border: 1px solid var(--po-line);
+	border-radius: var(--po-radius);
+	box-shadow: var(--po-shadow);
+	padding: 20px 22px 22px;
+}
+@media (max-width: 640px) { .po-card { padding: 16px 14px 18px; } }
+
+.po-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 14px;
+}
+.po-card-title {
+	margin: 0;
+	font-family: var(--po-cond);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--po-navy-700);
+}
+.po-card-note {
+	margin: 0;
+	font-size: 13px;
+	color: var(--po-muted);
+}
+
+/* ── Fields ────────────────────────────────────────────────────────────── */
+.po-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: 16px 18px;
+}
+.po-field { position: relative; min-width: 0; }
+.po-label {
+	display: block;
+	margin-bottom: 6px;
+	font-family: var(--po-cond);
+	font-size: 11.5px;
+	font-weight: 600;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--po-muted);
+}
+.po-label i { color: var(--po-red-600); font-style: normal; }
+
+.po .form-control {
+	width: 100%;
+	height: auto;
+	padding: 10px 12px;
+	font-family: var(--po-sans);
+	font-size: 15px;
+	font-weight: 500;
+	color: var(--po-navy-900);
+	background: var(--po-field);
+	border: 1px solid transparent;
+	border-radius: 9px;
+	box-shadow: none;
+	transition: background .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+.po .form-control::placeholder { color: #93A0C0; font-weight: 400; }
+.po .form-control:hover:not([readonly]):not(:disabled) { background: #EFF2F9; }
+.po .form-control:focus, .po .form-control:focus-visible {
+	outline: none;
+	background: var(--po-surface);
+	border-color: var(--po-navy-500);
+	box-shadow: 0 0 0 3px rgba(67, 92, 168, .16);
+}
+.po .form-control[readonly] { color: var(--po-muted); cursor: default; }
+.po input[type="date"].form-control { font-variant-numeric: tabular-nums; }
+
+/* Autocomplete menus (built in JS, styled here) */
+.po-dd {
+	position: absolute;
+	z-index: 60;
+	top: calc(100% + 6px);
+	left: 0;
+	width: 100%;
+	max-height: 260px;
+	overflow-y: auto;
+	padding: 5px;
+	background: var(--po-surface);
+	border: 1px solid var(--po-line);
+	border-radius: 11px;
+	box-shadow: 0 18px 40px -20px rgba(20, 31, 74, .55);
+	display: none;
+}
+.po-dd-item {
+	padding: 9px 11px;
+	border-radius: 7px;
+	font-size: 14.5px;
+	line-height: 1.3;
+	color: var(--po-navy-900);
+	cursor: pointer;
+}
+.po-dd-item:hover, .po-dd-hi { background: var(--po-field); }
+.po-dd-hi { box-shadow: inset 2px 0 0 var(--po-red-600); }
+
+/* ── Line items ────────────────────────────────────────────────────────── */
+.po-table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.po-items-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin: 0;
+}
+.po-items-table th {
+	padding: 0 10px 9px;
+	font-family: var(--po-cond);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .11em;
+	text-transform: uppercase;
+	color: var(--po-muted);
+	border-bottom: 1px solid var(--po-line);
+	white-space: nowrap;
+	text-align: left;
+}
+.po-items-table th.po-num, .po-items-table td.po-num { text-align: right; }
+.po-items-table td {
+	padding: 9px 10px;
+	border-bottom: 1px solid var(--po-line-soft);
+	vertical-align: middle;
+}
+.po-items-table tr:last-child td { border-bottom: none; }
+.po-sn {
+	font-family: var(--po-mono);
+	font-size: 12px;
+	color: var(--po-muted);
+}
+.po-fig, .po-items-table .po-num {
+	font-family: var(--po-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 14px;
+}
+.po-amount { font-weight: 600; color: var(--po-navy-900); }
+.po-vat-amount { color: var(--po-navy-700); }
+
+/* VAT: how it is charged, and how much — read together. */
+.po-vat-wrap {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 9px;
+}
+.po-vat-wrap .po-vat-amount { min-width: 58px; text-align: right; }
+
+.po .po-item-code {
+	background: transparent;
+	border-color: transparent;
+	padding-left: 0;
+	font-weight: 600;
+	color: var(--po-navy-900);
+}
+.po .po-qty, .po .po-rate { font-family: var(--po-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.po .po-qty::-webkit-outer-spin-button,
+.po .po-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.po .po-qty { -moz-appearance: textfield; }
+.po .po-rate { background: transparent; border-color: var(--po-line-soft); }
+
+.po .po-uom {
+	appearance: none;
+	-webkit-appearance: none;
+	padding-right: 30px;
+	font-family: var(--po-cond);
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: .02em;
+	background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5l5-5' fill='none' stroke='%2364719B' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 11px center;
+	background-size: 11px;
+}
+.po .po-uom:not([value=""]) { color: var(--po-navy-900); }
+
+/* VAT treatment is fixed by the company's tax rules — shown, not editable. */
+.po .po-vat-apply-on {
+	width: auto;
+	min-width: 92px;
+	padding: 5px 11px;
+	appearance: none;
+	-webkit-appearance: none;
+	font-family: var(--po-cond);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .06em;
+	color: var(--po-navy-700) !important;
+	background: var(--po-field) !important;
+	border: 1px solid var(--po-line-soft);
+	border-radius: 999px;
+	opacity: 1;
+}
+.po-remove-row {
+	width: 30px; height: 30px;
+	display: inline-grid; place-items: center;
+	padding: 0;
+	font-size: 17px;
+	line-height: 1;
+	color: var(--po-muted);
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: color .14s ease, background .14s ease, border-color .14s ease;
+}
+.po-remove-row:hover {
+	color: var(--po-red-600);
+	background: var(--po-red-050);
+	border-color: #F6C9CC;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.po-btn {
+	font-family: var(--po-sans);
+	font-weight: 600;
+	border-radius: 10px;
+	cursor: pointer;
+	transition: background .15s ease, border-color .15s ease, color .15s ease, transform .1s ease, box-shadow .15s ease;
+}
+.po-btn:disabled { opacity: .45; cursor: not-allowed; }
+.po-btn--ghost {
+	padding: 8px 14px;
+	font-size: 13.5px;
+	color: var(--po-navy-700);
+	background: var(--po-surface);
+	border: 1px solid var(--po-line);
+}
+.po-btn--ghost:hover:not(:disabled) { background: var(--po-field); border-color: var(--po-navy-500); }
+.po-btn--primary {
+	width: 100%;
+	padding: 14px 18px;
+	font-size: 16px;
+	letter-spacing: .01em;
+	color: #fff;
+	background: var(--po-red-600);
+	border: 1px solid var(--po-red-600);
+	box-shadow: 0 10px 24px -12px rgba(214, 32, 42, .9);
+}
+.po-btn--primary:hover:not(:disabled) { background: var(--po-red-700); border-color: var(--po-red-700); }
+.po-btn--primary:active:not(:disabled) { transform: translateY(1px); }
+.po :focus-visible { outline: 2px solid var(--po-navy-700); outline-offset: 2px; }
+
+/* ── Notice ────────────────────────────────────────────────────────────── */
+.po-empty {
+	display: flex;
+	gap: 10px;
+	align-items: flex-start;
+	margin: 4px 0 0;
+	padding: 14px 16px;
+	font-size: 14px;
+	line-height: 1.45;
+	color: var(--po-red-700);
+	background: var(--po-red-050);
+	border: 1px solid #F6C9CC;
+	border-radius: 11px;
+}
+
+/* ── Summary docket ────────────────────────────────────────────────────── */
+.po-summary {
+	position: relative;
+	overflow: hidden;
+	padding: 20px 20px 18px;
+	background: var(--po-surface);
+	border: 1px solid var(--po-line);
+	border-radius: var(--po-radius);
+	box-shadow: var(--po-shadow);
+}
+.po-summary::before {
+	content: "";
+	position: absolute;
+	inset: 0 0 auto;
+	height: 3px;
+	background: linear-gradient(90deg, var(--po-red-600) 0 38%, var(--po-navy-700) 38% 100%);
+}
+.po-sum-title {
+	margin: 4px 0 14px;
+	font-family: var(--po-cond);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--po-navy-700);
+}
+.po-sum-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 14px;
+	padding: 7px 0;
+	font-size: 14px;
+	color: var(--po-muted);
+}
+.po-sum-row .po-fig { color: var(--po-navy-900); }
+.po-sum-row--grand {
+	white-space: nowrap;
+	margin-top: 6px;
+	padding-top: 13px;
+	border-top: 1px solid var(--po-line);
+	font-family: var(--po-cond);
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: .12em;
+	text-transform: uppercase;
+	color: var(--po-navy-900);
+}
+.po-grand {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 7px;
+}
+.po-grand .po-cur {
+	font-family: var(--po-cond);
+	font-size: 12px;
+	letter-spacing: .1em;
+	color: var(--po-muted);
+}
+.po-grand .po-fig {
+	font-size: clamp(22px, 2.2vw, 28px);
+	font-weight: 600;
+	letter-spacing: -.02em;
+	color: var(--po-navy-900);
+}
+.po-sum-lines {
+	margin: 0 0 12px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--po-line-soft);
+	font-family: var(--po-mono);
+	font-size: 12.5px;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.5;
+	color: var(--po-navy-700);
+}
+.po-sum-lines:empty { display: none; }
+
+.po .po-rate { color: var(--po-muted); }
+
+.po-inwords {
+	margin: 10px 0 16px;
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--po-muted);
+}
+.po-inwords:empty { display: none; }
+.po-foot-note {
+	margin: 12px 0 0;
+	font-size: 12px;
+	line-height: 1.45;
+	text-align: center;
+	color: var(--po-muted);
+}
+
+/* ── Order placed ──────────────────────────────────────────────────────── */
+.po-done { display: flex; justify-content: center; padding: 26px 0 10px; }
+.po-done[hidden] { display: none; }
+.po-done-card {
+	width: 100%;
+	max-width: 520px;
+	padding: 34px 32px 28px;
+	text-align: center;
+	background: var(--po-surface);
+	border: 1px solid var(--po-line);
+	border-radius: var(--po-radius);
+	box-shadow: var(--po-shadow);
+	animation: po-rise .38s cubic-bezier(.2, .7, .3, 1) both;
+}
+@keyframes po-rise {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; transform: none; }
+}
+.po-done-tick {
+	display: grid;
+	place-items: center;
+	width: 52px; height: 52px;
+	margin: 0 auto 16px;
+	color: #fff;
+	background: var(--po-red-600);
+	border-radius: 50%;
+	box-shadow: 0 10px 22px -10px rgba(214, 32, 42, .85);
+}
+.po-done-tick svg { width: 26px; height: 26px; }
+.po-done-id {
+	margin: 2px 0 22px;
+	font-family: var(--po-mono);
+	font-size: clamp(19px, 2.6vw, 24px);
+	font-weight: 600;
+	letter-spacing: -.01em;
+	color: var(--po-navy-900);
+}
+.po-done-facts {
+	margin: 0 0 24px;
+	padding: 4px 0 0;
+	border-top: 1px solid var(--po-line-soft);
+	text-align: left;
+}
+.po-done-facts > div {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 9px 0;
+	border-bottom: 1px solid var(--po-line-soft);
+}
+.po-done-facts dt {
+	margin: 0;
+	font-family: var(--po-cond);
+	font-size: 11.5px;
+	font-weight: 600;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--po-muted);
+}
+.po-done-facts dd {
+	margin: 0;
+	font-size: 14.5px;
+	font-weight: 500;
+	text-align: right;
+	color: var(--po-navy-900);
+}
+.po-done-facts dd#po-done-lines, .po-done-facts dd#po-done-total {
+	font-family: var(--po-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 14px;
+}
+@media (max-width: 640px) { .po-done-card { padding: 26px 18px 22px; } }
+
+/* ── Line items become cards on small screens ──────────────────────────── */
+@media (max-width: 767px) {
+	.po-table-wrap { overflow: visible; margin: 0; padding: 0; }
+	.po-items-table thead { display: none; }
+	.po-items-table, .po-items-table tbody, .po-items-table tr, .po-items-table td { display: block; width: 100%; }
+	.po-items-table tr {
+		position: relative;
+		margin-bottom: 12px;
+		padding: 12px 14px 8px;
+		border: 1px solid var(--po-line);
+		border-radius: 12px;
+		background: var(--po-surface);
+	}
+	.po-items-table tr:last-child { margin-bottom: 0; }
+	.po-items-table td, .po-items-table tr:last-child td {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(120px, 46%);
+		align-items: center;
+		gap: 12px;
+		padding: 7px 0;
+		border-bottom: 1px solid var(--po-line-soft);
+		text-align: left;
+	}
+	.po-items-table td::before {
+		content: attr(data-label);
+		font-family: var(--po-cond);
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: .1em;
+		text-transform: uppercase;
+		color: var(--po-muted);
+	}
+	.po-items-table td.po-num { text-align: right; }
+	.po-items-table td.po-cell-sn { display: none; }
+	.po-items-table td.po-cell-item {
+		display: block;
+		padding: 0 34px 8px 0;
+		border-bottom: 1px solid var(--po-line);
+	}
+	.po-items-table td.po-cell-item::before { content: none; }
+	.po .po-item-code { font-size: 16px; padding: 0; }
+	.po-items-table td.po-cell-remove {
+		position: absolute;
+		top: 9px; right: 9px;
+		width: auto;
+		padding: 0;
+		border: none;
+	}
+	.po-items-table td.po-cell-remove::before { content: none; }
+	.po .po-qty, .po .po-uom { font-size: 16px; padding: 9px 12px; }
+	.po .po-uom { padding-right: 30px; }
+	.po .po-rate { font-size: 15px; padding: 8px 12px; }
+	.po-fig, .po-items-table .po-num { font-size: 15px; }
+
+	/* The docket rides the bottom of the screen where the thumb is. */
+	.po-side { position: sticky; bottom: 0; z-index: 30; }
+	.po-summary {
+		padding: 12px 16px 14px;
+		border-radius: 14px 14px 0 0;
+		box-shadow: 0 -14px 34px -18px rgba(20, 31, 74, .55);
+	}
+	.po-sum-title, .po-inwords, .po-foot-note { display: none; }
+	.po-sum-row { display: none; }
+	.po-sum-row--grand {
+		display: flex;
+		margin: 4px 0 10px;
+		padding-top: 0;
+		border-top: none;
+	}
+	.po-grand .po-fig { font-size: 26px; }
+	.po-btn--primary { padding: 13px 18px; }
+}
+
+@media (max-width: 640px) {
+	.po-head { gap: 12px; padding: 20px 0 14px; }
+	.po-head-aside { display: none; }
+	.po-fields { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.po *, .po *::before, .po *::after {
+		transition-duration: .01ms !important;
+		animation-duration: .01ms !important;
+	}
+}
+</style>
+{% endblock %}
+
 {% block script %}
 <script>
 window.place_order_ctx = {
@@ -15,12 +677,22 @@ window.place_order_ctx = {
 	default_delivery_date: {{ default_delivery_date | tojson }},
 	default_item_code: {{ default_item_code | tojson }},
 	default_item_name: {{ default_item_name | tojson }},
+	uoms: {{ default_uoms | tojson }},
 	items: []
 };
 
 $(document).ready(function () {
 	new PlaceOrder();
 });
+
+// 2026-08-29 → 29 Aug 2026
+function format_date(iso) {
+	if (!iso) return "—";
+	const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+	const parts = String(iso).split("-");
+	if (parts.length !== 3) return iso;
+	return `${parseInt(parts[2], 10)} ${months[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
+}
 
 // Keyboard navigation helper for autocomplete dropdowns
 function attach_kbd_nav($input, get_dd) {
@@ -54,35 +726,98 @@ class PlaceOrder {
 		this.ctx = window.place_order_ctx;
 		this.row_idx = 0;
 
-		// Shared UOM dropdown appended to body to escape table overflow clipping
-		var me = this;
-		this.$uom_dd = $('<div>').css({
-			position: 'absolute', zIndex: 10000, background: '#fff',
-			border: '1px solid #ddd', display: 'none',
-			minWidth: '150px', maxHeight: '200px', overflowY: 'auto',
-			boxShadow: '0 2px 8px rgba(0,0,0,0.15)', borderRadius: '4px'
-		}).appendTo('body');
-		$(document).on('mousedown.uom_dd', function(e) {
-			if (!$(e.target).hasClass('po-uom')) me.$uom_dd.hide();
-		});
-
 		this.bind_company_search();
 		this.bind_customer_change();
-		this.bind_price_list_search();
 		this.bind_add_row();
 		this.bind_submit();
 		this.add_row(); // start with one empty row
+		this.apply_item_availability();
+	}
+
+	// ── The company decides the item ──────────────────────────────────
+	// Each company sells its own LP Gas item (Item.custom_company), so the item and its
+	// UOMs are re-resolved whenever the company changes — directly, or via a customer
+	// whose custom_company overrides it.
+	refresh_company_item(after) {
+		var me = this;
+		const company = me.ctx.company || "";
+		if (!company) {
+			me.ctx.default_item_code = "";
+			me.ctx.uoms = [];
+			me.apply_item_availability();
+			if (after) after();
+			return;
+		}
+
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.place_order.get_company_item",
+			args: { company: company, customer: me.ctx.customer || "" },
+			callback: function (r) {
+				const d = r.message || {};
+				me.sizes_narrowed = !!d.narrowed;
+				me.ctx.default_item_code = d.item_code || "";
+				me.ctx.default_item_name = d.item_name || "LP Gas";
+				me.ctx.uoms = d.uoms || [];
+
+				// Repoint every existing row at the new company's item and rebuild its
+				// UOM list, keeping the chosen UOM only if the new item supports it.
+				$("#po-items-body tr").each(function () {
+					const idx = $(this).data("idx");
+					const item = me.get_item(idx);
+					const keep_uom = (item && me.ctx.uoms.indexOf(item.uom) !== -1) ? item.uom : "";
+
+					$(`input.po-item-code[data-idx=${idx}]`)
+						.val(me.ctx.default_item_name)
+						.attr("title", me.ctx.default_item_name)
+						.data("item_code", me.ctx.default_item_code);
+					$(`select.po-uom[data-idx=${idx}]`).html(me.uom_options_html(keep_uom));
+
+					if (item) {
+						item.item_code = me.ctx.default_item_code;
+						item.item_name = me.ctx.default_item_name;
+						item.uom = keep_uom;
+					}
+
+					if (me.ctx.default_item_code) {
+						if (keep_uom) me.fetch_item_details_with_uom(idx, keep_uom);
+						else me.fetch_item_details(idx);
+					}
+				});
+
+				me.apply_item_availability();
+				if (after) after();
+			}
+		});
+	}
+
+	apply_item_availability() {
+		const ok = !!this.ctx.default_item_code;
+		const company = this.ctx.company || "";
+		const no_sizes = ok && this.sizes_narrowed && !(this.ctx.uoms || []).length;
+
+		$("#po-add-row").prop("disabled", !ok || no_sizes);
+		$("#po-submit").prop("disabled", !ok || no_sizes);
+
+		if (no_sizes) {
+			$("#po-no-item").text(
+				"No cylinder sizes are priced for this account yet. Please contact the depot."
+			).show();
+		} else if (ok) {
+			$("#po-no-item").hide().text("");
+		} else {
+			$("#po-no-item").text(
+				company
+					? `LP Gas is not set up for ${company}. Orders cannot be placed for this company.`
+					: "Select a company to start your order."
+			).show();
+		}
 	}
 
 	// ── Company autocomplete ──────────────────────────────────────────
 	bind_company_search() {
 		var me = this;
 		const $input = $("#po-company");
-		const $dd = $("<div>").css({
-			position: "absolute", zIndex: 999, background: "#fff",
-			border: "1px solid #ddd", display: "none",
-			minWidth: "250px", maxHeight: "200px", overflowY: "auto"
-		}).insertAfter($input);
+		const $dd = $("<div class='po-dd'>").insertAfter($input);
 
 		function search_company() {
 			const txt = $input.val().trim();
@@ -94,10 +829,7 @@ class PlaceOrder {
 					$dd.empty();
 					if (!results.length) { $dd.hide(); return; }
 					results.forEach(function (c) {
-						$("<div>").text(c.name)
-							.css({ padding: "6px 10px", cursor: "pointer" })
-							.hover(function () { $(this).css("background", "#f0f0f0"); },
-								   function () { $(this).css("background", "#fff"); })
+						$("<div class='po-dd-item'>").text(c.name)
 							.on("mousedown", function (e) {
 								e.preventDefault();
 								$input.val(c.name);
@@ -106,13 +838,13 @@ class PlaceOrder {
 								// reset customer and price list when company changes
 								me.ctx.customer = "";
 								me.ctx.price_list = "";
-								$("#po-price-list").val("");
 								if (me.ctx.customer_list && me.ctx.customer_list.length > 0) {
 									$("#po-customer").val("");
 									me.filter_customer_dropdown();
 								} else {
 									$("#po-customer").val("");
 								}
+								me.refresh_company_item();
 							})
 							.appendTo($dd);
 					});
@@ -126,54 +858,11 @@ class PlaceOrder {
 		attach_kbd_nav($input, function () { return $dd; });
 
 		$input.on("change", function () {
-			me.ctx.company = $(this).val().trim();
+			const val = $(this).val().trim();
+			if (val === me.ctx.company) return;
+			me.ctx.company = val;
+			me.refresh_company_item();
 		});
-	}
-
-	// ── Price List search ─────────────────────────────────────────────
-	bind_price_list_search() {
-		var me = this;
-		const $input = $("#po-price-list");
-		const $dd = $("<div>").css({
-			position: "absolute", zIndex: 999, background: "#fff",
-			border: "1px solid #ddd", display: "none",
-			minWidth: "250px", maxHeight: "200px", overflowY: "auto"
-		}).insertAfter($input);
-
-		function search_pl() {
-			const txt = $input.val().trim();
-			const customer = me.ctx.customer || $("#po-customer").val().trim();
-			frappe.call({
-				method: "avinashgroup_app.templates.pages.place_order.search_price_lists",
-				args: { txt: txt, customer: customer },
-				callback: function (r) {
-					const results = r.message || [];
-					$dd.empty();
-					if (!results.length) { $dd.hide(); return; }
-					results.forEach(function (pl) {
-						const display = pl.price_list_name || pl.name;
-						$("<div>").text(display)
-							.css({ padding: "6px 10px", cursor: "pointer" })
-							.hover(function () { $(this).css("background", "#f0f0f0"); },
-								   function () { $(this).css("background", "#fff"); })
-							.on("click", function () {
-								$input.val(display);
-								me.ctx.price_list = pl.name;
-								$dd.hide();
-								$("#po-items-body tr").each(function () {
-									me.fetch_item_details($(this).data("idx"));
-								});
-							})
-							.appendTo($dd);
-					});
-					$dd.show();
-				}
-			});
-		}
-
-		$input.on("focus click input", function () { search_pl(); });
-		$input.on("blur", function () { setTimeout(function () { $dd.hide(); }, 200); });
-		$input.on("change", function () { me.ctx.price_list = $(this).val().trim(); });
 	}
 
 	// ── Customer search + change ──────────────────────────────────────
@@ -207,10 +896,7 @@ class PlaceOrder {
 						$dd.empty();
 						if (!results.length) { $dd.hide(); return; }
 						results.forEach(function (c) {
-							$("<div>").text(c.customer_name || c.name)
-								.css({ padding: "6px 10px", cursor: "pointer" })
-								.hover(function () { $(this).css("background", "#f0f0f0"); },
-									   function () { $(this).css("background", "#fff"); })
+							$("<div class='po-dd-item'>").text(c.customer_name || c.name)
 								.on("click", function () {
 									$input.val(c.customer_name || c.name);
 									me.ctx.customer = c.name;
@@ -259,18 +945,19 @@ class PlaceOrder {
 				me.ctx.price_list = r.message.price_list;
 				me.ctx.currency = r.message.currency;
 				// Fill company from customer's linked company if set; otherwise leave user's choice
-				if (r.message.customer_company) {
+				let company_changed = false;
+				if (r.message.customer_company && r.message.customer_company !== me.ctx.company) {
 					me.ctx.company = r.message.customer_company;
 					$("#po-company").val(r.message.customer_company);
+					company_changed = true;
 				}
-				$("#po-price-list").val(r.message.price_list_name || r.message.price_list);
-				$("#po-currency-display").val(r.message.currency);
+						$("#po-currency-display").val(r.message.currency);
 				$("#po-currency").val(r.message.currency);
-				// re-fetch rates for existing rows
-				$("#po-items-body tr").each(function () {
-					const idx = $(this).data("idx");
-					me.fetch_item_details(idx);
-				});
+				$("#po-sum-currency").text(r.message.currency);
+
+				// Both the item (via company) and the sizes on offer (via price list)
+				// depend on the customer, so re-read them either way.
+				me.refresh_company_item();
 			}
 		});
 	}
@@ -283,42 +970,50 @@ class PlaceOrder {
 		});
 	}
 
+	uom_options_html(selected) {
+		// The UOM choices are the company item's own conversions, not a fixed list.
+		const uoms = this.ctx.uoms || [];
+		let html = '<option value="">Select</option>';
+		uoms.forEach(function (u) {
+			const sel = (u === selected) ? ' selected' : '';
+			html += `<option value="${u}"${sel}>${u}</option>`;
+		});
+		return html;
+	}
+
 	add_row() {
 		this.row_idx++;
 		const idx = this.row_idx;
-		const delivery = this.ctx.today;
-		// LP Gas is the only product — the item is fixed and not editable on the form.
+		// LP Gas is the only product — the item is fixed, but which LP Gas item it is
+		// depends on the company.
 		const defaultItemName = this.ctx.default_item_name || "LP Gas";
 		const defaultItemCode = this.ctx.default_item_code || "";
 
 		const row = $(`
 			<tr data-idx="${idx}">
-				<td class="text-center po-sn"></td>
-				<td>
+				<td class="po-cell-sn"><span class="po-sn"></span></td>
+				<td class="po-cell-item">
 					<input type="text" class="form-control po-item-code" data-idx="${idx}"
-						value="${defaultItemName}" readonly tabindex="-1"
-						style="background:#f5f5f5;cursor:default;" title="${defaultItemName}">
-					</td>
-				<td>
-					<input type="date" class="form-control po-delivery-date" data-idx="${idx}" value="${delivery}">
+						value="${defaultItemName}" readonly tabindex="-1" title="${defaultItemName}">
 				</td>
-				<td><input type="number" class="form-control po-qty text-right" data-idx="${idx}" value="1" min="0" step="1" placeholder="0"></td>
-				<td>
-					<input type="text" class="form-control po-uom" data-idx="${idx}"
-						placeholder="UOM" autocomplete="off">
+				<td class="po-num" data-label="Qty"><input type="number" class="form-control po-qty" data-idx="${idx}" value="1" min="0" step="1" placeholder="0"></td>
+				<td data-label="Size">
+					<select class="form-control po-uom" data-idx="${idx}" aria-label="Cylinder size">${this.uom_options_html("")}</select>
 				</td>
-				<td><input type="text" class="form-control po-rate text-right" data-idx="${idx}" readonly tabindex="-1" value="0.00"></td>
-				<td class="text-right po-amount" data-idx="${idx}">0.00</td>
-				<td>
-					<select class="form-control po-vat-apply-on" data-idx="${idx}" disabled style="pointer-events:none;background:#f5f5f5;color:#333;">
-						<option value="VAT 13%">VAT 13%</option>
-						<option value="VAT 0%">VAT 0%</option>
-						<option value="Amount">Amount</option>
-					</select>
+				<td class="po-num" data-label="Rate"><span class="po-rate po-fig" data-idx="${idx}">0.00</span></td>
+				<td class="po-num po-amount" data-idx="${idx}" data-label="Amount">0.00</td>
+				<td class="po-num po-cell-vat" data-label="VAT">
+					<span class="po-vat-wrap">
+						<select class="form-control po-vat-apply-on" data-idx="${idx}" disabled style="pointer-events:none;">
+							<option value="VAT 13%">VAT 13%</option>
+							<option value="VAT 0%">VAT 0%</option>
+							<option value="Amount">Amount</option>
+						</select>
+						<span class="po-vat-amount po-fig" data-idx="${idx}">0.00</span>
+					</span>
 				</td>
-				<td class="text-right po-vat-amount" data-idx="${idx}">0.00</td>
-				<td class="text-center">
-					<button class="btn btn-sm btn-light po-remove-row" data-idx="${idx}" style="font-weight:700;font-size:16px;color:#333;line-height:1;">×</button>
+				<td class="po-cell-remove">
+					<button type="button" class="po-remove-row" data-idx="${idx}" aria-label="Remove line">×</button>
 				</td>
 			</tr>
 		`);
@@ -330,7 +1025,6 @@ class PlaceOrder {
 			_idx: idx,
 			item_code: defaultItemCode, item_name: defaultItemName, uom: "",
 			qty: 0, rate: 0, amount: 0,
-			delivery_date: delivery,
 			vat_apply_on: "VAT 13%", vat_amount: 0
 		});
 
@@ -346,67 +1040,28 @@ class PlaceOrder {
 	bind_row_events(idx) {
 		var me = this;
 
-		// Item is fixed to LP Gas — no item search/dropdown.
+		// Item is fixed to the company's LP Gas item — no item search/dropdown.
 
-		// UOM search — uses shared body-level dropdown to escape table overflow clipping
-		function search_uom() {
-			const $inp = $(`input.po-uom[data-idx=${idx}]`);
+		// UOM — a plain select of the item's own UOMs; picking one re-prices the row.
+		$(`select.po-uom[data-idx=${idx}]`).on("change", function () {
+			const uom = $(this).val();
 			const item = me.get_item(idx);
-			const item_code = item ? (item.item_code || "") : "";
-			const txt = $inp.val().trim();
+			if (item) item.uom = uom;
 
-			frappe.call({
-				method: "avinashgroup_app.templates.pages.place_order.search_uoms",
-				args: { item_code: item_code, txt: txt },
-				callback: function (r) {
-					const uoms = r.message || [];
-					me.$uom_dd.empty();
-					if (!uoms.length) { me.$uom_dd.hide(); return; }
-
-					const rect = $inp[0].getBoundingClientRect();
-					me.$uom_dd.css({
-						top: rect.bottom + window.scrollY,
-						left: rect.left + window.scrollX,
-						width: Math.max(rect.width, 150)
-					});
-
-					uoms.forEach(function (uom) {
-						$("<div>").text(uom)
-							.css({ padding: "6px 10px", cursor: "pointer" })
-							.hover(function () { $(this).css("background", "#f0f0f0"); },
-								   function () { $(this).css("background", "#fff"); })
-							.on("mousedown", function (e) {
-								e.preventDefault(); // prevent blur before click
-								$inp.val(uom);
-								if (item) item.uom = uom;
-								me.$uom_dd.hide();
-								if (item && item.item_code) {
-									me.fetch_item_details_with_uom(idx, uom);
-								}
-							})
-							.appendTo(me.$uom_dd);
-					});
-					me.$uom_dd.show();
-				}
-			});
-		}
-
-		$(`input.po-uom[data-idx=${idx}]`).on("focus click input", function () { search_uom(); });
-		$(`input.po-uom[data-idx=${idx}]`).on("blur", function () {
-			setTimeout(function () { me.$uom_dd.hide(); }, 200);
+			if (!uom) {
+				if (item) { item.rate = 0; }
+				$(`.po-rate[data-idx=${idx}]`).text("0.00");
+				me.update_row_amount(idx);
+				me.recalculate_totals();
+				return;
+			}
+			if (item && item.item_code) me.fetch_item_details_with_uom(idx, uom);
 		});
-		attach_kbd_nav($(`input.po-uom[data-idx=${idx}]`), function () { return me.$uom_dd; });
 
 		// Qty change
 		$(`input.po-qty[data-idx=${idx}]`).on("change", function () {
 			me.update_row_amount(idx);
 			me.recalculate_totals();
-		});
-
-		// Delivery date
-		$(`input.po-delivery-date[data-idx=${idx}]`).on("change", function () {
-			const item = me.get_item(idx);
-			if (item) item.delivery_date = $(this).val();
 		});
 
 		// VAT Apply On change
@@ -431,6 +1086,17 @@ class PlaceOrder {
 		});
 	}
 
+	// Re-price every row against the current price list, keeping each row's UOM.
+	reprice_rows() {
+		var me = this;
+		$("#po-items-body tr").each(function () {
+			const idx = $(this).data("idx");
+			const item = me.get_item(idx);
+			if (item && item.uom) me.fetch_item_details_with_uom(idx, item.uom);
+			else me.fetch_item_details(idx);
+		});
+	}
+
 	fetch_item_details(idx) {
 		var me = this;
 		const $inp = $(`input.po-item-code[data-idx=${idx}]`);
@@ -448,13 +1114,14 @@ class PlaceOrder {
 
 				item.item_code = item_code;
 				item.item_name = d.item_name || item_code;
-				// Leave UOM blank on item select — client picks it from the dropdown.
+				// Leave UOM blank on item select — the client picks it from the dropdown,
+				// and until they do there is no rate to show.
 				item.uom       = "";
 				item.stock_uom = d.stock_uom || "";
-				item.rate      = flt(d.rate || 0);
+				item.rate      = 0;
 
-					$(`input.po-uom[data-idx=${idx}]`).val("");
-				$(`input.po-rate[data-idx=${idx}]`).val(
+				$(`select.po-uom[data-idx=${idx}]`).val("");
+				$(`.po-rate[data-idx=${idx}]`).text(
 					format_number(item.rate, me.ctx.number_format, 5)
 				);
 
@@ -480,8 +1147,8 @@ class PlaceOrder {
 				if (!item) return;
 				item.uom  = uom || d.uom || d.stock_uom || "";
 				item.rate = flt(d.rate || 0);
-				$(`input.po-uom[data-idx=${idx}]`).val(item.uom);
-				$(`input.po-rate[data-idx=${idx}]`).val(
+				$(`select.po-uom[data-idx=${idx}]`).val(item.uom);
+				$(`.po-rate[data-idx=${idx}]`).text(
 					format_number(item.rate, me.ctx.number_format, 5)
 				);
 				me.update_row_amount(idx);
@@ -544,6 +1211,16 @@ class PlaceOrder {
 		});
 		const grand_total = total_amount + total_vat_amount;
 
+		// "12 × 14.2 KG · 5 × 5 KG" — the order read back the way a depot reads it.
+		const by_size = [];
+		this.ctx.items.forEach(function (item) {
+			if (!item.qty || !item.uom) return;
+			const hit = by_size.find(g => g.uom === item.uom);
+			if (hit) hit.qty += flt(item.qty);
+			else by_size.push({ uom: item.uom, qty: flt(item.qty) });
+		});
+		$("#po-sum-lines").text(by_size.map(g => `${g.qty} × ${g.uom}`).join("  ·  "));
+
 		$("#po-total-amount-incl-excise").text(format_number(total_amount, me.ctx.number_format, 2));
 		$("#po-total-vat-amount").text(format_number(total_vat_amount, me.ctx.number_format, 2));
 		$("#po-grand-total").text(format_number(grand_total, me.ctx.number_format, 2));
@@ -553,7 +1230,7 @@ class PlaceOrder {
 			method: "avinashgroup_app.templates.pages.place_order.get_in_words",
 			args: { amount: grand_total, currency: me.ctx.currency },
 			callback: function (r) {
-				$("#po-in-words").text(r.message || "");
+				$("#po-in-words").text(grand_total ? (r.message || "") : "");
 			}
 		});
 	}
@@ -561,17 +1238,49 @@ class PlaceOrder {
 	// ── Submit ────────────────────────────────────────────────────────
 	bind_submit() {
 		var me = this;
+		$("#po-again").on("click", function () { window.location.href = "/place_order"; });
 		$("#po-submit").on("click", function () {
 			me.submit_order();
 		});
 	}
 
+	// The order is on the system — hand back the number rather than bouncing the
+	// customer to another page.
+	show_done(order_id, delivery_date) {
+		const cust = $("#po-customer option:selected").text() || $("#po-customer").val() || "";
+		$("#po-done-id").text(order_id);
+		$("#po-done-customer").text(cust);
+		$("#po-done-lines").text($("#po-sum-lines").text() || "—");
+		$("#po-done-delivery").text(format_date(delivery_date));
+		$("#po-done-total").text(`${this.ctx.currency} ${$("#po-grand-total").text()}`);
+
+		$(".po-grid").hide();
+		$("#po-done").prop("hidden", false);
+		$(window).scrollTop(0);
+	}
+
 	submit_order() {
 		var me = this;
+
+		// One order per click. Disabling the button is not enough on its own: handlers
+		// already queued for the same event still run.
+		if (me.submitting) return;
+
+		const company = $("#po-company").val().trim();
+		if (!company || !me.ctx.default_item_code) {
+			frappe.msgprint({ title: "Missing", message: "Please select a company that sells LP Gas.", indicator: "red" });
+			return;
+		}
 
 		const customer = $("#po-customer").val().trim();
 		if (!customer) {
 			frappe.msgprint({ title: "Missing", message: "Please select a customer.", indicator: "red" });
+			return;
+		}
+
+		const delivery_date = $("#po-delivery-date").val();
+		if (!delivery_date) {
+			frappe.msgprint({ title: "Missing Date", message: "Please set the Expected Delivery Date.", indicator: "red" });
 			return;
 		}
 
@@ -582,13 +1291,18 @@ class PlaceOrder {
 		}
 
 		for (let i = 0; i < valid_items.length; i++) {
-			const item = valid_items[i];
-			const delivery = $(`input.po-delivery-date[data-idx=${item._idx}]`).val();
-			if (!delivery) {
-				frappe.msgprint({ title: "Missing Date", message: `Row ${i + 1}: Delivery Date is required.`, indicator: "red" });
+			if (!valid_items[i].uom) {
+				frappe.msgprint({ title: "Missing size", message: `Line ${i + 1}: please choose a cylinder size.`, indicator: "red" });
 				return;
 			}
-			item.delivery_date = delivery;
+			if (!(valid_items[i].rate > 0)) {
+				frappe.msgprint({
+					title: "Size not available",
+					message: `Line ${i + 1}: ${valid_items[i].uom} is not priced for your account. Please choose another size or contact the depot.`,
+					indicator: "red"
+				});
+				return;
+			}
 		}
 
 		const payload = valid_items.map(function (item) {
@@ -599,12 +1313,12 @@ class PlaceOrder {
 				qty: item.qty,
 				rate: item.rate,
 				amount: item.amount,
-				delivery_date: item.delivery_date,
 				vat_apply_on: item.vat_apply_on || "",
 				vat_amount: item.vat_amount || 0
 			};
 		});
 
+		me.submitting = true;
 		$("#po-submit").prop("disabled", true).text("Placing Order...");
 		frappe.freeze("Placing order...");
 
@@ -612,29 +1326,23 @@ class PlaceOrder {
 			method: "avinashgroup_app.templates.pages.place_order.create_sales_order",
 			args: {
 				customer: customer,
-				company: $("#po-company").val(),
+				company: company,
 				transaction_date: $("#po-date").val() || me.ctx.today,
-				selling_price_list: me.ctx.price_list || $("#po-price-list").val(),
-				currency: $("#po-currency").val(),
+				delivery_date: delivery_date,
 				items: JSON.stringify(payload)
 			},
 			callback: function (r) {
 				frappe.unfreeze();
 				if (r.message && r.message.status === "success") {
-					frappe.msgprint({
-						title: "Order Placed!",
-						message: `Order <b>${r.message.order_id}</b> has been placed successfully.<br><br><a href="/orders">View My Orders →</a>`,
-						indicator: "green"
-					});
-					setTimeout(function () {
-						window.location.href = "/orders";
-					}, 2500);
+					me.show_done(r.message.order_id, delivery_date);
 				} else {
+					me.submitting = false;
 					$("#po-submit").prop("disabled", false).text("Place Order");
 				}
 			},
 			error: function () {
 				frappe.unfreeze();
+				me.submitting = false;
 				$("#po-submit").prop("disabled", false).text("Place Order");
 			}
 		});
@@ -644,128 +1352,154 @@ class PlaceOrder {
 {% endblock %}
 
 {% block page_content %}
-<style>
-.po-qty::-webkit-outer-spin-button,
-.po-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.po-qty { -moz-appearance: textfield; }
-.po-section-label {
-	font-size: 14px;
-	color: #000;
-	font-weight: 600;
-	margin-bottom: 4px;
-}
-.po-field-value {
-	font-weight: 500;
-	padding: 6px 0;
-}
-.po-items-table th {
-	font-size: 14px;
-	color: #000;
-	font-weight: 600;
-}
-.po-items-table td {
-	vertical-align: middle;
-}
-.po-amount {
-	font-weight: 500;
-}
-.po-dd-hi { background: #e8f0fe !important; }
-</style>
+<div class="po">
 
-<style>
-.page-content, .page_content, .container { max-width: 100% !important; padding-left: 130px !important; padding-right: 130px !important; }
-</style>
-<h2 class="mb-4">Place Order</h2>
-
-<!-- Header Fields -->
-<div class="row mb-4">
-	<div class="col-sm-4 mb-3">
-		<div class="po-section-label">Company <span class="text-danger">*</span></div>
-		<div style="position:relative;">
-			<input type="text" class="form-control" id="po-company"
-				value="{{ company }}" placeholder="Select company">
+	<header class="po-head">
+		<div class="po-mark" aria-hidden="true">
+			<!-- the group's flame, redrawn -->
+			<svg viewBox="0 0 24 24" fill="none">
+				<path d="M12 2.2c.6 3.1-1.1 4.3-2.6 5.9-1.6 1.7-2.6 3.3-2.6 5.5a5.2 5.2 0 0 0 10.4 0c0-2.4-1.2-3.7-2.3-5.2-.5 1-1.2 1.5-2 1.7.7-2.6.5-5.2-.9-7.9Z" fill="#fff"/>
+				<path d="M12 21.8a3 3 0 0 1-3-3c0-1.6 1.4-2.6 2.3-4 .8 1.5 3.7 2.3 3.7 4a3 3 0 0 1-3 3Z" fill="#D6202A"/>
+			</svg>
 		</div>
-	</div>
-	<div class="col-sm-4 mb-3">
-		<div class="po-section-label">Customer <span class="text-danger">*</span></div>
-		{% if customer_list %}
-			<select class="form-control" id="po-customer">
-				<option value="">-- Select Customer --</option>
-				{% for c in customer_list %}
-				<option value="{{ c.name }}" data-company="{{ c.company }}">{{ c.customer_name }}</option>
-				{% endfor %}
-			</select>
-		{% else %}
-			<div style="position:relative;">
-				<input type="text" class="form-control" id="po-customer"
-					placeholder="Select customer" value="">
+		<div class="po-head-text">
+			<p class="po-eyebrow">Customer Portal</p>
+			<h1 class="po-title">Place Order</h1>
+		</div>
+		<div class="po-head-aside">
+			<span class="po-product"><span>Product</span> <b>LP Gas</b></span>
+		</div>
+	</header>
+
+	<div class="po-grid">
+		<div class="po-main">
+
+			<!-- Order details -->
+			<section class="po-card">
+				<div class="po-card-head">
+					<h2 class="po-card-title">Order details</h2>
+					<p class="po-card-note">Rates are set for your account.</p>
+				</div>
+
+				<div class="po-fields">
+					<div class="po-field">
+						<label class="po-label" for="po-company">Company <i>*</i></label>
+						<input type="text" class="form-control" id="po-company"
+							value="{{ company }}" placeholder="Select company" autocomplete="off">
+					</div>
+
+					<div class="po-field">
+						<label class="po-label" for="po-customer">Customer <i>*</i></label>
+						{% if customer_list %}
+							<select class="form-control" id="po-customer">
+								<option value="">Select customer</option>
+								{% for c in customer_list %}
+								<option value="{{ c.name }}" data-company="{{ c.company }}">{{ c.customer_name }}</option>
+								{% endfor %}
+							</select>
+						{% else %}
+							<input type="text" class="form-control" id="po-customer"
+								placeholder="Search customer" value="" autocomplete="off">
+						{% endif %}
+					</div>
+
+					<div class="po-field">
+						<label class="po-label" for="po-date">Order Date <i>*</i></label>
+						<input type="date" class="form-control" id="po-date" value="{{ today }}">
+					</div>
+
+					<div class="po-field">
+						<label class="po-label" for="po-delivery-date">Expected Delivery <i>*</i></label>
+						<input type="date" class="form-control" id="po-delivery-date" value="{{ default_delivery_date }}">
+					</div>
+
+					<div class="po-field">
+						<label class="po-label" for="po-currency-display">Currency</label>
+						<input type="text" class="form-control" id="po-currency-display" value="{{ currency }}" readonly tabindex="-1">
+						<input type="hidden" id="po-currency" value="{{ currency }}">
+					</div>
+				</div>
+			</section>
+
+			<!-- Cylinders -->
+			<section class="po-card">
+				<div class="po-card-head">
+					<h2 class="po-card-title">Cylinders</h2>
+					<button type="button" class="po-btn po-btn--ghost" id="po-add-row">+ Add line</button>
+				</div>
+
+				<div class="po-empty" id="po-no-item" style="display:none;"></div>
+
+				<div class="po-table-wrap">
+					<table class="po-items-table">
+						<thead>
+							<tr>
+								<th style="width:30px;">#</th>
+								<th style="min-width:118px;">Item</th>
+								<th class="po-num" style="width:84px;">Qty</th>
+								<th style="width:116px;">Size</th>
+								<th class="po-num" style="width:116px;">Rate</th>
+								<th class="po-num" style="width:116px;">Amount</th>
+								<th class="po-num" style="width:158px;">VAT</th>
+								<th style="width:34px;"></th>
+							</tr>
+						</thead>
+						<tbody id="po-items-body"></tbody>
+					</table>
+				</div>
+			</section>
+		</div>
+
+		<!-- Running docket -->
+		<aside class="po-side">
+			<div class="po-summary">
+				<h2 class="po-sum-title">Order summary</h2>
+
+				<p class="po-sum-lines" id="po-sum-lines"></p>
+
+				<div class="po-sum-row">
+					<span>Total incl. excise</span>
+					<span class="po-fig" id="po-total-amount-incl-excise">0.00</span>
+				</div>
+				<div class="po-sum-row">
+					<span>VAT</span>
+					<span class="po-fig" id="po-total-vat-amount">0.00</span>
+				</div>
+				<div class="po-sum-row po-sum-row--grand">
+					<span>Grand total</span>
+					<span class="po-grand">
+						<span class="po-cur" id="po-sum-currency">{{ currency }}</span>
+						<span class="po-fig" id="po-grand-total">0.00</span>
+					</span>
+				</div>
+
+				<p class="po-inwords" id="po-in-words"></p>
+
+				<button type="button" class="po-btn po-btn--primary" id="po-submit">Place Order</button>
+				<p class="po-foot-note">Your order goes straight to the depot for dispatch.</p>
 			</div>
-		{% endif %}
+		</aside>
 	</div>
-	<div class="col-sm-4 mb-3">
-		<div class="po-section-label">Transaction Date <span class="text-danger">*</span></div>
-		<input type="date" class="form-control" id="po-date" value="{{ today }}">
-	</div>
-	<div class="col-sm-4 mb-3">
-		<div class="po-section-label">Price List <span class="text-danger">*</span></div>
-		<div style="position:relative;">
-			<input type="text" class="form-control" id="po-price-list"
-				value="{{ price_list }}" placeholder="Select price list">
-		</div>
-	</div>
-	<div class="col-sm-4 mb-3">
-		<div class="po-section-label">Currency</div>
-		<input type="text" class="form-control" id="po-currency-display" value="{{ currency }}" readonly tabindex="-1">
-		<input type="hidden" id="po-currency" value="{{ currency }}">
-	</div>
-</div>
 
-<!-- Items Table -->
-<div class="table-responsive mb-2">
-	<table class="table po-items-table">
-		<thead>
-			<tr>
-				<th style="width:40px;">S.N.</th>
-				<th style="min-width:160px;">Item</th>
-				<th style="min-width:130px;">Delivery Date</th>
-				<th style="width:130px;" class="text-right">Qty</th>
-				<th style="width:80px;">UOM</th>
-				<th style="min-width:80px;" class="text-right">Rate</th>
-				<th style="min-width:100px;" class="text-right">Amount</th>
-				<th style="min-width:2px;" class="text-right">VAT Apply On</th>
-				<th style="min-width:120px;" class="text-right">VAT Amount</th>
-				<th style="width:40px;"></th>
-			</tr>
-		</thead>
-		<tbody id="po-items-body">
-		</tbody>
-	</table>
-</div>
+	<!-- Shown in place of the form once the order is on the system -->
+	<section class="po-done" id="po-done" hidden>
+		<div class="po-done-card">
+			<span class="po-done-tick" aria-hidden="true">
+				<svg viewBox="0 0 24 24" fill="none"><path d="m4.5 12.5 5 5 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+			<p class="po-eyebrow">Order placed</p>
+			<h2 class="po-done-id" id="po-done-id"></h2>
 
-<button class="btn btn-sm btn-secondary mb-4" id="po-add-row">+ Add Item</button>
+			<dl class="po-done-facts">
+				<div><dt>Customer</dt><dd id="po-done-customer"></dd></div>
+				<div><dt>Cylinders</dt><dd id="po-done-lines"></dd></div>
+				<div><dt>Expected delivery</dt><dd id="po-done-delivery"></dd></div>
+				<div><dt>Order total</dt><dd id="po-done-total"></dd></div>
+			</dl>
 
-<!-- Footer / Totals -->
-<div class="row justify-content-end mb-1">
-	<div class="col-sm-4">
-		<div class="d-flex justify-content-between border-top pt-2">
-			<span>Total Amount (Including Excise)</span>
-			<span id="po-total-amount-incl-excise">0.00</span>
+			<button type="button" class="po-btn po-btn--primary" id="po-again">Place another order</button>
+			<p class="po-foot-note">Keep the order number for any follow-up with the depot.</p>
 		</div>
-		<div class="d-flex justify-content-between pt-1">
-			<span>Total VAT Amount</span>
-			<span id="po-total-vat-amount">0.00</span>
-		</div>
-		<div class="d-flex justify-content-between border-top pt-2 mt-1">
-			<strong>Grand Total</strong>
-			<strong id="po-grand-total">0.00</strong>
-		</div>
-		<div class="text-muted small mt-1"><span>In Words: </span><span id="po-in-words"></span></div>
-	</div>
-</div>
-
-<div class="row justify-content-end mt-4">
-	<div class="col-sm-4 text-right">
-		<button class="btn btn-primary btn-lg" id="po-submit">Place Order</button>
-	</div>
+	</section>
 </div>
 {% endblock %}
