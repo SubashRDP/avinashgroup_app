@@ -10,11 +10,27 @@
 frappe.ready(function () {
 	if (!frappe.session || frappe.session.user === "Guest") return;
 
-	const $navbar = $(".navbar .navbar-nav").last();
-	if (!$navbar.length || $navbar.find(".ag-bell").length) return;
+	// Mount outside the collapse. .navbar-nav lives inside .navbar-collapse, which
+	// Bootstrap folds behind the hamburger below the lg breakpoint — a bell in
+	// there is invisible on a phone, which is where a customer actually is.
+	const $container = $(".navbar .container").first();
+	if (!$container.length || $container.find(".ag-bell").length) return;
+	const $toggler = $container.find(".navbar-toggler").first();
 
 	$("<style>").text(`
-		.ag-bell-wrap { position: relative; display: flex; align-items: center; }
+		/* Phone: the collapse is folded away, so an auto margin carries the bell to
+		   the right, just left of the hamburger. Desktop: the expanded collapse
+		   grows into that space and the margin does nothing, so the bell is
+		   ordered after it instead and lands at the far right, past the nav. */
+		.ag-bell-wrap {
+			position: relative; display: flex; align-items: center;
+			margin-left: auto; order: 99;
+		}
+		.navbar .navbar-toggler { order: 100; margin-left: 6px; }
+		.navbar .navbar-collapse { order: 101; }
+		@media (min-width: 992px) {
+			.ag-bell-wrap { order: 102; margin-left: 10px; }
+		}
 		.ag-bell {
 			position: relative; display: grid; place-items: center;
 			width: 34px; height: 34px; padding: 0;
@@ -52,11 +68,18 @@ frappe.ready(function () {
 			text-transform: uppercase; color: #97A2C2;
 		}
 		.ag-bell-empty { padding: 26px 14px; text-align: center; font-size: 13.5px; color: #97A2C2; }
-		@media (max-width: 480px) { .ag-bell-panel { width: calc(100vw - 24px); right: -8px; } }
+		/* On a phone the panel is anchored to the screen, not to the bell: hung off
+		   the bell it runs past the left edge, because the bell sits near the right. */
+		@media (max-width: 767px) {
+			.ag-bell-panel {
+				position: fixed; top: 58px; left: 12px; right: 12px;
+				width: auto; max-height: 70vh;
+			}
+		}
 	`).appendTo("head");
 
 	const $wrap = $(`
-		<li class="nav-item ag-bell-wrap">
+		<div class="ag-bell-wrap">
 			<button class="ag-bell" type="button" aria-label="Notifications" aria-expanded="false">
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
 					stroke-linecap="round" stroke-linejoin="round">
@@ -68,8 +91,10 @@ frappe.ready(function () {
 				<div class="ag-bell-head">Notifications</div>
 				<div class="ag-bell-list"><div class="ag-bell-empty">Loading…</div></div>
 			</div>
-		</li>
-	`).prependTo($navbar);
+		</div>
+	`);
+	if ($toggler.length) $wrap.insertBefore($toggler);
+	else $container.append($wrap);
 
 	const $btn = $wrap.find(".ag-bell");
 	const $panel = $wrap.find(".ag-bell-panel");
