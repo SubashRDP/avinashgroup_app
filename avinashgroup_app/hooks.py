@@ -128,6 +128,10 @@ sales_invoice_specific_events = {
     "before_print": "avinashgroup_app.custom_code.SalesInvoice.print_count.before_print",
 }
 
+customer_notice_events = {
+    "on_submit": "avinashgroup_app.custom_code.customer_notifications.notify_customer",
+}
+
 cbms_sales_invoice_events = {
     "on_submit": "avinashgroup_app.custom_code.CBMS.sales_invoice_hooks.on_submit",
     # IRD immutability from the CBMS cutoff date (enable_from_date): in-scope
@@ -147,13 +151,16 @@ quotation_events = {
 sales_order_events = {
     "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_sales_order",
     "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_sales_order",
-    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_sales_order"
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_sales_order",
+    # tells the customer their order is confirmed; never raises
+    "on_submit": "avinashgroup_app.custom_code.customer_notifications.notify_customer",
 }
 
 delivery_note_events = {
     "before_validate": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_validate_delivery_note",
     "before_save": "avinashgroup_app.custom_code.common.selling_taxes_handler.before_save_delivery_note",
-    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_delivery_note"
+    "validate": "avinashgroup_app.custom_code.SalesInvoice.salesinvoice_taxes.validate_delivery_note",
+    "on_submit": "avinashgroup_app.custom_code.customer_notifications.notify_customer",
 }
 
 material_request_events = {
@@ -235,6 +242,9 @@ for _event, _handler in sales_invoice_specific_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
 
 for _event, _handler in cbms_sales_invoice_events.items():
+    _add_doc_event("Sales Invoice", _event, _handler)
+
+for _event, _handler in customer_notice_events.items():
     _add_doc_event("Sales Invoice", _event, _handler)
 
 for _event, _handler in quotation_events.items():
