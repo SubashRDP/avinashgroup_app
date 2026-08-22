@@ -754,19 +754,25 @@ body { background: var(--po-paper); }
 
 {% block script %}
 <script>
+// Every value is defaulted before tojson. Frappe re-reads a template from disk
+// on every render but imports the page controller once per process, so a deploy
+// that is not followed by a restart runs a NEW template against an OLD
+// get_context. A key it has never heard of arrives here as Jinja's Undefined,
+// which tojson cannot serialise, and the whole page 500s. Defaulted, the page
+// degrades to a field it does not know about instead.
 window.place_order_ctx = {
-	customer: {{ customer | tojson }},
-	customer_list: {{ customer_list | tojson }},
-	company: {{ company | tojson }},
-	price_list: {{ price_list | tojson }},
-	currency: {{ currency | tojson }},
-	number_format: {{ number_format | tojson }},
-	today: {{ today | tojson }},
-	default_delivery_date: {{ default_delivery_date | tojson }},
-	default_item_code: {{ default_item_code | tojson }},
-	default_item_name: {{ default_item_name | tojson }},
-	sales_uom: {{ default_sales_uom | tojson }},
-	uoms: {{ default_uoms | tojson }},
+	customer: {{ (customer or "") | tojson }},
+	customer_list: {{ (customer_list or []) | tojson }},
+	company: {{ (company or "") | tojson }},
+	price_list: {{ (price_list or "") | tojson }},
+	currency: {{ (currency or "") | tojson }},
+	number_format: {{ (number_format or "#,###.##") | tojson }},
+	today: {{ (today or "") | tojson }},
+	default_delivery_date: {{ (default_delivery_date or "") | tojson }},
+	default_item_code: {{ (default_item_code or "") | tojson }},
+	default_item_name: {{ (default_item_name or "LP Gas") | tojson }},
+	sales_uom: {{ (default_sales_uom or "") | tojson }},
+	uoms: {{ (default_uoms or []) | tojson }},
 	items: []
 };
 
