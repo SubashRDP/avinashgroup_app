@@ -86,7 +86,7 @@ body { background: var(--po-paper); }
 /* the banner's composition: crimson block, navy field */
 .po-doc-head {
 	display: grid;
-	grid-template-columns: 78px minmax(0, 1fr) auto;
+	grid-template-columns: 104px minmax(0, 1fr) auto;
 	align-items: center;
 	background: var(--po-navy);
 }
@@ -94,11 +94,11 @@ body { background: var(--po-paper); }
 	align-self: stretch;
 	display: grid;
 	place-items: center;
-	padding: 14px 0;
+	padding: 18px 0;
 	background: var(--po-red);
 }
-.po-mark svg { width: 26px; height: 30px; display: block; }
-.po-brand { padding: 12px 18px; min-width: 0; }
+.po-mark svg { width: 30px; height: 34px; display: block; }
+.po-brand { padding: 15px 20px; min-width: 0; }
 .po-brand b {
 	display: block;
 	font-family: var(--po-cond);
@@ -137,7 +137,7 @@ body { background: var(--po-paper); }
 	align-items: baseline;
 	gap: 14px;
 	flex-wrap: wrap;
-	padding: 20px 22px 16px;
+	padding: 26px 22px 20px;
 }
 .po-doc-title h1 {
 	margin: 0;
@@ -159,7 +159,7 @@ body { background: var(--po-paper); }
 }
 .po-cell {
 	position: relative;
-	padding: 11px 14px 12px;
+	padding: 13px 14px 14px;
 	border-left: 1px solid var(--po-rule-soft);
 	min-width: 0;
 }
@@ -273,12 +273,25 @@ body { background: var(--po-paper); }
 .po-reg-head[hidden] { display: none; }
 
 .po-line {
-	padding-top: 11px;
-	padding-bottom: 11px;
+	padding-top: 15px;
+	padding-bottom: 15px;
 	border-top: 1px solid var(--po-rule-soft);
 	transition: background .16s ease;
 }
 .po-line.is-on { background: linear-gradient(90deg, var(--po-wash), rgba(244, 246, 251, .3)); }
+
+.po-tagwrap { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.po-line-name {
+	font-family: var(--po-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--po-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.po-line.is-on .po-line-name { color: var(--po-navy); }
 
 /* the size reads as a physical collar tag */
 .po-tag {
@@ -317,16 +330,6 @@ body { background: var(--po-paper); }
 	font-size: 13.5px;
 }
 .po-line-rate { text-align: right; color: var(--po-muted); }
-.po-line-rate em {
-	display: block;
-	margin-top: 2px;
-	font-family: var(--po-cond);
-	font-size: 10.5px;
-	font-style: normal;
-	letter-spacing: .12em;
-	text-transform: uppercase;
-	color: var(--po-faint);
-}
 .po-line-amt {
 	text-align: right;
 	font-size: 15px;
@@ -832,6 +835,7 @@ class PlaceOrder {
 
 				me.ctx.default_item_code = d.item_code || "";
 				me.ctx.default_item_name = d.item_name || "LP Gas";
+				me.ctx.stock_uom = d.stock_uom || "";
 				me.ctx.price_list = d.price_list || "";
 				me.sizes = (d.sizes || []).map(function (s) {
 					return $.extend({}, s, { qty: kept[s.uom] || 0 });
@@ -849,10 +853,10 @@ class PlaceOrder {
 			$body.append(
 				'<div class="po-line" data-uom="' + s.uom + '">' +
 					'<div class="po-tagwrap"><span class="po-tag"><b>' + me.size_number(s.uom) +
-						'</b><span>' + me.size_unit(s.uom) + '</span></span></div>' +
+						'</b><span>' + me.size_unit(s.uom) + '</span></span>' +
+						'<span class="po-line-name"></span></div>' +
 					'<div class="po-line-rate"><span class="po-fig">' +
-						format_number(s.rate, me.ctx.number_format, 5) +
-						'</span><em>per cylinder</em></div>' +
+						format_number(s.rate, me.ctx.number_format, 5) + '</span></div>' +
 					'<div class="po-qtybox">' +
 						'<button type="button" class="po-step" data-step="-1" aria-label="One less">&minus;</button>' +
 						'<input type="number" class="po-qty form-control" value="0" min="0" step="1" ' +
@@ -935,6 +939,14 @@ class PlaceOrder {
 		});
 		if (!typed) $line.find(".po-qty").val(size.qty);
 		$line.toggleClass("is-on", size.qty > 0);
+		// what this line puts on the order in stock terms — 12 × 14.2 KG is 170.4 Kg,
+		// and that is the figure the stock ledger will carry
+		$line.find(".po-line-name").text(
+			size.qty > 0
+				? format_number(flt(size.qty) * flt(size.conversion_factor), this.ctx.number_format, 1) +
+					" " + (this.ctx.stock_uom || "")
+				: ""
+		);
 		$line.find(".po-line-amt").text(
 			format_number(flt(size.qty) * flt(size.rate), this.ctx.number_format, 2)
 		);
@@ -1090,7 +1102,7 @@ class PlaceOrder {
 					<b>Customer Portal</b>
 					<i>Order sheet for LP Gas</i>
 				</span>
-				<span class="po-kind" id="po-kind">LP Gas</span>
+
 			</header>
 
 			<div class="po-doc-title">
@@ -1134,7 +1146,7 @@ class PlaceOrder {
 
 			<div class="po-reg-head" id="po-reg-head" hidden>
 				<span>Cylinder size</span>
-				<span>Rate</span>
+				<span>Rate per cylinder</span>
 				<span>Quantity</span>
 				<span>Amount</span>
 			</div>

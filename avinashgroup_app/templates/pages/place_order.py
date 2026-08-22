@@ -232,6 +232,7 @@ def get_order_sheet(company, customer=None):
 	return {
 		"item_code": item.name,
 		"item_name": item.item_name,
+		"stock_uom": frappe.db.get_value("Item", item.name, "stock_uom") or "",
 		"price_list": price_list,
 		"sizes": _rates_for(item.name, price_list),
 	}
