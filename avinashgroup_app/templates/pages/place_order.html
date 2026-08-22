@@ -262,6 +262,48 @@ body { background: var(--po-paper); }
 .po-dd-item:hover, .po-dd-hi { background: var(--po-field); }
 .po-dd-hi { box-shadow: inset 2px 0 0 var(--po-red-600); }
 
+/* ── Account position ─────────────────────────────────────────────────── */
+.po-credit {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px 14px;
+	margin-top: 18px;
+	padding-top: 14px;
+	border-top: 1px dashed var(--po-line);
+}
+.po-credit[hidden] { display: none; }
+.po-credit-kind {
+	font-family: var(--po-cond);
+	font-size: 11.5px;
+	font-weight: 600;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--po-navy-700);
+}
+.po-credit-items {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+	font-size: 13.5px;
+	color: var(--po-muted);
+}
+.po-credit-items b {
+	font-family: var(--po-mono);
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	color: var(--po-navy-900);
+}
+.po-credit-items i { font-style: normal; color: #B9C1D8; }
+.po-credit-items .is-over b { color: var(--po-red-600); }
+.po-credit-note {
+	margin-left: auto;
+	font-size: 12px;
+	color: #97A2C2;
+}
+@media (max-width: 700px) { .po-credit-note { margin-left: 0; } }
+
 /* ── Line items ────────────────────────────────────────────────────────── */
 .po-table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
 .po-items-table {
@@ -900,6 +942,7 @@ class PlaceOrder {
 								// reset customer and price list when company changes
 								me.ctx.customer = "";
 								me.ctx.price_list = "";
+								me.load_credit("");
 								if (me.ctx.customer_list && me.ctx.customer_list.length > 0) {
 									$("#po-customer").val("");
 									me.filter_customer_dropdown();
@@ -992,12 +1035,47 @@ class PlaceOrder {
 			if (opt.length && !opt.is(":visible")) {
 				$("#po-customer").val("");
 				me.ctx.customer = "";
+				me.load_credit("");
 			}
 		}
 	}
 
+	// The customer's own account position, shown and never enforced: credit
+	// control runs on Sales Invoice, not on Sales Order.
+	load_credit(customer) {
+		var me = this;
+		if (!customer) { $("#po-credit").prop("hidden", true); return; }
+
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.place_order.get_credit_snapshot",
+			args: { customer: customer },
+			callback: function (r) {
+				const p = r.message || {};
+				if (!p.currency) { $("#po-credit").prop("hidden", true); return; }
+
+				const money = (v) => `${p.currency} ${format_number(v, me.ctx.number_format, 2)}`;
+				const bits = [`Outstanding <b>${money(p.outstanding)}</b>`];
+
+				if (p.advance_only) {
+					bits.push("Advance payment account");
+				} else if (p.amount_limit) {
+					bits.push(`Credit limit <b>${money(p.amount_limit)}</b>`);
+					bits.push(p.remaining >= 0
+						? `Remaining <b>${money(p.remaining)}</b>`
+						: `<span class="is-over">Over by <b>${money(-p.remaining)}</b></span>`);
+				}
+				if (p.unpaid_count) bits.push(`<b>${p.unpaid_count}</b> unpaid ${p.unpaid_count === 1 ? "bill" : "bills"}`);
+				if (p.oldest_date) bits.push(`Oldest unpaid <b>${p.days_used}</b> days`);
+
+				$("#po-credit-items").html(bits.join(' <i>·</i> '));
+				$("#po-credit").prop("hidden", false);
+			}
+		});
+	}
+
 	on_customer_select(customer) {
 		var me = this;
+		me.load_credit(customer);
 		frappe.call({
 			method: "avinashgroup_app.templates.pages.place_order.get_customer_defaults",
 			args: { customer: customer, company: me.ctx.company },
@@ -1504,6 +1582,12 @@ class PlaceOrder {
 					</div>
 
 					<input type="hidden" id="po-currency" value="{{ currency }}">
+				</div>
+
+				<div class="po-credit" id="po-credit" hidden>
+					<span class="po-credit-kind">Account position</span>
+					<span class="po-credit-items" id="po-credit-items"></span>
+					<span class="po-credit-note">For your information — it does not affect this order.</span>
 				</div>
 			</section>
 

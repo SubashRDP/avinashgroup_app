@@ -242,6 +242,62 @@ def get_order_sheet(company, customer=None):
 	}
 
 
+def _may_see_customer(customer):
+	"""A portal user may only look at their own linked customers. Anyone else on
+	this page is limited to the customers of the gas-selling companies, the same
+	set the pickers offer."""
+	if not customer:
+		return False
+	portal_customers = frappe.db.sql("""
+		SELECT parent FROM `tabPortal User`
+		WHERE user = %s AND parenttype = 'Customer' AND parent IS NOT NULL AND parent != ''
+	""", frappe.session.user, as_list=True)
+	portal_customers = [r[0] for r in portal_customers]
+	if portal_customers:
+		return customer in portal_customers
+	return frappe.db.get_value("Customer", customer, "custom_company") in _lp_gas_companies()
+
+
+@frappe.whitelist()
+def get_credit_snapshot(customer):
+	"""The customer's own account position, for display on the order sheet.
+
+	Nothing here restricts the order: credit control is enforced on Sales Invoice
+	(hooks.py -> credit_control.validate_sales_invoice), not on Sales Order, and
+	this returns figures only. It reuses the invoice banner's calculation so the
+	customer is never shown a different number from the one the office sees.
+
+	Only the few fields the page prints are returned — the full state carries
+	ledger internals a customer has no business reading.
+	"""
+	if not _may_see_customer(customer):
+		return {}
+
+	from avinashgroup_app.custom_code.SalesInvoice.credit_control import get_credit_position
+
+	position = get_credit_position(customer) or {}
+	if not position.get("has_limits"):
+		return {}
+
+	amount_limit = flt(position.get("amount_limit"))
+	# A limit of 1 is this group's marker for an advance-only account, not a
+	# rupee of headroom — say so rather than printing "Limit NPR 1.00".
+	advance_only = 0 < amount_limit <= 1
+
+	outstanding = max(0.0, flt(position.get("exposure")))
+	return {
+		"outstanding": outstanding,
+		"amount_limit": amount_limit,
+		"advance_only": 1 if advance_only else 0,
+		"remaining": (amount_limit - flt(position.get("exposure"))) if amount_limit and not advance_only else None,
+		"unpaid_count": position.get("unpaid_count") or 0,
+		"days_used": position.get("days_used") or 0,
+		"oldest_date": position.get("oldest_date"),
+		"currency": frappe.db.get_value("Customer", customer, "default_currency")
+			or frappe.db.get_single_value("Global Defaults", "default_currency") or "",
+	}
+
+
 @frappe.whitelist()
 def search_customers(txt, company=None):
 	gas_companies = _lp_gas_companies()
