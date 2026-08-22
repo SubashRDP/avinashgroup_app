@@ -822,6 +822,7 @@ class PlaceOrder {
 		this.add_row(); // start with one empty row
 		this.brand();
 		this.apply_item_availability();
+		this.preselect_only_customer();
 	}
 
 	// ── The company decides the item ──────────────────────────────────
@@ -883,6 +884,16 @@ class PlaceOrder {
 				if (after) after();
 			}
 		});
+	}
+
+	// One linked customer means there is nothing to pick: open on it, and run the
+	// same path a selection would, so rates, sizes and the account position load.
+	preselect_only_customer() {
+		const list = this.ctx.customer_list || [];
+		if (list.length !== 1) return;
+		const $select = $("#po-customer");
+		if (!$select.is("select") || $select.val()) return;
+		$select.val(list[0].name).trigger("change");
 	}
 
 	// The company the order is placed with, stated. Seven companies share this

@@ -96,7 +96,11 @@ def get_context(context):
 
 	context.company = company
 	context.gas_companies = gas_companies
-	context.customer = ""
+	# A portal user linked to exactly one customer has nothing to choose: the
+	# page opens on that customer.
+	context.customer = (
+		context.customer_list[0].name if len(context.customer_list or []) == 1 else ""
+	)
 	context.customer_name = ""
 	context.price_list = ""
 	context.currency = (
