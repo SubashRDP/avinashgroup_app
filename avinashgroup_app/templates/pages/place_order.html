@@ -102,24 +102,45 @@ body { background: var(--po-paper); }
 .po-brand b {
 	display: block;
 	font-family: var(--po-cond);
-	font-size: clamp(16px, 2vw, 19px);
-	font-weight: 700;
-	letter-spacing: .14em;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .22em;
 	text-transform: uppercase;
-	line-height: 1.1;
-	color: #fff;
+	line-height: 1.2;
+	color: rgba(255, 255, 255, .68);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 .po-brand i {
-	display: block;
-	margin-top: 2px;
-	font-size: 12.5px;
-	font-weight: 400;
+	display: flex;
+	align-items: baseline;
+	gap: 9px;
+	margin-top: 4px;
+	font-family: var(--po-cond);
+	font-size: 12px;
+	font-weight: 500;
 	font-style: normal;
-	line-height: 1.3;
-	color: rgba(255, 255, 255, .62);
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	line-height: 1.25;
+	color: rgba(255, 255, 255, .55);
+}
+.po-brand i[hidden] { display: none; }
+.po-brand em {
+	display: block;
+	min-width: 0;
+	font-family: var(--po-cond);
+	font-size: clamp(17px, 2.1vw, 21px);
+	font-weight: 700;
+	font-style: normal;
+	letter-spacing: .04em;
+	text-transform: none;
+	line-height: 1.15;
+	color: #fff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 .po-kind {
 	padding: 0 18px;
@@ -695,7 +716,13 @@ class PlaceOrder {
 	// share this portal and dressing one order in another entity's name is a
 	// misrepresentation on a document that carries tax consequences.
 	brand() {
-		$("#po-company").attr("title", this.ctx.company || "");
+		const company = this.ctx.company || "";
+		$("#po-company").attr("title", company);
+		// Named as the party being ordered from, not set as a letterhead: seven
+		// companies share this page and the sheet must not read as one company's
+		// own stationery.
+		$("#po-doc-company").text(company);
+		$("#po-doc-from").prop("hidden", !company);
 	}
 
 	// -- Company --------------------------------------------------------
@@ -978,12 +1005,24 @@ class PlaceOrder {
 		$("#po-grand-total").text(format_number(grand, me.ctx.number_format, 2));
 		$("#po-submit").prop("disabled", !lines.length || me.submitting);
 
+		// Each keystroke asks the server to spell the total, and an earlier reply can
+		// land after a later one — leaving words that do not match the figure above
+		// them. Debounce, and ignore any answer that is no longer the current one.
+		clearTimeout(me._words_timer);
+		me._words_seq = (me._words_seq || 0) + 1;
+		const seq = me._words_seq;
+
 		if (!grand) { $("#po-in-words").text(""); return; }
-		frappe.call({
-			method: PO_METHOD + "get_in_words",
-			args: { amount: grand, currency: me.ctx.currency },
-			callback: function (r) { $("#po-in-words").text(r.message || ""); }
-		});
+		me._words_timer = setTimeout(function () {
+			frappe.call({
+				method: PO_METHOD + "get_in_words",
+				args: { amount: grand, currency: me.ctx.currency },
+				callback: function (r) {
+					if (seq !== me._words_seq) return;
+					$("#po-in-words").text(r.message || "");
+				}
+			});
+		}, 200);
 	}
 
 	// -- Placing it -----------------------------------------------------
@@ -1099,8 +1138,8 @@ class PlaceOrder {
 					</svg>
 				</span>
 				<span class="po-brand">
-					<b>Customer Portal</b>
-					<i>Order sheet for LP Gas</i>
+					<b>Order placement</b>
+					<i id="po-doc-from" hidden>Ordering from <em id="po-doc-company"></em></i>
 				</span>
 
 			</header>
