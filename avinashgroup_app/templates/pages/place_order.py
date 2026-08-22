@@ -38,7 +38,7 @@ def _get_lp_gas_item(company):
 			"is_sales_item": 1,
 			"custom_company": company,
 		},
-		["name", "item_name"],
+		["name", "item_name", "sales_uom", "stock_uom"],
 		as_dict=True,
 	)
 
@@ -113,6 +113,7 @@ def get_context(context):
 	default_item = _get_lp_gas_item(company)
 	context.default_item_code = default_item.name if default_item else ""
 	context.default_item_name = default_item.item_name if default_item else LP_GAS_ITEM_NAME
+	context.default_sales_uom = (default_item.sales_uom or "") if default_item else ""
 	context.default_uoms = get_item_uoms(default_item.name) if default_item else []
 
 
@@ -205,6 +206,8 @@ def get_company_item(company, customer=None):
 	return {
 		"item_code": item.name,
 		"item_name": item.item_name,
+		# Item's "Default Sales Unit of Measure" — the size a line starts on
+		"sales_uom": item.sales_uom or "",
 		"uoms": _priced_uoms(item.name, price_list) if price_list else get_item_uoms(item.name),
 		"price_list": price_list or "",
 		"narrowed": bool(price_list),
@@ -232,7 +235,8 @@ def get_order_sheet(company, customer=None):
 	return {
 		"item_code": item.name,
 		"item_name": item.item_name,
-		"stock_uom": frappe.db.get_value("Item", item.name, "stock_uom") or "",
+		"stock_uom": item.stock_uom or "",
+		"sales_uom": item.sales_uom or "",
 		"price_list": price_list,
 		"sizes": _rates_for(item.name, price_list),
 	}

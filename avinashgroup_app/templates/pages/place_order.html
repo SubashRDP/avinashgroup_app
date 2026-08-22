@@ -723,6 +723,7 @@ window.place_order_ctx = {
 	default_delivery_date: {{ default_delivery_date | tojson }},
 	default_item_code: {{ default_item_code | tojson }},
 	default_item_name: {{ default_item_name | tojson }},
+	sales_uom: {{ default_sales_uom | tojson }},
 	uoms: {{ default_uoms | tojson }},
 	items: []
 };
@@ -805,6 +806,7 @@ class PlaceOrder {
 				me.sizes_narrowed = !!d.narrowed;
 				me.ctx.default_item_code = d.item_code || "";
 				me.ctx.default_item_name = d.item_name || "LP Gas";
+				me.ctx.sales_uom = d.sales_uom || "";
 				me.ctx.uoms = d.uoms || [];
 
 				// Repoint every existing row at the new company's item and rebuild its
@@ -1029,11 +1031,12 @@ class PlaceOrder {
 		});
 	}
 
-	// 14.2 KG is the cylinder most orders are written for, so a new line starts
-	// there when the account is priced for it.
+	// A line starts on the item's Default Sales Unit of Measure (Item.sales_uom),
+	// so the size the company actually sells in is set on the item, not in here.
+	// If the account is not priced for it, the line opens unset.
 	default_size() {
-		const uoms = this.ctx.uoms || [];
-		return uoms.indexOf("14.2 KG") !== -1 ? "14.2 KG" : "";
+		const sales_uom = this.ctx.sales_uom || "";
+		return (this.ctx.uoms || []).indexOf(sales_uom) !== -1 ? sales_uom : "";
 	}
 
 	uom_options_html(selected) {
