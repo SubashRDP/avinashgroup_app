@@ -10,6 +10,9 @@ app_license = "mit"
 
 page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 
+# the customer portal's notification bell — website pages, not the desk
+web_include_js = ["/assets/avinashgroup_app/js/portal_notifications.js"]
+
 app_include_js = [
     # Wraps frappe.msgprint / show_alert to drop ERPNext's informational
     # negative-stock notifications (blue "Warning on Negative Stock",
