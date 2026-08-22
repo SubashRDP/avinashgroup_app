@@ -46,7 +46,7 @@
 body { background: var(--po-paper); }
 
 .page-content, .page_content, .container {
-	max-width: 1180px !important;
+	max-width: 1460px !important;
 	padding-left: 24px !important;
 	padding-right: 24px !important;
 }
@@ -68,11 +68,16 @@ body { background: var(--po-paper); }
 
 .po-layout {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 312px;
-	gap: 22px;
+	grid-template-columns: minmax(0, 1fr) 360px;
+	gap: 26px;
 	align-items: start;
 }
 @media (max-width: 991px) { .po-layout { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+/* between tablet and laptop the stub must not eat the register */
+@media (min-width: 992px) and (max-width: 1199px) {
+	.po-layout { grid-template-columns: minmax(0, 1fr) 288px; gap: 18px; }
+	.po-reg-head, .po-line { grid-template-columns: minmax(0, 1fr) 116px 116px 116px; gap: 10px; }
+}
 
 /* ── The document ──────────────────────────────────────────────────────── */
 .po-doc {
@@ -626,9 +631,60 @@ body { background: var(--po-paper); }
 	.po-grand { margin-top: 0; padding-top: 0; border-top: none; margin-bottom: 10px; }
 	.po-btn { padding: 13px 18px; }
 }
+/* the band has no room to ellipse a company name on a phone — let it wrap */
+@media (max-width: 700px) {
+	.po-brand i { display: block; }
+	.po-brand em {
+		white-space: normal;
+		font-size: 16.5px;
+		line-height: 1.2;
+		margin-top: 2px;
+	}
+}
+
 @media (max-width: 380px) {
 	.po-line { grid-template-columns: minmax(0, 1fr) 108px; }
 	.po-line > .po-qtybox { width: 136px; }
+}
+
+@media (min-width: 1200px) {
+	.po { padding-top: 32px; }
+	.po-doc-title { padding: 30px 26px 22px; }
+	.po-doc-title h1 { font-size: 40px; }
+	.po-doc-title p { font-size: 15px; }
+
+	.po-cell { padding: 15px 20px 16px; }
+	.po-cell > label { font-size: 12px; margin-bottom: 4px; }
+	.po .form-control { font-size: 16.5px; }
+	.po-cell:first-child .form-control { font-size: 17px; }
+
+	.po-reg-head, .po-line {
+		grid-template-columns: minmax(0, 1fr) 190px 156px 172px;
+		padding-left: 26px;
+		padding-right: 26px;
+	}
+	.po-reg-head { font-size: 12px; padding-top: 18px; padding-bottom: 11px; }
+	.po-line { padding-top: 19px; padding-bottom: 19px; }
+	.po-tag { padding: 9px 13px 8px; }
+	.po-tag b { font-size: 25px; }
+	.po-tag span { font-size: 13px; }
+	.po-line-name { font-size: 13.5px; }
+	.po-line-rate .po-fig { font-size: 15px; }
+	.po-line-amt { font-size: 18px; }
+	.po-qtybox { grid-template-columns: 40px minmax(0, 1fr) 40px; }
+	.po-step, .po .po-qty { height: 42px; }
+	.po .po-qty { font-size: 16.5px; }
+	.po-step { font-size: 19px; }
+	.po-note-row, .po-reg-foot { padding-left: 26px; padding-right: 26px; }
+
+	.po-stub { padding: 24px 24px 22px; }
+	.po-sum-lines { font-size: 13.5px; }
+	.po-stub dt, .po-stub dd { font-size: 15px; }
+	.po-stub dl > div { padding: 7px 0; }
+	.po-grand > span { font-size: 14px; }
+	.po-grand .po-fig { font-size: 32px; }
+	.po-inwords { font-size: 13px; }
+	.po-btn { padding: 16px 18px; font-size: 17px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
