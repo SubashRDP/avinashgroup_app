@@ -529,24 +529,6 @@ def create_sales_order(customer, company, transaction_date, delivery_date, items
 				i + 1, item.get("uom")
 			))
 
-	# A double-fired request must not become two orders on the depot's list. If this
-	# user just placed the same order, hand back the one that already exists.
-	total_qty = sum(float(i.get("qty") or 0) for i in items)
-	existing = frappe.db.sql("""
-		SELECT name FROM `tabSales Order`
-		WHERE customer = %(customer)s AND company = %(company)s
-		AND owner = %(user)s AND docstatus = 1
-		AND delivery_date = %(delivery_date)s
-		AND ROUND(total_qty, 3) = ROUND(%(total_qty)s, 3)
-		AND creation >= NOW() - INTERVAL 2 MINUTE
-		ORDER BY creation DESC LIMIT 1
-	""", {
-		"customer": customer, "company": company, "user": frappe.session.user,
-		"delivery_date": delivery_date, "total_qty": total_qty,
-	}, as_list=True)
-	if existing:
-		return {"status": "success", "order_id": existing[0][0], "duplicate": 1}
-
 	so = frappe.new_doc("Sales Order")
 	so.customer = customer
 	so.company = company
