@@ -31,7 +31,9 @@ app_include_js = [
     # Loaded globally (not doctype_js) so it survives even when another app's
     # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
     # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=3.7",
+    # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
+    # changed this file, so the buster has to clear BOTH caches.
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=4.5",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -402,8 +404,6 @@ override_whitelisted_methods = {
     "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",
     # Report "Add Column": show a Link field's name instead of its id.
     "frappe.desk.query_report.get_data_for_custom_field": "avinashgroup_app.custom_code.Override.query_report.get_data_for_custom_field",
-    # Sales Invoice list-view Excel export: company letterhead on top of the table.
-    "frappe.desk.reportview.export_query": "avinashgroup_app.utils.report_excel.export_query",
 }
 
 # ---------------------------------------------------------------------------

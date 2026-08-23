@@ -1,6 +1,22 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
+// Pre-selects the Account filter with the company's Debtors + Advance accounts
+// whenever Company is set/changed — the user can still clear or change it afterwards.
+function pl_set_default_accounts(company) {
+	if (!company) return;
+	frappe
+		.call({
+			method: "avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.get_default_ledger_accounts",
+			args: { company },
+		})
+		.then((r) => {
+			if (r.message && r.message.length) {
+				frappe.query_report.set_filter_value("account", r.message);
+			}
+		});
+}
+
 frappe.query_reports["Party Ledger"] = {
 	filters: [
 		{
@@ -10,6 +26,9 @@ frappe.query_reports["Party Ledger"] = {
 			options: "Company",
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
+			on_change: function () {
+				pl_set_default_accounts(frappe.query_report.get_filter_value("company"));
+			},
 		},
 		{
 			fieldname: "party_type",
@@ -226,6 +245,13 @@ frappe.query_reports["Party Ledger"] = {
 	},
 
 	onload: function (_report) {
+		// Company already carries a default value (user default) that on_change never
+		// fires for on first load — seed the Account default here too, once only.
+		if (!frappe.query_report.get_filter_value("account") ||
+			!frappe.query_report.get_filter_value("account").length) {
+			pl_set_default_accounts(frappe.query_report.get_filter_value("company"));
+		}
+
 		// Resolve which columns the PRINT pdf should show, matching the report:
 		//  1) "Pick Columns" in the print dialog, else
 		//  2) whatever columns are still visible in the datatable (after removals).

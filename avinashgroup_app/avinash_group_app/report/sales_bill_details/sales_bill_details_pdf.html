@@ -120,6 +120,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 {% set s_miti             = show_all or 'miti'             in sc %}
 {% set s_invoice_number   = show_all or 'invoice_number'   in sc %}
 {% set s_customer         = show_all or 'customer'         in sc %}
+{% set s_branch           = show_all or 'branch'           in sc %}
 {% set s_total_qty        = show_all or 'total_qty'        in sc %}
 {% set s_amount_before_vat = show_all or 'amount_before_vat' in sc %}
 {% set s_vat_amount       = show_all or 'vat_amount'       in sc %}
@@ -174,6 +175,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
       {% if s_miti %}<th class="l">Miti</th>{% endif %}
       {% if s_invoice_number %}<th class="l">Invoice Number</th>{% endif %}
       {% if s_customer %}<th class="l">Customer</th>{% endif %}
+      {% if s_branch %}<th class="l">Branch</th>{% endif %}
       {% if s_total_qty %}<th class="r">Total Quantity</th>{% endif %}
       {% if s_amount_before_vat %}<th class="r">Amount before VAT</th>{% endif %}
       {% if s_vat_amount %}<th class="r">VAT Amount</th>{% endif %}
@@ -191,6 +193,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
       {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
       {% if s_invoice_number %}<td>{{ row.get('invoice_number') or '' }}</td>{% endif %}
       {% if s_customer %}<td>{{ row.get('customer') or '' }}</td>{% endif %}
+      {% if s_branch %}<td>{{ row.get('branch') or '' }}</td>{% endif %}
       {% if s_total_qty %}<td class="r nowrap">{{ fmt(row.get('total_qty')) }}</td>{% endif %}
       {% if s_amount_before_vat %}<td class="r nowrap">{{ fmt(row.get('amount_before_vat')) }}</td>{% endif %}
       {% if s_vat_amount %}<td class="r nowrap">{{ fmt(row.get('vat_amount')) }}</td>{% endif %}

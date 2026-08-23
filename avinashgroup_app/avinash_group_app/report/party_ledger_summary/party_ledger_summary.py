@@ -152,6 +152,11 @@ def get_data(filters):
 		conditions += " AND gle.party IN %(allowed)s"
 		params["allowed"] = tuple(allowed)
 
+	accounts = _normalize_multiselect(filters.get("account"))
+	if accounts:
+		conditions += " AND gle.account IN %(accounts)s"
+		params["accounts"] = tuple(accounts)
+
 	# Restrict to parties of THIS company (custom_company). Drops parties explicitly assigned
 	# to a different company even if they have stray GL entries here; parties with none set stay.
 	if frappe.db.has_column(party_type, "custom_company"):
@@ -397,6 +402,77 @@ def get_company_parties(party_type, company, txt=None):
 		""",
 		{"txt": like, "party_type": party_type, "company": company},
 		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_report_accounts(company, party_type=None, party=None, from_date=None, to_date=None, txt=None):
+	"""Account options limited to accounts the summary actually posts to for the current
+	Company / Party Type / Party / date range — mirrors Party Ledger's equivalent."""
+	if not company:
+		return []
+
+	party_type = party_type if party_type in ("Customer", "Supplier") else "Customer"
+	parties = _normalize_multiselect(party)
+	like = f"%{(txt or '').strip()}%"
+
+	conditions = (
+		"gle.is_cancelled = 0 AND gle.company = %(company)s "
+		"AND gle.party_type = %(party_type)s AND gle.account LIKE %(txt)s"
+	)
+	params = {"company": company, "party_type": party_type, "txt": like}
+
+	if parties:
+		if len(parties) == 1:
+			conditions += " AND gle.party = %(party)s"
+			params["party"] = parties[0]
+		else:
+			conditions += " AND gle.party in %(party)s"
+			params["party"] = tuple(parties)
+
+	if from_date and to_date:
+		conditions += " AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s"
+		conditions += " AND COALESCE(gle.is_opening, 'No') != 'Yes'"
+		params["from_date"] = from_date
+		params["to_date"] = to_date
+
+	return frappe.db.sql(
+		f"""
+		SELECT gle.account AS value, gle.account AS description
+		FROM `tabGL Entry` gle
+		WHERE {conditions}
+		GROUP BY gle.account
+		ORDER BY gle.account
+		LIMIT 50
+		""",
+		params,
+		as_dict=True,
+	)
+
+
+# Debtors is named the same everywhere (account 347959 too, but under two different
+# names): GEPL/GLMI/SGU call it "Advance Received", NGI/NGG/NGN/NGK call it "Advance
+# From Customer" — NGK spells its version "Advance from Customer", a different case
+# that still matches under the table's utf8mb4_unicode_ci collation. Both names are
+# listed so every company's 347959 account is picked up. See credit_control.md §7.
+DEFAULT_LEDGER_ACCOUNT_NAMES = ["Debtors A/c - Domestic", "Advance From Customer", "Advance Received"]
+
+
+@frappe.whitelist()
+def get_default_ledger_accounts(company):
+	"""Debtors + Advance From Customer account(s) for the given company, to pre-select
+	the Account filter. Matches by account_name since the docname carries a per-company
+	suffix."""
+	if not company:
+		return []
+
+	return frappe.db.sql_list(
+		"""
+		SELECT name FROM `tabAccount`
+		WHERE company = %(company)s AND account_name IN %(names)s
+		ORDER BY account_name
+		""",
+		{"company": company, "names": tuple(DEFAULT_LEDGER_ACCOUNT_NAMES)},
 	)
 
 

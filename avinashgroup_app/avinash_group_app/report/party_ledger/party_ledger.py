@@ -289,6 +289,31 @@ def get_company_parties(party_type, company, txt=None):
 	)
 
 
+# Debtors is named the same everywhere (account 347959 too, but under two different
+# names): GEPL/GLMI/SGU call it "Advance Received", NGI/NGG/NGN/NGK call it "Advance
+# From Customer" — NGK spells its version "Advance from Customer", a different case
+# that still matches under the table's utf8mb4_unicode_ci collation. Both names are
+# listed so every company's 347959 account is picked up. See credit_control.md §7.
+DEFAULT_LEDGER_ACCOUNT_NAMES = ["Debtors A/c - Domestic", "Advance From Customer", "Advance Received"]
+
+
+@frappe.whitelist()
+def get_default_ledger_accounts(company):
+	"""Debtors + Advance account(s) for the given company, to pre-select the Account
+	filter. Matches by account_name since the docname carries a per-company suffix."""
+	if not company:
+		return []
+
+	return frappe.db.sql_list(
+		"""
+		SELECT name FROM `tabAccount`
+		WHERE company = %(company)s AND account_name IN %(names)s
+		ORDER BY account_name
+		""",
+		{"company": company, "names": tuple(DEFAULT_LEDGER_ACCOUNT_NAMES)},
+	)
+
+
 @frappe.whitelist()
 def get_report_accounts(company, party_type=None, party=None, from_date=None, to_date=None, txt=None):
 	"""Account options limited to the accounts the ledger actually posts to for the current
