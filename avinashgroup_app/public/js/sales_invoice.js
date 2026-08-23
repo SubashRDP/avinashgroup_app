@@ -818,20 +818,19 @@ function enforce_pos_scope(frm) {
 
 /**
  * Rounding is skipped by default (disable_rounded_total defaults to 1 on a new
- * invoice), which leaves rounded_total blank/unused. Force rounding ON purely
- * on Company + Branch (Grishma Enterprises — Anamnagar), independent of
- * is_pos, so the POS payment row (sync_pos_payment_amount) is always paid in
- * the rounded figure and ERPNext's own outstanding-amount formula — which
+ * invoice), which leaves rounded_total blank/unused. Force rounding ON only
+ * when ALL three hold: Company + Branch (Grishma Enterprises — Anamnagar) AND
+ * is_pos=1 — so the POS payment row (sync_pos_payment_amount) is always paid
+ * in the rounded figure and ERPNext's own outstanding-amount formula — which
  * prefers rounded_total whenever it's populated — never shows the rounding
  * paisa as a leftover "still owed" balance.
  *
- * Runs both directions: forces rounding ON while eligible, and back OFF the
- * moment Company/Branch moves away from Grishma — Anamnagar, the same way
- * enforce_pos_scope resets is_pos. Without the reverse direction, an invoice
- * that briefly touched Anamnagar would keep rounding on forever after.
+ * Runs both directions: forces rounding ON while all three hold, and back OFF
+ * the moment any one of them stops holding (Company/Branch changes away, or
+ * is_pos gets unticked) — same self-correcting pattern as enforce_pos_scope.
  */
 function sync_pos_rounding(frm) {
-    const want_disabled = is_pos_eligible(frm) ? 0 : 1;
+    const want_disabled = (is_pos_eligible(frm) && cint(frm.doc.is_pos)) ? 0 : 1;
     if (cint(frm.doc.disable_rounded_total) !== want_disabled) {
         frm.set_value("disable_rounded_total", want_disabled);
     }
