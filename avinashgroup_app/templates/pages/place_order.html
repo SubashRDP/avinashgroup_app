@@ -1291,7 +1291,7 @@ class PlaceOrder {
 
 				$(`select.po-uom[data-idx=${idx}]`).val("");
 				$(`.po-rate[data-idx=${idx}]`).text(
-					format_number(item.rate, me.ctx.number_format, 5)
+					format_number(item.rate, me.ctx.number_format, 2)
 				);
 
 				me.update_row_amount(idx);
@@ -1318,7 +1318,7 @@ class PlaceOrder {
 				item.rate = flt(d.rate || 0);
 				$(`select.po-uom[data-idx=${idx}]`).val(item.uom);
 				$(`.po-rate[data-idx=${idx}]`).text(
-					format_number(item.rate, me.ctx.number_format, 5)
+					format_number(item.rate, me.ctx.number_format, 2)
 				);
 				me.update_row_amount(idx);
 				me.recalculate_totals();

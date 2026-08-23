@@ -178,7 +178,10 @@ def _rates_for(item_code, price_list):
 		rate = by_uom.get(c.uom)
 		derived = False
 		if not rate and base:
-			rate = flt(base) * flt(c.conversion_factor)
+			# A per-Kg price times a cylinder's weight lands on fractions of a
+			# paisa (124.94515 x 14.2 = 1,774.22124). Quote and charge a real
+			# money figure, or the sheet shows a rate its own amount contradicts.
+			rate = flt(flt(base) * flt(c.conversion_factor), 2)
 			derived = True
 		if rate:
 			sizes.append({
