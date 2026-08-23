@@ -23,6 +23,14 @@ frappe.ui.form.on("Sales Invoice", {
         if (frm.is_new()) {
             set_due_date_from_customer(frm);
         }
+        // Draft-only: a doc opened already sitting on Grishma/Anamnagar (e.g. loaded
+        // with those defaults pre-filled, without company/custom_branch ever firing
+        // their change event) still needs rounding forced on / POS scope enforced.
+        // Never touch a submitted document from a passive refresh.
+        if (frm.doc.docstatus === 0) {
+            sync_pos_rounding(frm);
+            enforce_pos_scope(frm);
+        }
         sync_custom_totals(frm);
         restore_return_vat(frm);
         fetch_credit_banner(frm);
@@ -57,7 +65,18 @@ frappe.ui.form.on("Sales Invoice", {
     // the row with the pre-VAT grand_total. Re-sync once that round-trip has
     // settled, same delay convention as taxes_and_charges above.
     is_pos: function(frm) {
+        sync_pos_rounding(frm);
         setTimeout(() => sync_custom_totals(frm), 500);
+    },
+
+    company: function(frm) {
+        enforce_pos_scope(frm);
+        sync_pos_rounding(frm);
+    },
+
+    custom_branch: function(frm) {
+        enforce_pos_scope(frm);
+        sync_pos_rounding(frm);
     },
 
     total_advance: function(frm) {
@@ -726,22 +745,95 @@ function update_total_amount_preview(frm) {
  * Core's set_default_payment() (taxes_and_totals.js) fills the default POS
  * payment row's Amount from grand_total, but VAT/excise taxes are only
  * appended server-side on save (see sync_custom_totals above) — before save,
- * grand_total is understated by the tax amount. Re-point the default row at
- * custom_expected_grand_total, which already includes VAT+excise, so the
- * displayed payment Amount matches what the invoice will actually total.
+ * grand_total (and anything derived from it, incl. rounded_total) is
+ * understated by the tax amount. custom_expected_grand_total already includes
+ * VAT+excise, so it is the correct pre-save total to round.
+ *
+ * The payment row is paid in the ROUNDED figure (not the raw total): ERPNext's
+ * own outstanding-amount formula is `(rounded_total or grand_total) - paid`,
+ * and it prefers rounded_total whenever rounding is enabled (see
+ * sync_pos_rounding, which forces it on for POS-eligible invoices). Paying the
+ * unrounded total would leave the rounding paisa sitting in Outstanding as a
+ * fake "still owed" balance even though the customer paid in full — so this
+ * must round the same way core would (round_based_on_smallest_currency
+ * _fraction, a Frappe framework global), not just truncate to 2 decimals.
  */
 function sync_pos_payment_amount(frm) {
     if (!frm.doc.is_pos) return;
 
-    const default_row = (frm.doc.payments || []).find(function(p) { return p.default; });
+    const rows = frm.doc.payments || [];
+    // The row pulled in from the POS Profile is flagged default=1, but a row
+    // added by hand (Add Row) never gets that flag — with only one row on the
+    // table there is no ambiguity about which one is "the" payment, so fall
+    // back to it instead of silently doing nothing.
+    const default_row = rows.find(function(p) { return p.default; })
+        || (rows.length === 1 ? rows[0] : null);
     if (!default_row) return;
 
-    const amount = flt(frm.doc.custom_expected_grand_total, precision('amount', default_row));
+    const raw_total = flt(frm.doc.custom_expected_grand_total);
+    const rounded_total = frm.doc.disable_rounded_total
+        ? raw_total
+        : round_based_on_smallest_currency_fraction(
+            raw_total, frm.doc.currency, precision('grand_total'));
+
+    const amount = flt(rounded_total, precision('amount', default_row));
     if (flt(default_row.amount, precision('amount', default_row)) === amount) return;
 
     frappe.model.set_value(default_row.doctype, default_row.name, 'amount', amount);
     if (frm.cscript && frm.cscript.calculate_paid_amount) {
         frm.cscript.calculate_paid_amount();
+    }
+}
+
+/**
+ * The "Include Payment (POS)" checkbox (is_pos) is only shown, via a Customize
+ * Form depends_on Property Setter, when Company is Grishma Enterprises and
+ * Branch is Anamnagar (GEPL-Branch-00001) — that Property Setter condition is
+ * mirrored here. depends_on only ever hides/shows a field; it never clears its
+ * value. So switching Branch away from Anamnagar hides the is_pos checkbox but
+ * leaves is_pos=1 sitting in the document, which in turn keeps pos_profile
+ * visible (it depends on is_pos's value, not on branch) with a stale profile
+ * and a stale POS payment row still attached to an invoice that is no longer
+ * eligible for POS at all.
+ *
+ * Call this whenever Company or Branch changes: if the combination no longer
+ * qualifies for POS, explicitly turn is_pos off and drop the payment rows core
+ * never clears on its own (core's is_pos handler only calls set_pos_data() when
+ * is_pos is truthy — see sales_invoice.js Controller.set_pos_data — turning it
+ * off just triggers a plain refresh, payments included).
+ */
+function is_pos_eligible(frm) {
+    return frm.doc.company === "Grishma Enterprises Pvt. Ltd."
+        && frm.doc.custom_branch === "GEPL-Branch-00001";
+}
+
+function enforce_pos_scope(frm) {
+    if (is_pos_eligible(frm) || !frm.doc.is_pos) return;
+
+    frm.set_value("is_pos", 0);
+    frm.set_value("pos_profile", "");
+    frm.clear_table("payments");
+    frm.refresh_field("payments");
+}
+
+/**
+ * Rounding is skipped by default (disable_rounded_total defaults to 1 on a new
+ * invoice), which leaves rounded_total blank/unused. Force rounding ON purely
+ * on Company + Branch (Grishma Enterprises — Anamnagar), independent of
+ * is_pos, so the POS payment row (sync_pos_payment_amount) is always paid in
+ * the rounded figure and ERPNext's own outstanding-amount formula — which
+ * prefers rounded_total whenever it's populated — never shows the rounding
+ * paisa as a leftover "still owed" balance.
+ *
+ * Runs both directions: forces rounding ON while eligible, and back OFF the
+ * moment Company/Branch moves away from Grishma — Anamnagar, the same way
+ * enforce_pos_scope resets is_pos. Without the reverse direction, an invoice
+ * that briefly touched Anamnagar would keep rounding on forever after.
+ */
+function sync_pos_rounding(frm) {
+    const want_disabled = is_pos_eligible(frm) ? 0 : 1;
+    if (cint(frm.doc.disable_rounded_total) !== want_disabled) {
+        frm.set_value("disable_rounded_total", want_disabled);
     }
 }
 
