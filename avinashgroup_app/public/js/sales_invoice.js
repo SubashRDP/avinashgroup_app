@@ -882,32 +882,68 @@ async function force_all_si_warehouses(frm) {
 // server-side validate hook is what actually enforces the limits.
 
 // Stands in for a figure we do not have yet.
-const CREDIT_DASH = "\u2014";
+const CREDIT_DASH = "—";
 
-// The strip is drawn on every draft, with or without data, because injecting
-// the headline after the round trip lands pushes the whole form down one row —
-// and that happens mid-keystroke for anyone typing quickly. Reserving the space
-// up front costs a line of grey text and keeps the fields still.
-function credit_placeholder_parts(note) {
-    const parts = [
-        `<b>Outstanding:</b> ${CREDIT_DASH}`,
-        `<b>Remaining</b> ${CREDIT_DASH}`,
-        `<b>Bills:</b> ${CREDIT_DASH}`
-    ];
-    if (note) parts.push(`<i>${note}</i>`);
-    return parts;
+// ---------------------------------------------------------------------------
+// The people who read this strip all day are counter staff, many of them thirty
+// years in the company. It used to be one dense line of pipe-separated
+// fragments with the arithmetic buried in brackets -- readable only if you
+// already knew what it said. It is now a row of tiles: one fact each, a plain
+// label above and a large number below, with the verdict spelled out in words
+// on the line above rather than signalled by colour alone.
+//
+// Rules for anything added here:
+//   * one fact per tile, never two joined by a separator;
+//   * the number is the biggest thing in the tile;
+//   * say what is wrong in words -- colour is the second signal, never the only
+//     one, and red on grey is the first thing tired eyes lose;
+//   * colours come from Frappe's CSS variables so dark mode still works.
+// ---------------------------------------------------------------------------
+
+// One tile. `sub` is the small print under the number -- the limit it is tested
+// against, or the working behind it. `breached` tints the whole tile, so a
+// customer over two limits shows two red tiles even though the server throws on
+// only the first.
+function credit_tile(label, value, sub, breached) {
+    const tint = breached ? "var(--red-50, rgba(220,38,38,.08))" : "transparent";
+    const edge = breached ? "var(--red-500)" : "var(--gray-300)";
+    const num  = breached ? "var(--red-600, var(--red-500))" : "var(--text-color)";
+    return `
+        <div style="flex:1 1 150px;min-width:135px;padding:6px 12px;border-left:3px solid ${edge};background:${tint};border-radius:0 3px 3px 0;">
+            <div style="font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);white-space:nowrap;">${label}</div>
+            <div style="font-size:1.35rem;font-weight:700;line-height:1.25;color:${num};">${value}</div>
+            <div style="font-size:.75rem;color:var(--text-muted);min-height:1.05em;">${sub || ""}</div>
+        </div>`;
 }
 
-function set_credit_headline(frm, parts, blocked_by, muted) {
-    const colour = blocked_by
-        ? "var(--red-500)"
-        : (muted ? "var(--gray-300)" : "var(--gray-600)");
-    const text = muted ? "var(--text-muted)" : "var(--text-color)";
-    const label = blocked_by ? "Credit blocked" : "Credit";
+// The tiles drawn when there is nothing to show yet. Same shape and the same
+// height as the real thing, because injecting the strip after the round trip
+// lands pushes the whole form down a row -- and that happens mid-keystroke for
+// anyone typing quickly.
+function credit_placeholder_tiles() {
+    return [
+        credit_tile("Customer owes", CREDIT_DASH, "", false),
+        credit_tile("Can still bill", CREDIT_DASH, "", false),
+        credit_tile("Unpaid bills", CREDIT_DASH, "", false),
+        credit_tile("Oldest unpaid bill", CREDIT_DASH, "", false)
+    ].join("");
+}
+
+// `status` is the sentence on the top line -- it must say what is wrong, not
+// just that something is. `tone` is "ok", "blocked" or "muted"; muted is for
+// the states where there are no figures to judge yet.
+function set_credit_banner(frm, status, tone, tiles) {
+    const edge = tone === "blocked" ? "var(--red-500)"
+               : tone === "ok"      ? "var(--green-500)"
+               : "var(--gray-300)";
+    const status_colour = tone === "blocked" ? "var(--red-600, var(--red-500))"
+                        : tone === "ok"      ? "var(--green-600, var(--green-500))"
+                        : "var(--text-muted)";
 
     frm.dashboard.set_headline(
-        `<div style="padding:6px 10px;background:var(--bg-light-gray);border-left:4px solid ${colour};color:${text};border-radius:3px;">
-            <b>${label} : </b> &nbsp; ${parts.join(" &nbsp;|&nbsp; ")}
+        `<div style="border-left:5px solid ${edge};background:var(--bg-light-gray);border-radius:4px;padding:8px 12px;color:var(--text-color);">
+            <div style="font-size:.95rem;font-weight:700;color:${status_colour};margin-bottom:6px;">${status}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 8px;align-items:stretch;">${tiles}</div>
         </div>`
     );
 }
@@ -968,25 +1004,25 @@ function render_credit_banner(frm) {
     // Every remaining path below draws SOMETHING. Nothing here may return
     // without a headline, or the form jumps again.
     if (frm.doc.is_return) {
-        set_credit_headline(
-            frm, credit_placeholder_parts("credit limits do not apply to returns"), null, true);
+        set_credit_banner(frm, "Credit limits do not apply to returns",
+                          "muted", credit_placeholder_tiles());
         return;
     }
     if (!frm.doc.customer) {
-        set_credit_headline(
-            frm, credit_placeholder_parts("select a customer"), null, true);
+        set_credit_banner(frm, "Select a customer to see their credit position",
+                          "muted", credit_placeholder_tiles());
         return;
     }
 
     const p = frm.__credit_position;
     if (!p) {
-        set_credit_headline(
-            frm, credit_placeholder_parts("checking\u2026"), null, true);
+        set_credit_banner(frm, "Checking this customer's credit…",
+                          "muted", credit_placeholder_tiles());
         return;
     }
     if (!p.has_limits) {
-        set_credit_headline(
-            frm, credit_placeholder_parts("no credit limits set for this customer"), null, true);
+        set_credit_banner(frm, "No credit limits set for this customer",
+                          "muted", credit_placeholder_tiles());
         return;
     }
 
@@ -1016,92 +1052,85 @@ function render_credit_banner(frm) {
     // this was wrong before.
     const over = {
         count: !!p.count_exceeded,
-        days: !!p.days_exceeded,   // PARKED — server always sends 0
+        days: !!p.days_exceeded,
         amount: !!amount_exceeded
     };
-    const mark = which =>
-        over[which] ? (blocked_by === which ? "\u26d4 " : "\u26a0\ufe0f ") : "";
-    const parts = [];
 
-    // What the customer owes, shown first so the strip reads left to right:
-    //   Limit - Outstanding - this invoice = Remaining
-    // Without it "Remaining" is derived from a figure that never appears, and
-    // the arithmetic cannot be checked from the form.
-    //
-    // p.exposure, not p.outstanding or p.gross_outstanding. It is the exact
-    // quantity the amount limit is tested against (see `projected` above), and
-    // FIFO leaves leftover_advance at 0 whenever any bill is uncovered, so it
-    // equals p.outstanding for every customer who actually owes money. It only
-    // differs for a prepaid one, where it correctly goes negative.
+    const tiles = [];
+
+    // What the customer owes. p.exposure, not p.outstanding or
+    // p.gross_outstanding: it is the exact quantity the amount limit is tested
+    // against (see `projected`), and FIFO leaves leftover_advance at 0 whenever
+    // any bill is uncovered, so it equals p.outstanding for everyone who
+    // actually owes money. It only differs for a prepaid customer, where it
+    // correctly goes negative.
     //
     // gross_outstanding would be wrong here: _unpaid_after_advance filters
     // is_return = 0, so it counts no credit notes and would tell a customer who
     // returned goods they owe more than they do.
     //
-    // No mark() prefix — this segment is informational; the blocked markers
-    // belong on the limits that can actually trip.
-    //
-    // Floored at 0 rather than flipping to an "Advance balance" label: the
-    // heading stays the same word on every invoice, so an operator scanning
-    // the strip reads one column and not two. A prepaid customer's advance is
-    // not lost from the screen — it still appears in the Remaining basis as
-    // "(advance left X + limit Y)".
+    // Floored at 0 rather than flipping to an "Advance balance" label: the tile
+    // keeps the same heading on every invoice, so an operator scanning the row
+    // reads one column and not two. A prepaid customer's advance is not lost
+    // from the screen — it moves to the "Can still bill" tile's small print.
     const owed = Math.max(0, flt(p.exposure));
-    parts.push(`<b>Outstanding:</b> ${rs(owed)}`);
+    tiles.push(credit_tile(
+        "Customer owes", rs(owed),
+        flt(p.je_debit) ? `includes ${rs(p.je_debit)} journal debit` : "",
+        false));
 
     if (p.amount_limit) {
         const remaining = flt(p.amount_limit) - projected;
         // Spell out where the headroom comes from when the customer is prepaid,
         // so the figure on screen can be tied back to their ledger balance.
         const basis = flt(p.leftover_advance)
-            ? ` (advance left ${rs(p.leftover_advance)} + limit ${rs(p.amount_limit)})`
-            : ` &nbsp;|&nbsp; <b>Amount Limit:</b> ${rs(p.amount_limit)}`;
-        parts.push(
-            mark("amount") +
-            (remaining >= 0
-                ? `<b>Remaining ${rs(remaining)}</b>`
-                : `<b>Exceeded by ${rs(-remaining)}</b>`) +
-            basis
-        );
+            ? `advance left ${rs(p.leftover_advance)} + limit ${rs(p.amount_limit)}`
+            : `limit ${rs(p.amount_limit)}`;
+        tiles.push(credit_tile(
+            "Can still bill",
+            remaining >= 0 ? rs(remaining) : `over by ${rs(-remaining)}`,
+            basis, over.amount));
     }
 
     if (p.bill_limit) {
         // The server throws on >=, so the last permitted bill count is one
         // below the limit. Say that, rather than "N of N allowed" reading fine
         // at the exact point the save fails.
-        parts.push(
-            mark("count") +
-            `<b>Bills:</b> ${p.unpaid_count} unpaid, blocked at ${p.bill_limit}`
-        );
+        tiles.push(credit_tile(
+            "Unpaid bills", `${p.unpaid_count}`,
+            `blocked at ${p.bill_limit}`, over.count));
     }
 
-    // ---- PARKED 2026-08-20: days segment ---------------------------------
-    // The days check is switched off server-side (credit_control.py), so this
-    // must not render a limit or a blocked marker. The age itself is still
-    // useful, so it is shown as plain information. To restore, swap this back
-    // for the commented block and re-enable the server branch.
-    if (p.oldest_date) {
-        parts.push(`<b>Oldest unpaid:</b> ${p.days_used} days`);
-    }
-    // if (p.days_limit) {
-    //     parts.push(
-    //         mark("days") +
-    //         (p.oldest_date
-    //             ? `<b>Days:</b> oldest bill ${p.days_used}, blocked at ${p.days_limit}`
-    //             : `<b>Days:</b> no unpaid bills (blocked at ${p.days_limit})`)
-    //     );
-    // }
-    // ----------------------------------------------------------------------
-
-    // The advance pool is deliberately NOT shown. It is already netted off the
-    // outstanding figure, so printing it again just widens the strip with a
-    // number the user cannot act on. get_credit_position still returns the
-    // pe_advance / je_credit / je_debit breakdown for anyone who needs it.
-    // A journal DEBIT is different — it adds to what the customer owes — so
-    // that one stays.
-    if (flt(p.je_debit)) {
-        parts.push(`<b>Journal debit:</b> ${rs(p.je_debit)} <i>(added to exposure)</i>`);
+    // Drawn whenever there is an age to report OR a limit to report it against,
+    // so a customer with no days limit keeps the bill age they could always see
+    // here — it is useful on its own, it just cannot block anything.
+    if (p.days_limit || p.oldest_date) {
+        // p.days_used is the age of the oldest bill the customer's credits
+        // could NOT cover, already floored to 0 by the server when the leftover
+        // is too small to be worth ageing (DAYS_MATERIALITY_FLOOR).
+        tiles.push(credit_tile(
+            "Oldest unpaid bill",
+            p.days_used ? `${p.days_used} days` : "none",
+            p.days_limit ? `blocked at ${p.days_limit} days` : "no days limit set",
+            over.days));
     }
 
-    set_credit_headline(frm, parts, blocked_by, false);
+    // The verdict, in words. "Blocked" alone leaves the operator hunting the
+    // row for a red tile; naming the reason means they can act on it without
+    // reading anything else.
+    let status = "✓  Credit OK";
+    let tone = "ok";
+    if (blocked_by === "count") {
+        status = `⛔  Sale blocked — ${p.unpaid_count} unpaid bills, limit is ${p.bill_limit}`;
+        tone = "blocked";
+    } else if (blocked_by === "days") {
+        status = `⛔  Sale blocked — oldest unpaid bill is ${p.days_used} days old, limit is ${p.days_limit} days`;
+        tone = "blocked";
+    } else if (blocked_by === "amount") {
+        const over_by = projected - flt(p.amount_limit);
+        status = `⛔  Sale blocked — this invoice goes ${rs(over_by)} past the credit limit`;
+        tone = "blocked";
+    }
+
+    set_credit_banner(frm, status, tone, tiles.join(""));
 }
