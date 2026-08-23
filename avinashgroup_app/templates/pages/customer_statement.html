@@ -321,6 +321,33 @@ class CustomerStatement {
 .cs-section-label { font-size: 14px; color: #000; font-weight: 600; margin-bottom: 4px; }
 .page-content, .page_content, .container { max-width: 100% !important; padding-left: 80px !important; padding-right: 80px !important; }
 
+/* ── Phone ──────────────────────────────────────────────────────────────
+   80px of padding either side is 160px of a 390px screen — 41% of the
+   display — which squeezed the filters to 185px (truncating "Nepal Gas
+   Ud…") and wrapped the statement header one word per line. */
+@media (max-width: 1199px) {
+	.page-content, .page_content, .container { padding-left: 24px !important; padding-right: 24px !important; }
+}
+@media (max-width: 640px) {
+	.page-content, .page_content, .container { padding-left: 12px !important; padding-right: 12px !important; }
+}
+
+/* a label and its required mark belong on one line */
+.cs-section-label { white-space: nowrap; }
+
+@media (max-width: 767px) {
+	/* the report scrolls inside its own box rather than dragging the page sideways */
+	.pl { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+	.pl table { min-width: 560px; }
+
+	/* company name and report title stack instead of fighting for a narrow column */
+	.pl-page-header { flex-direction: column; align-items: flex-start; gap: 6px; }
+	.pl-right-header { text-align: left; }
+
+	.cs-print-bar { justify-content: stretch; }
+	.cs-download-btn { width: 100%; }
+}
+
 /* Customer multi-select dropdown */
 .cs-ms { position: relative; }
 .cs-ms-btn { text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
