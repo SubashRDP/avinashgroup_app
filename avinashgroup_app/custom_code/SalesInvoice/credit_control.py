@@ -13,6 +13,24 @@ CREDIT_ACCOUNT_NAMES = (
     "Advance From Customer",
 )
 
+# Below this, an uncovered balance is not worth ageing. The days clock reads 0
+# and the customer is treated as settled.
+#
+# This exists because of GEPL-CUS-00713: an unallocated journal credit of
+# 34,174.93 against bills of 34,175.00 leaves SEVEN PAISA uncovered, and without
+# a floor that seven paisa refuses every sale to that customer for 124 days and
+# counting. GEPL-CUS-00242 and GEPL-CUS-00339 are the same shape at 522.00 and
+# 2,040.00 against advances of 5.4m and 2.5m.
+#
+# 100 is deliberately low: it clears rounding and paisa-level artifacts and
+# nothing else. The two larger cases stay blocked because they genuinely ARE
+# unpaid -- the fix for those is for accounts to allocate the journal credit,
+# not to widen this number. Raising it to 5000 would swallow all three; the
+# group-wide block count barely moves either way (130 / 126 / 123 / 121 / 116 at
+# floors of 1 / 100 / 1000 / 5000 on nepalgas), so this is a fairness dial and
+# not a volume dial.
+DAYS_MATERIALITY_FLOOR = 100.0
+
 
 def _money(value, currency=None):
     """Format for display. The books are NPR — never hardcode a symbol here."""
@@ -212,6 +230,8 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "oldest_date": None,
         "oldest_invoice": None,
         "days_used": 0,
+        "days_used_raw": 0,
+        "days_immaterial": 0,
         "count_exceeded": 0,
         "days_exceeded": 0,
         "amount_exceeded": 0,
@@ -239,11 +259,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "amount_limit": amount_limit,
     })
 
-    # DAYS CHECK PARKED 2026-08-20 — see the commented block further down.
-    # days_limit is left out of this test on purpose: a customer carrying ONLY
-    # a days limit must count as unrestricted while the check is off.
-    # To restore: put `days_limit or` back here and uncomment the block below.
-    if not (bill_limit or amount_limit):   # or days_limit
+    if not (bill_limit or days_limit or amount_limit):
         return state
     state["has_limits"] = 1
 
@@ -255,9 +271,20 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     je_debit = pool["je_debit"]
     unpaid = _unpaid_after_advance(customer, advance, exclude_invoice)
 
-    days_used = 0
+    # The clock runs from the oldest bill the CREDITS COULD NOT REACH, which is
+    # newer than the customer's oldest bill whenever an advance covered some of
+    # them. That is the intended reading: a bill the advance already paid is not
+    # ageing, so it must not set the clock.
+    days_used_raw = 0
     if unpaid["oldest_date"]:
-        days_used = (today - getdate(unpaid["oldest_date"])).days
+        days_used_raw = (today - getdate(unpaid["oldest_date"])).days
+
+    # An uncovered balance under the floor is noise, not debt -- see
+    # DAYS_MATERIALITY_FLOOR. Report the clock as 0 so the banner, the throw and
+    # the audit all tell the same story; days_used_raw keeps the true age for
+    # anyone reconciling.
+    days_immaterial = 0 < unpaid["total_unpaid"] < DAYS_MATERIALITY_FLOOR
+    days_used = 0 if days_immaterial else days_used_raw
 
     # Advance the bills did not consume. FIFO leaves this at 0 whenever any
     # bill is still uncovered, so it is only ever positive for a prepaid
@@ -285,6 +312,8 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "oldest_date": str(unpaid["oldest_date"]) if unpaid["oldest_date"] else None,
         "oldest_invoice": unpaid["oldest_invoice"],
         "days_used": days_used,
+        "days_used_raw": days_used_raw,
+        "days_immaterial": int(days_immaterial),
         "remaining_amount": available_credit,
     })
 
@@ -305,16 +334,15 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     # ------------------------------------------------------------------
     # Count and days use `>=`: a limit of 5 blocks the 5th unpaid bill.
     count_exceeded = bool(bill_limit and unpaid["unpaid_count"] >= bill_limit)
-    # PARKED — days check off. days_used and oldest_date are still computed
-    # above and still returned, so the banner can show the age as information.
-    # days_exceeded = bool(days_limit and days_used >= days_limit)
-    days_exceeded = False
+    # days_used is already floored to 0 for an immaterial residual, so the floor
+    # does not need repeating here.
+    days_exceeded = bool(days_limit and days_used >= days_limit)
     # Amount uses `>`: landing exactly on the limit is allowed.
     final_exposure = exposure + new_amount
     amount_exceeded = bool(amount_limit and final_exposure > amount_limit)
 
     state["count_exceeded"] = int(count_exceeded)
-    state["days_exceeded"] = int(days_exceeded)   # PARKED — always 0
+    state["days_exceeded"] = int(days_exceeded)
     state["amount_exceeded"] = int(amount_exceeded)
 
     # Precedence — count, then days, then amount. This is the order
@@ -330,28 +358,31 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
             f"Maximum Allowed: <b>{int(bill_limit)}</b><br><br>"
             f"<i>Please clear existing invoices before creating new ones.</i>"
         )
-    # ---- PARKED 2026-08-20: days check -------------------------------------
-    # Switched off at Sijan's request; kept verbatim so it can be brought back.
-    # To restore: uncomment this branch, restore the days_exceeded assignment
-    # above, and put `days_limit or` back in the "no limits configured" test.
+    # Restored 2026-08-23 after being parked on 2026-08-20. The open question
+    # that got it parked -- a customer whose credits fall a little short still
+    # ages -- is answered by DAYS_MATERIALITY_FLOOR above.
     #
-    # Known open question if it is revived: the clock runs on the oldest bill
-    # the advance did NOT cover, so a customer holding a large advance that
-    # falls a little short still ages. On ng-group, GEPL-CUS-00212 had
-    # 2,024,831 of advance, was 9,079 short, and showed 142 days.
-    #
-    # elif days_exceeded:
-    #     state["blocked_by"] = "days"
-    #     state["title"] = "Credit Days Exceeded"
-    #     state["message"] = (
-    #         f"<b>Credit Limit: Days Exceeded</b><br><br>"
-    #         f"Customer: <b>{customer}</b><br>"
-    #         f"Oldest Unpaid Invoice: <b>{unpaid['oldest_invoice']}</b><br>"
-    #         f"Date: <b>{unpaid['oldest_date']}</b> ({days_used} days ago)<br>"
-    #         f"Maximum Days Allowed: <b>{int(days_limit)}</b><br><br>"
-    #         f"<i>Payment is overdue. Please collect payment before new sales.</i>"
-    #     )
-    # ------------------------------------------------------------------------
+    # The invoice named here is the oldest bill the customer's credits could NOT
+    # pay, which for anyone holding an advance is NEWER than their oldest bill.
+    # The message says so outright, because an operator who looks up the
+    # customer's ledger will see older bills than the one quoted and otherwise
+    # has no way to know that is correct.
+    elif days_exceeded:
+        state["blocked_by"] = "days"
+        state["title"] = "Credit Days Exceeded"
+        state["message"] = (
+            f"<b>Credit Limit: Bill Too Old</b><br><br>"
+            f"Customer: <b>{customer}</b><br>"
+            f"Oldest Unpaid Bill: <b>{unpaid['oldest_invoice']}</b><br>"
+            f"Bill Date: <b>{unpaid['oldest_date']}</b> "
+            f"— <b>{days_used} days</b> ago<br>"
+            f"Days Allowed: <b>{int(days_limit)}</b><br>"
+            f"Still Unpaid: <b>{_money(unpaid['total_unpaid'], currency)}</b><br><br>"
+            f"<i>This is the oldest bill the customer's payments, returns and "
+            f"advances could not cover — {_money(advance, currency)} of credit "
+            f"was already applied to older bills. Please collect payment before "
+            f"making a new sale.</i>"
+        )
     elif amount_exceeded:
         state["blocked_by"] = "amount"
         state["title"] = "Credit Amount Exceeded"
