@@ -402,8 +402,6 @@ override_whitelisted_methods = {
     "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",
     # Report "Add Column": show a Link field's name instead of its id.
     "frappe.desk.query_report.get_data_for_custom_field": "avinashgroup_app.custom_code.Override.query_report.get_data_for_custom_field",
-    # Sales Invoice list-view Excel export: company letterhead on top of the table.
-    "frappe.desk.reportview.export_query": "avinashgroup_app.utils.report_excel.export_query",
 }
 
 # ---------------------------------------------------------------------------
