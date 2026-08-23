@@ -135,10 +135,27 @@ frappe.ready(function () {
 		});
 	}
 
+	// Keep the panel on screen whatever the navbar does with the bell. Anchored to
+	// the bell it can hang off an edge — when the bell sits left, a right-aligned
+	// panel runs off the left of the screen, which is what a customer saw.
+	function fit_panel() {
+		$panel.css({ position: "", top: "", left: "", right: "", width: "" });
+		const vw = window.innerWidth;
+		const r = $panel[0].getBoundingClientRect();
+		if (r.left < 8 || r.right > vw - 8 || vw < 768) {
+			$panel.css({
+				position: "fixed",
+				top: Math.round($btn[0].getBoundingClientRect().bottom + 8) + "px",
+				left: "12px", right: "12px", width: "auto"
+			});
+		}
+	}
+
 	$btn.on("click", function (e) {
 		e.stopPropagation();
 		const opening = $panel.prop("hidden");
 		$panel.prop("hidden", !opening);
+		if (opening) fit_panel();
 		$btn.attr("aria-expanded", opening ? "true" : "false");
 		if (!opening) return;
 

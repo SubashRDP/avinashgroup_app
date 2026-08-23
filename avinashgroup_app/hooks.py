@@ -11,7 +11,10 @@ app_license = "mit"
 page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 
 # the customer portal's notification bell — website pages, not the desk
-web_include_js = ["/assets/avinashgroup_app/js/portal_notifications.js"]
+# ?v= is a cache buster. Plain files under public/ are served without a content
+# hash, so a phone that has the file keeps it — the bell reached a customer's
+# handset in a half-finished state for exactly this reason. Bump on every edit.
+web_include_js = ["/assets/avinashgroup_app/js/portal_notifications.js?v=2"]
 
 app_include_js = [
     # Wraps frappe.msgprint / show_alert to drop ERPNext's informational
