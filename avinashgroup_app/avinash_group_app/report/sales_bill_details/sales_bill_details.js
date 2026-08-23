@@ -52,13 +52,18 @@ frappe.query_reports["Sales Bill Details"] = {
 		{
 			fieldname: "invoice_no",
 			label: __("Invoice No"),
-			fieldtype: "Link",
-			options: "Sales Invoice",
-			get_query: function() {
+			fieldtype: "MultiSelectList",
+			get_data: function(txt) {
 				const company = frappe.query_report.get_filter_value("company");
-				const filters = { docstatus: 1, is_return: 0 };
-				if (company && company.length) filters.company = ["in", company];
-				return { filters: filters };
+				const from_date = frappe.query_report.get_filter_value("from_date");
+				const to_date = frappe.query_report.get_filter_value("to_date");
+				const customer = frappe.query_report.get_filter_value("customer");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_bill_details.sales_bill_details.get_invoice_options",
+						args: { company: company, from_date: from_date, to_date: to_date, customer: customer, txt: txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -71,6 +76,21 @@ frappe.query_reports["Sales Bill Details"] = {
 				return frappe
 					.call({
 						method: "avinashgroup_app.avinash_group_app.report.sales_bill_details.sales_bill_details.get_company_customers",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
+			fieldname: "branch",
+			label: __("Branch"),
+			fieldtype: "MultiSelectList",
+			get_data: function(txt) {
+				// Scope branches to the selected company(ies).
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_bill_details.sales_bill_details.get_company_branches",
 						args: { company: company, txt: txt },
 					})
 					.then((r) => r.message || []);
@@ -252,7 +272,8 @@ frappe.query_reports["Sales Bill Details"] = {
 		if (!data) return default_formatter(value, row, column, data);
 
 		if (column.fieldname === "invoice_number" && value && !data.bold) {
-			value = `<a href="/app/sales-invoice/${value}" target="_blank">${value}</a>`;
+			const doc_name = data.invoice_name || value;
+			value = `<a href="/app/sales-invoice/${encodeURIComponent(doc_name)}" target="_blank">${value}</a>`;
 			return value;
 		}
 

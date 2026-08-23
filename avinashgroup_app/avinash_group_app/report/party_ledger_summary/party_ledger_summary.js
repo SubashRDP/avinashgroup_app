@@ -1,6 +1,22 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
+// Pre-selects the Account filter with the company's Debtors + Advance From Customer
+// accounts whenever Company is set/changed — the user can still clear or change it.
+function pls_set_default_accounts(company) {
+	if (!company) return;
+	frappe
+		.call({
+			method: "avinashgroup_app.avinash_group_app.report.party_ledger_summary.party_ledger_summary.get_default_ledger_accounts",
+			args: { company },
+		})
+		.then((r) => {
+			if (r.message && r.message.length) {
+				frappe.query_report.set_filter_value("account", r.message);
+			}
+		});
+}
+
 frappe.query_reports["Party Ledger Summary"] = {
 	filters: [
 		{
@@ -21,6 +37,9 @@ frappe.query_reports["Party Ledger Summary"] = {
 			options: "Company",
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
+			on_change: function () {
+				pls_set_default_accounts(frappe.query_report.get_filter_value("company"));
+			},
 		},
 		{
 			fieldname: "party_type",
@@ -72,6 +91,30 @@ frappe.query_reports["Party Ledger Summary"] = {
 					.call({
 						method: "avinashgroup_app.avinash_group_app.report.party_ledger_summary.party_ledger_summary.get_company_parties",
 						args: { party_type, company, txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
+			fieldname: "account",
+			label: __("Account"),
+			fieldtype: "MultiSelectList",
+			get_data: function (txt) {
+				// Only offer accounts that actually appear in the summary for the current
+				// Company / Party / date range (not every account in the company).
+				const company = frappe.query_report.get_filter_value("company");
+				if (!company) return [];
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.party_ledger_summary.party_ledger_summary.get_report_accounts",
+						args: {
+							company,
+							party_type: frappe.query_report.get_filter_value("party_type"),
+							party: JSON.stringify(frappe.query_report.get_filter_value("party") || []),
+							from_date: frappe.query_report.get_filter_value("from_date"),
+							to_date: frappe.query_report.get_filter_value("to_date"),
+							txt,
+						},
 					})
 					.then((r) => r.message || []);
 			},
@@ -201,6 +244,13 @@ frappe.query_reports["Party Ledger Summary"] = {
 	},
 
 	onload: function (_report) {
+		// Company already carries a default value (user default) that on_change never
+		// fires for on first load — seed the Account default here too, once only.
+		if (!frappe.query_report.get_filter_value("account") ||
+			!frappe.query_report.get_filter_value("account").length) {
+			pls_set_default_accounts(frappe.query_report.get_filter_value("company"));
+		}
+
 		// Override the built-in Export menu: produce a custom Excel where Opening and
 		// Closing each show the magnitude followed by a Dr/Cr column. The on-screen report
 		// is unchanged. Instance-level override only — does not affect other reports.

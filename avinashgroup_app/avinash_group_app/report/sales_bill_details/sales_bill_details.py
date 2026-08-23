@@ -51,6 +51,68 @@ def get_company_customers(company=None, txt=None):
 	)
 
 
+@frappe.whitelist()
+def get_company_branches(company=None, txt=None):
+	"""Branch options scoped to the selected company via the branch's custom_company."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["(br.name LIKE %(txt)s OR br.branch LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("(br.custom_company IN %(company)s OR COALESCE(br.custom_company, '') = '')")
+		values["company"] = tuple(company)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT br.name AS value, br.branch AS label, br.name AS description
+		FROM `tabBranch` br
+		WHERE {where}
+		ORDER BY br.branch
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_invoice_options(company=None, from_date=None, to_date=None, customer=None, txt=None):
+	"""Invoice No options (custom_branch_name) scoped to the filters already applied on
+	the report, so the dropdown only offers bills the report would actually show."""
+	company = _as_list(company)
+	customer = _as_list(customer)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["si.docstatus = 1", "si.is_return = 0",
+		"(COALESCE(si.custom_branch_name, si.name) LIKE %(txt)s OR si.name LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("si.company IN %(company)s")
+		values["company"] = tuple(company)
+	if customer:
+		conditions.append("si.customer IN %(customer)s")
+		values["customer"] = tuple(customer)
+	if from_date:
+		conditions.append("si.posting_date >= %(from_date)s")
+		values["from_date"] = from_date
+	if to_date:
+		conditions.append("si.posting_date <= %(to_date)s")
+		values["to_date"] = to_date
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT si.name AS value, COALESCE(si.custom_branch_name, si.name) AS label, si.name AS description
+		FROM `tabSales Invoice` si
+		WHERE {where}
+		ORDER BY si.posting_date DESC
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
 def _fmt_inr(v):
 	if not v:
 		return ''
@@ -156,7 +218,7 @@ def execute(filters=None):
 
 	if data:
 		total = {"miti": None, "invoice_number": _("Total"), "customer": None, "vehicle_number": None,
-			"price_list": None, "customer_address": None, "customer_phone": None, "bold": 1}
+			"price_list": None, "branch": None, "customer_address": None, "customer_phone": None, "bold": 1}
 		for col in columns:
 			if col.get("fieldtype") in ("Currency", "Float"):
 				total[col["fieldname"]] = sum(row.get(col["fieldname"]) or 0 for row in data)
@@ -169,6 +231,7 @@ def get_columns():
 		{"fieldname": "miti",              "label": _("Miti"),                   "fieldtype": "Data",     "width": 110},
 		{"fieldname": "invoice_number",     "label": _("Invoice Number"),         "fieldtype": "Data",     "width": 150},
 		{"fieldname": "customer",           "label": _("Customer"),               "fieldtype": "Data",     "width": 170},
+		{"fieldname": "branch",             "label": _("Branch"),                 "fieldtype": "Data",     "width": 130},
 		{"fieldname": "total_qty",          "label": _("Total Quantity"),         "fieldtype": "Float",    "width": 110},
 		{"fieldname": "amount_before_vat",  "label": _("Amount before VAT"),      "fieldtype": "Currency", "width": 140},
 		{"fieldname": "vat_amount",         "label": _("VAT Amount"),             "fieldtype": "Currency", "width": 120},
@@ -194,31 +257,39 @@ def get_data(filters):
 		placeholders = ", ".join(["'{}'".format(c) for c in _as_list(filters.get("customer"))])
 		conditions += " AND si.customer IN ({})".format(placeholders)
 	if filters.get("invoice_no"):
-		conditions += " AND si.name = %(invoice_no)s"
+		placeholders = ", ".join(["'{}'".format(v) for v in _as_list(filters.get("invoice_no"))])
+		conditions += " AND si.name IN ({})".format(placeholders)
 	if filters.get("vehicle"):
 		conditions += " AND si.custom_vehicle_no LIKE %(vehicle)s"
 		filters["vehicle"] = "%{}%".format(filters["vehicle"])
+	if filters.get("branch"):
+		placeholders = ", ".join(["'{}'".format(b) for b in _as_list(filters.get("branch"))])
+		conditions += " AND si.custom_branch IN ({})".format(placeholders)
 
 	return frappe.db.sql(
 		f"""
 		SELECT
 			SUBSTRING_INDEX(si.custom_invoice_miti, ' ', 1)   AS miti,
 			COALESCE(si.custom_branch_name, si.name)          AS invoice_number,
+			si.name                                           AS invoice_name,
 			si.customer                                       AS customer_id,
 			si.customer_name                                  AS customer,
+			br.branch                                          AS branch,
 			SUM(sii.qty)                                       AS total_qty,
 			si.custom_total_amount_including_excise           AS amount_before_vat,
 			si.custom_total_vat_amount                        AS vat_amount,
 			si.grand_total                                     AS grand_total,
 			si.custom_vehicle_no                                AS vehicle_number,
-			si.selling_price_list                               AS price_list,
+			pl.price_list_name                                  AS price_list,
 			c.custom_mobile_number                              AS customer_phone
 		FROM `tabSales Invoice` si
 		JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
 		JOIN `tabCustomer` c ON c.name = si.customer
+		LEFT JOIN `tabPrice List` pl ON pl.name = si.selling_price_list
+		LEFT JOIN `tabBranch` br ON br.name = si.custom_branch
 		WHERE {conditions}
 		GROUP BY si.name
-		ORDER BY si.posting_date ASC
+		ORDER BY si.posting_date DESC
 		""",
 		filters,
 		as_dict=True,
