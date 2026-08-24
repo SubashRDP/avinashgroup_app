@@ -33,8 +33,9 @@ def _as_list(value):
 
 @frappe.whitelist()
 def get_company_price_lists(company=None, txt=None):
-	"""Price List categories (Bulk, Dealer, ...) scoped to the selected company(ies),
-	with the matching docname(s) for those companies shown as the description."""
+	"""One filter option per Price List doc scoped to the selected company(ies) —
+	kept one-per-company rather than deduped by category (Bulk, Dealer, ...),
+	since two different companies' Price Lists can share the same category name."""
 	companies = _as_list(company)
 	like = f"%{(txt or '').strip()}%"
 	conditions = ["price_list_name LIKE %(txt)s"]
@@ -46,7 +47,7 @@ def get_company_price_lists(company=None, txt=None):
 
 	rows = frappe.db.sql(
 		f"""
-		SELECT name, price_list_name
+		SELECT name, price_list_name, custom_company
 		FROM `tabPrice List`
 		WHERE {where}
 		ORDER BY price_list_name
@@ -54,14 +55,25 @@ def get_company_price_lists(company=None, txt=None):
 		values,
 		as_dict=True,
 	)
+	if not rows:
+		return []
 
-	docnames_by_category = {}
-	for row in rows:
-		docnames_by_category.setdefault(row.price_list_name, []).append(row.name)
+	company_abbrs = dict(
+		frappe.get_all(
+			"Company",
+			filters=[["name", "in", [r.custom_company for r in rows if r.custom_company]]],
+			fields=["name", "abbr"],
+			as_list=True,
+		)
+	)
 
 	return [
-		{"value": category, "label": category, "description": ", ".join(docnames)}
-		for category, docnames in docnames_by_category.items()
+		{
+			"value": row.name,
+			"label": "{0} - {1}".format(row.price_list_name, company_abbrs.get(row.custom_company, row.custom_company)),
+			"description": row.name,
+		}
+		for row in rows
 	]
 
 
@@ -113,21 +125,6 @@ def _lp_gas_items(companies):
 		fields=["name", "custom_company", "item_name"],
 	)
 	return {r.name: {"company": r.custom_company, "item_name": r.item_name} for r in rows}
-
-
-def _price_list_docnames(companies, categories):
-	"""Every company's Price List docname for the selected categories (Bulk,
-	Dealer, Inter-Company, Buying, ...) — one per company, since Price List is
-	per-company (custom_company) but named after the category (price_list_name)."""
-	if not categories:
-		return None
-	return tuple(
-		frappe.get_all(
-			"Price List",
-			filters={"custom_company": ["in", companies], "price_list_name": ["in", categories]},
-			pluck="name",
-		)
-	) or ("",)
 
 
 def _price_list_filter(column, price_lists):
@@ -215,7 +212,7 @@ def get_data(filters, companies):
 	if not items:
 		return []
 	item_codes = list(items.keys())
-	price_lists = _price_list_docnames(companies, _as_list(filters.get("price_list")))
+	price_lists = tuple(_as_list(filters.get("price_list"))) or None
 
 	received = {
 		(r.item_code, r.uom, r.price_list): r.qty or 0
@@ -229,14 +226,28 @@ def get_data(filters, companies):
 	price_list_names = {}
 	all_price_lists = {k[2] for k in set(received) | set(delivered) if k[2]}
 	if all_price_lists:
-		price_list_names = dict(
+		price_list_docs = frappe.get_all(
+			"Price List",
+			filters=[["name", "in", list(all_price_lists)]],
+			fields=["name", "price_list_name", "custom_company"],
+		)
+		# Two different companies' Price Lists can share the same category name
+		# (both called "Bulk") — suffix the owning company's abbreviation so
+		# those stay visibly distinct instead of looking like one merged row.
+		company_abbrs = dict(
 			frappe.get_all(
-				"Price List",
-				filters=[["name", "in", list(all_price_lists)]],
-				fields=["name", "price_list_name"],
+				"Company",
+				filters=[["name", "in", [d.custom_company for d in price_list_docs if d.custom_company]]],
+				fields=["name", "abbr"],
 				as_list=True,
 			)
 		)
+		price_list_names = {
+			d.name: "{0} - {1}".format(d.price_list_name, company_abbrs.get(d.custom_company, d.custom_company))
+			if d.custom_company
+			else d.price_list_name
+			for d in price_list_docs
+		}
 
 	rows = []
 	for key in sorted(set(received) | set(delivered), key=lambda k: (k[0], k[1], k[2] or "")):
