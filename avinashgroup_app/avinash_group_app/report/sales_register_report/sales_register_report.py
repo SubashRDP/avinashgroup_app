@@ -27,6 +27,31 @@ def _as_list(value):
 
 
 @frappe.whitelist()
+def get_company_branches(company=None, txt=None):
+	"""Branch options scoped to the selected company via Branch.custom_company."""
+	company = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["(b.name LIKE %(txt)s OR b.branch LIKE %(txt)s)"]
+	values = {"txt": like}
+	if company:
+		conditions.append("(b.custom_company IN %(company)s OR COALESCE(b.custom_company, '') = '')")
+		values["company"] = tuple(company)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT b.name AS value, b.branch AS label, b.name AS description
+		FROM `tabBranch` b
+		WHERE {where}
+		ORDER BY b.branch
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
 def get_company_customers(company=None, txt=None):
 	"""Customer options scoped to the selected company via the customer's custom_company."""
 	company = _as_list(company)
@@ -167,7 +192,7 @@ def execute(filters=None):
 					row[f] = abs(row[f])
 
 	if data:
-		total = {"date": None, "miti": None, "bill_no": _("Total"), "customer": None, "vat_number": None, "bold": 1}
+		total = {"date": None, "miti": None, "bill_no": _("Total"), "customer": None, "branch": None, "vat_number": None, "bold": 1}
 		for col in columns:
 			if col.get("fieldtype") == "Currency":
 				total[col["fieldname"]] = sum(row.get(col["fieldname"]) or 0 for row in data)
@@ -181,6 +206,7 @@ def get_columns():
 		{"fieldname": "miti",          "label": _("Miti"),           "fieldtype": "Data",     "width": 120},
 		{"fieldname": "bill_no",       "label": _("Bill No"),        "fieldtype": "Data",     "width": 170},
 		{"fieldname": "customer",      "label": _("Customer Name"),  "fieldtype": "Data",     "width": 180},
+		{"fieldname": "branch",        "label": _("Branch"),         "fieldtype": "Data",     "width": 120},
 		{"fieldname": "vat_number",    "label": _("VAT Number"),     "fieldtype": "Data",     "width": 130},
 		{"fieldname": "total_sales",   "label": _("Total Sales"),    "fieldtype": "Currency", "width": 130},
 		{"fieldname": "tax_free_sale", "label": _("Tax Free Sale"),  "fieldtype": "Currency", "width": 140},
@@ -204,6 +230,9 @@ def get_data(filters):
 	if filters.get("customer"):
 		placeholders = ", ".join(["'{}'".format(c) for c in filters.get("customer")])
 		conditions += " AND si.customer IN ({})".format(placeholders)
+	if filters.get("branch"):
+		placeholders = ", ".join(["'{}'".format(b) for b in filters.get("branch")])
+		conditions += " AND si.custom_branch IN ({})".format(placeholders)
 
 	return frappe.db.sql(
 		f"""
@@ -212,6 +241,7 @@ def get_data(filters):
 			SUBSTRING_INDEX(si.custom_invoice_miti, ' ', 1)                                                                               AS miti,
 			COALESCE(si.custom_branch_name, si.name)                                                                                      AS bill_no,
 			si.customer_name                                                                                                               AS customer,
+			br.branch                                                                                                                      AS branch,
 			c.tax_id                                                                                                                       AS vat_number,
 			si.custom_total_amount_including_excise                                                                                        AS total_sales,
 			SUM(CASE WHEN sii.custom_vat_apply_on = 'VAT 0%%'                                             AND c.territory = 'Nepal'    THEN sii.amount ELSE 0 END) AS tax_free_sale,
@@ -221,6 +251,7 @@ def get_data(filters):
 		FROM `tabSales Invoice` si
 		JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
 		JOIN `tabCustomer` c ON c.name = si.customer
+		LEFT JOIN `tabBranch` br ON br.name = si.custom_branch
 		WHERE {conditions}
 		GROUP BY si.name
 		ORDER BY si.posting_date ASC

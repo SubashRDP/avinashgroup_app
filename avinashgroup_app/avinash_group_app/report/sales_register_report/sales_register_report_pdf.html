@@ -134,6 +134,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 {% set s_miti          = show_all or 'miti'          in sc %}
 {% set s_bill_no       = show_all or 'bill_no'       in sc %}
 {% set s_customer      = show_all or 'customer'      in sc %}
+{% set s_branch        = show_all or 'branch'        in sc %}
 {% set s_vat_number    = show_all or 'vat_number'    in sc %}
 {% set s_total_sales   = show_all or 'total_sales'   in sc %}
 {% set s_tax_free_sale = show_all or 'tax_free_sale' in sc %}
@@ -158,7 +159,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 <table>
   <thead>
     <tr>
-      <td colspan="10" style="padding:4px 0 0 0; border:none;">
+      <td colspan="11" style="padding:4px 0 0 0; border:none;">
         <div style="text-align:right; font-size:13px; font-weight:bold;">Sales Register</div>
         {% if company_label %}
         <div class="sr-company-center">{{ company_label }}</div>
@@ -187,6 +188,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
       {% if s_miti %}<th class="l">Miti</th>{% endif %}
       {% if s_bill_no %}<th class="l">Bill No</th>{% endif %}
       {% if s_customer %}<th class="l">Customer Name</th>{% endif %}
+      {% if s_branch %}<th class="l">Branch</th>{% endif %}
       {% if s_vat_number %}<th class="l">VAT Number</th>{% endif %}
       {% if s_total_sales %}<th class="r">Total Sales</th>{% endif %}
       {% if s_tax_free_sale %}<th class="r">Tax Free Sale</th>{% endif %}
@@ -203,6 +205,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
       {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
       {% if s_bill_no %}<td>{{ row.get('bill_no') or '' }}</td>{% endif %}
       {% if s_customer %}<td>{{ row.get('customer') or '' }}</td>{% endif %}
+      {% if s_branch %}<td>{{ row.get('branch') or '' }}</td>{% endif %}
       {% if s_vat_number %}<td>{{ row.get('vat_number') or '' }}</td>{% endif %}
       {% if s_total_sales %}<td class="r nowrap">{{ fmt(row.get('total_sales')) }}</td>{% endif %}
       {% if s_tax_free_sale %}<td class="r nowrap">{{ fmt(row.get('tax_free_sale')) }}</td>{% endif %}

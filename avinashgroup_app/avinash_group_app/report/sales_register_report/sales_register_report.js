@@ -65,6 +65,21 @@ frappe.query_reports["Sales Register Report"] = {
 			},
 		},
 		{
+			fieldname: "branch",
+			label: __("Branch"),
+			fieldtype: "MultiSelectList",
+			get_data: function(txt) {
+				// Scope branches to the selected company(ies).
+				const company = frappe.query_report.get_filter_value("company");
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.sales_register_report.sales_register_report.get_company_branches",
+						args: { company: company, txt: txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
 			fieldname: "is_return",
 			label: __("Is Return"),
 			fieldtype: "Check",
