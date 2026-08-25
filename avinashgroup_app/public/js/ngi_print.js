@@ -23,47 +23,60 @@
 	// is supported for these forms anyway (Firefox rasterises PDFs and loses
 	// the millimetres), but the fallback keeps every browser printing SOMETHING
 	// rather than silently nothing.
+	//
+	// Returns a promise that settles once the job has been handed off — the
+	// print dialog is up (contentWindow.print() blocks until it is dismissed)
+	// or the tab fallback ran. Callers that do something after the print, like
+	// company_print.js's Print & New, wait on it; the iframe lives on
+	// document.body, outside the page container, so a desk route change after
+	// that does not cancel the job.
 	avinash.print_pdf = function (url) {
 		const old = document.getElementById("avinash-print-frame");
 		if (old) old.remove();
 
-		let settled = false;
-		const open_tab = function () {
-			if (settled) return;
-			settled = true;
-			const w = window.open(url);
-			if (!w) {
-				frappe.msgprint({
-					title: __("Print ready"),
-					indicator: "blue",
-					message: __("The browser blocked the print window. {0}", [
-						`<a href="${url}" target="_blank" rel="noopener">${__("Open print")}</a>`,
-					]),
-				});
-			}
-		};
+		return new Promise(function (resolve) {
+			let settled = false;
+			const open_tab = function () {
+				if (settled) return;
+				settled = true;
+				const w = window.open(url);
+				if (!w) {
+					frappe.msgprint({
+						title: __("Print ready"),
+						indicator: "blue",
+						message: __("The browser blocked the print window. {0}", [
+							`<a href="${url}" target="_blank" rel="noopener">${__("Open print")}</a>`,
+						]),
+					});
+				}
+				resolve();
+			};
 
-		const frame = document.createElement("iframe");
-		frame.id = "avinash-print-frame";
-		frame.style.cssText = "position:fixed; right:0; bottom:0; width:0; height:0; border:0;";
-		// a slow render must not strand the user with no print and no tab
-		const timer = setTimeout(open_tab, 15000);
-		frame.onload = function () {
-			clearTimeout(timer);
-			if (settled) return;
-			settled = true;
-			try {
-				frame.contentWindow.focus();
-				frame.contentWindow.print();
-			} catch (e) {
-				settled = false;
-				frame.remove();
-				open_tab();
-			}
-		};
-		frame.onerror = open_tab;
-		frame.src = url;
-		document.body.appendChild(frame);
+			const frame = document.createElement("iframe");
+			frame.id = "avinash-print-frame";
+			frame.style.cssText =
+				"position:fixed; right:0; bottom:0; width:0; height:0; border:0;";
+			// a slow render must not strand the user with no print and no tab
+			const timer = setTimeout(open_tab, 15000);
+			frame.onload = function () {
+				clearTimeout(timer);
+				if (settled) return;
+				settled = true;
+				try {
+					frame.contentWindow.focus();
+					frame.contentWindow.print();
+				} catch (e) {
+					settled = false;
+					frame.remove();
+					open_tab();
+					return;
+				}
+				resolve();
+			};
+			frame.onerror = open_tab;
+			frame.src = url;
+			document.body.appendChild(frame);
+		});
 	};
 
 	// Fallback only, for a format doc that hasn't reached locals yet. The real

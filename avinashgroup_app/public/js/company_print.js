@@ -8,7 +8,7 @@
 // this file never sees the parent/child shape). Fetched at app_ready, then
 // re-fetched whenever a Company Print Template is saved (realtime event
 // published by the doctype) and on every Print view open — an edited rule
-// must win in already-open desk sessions, not only after a reload. Three
+// must win in already-open desk sessions, not only after a reload. Four
 // behaviours:
 //
 //   1. Direct print from the form: Form.print_doc (the Print menu item, the
@@ -29,7 +29,10 @@
 //   3. Print Immediately on Submit: for doctypes with such a rule, submitting
 //      from the desk opens the print in a new tab at once.
 //
-// (1) and (3) share one routing rule: formats whose pdf_generator is "chrome"
+//   4. "Print & New" on Sales Invoice: one button that does (1) and then
+//      leaves the till on a blank invoice carrying only the company over.
+//
+// (1), (3) and (4) share one routing rule: formats whose pdf_generator is "chrome"
 // (the mm-exact NGI overlays) open through download_pdf — same route
 // ngi_print.js uses for the Print view's Print button — while everything else
 // opens /printview?trigger_print=1, which pops the browser print dialog
@@ -113,7 +116,7 @@
 	// printer mapping as the Print view ("Printer Settings" there); without a
 	// mapping the agent's default queue (LQ310-RAW) is used.
 	function raw_print(doctype, name, sel) {
-		frappe.call({
+		return frappe.call({
 			method: "frappe.www.printview.get_rendered_raw_commands",
 			args: { doc: doctype, name: name, print_format: sel.format },
 			callback: function (r) {
@@ -163,10 +166,15 @@
 	// Open the actual print output for (doctype, name) with the selected
 	// format: chrome formats via download_pdf, the rest via the browser print
 	// dialog. Both bump the IRD copy counter server-side.
+	//
+	// Returns a promise that settles once the job has been handed off, so a
+	// caller can act after the print (print_and_new below). Only the chrome
+	// route can actually tell — window.open returns the moment the tab is
+	// created — so the other routes settle immediately, which is honest: there
+	// is nothing further to wait for on them.
 	function open_print(doctype, name, sel) {
 		if (sel.raw) {
-			raw_print(doctype, name, sel);
-			return;
+			return Promise.resolve(raw_print(doctype, name, sel));
 		}
 		let url;
 		if (sel.generator === "chrome") {
@@ -203,8 +211,7 @@
 		// ngi_print.js (loaded before this file), so the till presses Print once.
 		// It falls back to opening the tab by itself if the browser refuses.
 		if (sel.generator === "chrome" && window.avinash && avinash.print_pdf) {
-			avinash.print_pdf(url);
-			return;
+			return avinash.print_pdf(url);
 		}
 
 		const w = window.open(url);
@@ -219,6 +226,7 @@
 				]),
 			});
 		}
+		return Promise.resolve();
 	}
 
 	// ------------------------------------------------------------------
@@ -357,6 +365,80 @@
 			});
 		});
 	}
+
+	// ------------------------------------------------------------------
+	// 4. Sales Invoice: "Print & New"
+	// ------------------------------------------------------------------
+
+	// The counter's whole job is one invoice after another, so the two actions
+	// that always follow a bill are collapsed into one button: print this
+	// invoice on the company's format — no Print view, no format chooser, no
+	// preview — and then leave the till on a blank Sales Invoice carrying only
+	// the company across. Nothing else is carried: the next bill is a different
+	// customer, so a pre-filled customer or item table would have to be cleared
+	// by hand, which is slower than typing it.
+	//
+	// This is a real print, not a preview: it bumps the IRD copy counter like
+	// every other route (print_count.py), so the first press prints the
+	// TAX INVOICE + INVOICE pair and a second press would print COPY OF
+	// ORIGINAL 1. That is why the button is offered only on a submitted,
+	// saved document — a draft can still change, and its sheets would already
+	// be spent.
+	//
+	// The new document is opened only after open_print's promise settles, so
+	// the route change cannot land before the job is handed to the printer.
+	const PRINT_AND_NEW_DOCTYPE = "Sales Invoice";
+
+	function print_and_new(frm, $btn) {
+		$btn.prop("disabled", true);
+		const company = frm.doc.company;
+
+		const done = function () {
+			$btn.prop("disabled", false);
+		};
+
+		load_rules()
+			.then(function () {
+				const rule = get_rule(frm.doctype, frm.doc);
+				const sel = rule && pick_format(rule, frm.doc);
+				if (!sel || !frappe.meta.get_print_formats(frm.doctype).includes(sel.format)) {
+					// No usable rule: printing "directly" would mean guessing a
+					// format. Say so instead of silently printing the wrong one.
+					frappe.msgprint({
+						title: __("No print format for this company"),
+						indicator: "orange",
+						message: __(
+							"{0} has no usable Company Print Template rule, so there is nothing to print directly. Set one up, or use the Print menu to pick a format.",
+							[frappe.utils.escape_html(company || __("This company"))]
+						),
+					});
+					return done();
+				}
+				return open_print(frm.doctype, frm.doc.name, sel).then(function () {
+					done();
+					// Only the company crosses over.
+					frappe.new_doc(PRINT_AND_NEW_DOCTYPE, company ? { company: company } : null);
+				});
+			})
+			.catch(done);
+	}
+
+	frappe.ui.form.on(PRINT_AND_NEW_DOCTYPE, {
+		refresh(frm) {
+			// Submitted only — see the note above on spent sheets. Deliberately
+			// NOT gated on frm.is_dirty(), unlike print_doc in (1): a submitted
+			// Sales Invoice on these sites opens with __unsaved set and no field
+			// diffs (the same self-dirtying that hides the stock Cancel button),
+			// so an is_dirty() gate would hide this button at random. A submitted
+			// document's fields are read-only anyway, so the saved version the
+			// server renders is the version on screen.
+			if (frm.doc.docstatus !== 1 || frm.doc.__islocal) return;
+			const $btn = frm.add_custom_button(__("Print & New"), function () {
+				print_and_new(frm, $btn);
+			});
+			if ($btn) $btn.addClass("btn-primary");
+		},
+	});
 
 	// ------------------------------------------------------------------
 	// Load rules when the desk session is up; keep them fresh via realtime
