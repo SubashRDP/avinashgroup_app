@@ -52,6 +52,22 @@ DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
 
+	# Two shapes of the same month, behind one View filter. Summary is one row
+	# per employee (the physical attendance sheet); Detail is one row per
+	# employee per day. Both resolve the period and fetch employees the same
+	# way, so keeping them as separate reports meant maintaining one filter set
+	# twice — and the Summary report's own filters had drifted out of step with
+	# what its code required, so it threw on open.
+	#
+	# Imported here, not at module scope: summary.py imports the shared helpers
+	# from this module, so a top-level import would be circular.
+	if (filters.get("view") or "Detail") == "Summary":
+		from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.summary import (
+			execute_summary,
+		)
+
+		return execute_summary(filters)
+
 	ad_start, ad_end, bs_label = _resolve_period(filters)
 	if ad_end < ad_start:
 		frappe.throw(_("To Date cannot be before From Date"))

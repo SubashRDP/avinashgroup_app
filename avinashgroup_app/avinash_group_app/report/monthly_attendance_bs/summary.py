@@ -1,7 +1,12 @@
 """
-Monthly Attendance Summary BS
-=============================
+Monthly Attendance BS — Summary view
+====================================
 One row per employee for the selected BS month.
+
+Reached from the Monthly Attendance BS report with View = Summary; the Detail
+view of that same report is the per-day grid. They were two reports until they
+were merged: one period resolution, one employee fetch, one set of filters, two
+shapes of the same month.
 
 Mirrors the Nepal Gas Udhyog physical attendance sheet:
   • Employee Code, Name, Department
@@ -36,7 +41,7 @@ from avinashgroup_app.payroll.attendance_allowance import (
 	get_attendance_driven_components,
 	get_present_statuses,
 )
-from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_attendance_bs import (
+from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_attendance_bs import (  # noqa: E501
 	_resolve_period,
 	_get_employees,
 	_fetch_attendance,
@@ -90,7 +95,7 @@ def _group_fieldname(slug):
 	return f"grp_{slug}"
 
 
-def execute(filters=None):
+def execute_summary(filters):
 	filters = frappe._dict(filters or {})
 
 	ad_start, ad_end, bs_label = _resolve_period(filters)

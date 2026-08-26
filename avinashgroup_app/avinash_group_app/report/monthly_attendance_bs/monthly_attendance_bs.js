@@ -9,6 +9,14 @@ frappe.query_reports["Monthly Attendance BS"] = {
 
 	filters: [
 		{
+			fieldname: "view",
+			label: __("View"),
+			fieldtype: "Select",
+			options: ["Detail", "Summary"].join("\n"),
+			default: "Detail",
+			reqd: 1,
+		},
+		{
 			fieldname: "company",
 			label: __("Company"),
 			fieldtype: "Link",
