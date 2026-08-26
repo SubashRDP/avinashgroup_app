@@ -1,6 +1,6 @@
 import frappe
 import frappe.client
-from frappe import _
+from frappe import _, get_newargs
 from frappe.utils.caching import request_cache
 from datetime import datetime, date
 
@@ -538,16 +538,36 @@ def has_fiscal_year_permission(doc, ptype=None, user=None):
     return False
 
 
+def _core_get_list(doctype, kwargs):
+    """Call the real frappe.client.get_list with only the kwargs it declares.
+
+    Frappe's dispatcher (frappe.call -> get_newargs) drops any request argument
+    the target doesn't declare. This override is declared as **kwargs, so it
+    swallows the entire form dict instead and would forward unknown keys on.
+
+    frappe-ui clients — the HR Roster page, the HR mobile app — send BOTH
+    `start`/`limit` and `limit_start`/`limit_page_length`. Core get_list only
+    declares the second pair, so forwarding the first raised
+    `TypeError: get_list() got an unexpected keyword argument 'start'`
+    and every frappe-ui list call returned HTTP 500. Desk list views send only
+    the declared names, which is why the desk never surfaced this.
+
+    Dropping the undeclared keys is exactly what stock Frappe does, and costs
+    no pagination: the declared pair carries the same values.
+    """
+    return frappe.client.get_list(doctype, **get_newargs(frappe.client.get_list, kwargs))
+
+
 @frappe.whitelist(allow_guest=False)
 def filtered_get_list(doctype, *args, **kwargs):
     """Override for frappe.client.get_list to apply fiscal year filtering."""
     kwargs.pop('cmd', None)
     if doctype not in FILTERED_DOCTYPES:
-        return frappe.client.get_list(doctype, **kwargs)
+        return _core_get_list(doctype, kwargs)
 
     user = frappe.session.user
     if _is_admin(user):
-        return frappe.client.get_list(doctype, **kwargs)
+        return _core_get_list(doctype, kwargs)
 
     access_map = _get_user_fiscal_access(user)
     doctype_access = _has_doctype_access(doctype, access_map)
@@ -556,7 +576,7 @@ def filtered_get_list(doctype, *args, **kwargs):
         return []
 
     if _check_has_full_access_for_doctype(doctype_access):
-        return frappe.client.get_list(doctype, **kwargs)
+        return _core_get_list(doctype, kwargs)
 
     date_ranges = _build_date_ranges(doctype_access)
     if not date_ranges:
@@ -578,4 +598,4 @@ def filtered_get_list(doctype, *args, **kwargs):
         filters.append(or_filters)
 
     kwargs["filters"] = filters
-    return frappe.client.get_list(doctype, **kwargs)
+    return _core_get_list(doctype, kwargs)
