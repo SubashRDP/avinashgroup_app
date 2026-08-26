@@ -386,6 +386,12 @@ scheduler_events = {
         "*/5 * * * *": [
             "avinashgroup_app.custom_code.CBMS.scheduler.retry_failed_cbms_syncs",
         ],
+        # Midday, so the day is still correctable: someone chased at 13:00 can
+        # still punch out; someone chased at 09:00 the next morning cannot.
+        # Reported in Asia/Kathmandu, the site time zone the scheduler uses.
+        "0 13 * * *": [
+            "avinashgroup_app.biometric.daily_digest.send_daily_attendance_digest",
+        ],
     },
 }
 

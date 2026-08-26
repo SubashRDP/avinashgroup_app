@@ -26,6 +26,8 @@
   "alerting_section",
   "alert_threshold_minutes",
   "alert_recipients",
+  "digest_section",
+  "digest_recipients",
   "notes_section",
   "notes"
  ],
@@ -156,6 +158,19 @@
    "fieldname": "alert_recipients",
    "fieldtype": "Table",
    "label": "Alert Recipients",
+   "options": "Biometric Device Alert Recipient"
+  },
+  {
+   "description": "Who receives the midday attendance digest for this device's company: employees with an odd number of punches, employees not seen today without approved leave, and each device's sync status. Recipients are pooled across all of the company's devices, so the same person need only be listed once.",
+   "fieldname": "digest_section",
+   "fieldtype": "Section Break",
+   "label": "Daily Attendance Digest"
+  },
+  {
+   "description": "Leave empty to send no digest for this device.",
+   "fieldname": "digest_recipients",
+   "fieldtype": "Table",
+   "label": "Digest Recipients",
    "options": "Biometric Device Alert Recipient"
   },
   {
