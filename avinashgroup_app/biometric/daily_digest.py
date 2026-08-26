@@ -28,6 +28,13 @@ Three sections, each answering a different question:
      daily, so a device that went down and was acknowledged but never fixed
      cannot fade out of view.
 
+The digest follows the working calendar, not the wall calendar. Nothing is
+sent on a company holiday — nobody is expected to punch, so every section
+would either be empty or wrong — and section A reports the last WORKING day
+rather than literally yesterday. Reporting "yesterday" would silently lose
+Friday: Saturday is a weekly off, so Sunday's digest would look at Saturday
+and find nothing, and Friday's missed punches would never reach anyone.
+
 Recipients come from each device's `digest_recipients`, pooled per company —
 one email per company, not per device. A company with no recipients
 configured is skipped silently; that is how you turn the digest off.
@@ -69,7 +76,11 @@ def send_daily_attendance_digest():
 			recipients = get_digest_recipients(company)
 			if not recipients:
 				continue
-			digest = build_digest(company)
+			holiday_list = get_company_holiday_list(company)
+			if _is_holiday(holiday_list, getdate(now_datetime())):
+				log.info("attendance digest skipped: company=%s is on holiday today", company)
+				continue
+			digest = build_digest(company, holiday_list=holiday_list)
 			send_digest_email(company, recipients, digest)
 			log.info(
 				"attendance digest sent: company=%s to=%s missed=%d unseen=%d devices=%d",
@@ -108,20 +119,26 @@ def get_digest_recipients(company):
 # data
 # ---------------------------------------------------------------------------
 
-def build_digest(company, for_date=None, as_of=None):
-	"""Assemble the three sections. `for_date` is the day section A reports on
-	(default yesterday); `as_of` is the moment section B judges (default now)."""
+def build_digest(company, for_date=None, as_of=None, holiday_list=None):
+	"""Assemble the three sections.
+
+	`for_date` is the day section A reports on — by default the last WORKING
+	day, not literally yesterday, so a Sunday digest reports Friday instead of
+	an empty Saturday. `as_of` is the moment section B judges (default now)."""
 	as_of = get_datetime(as_of) if as_of else now_datetime()
 	today = getdate(as_of)
-	for_date = getdate(for_date) if for_date else add_days(today, -1)
+	if holiday_list is None:
+		holiday_list = get_company_holiday_list(company)
+	for_date = getdate(for_date) if for_date else last_working_day(holiday_list, today)
 
 	return {
 		"company": company,
 		"for_date": for_date,
 		"today": today,
 		"as_of": as_of,
+		"holiday_list": holiday_list,
 		"missed_punches": _missed_punches(company, for_date),
-		"not_seen": _not_seen_today(company, today, as_of),
+		"not_seen": _not_seen_today(company, today, as_of, holiday_list),
 		"devices": _device_status(company, as_of),
 	}
 
@@ -166,11 +183,17 @@ def _missed_punches(company, for_date):
 	return rows
 
 
-def _not_seen_today(company, today, as_of):
-	"""Rostered, shift already started, no punch, no approved leave, not a holiday."""
+def _not_seen_today(company, today, as_of, company_holiday_list=None):
+	"""Rostered, shift already started, no punch, no approved leave, not a holiday.
+
+	The holiday list is resolved shift -> employee -> company, matching what
+	HRMS auto-attendance honours. Employee.holiday_list alone is not enough:
+	on this site 1 of 299 employees has one, so trusting it would report the
+	whole roster as missing every Saturday."""
 	assignments = frappe.db.sql(
 		"""
-		SELECT sa.employee, e.employee_name, e.department, e.holiday_list,
+		SELECT sa.employee, e.employee_name, e.department,
+		       COALESCE(NULLIF(st.holiday_list, ''), NULLIF(e.holiday_list, '')) AS holiday_list,
 		       sa.shift_type, st.start_time
 		FROM `tabShift Assignment` sa
 		INNER JOIN `tabEmployee`   e  ON e.name = sa.employee
@@ -222,7 +245,7 @@ def _not_seen_today(company, today, as_of):
 	for a in due:
 		if a.employee in punched or a.employee in on_leave:
 			continue
-		if a.holiday_list and _is_holiday(a.holiday_list, today):
+		if _is_holiday(a.holiday_list or company_holiday_list, today):
 			continue
 		shift_start = midnight + (a.start_time or timedelta())
 		out.append(
@@ -240,11 +263,64 @@ def _not_seen_today(company, today, as_of):
 
 
 def _is_holiday(holiday_list, day):
+	if not holiday_list:
+		return False
 	return bool(
 		frappe.db.exists(
 			"Holiday", {"parent": holiday_list, "parenttype": "Holiday List", "holiday_date": day}
 		)
 	)
+
+
+def get_company_holiday_list(company):
+	"""The holiday list that governs this company's working calendar.
+
+	Prefers the list on the company's active Shift Types — that is the one
+	HRMS auto-attendance itself honours, and on this site it is the only one
+	reliably populated (1 of 299 employees has a personal holiday_list, and
+	no company has a default). Falls back to the company default, then to any
+	list an employee carries."""
+	shift_list = frappe.db.sql_list(
+		"""
+		SELECT DISTINCT st.holiday_list
+		FROM `tabShift Type` st
+		WHERE st.holiday_list IS NOT NULL AND st.holiday_list != ''
+		  AND st.custom_company = %s
+		""",
+		company,
+	)
+	if shift_list:
+		return shift_list[0]
+
+	default = frappe.db.get_value("Company", company, "default_holiday_list")
+	if default:
+		return default
+
+	from_employee = frappe.db.sql_list(
+		"""
+		SELECT holiday_list FROM `tabEmployee`
+		WHERE company = %s AND status = 'Active'
+		  AND holiday_list IS NOT NULL AND holiday_list != ''
+		LIMIT 1
+		""",
+		company,
+	)
+	return from_employee[0] if from_employee else None
+
+
+def last_working_day(holiday_list, before, max_lookback=14):
+	"""The most recent working day strictly before `before`.
+
+	Walks back past holidays so a Sunday digest reports Friday rather than an
+	empty Saturday. Gives up after `max_lookback` days and returns the plain
+	previous day — a holiday list with a fortnight-long gap is a configuration
+	problem, not a reason to send nothing."""
+	day = add_days(before, -1)
+	for _ in range(max_lookback):
+		if not _is_holiday(holiday_list, day):
+			return day
+		day = add_days(day, -1)
+	return add_days(before, -1)
 
 
 def _device_status(company, as_of):
