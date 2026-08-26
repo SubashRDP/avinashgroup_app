@@ -41,6 +41,51 @@ class AttendanceFix(Document):
     def validate(self):
         if getdate(self.from_date) > getdate(self.to_date):
             frappe.throw(_("From Date must be on or before To Date."))
+        self.validate_selected_employees()
+
+    def validate_selected_employees(self):
+        """Warn when a named employee cannot possibly be repaired by this run.
+
+        In Selected Employees mode the list is honoured as given — the point of
+        naming someone is to repair them. But attendance is computed against the
+        chosen Shift Type, and prepare_checkins_for_shift only accepts check-ins
+        that resolve to it, so an employee on a different shift is processed and
+        then silently does nothing. Say so at save time instead of leaving it to
+        be discovered in an empty log.
+        """
+        if self.repair_scope != "Selected Employees":
+            return
+        if not self.employees:
+            frappe.throw(
+                _("Add at least one employee, or set Repair Scope to {0}.").format(
+                    frappe.bold(_("All Employees in Shift"))
+                )
+            )
+
+        seen = set()
+        for row in self.employees:
+            if row.employee in seen:
+                frappe.throw(
+                    _("Row {0}: {1} is listed more than once.").format(row.idx, frappe.bold(row.employee))
+                )
+            seen.add(row.employee)
+
+        shift_doc = frappe.get_cached_doc("Shift Type", self.shift_type)
+        assigned = set(
+            shift_doc.get_assigned_employees(getdate(self.from_date), consider_default_shift=True)
+        )
+        stray = [r for r in self.employees if r.employee not in assigned]
+        if stray:
+            names = ", ".join(f"{r.employee_name or r.employee}" for r in stray[:8])
+            more = f" (+{len(stray) - 8} more)" if len(stray) > 8 else ""
+            frappe.msgprint(
+                _(
+                    "{0}{1} are not assigned to {2} on {3}. They will be processed, but their "
+                    "check-ins will not resolve to this shift, so nothing will change for them."
+                ).format(frappe.bold(names), more, frappe.bold(self.shift_type), self.from_date),
+                title=_("Not on this shift"),
+                indicator="orange",
+            )
 
     def on_submit(self):
         """Enqueue the heavy reconciliation in the background worker.
@@ -141,14 +186,27 @@ class AttendanceFix(Document):
         )
 
     def _resolve_employees(self, shift_doc) -> list[str]:
-        # Stock helper returns employees with this shift assigned (or default shift).
-        employees = shift_doc.get_assigned_employees(
-            getdate(self.from_date), consider_default_shift=True
-        )
-        employees = list(dict.fromkeys(employees))  # dedup, preserve order
+        """The employees this run will walk, in one of two modes.
 
-        if self.employee:
-            employees = [e for e in employees if e == self.employee]
+        All Employees in Shift — everyone the stock helper reports as assigned to
+        this Shift Type (or carrying it as their default shift) on the start date.
+
+        Selected Employees — exactly the names in the child table, used as given.
+        They are NOT intersected with the shift's roster: someone whose assignment
+        lapsed, or who was never assigned but has check-ins that resolve to this
+        shift, is precisely who a targeted repair is for. validate() has already
+        warned about names that cannot match.
+
+        The company and device filters apply to both modes.
+        """
+        if self.repair_scope == "Selected Employees":
+            employees = [r.employee for r in (self.employees or []) if r.employee]
+        else:
+            # Stock helper returns employees with this shift assigned (or default shift).
+            employees = shift_doc.get_assigned_employees(
+                getdate(self.from_date), consider_default_shift=True
+            )
+        employees = list(dict.fromkeys(employees))  # dedup, preserve order
 
         if self.company:
             employees = [
@@ -566,3 +624,28 @@ def repair_attendance_day(employee, attendance_date):
 		"counters": counters,
 		"log": log_lines,
 	}
+
+
+@frappe.whitelist()
+def get_shift_roster(shift_type, on_date, company=None):
+	"""Active employees assigned to a shift on a date — the seed list for the
+	Selected Employees table, so it can be trimmed rather than typed."""
+	frappe.only_for(("HR Manager", "System Manager"))
+	shift_doc = frappe.get_cached_doc("Shift Type", shift_type)
+	names = list(
+		dict.fromkeys(
+			shift_doc.get_assigned_employees(getdate(on_date), consider_default_shift=True)
+		)
+	)
+	if not names:
+		return []
+
+	filters = {"name": ("in", names), "status": "Active"}
+	if company:
+		filters["company"] = company
+	return frappe.get_all(
+		"Employee",
+		filters=filters,
+		fields=["name", "employee_name", "department", "company"],
+		order_by="employee_name asc",
+	)

@@ -9,10 +9,12 @@
   "naming_series",
   "shift_type",
   "company",
+  "repair_scope",
   "column_break_1",
   "from_date",
   "to_date",
-  "employee",
+  "selection_section",
+  "employees",
   "devices",
   "scope_section",
   "status",
@@ -53,6 +55,15 @@
    "options": "Company"
   },
   {
+   "default": "All Employees in Shift",
+   "description": "Whether to repair everyone assigned to the shift, or only the employees you list below.",
+   "fieldname": "repair_scope",
+   "fieldtype": "Select",
+   "label": "Repair Scope",
+   "options": "All Employees in Shift\nSelected Employees",
+   "reqd": 1
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -71,11 +82,18 @@
    "reqd": 1
   },
   {
-   "fieldname": "employee",
-   "fieldtype": "Link",
-   "label": "Employee (optional)",
-   "options": "Employee",
-   "description": "Leave blank to fix every employee on this shift. Set to limit the fix to one employee."
+   "fieldname": "selection_section",
+   "fieldtype": "Section Break",
+   "label": "Who to Repair"
+  },
+  {
+   "depends_on": "eval:doc.repair_scope==\"Selected Employees\"",
+   "description": "Only these employees are repaired. They are used as given \u2014 an employee not assigned to the chosen shift is still processed, but their check-ins will not match it, so nothing will change for them.",
+   "fieldname": "employees",
+   "fieldtype": "Table",
+   "label": "Employees",
+   "mandatory_depends_on": "eval:doc.repair_scope==\"Selected Employees\"",
+   "options": "Attendance Fix Employee"
   },
   {
    "fieldname": "devices",
@@ -175,7 +193,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-05-21 00:00:00.000000",
+ "modified": "2026-08-26 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Attendance Fix",

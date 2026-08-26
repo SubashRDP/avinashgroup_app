@@ -35,6 +35,17 @@ frappe.ui.form.on("Attendance Fix", {
 			console.warn("Attendance Fix: could not filter device picker", e);
 		}
 
+		// Only offer Active employees, and only of the chosen company.
+		frm.set_query("employee", "employees", () => {
+			const filters = { status: "Active" };
+			if (frm.doc.company) filters.company = frm.doc.company;
+			return { filters };
+		});
+
+		if (frm.doc.docstatus === 0 && frm.doc.repair_scope === "Selected Employees") {
+			frm.add_custom_button(__("Add Everyone on This Shift"), () => fill_from_shift(frm));
+		}
+
 		if (frm.doc.docstatus === 1) {
 			if (frm.doc.status === "Queued") {
 				frm.dashboard.set_headline_alert(
@@ -96,4 +107,46 @@ function _show_progress_bar(frm) {
 		frm.progress_bar.find("#progress-text").text(progress + "%");
 		frm.progress_bar.find("#progress-message").text(frm.doc.progress_message || "Processing...");
 	}
+}
+
+
+// Pre-fill the employee table from the shift roster, so "Selected Employees"
+// can be used as a starting list to trim rather than typed from scratch.
+function fill_from_shift(frm) {
+	if (!frm.doc.shift_type || !frm.doc.from_date) {
+		frappe.msgprint(__("Pick a Shift Type and From Date first."));
+		return;
+	}
+	frappe.call({
+		method: "avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix.get_shift_roster",
+		args: {
+			shift_type: frm.doc.shift_type,
+			on_date: frm.doc.from_date,
+			company: frm.doc.company || null,
+		},
+		freeze: true,
+		callback: (r) => {
+			const rows = r.message || [];
+			if (!rows.length) {
+				frappe.msgprint(__("No active employees are assigned to this shift on that date."));
+				return;
+			}
+			const existing = new Set((frm.doc.employees || []).map((d) => d.employee));
+			let added = 0;
+			rows.forEach((e) => {
+				if (existing.has(e.name)) return;
+				const row = frm.add_child("employees");
+				row.employee = e.name;
+				row.employee_name = e.employee_name;
+				row.department = e.department;
+				row.company = e.company;
+				added += 1;
+			});
+			frm.refresh_field("employees");
+			frappe.show_alert({
+				message: __("Added {0} employee(s). Remove the ones you do not want.", [added]),
+				indicator: "green",
+			});
+		},
+	});
 }
