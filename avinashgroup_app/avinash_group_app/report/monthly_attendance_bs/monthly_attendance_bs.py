@@ -575,6 +575,12 @@ def _chart(rows):
 	if not order:
 		return None
 
+	# Every bucket empty means the month has no marked attendance at all. Drawing
+	# 31 flat bars states nothing and reads as a broken chart; the Summary view
+	# already returns None in that case, and the two should agree.
+	if not any(sum(by_day[d].values()) for d in order):
+		return None
+
 	return {
 		"data": {
 			"labels": order,

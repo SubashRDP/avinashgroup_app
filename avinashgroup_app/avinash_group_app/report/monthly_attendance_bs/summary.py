@@ -364,34 +364,60 @@ def _summary(data, bs_label):
 
 
 def _chart(data):
-	"""The dozen employees losing the most time, late minutes against overtime.
+	"""Twelve employees, charted on whichever axis the month actually has.
 
-	Sorted by lateness rather than shown for everyone: a hundred-row chart is
-	decoration, twelve rows is a conversation to have. OT rides alongside
-	because the same person often appears in both, and that changes what the
-	conversation is.
+	When anyone has lost or added time, that is the interesting story: late
+	minutes against overtime, worst first. Sorted rather than drawn for all
+	107 - a hundred-row chart is decoration, twelve rows is a conversation to
+	have, and OT rides alongside because the same person often appears in both.
+
+	When no one has either - a fresh month, or a site whose punches have not
+	started flowing - fall back to attendance itself. A chart that disappears
+	on some data and not other data reads as a broken report, so this always
+	renders something as long as there are employees.
 	"""
-	ranked = sorted(
-		(r for r in data if r.get("late_minutes") or r.get("ot_hours")),
-		key=lambda r: (-flt(r.get("late_minutes")), -flt(r.get("ot_hours"))),
-	)[:12]
-	if not ranked:
+	if not data:
 		return None
 
 	def short(row):
 		name = row.get("employee_name") or row.get("employee") or ""
-		return name if len(name) <= 18 else name[:17] + "…"
+		return name if len(name) <= 18 else name[:17] + "\u2026"
 
+	timed = [r for r in data if flt(r.get("late_minutes")) or flt(r.get("ot_hours"))]
+	if timed:
+		ranked = sorted(
+			timed, key=lambda r: (-flt(r.get("late_minutes")), -flt(r.get("ot_hours")))
+		)[:12]
+		return {
+			"data": {
+				"labels": [short(r) for r in ranked],
+				"datasets": [
+					{"name": _("Late (min)"), "values": [flt(r.get("late_minutes")) for r in ranked]},
+					{"name": _("O.T. (hrs)"), "values": [flt(r.get("ot_hours"), 2) for r in ranked]},
+				],
+			},
+			"type": "bar",
+			"colors": ["#C4787F", "#6E93B8"],
+			"axisOptions": {"shortenYAxisNumbers": 1},
+			"height": 260,
+		}
+
+	ranked = sorted(data, key=lambda r: -flt(r.get("present_days")))[:12]
+	if not any(flt(r.get("present_days")) for r in ranked):
+		return None
 	return {
 		"data": {
 			"labels": [short(r) for r in ranked],
 			"datasets": [
-				{"name": _("Late (min)"), "values": [flt(r.get("late_minutes")) for r in ranked]},
-				{"name": _("O.T. (hrs)"), "values": [flt(r.get("ot_hours"), 2) for r in ranked]},
+				{"name": _("Present Days"), "values": [flt(r.get("present_days"), 1) for r in ranked]},
+				{
+					"name": _("Worked on Holiday"),
+					"values": [flt(r.get("worked_on_holiday")) for r in ranked],
+				},
 			],
 		},
 		"type": "bar",
-		"colors": ["#c0453a", "#2b6f8f"],
+		"colors": ["#7BA88C", "#A98CC4"],
 		"axisOptions": {"shortenYAxisNumbers": 1},
 		"height": 260,
 	}

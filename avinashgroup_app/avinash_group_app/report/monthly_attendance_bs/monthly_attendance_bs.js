@@ -2,6 +2,7 @@
 
 frappe.query_reports["Monthly Attendance BS"] = {
 	onload: async function (report) {
+		_apply_theme(report);
 		_make_full_width(report);
 		_setup_fiscal_year_visibility(report);
 		await _init_default_fiscal_year(report);
@@ -124,7 +125,7 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			const n = cint(data[f]);
 			if (!n) return muteZero();
 			// 15 minutes is the grace period on every shift; past it, it counts.
-			const tone = n > 15 ? "var(--red-600)" : "var(--orange-600)";
+			const tone = n > 15 ? "#A64E5B" : "#96662A";
 			return `<span style="color:${tone};font-weight:600">${n}</span>`;
 		}
 
@@ -136,13 +137,13 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		if (f === "in_time" || f === "out_time") {
 			if (!data[f]) {
 				// A missing OUT is the single most common data fault — name it.
-				return `<span style="color:var(--red-500)" title="${__("No punch recorded")}">— —</span>`;
+				return `<span style="color:#A64E5B" title="${__("No punch recorded")}">— —</span>`;
 			}
 			return value;
 		}
 
 		if (f === "work_in_holiday" && cint(data.work_in_holiday)) {
-			return `<span style="color:var(--purple-600);font-weight:600">${__("Holiday")}</span>`;
+			return `<span style="color:#70569C;font-weight:600">${__("Holiday")}</span>`;
 		}
 
 		if (f === "remarks" && data.remarks) {
@@ -153,7 +154,7 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		if (f === "ot_hours") {
 			const n = flt(data.ot_hours);
 			if (!n) return muteZero();
-			return `<span style="color:var(--blue-600);font-weight:600">${format_number(n, null, 2)}</span>`;
+			return `<span style="color:#3E7290;font-weight:600">${format_number(n, null, 2)}</span>`;
 		}
 
 		if (f === "present_days") {
@@ -164,7 +165,7 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			return `
 				<div style="position:relative">
 					<div style="position:absolute;inset:0;width:${pct}%;
-						background:var(--green-100);border-radius:2px"></div>
+						background:#DCEAE0;border-radius:3px"></div>
 					<span style="position:relative;font-weight:600">${format_number(n, null, 1)}</span>
 				</div>`;
 		}
@@ -172,7 +173,7 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		if (f === "worked_on_holiday") {
 			const n = cint(data.worked_on_holiday);
 			if (!n) return muteZero();
-			return `<span style="color:var(--purple-600);font-weight:600">${n}</span>`;
+			return `<span style="color:#70569C;font-weight:600">${n}</span>`;
 		}
 
 		if (f === "leave_current" || f === "leave_previous" || f === "leave_upto") {
@@ -186,7 +187,10 @@ frappe.query_reports["Monthly Attendance BS"] = {
 	get_datatable_options(options) {
 		return Object.assign(options, {
 			checkboxColumn: false,
-			cellHeight: 34,
+			// Roomier than the stock 28px. This grid is read across for minutes
+			// a row, not skimmed, and the extra height is what makes that
+			// bearable at 15px type.
+			cellHeight: 42,
 		});
 	},
 
@@ -317,17 +321,74 @@ function _default_bs_month() {
 // the blocks of colour, not the words.
 function _chip(status) {
 	if (!status) return "";
+	// Softened deliberately. The stock --red-600 / --green-600 pair is built to
+	// alarm; a month of attendance is read for half an hour at a time, and a
+	// grid of alarm colours is exhausting rather than informative. These keep
+	// the same semantic separation at lower saturation.
 	const tones = {
-		Present: ["var(--green-600)", "var(--green-50)"],
-		"Work From Home": ["var(--green-600)", "var(--green-50)"],
-		"Half Day": ["var(--orange-700)", "var(--orange-50)"],
-		"On Leave": ["var(--blue-600)", "var(--blue-50)"],
-		Absent: ["var(--red-600)", "var(--red-50)"],
-		Holiday: ["var(--purple-600)", "var(--purple-50)"],
+		Present: ["#3F6F52", "#E8F1EA"],
+		"Work From Home": ["#3F6F52", "#E8F1EA"],
+		"Half Day": ["#96662A", "#FAF0DE"],
+		"On Leave": ["#456A9E", "#E8EFF8"],
+		Absent: ["#A64E5B", "#FAEAEC"],
+		Holiday: ["#70569C", "#F0EAF8"],
 	};
 	const [fg, bg] = tones[status] || ["var(--text-muted)", "var(--bg-light-gray)"];
 	const italic = status === "Not Marked" ? "font-style:italic;" : "";
 	return `<span style="color:${fg};background:${bg};${italic}
 		padding:2px 8px;border-radius:10px;font-size:.85em;font-weight:600;
 		white-space:nowrap">${status}</span>`;
+}
+
+
+// Legibility pass, scoped to this report only.
+//
+// The reader works through a full month of a full workforce in one sitting.
+// Stock desk type is 13px on tight 28px rows, which is fine for glancing at a
+// list and punishing for reading a grid. This raises the body to 15px, gives
+// headers real weight and spacing, warms the rules off pure grey, and stripes
+// the rows so the eye can track across twelve columns without losing its line.
+function _apply_theme(report) {
+	const id = "nepal-hrms-attendance-theme";
+	if (document.getElementById(id)) return;
+
+	$(`<style id="${id}">
+		.nepal-attendance-report .dt-cell__content {
+			font-size: 15px;
+			line-height: 1.45;
+			padding: 8px 12px;
+			color: #2F3437;
+		}
+		.nepal-attendance-report .dt-row:nth-child(even) .dt-cell {
+			background: #FBFAF9;
+		}
+		.nepal-attendance-report .dt-row:hover .dt-cell {
+			background: #F3F1EE;
+		}
+		.nepal-attendance-report .dt-cell--header .dt-cell__content {
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: .045em;
+			text-transform: uppercase;
+			color: #6B6560;
+			background: #F5F3F0;
+		}
+		.nepal-attendance-report .dt-cell { border-color: #EDE9E4; }
+
+		/* Summary cards: give the numbers room and calm the labels down. */
+		.nepal-attendance-report .report-summary .summary-value {
+			font-size: 22px;
+			font-weight: 600;
+			color: #2F3437;
+		}
+		.nepal-attendance-report .report-summary .summary-label {
+			font-size: 12px;
+			letter-spacing: .04em;
+			color: #857E77;
+		}
+		.nepal-attendance-report .chart-container { padding-top: 4px; }
+	</style>`).appendTo("head");
+
+	const wrapper = report && report.page ? report.page.wrapper : null;
+	if (wrapper) $(wrapper).addClass("nepal-attendance-report");
 }
