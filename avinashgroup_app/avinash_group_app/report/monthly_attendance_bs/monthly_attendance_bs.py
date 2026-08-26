@@ -29,7 +29,7 @@ Columns:
 
 import frappe
 from frappe import _
-from frappe.utils import getdate, flt, strip_html_tags
+from frappe.utils import getdate, flt, strip_html_tags, today
 
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
@@ -68,7 +68,7 @@ def execute(filters=None):
 
 		return execute_summary(filters)
 
-	ad_start, ad_end, bs_label = _resolve_period(filters)
+	ad_start, ad_end, bs_label, note = _resolve_period(filters)
 	if ad_end < ad_start:
 		frappe.throw(_("To Date cannot be before From Date"))
 
@@ -76,7 +76,7 @@ def execute(filters=None):
 	components = get_attendance_driven_components()
 
 	if not employees:
-		return _columns(components), [], None, None, _summary(0, 0, 0, 0, 0, bs_label)
+		return _columns(components), [], _note_html(note), None, _summary(0, 0, 0, 0, 0, bs_label)
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
@@ -117,7 +117,7 @@ def execute(filters=None):
 	return (
 		_columns(components),
 		data,
-		None,
+		_note_html(note),
 		_chart(data),
 		_summary(
 			totals["office"],
@@ -135,35 +135,62 @@ def execute(filters=None):
 # ---------------------------------------------------------------------------
 
 def _resolve_period(filters):
-	"""Return (ad_start, ad_end, bs_label_for_header).
+	"""Return (ad_start, ad_end, bs_label, assumption_note).
 
-	Priority: Fiscal Year + BS Month wins when both are set. Only fall back to
-	From Date + To Date when those filters are blank — otherwise Frappe's
-	Date-type widgets (which can retain values across runs) would silently
-	override a freshly-picked BS month.
+	This used to throw "Select Fiscal Year + BS Month or From Date + To Date"
+	whenever the filters were not one of two exact shapes. That is a refusal
+	dressed as an error: a fiscal year on its own, or a single date, says
+	perfectly clearly which month is wanted. The report now resolves the most
+	sensible period it can and reports what it assumed, so it always runs.
+
+	Priority, most specific first:
+
+	  1. Fiscal Year + BS Month  — the intended pair, honoured exactly.
+	  2. From Date + To Date     — an explicit AD range.
+	  3. One date only           — that date's BS month.
+	  4. Fiscal Year only        — the running BS month if it falls inside that
+	                               year, otherwise the year's closing month.
+	  5. BS Month only           — that month of the fiscal year covering today.
+	  6. Nothing at all          — the running BS month.
+
+	Fiscal Year + BS Month is checked before the dates because Frappe's Date
+	widgets retain values across runs; without that order a stale date pair
+	would silently override a freshly picked month.
+
+	`assumption_note` is None when the filters were unambiguous, and otherwise a
+	short sentence naming what was chosen — surfaced above the report rather
+	than left for the reader to infer from the numbers.
 	"""
-	if filters.get("fiscal_year") and filters.get("bs_month"):
-		bs_month = _parse_bs_month(filters.bs_month)
-		fy = frappe.get_cached_doc("Fiscal Year", filters.fiscal_year)
-		# FY starts on Shrawan 1 of some BS year. Months 4-12 belong to that BS
-		# year; months 1-3 (Baisakh–Ashadh) roll into the next BS year.
-		fy_start_bs_year = ad_to_bs(getdate(fy.year_start_date)).year
-		bs_year = fy_start_bs_year if bs_month >= 4 else fy_start_bs_year + 1
-		company = filters.get("company")
+	company = filters.get("company")
 
+	def month_range(bs_year, bs_month, note=None):
 		raw_start, raw_end = get_bs_month_range(bs_year, bs_month)
+		label = f"{get_bs_month_name(bs_month)} {bs_year}"
 		if company:
 			custom = get_user_defined_period(raw_start, company)
 			if custom and custom.bs_year == bs_year and custom.bs_month == bs_month:
-				return custom.start_date, custom.end_date, f"{get_bs_month_name(bs_month)} {bs_year}"
+				return custom.start_date, custom.end_date, label, note
+		return raw_start, raw_end, label, note
 
-		return raw_start, raw_end, f"{get_bs_month_name(bs_month)} {bs_year}"
+	def bs_year_for(fy_name, bs_month):
+		"""A fiscal year starts on Shrawan 1. Months 4-12 belong to its opening
+		BS year; months 1-3 (Baisakh–Ashadh) roll into the next one."""
+		fy = frappe.get_cached_doc("Fiscal Year", fy_name)
+		opening = ad_to_bs(getdate(fy.year_start_date)).year
+		return opening if bs_month >= 4 else opening + 1
 
+	# 1. the intended pair
+	if filters.get("fiscal_year") and filters.get("bs_month"):
+		bs_month = _parse_bs_month(filters.bs_month)
+		return month_range(bs_year_for(filters.fiscal_year, bs_month), bs_month)
+
+	# 2. an explicit AD range
 	if filters.get("from_date") and filters.get("to_date"):
 		ad_start = getdate(filters.from_date)
 		ad_end = getdate(filters.to_date)
-		bs_s = ad_to_bs(ad_start)
-		bs_e = ad_to_bs(ad_end)
+		if ad_end < ad_start:
+			ad_start, ad_end = ad_end, ad_start
+		bs_s, bs_e = ad_to_bs(ad_start), ad_to_bs(ad_end)
 		if bs_s.year == bs_e.year and bs_s.month == bs_e.month:
 			label = f"{get_bs_month_name(bs_s.month)} {bs_s.year}"
 		else:
@@ -171,9 +198,73 @@ def _resolve_period(filters):
 				f"{bs_s.day} {get_bs_month_name(bs_s.month)} → "
 				f"{bs_e.day} {get_bs_month_name(bs_e.month)} {bs_e.year}"
 			)
-		return ad_start, ad_end, label
+		return ad_start, ad_end, label, None
 
-	frappe.throw(_("Select Fiscal Year + BS Month or From Date + To Date to run the report."))
+	# 3. one date only — take that date's BS month
+	lone = filters.get("from_date") or filters.get("to_date")
+	if lone:
+		bs = ad_to_bs(getdate(lone))
+		which = _("From Date") if filters.get("from_date") else _("To Date")
+		return month_range(
+			bs.year,
+			bs.month,
+			_("Only {0} was set, so the whole of {1} {2} is shown.").format(
+				which, get_bs_month_name(bs.month), bs.year
+			),
+		)
+
+	today_bs = ad_to_bs(getdate(today()))
+
+	# 4. fiscal year only — the running month if it belongs to that year
+	if filters.get("fiscal_year"):
+		fy = frappe.get_cached_doc("Fiscal Year", filters.fiscal_year)
+		if getdate(fy.year_start_date) <= getdate(today()) <= getdate(fy.year_end_date):
+			return month_range(
+				today_bs.year,
+				today_bs.month,
+				_("No BS Month was set, so the current month ({0} {1}) is shown.").format(
+					get_bs_month_name(today_bs.month), today_bs.year
+				),
+			)
+		# a closed year: its last month is the one anybody means
+		closing = ad_to_bs(getdate(fy.year_end_date))
+		return month_range(
+			closing.year,
+			closing.month,
+			_("No BS Month was set, so the last month of {0} ({1} {2}) is shown.").format(
+				filters.fiscal_year, get_bs_month_name(closing.month), closing.year
+			),
+		)
+
+	# 5. BS month only — place it in the fiscal year covering today
+	if filters.get("bs_month"):
+		bs_month = _parse_bs_month(filters.bs_month)
+		fy_name = frappe.db.get_value(
+			"Fiscal Year",
+			{
+				"year_start_date": ("<=", today()),
+				"year_end_date": (">=", today()),
+				"disabled": 0,
+			},
+			"name",
+		)
+		bs_year = bs_year_for(fy_name, bs_month) if fy_name else today_bs.year
+		return month_range(
+			bs_year,
+			bs_month,
+			_("No Fiscal Year was set, so {0} {1} is shown.").format(
+				get_bs_month_name(bs_month), bs_year
+			),
+		)
+
+	# 6. nothing at all
+	return month_range(
+		today_bs.year,
+		today_bs.month,
+		_("No period was set, so the current month ({0} {1}) is shown.").format(
+			get_bs_month_name(today_bs.month), today_bs.year
+		),
+	)
 
 
 def _parse_bs_month(value):
@@ -597,3 +688,15 @@ def _chart(rows):
 		"axisOptions": {"xIsSeries": 1, "shortenYAxisNumbers": 1},
 		"height": 260,
 	}
+
+
+def _note_html(note):
+	"""Frappe renders the report `message` slot above the grid. Used only to say
+	what the report assumed when the filters left it a choice — silent when they
+	did not, so the banner keeps meaning something."""
+	if not note:
+		return None
+	return (
+		'<div style="padding:8px 12px;background:#FAF6EC;border-left:3px solid #C9A227;'
+		'border-radius:0 4px 4px 0;color:#6B5A1E;font-size:13px">{0}</div>'
+	).format(note)

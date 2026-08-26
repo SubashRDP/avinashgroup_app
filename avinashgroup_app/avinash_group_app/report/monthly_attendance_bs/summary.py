@@ -42,6 +42,7 @@ from avinashgroup_app.payroll.attendance_allowance import (
 	get_present_statuses,
 )
 from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_attendance_bs import (  # noqa: E501
+	_note_html,
 	_resolve_period,
 	_get_employees,
 	_fetch_attendance,
@@ -98,7 +99,7 @@ def _group_fieldname(slug):
 def execute_summary(filters):
 	filters = frappe._dict(filters or {})
 
-	ad_start, ad_end, bs_label = _resolve_period(filters)
+	ad_start, ad_end, bs_label, note = _resolve_period(filters)
 	if ad_end < ad_start:
 		frappe.throw(_("To Date cannot be before From Date"))
 
@@ -109,7 +110,7 @@ def execute_summary(filters):
 	columns = _columns(groups, standalone_components)
 
 	if not employees:
-		return columns, [], None, None, _summary([], bs_label)
+		return columns, [], _note_html(note), None, _summary([], bs_label)
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
@@ -147,7 +148,7 @@ def execute_summary(filters):
 		)
 		data.append(row)
 
-	return columns, data, None, _chart(data), _summary(data, bs_label)
+	return columns, data, _note_html(note), _chart(data), _summary(data, bs_label)
 
 
 # ---------------------------------------------------------------------------
