@@ -1,14 +1,14 @@
 import frappe
 from frappe import _
-from frappe.utils import flt, now_datetime
+from frappe.utils import cint, flt, now_datetime
 from datetime import datetime
 from collections import defaultdict
 
 from avinashgroup_app.biometric.attendance_sync import desired_log_type, sync_day
 
-# Fallback de-duplication window (minutes) when the sending device has no
+# Fallback de-duplication window (seconds) when the sending device has no
 # Duplicate Threshold configured. Matches the Biometric Device field default.
-DEFAULT_DUPLICATE_THRESHOLD_MINUTES = 1.0
+DEFAULT_DUPLICATE_THRESHOLD_SECONDS = 60
 
 
 def assert_known_device(serial: str) -> str:
@@ -105,6 +105,32 @@ def resolve_employee_for_punch(user_id, device_company=None, device_name=None):
 
 
 def process_attendance_records(attendance_data, device_identifier=None):
+    """
+    Store biometric punches as Employee Checkin rows. For each (employee, date),
+    new punches are merged with existing rows, de-duplicated within the sending
+    device's Duplicate Threshold window (near-simultaneous repeats of one
+    physical punch are dropped), sorted chronologically, and assigned
+    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ... with the day's
+    last punch forced to OUT (see attendance_sync.desired_log_type).
+
+    Re-running with the same batch is idempotent. A late-arriving punch slots
+    in by time and downstream rows flip IN↔OUT if needed.
+
+    Args:
+        attendance_data: list of {"user_id": str, "timestamp": str} dicts
+        device_identifier: optional device name/IP
+
+    Returns:
+        dict with success, synced, errors, skipped, message, error_details,
+        synced_punches, failed_punches, skipped_punches
+
+    Outcome categories (so the caller knows what to retry):
+      - synced_punches  → stored successfully.
+      - skipped_punches → permanently unprocessable for a business reason
+        (unknown device user_id, malformed timestamp). Retrying won't help, so
+        the bridge stops resending and doesn't flag them as errors.
+      - failed_punches  → transient failure (exception). Safe to retry.
+    """
   
     if not attendance_data:
         return {
@@ -134,19 +160,19 @@ def process_attendance_records(attendance_data, device_identifier=None):
     # across companies. None (legacy device with no company) = no company filter.
     device_company = None
     device_name = None
-    threshold_minutes = DEFAULT_DUPLICATE_THRESHOLD_MINUTES
+    threshold_seconds = DEFAULT_DUPLICATE_THRESHOLD_SECONDS
     if device_identifier:
         device_row = frappe.db.get_value(
             "Biometric Device",
             {"device_serial": device_identifier},
-            ["name", "company", "duplicate_threshold_minutes"],
+            ["name", "company", "duplicate_threshold_seconds"],
             as_dict=True,
         )
         if device_row:
             device_name = device_row.name
             device_company = device_row.company
-            if device_row.duplicate_threshold_minutes is not None:
-                threshold_minutes = device_row.duplicate_threshold_minutes
+            if device_row.duplicate_threshold_seconds is not None:
+                threshold_seconds = device_row.duplicate_threshold_seconds
 
     for record in attendance_data:
         user_id = str(record.get("user_id", "")).strip()
@@ -198,7 +224,7 @@ def process_attendance_records(attendance_data, device_identifier=None):
 
             inserted, updated = _reconcile_day_checkins(
                 employee, punch_date, new_timestamps, device_identifier,
-                threshold_minutes=threshold_minutes,
+                threshold_seconds=threshold_seconds,
             )
 
             synced += len(new_timestamps)
@@ -243,8 +269,20 @@ def process_attendance_records(attendance_data, device_identifier=None):
 
 def _reconcile_day_checkins(
     employee, punch_date, new_timestamps, device_identifier=None,
-    threshold_minutes=DEFAULT_DUPLICATE_THRESHOLD_MINUTES,
+    threshold_seconds=DEFAULT_DUPLICATE_THRESHOLD_SECONDS,
 ):
+    """Merge new punches with existing rows for the day and apply IN/OUT
+    alternation in chronological order.
+
+    De-duplication (``threshold_seconds``, "prevent new only"): existing
+    Employee Checkin rows are always kept; a *new* punch is dropped when it
+    falls within ``threshold_seconds`` of a punch already kept for the day
+    (an existing row or an earlier new punch we've accepted). This collapses
+    the repeated reads a device fires for a single physical punch. A threshold
+    of 0 keeps only exact-timestamp de-duplication.
+
+    Returns (inserted_count, relabeled_count).
+    """
 
     day_start = datetime.combine(punch_date, datetime.min.time())
     day_end = datetime.combine(punch_date, datetime.max.time())
@@ -260,7 +298,7 @@ def _reconcile_day_checkins(
     )
     existing_by_time = {row.time: row for row in existing_rows}
 
-    threshold_seconds = max(flt(threshold_minutes), 0) * 60.0
+    threshold_seconds = max(cint(threshold_seconds), 0)
 
     # Existing rows are always kept. Walk new punches in chronological order,
     # accepting one only when it is not within the threshold of an already-kept

@@ -22,7 +22,7 @@
   "last_sync_time",
   "total_synced",
   "additional_settings_section",
-  "duplicate_threshold_minutes",
+  "duplicate_threshold_seconds",
   "alerting_section",
   "alert_threshold_minutes",
   "alert_recipients",
@@ -132,11 +132,11 @@
    "label": "Punch Handling"
   },
   {
-   "default": "1",
-   "description": "De-duplication window in minutes. When a device fires the same punch several times in quick succession, punches within this many minutes of an already-kept punch are treated as duplicates and not stored again. Set to 0 to keep only exact-timestamp de-duplication.",
-   "fieldname": "duplicate_threshold_minutes",
-   "fieldtype": "Float",
-   "label": "Duplicate Threshold (minutes)"
+   "default": "60",
+   "description": "De-duplication window in seconds. A device often fires the same physical punch several times in quick succession; a punch within this many seconds of one already kept for the day is treated as a repeat and not stored again. Set to 0 to keep only exact-timestamp de-duplication.",
+   "fieldname": "duplicate_threshold_seconds",
+   "fieldtype": "Int",
+   "label": "Duplicate Threshold (seconds)"
   },
   {
    "collapsible": 1,
