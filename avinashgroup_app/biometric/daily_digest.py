@@ -7,14 +7,27 @@ while they are still fixable, and proves the devices are alive when they are.
 
 Three sections, each answering a different question:
 
-  A. Missed Punches (yesterday)
-     Employees whose punch count for the day is ODD. An odd count means a
+  A. Missed Punches (rolling window, every calendar day)
+     Employees whose punch count for a day is ODD. An odd count means a
      punch is missing — someone forgot to tap out, or tapped in twice. The
      day still produces an Attendance row (desired_log_type forces the last
      punch to OUT precisely so it does), but the hours are wrong, so these
      are the rows worth correcting in Attendance Fix before payroll.
-     Yesterday, not today: at send time no day shift has ended, so today's
+
+     A WINDOW, not a single day, because we cannot know a day's data is
+     complete: a bridge that was offline pushes its backlog whenever it
+     reconnects, so Monday's missing punch may not exist in the database
+     until Wednesday. A fixed one-day report would have already passed it by.
+
+     Every calendar day in the window, holidays included — people do work
+     holidays, and those punches need pairing up like any other.
+
+     Today is excluded: at send time no day shift has ended, so today's
      counts are all legitimately odd and would bury the real ones.
+
+     The window overlaps deliberately, so an unfixed day is reported again
+     tomorrow. The section is a to-do list, not a diff — a row leaves it by
+     being corrected, not by ageing out.
 
   B. Not Seen Today (as of send time)
      Employees rostered on a shift that has already started, with no punch
@@ -28,12 +41,11 @@ Three sections, each answering a different question:
      daily, so a device that went down and was acknowledged but never fixed
      cannot fade out of view.
 
-The digest follows the working calendar, not the wall calendar. Nothing is
-sent on a company holiday — nobody is expected to punch, so every section
-would either be empty or wrong — and section A reports the last WORKING day
-rather than literally yesterday. Reporting "yesterday" would silently lose
-Friday: Saturday is a weekly off, so Sunday's digest would look at Saturday
-and find nothing, and Friday's missed punches would never reach anyone.
+Nothing is SENT on a company holiday — nobody is there to act on it — but no
+day's data is ever skipped: the section A window spans calendar days, so the
+Sunday email carries Saturday and Friday. Section B is the part that follows
+the working calendar, since being "not seen" only means something on a day
+you were expected.
 
 Recipients come from each device's `digest_recipients`, pooled per company —
 one email per company, not per device. A company with no recipients
@@ -50,6 +62,11 @@ from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetim
 # Inline tables are trimmed to keep the email readable on a phone; the full
 # lists always travel in the attached workbook.
 MAX_ROWS_INLINE = 15
+
+# How many days back section A re-checks for odd punch counts. Long enough to
+# catch a bridge that reconnected and pushed a backlog, short enough that the
+# list stays a to-do rather than a history.
+MISSED_PUNCH_LOOKBACK_DAYS = 3
 
 
 # ---------------------------------------------------------------------------
@@ -122,35 +139,45 @@ def get_digest_recipients(company):
 def build_digest(company, for_date=None, as_of=None, holiday_list=None):
 	"""Assemble the three sections.
 
-	`for_date` is the day section A reports on — by default the last WORKING
-	day, not literally yesterday, so a Sunday digest reports Friday instead of
-	an empty Saturday. `as_of` is the moment section B judges (default now)."""
+	Section A covers a WINDOW ending yesterday — every calendar day, holidays
+	included — because a day's data is never known to be complete: a bridge
+	that reconnects pushes its backlog days late. `for_date` pins the window to
+	a single day instead, for previewing one specific date. `as_of` is the
+	moment section B judges (default now)."""
 	as_of = get_datetime(as_of) if as_of else now_datetime()
 	today = getdate(as_of)
 	if holiday_list is None:
 		holiday_list = get_company_holiday_list(company)
-	for_date = getdate(for_date) if for_date else last_working_day(holiday_list, today)
+
+	if for_date:
+		from_date = to_date = getdate(for_date)
+	else:
+		to_date = add_days(today, -1)
+		from_date = add_days(today, -MISSED_PUNCH_LOOKBACK_DAYS)
 
 	return {
 		"company": company,
-		"for_date": for_date,
+		"from_date": from_date,
+		"to_date": to_date,
 		"today": today,
 		"as_of": as_of,
 		"holiday_list": holiday_list,
-		"missed_punches": _missed_punches(company, for_date),
+		"missed_punches": _missed_punches(company, from_date, to_date),
 		"not_seen": _not_seen_today(company, today, as_of, holiday_list),
 		"devices": _device_status(company, as_of),
 	}
 
 
-def _missed_punches(company, for_date):
-	"""Employees with an ODD number of punches on `for_date`."""
-	day_start = datetime.combine(for_date, time.min)
-	day_end = datetime.combine(for_date, time.max)
+def _missed_punches(company, from_date, to_date):
+	"""Employees with an ODD punch count on any day in [from_date, to_date].
 
+	Every calendar day in the range, holidays included — a holiday punch needs
+	pairing up like any other, and a day whose data arrived late must still be
+	reachable."""
 	rows = frappe.db.sql(
 		"""
 		SELECT
+			DATE(c.`time`)      AS punch_date,
 			c.employee,
 			e.employee_name,
 			e.department,
@@ -160,19 +187,24 @@ def _missed_punches(company, for_date):
 		FROM `tabEmployee Checkin` c
 		INNER JOIN `tabEmployee` e ON e.name = c.employee
 		WHERE e.company = %(company)s
-		  AND c.`time` BETWEEN %(start)s AND %(end)s
-		GROUP BY c.employee, e.employee_name, e.department
+		  AND c.`time` >= %(start)s AND c.`time` <= %(end)s
+		GROUP BY DATE(c.`time`), c.employee, e.employee_name, e.department
 		HAVING COUNT(*) %% 2 = 1
-		ORDER BY COUNT(*) ASC, e.employee_name ASC
+		ORDER BY DATE(c.`time`) DESC, e.employee_name ASC
 		""",
-		{"company": company, "start": day_start, "end": day_end},
+		{
+			"company": company,
+			"start": datetime.combine(from_date, time.min),
+			"end": datetime.combine(to_date, time.max),
+		},
 		as_dict=True,
 	)
 
 	for r in rows:
+		r.punch_date = getdate(r.punch_date)
 		att = frappe.db.get_value(
 			"Attendance",
-			{"employee": r.employee, "attendance_date": for_date, "docstatus": ("<", 2)},
+			{"employee": r.employee, "attendance_date": r.punch_date, "docstatus": ("<", 2)},
 			["name", "status", "working_hours", "shift"],
 			as_dict=True,
 		)
@@ -308,21 +340,6 @@ def get_company_holiday_list(company):
 	return from_employee[0] if from_employee else None
 
 
-def last_working_day(holiday_list, before, max_lookback=14):
-	"""The most recent working day strictly before `before`.
-
-	Walks back past holidays so a Sunday digest reports Friday rather than an
-	empty Saturday. Gives up after `max_lookback` days and returns the plain
-	previous day — a holiday list with a fortnight-long gap is a configuration
-	problem, not a reason to send nothing."""
-	day = add_days(before, -1)
-	for _ in range(max_lookback):
-		if not _is_holiday(holiday_list, day):
-			return day
-		day = add_days(day, -1)
-	return add_days(before, -1)
-
-
 def _device_status(company, as_of):
 	devices = frappe.get_all(
 		"Biometric Device",
@@ -355,9 +372,9 @@ SECTIONS = (
 	(
 		"missed_punches",
 		"Missed Punches",
-		["employee", "employee_name", "department", "shift", "punches",
+		["punch_date", "employee", "employee_name", "department", "shift", "punches",
 		 "first_punch", "last_punch", "working_hours", "status", "attendance"],
-		["Employee", "Name", "Department", "Shift", "Punches",
+		["Date", "Employee", "Name", "Department", "Shift", "Punches",
 		 "First Punch", "Last Punch", "Hours", "Attendance Status", "Attendance"],
 	),
 	(
@@ -429,7 +446,7 @@ def render_digest_html(digest):
 		f'<p style="margin:0 0 16px;color:#6b7280;font-size:13px">'
 		f'Attendance digest · {digest["as_of"].strftime("%Y-%m-%d %H:%M")}</p>',
 		'<p style="margin:0 0 20px">',
-		chip(f'missed punches ({digest["for_date"]})', len(missed), True),
+		chip("missed punches", len(missed), True),
 		chip("not seen today", len(unseen), True),
 		chip("devices down", len(down), True),
 		"</p>",
@@ -442,10 +459,17 @@ def render_digest_html(digest):
 			"and all devices are reporting.</p>"
 		)
 
+	window = (
+		str(digest["from_date"])
+		if digest["from_date"] == digest["to_date"]
+		else f'{digest["from_date"]} → {digest["to_date"]}'
+	)
 	blocks = [
-		("Missed Punches", digest["for_date"],
+		("Missed Punches", window,
 		 "Odd number of punches — a tap is missing, so the hours are wrong. "
-		 "Correct these in Attendance Fix before payroll.", missed, 0),
+		 "Correct these in Attendance Fix before payroll. Days stay listed until "
+		 "they are fixed, and late-arriving punches appear here when they land.",
+		 missed, 0),
 		("Not Seen Today", digest["today"],
 		 "Rostered, shift already started, no punch, no approved leave. Chase these now.",
 		 unseen, 1),
