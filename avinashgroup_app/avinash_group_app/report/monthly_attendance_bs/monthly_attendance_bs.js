@@ -109,24 +109,87 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		value = default_formatter(value, row, column, data, { css: {} });
 		if (!data) return value;
 
-		if (column.fieldname === "status") {
-			if (data.status === "Absent") {
-				value = `<span style="color: var(--red-600); font-weight: 600;">${data.status}</span>`;
-			} else if (data.status === "Half Day") {
-				value = `<span style="color: var(--orange-600); font-weight: 600;">${data.status}</span>`;
-			} else if (data.status === "Not Marked") {
-				value = `<span style="color: var(--gray-500); font-style: italic;">${data.status}</span>`;
-			} else if (data.status === "Present") {
-				value = `<span style="color: var(--green-600);">${data.status}</span>`;
-			}
+		const f = column.fieldname;
+
+		// --- shared: a zero in an exception column is good news, so mute it ---
+		const muteZero = (v) =>
+			`<span style="color: var(--text-lighter)">—</span>`;
+
+		// --- Detail view -------------------------------------------------
+		if (f === "status") {
+			return _chip(data.status);
 		}
 
-		if (column.fieldname === "remarks" && data.remarks) {
-			value = `<span style="color: var(--text-muted); font-size: 0.9em;">${data.remarks}</span>`;
+		if (f === "late_minutes" || f === "before_office_minutes") {
+			const n = cint(data[f]);
+			if (!n) return muteZero();
+			// 15 minutes is the grace period on every shift; past it, it counts.
+			const tone = n > 15 ? "var(--red-600)" : "var(--orange-600)";
+			return `<span style="color:${tone};font-weight:600">${n}</span>`;
+		}
+
+		if (f === "working_hours") {
+			if (!data.working_hours || data.working_hours === "00:00") return muteZero();
+			return `<span style="font-weight:600">${data.working_hours}</span>`;
+		}
+
+		if (f === "in_time" || f === "out_time") {
+			if (!data[f]) {
+				// A missing OUT is the single most common data fault — name it.
+				return `<span style="color:var(--red-500)" title="${__("No punch recorded")}">— —</span>`;
+			}
+			return value;
+		}
+
+		if (f === "work_in_holiday" && cint(data.work_in_holiday)) {
+			return `<span style="color:var(--purple-600);font-weight:600">${__("Holiday")}</span>`;
+		}
+
+		if (f === "remarks" && data.remarks) {
+			return `<span style="color:var(--text-muted);font-size:.9em">${data.remarks}</span>`;
+		}
+
+		// --- Summary view ------------------------------------------------
+		if (f === "ot_hours") {
+			const n = flt(data.ot_hours);
+			if (!n) return muteZero();
+			return `<span style="color:var(--blue-600);font-weight:600">${format_number(n, null, 2)}</span>`;
+		}
+
+		if (f === "present_days") {
+			const n = flt(data.present_days);
+			// A quiet proportional bar behind the number: the column becomes
+			// scannable without anyone having to read every figure.
+			const pct = Math.max(0, Math.min(100, (n / 31) * 100));
+			return `
+				<div style="position:relative">
+					<div style="position:absolute;inset:0;width:${pct}%;
+						background:var(--green-100);border-radius:2px"></div>
+					<span style="position:relative;font-weight:600">${format_number(n, null, 1)}</span>
+				</div>`;
+		}
+
+		if (f === "worked_on_holiday") {
+			const n = cint(data.worked_on_holiday);
+			if (!n) return muteZero();
+			return `<span style="color:var(--purple-600);font-weight:600">${n}</span>`;
+		}
+
+		if (f === "leave_current" || f === "leave_previous" || f === "leave_upto") {
+			if (!flt(data[f])) return muteZero();
+			return value;
 		}
 
 		return value;
 	},
+
+	get_datatable_options(options) {
+		return Object.assign(options, {
+			checkboxColumn: false,
+			cellHeight: 34,
+		});
+	},
+
 };
 
 async function _init_default_fiscal_year(report) {
@@ -247,4 +310,24 @@ function _default_bs_month() {
 		"Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
 	];
 	return `${String(bs).padStart(2, "0")} - ${names[bs - 1]}`;
+}
+
+
+// Status as a chip rather than coloured text: at a glance the eye picks out
+// the blocks of colour, not the words.
+function _chip(status) {
+	if (!status) return "";
+	const tones = {
+		Present: ["var(--green-600)", "var(--green-50)"],
+		"Work From Home": ["var(--green-600)", "var(--green-50)"],
+		"Half Day": ["var(--orange-700)", "var(--orange-50)"],
+		"On Leave": ["var(--blue-600)", "var(--blue-50)"],
+		Absent: ["var(--red-600)", "var(--red-50)"],
+		Holiday: ["var(--purple-600)", "var(--purple-50)"],
+	};
+	const [fg, bg] = tones[status] || ["var(--text-muted)", "var(--bg-light-gray)"];
+	const italic = status === "Not Marked" ? "font-style:italic;" : "";
+	return `<span style="color:${fg};background:${bg};${italic}
+		padding:2px 8px;border-radius:10px;font-size:.85em;font-weight:600;
+		white-space:nowrap">${status}</span>`;
 }

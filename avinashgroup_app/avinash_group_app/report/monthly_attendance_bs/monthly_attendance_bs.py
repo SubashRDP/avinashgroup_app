@@ -96,16 +96,19 @@ def execute(filters=None):
 	date_info = {}
 	for ad_date in dates:
 		bs = ad_to_bs(ad_date)
-		bs_label = f"{bs.day:02d} {get_bs_month_name(bs.month)}"
+		# `day_label`, not `bs_label`: the per-day label used to shadow the
+		# period label resolved above, so the BS Period summary card showed the
+		# last day of the month ("31 Shrawan") instead of the month itself.
+		day_label = f"{bs.day:02d} {get_bs_month_name(bs.month)}"
 		weekday = DAY_NAMES[ad_date.weekday()]
-		date_info[ad_date] = (bs_label, weekday)
+		date_info[ad_date] = (day_label, weekday)
 
 	for emp in employees:
 		emp_holidays = holiday_map.get(emp.holiday_list, {})
 		for ad_date in dates:
-			bs_label, weekday = date_info[ad_date]
+			day_label, weekday = date_info[ad_date]
 			row = _build_row(
-				emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map,
+				emp, ad_date, day_label, weekday, att_map, emp_holidays, leave_map,
 				components, shift_cache,
 			)
 			data.append(row)
@@ -115,7 +118,7 @@ def execute(filters=None):
 		_columns(components),
 		data,
 		None,
-		None,
+		_chart(data),
 		_summary(
 			totals["office"],
 			totals["holiday"],
@@ -541,3 +544,50 @@ def _summary(office_days, holiday_days, total_worked, leave_days, late_min, bs_l
 		{"value": leave_days, "label": _("Leave Days"), "datatype": "Int"},
 		{"value": late_min, "label": _("Late Time (min)"), "datatype": "Int"},
 	]
+
+
+def _chart(rows):
+	"""Attendance mix per day, in BS date order.
+
+	The grid answers "what did this person do"; the chart answers "what did
+	this day look like" — a spike of Absent on one date reads instantly here
+	and is invisible in three thousand rows.
+	"""
+	if not rows:
+		return None
+
+	order = []
+	by_day = {}
+	for r in rows:
+		label = r.get("bs_date")
+		if not label:
+			continue
+		if label not in by_day:
+			by_day[label] = {"Present": 0, "Half Day": 0, "Absent": 0, "On Leave": 0}
+			order.append(label)
+		bucket = by_day[label]
+		status = r.get("status")
+		if status in bucket:
+			bucket[status] += 1
+		elif status == "Work From Home":
+			bucket["Present"] += 1
+
+	if not order:
+		return None
+
+	return {
+		"data": {
+			"labels": order,
+			"datasets": [
+				{"name": _("Present"), "values": [by_day[d]["Present"] for d in order]},
+				{"name": _("Half Day"), "values": [by_day[d]["Half Day"] for d in order]},
+				{"name": _("On Leave"), "values": [by_day[d]["On Leave"] for d in order]},
+				{"name": _("Absent"), "values": [by_day[d]["Absent"] for d in order]},
+			],
+		},
+		"type": "bar",
+		"barOptions": {"stacked": 1},
+		"colors": ["#2b8a5e", "#c98a12", "#4b7bb5", "#c0453a"],
+		"axisOptions": {"xIsSeries": 1, "shortenYAxisNumbers": 1},
+		"height": 260,
+	}

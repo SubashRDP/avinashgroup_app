@@ -109,7 +109,7 @@ def execute_summary(filters):
 	columns = _columns(groups, standalone_components)
 
 	if not employees:
-		return columns, []
+		return columns, [], None, None, _summary([], bs_label)
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
@@ -147,7 +147,7 @@ def execute_summary(filters):
 		)
 		data.append(row)
 
-	return columns, data, None, None, _summary(data, bs_label)
+	return columns, data, None, _chart(data), _summary(data, bs_label)
 
 
 # ---------------------------------------------------------------------------
@@ -361,3 +361,37 @@ def _summary(data, bs_label):
 		{"value": sum(r["ot_hours"] for r in data), "label": _("Total O.T. (hrs)"), "datatype": "Float"},
 		{"value": sum(r["late_minutes"] for r in data), "label": _("Total Late (min)"), "datatype": "Int"},
 	]
+
+
+def _chart(data):
+	"""The dozen employees losing the most time, late minutes against overtime.
+
+	Sorted by lateness rather than shown for everyone: a hundred-row chart is
+	decoration, twelve rows is a conversation to have. OT rides alongside
+	because the same person often appears in both, and that changes what the
+	conversation is.
+	"""
+	ranked = sorted(
+		(r for r in data if r.get("late_minutes") or r.get("ot_hours")),
+		key=lambda r: (-flt(r.get("late_minutes")), -flt(r.get("ot_hours"))),
+	)[:12]
+	if not ranked:
+		return None
+
+	def short(row):
+		name = row.get("employee_name") or row.get("employee") or ""
+		return name if len(name) <= 18 else name[:17] + "…"
+
+	return {
+		"data": {
+			"labels": [short(r) for r in ranked],
+			"datasets": [
+				{"name": _("Late (min)"), "values": [flt(r.get("late_minutes")) for r in ranked]},
+				{"name": _("O.T. (hrs)"), "values": [flt(r.get("ot_hours"), 2) for r in ranked]},
+			],
+		},
+		"type": "bar",
+		"colors": ["#c0453a", "#2b6f8f"],
+		"axisOptions": {"shortenYAxisNumbers": 1},
+		"height": 260,
+	}
