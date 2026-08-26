@@ -29,6 +29,7 @@ from datetime import datetime, time, timedelta
 
 import frappe
 from frappe.utils import cint, flt, get_datetime, getdate, today
+from frappe.model.meta import get_field_precision
 
 from hrms.hr.doctype.employee_checkin.employee_checkin import (
     update_attendance_in_checkins,
@@ -199,8 +200,20 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
     def _dt(value):
         return get_datetime(value) if value else None
 
+    # Round to the field's own precision before comparing OR writing.
+    # Attendance.working_hours is decimal(21,1) on hrms 15.49.2 (2 dp on later
+    # releases), so the database itself rounds 8.32 down to 8.3 on write.
+    # Comparing the unrounded computed value against the rounded stored one
+    # made every call look like a change: the row was rewritten, and a repair
+    # logged, on every single self-heal pass — for every Present day in the
+    # 45-day window, every hour, without ever converging.
+    hours_precision = get_field_precision(
+        frappe.get_meta("Attendance").get_field("working_hours")
+    )
+    working_hours = flt(working_hours, hours_precision)
+
     updates = {}
-    if flt(current.working_hours, 5) != flt(working_hours, 5):
+    if flt(current.working_hours, hours_precision) != working_hours:
         updates["working_hours"] = working_hours
     if cint(current.late_entry) != cint(bool(late_entry)):
         updates["late_entry"] = cint(bool(late_entry))

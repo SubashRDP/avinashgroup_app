@@ -386,10 +386,17 @@ scheduler_events = {
         "*/5 * * * *": [
             "avinashgroup_app.custom_code.CBMS.scheduler.retry_failed_cbms_syncs",
         ],
-        # Midday, so the day is still correctable: someone chased at 13:00 can
+        # Midday, so the day is still correctable: someone chased at 13:10 can
         # still punch out; someone chased at 09:00 the next morning cannot.
         # Reported in Asia/Kathmandu, the site time zone the scheduler uses.
-        "0 13 * * *": [
+        #
+        # :10 rather than :00 deliberately. Every "Hourly" and "Hourly Long"
+        # event fires at "0 * * * *" — including heal_unlinked_checkins, which
+        # is the job that REPAIRS the very rows this digest reports on. Sending
+        # at 13:00 would race it and mail out problems self-heal was in the
+        # middle of fixing. Ten minutes lets it finish, so the digest describes
+        # the repaired state and lands in the lunch break either way.
+        "10 13 * * *": [
             "avinashgroup_app.biometric.daily_digest.send_daily_attendance_digest",
         ],
     },

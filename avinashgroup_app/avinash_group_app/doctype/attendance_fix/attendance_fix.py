@@ -460,3 +460,109 @@ def _get_holiday_dates(employee, from_date, to_date) -> set:
         pluck="holiday_date",
     )
     return {getdate(d) for d in rows}
+
+
+@frappe.whitelist()
+def repair_attendance_day(employee, attendance_date):
+	"""Reconcile ONE (employee, day) on demand, from the Attendance form.
+
+	Attendance Fix is the bulk tool — a shift and a date range, run in a
+	background worker. This is its single-record counterpart: you are looking
+	at one wrong row and want that row rebuilt from the punches, without
+	filing a range job to fix a single day.
+
+	Same primitive underneath (reconcile_employee_day), so a repair means the
+	same thing however it is triggered.
+
+	Two differences from the scheduled self-heal:
+
+	  * No shift gates. Self-heal skips shifts with auto attendance disabled
+	    or a closed sync window because it must never race the realtime flow.
+	    A human pressing Repair has made that judgement themselves, and the
+	    tool would be useless on exactly the shifts that need it most.
+	  * mark_absent_when_no_checkins stays False. Creating an Absent from an
+	    empty day is a payroll decision; this button exists to make attendance
+	    agree with the punches, not to invent a verdict where there are none.
+
+	Returns what actually happened, including whether the row was REPLACED —
+	a stale Absent with punches against it is deleted and rebuilt, so the
+	document the user was looking at no longer exists and the form has to be
+	sent somewhere new.
+	"""
+	frappe.only_for(("HR Manager", "System Manager"))
+
+	attendance_date = getdate(attendance_date)
+	if not frappe.db.exists("Employee", employee):
+		frappe.throw(_("Employee {0} not found.").format(employee))
+
+	# Lazy import: attendance_self_heal imports reconcile_employee_day from this
+	# module, so a top-level import here would be circular.
+	from avinashgroup_app.biometric.attendance_self_heal import _resolve_shift
+
+	shift_doc = _resolve_shift(employee, attendance_date, {})
+	if not shift_doc:
+		frappe.throw(
+			_(
+				"No shift could be resolved for {0} on {1}. The day's check-ins carry no "
+				"shift and the employee has no Default Shift, so there are no rules to "
+				"compute attendance against. Assign a shift and try again."
+			).format(frappe.bold(employee), frappe.bold(str(attendance_date))),
+			title=_("No Shift"),
+		)
+
+	before = frappe.db.get_value(
+		"Attendance",
+		{"employee": employee, "attendance_date": attendance_date, "docstatus": ("<", 2)},
+		["name", "status", "working_hours"],
+		as_dict=True,
+	)
+
+	counters = {
+		"attendance_created_or_updated": 0,
+		"absent_rows_deleted": 0,
+		"checkins_relinked": 0,
+	}
+	log_lines = []
+
+	savepoint = "attendance_repair_one"
+	try:
+		frappe.db.savepoint(savepoint)
+		reconcile_employee_day(
+			shift_doc,
+			employee,
+			attendance_date,
+			holiday_dates=frozenset(),  # a punch on a holiday still needs pairing up
+			counters=counters,
+			log_lines=log_lines,
+			include_skipped=True,
+			mark_absent_when_no_checkins=False,
+		)
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		frappe.log_error(
+			title=f"Attendance repair failed: {employee} {attendance_date}",
+			message=frappe.get_traceback(),
+		)
+		raise
+
+	after = frappe.db.get_value(
+		"Attendance",
+		{"employee": employee, "attendance_date": attendance_date, "docstatus": ("<", 2)},
+		["name", "status", "working_hours", "in_time", "out_time"],
+		as_dict=True,
+	)
+
+	changed = bool(
+		counters["attendance_created_or_updated"]
+		or counters["checkins_relinked"]
+		or counters["absent_rows_deleted"]
+	)
+	return {
+		"changed": changed,
+		"replaced": bool(before and after and before.name != after.name),
+		"shift": shift_doc.name,
+		"before": before,
+		"after": after,
+		"counters": counters,
+		"log": log_lines,
+	}
