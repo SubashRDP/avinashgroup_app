@@ -12,23 +12,16 @@
   "device_serial",
   "company",
   "device_ip",
-  "device_port",
   "column_break_1",
   "enabled",
-  "device_model",
   "connection_status",
+  "cross_company_section",
+  "allowed_employees",
   "sync_information_section",
   "last_contact_time",
   "last_sync_time",
   "total_synced",
-  "column_break_2",
-  "last_employee_sync",
-  "total_employees_synced",
   "additional_settings_section",
-  "clear_logs_after_sync",
-  "sync_interval",
-  "column_break_3",
-  "timeout",
   "duplicate_threshold_minutes",
   "alerting_section",
   "alert_threshold_minutes",
@@ -52,7 +45,7 @@
    "unique": 1
   },
   {
-   "description": "Hardware serial number — must match the device_id sent by the bridge or SN sent via ADMS push. Punches from any other serial are rejected.",
+   "description": "Hardware serial number \u2014 must match the device_id sent by the bridge or SN sent via ADMS push. Punches from any other serial are rejected.",
    "fieldname": "device_serial",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -69,17 +62,10 @@
    "reqd": 1
   },
   {
-   "description": "Optional. IP address of the biometric device — informational only (the bridge holds the real address and identifies itself by serial). Leave blank for software/database sources like HTMS-86.",
+   "description": "Optional. IP address of the biometric device \u2014 informational only (the bridge holds the real address and identifies itself by serial). Leave blank for software/database sources like HTMS-86.",
    "fieldname": "device_ip",
    "fieldtype": "Data",
    "label": "Device IP"
-  },
-  {
-   "default": "4370",
-   "description": "Port number for device communication (default: 4370)",
-   "fieldname": "device_port",
-   "fieldtype": "Int",
-   "label": "Device Port"
   },
   {
    "fieldname": "column_break_1",
@@ -93,17 +79,24 @@
    "label": "Enabled"
   },
   {
-   "description": "Device model (e.g., K40, F18, K50)",
-   "fieldname": "device_model",
-   "fieldtype": "Data",
-   "label": "Device Model"
-  },
-  {
    "description": "Current connection status",
    "fieldname": "connection_status",
    "fieldtype": "Select",
    "label": "Connection Status",
    "options": "Connected\nDisconnected"
+  },
+  {
+   "description": "Employees from OTHER companies who are allowed to punch on this device. A punch is matched to an employee of this device's own company first; only if none matches is this list consulted.",
+   "fieldname": "cross_company_section",
+   "fieldtype": "Section Break",
+   "label": "Cross-Company Attendance"
+  },
+  {
+   "description": "Leave empty to restrict this device to its own company's employees.",
+   "fieldname": "allowed_employees",
+   "fieldtype": "Table",
+   "label": "Allowed Employees from Other Companies",
+   "options": "Biometric Device Allowed Employee"
   },
   {
    "fieldname": "sync_information_section",
@@ -133,54 +126,10 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Last time employees were synced",
-   "fieldname": "last_employee_sync",
-   "fieldtype": "Datetime",
-   "label": "Last Employee Sync",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "description": "Total employees synced to device",
-   "fieldname": "total_employees_synced",
-   "fieldtype": "Int",
-   "label": "Total Employees Synced",
-   "read_only": 1
-  },
-  {
    "collapsible": 1,
    "fieldname": "additional_settings_section",
    "fieldtype": "Section Break",
-   "label": "Additional Settings"
-  },
-  {
-   "default": "1",
-   "description": "Clear device logs after successful sync",
-   "fieldname": "clear_logs_after_sync",
-   "fieldtype": "Check",
-   "label": "Clear Logs After Sync"
-  },
-  {
-   "default": "30",
-   "description": "Auto-sync interval",
-   "fieldname": "sync_interval",
-   "fieldtype": "Int",
-   "label": "Sync Interval (minutes)"
-  },
-  {
-   "fieldname": "column_break_3",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "5",
-   "description": "Connection timeout",
-   "fieldname": "timeout",
-   "fieldtype": "Int",
-   "label": "Connection Timeout (seconds)"
+   "label": "Punch Handling"
   },
   {
    "default": "1",
@@ -225,7 +174,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-26 12:00:00.000000",
+ "modified": "2026-08-26 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Biometric Device",

@@ -45,33 +45,67 @@ def assert_known_device(serial: str) -> str:
     return name
 
 
+def resolve_employee_for_punch(user_id, device_company=None, device_name=None):
+    """Find the Employee a punch belongs to. Two steps, in this order.
+
+    1. An employee of the device's OWN company whose ``attendance_device_id``
+       is ``user_id``. This is the normal path and always wins. (A device with
+       no company set — legacy — matches across all companies here.)
+    2. Only on a miss: the device's ``allowed_employees`` list, the employees of
+       OTHER companies cleared to punch on this device. A row matches when its
+       ``device_user_id`` equals ``user_id``, or — when that is blank — when the
+       employee's own ``attendance_device_id`` does.
+
+    Step 2 is unreachable for any ID step 1 could answer, so a visitor can never
+    shadow one of the host company's own staff. Together with
+    ``BiometricDevice.validate_allowed_employees`` (which refuses to save a list
+    where two rows claim one ID, or where an ID is already taken by the host
+    company) the result is unambiguous by construction — the matching side never
+    has to guess, the same guarantee ``validate_unique_device_id`` gives within
+    a company.
+
+    Returns a dict of name / employee_name / company / default_shift, or None.
+    """
+    fields = ["name", "employee_name", "company", "default_shift"]
+
+    emp_filters = {"attendance_device_id": user_id}
+    if device_company:
+        emp_filters["company"] = device_company
+    employee = frappe.db.get_value("Employee", emp_filters, fields, as_dict=True)
+    if employee:
+        return employee
+
+    if not device_name:
+        return None
+
+    rows = frappe.get_all(
+        "Biometric Device Allowed Employee",
+        filters={"parent": device_name, "parenttype": "Biometric Device"},
+        fields=["employee", "device_user_id"],
+    )
+    if not rows:
+        return None
+
+    # An explicit Device User ID on the row wins over the employee's own ID:
+    # it exists precisely to describe how this device numbers this visitor.
+    explicit = [r.employee for r in rows if (r.device_user_id or "").strip() == user_id]
+    if explicit:
+        return frappe.db.get_value("Employee", explicit[0], fields, as_dict=True)
+
+    inherited = [r.employee for r in rows if not (r.device_user_id or "").strip()]
+    if not inherited:
+        return None
+
+    return frappe.db.get_value(
+        "Employee",
+        {"name": ["in", inherited], "attendance_device_id": user_id},
+        fields,
+        as_dict=True,
+    )
+
+
 def process_attendance_records(attendance_data, device_identifier=None):
-    """
-    Store biometric punches as Employee Checkin rows. For each (employee, date),
-    new punches are merged with existing rows, de-duplicated within the sending
-    device's Duplicate Threshold window (near-simultaneous repeats of one
-    physical punch are dropped), sorted chronologically, and assigned
-    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ... with the day's
-    last punch forced to OUT (see attendance_sync.desired_log_type).
-
-    Re-running with the same batch is idempotent. A late-arriving punch slots
-    in by time and downstream rows flip IN↔OUT if needed.
-
-    Args:
-        attendance_data: list of {"user_id": str, "timestamp": str} dicts
-        device_identifier: optional device name/IP
-
-    Returns:
-        dict with success, synced, errors, skipped, message, error_details,
-        synced_punches, failed_punches, skipped_punches
-
-    Outcome categories (so the caller knows what to retry):
-      - synced_punches  → stored successfully.
-      - skipped_punches → permanently unprocessable for a business reason
-        (unknown device user_id, malformed timestamp). Retrying won't help, so
-        the bridge stops resending and doesn't flag them as errors.
-      - failed_punches  → transient failure (exception). Safe to retry.
-    """
+  
     if not attendance_data:
         return {
             "success": True,
@@ -99,15 +133,17 @@ def process_attendance_records(attendance_data, device_identifier=None):
     # company, so the same work-number (attendance_device_id) can be reused
     # across companies. None (legacy device with no company) = no company filter.
     device_company = None
+    device_name = None
     threshold_minutes = DEFAULT_DUPLICATE_THRESHOLD_MINUTES
     if device_identifier:
         device_row = frappe.db.get_value(
             "Biometric Device",
             {"device_serial": device_identifier},
-            ["company", "duplicate_threshold_minutes"],
+            ["name", "company", "duplicate_threshold_minutes"],
             as_dict=True,
         )
         if device_row:
+            device_name = device_row.name
             device_company = device_row.company
             if device_row.duplicate_threshold_minutes is not None:
                 threshold_minutes = device_row.duplicate_threshold_minutes
@@ -144,20 +180,13 @@ def process_attendance_records(attendance_data, device_identifier=None):
         try:
             frappe.db.savepoint(savepoint)
 
-            emp_filters = {"attendance_device_id": user_id}
-            if device_company:
-                emp_filters["company"] = device_company
-            employee = frappe.db.get_value(
-                "Employee",
-                emp_filters,
-                ["name", "employee_name", "company", "default_shift"],
-                as_dict=True,
-            )
+            employee = resolve_employee_for_punch(user_id, device_company, device_name)
 
             if not employee:
-                # No Employee maps to this device user_id (within the device's
-                # company). Not our error and not retryable until someone
-                # registers the employee — skip.
+                # No Employee maps to this device user_id — neither in the
+                # device's own company nor in its cross-company allow-list. Not
+                # our error and not retryable until someone registers the
+                # employee (or adds them to the device) — skip.
                 frappe.db.rollback(save_point=savepoint)
                 skipped += len(group_record_ids)
                 where = f" (company {device_company})" if device_company else ""
@@ -216,18 +245,7 @@ def _reconcile_day_checkins(
     employee, punch_date, new_timestamps, device_identifier=None,
     threshold_minutes=DEFAULT_DUPLICATE_THRESHOLD_MINUTES,
 ):
-    """Merge new punches with existing rows for the day and apply IN/OUT
-    alternation in chronological order.
 
-    De-duplication (``threshold_minutes``, "prevent new only"): existing
-    Employee Checkin rows are always kept; a *new* punch is dropped when it
-    falls within ``threshold_minutes`` of a punch already kept for the day
-    (an existing row or an earlier new punch we've accepted). This collapses
-    the repeated reads a device fires for a single physical punch. A threshold
-    of 0 keeps only exact-timestamp de-duplication.
-
-    Returns (inserted_count, relabeled_count).
-    """
     day_start = datetime.combine(punch_date, datetime.min.time())
     day_end = datetime.combine(punch_date, datetime.max.time())
 
