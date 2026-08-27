@@ -193,6 +193,7 @@ frappe.query_reports["Purchase Register Report"] = {
 				}
 				.pr-vat-heading-onscreen th.r { text-align: right; }
 				.pr-vat-heading-onscreen th.l { text-align: left; }
+				.pr-vat-heading-onscreen th.c { text-align: center; }
 			</style>`).appendTo("head");
 		}
 

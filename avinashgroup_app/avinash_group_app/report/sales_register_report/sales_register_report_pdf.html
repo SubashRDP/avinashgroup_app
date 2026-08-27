@@ -79,6 +79,7 @@ thead th {
 }
 thead th.r { text-align: right; }
 thead th.l { text-align: left; }
+thead th.c { text-align: center; }
 
 .govt-grid th, .govt-grid td { border: 1px solid #999; }
 
@@ -168,8 +169,8 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
           <div class="sr-vat-info">
             <span>करदाता दर्ता नं (PAN) : <span class="sr-vat-value">{{ govt_heading.pan or '' }}</span></span>
             <span>करदाताको नाम: <span class="sr-vat-value">{{ govt_heading.company_name or '' }}</span></span>
-            <span>साल <span class="sr-vat-value">{{ govt_heading.fiscal_year or '' }}</span></span>
-            <span>कर अवधि: <span class="sr-vat-value">&nbsp;</span></span>
+            <span>साल: <span class="sr-vat-value">{{ govt_heading.bs_year or '' }}</span></span>
+            <span>कर अवधि: <span class="sr-vat-value">{{ govt_heading.tax_period or '' }}</span></span>
           </div>
         </div>
         {% if customer_label %}

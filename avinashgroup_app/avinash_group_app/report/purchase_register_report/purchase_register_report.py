@@ -76,16 +76,17 @@ def _get_display_names(filters):
 
 
 def _get_govt_heading_info(filters):
-	"""PAN, company name(s), BS fiscal year ("83/84"), and BS tax period (month name +
-	year, e.g. "Shrawan 2083") for the govt heading block — resolved here (not in the
-	template/JS) so the print and on-screen views agree."""
+	"""PAN, company name(s), the plain BS year ("2083", not the "83/84" fiscal-year label),
+	and BS tax period (month name only, e.g. "Shrawan" — the year already shows via साल)
+	for the govt heading block — resolved here (not in the template/JS) so the print and
+	on-screen views agree."""
 	companies = filters.get('company') or []
 	if isinstance(companies, str):
 		companies = [companies]
 
 	pan = ''
 	company_name = ''
-	fiscal_year = ''
+	bs_year = ''
 	tax_period = ''
 	if companies:
 		rows = frappe.db.get_all('Company',
@@ -95,20 +96,16 @@ def _get_govt_heading_info(filters):
 		company_name = ', '.join(r.name for r in rows)
 
 		if filters.get('to_date'):
-			from avinashgroup_app.custom_code.CBMS.utils import cbms_fiscal_year
-			try:
-				fiscal_year = cbms_fiscal_year(filters.get('to_date'), company=companies[0])
-			except Exception:
-				fiscal_year = ''
-
 			from rdp_common_app.utils.bs_boundaries import ad_to_bs, get_bs_month_name
 			try:
 				bs = ad_to_bs(frappe.utils.getdate(filters.get('to_date')))
-				tax_period = f"{get_bs_month_name(bs.month)} {bs.year}"
+				bs_year = str(bs.year)
+				tax_period = get_bs_month_name(bs.month)
 			except Exception:
+				bs_year = ''
 				tax_period = ''
 
-	return {'pan': pan, 'company_name': company_name, 'fiscal_year': fiscal_year, 'tax_period': tax_period}
+	return {'pan': pan, 'company_name': company_name, 'bs_year': bs_year, 'tax_period': tax_period}
 
 
 # Nepali-only labelling for the two official govt VAT books (Rule 23(1)(chha)): "खरिद खाता"
@@ -207,7 +204,9 @@ def _build_govt_layout(selected_columns, is_return=False):
 			j = i
 			while j < len(body_fields) and body_fields[j]['group'] == bf['group']:
 				j += 1
-			row1.append({'text': groups[bf['group']], 'css': bf['css'], 'colspan': j - i, 'rowspan': 1})
+			# Merged group headers are always centered over their span, regardless of
+			# whether the underlying columns are left (Data) or right (Currency) aligned.
+			row1.append({'text': groups[bf['group']], 'css': 'c', 'colspan': j - i, 'rowspan': 1})
 			i = j
 		else:
 			row1.append({'text': bf['sub'], 'css': bf['css'], 'colspan': 1, 'rowspan': 2})
@@ -371,7 +370,7 @@ def download_excel(filters, selected_columns=None):
 	pan_line = (
 		f"करदाता दर्ता नं (PAN) : {heading['pan']}      "
 		f"करदाताको नाम: {heading['company_name']}      "
-		f"साल  {heading['fiscal_year']}      "
+		f"साल: {heading['bs_year']}      "
 		f"कर अवधि: {heading['tax_period']}"
 	)
 	c = ws.cell(row=4, column=1, value=pan_line)
