@@ -56,6 +56,13 @@ body {
 
 .pr-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
 
+.pr-vat-heading  { text-align: center; margin-bottom: 6px; }
+.pr-vat-title    { font-size: 20px; font-weight: bold; }
+.pr-vat-subtitle { font-size: 12px; margin-top: 2px; }
+.pr-vat-info     { font-size: 11px; margin-top: 6px; text-align: left; }
+.pr-vat-info span { margin-right: 20px; }
+.pr-vat-info .pr-vat-value { display: inline-block; min-width: 90px; border-bottom: 1px dotted #333; }
+
 table { width: 100%; border-collapse: collapse; }
 tr    { page-break-inside: avoid; }
 
@@ -70,6 +77,8 @@ thead th {
 }
 thead th.r { text-align: right; }
 thead th.l { text-align: left; }
+
+.govt-grid th, .govt-grid td { border: 1px solid #999; }
 
 td { padding: 4px 5px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
 .nowrap { white-space: nowrap; }
@@ -103,6 +112,12 @@ body                 { font-size: 7px !important; line-height: 1.3 !important; }
 .pr-company-center   { font-size: 10px !important; margin-bottom: 1px !important; }
 .pr-title-l          { font-size: 9px !important; margin-bottom: 1px !important; }
 
+.pr-vat-heading      { margin-bottom: 3px !important; }
+.pr-vat-title        { font-size: 11px !important; }
+.pr-vat-subtitle     { font-size: 7px !important; margin-top: 1px !important; }
+.pr-vat-info         { font-size: 7px !important; margin-top: 3px !important; }
+.pr-vat-info span    { margin-right: 8px !important; }
+
 .pr-filters          { font-size: 7px !important; margin-bottom: 2px !important; }
 .pr-filter-item      { margin-right: 6px !important; }
 .pr-divider          { margin: 2px 0 3px !important; }
@@ -126,28 +141,6 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 {% set supplier_label = supplier_display or '' %}
 {% set ptype_label = ptype_display or '' %}
 
-{# sc = selected columns list; empty means show all #}
-{% set show_all = not sc %}
-{% set s_date                 = show_all or 'date'                 in sc %}
-{% set s_miti                 = show_all or 'miti'                 in sc %}
-{% set s_purchase_type        = show_all or 'purchase_type'        in sc %}
-{% set s_voucher_no           = show_all or 'voucher_no'           in sc %}
-{% set s_supplier_invoice_no  = show_all or 'supplier_invoice_no'  in sc %}
-{% set s_supplier_invoice_date= show_all or 'supplier_invoice_date'in sc %}
-{% set s_supplier_invoice_miti= show_all or 'supplier_invoice_miti'in sc %}
-{% set s_supplier_name        = show_all or 'supplier_name'        in sc %}
-{% set s_vat_number           = show_all or 'vat_number'           in sc %}
-{% set s_purchase             = show_all or 'purchase'             in sc %}
-{% set s_tax_free_purchase    = show_all or 'tax_free_purchase'    in sc %}
-{% set s_taxable_purchase     = show_all or 'taxable_purchase'     in sc %}
-{% set s_vat                  = show_all or 'vat'                  in sc %}
-{% set s_taxable_import       = show_all or 'taxable_import'       in sc %}
-{% set s_import_vat           = show_all or 'import_vat'           in sc %}
-{% set s_capitalized_purchase = show_all or 'capitalized_purchase' in sc %}
-{% set s_capitalized_vat      = show_all or 'capitalized_vat'      in sc %}
-{% set s_total_vat            = show_all or 'total_vat'            in sc %}
-{% set s_qty                  = show_all or 'qty'                  in sc %}
-
 {# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ──
    row_limit = rows per physical page; tune per orientation if rows overflow the break. #}
 {% set row_limit = 90 if orientation == 'Portrait' else 27 %}
@@ -161,81 +154,51 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 
 <div class="sheet{% if not loop.last %} brk{% endif %}{% if is_html_view %} page{% endif %}">
 
-<table>
+{% set total_cols = govt_layout.body_fields | length %}
+<table class="govt-grid">
   <thead>
     <tr>
-      <td colspan="19" style="padding:4px 0 0 0; border:none;">
-        <div style="text-align:right; font-size:15px; font-weight:bold;">Purchase Register</div>
-        {% if company_label %}
-        <div class="pr-company-center">{{ company_label }}</div>
-        {% endif %}
+      <td colspan="{{ total_cols }}" style="padding:4px 0 0 0; border:none;">
+        <div class="pr-vat-heading">
+          <div class="pr-vat-title">{{ 'खरिद फिर्ता खाता' if filters.get('is_return') else 'खरिद खाता' }}</div>
+          <div class="pr-vat-subtitle">(नियम २३ को उपनियम (१) को खण्ड  (छ) संग सम्बन्धित )</div>
+          <div class="pr-vat-info">
+            <span>करदाता दर्ता नं (PAN) : <span class="pr-vat-value">{{ govt_heading.pan or '' }}</span></span>
+            <span>करदाताको नाम: <span class="pr-vat-value">{{ govt_heading.company_name or '' }}</span></span>
+            <span>साल <span class="pr-vat-value">{{ govt_heading.fiscal_year or '' }}</span></span>
+            <span>कर अवधि: <span class="pr-vat-value">{{ govt_heading.tax_period or '' }}</span></span>
+          </div>
+        </div>
         {% if supplier_label %}
         <div class="pr-title-l">Supplier: {{ supplier_label }}</div>
         {% endif %}
         {% if ptype_label %}
         <div class="pr-title-l">Purchase Type: {{ ptype_label }}</div>
         {% endif %}
-        <div class="pr-filters">
-          <span class="pr-filter-item">
-            <span class="pr-filter-label">From:</span>
-            {{ frappe.utils.formatdate(filters.get('from_date')) }}
-            &nbsp;<span class="pr-filter-label">To:</span>
-            {{ frappe.utils.formatdate(filters.get('to_date')) }}
-          </span>
-          {% if filters.get('is_return') %}
-          <span class="pr-filter-item">
-            <span class="pr-filter-label">Is Return:</span> Yes
-          </span>
-          {% endif %}
-        </div>
         <hr class="pr-divider" style="margin-bottom:0;">
       </td>
     </tr>
     <tr>
-      {% if s_date %}<th class="l">Date</th>{% endif %}
-      {% if s_miti %}<th class="l">Miti</th>{% endif %}
-      {% if s_purchase_type %}<th class="l">Purchase Type</th>{% endif %}
-      {% if s_voucher_no %}<th class="l">Voucher No</th>{% endif %}
-      {% if s_supplier_invoice_no %}<th class="l">Supp. Inv No</th>{% endif %}
-      {% if s_supplier_invoice_date %}<th class="l">Supp. Inv Date</th>{% endif %}
-      {% if s_supplier_invoice_miti %}<th class="l">Supp. Inv Miti</th>{% endif %}
-      {% if s_supplier_name %}<th class="l">Supplier Name</th>{% endif %}
-      {% if s_vat_number %}<th class="l">{% if orientation == 'Portrait' %}VAT<br>No{% else %}VAT No{% endif %}</th>{% endif %}
-      {% if s_purchase %}<th class="r">Purchase</th>{% endif %}
-      {% if s_tax_free_purchase %}<th class="r">Tax Free</th>{% endif %}
-      {% if s_taxable_purchase %}<th class="r">Taxable Pur.</th>{% endif %}
-      {% if s_vat %}<th class="r">VAT</th>{% endif %}
-      {% if s_taxable_import %}<th class="r">Tax. Import</th>{% endif %}
-      {% if s_import_vat %}<th class="r">Imp. VAT</th>{% endif %}
-      {% if s_capitalized_purchase %}<th class="r">Cap. Pur.</th>{% endif %}
-      {% if s_capitalized_vat %}<th class="r">Cap. VAT</th>{% endif %}
-      {% if s_total_vat %}<th class="r">Total VAT</th>{% endif %}
-      {% if s_qty %}<th class="r{% if orientation == 'Portrait' %} nowrap{% endif %}">QTY</th>{% endif %}
+      {% for c in govt_layout.row1 %}
+      <th class="{{ c.css }}"{% if c.colspan > 1 %} colspan="{{ c.colspan }}"{% endif %}{% if c.rowspan > 1 %} rowspan="{{ c.rowspan }}"{% endif %}>{{ c.text }}</th>
+      {% endfor %}
+    </tr>
+    <tr>
+      {% for bf in govt_layout.body_fields %}
+      {% if bf.group %}<th class="{{ bf.css }}">{{ bf.sub }}</th>{% endif %}
+      {% endfor %}
     </tr>
   </thead>
 
   <tbody>
   {% for row in page_rows %}
     <tr{% if row.get('bold') %} class="tr-total"{% endif %}>
-      {% if s_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('date')) if row.get('date') else '' }}</td>{% endif %}
-      {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
-      {% if s_purchase_type %}<td>{{ row.get('purchase_type') or '' }}</td>{% endif %}
-      {% if s_voucher_no %}<td>{{ (row.get('voucher_no') or '').split('::')[0] }}</td>{% endif %}
-      {% if s_supplier_invoice_no %}<td>{{ row.get('supplier_invoice_no') or '' }}</td>{% endif %}
-      {% if s_supplier_invoice_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('supplier_invoice_date')) if row.get('supplier_invoice_date') else '' }}</td>{% endif %}
-      {% if s_supplier_invoice_miti %}<td class="nowrap">{{ row.get('supplier_invoice_miti') or '' }}</td>{% endif %}
-      {% if s_supplier_name %}<td>{{ row.get('supplier_name') or '' }}</td>{% endif %}
-      {% if s_vat_number %}<td>{{ row.get('vat_number') or '' }}</td>{% endif %}
-      {% if s_purchase %}<td class="r nowrap">{{ fmt(row.get('purchase')) }}</td>{% endif %}
-      {% if s_tax_free_purchase %}<td class="r nowrap">{{ fmt(row.get('tax_free_purchase')) }}</td>{% endif %}
-      {% if s_taxable_purchase %}<td class="r nowrap">{{ fmt(row.get('taxable_purchase')) }}</td>{% endif %}
-      {% if s_vat %}<td class="r nowrap">{{ fmt(row.get('vat')) }}</td>{% endif %}
-      {% if s_taxable_import %}<td class="r nowrap">{{ fmt(row.get('taxable_import')) }}</td>{% endif %}
-      {% if s_import_vat %}<td class="r nowrap">{{ fmt(row.get('import_vat')) }}</td>{% endif %}
-      {% if s_capitalized_purchase %}<td class="r nowrap">{{ fmt(row.get('capitalized_purchase')) }}</td>{% endif %}
-      {% if s_capitalized_vat %}<td class="r nowrap">{{ fmt(row.get('capitalized_vat')) }}</td>{% endif %}
-      {% if s_total_vat %}<td class="r nowrap">{{ fmt(row.get('total_vat')) }}</td>{% endif %}
-      {% if s_qty %}<td class="r{% if orientation == 'Portrait' %} nowrap{% endif %}">{{ row.get('qty') or '' }}</td>{% endif %}
+      {% for bf in govt_layout.body_fields %}
+      {% if bf.kind == 'currency' %}<td class="{{ bf.css }} nowrap">{{ fmt(row.get(bf.key)) }}</td>
+      {% elif bf.kind == 'voucher' %}<td class="{{ bf.css }}">{{ (row.get(bf.key) or '').split('::')[0] }}</td>
+      {% else %}<td class="{{ bf.css }}">{{ row.get(bf.key) or '' }}</td>
+      {% endif %}
+      {% endfor %}
     </tr>
   {% endfor %}
   </tbody>
