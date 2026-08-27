@@ -224,6 +224,7 @@ frappe.query_reports["Sales Register Report"] = {
 				}
 				.sr-vat-heading-onscreen th.r { text-align: right; }
 				.sr-vat-heading-onscreen th.l { text-align: left; }
+				.sr-vat-heading-onscreen th.c { text-align: center; }
 			</style>`).appendTo("head");
 		}
 
