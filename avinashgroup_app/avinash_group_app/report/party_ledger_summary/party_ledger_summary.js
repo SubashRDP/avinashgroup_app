@@ -251,6 +251,22 @@ frappe.query_reports["Party Ledger Summary"] = {
 			pls_set_default_accounts(frappe.query_report.get_filter_value("company"));
 		}
 
+		// The Account filter sits at the far right of the filter row, and extra
+		// filters injected by rdp_common_app (BS date pickers) can push it far
+		// enough that its dropdown opens past the right edge of the viewport.
+		// Flip it to hug the right edge of the field whenever that happens.
+		$(document)
+			.off("shown.bs.dropdown.party_ledger_account")
+			.on("shown.bs.dropdown.party_ledger_account", '.multiselect-list[data-fieldname="account"]', function () {
+				const $menu = $(this).find(".dropdown-menu");
+				const menu_el = $menu[0];
+				if (!menu_el) return;
+				const overflow = menu_el.getBoundingClientRect().right - window.innerWidth;
+				if (overflow > 0) {
+					$menu.css({ left: "auto", right: 0 });
+				}
+			});
+
 		// Override the built-in Export menu: produce a custom Excel where Opening and
 		// Closing each show the magnitude followed by a Dr/Cr column. The on-screen report
 		// is unchanged. Instance-level override only — does not affect other reports.
