@@ -1017,6 +1017,15 @@ def _merge_entries(entries):
 		candidates = [d for d in descriptions if d not in avoid] or descriptions
 		return max(candidates, key=lambda s: len(s))
 
+	# How many distinct accounts each Journal Entry touches for a given party/date —
+	# used below to decide whether the account name is a useful row label.
+	je_accounts = {}
+	for e in entries:
+		if e.get("voucher_type") == "Journal Entry":
+			je_accounts.setdefault(
+				(e.get("party"), e.get("date"), e.get("voucher_no")), set()
+			).add(e.get("account"))
+
 	grouped = {}
 	order = []
 	for e in entries:
@@ -1024,6 +1033,12 @@ def _merge_entries(entries):
 		# Journal Entries split by account; all other voucher types merge per voucher.
 		if vt == "Journal Entry":
 			key = (e.get("party"), e.get("date"), vt, e.get("voucher_no"), e.get("account"))
+		elif vt == "Payment Entry":
+			# One line per receipt: merge every leg of the Payment Entry — the Advance
+			# From Customer posting, the Debtors postings, and allocations that landed
+			# on a later date — so the row shows the single net amount, not the gross
+			# of both party accounts. Row keeps the earliest (first-seen) date.
+			key = (e.get("party"), vt, e.get("voucher_no"))
 		else:
 			key = (e.get("party"), e.get("date"), vt, e.get("voucher_no"))
 		if key not in grouped:
@@ -1050,11 +1065,29 @@ def _merge_entries(entries):
 		vt = g.get("voucher_type")
 		descriptions = list(dict.fromkeys(g["_descriptions"]))
 
-		# For a JE line, the account is the meaningful label (not the generic "Journal Entry").
+		# For a contra JE (two+ accounts for the same party) the account name tells the
+		# legs apart; for an ordinary single-account JE it just repeats the ledger's own
+		# account, so fall back to the plain "Journal Entry" label.
 		if vt == "Journal Entry":
-			description = g.get("account") or _pick_description(descriptions, vt)
+			multi_account = len(je_accounts.get(
+				(g.get("party"), g.get("date"), g.get("voucher_no")), ())
+			) > 1
+			if multi_account:
+				description = g.get("account") or _pick_description(descriptions, vt)
+			else:
+				description = _pick_description(descriptions, vt)
 		else:
 			description = _pick_description(descriptions, vt)
+
+		debit  = round(g.get("debit") or 0, 2)
+		credit = round(g.get("credit") or 0, 2)
+		# A Payment Entry fills both columns because it posts the receipt to Advance
+		# From Customer and then moves it to Debtors as it is allocated. Collapse to
+		# the net on one side so a receipt shows a single credit figure.
+		if vt == "Payment Entry":
+			net = round(debit - credit, 2)
+			debit  = net  if net > 0 else 0.0
+			credit = -net if net < 0 else 0.0
 
 		out.append({
 			"party": g.get("party") or "",
@@ -1063,8 +1096,8 @@ def _merge_entries(entries):
 			"voucher_no": g.get("voucher_no"),
 			"description": description,
 			"remarks": "",
-			"debit": round(g.get("debit") or 0, 2),
-			"credit": round(g.get("credit") or 0, 2),
+			"debit": debit,
+			"credit": credit,
 		})
 	return out
 
