@@ -42,4 +42,13 @@ frappe.query_reports["Yearly Leave Details BS"] = {
 			default: "Active",
 		},
 	],
+
+	formatter: function (value, row, column, data, default_formatter) {
+		// Name over ID in one clickable cell — see NepalHR.employeeCell.
+		if (column.fieldname === "employee") {
+			const cell = window.NepalHR && window.NepalHR.employeeCell(data);
+			if (cell) return cell;
+		}
+		return default_formatter(value, row, column, data);
+	},
 };

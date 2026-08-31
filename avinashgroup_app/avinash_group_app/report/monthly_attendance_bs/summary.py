@@ -36,6 +36,7 @@ from rdp_common_app.utils.bs_boundaries import (
 	get_bs_month_range,
 	get_bs_month_name,
 )
+from avinashgroup_app.hr.utils import resolve_holiday_lists
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
 	get_attendance_driven_components,
@@ -114,7 +115,10 @@ def execute_summary(filters):
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
-	holiday_map = _fetch_holidays(employees, ad_start, ad_end)
+	# Employee.holiday_list is blank for nearly everyone; the list is set on the
+	# Company and inherited. Resolve that fallback for the whole roster.
+	holiday_list_of = resolve_holiday_lists(employees)
+	holiday_map = _fetch_holidays(holiday_list_of, ad_start, ad_end)
 	# Bucket each leave map ONCE into {employee: sorted [dates]} so per-employee
 	# leave counting is a bounded bisect instead of a full scan of every entry.
 	leave_dates = _bucket_leave_dates(_fetch_leaves(employees, ad_start, ad_end, company))
@@ -143,7 +147,7 @@ def execute_summary(filters):
 	for idx, emp in enumerate(employees, start=1):
 		row = _build_summary_row(
 			idx, emp, ad_start, ad_end,
-			att_map, holiday_map, leave_windows,
+			att_map, holiday_map, holiday_list_of, leave_windows,
 			components, groups, standalone_components, shift_cache,
 		)
 		data.append(row)
@@ -157,10 +161,10 @@ def execute_summary(filters):
 
 def _build_summary_row(
 	idx, emp, ad_start, ad_end,
-	att_map, holiday_map, leave_windows,
+	att_map, holiday_map, holiday_list_of, leave_windows,
 	components, groups, standalone_components, shift_cache,
 ):
-	emp_holidays = holiday_map.get(emp.holiday_list, {})
+	emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
 
 	# Per-component qty totals (only attendance-driven components count)
 	component_totals = {sc.name: 0.0 for sc in components}
@@ -312,10 +316,12 @@ def _bs_fy_start(ad_date):
 
 def _columns(groups, standalone_components):
 	cols = [
+		# S.N. + Employee are FROZEN by the report JS — see FROZEN_FIELDS in
+		# monthly_attendance_bs.js. They must stay contiguous and leading.
+		# Employee renders name over ID as one clickable cell; see the note on
+		# the matching column in monthly_attendance_bs.py.
 		{"label": _("S.N."), "fieldname": "sn", "fieldtype": "Int", "width": 60},
-		{"label": _("Employee Code"), "fieldname": "employee_number", "fieldtype": "Data", "width": 110},
-		{"label": _("Employee"), "fieldname": "employee", "fieldtype": "Link", "options": "Employee", "width": 130},
-		{"label": _("Name Of Staff"), "fieldname": "employee_name", "fieldtype": "Data", "width": 180},
+		{"label": _("Employee"), "fieldname": "employee", "fieldtype": "Data", "width": 190},
 		{"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 130},
 	]
 	# Grouped columns — one per Salary Component custom_summary_group value.
@@ -365,60 +371,43 @@ def _summary(data, bs_label):
 
 
 def _chart(data):
-	"""Twelve employees, charted on whichever axis the month actually has.
+	"""How the whole roster attended, as a distribution — not a ranking.
 
-	When anyone has lost or added time, that is the interesting story: late
-	minutes against overtime, worst first. Sorted rather than drawn for all
-	107 - a hundred-row chart is decoration, twelve rows is a conversation to
-	have, and OT rides alongside because the same person often appears in both.
+	This used to chart the twelve people with the most late minutes, worst
+	first, by name. Three things were wrong with that. It answered a question
+	nobody had asked of a monthly summary; it showed twelve of a hundred and
+	seven with no way to reach the rest; and a named league table of lateness
+	is a document that gets forwarded, which is not what an attendance report
+	is for.
 
-	When no one has either - a fresh month, or a site whose punches have not
-	started flowing - fall back to attendance itself. A chart that disappears
-	on some data and not other data reads as a broken report, so this always
-	renders something as long as there are employees.
+	A histogram answers what the summary is actually for — "how did the month
+	go" — and answers it for every employee at once. Most of the roster stacks
+	up on the right at a full month; anyone worth following up shows as height
+	on the left, as a count rather than a name. The grid directly below is
+	where names belong, sortable on any column.
 	"""
 	if not data:
 		return None
 
-	def short(row):
-		name = row.get("employee_name") or row.get("employee") or ""
-		return name if len(name) <= 18 else name[:17] + "\u2026"
-
-	timed = [r for r in data if flt(r.get("late_minutes")) or flt(r.get("ot_hours"))]
-	if timed:
-		ranked = sorted(
-			timed, key=lambda r: (-flt(r.get("late_minutes")), -flt(r.get("ot_hours")))
-		)[:12]
-		return {
-			"data": {
-				"labels": [short(r) for r in ranked],
-				"datasets": [
-					{"name": _("Late (min)"), "values": [flt(r.get("late_minutes")) for r in ranked]},
-					{"name": _("O.T. (hrs)"), "values": [flt(r.get("ot_hours"), 2) for r in ranked]},
-				],
-			},
-			"type": "bar",
-			"colors": ["#C4787F", "#6E93B8"],
-			"axisOptions": {"shortenYAxisNumbers": 1},
-			"height": 260,
-		}
-
-	ranked = sorted(data, key=lambda r: -flt(r.get("present_days")))[:12]
-	if not any(flt(r.get("present_days")) for r in ranked):
+	days = [round(flt(r.get("present_days"))) for r in data]
+	if not any(days):
 		return None
+
+	# One bar per whole day-count somebody actually reached, ascending. Bucketing
+	# into ranges would hide the detail most worth seeing: the gap between a full
+	# month and one day short of it.
+	counts = {}
+	for d in days:
+		counts[d] = counts.get(d, 0) + 1
+	order = sorted(counts)
+
 	return {
 		"data": {
-			"labels": [short(r) for r in ranked],
-			"datasets": [
-				{"name": _("Present Days"), "values": [flt(r.get("present_days"), 1) for r in ranked]},
-				{
-					"name": _("Worked on Holiday"),
-					"values": [flt(r.get("worked_on_holiday")) for r in ranked],
-				},
-			],
+			"labels": [str(d) for d in order],
+			"datasets": [{"name": _("Employees"), "values": [counts[d] for d in order]}],
 		},
 		"type": "bar",
-		"colors": ["#7BA88C", "#A98CC4"],
+		"colors": ["#2b8a5e"],
 		"axisOptions": {"shortenYAxisNumbers": 1},
 		"height": 260,
 	}

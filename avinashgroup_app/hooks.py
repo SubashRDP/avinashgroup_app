@@ -31,6 +31,8 @@ app_include_js = [
     # blocking "Insufficient Stock" error (that is server-side).
     "/assets/avinashgroup_app/js/suppress_negative_stock_msg.js?v=1.0",
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
+    # Shared cell renderers for the HR/payroll reports (stacked employee cell).
+    "/assets/avinashgroup_app/js/hr_report_common.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.9",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.2",

@@ -31,6 +31,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
+from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
 	get_bs_month_range,
@@ -80,9 +81,16 @@ def execute(filters=None):
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
-	holiday_map = _fetch_holidays(employees, ad_start, ad_end)
+	# Employee.holiday_list is blank for nearly everyone; the list is set on the
+	# Company and inherited. Resolve that fallback once for the whole roster.
+	holiday_list_of = resolve_holiday_lists(employees)
+	holiday_map = _fetch_holidays(holiday_list_of, ad_start, ad_end)
 	leave_map = _fetch_leaves(employees, ad_start, ad_end, company)
 	shift_cache = {}
+	# Attendance carries its own shift, but days with no Attendance row have
+	# none — so fall back to the roster rather than leaving the column blank on
+	# exactly the days someone is asking about.
+	roster = _shift_roster(employees, ad_start, ad_end)
 
 	data = []
 	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0}
@@ -104,12 +112,12 @@ def execute(filters=None):
 		date_info[ad_date] = (day_label, weekday)
 
 	for emp in employees:
-		emp_holidays = holiday_map.get(emp.holiday_list, {})
+		emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
 		for ad_date in dates:
 			day_label, weekday = date_info[ad_date]
 			row = _build_row(
 				emp, ad_date, day_label, weekday, att_map, emp_holidays, leave_map,
-				components, shift_cache,
+				components, shift_cache, roster,
 			)
 			data.append(row)
 			_accumulate(totals, row)
@@ -118,7 +126,7 @@ def execute(filters=None):
 		_columns(components),
 		data,
 		_note_html(note),
-		_chart(data),
+		_chart(data, len(employees)),
 		_summary(
 			totals["office"],
 			totals["holiday"],
@@ -267,6 +275,23 @@ def _resolve_period(filters):
 	)
 
 
+@frappe.whitelist()
+def get_ad_range(fiscal_year=None, bs_month=None, company=None):
+	"""AD dates for a BS fiscal year + month, for the filter autofill.
+
+	The report's own resolver does the work, so the dates shown in the From/To
+	filters are the exact dates the report will use — including any Nepal BS
+	Period company override, which shifts month boundaries away from the
+	calendar ones.
+	"""
+	ad_start, ad_end, label, _note = _resolve_period(
+		frappe._dict(
+			{"fiscal_year": fiscal_year, "bs_month": bs_month, "company": company}
+		)
+	)
+	return {"from_date": str(ad_start), "to_date": str(ad_end), "label": label}
+
+
 def _parse_bs_month(value):
 	"""Accept '7', 7, '07 - Kartik', 'Kartik' — return int 1-12."""
 	if value is None or value == "":
@@ -290,7 +315,7 @@ def _parse_bs_month(value):
 
 
 # ---------------------------------------------------------------------------
-# Employee fetch (honors User Permissions via frappe.get_all)
+# Employee fetch (company-scoped by User Permissions — see the note below)
 # ---------------------------------------------------------------------------
 
 def _get_employees(filters, ad_start, ad_end):
@@ -305,6 +330,14 @@ def _get_employees(filters, ad_start, ad_end):
 		emp_filters.append(["Employee", "designation", "=", filters.designation])
 	if filters.get("employee"):
 		emp_filters.append(["Employee", "name", "=", filters.employee])
+	if filters.get("shift"):
+		# Shift lives on Shift Assignment, not on the Employee: default_shift is
+		# blank for everyone here and the assignment is what auto-attendance
+		# actually reads. Resolve the roster first, then filter by name.
+		on_shift = _employees_on_shift(filters.shift, ad_start, ad_end)
+		# An empty list must still filter, or "no one on this shift" would
+		# silently return everyone.
+		emp_filters.append(["Employee", "name", "in", on_shift or [""]])
 
 	emp_filters.append(["Employee", "date_of_joining", "<=", ad_end])
 
@@ -314,10 +347,16 @@ def _get_employees(filters, ad_start, ad_end):
 		["Employee", "relieving_date", ">", ad_start],
 	]
 
-	return frappe.get_all(
+	# frappe.get_list, NOT get_all: get_all hardcodes ignore_permissions=True
+	# (frappe/__init__.py), so it returns every company's staff to anyone who
+	# can open the report. get_list applies User Permissions — Company, and
+	# also Department/Branch where those are set. limit_page_length=0 because
+	# get_list otherwise stops at 20 rows.
+	return frappe.get_list(
 		"Employee",
 		filters=emp_filters,
 		or_filters=emp_or_filters,
+		limit_page_length=0,
 		fields=[
 			"name", "employee_name", "employee_number",
 			"company", "department", "designation", "branch",
@@ -331,6 +370,55 @@ def _get_employees(filters, ad_start, ad_end):
 # ---------------------------------------------------------------------------
 # Bulk fetches
 # ---------------------------------------------------------------------------
+
+def _shift_roster(employees, ad_start, ad_end):
+	"""{employee: shift} from Shift Assignment, for days with no Attendance."""
+	emp_names = [e.name for e in employees]
+	if not emp_names:
+		return {}
+	roster = {}
+	for row in frappe.get_all(
+		"Shift Assignment",
+		filters={
+			"employee": ["in", emp_names],
+			"docstatus": 1,
+			"start_date": ["<=", ad_end],
+		},
+		or_filters=[["end_date", "is", "not set"], ["end_date", ">=", ad_start]],
+		fields=["employee", "shift_type"],
+		order_by="start_date asc",
+		limit_page_length=0,
+	):
+		roster[row.employee] = row.shift_type
+	return roster
+
+
+def _employees_on_shift(shift, ad_start, ad_end):
+	"""Employees assigned to `shift` at any point in the period.
+
+	A Shift Assignment with no end date is open-ended, so it counts as long as
+	it started on or before the period ends.
+	"""
+	rows = frappe.get_all(
+		"Shift Assignment",
+		filters={
+			"shift_type": shift,
+			"docstatus": 1,
+			"start_date": ["<=", ad_end],
+		},
+		or_filters=[
+			["end_date", "is", "not set"],
+			["end_date", ">=", ad_start],
+		],
+		pluck="employee",
+		limit_page_length=0,
+	)
+	# Employees whose default shift is this one, with no assignment at all.
+	rows += frappe.get_all(
+		"Employee", filters={"default_shift": shift}, pluck="name", limit_page_length=0
+	)
+	return list(set(rows))
+
 
 def _fetch_attendance(employees, ad_start, ad_end, company=None):
 	"""Return {(employee, date): attendance_dict}."""
@@ -362,9 +450,14 @@ def _fetch_attendance(employees, ad_start, ad_end, company=None):
 	return out
 
 
-def _fetch_holidays(employees, ad_start, ad_end):
-	"""Return {holiday_list_name: {date: {description, weekly_off}}}."""
-	lists = list({e.holiday_list for e in employees if e.holiday_list})
+def _fetch_holidays(holiday_list_of, ad_start, ad_end):
+	"""Return {holiday_list_name: {date: {description, weekly_off}}}.
+
+	Takes the resolved {employee: holiday list} map rather than the employees,
+	so the company fallback is already applied — reading Employee.holiday_list
+	here saw a blank for 106 of 107 people and loaded no holidays at all.
+	"""
+	lists = list({hl for hl in holiday_list_of.values() if hl})
 	if not lists:
 		return {}
 	rows = frappe.get_all(
@@ -437,7 +530,7 @@ def _to_seconds(val):
 
 
 
-def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, shift_cache):
+def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, shift_cache, roster=None):
 	holiday = emp_holidays.get(ad_date)
 	leave_type = leave_map.get((emp.name, ad_date))
 	att = att_map.get((emp.name, ad_date))
@@ -522,6 +615,7 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 		"day": weekday,
 		"employee": emp.name,
 		"employee_name": emp.employee_name,
+		"shift": (att.shift if att else None) or (roster or {}).get(emp.name) or emp.default_shift,
 		"department": emp.department,
 		"in_time": in_time_str,
 		"out_time": out_time_str,
@@ -595,12 +689,22 @@ def _component_fieldname(component_name):
 # ---------------------------------------------------------------------------
 
 def _columns(components):
+	# The first two columns are FROZEN by the report JS (FROZEN_FIELDS in
+	# monthly_attendance_bs.js) so they stay on screen while the rest scrolls.
+	# Freezing needs them contiguous and leading, which is why AD Date sits
+	# third: the grid is read in BS, so AD Date is allowed to scroll away rather
+	# than spend 100px of the frozen block. Reordering the first two breaks the
+	# freeze silently.
 	base = [
 		{"label": _("BS Date"), "fieldname": "bs_date", "fieldtype": "Data", "width": 110},
+		# Name over ID in one cell, the whole cell a link to the Employee. Data,
+		# not Link: a Link fieldtype renders its own anchor around the ID alone,
+		# and we need the anchor to wrap both lines. The JS formatter builds it
+		# from `employee` + `employee_name`, both of which stay on every row.
+		{"label": _("Employee"), "fieldname": "employee", "fieldtype": "Data", "width": 190},
 		{"label": _("AD Date"), "fieldname": "ad_date", "fieldtype": "Date", "width": 100},
 		{"label": _("Day"), "fieldname": "day", "fieldtype": "Data", "width": 60},
-		{"label": _("Employee"), "fieldname": "employee", "fieldtype": "Link", "options": "Employee", "width": 130},
-		{"label": _("Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 150},
+		{"label": _("Shift"), "fieldname": "shift", "fieldtype": "Link", "options": "Shift Type", "width": 120},
 		{"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 130},
 		{"label": _("IN"), "fieldname": "in_time", "fieldtype": "Data", "width": 85},
 		{"label": _("OUT"), "fieldname": "out_time", "fieldtype": "Data", "width": 85},
@@ -637,54 +741,107 @@ def _summary(office_days, holiday_days, total_worked, leave_days, late_min, bs_l
 	]
 
 
-def _chart(rows):
-	"""Attendance mix per day, in BS date order.
+def _chart(rows, employee_count=None):
+	"""One chart, two stories — which one depends on how many people are shown.
 
-	The grid answers "what did this person do"; the chart answers "what did
-	this day look like" — a spike of Absent on one date reads instantly here
-	and is invisible in three thousand rows.
+	For a whole roster the question is "what did this DAY look like": a stacked
+	mix of Present / Half Day / Leave / Absent, where a spike of red on one date
+	reads instantly and is invisible in three thousand grid rows.
+
+	For a single employee that same chart is 31 bars all exactly one unit tall,
+	whose only information is colour, on a y-axis reading 0 / 0.5 / 1. So for one
+	person it plots HOURS WORKED instead: the shape of their month, with short
+	days and absences visible as dips rather than as a colour you have to decode
+	against a legend.
+
+	Labels are the BS day number alone. "01 Shrawan" repeated 31 times does not
+	fit the axis and renders as "0 ...", and the month is already named in the
+	BS Period tile directly above the chart.
 	"""
 	if not rows:
 		return None
 
-	order = []
-	by_day = {}
+	day_label = lambda r: (r.get("bs_date") or "").split(" ")[0]
+
+	if employee_count == 1:
+		return _hours_chart(rows, day_label)
+	return _status_mix_chart(rows, day_label)
+
+
+def _hours_chart(rows, day_label):
+	"""Hours worked per day for one employee."""
+	labels, hours = [], []
 	for r in rows:
-		label = r.get("bs_date")
+		label = day_label(r)
 		if not label:
 			continue
-		if label not in by_day:
-			by_day[label] = {"Present": 0, "Half Day": 0, "Absent": 0, "On Leave": 0}
-			order.append(label)
-		bucket = by_day[label]
-		status = r.get("status")
-		if status in bucket:
-			bucket[status] += 1
-		elif status == "Work From Home":
-			bucket["Present"] += 1
+		labels.append(label)
+		# working_hours is preformatted "HH:MM" for the grid; parse it back so
+		# the axis is in decimal hours rather than a string.
+		raw = r.get("working_hours") or ""
+		if ":" in str(raw):
+			h, m = str(raw).split(":")[:2]
+			hours.append(round(int(h) + int(m) / 60.0, 2))
+		else:
+			hours.append(flt(raw))
 
-	if not order:
-		return None
-
-	# Every bucket empty means the month has no marked attendance at all. Drawing
-	# 31 flat bars states nothing and reads as a broken chart; the Summary view
-	# already returns None in that case, and the two should agree.
-	if not any(sum(by_day[d].values()) for d in order):
+	if not any(hours):
 		return None
 
 	return {
-		"data": {
-			"labels": order,
-			"datasets": [
-				{"name": _("Present"), "values": [by_day[d]["Present"] for d in order]},
-				{"name": _("Half Day"), "values": [by_day[d]["Half Day"] for d in order]},
-				{"name": _("On Leave"), "values": [by_day[d]["On Leave"] for d in order]},
-				{"name": _("Absent"), "values": [by_day[d]["Absent"] for d in order]},
-			],
-		},
+		"data": {"labels": labels, "datasets": [{"name": _("Hours Worked"), "values": hours}]},
+		"type": "bar",
+		"colors": ["#2b8a5e"],
+		"axisOptions": {"xIsSeries": 1},
+		"height": 260,
+	}
+
+
+def _status_mix_chart(rows, day_label):
+	"""Stacked Present / Half Day / Leave / Absent / Holiday per day."""
+	# Holiday is a bucket, not a gap: without it a Saturday drew nothing and the
+	# chart read as missing data rather than as a day nobody was meant to work.
+	BUCKETS = (
+		(_("Present"), "#2b8a5e"),
+		(_("Half Day"), "#c98a12"),
+		(_("On Leave"), "#4b7bb5"),
+		(_("Absent"), "#c0453a"),
+		(_("Holiday"), "#c9c4bd"),
+	)
+	names = [n for n, _c in BUCKETS]
+
+	order, by_day = [], {}
+	for r in rows:
+		label = day_label(r)
+		if not label:
+			continue
+		if label not in by_day:
+			by_day[label] = dict.fromkeys(names, 0)
+			order.append(label)
+		bucket = by_day[label]
+		status = (r.get("status") or "").split(" (")[0]
+		if status in bucket:
+			bucket[status] += 1
+		elif status == "Work From Home":
+			bucket[_("Present")] += 1
+
+	if not order or not any(sum(by_day[d].values()) for d in order):
+		return None
+
+	# Drop buckets nothing landed in, so the legend names what actually happened
+	# instead of listing every status the report knows about.
+	datasets, colors = [], []
+	for name, color in BUCKETS:
+		values = [by_day[d][name] for d in order]
+		if any(values):
+			datasets.append({"name": name, "values": values})
+			colors.append(color)
+
+	return {
+		"data": {"labels": order, "datasets": datasets},
 		"type": "bar",
 		"barOptions": {"stacked": 1},
-		"colors": ["#2b8a5e", "#c98a12", "#4b7bb5", "#c0453a"],
+		"colors": colors,
 		"axisOptions": {"xIsSeries": 1, "shortenYAxisNumbers": 1},
 		"height": 260,
 	}

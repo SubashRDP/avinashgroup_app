@@ -51,6 +51,8 @@ def execute(filters=None):
 			"sno": idx,
 			"employee": emp.name,
 			"employee_name": emp.employee_name,
+			# Not a column any more — the employee ID is the second line of the
+			# Employee cell. Kept on the row so restoring it is one line.
 			"code": emp.employee_number or "",
 			"department": emp.department or "",
 		}
@@ -114,11 +116,17 @@ def _get_employees(filters):
 		emp_filters["branch"] = filters.branch
 	if filters.get("employee"):
 		emp_filters["name"] = filters.employee
-	return frappe.get_all(
+	# frappe.get_list, NOT get_all: get_all hardcodes ignore_permissions=True
+	# (frappe/__init__.py), so it returns every company's staff to anyone who
+	# can open the report. get_list applies User Permissions — Company, and
+	# also Department/Branch where those are set. limit_page_length=0 because
+	# get_list otherwise stops at 20 rows.
+	return frappe.get_list(
 		"Employee",
 		filters=emp_filters,
 		fields=["name", "employee_name", "employee_number", "department", "company"],
 		order_by="employee_name asc",
+		limit_page_length=0,
 	)
 
 
@@ -252,11 +260,13 @@ def _month_field(bs_month):
 def _columns():
 	cols = [
 		{"label": _("S.No."), "fieldname": "sno", "fieldtype": "Int", "width": 60},
-		{"label": _("Employee"), "fieldname": "employee", "fieldtype": "Link",
-		 "options": "Employee", "width": 130},
-		{"label": _("Name Of Staff"), "fieldname": "employee_name",
-		 "fieldtype": "Data", "width": 200},
-		{"label": _("Code"), "fieldname": "code", "fieldtype": "Data", "width": 80},
+		# One column, not two: a Link to Employee renders "NGI-EMP-00015: Name"
+		# on a single line and clips at any usable width, and Name Of Staff
+		# then repeated the same name beside it. The report JS stacks name over
+		# ID in one clickable cell. Data, not Link — a Link fieldtype draws its
+		# own anchor around the ID alone and fights the wrapping one.
+		{"label": _("Name Of Staff"), "fieldname": "employee",
+		 "fieldtype": "Data", "width": 210},
 		{"label": _("Department"), "fieldname": "department", "fieldtype": "Link",
 		 "options": "Department", "width": 140},
 	]

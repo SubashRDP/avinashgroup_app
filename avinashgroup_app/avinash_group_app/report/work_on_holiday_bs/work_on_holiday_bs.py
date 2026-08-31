@@ -89,9 +89,15 @@ def _get_employees(filters):
 		emp_filters["custom_ot_eligibility"] = 1
 	# "All" → no filter added (matches the Excel "Work On Holiday" sheet, which lists every staff member)
 
-	return frappe.get_all(
+	# frappe.get_list, NOT get_all: get_all hardcodes ignore_permissions=True
+	# (frappe/__init__.py), so it returns every company's staff to anyone who
+	# can open the report. get_list applies User Permissions — Company, and
+	# also Department/Branch where those are set. limit_page_length=0 because
+	# get_list otherwise stops at 20 rows.
+	return frappe.get_list(
 		"Employee",
 		filters=emp_filters,
+		limit_page_length=0,
 		fields=[
 			"name",
 			"employee_name",

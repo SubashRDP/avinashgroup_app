@@ -1,5 +1,8 @@
 
 
+const REPORT_MODULE =
+	"avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_attendance_bs";
+
 frappe.query_reports["Monthly Attendance BS"] = {
 	onload: async function (report) {
 		_apply_theme(report);
@@ -58,12 +61,22 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			fieldname: "from_date",
 			label: __("From Date (AD)"),
 			fieldtype: "Date",
-			description: __("Only used when Fiscal Year + BS Month are cleared"),
+			description: __("Filled from the BS Month. Edit to use an AD range instead."),
 		},
 		{
 			fieldname: "to_date",
 			label: __("To Date (AD)"),
 			fieldtype: "Date",
+		},
+		{
+			fieldname: "shift",
+			label: __("Shift"),
+			fieldtype: "Link",
+			options: "Shift Type",
+			get_query: function () {
+				const company = frappe.query_report.get_filter_value("company");
+				return company ? { filters: { custom_company: company } } : {};
+			},
 		},
 		{
 			fieldname: "department",
@@ -111,6 +124,12 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		if (!data) return value;
 
 		const f = column.fieldname;
+
+		// Name over ID in one clickable cell — see NepalHR.employeeCell.
+		if (f === "employee") {
+			const cell = window.NepalHR && window.NepalHR.employeeCell(data);
+			if (cell) return cell;
+		}
 
 		// --- shared: a zero in an exception column is good news, so mute it ---
 		const muteZero = (v) =>
@@ -194,6 +213,19 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		});
 	},
 
+	after_datatable_render(datatable) {
+		// The datatable is still settling its column widths when this fires —
+		// measuring now reads the pre-layout numbers and the frozen block ends
+		// up offset from the body on the first render, then corrects itself on
+		// any later one. Measure after the browser has laid the grid out, and
+		// again once more in case a web font or scrollbar shifts it.
+		requestAnimationFrame(() => {
+			_freeze_leading_columns(datatable);
+			setTimeout(() => _freeze_leading_columns(datatable), 120);
+		});
+		_bind_arrow_key_scrolling(datatable);
+	},
+
 };
 
 async function _init_default_fiscal_year(report) {
@@ -210,64 +242,76 @@ async function _init_default_fiscal_year(report) {
 }
 
 function _setup_fiscal_year_visibility(report) {
-	// BS mode (fiscal_year + bs_month) and AD mode (from_date + to_date) are
-	// mutually exclusive — populating one mode nulls out the other.
-	let _syncing = false;
+	// BS month and AD range are two views of the same period, not two modes.
+	// Picking a BS month used to CLEAR the AD dates and hide both fields, so
+	// there was no way to see which English dates a Nepali month covered.
+	// Now the BS pair fills the AD dates in and leaves them visible; typing an
+	// AD date instead clears the BS pair, so whichever was touched last wins.
+	//
+	// The dates come from the server's own resolver rather than being derived
+	// here, so the filters show exactly what the report will use — including a
+	// Nepal BS Period company override, which can move a month boundary off
+	// the calendar one.
+	//
+	// Echo detection, not a busy flag: filter changes arrive through a 100ms
+	// debounce, so a synchronous "we are writing" flag is already false by the
+	// time our own write comes back — and the handler then read the autofilled
+	// date as a hand-typed one and cleared the month the user had just picked.
+	// Remembering what we wrote survives the gap; a flag cannot.
+	let written = { from_date: null, to_date: null };
 
-	const clearFilters = (fieldnames) => {
-		fieldnames.forEach((fn) => {
-			if (frappe.query_report.get_filter_value(fn)) {
-				frappe.query_report.set_filter_value(fn, "");
-			}
+	const value = (fn) => frappe.query_report.get_filter_value(fn);
+
+	const fillDatesFromBS = () => {
+		const fiscal_year = value("fiscal_year");
+		const bs_month = value("bs_month");
+		if (!fiscal_year || !bs_month) return;
+
+		frappe.call({
+			method: REPORT_MODULE + ".get_ad_range",
+			args: { fiscal_year, bs_month, company: value("company") },
+			callback: (r) => {
+				if (!r.message) return;
+				// Still the same month by the time the call came back?
+				if (value("fiscal_year") !== fiscal_year || value("bs_month") !== bs_month) return;
+
+				written = { from_date: r.message.from_date, to_date: r.message.to_date };
+				// One object, one refresh — set_filter_value suppresses the
+				// reload until the last key, so the report does not run twice.
+				frappe.query_report.set_filter_value(written);
+			},
 		});
 	};
 
-	const enforceExclusivity = (changedField) => {
-		if (_syncing) return;
-		_syncing = true;
-		try {
-			if (changedField === "fiscal_year" || changedField === "bs_month") {
-				// Picking a BS field clears the AD date range.
-				if (frappe.query_report.get_filter_value(changedField)) {
-					clearFilters(["from_date", "to_date"]);
-				}
-			} else if (changedField === "from_date" || changedField === "to_date") {
-				// Picking an AD date clears the BS fiscal year + month.
-				if (frappe.query_report.get_filter_value(changedField)) {
-					clearFilters(["fiscal_year", "bs_month"]);
-				}
-			}
-		} finally {
-			_syncing = false;
+	const onFilterChange = (changed) => {
+		if (changed === "fiscal_year" || changed === "bs_month" || changed === "company") {
+			fillDatesFromBS();
+			return;
+		}
+
+		if (changed === "from_date" || changed === "to_date") {
+			// Our own autofill echoing back — leave the BS pair alone.
+			if (value(changed) === written[changed]) return;
+
+			// A hand-typed AD date means an explicit range: drop the BS pair,
+			// which the server checks first and would otherwise prefer.
+			written = { from_date: null, to_date: null };
+			["fiscal_year", "bs_month"].forEach((fn) => {
+				if (value(fn)) frappe.query_report.set_filter_value(fn, "");
+			});
 		}
 	};
 
-	const updateADVisibility = () => {
-		const hasFY = frappe.query_report.get_filter_value("fiscal_year");
-		const hasBSMonth = frappe.query_report.get_filter_value("bs_month");
-		const useAD = !hasFY || !hasBSMonth;
+	fillDatesFromBS();
 
-		const $fromDate = $(`.frappe-control[data-fieldname="from_date"]`);
-		const $toDate = $(`.frappe-control[data-fieldname="to_date"]`);
-
-		if (useAD) {
-			$fromDate.show().removeClass("hide");
-			$toDate.show().removeClass("hide");
-		} else {
-			$fromDate.hide().addClass("hide");
-			$toDate.hide().addClass("hide");
+	frappe.query_report.page.wrapper.on(
+		"change",
+		".report-filters input, .report-filters select",
+		(e) => {
+			const changed = $(e.target).closest(".frappe-control").attr("data-fieldname");
+			setTimeout(() => onFilterChange(changed), 100);
 		}
-	};
-
-	updateADVisibility();
-
-	frappe.query_report.page.wrapper.on("change", ".report-filters input, .report-filters select", (e) => {
-		const changedField = $(e.target).closest(".frappe-control").attr("data-fieldname");
-		setTimeout(() => {
-			enforceExclusivity(changedField);
-			updateADVisibility();
-		}, 100);
-	});
+	);
 }
 
 function _make_full_width(report) {
@@ -391,4 +435,320 @@ function _apply_theme(report) {
 
 	const wrapper = report && report.page ? report.page.wrapper : null;
 	if (wrapper) $(wrapper).addClass("nepal-attendance-report");
+}
+
+// ---------------------------------------------------------------------------
+// Frozen leading columns + keyboard scrolling
+// ---------------------------------------------------------------------------
+//
+// This grid is much wider than any screen: 14 fixed columns plus one per
+// attendance-driven Salary Component. Scrolling right used to carry the date
+// and the employee's name off-screen, leaving a wall of numbers with nothing
+// identifying the row.
+//
+// frappe-datatable 1.19.0 has no frozen-column option, so we add one:
+//
+//   body   — `position: sticky` on the leading cells. The scroll container
+//            (.dt-scrollable) has no transformed ancestor, so sticky behaves.
+//
+//   header — sticky does NOT work there. The datatable scrolls its header by
+//            putting `transform: translateX(-scrollLeft)` on .dt-header
+//            (Style.js), and a transformed ancestor becomes the containing
+//            block for sticky, so the cells would ride along with it. Instead
+//            we counter-translate the frozen header cells by +scrollLeft on
+//            every scroll frame, which cancels the parent's transform exactly.
+//            .dt-footer (the total row) is translated the same way and gets
+//            the same treatment.
+//
+// The frozen set must be CONTIGUOUS AND LEADING — sticky offsets are
+// cumulative, and a gap in the middle renders as a floating island. The Python
+// column order is arranged for this and says so in a comment; if the freeze
+// silently stops working, a reordered column is the first thing to check.
+
+
+// Fields that identify a row. Whichever of these the grid actually renders as a
+// LEADING, CONTIGUOUS block get frozen.
+//
+// Derived from the rendered columns rather than from the View filter: the
+// filter value flips before the datatable re-renders, so reading it here means
+// asking for Detail's columns while Summary's are still on screen. The lookup
+// then fails, the function bails, and the previous view's offsets and
+// transforms are left behind — which is what made switching views unstable.
+// Reading what is on screen cannot desync.
+const ANCHOR_FIELDS = new Set([
+	"bs_date", // Detail
+	"sn", // Summary
+	"employee", // both
+]);
+
+// The datatable prepends its own serial-number column (serialNoColumn defaults
+// to on). It is always leftmost, so it freezes with the rest.
+const SERIAL_COLUMN_ID = "_rowIndex";
+
+const FREEZE_STYLE_ID = "nepal-attendance-freeze";
+
+// Listeners this report owns. The datatable is refreshed or rebuilt on every
+// run, so each render must replace its predecessor's handlers rather than stack
+// another copy on top — otherwise one scroll fires N transform passes.
+const state = { scroll: null, resize: null, keys: null };
+
+function _teardown(off) {
+	if (typeof off === "function") off();
+}
+
+function _scrollable(datatable) {
+	return datatable && datatable.wrapper
+		? datatable.wrapper.querySelector(".dt-scrollable")
+		: null;
+}
+
+// Cells carry an inline transform from the counter-translate below. Anything
+// left over from a previous render would hold a column visibly out of place, so
+// every path through the freeze clears them before deciding what to pin.
+function _clear_pinned_transforms(datatable) {
+	if (!datatable || !datatable.wrapper) return;
+	for (const cell of datatable.wrapper.querySelectorAll(
+		".dt-header .dt-cell[style*='transform'], .dt-footer .dt-cell[style*='transform']"
+	)) {
+		cell.style.transform = "";
+	}
+}
+
+function _leading_anchor_columns(datatable) {
+	const columns = (datatable.datamanager && datatable.datamanager.columns) || [];
+	const byIndex = [...columns].sort((a, b) => a.colIndex - b.colIndex);
+
+	const frozen = [];
+	for (const col of byIndex) {
+		const key = col.id || col.fieldname;
+		const isAnchor = key === SERIAL_COLUMN_ID || ANCHOR_FIELDS.has(key);
+		// Stop at the first column that is not an anchor: the block has to be
+		// contiguous from the left, because sticky offsets are cumulative and a
+		// gap in the middle renders as a floating island.
+		if (!isAnchor) break;
+		frozen.push(col);
+	}
+	return frozen;
+}
+
+function _freeze_leading_columns(datatable) {
+	if (!datatable || !datatable.wrapper) return;
+	if (!document.body.contains(datatable.wrapper)) return;
+
+	_clear_pinned_transforms(datatable);
+
+	const frozen = _leading_anchor_columns(datatable);
+	if (!frozen.length) {
+		$(`#${FREEZE_STYLE_ID}`).remove();
+		return;
+	}
+
+	// Measure the RENDERED header cell rather than trusting col.width: the
+	// datatable runs layout:"fixed" and rescales declared widths to fill the
+	// container, so the declared number is not what ends up on screen.
+	const measure = (col) => {
+		const cell = datatable.wrapper.querySelector(`.dt-header .dt-cell--col-${col.colIndex}`);
+		return cell ? Math.round(cell.getBoundingClientRect().width) : col.width || 0;
+	};
+
+	const rules = [];
+	let left = 0;
+
+	frozen.forEach((col, i) => {
+		const n = col.colIndex;
+		const last = i === frozen.length - 1;
+
+		rules.push(`
+			.nepal-attendance-report .dt-cell--col-${n} {
+				position: sticky;
+				left: ${left}px;
+				z-index: 2;
+				background-color: var(--dt-cell-bg, #fff);
+			}
+			.nepal-attendance-report .dt-cell--header.dt-cell--col-${n} {
+				z-index: 4;
+				background-color: var(--dt-header-cell-bg, #fff);
+			}
+			.nepal-attendance-report .dt-row--highlight .dt-cell--col-${n} {
+				background-color: var(--dt-selection-highlight-color, #fffce7);
+			}
+		`);
+
+		// Body cells only for the stacked Employee cell. The header and the
+		// inline-filter row share this column index, and stripping their padding
+		// knocks the header label out of line with everything beside it.
+		if ((col.id || col.fieldname) === "employee") {
+			rules.push(`
+				.nepal-attendance-report .dt-row .dt-cell--col-${n}:not(.dt-cell--header) .dt-cell__content {
+					padding: 0;
+					white-space: normal;
+				}
+			`);
+		}
+
+		if (last) {
+			// One firm edge where the frozen block ends, and a shadow that only
+			// appears once something has actually scrolled under it.
+			rules.push(`
+				.nepal-attendance-report .dt-cell--col-${n}::after {
+					content: "";
+					position: absolute;
+					top: 0; right: -1px; bottom: 0;
+					width: 1px;
+					background: var(--dt-border-color, #d1d8dd);
+				}
+				.nepal-attendance-report.is-scrolled-x .dt-cell--col-${n} {
+					box-shadow: 3px 0 6px -3px rgba(0, 0, 0, 0.18);
+				}
+			`);
+		}
+
+		left += measure(col);
+	});
+
+	$(`#${FREEZE_STYLE_ID}`).remove();
+	$(`<style id="${FREEZE_STYLE_ID}">${rules.join("\n")}</style>`).appendTo("head");
+
+	_sync_frozen_header(datatable, frozen);
+	_watch_resize(datatable);
+}
+
+function _sync_frozen_header(datatable, frozen) {
+	const scrollable = _scrollable(datatable);
+	if (!scrollable) return;
+
+	// Resolved per frame, NOT cached. datatable.refresh() rebuilds these nodes,
+	// and a cached list from the previous render points at detached elements
+	// that then never move — the header drifting away from the body.
+	const selector = frozen
+		.flatMap((col) => [
+			`.dt-header .dt-cell--col-${col.colIndex}`,
+			`.dt-footer .dt-cell--col-${col.colIndex}`,
+		])
+		.join(", ");
+
+	const $wrapper = $(datatable.wrapper).closest(".nepal-attendance-report");
+	let ticking = false;
+	let wasScrolled = null;
+
+	const apply = () => {
+		ticking = false;
+		if (!document.body.contains(scrollable)) return;
+
+		const x = scrollable.scrollLeft;
+		// Cancel .dt-header's translateX(-scrollLeft) so these cells hold still.
+		for (const cell of datatable.wrapper.querySelectorAll(selector)) {
+			cell.style.transform = `translateX(${x}px)`;
+		}
+
+		// Only touch the class when the state flips — this runs on every frame
+		// while the scrollbar is being dragged.
+		const isScrolled = x > 0;
+		if (isScrolled !== wasScrolled) {
+			$wrapper.toggleClass("is-scrolled-x", isScrolled);
+			wasScrolled = isScrolled;
+		}
+	};
+
+	_teardown(state.scroll);
+	const onScroll = () => {
+		if (ticking) return;
+		ticking = true;
+		requestAnimationFrame(apply);
+	};
+	scrollable.addEventListener("scroll", onScroll, { passive: true });
+	state.scroll = () => scrollable.removeEventListener("scroll", onScroll);
+
+	apply();
+}
+
+// layout:"fixed" rescales every column when the window changes size, which
+// invalidates the offsets baked into the stylesheet. Recompute, debounced.
+const RESIZE_DEBOUNCE_MS = 150;
+
+function _watch_resize(datatable) {
+	_teardown(state.resize);
+
+	let timer;
+	const onResize = () => {
+		clearTimeout(timer);
+		timer = setTimeout(() => _freeze_leading_columns(datatable), RESIZE_DEBOUNCE_MS);
+	};
+	window.addEventListener("resize", onResize);
+	state.resize = () => {
+		clearTimeout(timer);
+		window.removeEventListener("resize", onResize);
+	};
+}
+
+// --- keyboard -------------------------------------------------------------
+//
+// frappe-datatable binds the arrow keys, but only to move an already-focused
+// cell. With nothing focused — the normal state after a report runs — they did
+// nothing at all, and .dt-scrollable only answers the browser's own scrolling
+// when it happens to be hovered or focused. So the grid was mouse-only. This
+// scrolls it directly, in both axes.
+
+// One horizontal press moves about one data column. The grid's data columns run
+// 60-190px wide; 220px clears a whole one every time without overshooting so
+// far that the eye loses its place.
+const ARROW_STEP_PX = 220;
+
+// A screenful, less a sliver of overlap so nothing is skipped between presses.
+const ARROW_PAGE_FRACTION = 0.9;
+
+// Fallback row height for the vertical step; the live value comes from the
+// datatable's own cellHeight option, which this report raises to 42.
+const DEFAULT_ROW_HEIGHT_PX = 42;
+
+const EDITABLE = "input, textarea, select, [contenteditable='true']";
+
+const ARROW_AXES = {
+	ArrowLeft: ["left", -1],
+	ArrowRight: ["left", 1],
+	ArrowUp: ["top", -1],
+	ArrowDown: ["top", 1],
+};
+
+function _bind_arrow_key_scrolling(datatable) {
+	const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+	const handler = (e) => {
+		const axis = ARROW_AXES[e.key];
+		if (!axis) return;
+		if (e.altKey || e.ctrlKey || e.metaKey) return;
+
+		// Someone is typing, or a dialog is up.
+		if (e.target.closest && e.target.closest(EDITABLE)) return;
+		if (document.querySelector(".modal.show")) return;
+
+		// Resolved per keypress, never captured: datatable.refresh() replaces
+		// .dt-scrollable, and a handler holding the old node would scroll an
+		// element that is no longer on the page — the arrow keys going dead
+		// after a view switch.
+		const scrollable = _scrollable(datatable);
+		if (!scrollable || !document.body.contains(scrollable)) {
+			_teardown(state.keys);
+			state.keys = null;
+			return;
+		}
+
+		// A focused cell means the datatable's own navigation is in play; it
+		// scrolls the grid itself, and both of us moving would double the step.
+		if (datatable.wrapper.querySelector(".dt-cell--focus")) return;
+
+		const [edge, direction] = axis;
+		const page = edge === "left" ? scrollable.clientWidth : scrollable.clientHeight;
+		const stride = edge === "left" ? ARROW_STEP_PX : datatable.options?.cellHeight || DEFAULT_ROW_HEIGHT_PX;
+
+		scrollable.scrollBy({
+			[edge]: (e.shiftKey ? page * ARROW_PAGE_FRACTION : stride) * direction,
+			behavior: smooth ? "smooth" : "auto",
+		});
+		e.preventDefault();
+	};
+
+	_teardown(state.keys);
+	document.addEventListener("keydown", handler);
+	state.keys = () => document.removeEventListener("keydown", handler);
 }
