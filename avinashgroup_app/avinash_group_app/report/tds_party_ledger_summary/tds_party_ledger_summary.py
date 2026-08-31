@@ -1,7 +1,7 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
-"""TDS Sub Ledger Summary — a party-wise sub ledger of the TDS accounts.
+"""TDS Party Ledger Summary — a party-wise sub ledger of the TDS accounts.
 
 Ported from the legacy "Normal Sub Ledger - Summary" (GL P03, Tax Deduction at
 Source). Same arithmetic as ERPNext's "Trial Balance for Party":

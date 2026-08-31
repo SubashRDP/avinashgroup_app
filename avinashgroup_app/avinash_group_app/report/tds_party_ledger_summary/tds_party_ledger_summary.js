@@ -1,7 +1,7 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
-frappe.query_reports["TDS Sub Ledger Summary"] = {
+frappe.query_reports["TDS Party Ledger Summary"] = {
 	filters: [
 		{
 			fieldname: "company",
