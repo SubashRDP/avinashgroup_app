@@ -739,6 +739,16 @@ function update_total_amount_preview(frm) {
     frm.refresh_field('custom_expected_grand_total');
 
     sync_pos_payment_amount(frm);
+
+    // The credit strip prices this invoice from the field just assigned above.
+    // The `grand_total` field trigger cannot do this job before save: nothing
+    // writes grand_total client-side, and this preview is assigned directly
+    // rather than through set_value (so the form is not marked dirty), so no
+    // field event fires at all. Without this call the strip keeps whatever it
+    // showed when the customer was picked, however much the operator types.
+    // render_credit_banner swallows its own errors, so this cannot break the
+    // totals chain it is being called from.
+    render_credit_banner(frm);
 }
 
 /**
@@ -1013,10 +1023,11 @@ function credit_tile(label, value, sub, breached) {
 // anyone typing quickly.
 function credit_placeholder_tiles() {
     return [
-        credit_tile("Customer owes", CREDIT_DASH, "", false),
-        credit_tile("Can still bill", CREDIT_DASH, "", false),
-        credit_tile("Unpaid bills", CREDIT_DASH, "", false),
-        credit_tile("Oldest unpaid bill", CREDIT_DASH, "", false)
+        credit_tile("Delivery Order", CREDIT_DASH, "", false),
+        credit_tile("Outstanding", CREDIT_DASH, "", false),
+        credit_tile("Total", CREDIT_DASH, "", false),
+        credit_tile("Credit Limit", CREDIT_DASH, "", false),
+        credit_tile("Days Limit", CREDIT_DASH, "", false)
     ].join("");
 }
 
@@ -1082,7 +1093,56 @@ function fetch_credit_banner(frm) {
     });
 }
 
+// The figure the amount check must be tested against.
+//
+// grand_total is 0 on an unsaved invoice: the VAT and excise rows are only
+// appended to the taxes table on the SERVER (salesinvoice_taxes), so before
+// save the form carries no grand total at all. Reading it here priced the sale
+// being rung up at Rs 0.00, which made Total = Outstanding, which made the
+// strip print "Credit OK — can still bill Rs 108.15" for a Rs 2,060 invoice
+// against a Rs 1,455 limit. The save then threw. The strip has to agree with
+// the server or it is worse than absent.
+//
+// custom_expected_grand_total is the same preview the Totals section shows —
+// what grand_total WILL be after save. Fall back to grand_total for a saved or
+// submitted invoice, where the real figure exists and the preview may not have
+// been recomputed yet.
+function credit_invoice_amount(frm) {
+    return flt(frm.doc.custom_expected_grand_total) || flt(frm.doc.grand_total);
+}
+
+// The banner is decoration; the form is not. render_credit_banner runs inside
+// the refresh, customer, grand_total and posting_date handler chains, and on
+// grand_total it is the ONLY statement -- so an exception escaping it does not
+// merely lose the strip, it interrupts the trigger and takes ERPNext's own
+// handlers down with it while a counter clerk is mid-invoice.
+//
+// Nothing below is expected to throw. This exists because the cost of being
+// wrong about that is a till that has stopped, twenty minutes from anyone who
+// can read a stack trace. A failure degrades to the placeholder row, which says
+// in words that the figures are missing -- never a strip of stale or invented
+// numbers, which is worse than none.
 function render_credit_banner(frm) {
+    try {
+        build_credit_banner(frm);
+    } catch (e) {
+        console.error("Credit banner failed to render", e);
+        try {
+            frm.dashboard.clear_headline();
+            if (frm.doc.docstatus === 0) {
+                set_credit_banner(
+                    frm,
+                    "Credit position unavailable — the limits still apply on save",
+                    "muted", credit_placeholder_tiles());
+            }
+        } catch (_) {
+            // The dashboard itself is gone. There is nothing left to draw on
+            // and nothing worth throwing over.
+        }
+    }
+}
+
+function build_credit_banner(frm) {
     // Clear before rendering so overlapping fetch_credit_banner calls
     // (customer + posting_date can both fire it in quick succession) never
     // stack multiple banner divs on top of each other.
@@ -1122,7 +1182,7 @@ function render_credit_banner(frm) {
     // p.exposure is outstanding MINUS whatever advance the bills did not use,
     // so it goes negative for a prepaid customer. The limit is headroom on top
     // of that, which is why available_credit can exceed the limit itself.
-    const projected = flt(p.exposure) + flt(frm.doc.grand_total);
+    const projected = flt(p.exposure) + credit_invoice_amount(frm);
 
     // The server evaluates count and days on its own; only the amount check
     // depends on grand_total, so that one is recomputed here as the user types
@@ -1149,38 +1209,110 @@ function render_credit_banner(frm) {
 
     const tiles = [];
 
-    // What the customer owes. p.exposure, not p.outstanding or
-    // p.gross_outstanding: it is the exact quantity the amount limit is tested
-    // against (see `projected`), and FIFO leaves leftover_advance at 0 whenever
-    // any bill is uncovered, so it equals p.outstanding for everyone who
-    // actually owes money. It only differs for a prepaid customer, where it
-    // correctly goes negative.
+    // ---- The four lines the counter already knows -------------------------
+    // Delivery Order / Outstanding / Total / Credit Limit are the labels from
+    // the system this one replaced, kept verbatim. The staff reading this strip
+    // have twenty and thirty years on those four words; a better name they have
+    // to learn is worse than an odd name they already read without thinking.
+    //
+    // They are not just borrowed labels — their arithmetic IS the amount check,
+    // which is what lets the row be read as a verdict rather than as figures:
+    //
+    //     Delivery Order + Outstanding = Total,  blocked when Total > Credit Limit
+    //
+    // Every term is already on the form or in the payload, so the row recomputes
+    // as the operator types instead of costing a round trip per keystroke.
+
+    // "Delivery Order" is this invoice — the sale being rung up right now. The
+    // old system meant goods committed but not yet billed; with no Sales Orders
+    // or Delivery Notes raised here (16 orders against 290k invoices) that
+    // reading would print 0.00 forever, and the invoice on screen is the one
+    // figure the label can carry that anybody needs.
+    tiles.push(credit_tile(
+        "Delivery Order", rs(credit_invoice_amount(frm)),
+        "this invoice", false));
+
+    // p.exposure, not p.outstanding or p.gross_outstanding: it is the exact
+    // quantity the amount limit is tested against (see `projected`), and FIFO
+    // leaves leftover_advance at 0 whenever any bill is uncovered, so it equals
+    // p.outstanding for everyone who actually owes money. It differs only for a
+    // prepaid customer, where it correctly goes negative.
     //
     // gross_outstanding would be wrong here: _unpaid_after_advance filters
     // is_return = 0, so it counts no credit notes and would tell a customer who
     // returned goods they owe more than they do.
     //
-    // Floored at 0 rather than flipping to an "Advance balance" label: the tile
-    // keeps the same heading on every invoice, so an operator scanning the row
-    // reads one column and not two. A prepaid customer's advance is not lost
-    // from the screen — it moves to the "Can still bill" tile's small print.
-    const owed = Math.max(0, flt(p.exposure));
+    // Shown SIGNED — negative for a customer in credit — because that is what
+    // the old panel showed under this word and what the staff expect it to
+    // mean. It used to be floored at 0 under a "Customer owes" heading, which
+    // that label required and this one forbids. The minus sign is never the
+    // only signal: the small print says "in credit" in words.
+    const outstanding = flt(p.exposure);
     tiles.push(credit_tile(
-        "Customer owes", rs(owed),
-        flt(p.je_debit) ? `includes ${rs(p.je_debit)} journal debit` : "",
+        "Outstanding", rs(outstanding),
+        flt(p.je_debit) ? `includes ${rs(p.je_debit)} journal debit`
+                        : (outstanding < 0 ? "in credit" : ""),
         false));
+
+    // Total carries the breach tint even though Credit Limit is the tile that
+    // names the number, because Total is the side of the comparison that moves.
+    tiles.push(credit_tile(
+        "Total", rs(projected),
+        "outstanding + this invoice", over.amount));
 
     if (p.amount_limit) {
         const remaining = flt(p.amount_limit) - projected;
-        // Spell out where the headroom comes from when the customer is prepaid,
-        // so the figure on screen can be tied back to their ledger balance.
-        const basis = flt(p.leftover_advance)
-            ? `advance left ${rs(p.leftover_advance)} + limit ${rs(p.amount_limit)}`
-            : `limit ${rs(p.amount_limit)}`;
+        // Headroom rides in the small print rather than in a tile of its own:
+        // the old panel had no such line, and the four labels only stay
+        // recognisable at a glance if nothing is wedged between them. For a
+        // prepaid customer it exceeds the limit itself, which the negative
+        // Outstanding two tiles left already explains.
         tiles.push(credit_tile(
-            "Can still bill",
-            remaining >= 0 ? rs(remaining) : `over by ${rs(-remaining)}`,
-            basis, over.amount));
+            "Credit Limit", rs(p.amount_limit),
+            remaining >= 0 ? `can still bill ${rs(remaining)}`
+                           : `over by ${rs(-remaining)}`,
+            over.amount));
+    }
+
+    // The second limit, drawn the same way as the first: the limit is the
+    // number, where the customer currently stands against it is the small
+    // print. It sits next to Credit Limit so the two limits read as a pair —
+    // an operator asking "how much room is left" gets both answers without
+    // moving their eyes across the unpaid-bill count.
+    if (p.days_limit) {
+        // The server throws on >=, so the last permitted age is one day BELOW
+        // the limit. The countdown is to the block, not to the number on the
+        // tile: "1 left" means the next day refuses the sale.
+        const days_left = flt(p.days_limit) - flt(p.days_used);
+        let days_note;
+        if (p.days_partial_only) {
+            // Uncovered money exists, but all of it sits inside the bill the
+            // advance is part-way through paying. Nothing is ageing, so the
+            // clock reads 0 — but the account is NOT square, and "nothing
+            // unpaid" here would contradict the Outstanding tile beside it.
+            days_note = "part-paid bill, not ageing";
+        } else if (!p.oldest_date) {
+            days_note = "nothing unpaid";
+        } else if (p.days_immaterial) {
+            // Under DAYS_MATERIALITY_FLOOR the server reports the clock as 0
+            // even though a bill is technically open. Say why, or the tile
+            // reads as a bug to anyone looking at a ledger with an old bill
+            // still on it.
+            days_note = "residual too small to age";
+        } else if (days_left > 0) {
+            days_note = `oldest bill ${p.days_used} days · ${days_left} left`;
+        } else {
+            days_note = `oldest bill ${p.days_used} days`;
+        }
+        tiles.push(credit_tile(
+            "Days Limit", `${p.days_limit} days`, days_note, over.days));
+    } else if (p.oldest_date) {
+        // No limit to test against, but the age is worth seeing on its own —
+        // it just cannot block anything.
+        tiles.push(credit_tile(
+            "Oldest unpaid bill",
+            p.days_used ? `${p.days_used} days` : "none",
+            "no days limit set", false));
     }
 
     if (p.bill_limit) {
@@ -1190,20 +1322,6 @@ function render_credit_banner(frm) {
         tiles.push(credit_tile(
             "Unpaid bills", `${p.unpaid_count}`,
             `blocked at ${p.bill_limit}`, over.count));
-    }
-
-    // Drawn whenever there is an age to report OR a limit to report it against,
-    // so a customer with no days limit keeps the bill age they could always see
-    // here — it is useful on its own, it just cannot block anything.
-    if (p.days_limit || p.oldest_date) {
-        // p.days_used is the age of the oldest bill the customer's credits
-        // could NOT cover, already floored to 0 by the server when the leftover
-        // is too small to be worth ageing (DAYS_MATERIALITY_FLOOR).
-        tiles.push(credit_tile(
-            "Oldest unpaid bill",
-            p.days_used ? `${p.days_used} days` : "none",
-            p.days_limit ? `blocked at ${p.days_limit} days` : "no days limit set",
-            over.days));
     }
 
     // The verdict, in words. "Blocked" alone leaves the operator hunting the

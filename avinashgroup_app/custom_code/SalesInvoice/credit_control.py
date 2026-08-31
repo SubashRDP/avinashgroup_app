@@ -67,7 +67,7 @@ def _advance_pool(customer):
         WHERE party_type = 'Customer'
           AND party = %s
           AND docstatus = 1
-          AND unallocated_amount > 0.01
+          AND unallocated_amount > 0.001
           AND payment_type IN ('Receive', 'Internal Transfer')
     """, customer)[0][0])
 
@@ -135,6 +135,17 @@ def _unpaid_after_advance(customer, advance, exclude_invoice=None):
     `gross_outstanding` is the pre-advance total over every unpaid bill. It is
     what lets the caller work out how much advance is LEFT once the bills are
     covered — the headroom a prepaid customer can still bill against.
+
+    `unpaid_count` and `total_unpaid` count the part-paid bill at the FIFO
+    cursor; `oldest_date`/`oldest_invoice` deliberately do not. Money owed is
+    money owed and belongs in the amount check — but a bill the advance is
+    part-way through paying is not ageing, so it must not start the days clock.
+
+    Returns oldest_date = None when every uncovered rupee sits inside a
+    part-paid bill. That is NOT "nothing unpaid": total_unpaid can be positive
+    while the clock is legitimately silent, which is why the caller reports it
+    as `days_partial_only` instead of letting the banner claim the account is
+    square.
     """
     row = frappe.db.sql("""
         SELECT
@@ -149,12 +160,46 @@ def _unpaid_after_advance(customer, advance, exclude_invoice=None):
                                       THEN outstanding_amount
                                       ELSE cum - %(advance)s END
                             ELSE 0 END), 0) AS total_unpaid,
-            MIN(CASE WHEN cum > %(advance)s THEN posting_date END) AS oldest_date,
+            -- The ageing clock starts at the first bill the advance did not
+            -- reach AT ALL (`cum - outstanding_amount >= advance`), not the
+            -- first it could not fully cover (`cum > advance`).
+            --
+            -- Those differ on exactly one bill: the one the FIFO cursor lands
+            -- inside. That bill is part-paid, and a bill the customer's money
+            -- is actively paying must not age. Using `cum > advance` here put
+            -- the clock on it and produced this, on GEPL-CUS-00339:
+            --
+            --     51 unpaid bills, gross 2,495,190
+            --     advance pool           2,493,150
+            --     residual                   2,040  -> lands on the 51st bill
+            --
+            -- ...whose date is 2026-04-01 — the customer's NEWEST invoice. The
+            -- clock read 152 days and refused every sale to a customer holding
+            -- 2.49m in advance who had simply not bought anything since April.
+            -- Worse, it was self-sustaining: blocked, so no newer bill ever
+            -- arrived to move the clock forward.
+            --
+            -- DAYS_MATERIALITY_FLOOR cannot catch that: it is an absolute
+            -- amount, and 2,040 is trivial only relative to the advance. 68 of
+            -- the 130 customers blocked on days on 2026-08-31 had their clock
+            -- set this way, 12 by a residual under one ten-thousandth of the
+            -- bill it sat on.
+            --
+            -- Keep this comment free of literal percent signs. pymysql
+            -- interpolates the whole query with Python string formatting, so a
+            -- stray percent even inside an SQL comment is read as a conversion
+            -- spec and the query dies with "not enough arguments for format
+            -- string". Only the named placeholders below may use one.
+            --
+            -- Unchanged when the customer holds no advance: `cum - amount >= 0`
+            -- is true on the first bill, so the clock still starts there.
+            MIN(CASE WHEN cum - outstanding_amount >= %(advance)s
+                     THEN posting_date END) AS oldest_date,
             -- Cheapest way to carry the oldest row's NAME out of an aggregate:
             -- posting_date renders fixed-width YYYY-MM-DD, so MIN over the
             -- concatenation orders by date then name, exactly like the window's
             -- ORDER BY. Constant memory, no second round trip.
-            MIN(CASE WHEN cum > %(advance)s
+            MIN(CASE WHEN cum - outstanding_amount >= %(advance)s
                      THEN CONCAT(posting_date, '|', name) END) AS oldest_key,
             IFNULL(SUM(outstanding_amount), 0) AS gross_outstanding
         FROM (
@@ -232,6 +277,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "days_used": 0,
         "days_used_raw": 0,
         "days_immaterial": 0,
+        "days_partial_only": 0,
         "count_exceeded": 0,
         "days_exceeded": 0,
         "amount_exceeded": 0,
@@ -286,6 +332,12 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
     days_immaterial = 0 < unpaid["total_unpaid"] < DAYS_MATERIALITY_FLOOR
     days_used = 0 if days_immaterial else days_used_raw
 
+    # Money is owed, but all of it sits inside the one bill the advance is
+    # part-way through paying, so nothing is ageing and the clock is silent.
+    # Distinct from "nothing unpaid" -- the banner must not call the account
+    # square while the Outstanding tile beside it shows a figure.
+    days_partial_only = bool(unpaid["unpaid_count"] and not unpaid["oldest_date"])
+
     # Advance the bills did not consume. FIFO leaves this at 0 whenever any
     # bill is still uncovered, so it is only ever positive for a prepaid
     # customer -- which is exactly the case the old early exit skipped.
@@ -314,6 +366,7 @@ def _credit_state(customer, as_of=None, new_amount=0, exclude_invoice=None, curr
         "days_used": days_used,
         "days_used_raw": days_used_raw,
         "days_immaterial": int(days_immaterial),
+        "days_partial_only": int(days_partial_only),
         "remaining_amount": available_credit,
     })
 
