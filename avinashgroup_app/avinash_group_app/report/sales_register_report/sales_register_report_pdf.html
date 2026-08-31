@@ -58,6 +58,13 @@ body {
 
 .sr-divider { border: none; border-top: 1.5px solid #ccc; margin: 5px 0 7px; }
 
+.sr-vat-heading  { text-align: center; margin-bottom: 6px; }
+.sr-vat-title    { font-size: 20px; font-weight: bold; }
+.sr-vat-subtitle { font-size: 12px; margin-top: 2px; }
+.sr-vat-info     { font-size: 11px; margin-top: 6px; text-align: left; }
+.sr-vat-info span { margin-right: 20px; }
+.sr-vat-info .sr-vat-value { display: inline-block; min-width: 90px; border-bottom: 1px dotted #333; }
+
 table { width: 100%; border-collapse: collapse; }
 tr    { page-break-inside: avoid; }
 
@@ -72,6 +79,9 @@ thead th {
 }
 thead th.r { text-align: right; }
 thead th.l { text-align: left; }
+thead th.c { text-align: center; }
+
+.govt-grid th, .govt-grid td { border: 1px solid #999; }
 
 td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
 .nowrap { white-space: nowrap; }
@@ -106,6 +116,12 @@ body                 { font-size: 8.5px !important; line-height: 1.35 !important
 .sr-company-center   { font-size: 12px !important; margin-bottom: 1px !important; }
 .sr-title-l          { font-size: 11px !important; margin-bottom: 1px !important; }
 
+.sr-vat-heading      { margin-bottom: 3px !important; }
+.sr-vat-title        { font-size: 11px !important; }
+.sr-vat-subtitle     { font-size: 7px !important; margin-top: 1px !important; }
+.sr-vat-info         { font-size: 7px !important; margin-top: 3px !important; }
+.sr-vat-info span    { margin-right: 8px !important; }
+
 .sr-filters          { font-size: 8.5px !important; margin-bottom: 2px !important; }
 .sr-filter-item      { margin-right: 8px !important; }
 .sr-divider          { margin: 2px 0 3px !important; }
@@ -128,19 +144,6 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 
 {% set customer_label = customer_display or '' %}
 
-{# sc = selected columns list; empty means show all #}
-{% set show_all = not sc %}
-{% set s_date          = show_all or 'date'          in sc %}
-{% set s_miti          = show_all or 'miti'          in sc %}
-{% set s_bill_no       = show_all or 'bill_no'       in sc %}
-{% set s_customer      = show_all or 'customer'      in sc %}
-{% set s_vat_number    = show_all or 'vat_number'    in sc %}
-{% set s_total_sales   = show_all or 'total_sales'   in sc %}
-{% set s_tax_free_sale = show_all or 'tax_free_sale' in sc %}
-{% set s_export_npr    = show_all or 'export_npr'    in sc %}
-{% set s_taxable_sales = show_all or 'taxable_sales' in sc %}
-{% set s_vat           = show_all or 'vat'           in sc %}
-
 {# ── Manual pagination so "Page X of Y" works on plain (unpatched) wkhtmltopdf. ──
    row_limit = rows per physical page. If rows overflow the page break, lower it;
    portrait fits more rows because the font is smaller. #}
@@ -155,60 +158,47 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
 
 <div class="sheet{% if not loop.last %} brk{% endif %}{% if is_html_view %} page{% endif %}">
 
-<table>
+{% set total_cols = govt_layout.body_fields | length %}
+<table class="govt-grid">
   <thead>
     <tr>
-      <td colspan="10" style="padding:4px 0 0 0; border:none;">
-        <div style="text-align:right; font-size:13px; font-weight:bold;">Sales Register</div>
-        {% if company_label %}
-        <div class="sr-company-center">{{ company_label }}</div>
-        {% endif %}
+      <td colspan="{{ total_cols }}" style="padding:4px 0 0 0; border:none;">
+        <div class="sr-vat-heading">
+          <div class="sr-vat-title">{{ 'बिक्री फिर्ता खाता' if filters.get('is_return') else 'बिक्री खाता' }}</div>
+          <div class="sr-vat-subtitle">(नियम २३ को उपनियम (१) को खण्ड  (ज) संग सम्बन्धित )</div>
+          <div class="sr-vat-info">
+            <span>करदाता दर्ता नं (PAN) : <span class="sr-vat-value">{{ govt_heading.pan or '' }}</span></span>
+            <span>करदाताको नाम: <span class="sr-vat-value">{{ govt_heading.company_name or '' }}</span></span>
+            <span>साल: <span class="sr-vat-value">{{ govt_heading.bs_year or '' }}</span></span>
+            <span>कर अवधि: <span class="sr-vat-value">{{ govt_heading.tax_period or '' }}</span></span>
+          </div>
+        </div>
         {% if customer_label %}
         <div class="sr-title-l">Customer: {{ customer_label }}</div>
         {% endif %}
-        <div class="sr-filters">
-          <span class="sr-filter-item">
-            <span class="sr-filter-label">From:</span>
-            {{ frappe.utils.formatdate(filters.get('from_date')) }}
-            &nbsp;<span class="sr-filter-label">To:</span>
-            {{ frappe.utils.formatdate(filters.get('to_date')) }}
-          </span>
-          {% if filters.get('is_return') %}
-          <span class="sr-filter-item">
-            <span class="sr-filter-label">Is Return:</span> Yes
-          </span>
-          {% endif %}
-        </div>
         <hr class="sr-divider" style="margin-bottom:0;">
       </td>
     </tr>
     <tr>
-      {% if s_date %}<th class="l">Date</th>{% endif %}
-      {% if s_miti %}<th class="l">Miti</th>{% endif %}
-      {% if s_bill_no %}<th class="l">Bill No</th>{% endif %}
-      {% if s_customer %}<th class="l">Customer Name</th>{% endif %}
-      {% if s_vat_number %}<th class="l">VAT Number</th>{% endif %}
-      {% if s_total_sales %}<th class="r">Total Sales</th>{% endif %}
-      {% if s_tax_free_sale %}<th class="r">Tax Free Sale</th>{% endif %}
-      {% if s_export_npr %}<th class="r">Export NPR</th>{% endif %}
-      {% if s_taxable_sales %}<th class="r">Taxable Sales</th>{% endif %}
-      {% if s_vat %}<th class="r">VAT</th>{% endif %}
+      {% for c in govt_layout.row1 %}
+      <th class="{{ c.css }}"{% if c.colspan > 1 %} colspan="{{ c.colspan }}"{% endif %}{% if c.rowspan > 1 %} rowspan="{{ c.rowspan }}"{% endif %}>{{ c.text }}</th>
+      {% endfor %}
+    </tr>
+    <tr>
+      {% for bf in govt_layout.body_fields %}
+      {% if bf.group %}<th class="{{ bf.css }}">{{ bf.sub }}</th>{% endif %}
+      {% endfor %}
     </tr>
   </thead>
 
   <tbody>
   {% for row in page_rows %}
     <tr{% if row.get('bold') %} class="tr-total"{% endif %}>
-      {% if s_date %}<td class="nowrap">{{ frappe.utils.formatdate(row.get('date')) if row.get('date') else '' }}</td>{% endif %}
-      {% if s_miti %}<td class="nowrap">{{ row.get('miti') or '' }}</td>{% endif %}
-      {% if s_bill_no %}<td>{{ row.get('bill_no') or '' }}</td>{% endif %}
-      {% if s_customer %}<td>{{ row.get('customer') or '' }}</td>{% endif %}
-      {% if s_vat_number %}<td>{{ row.get('vat_number') or '' }}</td>{% endif %}
-      {% if s_total_sales %}<td class="r nowrap">{{ fmt(row.get('total_sales')) }}</td>{% endif %}
-      {% if s_tax_free_sale %}<td class="r nowrap">{{ fmt(row.get('tax_free_sale')) }}</td>{% endif %}
-      {% if s_export_npr %}<td class="r nowrap">{{ fmt(row.get('export_npr')) }}</td>{% endif %}
-      {% if s_taxable_sales %}<td class="r nowrap">{{ fmt(row.get('taxable_sales')) }}</td>{% endif %}
-      {% if s_vat %}<td class="r nowrap">{{ fmt(row.get('vat')) }}</td>{% endif %}
+      {% for bf in govt_layout.body_fields %}
+      {% if bf.kind == 'currency' %}<td class="{{ bf.css }} nowrap">{{ fmt(row.get(bf.key)) }}</td>
+      {% else %}<td class="{{ bf.css }}">{{ row.get(bf.key) or '' }}</td>
+      {% endif %}
+      {% endfor %}
     </tr>
   {% endfor %}
   </tbody>

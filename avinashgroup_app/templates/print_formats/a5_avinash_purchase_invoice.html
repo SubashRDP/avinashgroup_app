@@ -114,6 +114,9 @@ td.texleft p { text-align: left !important; }
 /* Vendor/VAT header block: cancel the forced row height + cell padding so the two lines sit tight together */
 .top-data tr { height:auto !important; }
 .top-data tr td { padding:0 !important; line-height:1.25 !important; }
+/* Totals footer block: same tight line spacing as the Vendor/VAT header block above, instead of the 20px row height forced elsewhere in this table */
+.main-table tr.pi-total-row { height:auto !important; }
+.main-table tr.pi-total-row td { padding:1px 4px !important; line-height:1.25 !important; }
 .bottom-table td { padding:3px !important; min-height:20px; }
 .border-right { border-right:solid #030404 1px !important; }
 .p-0 { padding:0px !important; }
@@ -218,13 +221,15 @@ p { text-align: center; margin: 0; padding: 2px; }
   {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
 {% endfor %}
 {% set G.data_count = G.items|length %}
-{#- Trailing rows: Total Before Tax, VAT, Total Including Vat, TDS, Total. -#}
-{% for _ in range(5) %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX) %}
+{#- Trailing rows: Total Before Tax, VAT, Total Including Vat, TDS, Discount (if
+   any), Total — rendered at the tight .pi-total-row line-height, not PAD_PX+LINE_PX. -#}
+{% set TOTAL_ROW_PX = 18 %}
+{% for _ in range(5 + (1 if doc.write_off_amount else 0)) %}
+  {% set _add = G.items.append(TOTAL_ROW_PX) %}
 {% endfor %}
 {% set words = frappe.utils.money_in_words(doc.grand_total).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
-{% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.custom_memo or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
+{% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.remarks or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {#- The closing group — the five total rows, In Words and Remarks — is measured as
    one lump because it travels down to the fold together with the signatures rather
    than sitting under the items. -#}
@@ -303,29 +308,36 @@ p { text-align: center; margin: 0; padding: 2px; }
     <tr class="pi-spacer"><td colspan="7"></td></tr>
 
     <!-- TOTALS + REMARKS at the end -->
-    <tr>
-      <td colspan="4" style="border:none;"></td>
-      <td>Total Before Tax</td>
+    <tr class="pi-total-row">
+      <td colspan="3" style="border:none;"></td>
+      <td colspan="2">Total Before Tax</td>
       <td colspan="2" style="text-align:right;">{{ amt(doc.total) }}</td>
     </tr>
-    <tr>
-      <td colspan="4" style="border:none;"></td>
-      <td>Add : VAT 13%</td>
+    <tr class="pi-total-row">
+      <td colspan="3" style="border:none;"></td>
+      <td colspan="2">Add : VAT 13%</td>
       <td colspan="2" style="text-align:right;">{{ amt(doc.taxes_and_charges_added) }}</td>
     </tr>
-    <tr>
-      <td colspan="4" style="border:none;"></td>
-      <td>Total Including Vat</td>
+    <tr class="pi-total-row">
+      <td colspan="3" style="border:none;"></td>
+      <td colspan="2">Total Including Vat</td>
       <td colspan="2" style="text-align:right;">{{ amt((doc.total or 0) + (doc.taxes_and_charges_added or 0)) }}</td>
     </tr>
-    <tr>
-      <td colspan="4" style="border:none;"></td>
-      <td>Less : TDS</td>
+    <tr class="pi-total-row">
+      <td colspan="3" style="border:none;"></td>
+      <td colspan="2">Less : TDS</td>
       <td colspan="2" style="text-align:right;">{{ amt(doc.taxes_and_charges_deducted) }}</td>
     </tr>
-    <tr>
-      <td colspan="4" style="border:none;"></td>
-      <td style="border-bottom:1px solid #000; border-top:1px solid #000;"><strong>Total</strong></td>
+    {% if doc.write_off_amount %}
+    <tr class="pi-total-row">
+      <td colspan="3" style="border:none;"></td>
+      <td colspan="2">Less : Discount</td>
+      <td colspan="2" style="text-align:right;">{{ amt(doc.write_off_amount) }}</td>
+    </tr>
+    {% endif %}
+    <tr class="pi-total-row">
+      <td colspan="3" style="border:none;"></td>
+      <td colspan="2" style="border-bottom:1px solid #000; border-top:1px solid #000;"><strong>Total</strong></td>
       <td colspan="2" style="border-top:1px solid #000; text-align:right;">
         <strong>{{ amt(doc.grand_total) }}</strong>
       </td>
@@ -339,7 +351,7 @@ p { text-align: center; margin: 0; padding: 2px; }
     
         <tr>
       <td colspan="7" style="border:none; padding-top:5px;">
-        Remarks : {{ doc.custom_memo or '' }}
+        Remarks : {{ doc.remarks or '' }}
       </td>
     </tr>
     
