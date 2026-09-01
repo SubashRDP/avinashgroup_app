@@ -122,7 +122,7 @@ def get_data(filters, window):
 	if not pick:
 		return [], frappe._dict(shown=0, total_ledgers=total_ledgers)
 
-	balances = _gl_balances(company, pick, window.from_date, window.to_date)
+	balances = _gl_balances(company, window.from_date, window.to_date)
 
 	records = []
 	for account in pick:
@@ -189,35 +189,38 @@ def _grand_total_row(records):
 	}
 
 
-def _gl_balances(company, accounts, from_date, to_date):
+def _gl_balances(company, from_date, to_date):
 	"""Opening (signed) + period debit / credit per account.
 
 	Opening follows ERPNext General Ledger: everything strictly before From Date
 	PLUS any is_opening='Yes' entry regardless of its date. Those opening entries
 	are then excluded from the period debit / credit so nothing is double counted.
 
-	Split into three plain range queries instead of one CASE aggregation: the
-	original single query had no posting_date bound in its WHERE clause (all the
-	date logic sat inside CASE), so it read every GL Entry of the company for all
-	time. Each query below carries a real posting_date predicate, so it runs as an
-	index range scan on GL Entry's fin_stmt_agg_index (company, account,
-	posting_date, ...). Same numbers, far less work.
+	Performance notes (the original single CASE query took ~19s on a full company
+	and kept auto-flipping the report to "Prepared Report" past Frappe's 15s cap):
+
+	  * Three date-bounded queries instead of one, so each has a real posting_date
+	    predicate in WHERE (the old query kept every date test inside CASE and so
+	    scanned the company's entire GL Entry history).
+	  * No ``account IN (...)`` list. Group / other-company accounts simply never
+	    appear in the result and the caller only reads the accounts it wants, so
+	    the list only cost the optimizer a worse plan. Scoping to specific accounts
+	    is done in Python by the caller.
+	  * FORCE INDEX (fin_stmt_agg_index) -- the ERPNext core index
+	    (company, account, posting_date, is_cancelled, ..., debit, credit). With
+	    company fixed the scan is already ordered by account, so GROUP BY needs no
+	    temp table / filesort. Left to itself MariaDB picks the plain posting_date
+	    index and adds "Using temporary; Using filesort".
 	"""
-	params = {
-		"company": company,
-		"accounts": tuple(accounts),
-		"from_date": from_date,
-		"to_date": to_date,
-	}
+	params = {"company": company, "from_date": from_date, "to_date": to_date}
 
 	# Opening, part 1: every entry strictly before From Date.
 	opening = frappe.db.sql(
 		"""
 		SELECT gle.account AS account, SUM(gle.debit - gle.credit) AS amount
-		FROM `tabGL Entry` gle
+		FROM `tabGL Entry` gle FORCE INDEX (fin_stmt_agg_index)
 		WHERE gle.is_cancelled = 0
 			AND gle.company = %(company)s
-			AND gle.account IN %(accounts)s
 			AND gle.posting_date < %(from_date)s
 		GROUP BY gle.account
 		""",
@@ -230,10 +233,9 @@ def _gl_balances(company, accounts, from_date, to_date):
 	opening_on_after = frappe.db.sql(
 		"""
 		SELECT gle.account AS account, SUM(gle.debit - gle.credit) AS amount
-		FROM `tabGL Entry` gle
+		FROM `tabGL Entry` gle FORCE INDEX (fin_stmt_agg_index)
 		WHERE gle.is_cancelled = 0
 			AND gle.company = %(company)s
-			AND gle.account IN %(accounts)s
 			AND gle.is_opening = 'Yes'
 			AND gle.posting_date >= %(from_date)s
 		GROUP BY gle.account
@@ -248,10 +250,9 @@ def _gl_balances(company, accounts, from_date, to_date):
 		SELECT gle.account AS account,
 			SUM(gle.debit) AS period_debit,
 			SUM(gle.credit) AS period_credit
-		FROM `tabGL Entry` gle
+		FROM `tabGL Entry` gle FORCE INDEX (fin_stmt_agg_index)
 		WHERE gle.is_cancelled = 0
 			AND gle.company = %(company)s
-			AND gle.account IN %(accounts)s
 			AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			AND COALESCE(gle.is_opening, 'No') != 'Yes'
 		GROUP BY gle.account
