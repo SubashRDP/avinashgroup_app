@@ -24,10 +24,58 @@
 (() => {
 	const WIDE_CLASS = "column-limit-reached";
 	const PATCH_FLAG = "_agx_wide_columns_patched";
+	const DROPDOWN_CLASS = "agx-grid-dropdown";
 
 	// ------------------------------------------------------------------
 	// GridRow.prototype -- drop the Configure Columns ceiling
 	// ------------------------------------------------------------------
+
+	// Lift a Link cell's autocomplete list out of the scrolling container.
+	//
+	// A scroll container clips BOTH axes -- `overflow-x: auto` forces the
+	// other axis to clip too -- and the grid container is only about one row
+	// tall, so a list opening inside a cell is cut to nothing. The list is
+	// re-parented once, onto the grid wrapper; its position is recomputed on
+	// every focus so it still lands under the right cell after the grid has
+	// been scrolled sideways.
+	//
+	// The list keeps a `.awesomplete` parent at its new home, so awesomplete's
+	// own `.awesomplete > [role="listbox"]` styling still applies.
+	function bind_dropdown_escape($col, grid_row) {
+		$col.on("focusin", function () {
+			const grid = grid_row.grid;
+			const $wrapper = grid && grid.wrapper;
+			// A grid inside the old budget clips nothing -- leave it alone.
+			if (!$wrapper || !$wrapper.children(".form-grid-container").hasClass(WIDE_CLASS)) {
+				return;
+			}
+
+			const cell = this;
+			// the control, and with it the awesomplete, is built lazily when
+			// the row goes editable -- give it a tick to exist
+			frappe.utils.sleep(150).then(() => {
+				let $host = $col.data("agx_dropdown_host");
+
+				if (!$host || !$host.parent().length) {
+					const $list = $col.find(".awesomplete > ul").first();
+					if (!$list.length) return;
+					$host = $(`<div class="awesomplete ${DROPDOWN_CLASS}"></div>`).appendTo(
+						$wrapper
+					);
+					$host.append($list);
+					$col.data("agx_dropdown_host", $host);
+				}
+
+				const c = cell.getBoundingClientRect();
+				const w = $wrapper[0].getBoundingClientRect();
+				$host.css({
+					top: Math.round(c.bottom - w.top) + "px",
+					left: Math.round(c.left - w.left) + "px",
+					width: Math.round(c.width) + "px",
+				});
+			});
+		});
+	}
 
 	function patch_grid_row(proto) {
 		if (!proto || proto[PATCH_FLAG]) return;
@@ -36,6 +84,18 @@
 		// ceiling now that the grid scrolls, and `update_column_width` still
 		// rejects a zero width, so this can just stand down.
 		proto.validate_columns_width = function () {};
+
+		// Only Link and Dynamic Link open a list that the scroll container
+		// would clip; Select uses a native <select>, which the browser renders
+		// outside the page box.
+		const orig_make_column = proto.make_column;
+		proto.make_column = function (df) {
+			const $col = orig_make_column.apply(this, arguments);
+			if ($col && df && (df.fieldtype === "Link" || df.fieldtype === "Dynamic Link")) {
+				bind_dropdown_escape($col, this);
+			}
+			return $col;
+		};
 
 		proto[PATCH_FLAG] = true;
 	}
@@ -158,6 +218,15 @@
 			}
 
 			this.apply_wide_columns_class();
+		};
+
+		// reset_grid rebuilds every column, so any dropdown lifted out of the
+		// container belongs to a cell that is about to be discarded. Drop them
+		// with it, otherwise they accumulate on the wrapper.
+		const orig_reset_grid = proto.reset_grid;
+		proto.reset_grid = function () {
+			this.wrapper && this.wrapper.children("." + DROPDOWN_CLASS).remove();
+			return orig_reset_grid.apply(this, arguments);
 		};
 
 		// The header row is the only GridRow that owns the Configure Columns

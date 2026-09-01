@@ -56,7 +56,7 @@ app_include_js = [
     # units the grid scrolls sideways instead of silently dropping the
     # rest. Patches the Grid / GridRow prototypes, so it must load after
     # frappe's controls.bundle.js — every app_include_js does.
-    "/assets/avinashgroup_app/js/grid_wide_columns.js?v=1.1",
+    "/assets/avinashgroup_app/js/grid_wide_columns.js?v=1.2",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -67,7 +67,7 @@ app_include_css = [
     "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
     # styling half of grid_wide_columns.js — inert until that file
     # flags a grid with .column-limit-reached
-    "/assets/avinashgroup_app/css/grid_wide_columns.css?v=1.0",
+    "/assets/avinashgroup_app/css/grid_wide_columns.css?v=1.1",
 ]
 
 doctype_js = {

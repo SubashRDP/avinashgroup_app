@@ -103,6 +103,19 @@
 	background-color: var(--fg-color);
 }
 
+/* A Link cell's autocomplete list is lifted out of the scroll container by
+ * grid_wide_columns.js and parked on the grid wrapper -- which therefore has
+ * to be the positioning context it is placed against. */
+.grid-field:has(> .form-grid-container.column-limit-reached) {
+	position: relative;
+}
+
+/* Above the sticky last column (z-index 1) and the grid's own chrome. */
+.grid-field > .awesomplete.agx-grid-dropdown {
+	position: absolute;
+	z-index: 5;
+}
+
 /* Narrower ladder on small screens, matching v16. */
 @media (max-width: 768px) {
 	.form-grid-container.column-limit-reached .grid-static-col.col-xs-2 { flex: 1 0 90px; width: 90px; }
