@@ -63,6 +63,22 @@ LEDGER_TYPE_ROOTS = {
 	"Balance Sheet": ("Asset", "Liability", "Equity"),
 }
 
+# The legacy parameter screen's date-preset buttons. Its month and quarter
+# boundaries are Bikram Sambat ("This Month 2083/05/16 - 2083/06/14" is Bhadra,
+# not an AD month), so these are resolved through rdp_common_app's BS helpers
+# rather than frappe.datetime's AD ones.
+PERIOD_PRESETS = (
+	"Custom Dates",
+	"Today",
+	"Yesterday",
+	"This Month",
+	"Last Month",
+	"This Fiscal Quarter",
+	"Last Fiscal Quarter",
+	"This Fiscal Year",
+	"Last Fiscal Year",
+)
+
 NO_SUBLEDGER = "__none__"
 
 PARTY_NAME_FIELD = {
@@ -367,7 +383,8 @@ def _account_summary(filters, accounts, show_zero):
 
 	if data:
 		data.sort(key=lambda r: (r["code"], r["description"]))
-		data.append(_total_row(_("Grand Total"), grand))
+		if cint(filters.get("show_grand_total", 1)):
+			data.append(_total_row(_("Grand Total"), grand))
 	return data
 
 
@@ -436,7 +453,7 @@ def _subledger_summary(filters, accounts, show_zero):
 			data.append(row)
 		data.append(_total_row(_("Total ({0})").format(account.account_number or name), section))
 
-	if data:
+	if data and cint(filters.get("show_grand_total", 1)):
 		data.append({})
 		data.append(_total_row(_("Grand Total"), grand))
 	return data
@@ -626,8 +643,31 @@ def _build_detail(filters, accounts, level):
 				{"description": _("Opening Balance"), "balance": balance, "_bold": 1}
 			)
 
+			show_remarks = cint(filters.get("remarks", 1))
+			month_total = cint(filters.get("month_total"))
+
 			period_debit = period_credit = 0.0
+			month_debit = month_credit = 0.0
+			month_key = None
+
 			for txn in rows:
+				# monthly subtotal, on BS month boundaries like the rest of the report
+				if month_total:
+					key = (txn.get("miti") or "")[:7]
+					if month_key is not None and key != month_key:
+						data.append(
+							{
+								"description": _("Month Total ({0})").format(month_key),
+								"debit": month_debit,
+								"credit": month_credit,
+								"_bold": 1,
+							}
+						)
+						month_debit = month_credit = 0.0
+					month_key = key
+					month_debit += flt(txn.debit)
+					month_credit += flt(txn.credit)
+
 				balance += flt(txn.debit) - flt(txn.credit)
 				period_debit += flt(txn.debit)
 				period_credit += flt(txn.credit)
@@ -636,10 +676,24 @@ def _build_detail(filters, accounts, level):
 						"date": txn.posting_date,
 						"miti": txn.get("miti") or "",
 						"voucher_no": txn.voucher_no,
-						"description": (txn.remarks or txn.voucher_type or "").strip()[:180],
+						"description": (
+							(txn.remarks or txn.voucher_type or "").strip()[:180]
+							if show_remarks
+							else (txn.voucher_type or "")
+						),
 						"debit": flt(txn.debit),
 						"credit": flt(txn.credit),
 						"balance": balance,
+					}
+				)
+
+			if month_total and month_key is not None:
+				data.append(
+					{
+						"description": _("Month Total ({0})").format(month_key),
+						"debit": month_debit,
+						"credit": month_credit,
+						"_bold": 1,
 					}
 				)
 
@@ -805,3 +859,76 @@ def get_general_ledgers(company, txt=None, ledger_type=None):
 		params,
 		as_dict=True,
 	)
+
+
+@frappe.whitelist()
+def get_period(preset, company=None, on_date=None):
+	"""From/To dates for a legacy date-preset button.
+
+	Month and quarter boundaries follow the Bikram Sambat calendar, which is
+	what the legacy screen shows and what the books actually run on.
+	"""
+	from rdp_common_app.utils.bs_boundaries import ad_to_bs, bs_to_ad, get_bs_month_range
+
+	today = getdate(on_date or frappe.utils.nowdate())
+
+	if preset == "Today":
+		return {"from_date": str(today), "to_date": str(today)}
+
+	if preset == "Yesterday":
+		day = frappe.utils.add_days(today, -1)
+		return {"from_date": str(day), "to_date": str(day)}
+
+	if preset in ("This Month", "Last Month"):
+		bs = ad_to_bs(today)
+		year, month = bs.year, bs.month
+		if preset == "Last Month":
+			year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+		start, end = get_bs_month_range(year, month)
+		return {"from_date": str(start), "to_date": str(end)}
+
+	if preset in ("This Fiscal Quarter", "Last Fiscal Quarter"):
+		bs = ad_to_bs(today)
+		# BS fiscal year starts in month 4 (Shrawan); quarters are 4-6, 7-9,
+		# 10-12, 1-3, so shift by 3 before dividing.
+		index = ((bs.month - 4) % 12) // 3
+		if preset == "Last Fiscal Quarter":
+			index -= 1
+		year = bs.year
+		if index < 0:
+			index, year = 3, year - 1
+		first = ((index * 3) + 4 - 1) % 12 + 1
+		last = (first + 1) % 12 + 1
+		# a quarter that wraps past Chaitra belongs to the next BS year
+		start_year = year if first >= 4 else year + 1
+		end_year = year if last >= 4 else year + 1
+		start = get_bs_month_range(start_year, first)[0]
+		end = get_bs_month_range(end_year, last)[1]
+		return {"from_date": str(start), "to_date": str(end)}
+
+	if preset in ("This Fiscal Year", "Last Fiscal Year"):
+		fy = frappe.db.sql(
+			"""
+			SELECT year_start_date, year_end_date FROM `tabFiscal Year`
+			WHERE %(today)s BETWEEN year_start_date AND year_end_date
+			ORDER BY year_start_date DESC LIMIT 1
+			""",
+			{"today": today},
+			as_dict=True,
+		)
+		if not fy:
+			return {}
+		if preset == "This Fiscal Year":
+			return {"from_date": str(fy[0].year_start_date), "to_date": str(fy[0].year_end_date)}
+		prior = frappe.db.sql(
+			"""
+			SELECT year_start_date, year_end_date FROM `tabFiscal Year`
+			WHERE year_end_date < %(start)s ORDER BY year_end_date DESC LIMIT 1
+			""",
+			{"start": fy[0].year_start_date},
+			as_dict=True,
+		)
+		if prior:
+			return {"from_date": str(prior[0].year_start_date), "to_date": str(prior[0].year_end_date)}
+
+	return {}

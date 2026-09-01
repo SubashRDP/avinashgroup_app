@@ -30,6 +30,43 @@ frappe.query_reports["Custom Ledger"] = {
 			},
 		},
 		{
+			// The legacy screen's date-preset buttons. Month and quarter
+			// boundaries are Bikram Sambat, resolved server-side.
+			fieldname: "period_preset",
+			label: __("Period"),
+			fieldtype: "Select",
+			options: [
+				"Custom Dates",
+				"Today",
+				"Yesterday",
+				"This Month",
+				"Last Month",
+				"This Fiscal Quarter",
+				"Last Fiscal Quarter",
+				"This Fiscal Year",
+				"Last Fiscal Year",
+			].join("\n"),
+			default: "Custom Dates",
+			on_change: function () {
+				const preset = frappe.query_report.get_filter_value("period_preset");
+				if (!preset || preset === "Custom Dates") return;
+				frappe
+					.call({
+						method:
+							"avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger.get_period",
+						args: {
+							preset: preset,
+							company: frappe.query_report.get_filter_value("company"),
+						},
+					})
+					.then((r) => {
+						if (r.message && r.message.from_date) {
+							frappe.query_report.set_filter_value(r.message);
+						}
+					});
+			},
+		},
+		{
 			fieldname: "fiscal_year",
 			label: __("Fiscal Year"),
 			fieldtype: "Link",
@@ -109,9 +146,31 @@ frappe.query_reports["Custom Ledger"] = {
 			default: 0,
 		},
 		{
-			// The legacy Summary prints accounts with no movement at all.
+			// Legacy "Suppress Zero Transaction General Ledger", inverted so the
+			// checkbox reads positively.
 			fieldname: "show_zero_values",
-			label: __("Show zero values"),
+			label: __("Show Zero Transaction Ledgers"),
+			fieldtype: "Check",
+			default: 0,
+		},
+		{
+			fieldname: "show_grand_total",
+			label: __("Show Grand Total"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
+			// Legacy "Remarks" — the narration carried on each posting.
+			fieldname: "remarks",
+			label: __("Remarks"),
+			fieldtype: "Check",
+			default: 1,
+		},
+		{
+			// Legacy "Month Total" — a subtotal at each BS month boundary.
+			// Detail formats only.
+			fieldname: "month_total",
+			label: __("Month Total"),
 			fieldtype: "Check",
 			default: 0,
 		},
