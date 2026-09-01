@@ -773,50 +773,14 @@ def _build_detail(filters, accounts, level):
 	return data
 
 
-def _voucher_number_fields():
-	"""DocType -> the field holding its voucher number, per Numbering Configuration.
-
-	This is the number written on the document the customer is given
-	(NGI-CS-000002-83/84), not the internal Frappe name (NGI-JE-83/84-00334),
-	and it is what the legacy ledger prints in its Voucher No column.
-	"""
-	fields = {}
-	for row in frappe.get_all(
-		"Numbering Configuration",
-		filters={"enabled": 1},
-		fields=["document_type", "target_field"],
-	):
-		if row.target_field and row.document_type not in fields:
-			fields[row.document_type] = row.target_field
-	return fields
-
-
 def _apply_voucher_numbers(rows):
 	"""Swap each row's internal name for its voucher number, and add BS miti."""
 	if not rows:
 		return
 
-	targets = _voucher_number_fields()
+	from avinashgroup_app.utils.voucher_numbers import resolve
 
-	by_type = {}
-	for r in rows:
-		if r.get("voucher_type") and r.get("voucher_no"):
-			by_type.setdefault(r["voucher_type"], set()).add(r["voucher_no"])
-
-	numbers = {}
-	for voucher_type, names in by_type.items():
-		field = targets.get(voucher_type)
-		if not field or not frappe.db.has_column(voucher_type, field):
-			continue
-		names = list(names)
-		for i in range(0, len(names), 500):
-			for row in frappe.get_all(
-				voucher_type,
-				filters={"name": ("in", names[i : i + 500])},
-				fields=["name", "{0} as number".format(field)],
-			):
-				if row.number:
-					numbers[(voucher_type, row.name)] = row.number
+	numbers = resolve((r.get("voucher_type"), r.get("voucher_no")) for r in rows)
 
 	for r in rows:
 		# keep the internal name so the row can still be traced back
