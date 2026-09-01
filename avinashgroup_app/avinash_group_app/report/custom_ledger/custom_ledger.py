@@ -183,7 +183,7 @@ def _resolve_accounts(filters):
 
 	rows = frappe.db.sql(
 		"""
-		SELECT name, account_number, account_name, account_type
+		SELECT name, account_number, account_name, account_type, root_type
 		FROM `tabAccount`
 		WHERE {0}
 		ORDER BY account_number, name
@@ -214,7 +214,27 @@ def _vehicle_accounts(accounts):
 
 # ── balances ────────────────────────────────────────────────────────────────────
 
-def _gl_balances(filters, accounts, period, by_party=False):
+def _pl_opening_floor(from_date):
+	"""Start of the fiscal year containing from_date, or None if there isn't one.
+
+	Income and Expense accounts do not carry a balance across a year end -- a
+	Period Closing Voucher would sweep them into retained earnings. This site
+	runs none, so without a floor the opening balance of every P&L account is
+	its whole history: 136,849 rows on NGI, summed to produce a figure that
+	should read zero on the first day of a fiscal year.
+	"""
+	row = frappe.db.sql(
+		"""
+		SELECT year_start_date FROM `tabFiscal Year`
+		WHERE %(from_date)s BETWEEN year_start_date AND year_end_date
+		ORDER BY year_start_date DESC LIMIT 1
+		""",
+		{"from_date": from_date},
+	)
+	return row[0][0] if row else None
+
+
+def _gl_balances(filters, accounts, period, by_party=False, opening_floor=None):
 	"""Sum debit/credit from GL Entry, keyed by account (and party when asked)."""
 	params = {
 		"company": filters.company,
@@ -224,10 +244,21 @@ def _gl_balances(filters, accounts, period, by_party=False):
 	}
 
 	if period == "opening":
+		# An opening entry dated inside the period still belongs in the opening
+		# balance, hence the second branch.
 		date_clause = """
-			AND (g.posting_date < %(from_date)s
-			     OR (g.is_opening = 'Yes' AND g.posting_date <= %(to_date)s))
+			AND (
+				g.posting_date < %(from_date)s
+				OR (
+					g.is_opening = 'Yes'
+					AND g.posting_date >= %(from_date)s
+					AND g.posting_date <= %(to_date)s
+				)
+			)
 		"""
+		if opening_floor:
+			params["floor"] = opening_floor
+			date_clause += " AND g.posting_date >= %(floor)s"
 	else:
 		date_clause = """
 			AND g.posting_date >= %(from_date)s
@@ -314,6 +345,31 @@ def _vehicle_balances(filters, accounts, period):
 	return {(r.account, "Vehicle", r.vehicle): [flt(r.debit), flt(r.credit)] for r in rows}
 
 
+def _opening_balances(filters, accounts, by_party=False):
+	"""Opening balances, with P&L accounts floored at the fiscal year start.
+
+	Income and Expense accounts do not carry a balance across a year end -- a
+	Period Closing Voucher would sweep them into retained earnings, and this
+	site runs none. Without the floor every P&L account's opening balance is
+	its entire history (136,849 rows on NGI), which is both wrong on the first
+	day of a year and the single slowest thing the report did.
+	"""
+	pl = {name: row for name, row in accounts.items() if row.root_type in ("Income", "Expense")}
+	bs = {name: row for name, row in accounts.items() if name not in pl}
+
+	opening = {}
+	if bs:
+		opening.update(_gl_balances(filters, bs, "opening", by_party))
+
+	if pl:
+		floor = _pl_opening_floor(filters.from_date)
+		# from_date on the year start means there is nothing to carry in at all
+		if not floor or getdate(floor) < getdate(filters.from_date):
+			opening.update(_gl_balances(filters, pl, "opening", by_party, opening_floor=floor))
+
+	return opening
+
+
 def _toggle_debit_credit(debit, credit):
 	"""Net a Dr/Cr pair onto whichever side is larger."""
 	if flt(debit) > flt(credit):
@@ -366,7 +422,7 @@ def _build_summary(filters, accounts, level):
 
 
 def _account_summary(filters, accounts, show_zero):
-	opening = _gl_balances(filters, accounts, "opening")
+	opening = _opening_balances(filters, accounts)
 	within = _gl_balances(filters, accounts, "within")
 
 	data = []
@@ -400,7 +456,7 @@ def _subledger_summary(filters, accounts, show_zero):
 
 	opening, within = {}, {}
 	if party_accounts:
-		opening.update(_gl_balances(filters, party_accounts, "opening", by_party=True))
+		opening.update(_opening_balances(filters, party_accounts, by_party=True))
 		within.update(_gl_balances(filters, party_accounts, "within", by_party=True))
 	if vehicle_accounts:
 		opening.update(_vehicle_balances(filters, vehicle_accounts, "opening"))
@@ -588,13 +644,13 @@ def _build_detail(filters, accounts, level):
 		opening = {}
 		transactions = []
 		if party_accounts:
-			opening.update(_gl_balances(filters, party_accounts, "opening", by_party=True))
+			opening.update(_opening_balances(filters, party_accounts, by_party=True))
 			transactions += _gl_transactions(filters, party_accounts, True)
 		if vehicle_accounts:
 			opening.update(_vehicle_balances(filters, vehicle_accounts, "opening"))
 			transactions += _vehicle_transactions(filters, vehicle_accounts)
 	else:
-		opening = _gl_balances(filters, accounts, "opening")
+		opening = _opening_balances(filters, accounts)
 		transactions = _gl_transactions(filters, accounts, False)
 
 	_apply_voucher_numbers(transactions)
