@@ -41,7 +41,7 @@ app_include_js = [
     # v3.5: stale-value clear on auto flip + wildcard scope watching (SCOPE_FIELDS removed)
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.5",
     "/assets/avinashgroup_app/js/auto_fiscal_year.js?v=1.0",
-    "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
+    "/assets/avinashgroup_app/js/report_print_orientation.js?v=11",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
     # print_bridge defines avinash.print_bridge; load it before the two files
     # that route raw jobs through it — ngi_print (Print-view button) and
