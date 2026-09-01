@@ -50,13 +50,16 @@
 	max-width: none;
 }
 
-/* NOT freezing the first column, deliberately.
- *
- * v16 pins the subject column so the link to the document stays reachable at
- * any scroll offset, and the obvious rule for it is
- * `position: sticky; left: 0` on `.level-left .list-row-col:first-child`.
- * That was tried here and does not hold: computed style comes back
- * `position: sticky; left: 0px`, every ancestor up to the scrollport has
- * visible overflow and no transform, and the column still scrolls away with
- * the rest. Left unexplained rather than shipped half-working -- a pinned
- * column that does not pin is worse than an honest scroll. */
+/* Freeze the first column -- the link to the document -- so the way into a
+ * record stays reachable at any scroll offset. Needs an opaque background or
+ * the other columns scroll through underneath it. */
+.result.agx-list-scrolls .level-left .list-row-col:first-child {
+	position: sticky;
+	left: 0;
+	z-index: 2;
+	background-color: var(--fg-color);
+}
+
+.result.agx-list-scrolls .list-row-head .level-left .list-row-col:first-child {
+	background-color: var(--subtle-fg, var(--fg-color));
+}

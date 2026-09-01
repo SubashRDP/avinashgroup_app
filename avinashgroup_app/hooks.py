@@ -74,7 +74,7 @@ app_include_css = [
     "/assets/avinashgroup_app/css/grid_wide_columns.css?v=1.1",
     # styling half of list_wide_columns.js — inert until that file flags a
     # list with .agx-list-scrolls
-    "/assets/avinashgroup_app/css/list_wide_columns.css?v=2.1",
+    "/assets/avinashgroup_app/css/list_wide_columns.css?v=2.2",
 ]
 
 doctype_js = {
