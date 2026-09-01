@@ -40,7 +40,6 @@ Avinas Vehicle Expense report does.
 """
 
 import json
-from datetime import date, datetime
 
 import frappe
 from frappe import _
@@ -66,12 +65,15 @@ PARTY_NAME_FIELD = {
 	"Shareholder": "title",
 }
 
-# Voucher doctype -> the custom field holding its BS date
-MITI_FIELD = {
-	"Sales Invoice": "custom_invoice_miti",
-	"Purchase Invoice": "custom_nepali_miti",
-	"Payment Entry": "custom_posting_miti",
-}
+# Voucher number and BS date are both resolved generically, never per-doctype:
+#
+#   number  Numbering Configuration.target_field names the field a doctype
+#           stores its voucher number in — custom_branch_name on Sales
+#           Invoice, custom_name on the rest. Reading the rule means a new
+#           doctype (or a changed target) needs no edit here.
+#   miti    converted from posting_date with the CBMS converter, rather than
+#           read from one of the thirteen per-doctype miti fields. The ledger
+#           wants the posting date in BS, which is exactly what that yields.
 
 
 def execute(filters=None):
@@ -559,7 +561,7 @@ def _build_detail(filters, accounts, level):
 		opening = _gl_balances(filters, accounts, "opening")
 		transactions = _gl_transactions(filters, accounts, False)
 
-	_apply_bs_miti(transactions)
+	_apply_voucher_numbers(transactions)
 
 	grouped = {}
 	for txn in transactions:
@@ -642,29 +644,39 @@ def _build_detail(filters, accounts, level):
 	return data
 
 
-def _apply_bs_miti(rows):
-	"""Stamp the BS date onto each transaction from its voucher's miti field."""
+def _voucher_number_fields():
+	"""DocType -> the field holding its voucher number, per Numbering Configuration.
+
+	This is the number written on the document the customer is given
+	(NGI-CS-000002-83/84), not the internal Frappe name (NGI-JE-83/84-00334),
+	and it is what the legacy ledger prints in its Voucher No column.
+	"""
+	fields = {}
+	for row in frappe.get_all(
+		"Numbering Configuration",
+		filters={"enabled": 1},
+		fields=["document_type", "target_field"],
+	):
+		if row.target_field and row.document_type not in fields:
+			fields[row.document_type] = row.target_field
+	return fields
+
+
+def _apply_voucher_numbers(rows):
+	"""Swap each row's internal name for its voucher number, and add BS miti."""
 	if not rows:
 		return
 
-	def _normalize(value):
-		if not value:
-			return ""
-		if isinstance(value, datetime):
-			return value.date().isoformat()
-		if isinstance(value, date):
-			return value.isoformat()
-		value = str(value)
-		return value.split(" ", 1)[0] if " " in value else value
+	targets = _voucher_number_fields()
 
 	by_type = {}
 	for r in rows:
 		if r.get("voucher_type") and r.get("voucher_no"):
 			by_type.setdefault(r["voucher_type"], set()).add(r["voucher_no"])
 
-	lookup = {}
+	numbers = {}
 	for voucher_type, names in by_type.items():
-		field = MITI_FIELD.get(voucher_type)
+		field = targets.get(voucher_type)
 		if not field or not frappe.db.has_column(voucher_type, field):
 			continue
 		names = list(names)
@@ -672,12 +684,30 @@ def _apply_bs_miti(rows):
 			for row in frappe.get_all(
 				voucher_type,
 				filters={"name": ("in", names[i : i + 500])},
-				fields=["name", "{0} as miti".format(field)],
+				fields=["name", "{0} as number".format(field)],
 			):
-				lookup[(voucher_type, row.name)] = _normalize(row.miti)
+				if row.number:
+					numbers[(voucher_type, row.name)] = row.number
 
 	for r in rows:
-		r["miti"] = lookup.get((r.get("voucher_type"), r.get("voucher_no")), "")
+		# keep the internal name so the row can still be traced back
+		r["voucher_name"] = r.get("voucher_no")
+		r["voucher_no"] = numbers.get(
+			(r.get("voucher_type"), r.get("voucher_no")), r.get("voucher_no")
+		)
+		r["miti"] = _bs(r.get("posting_date"))
+
+
+def _bs(ad_date):
+	"""posting_date as a BS string, blank if it cannot be converted."""
+	if not ad_date:
+		return ""
+	try:
+		from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+
+		return bs_date_str(ad_date)
+	except Exception:
+		return ""
 
 
 # ── columns ─────────────────────────────────────────────────────────────────────
