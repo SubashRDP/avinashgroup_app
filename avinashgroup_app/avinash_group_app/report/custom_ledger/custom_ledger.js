@@ -60,9 +60,15 @@ frappe.query_reports["Custom Ledger"] = {
 						},
 					})
 					.then((r) => {
-						if (r.message && r.message.from_date) {
-							frappe.query_report.set_filter_value(r.message);
+						if (!r.message || !r.message.from_date) return;
+						// Move the Fiscal Year field with the dates. Both drive the
+						// period, so leaving them to disagree ("Last Fiscal Year"
+						// showing alongside 83/84) is just confusing.
+						const patch = Object.assign({}, r.message);
+						if (r.message.fiscal_year) {
+							patch.fiscal_year = r.message.fiscal_year;
 						}
+						frappe.query_report.set_filter_value(patch);
 					});
 			},
 		},
@@ -77,7 +83,9 @@ frappe.query_reports["Custom Ledger"] = {
 				if (!fiscal_year) return;
 				frappe.model.with_doc("Fiscal Year", fiscal_year, function () {
 					const fy = frappe.model.get_doc("Fiscal Year", fiscal_year);
+					// Picking a year by hand means the dates are no longer a preset.
 					frappe.query_report.set_filter_value({
+						period_preset: "Custom Dates",
 						from_date: fy.year_start_date,
 						to_date: fy.year_end_date,
 					});
@@ -108,7 +116,9 @@ frappe.query_reports["Custom Ledger"] = {
 			options: ["Both", "Profit & Loss", "Balance Sheet"].join("\n"),
 			default: "Both",
 			on_change: function () {
-				// the account list depends on this, so clear a now-invalid pick
+				// The account list depends on this, so clear a now-invalid pick.
+				// An explicit pick overrides the type server-side, so dropping it
+				// here keeps what is shown and what is applied in step.
 				frappe.query_report.set_filter_value("general_ledger", []);
 				frappe.query_report.refresh();
 			},
@@ -175,6 +185,23 @@ frappe.query_reports["Custom Ledger"] = {
 			default: 0,
 		},
 	],
+
+	onload: function (report) {
+		// Print-out matching the legacy layout: same header block, Nepali digit
+		// grouping, and the "Report Parameters" footer.
+		report.page.add_inner_button(__("Download PDF"), function () {
+			const filters = report.get_values();
+			if (!filters.company) {
+				frappe.msgprint(__("Please select a Company."));
+				return;
+			}
+			const url =
+				"/api/method/avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger.download_pdf" +
+				"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+				"&orientation=Portrait";
+			window.open(url);
+		});
+	},
 
 	formatter: function (value, row, column, data, default_formatter) {
 		// Account header, and (in the detail formats) the sub ledger header:

@@ -167,12 +167,16 @@ def _resolve_accounts(filters):
 		params["names"] = get_accounts_with_children(chosen)
 		conditions.append("name IN %(names)s")
 
-	roots = LEDGER_TYPE_ROOTS.get(filters.get("ledger_type"))
+	# General Ledger Type is a way of PICKING accounts, so an explicit pick wins
+	# over it. Applying both silently returned nothing whenever the chosen
+	# accounts sat on the other side of the P&L / Balance Sheet line.
+	roots = None if chosen else LEDGER_TYPE_ROOTS.get(filters.get("ledger_type"))
 	if roots:
 		params["roots"] = roots
 		conditions.append("root_type IN %(roots)s")
 
-	if not cint(filters.get("include_cash_bank")):
+	# Cash/Bank exclusion likewise only narrows a whole-company run.
+	if not chosen and not cint(filters.get("include_cash_bank")):
 		conditions.append("account_type NOT IN ('Cash', 'Bank') OR account_type IS NULL")
 
 	rows = frappe.db.sql(
@@ -909,7 +913,7 @@ def get_period(preset, company=None, on_date=None):
 	if preset in ("This Fiscal Year", "Last Fiscal Year"):
 		fy = frappe.db.sql(
 			"""
-			SELECT year_start_date, year_end_date FROM `tabFiscal Year`
+			SELECT name, year_start_date, year_end_date FROM `tabFiscal Year`
 			WHERE %(today)s BETWEEN year_start_date AND year_end_date
 			ORDER BY year_start_date DESC LIMIT 1
 			""",
@@ -919,16 +923,167 @@ def get_period(preset, company=None, on_date=None):
 		if not fy:
 			return {}
 		if preset == "This Fiscal Year":
-			return {"from_date": str(fy[0].year_start_date), "to_date": str(fy[0].year_end_date)}
+			return {
+				"from_date": str(fy[0].year_start_date),
+				"to_date": str(fy[0].year_end_date),
+				"fiscal_year": fy[0].name,
+			}
 		prior = frappe.db.sql(
 			"""
-			SELECT year_start_date, year_end_date FROM `tabFiscal Year`
+			SELECT name, year_start_date, year_end_date FROM `tabFiscal Year`
 			WHERE year_end_date < %(start)s ORDER BY year_end_date DESC LIMIT 1
 			""",
 			{"start": fy[0].year_start_date},
 			as_dict=True,
 		)
 		if prior:
-			return {"from_date": str(prior[0].year_start_date), "to_date": str(prior[0].year_end_date)}
+			return {
+				"from_date": str(prior[0].year_start_date),
+				"to_date": str(prior[0].year_end_date),
+				"fiscal_year": prior[0].name,
+			}
 
 	return {}
+
+
+# ── print / PDF ─────────────────────────────────────────────────────────────────
+
+def _fmt_npr(value):
+	"""Nepali digit grouping — 2,46,438.54, not 246,438.54. Blank for zero."""
+	if value in (None, ""):
+		return ""
+	try:
+		number = float(value)
+	except (TypeError, ValueError):
+		return ""
+	if not number:
+		return ""
+
+	negative = number < 0
+	whole, _, decimals = "{0:.2f}".format(abs(number)).partition(".")
+	if len(whole) > 3:
+		grouped, whole = whole[-3:], whole[:-3]
+		while whole:
+			grouped, whole = whole[-2:] + "," + grouped, whole[:-2]
+	else:
+		grouped = whole
+	return "{0}{1}.{2}".format("-" if negative else "", grouped, decimals)
+
+
+@frappe.whitelist()
+def download_pdf(filters, orientation="Portrait"):
+	"""The ledger as the legacy print-out: same header, columns and footer block."""
+	import os
+
+	from frappe.utils.pdf import get_pdf
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+	else:
+		filters = frappe._dict(filters)
+
+	columns, data = execute(filters)
+
+	# Currency columns print with Nepali grouping; everything else as text.
+	print_columns = []
+	for column in columns:
+		if column.get("hidden"):
+			continue
+		numeric = column.get("fieldtype") == "Currency"
+		print_columns.append(
+			frappe._dict(
+				fieldname=column["fieldname"],
+				label=column["label"],
+				numeric=numeric,
+				width="{0}px".format(column.get("width") or 100),
+			)
+		)
+
+	rows = []
+	for row in data:
+		if not row:
+			continue
+		out = frappe._dict()
+		for column in print_columns:
+			value = row.get(column.fieldname)
+			out[column.fieldname] = _fmt_npr(value) if column.numeric else (value or "")
+		out._class = (
+			"section"
+			if row.get("_section")
+			else "subsection"
+			if row.get("_subsection")
+			else "total"
+			if row.get("_bold")
+			else ""
+		)
+		rows.append(out)
+
+	fiscal_year = frappe.db.sql(
+		"""
+		SELECT name, year_start_date, year_end_date FROM `tabFiscal Year`
+		WHERE %(from_date)s BETWEEN year_start_date AND year_end_date LIMIT 1
+		""",
+		{"from_date": filters.from_date},
+		as_dict=True,
+	)
+	period = ""
+	if fiscal_year:
+		period = "{0} - {1}".format(
+			_bs(fiscal_year[0].year_start_date), _bs(fiscal_year[0].year_end_date)
+		)
+
+	company = frappe.db.get_value(
+		"Company", filters.company, ["phone_no", "fax", "email"], as_dict=True
+	) or frappe._dict()
+
+	selected = _normalize_multiselect(filters.get("general_ledger"))
+	total_ledgers = frappe.db.count(
+		"Account", {"company": filters.company, "is_group": 0}
+	)
+
+	yes_no = lambda flag: "Yes" if cint(flag) else "No"  # noqa: E731
+
+	template_path = os.path.join(os.path.dirname(__file__), "custom_ledger_pdf.html")
+	with open(template_path) as handle:
+		template = handle.read()
+
+	html = frappe.render_template(
+		template,
+		{
+			"company": filters.company,
+			"fy_label": (fiscal_year[0].name if fiscal_year else ""),
+			"accounting_period": period,
+			"report_format": filters.get("report_format") or DEFAULT_FORMAT,
+			"from_bs": _bs(filters.from_date),
+			"to_bs": _bs(filters.to_date),
+			"phone": company.get("phone_no"),
+			"fax": company.get("fax"),
+			"email": company.get("email"),
+			"columns": print_columns,
+			"rows": rows,
+			"ledger_type": filters.get("ledger_type") or "Both",
+			"ledgers_selected": len(selected) or total_ledgers,
+			"ledgers_total": total_ledgers,
+			"include_cash_bank": yes_no(filters.get("include_cash_bank")),
+			"show_grand_total": yes_no(filters.get("show_grand_total", 1)),
+			"suppress_zero": yes_no(not cint(filters.get("show_zero_values"))),
+			"remarks": yes_no(filters.get("remarks", 1)),
+			"month_total": yes_no(filters.get("month_total")),
+			"printed_on": _bs(frappe.utils.nowdate()),
+		},
+	)
+
+	frappe.local.response.filename = "{0} - {1}.pdf".format(
+		filters.get("report_format") or "Custom Ledger", filters.company
+	)
+	frappe.local.response.filecontent = get_pdf(
+		html,
+		{
+			"orientation": orientation if orientation in ("Portrait", "Landscape") else "Portrait",
+			"margin-top": "10mm",
+			"margin-bottom": "12mm",
+			"margin-left": "8mm",
+			"margin-right": "8mm",
+		},
+	)
+	frappe.local.response.type = "download"
