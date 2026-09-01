@@ -242,15 +242,15 @@ frappe.query_reports["Custom Ledger"] = {
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
-		// Account header, and (in the detail formats) the sub ledger header:
-		// blank every other cell so empty numerics don't render as 0.00.
-		// a nested document line sits under its posting, in lighter type
+		// A nested document line sits under its posting, in lighter type.
 		if (data && data._nested && column.fieldname === "description") {
 			return `<span style="color:#6b7280;">${frappe.utils.escape_html(
 				data.description || ""
 			)}</span>`;
 		}
 
+		// Account header, and (in the detail formats) the sub ledger header:
+		// blank every other cell so empty numerics don't render as 0.00.
 		if (data && (data._section || data._subsection)) {
 			if (column.fieldname === "description") {
 				const indent = data._subsection ? "padding-left:14px;" : "";
