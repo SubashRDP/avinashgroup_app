@@ -67,16 +67,18 @@ LEDGER_TYPE_ROOTS = {
 # boundaries are Bikram Sambat ("This Month 2083/05/16 - 2083/06/14" is Bhadra,
 # not an AD month), so these are resolved through rdp_common_app's BS helpers
 # rather than frappe.datetime's AD ones.
+# "Fiscal Year" reveals the year picker, "Custom Dates" reveals From/To, and
+# every other choice resolves both dates on its own.
 PERIOD_PRESETS = (
-	"Custom Dates",
-	"Today",
-	"Yesterday",
-	"This Month",
-	"Last Month",
+	"Fiscal Year",
+	"Last Fiscal Year",
 	"This Fiscal Quarter",
 	"Last Fiscal Quarter",
-	"This Fiscal Year",
-	"Last Fiscal Year",
+	"This Month",
+	"Last Month",
+	"Today",
+	"Yesterday",
+	"Custom Dates",
 )
 
 NO_SUBLEDGER = "__none__"
@@ -910,7 +912,7 @@ def get_period(preset, company=None, on_date=None):
 		end = get_bs_month_range(end_year, last)[1]
 		return {"from_date": str(start), "to_date": str(end)}
 
-	if preset in ("This Fiscal Year", "Last Fiscal Year"):
+	if preset in ("Fiscal Year", "This Fiscal Year", "Last Fiscal Year"):
 		fy = frappe.db.sql(
 			"""
 			SELECT name, year_start_date, year_end_date FROM `tabFiscal Year`
@@ -922,7 +924,7 @@ def get_period(preset, company=None, on_date=None):
 		)
 		if not fy:
 			return {}
-		if preset == "This Fiscal Year":
+		if preset != "Last Fiscal Year":
 			return {
 				"from_date": str(fy[0].year_start_date),
 				"to_date": str(fy[0].year_end_date),

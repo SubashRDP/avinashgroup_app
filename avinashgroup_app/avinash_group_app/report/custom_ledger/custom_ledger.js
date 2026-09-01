@@ -30,62 +30,45 @@ frappe.query_reports["Custom Ledger"] = {
 			},
 		},
 		{
-			// The legacy screen's date-preset buttons. Month and quarter
-			// boundaries are Bikram Sambat, resolved server-side.
+			// One control decides how the period is chosen. Each choice reveals
+			// only the fields it needs: "Fiscal Year" shows the year picker,
+			// "Custom Dates" shows From/To, everything else computes both.
 			fieldname: "period_preset",
 			label: __("Period"),
 			fieldtype: "Select",
+			reqd: 1,
 			options: [
-				"Custom Dates",
-				"Today",
-				"Yesterday",
-				"This Month",
-				"Last Month",
+				"Fiscal Year",
+				"Last Fiscal Year",
 				"This Fiscal Quarter",
 				"Last Fiscal Quarter",
-				"This Fiscal Year",
-				"Last Fiscal Year",
+				"This Month",
+				"Last Month",
+				"Today",
+				"Yesterday",
+				"Custom Dates",
 			].join("\n"),
-			default: "Custom Dates",
+			default: "Fiscal Year",
 			on_change: function () {
-				const preset = frappe.query_report.get_filter_value("period_preset");
-				if (!preset || preset === "Custom Dates") return;
-				frappe
-					.call({
-						method:
-							"avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger.get_period",
-						args: {
-							preset: preset,
-							company: frappe.query_report.get_filter_value("company"),
-						},
-					})
-					.then((r) => {
-						if (!r.message || !r.message.from_date) return;
-						// Move the Fiscal Year field with the dates. Both drive the
-						// period, so leaving them to disagree ("Last Fiscal Year"
-						// showing alongside 83/84) is just confusing.
-						const patch = Object.assign({}, r.message);
-						if (r.message.fiscal_year) {
-							patch.fiscal_year = r.message.fiscal_year;
-						}
-						frappe.query_report.set_filter_value(patch);
-					});
+				frappe.query_reports["Custom Ledger"].apply_period(frappe.query_report);
 			},
 		},
 		{
+			// Shown only when Period is "Fiscal Year". Defaults to the running
+			// year, so the report opens on the current books.
 			fieldname: "fiscal_year",
 			label: __("Fiscal Year"),
 			fieldtype: "Link",
 			options: "Fiscal Year",
 			default: erpnext.utils.get_fiscal_year(frappe.datetime.get_today()),
 			on_change: function () {
-				const fiscal_year = frappe.query_report.get_filter_value("fiscal_year");
+				const report = frappe.query_report;
+				if (report.get_filter_value("period_preset") !== "Fiscal Year") return;
+				const fiscal_year = report.get_filter_value("fiscal_year");
 				if (!fiscal_year) return;
 				frappe.model.with_doc("Fiscal Year", fiscal_year, function () {
 					const fy = frappe.model.get_doc("Fiscal Year", fiscal_year);
-					// Picking a year by hand means the dates are no longer a preset.
-					frappe.query_report.set_filter_value({
-						period_preset: "Custom Dates",
+					report.set_filter_value({
 						from_date: fy.year_start_date,
 						to_date: fy.year_end_date,
 					});
@@ -186,7 +169,54 @@ frappe.query_reports["Custom Ledger"] = {
 		},
 	],
 
+	// Show only the fields the chosen Period needs, and resolve its dates.
+	apply_period: function (report) {
+		const preset = report.get_filter_value("period_preset") || "Fiscal Year";
+		const by_year = preset === "Fiscal Year";
+		const custom = preset === "Custom Dates";
+
+		report.get_filter("fiscal_year").toggle(by_year);
+		report.get_filter("from_date").toggle(custom);
+		report.get_filter("to_date").toggle(custom);
+
+		if (custom) {
+			report.refresh();
+			return;
+		}
+
+		if (by_year) {
+			const fiscal_year =
+				report.get_filter_value("fiscal_year") ||
+				erpnext.utils.get_fiscal_year(frappe.datetime.get_today());
+			frappe.model.with_doc("Fiscal Year", fiscal_year, function () {
+				const fy = frappe.model.get_doc("Fiscal Year", fiscal_year);
+				if (!fy) return;
+				report.set_filter_value({
+					fiscal_year: fiscal_year,
+					from_date: fy.year_start_date,
+					to_date: fy.year_end_date,
+				});
+			});
+			return;
+		}
+
+		frappe
+			.call({
+				method:
+					"avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger.get_period",
+				args: { preset: preset, company: report.get_filter_value("company") },
+			})
+			.then((r) => {
+				if (r.message && r.message.from_date) {
+					report.set_filter_value(r.message);
+				}
+			});
+	},
+
 	onload: function (report) {
+		// Open on the current fiscal year with only the year picker showing.
+		frappe.query_reports["Custom Ledger"].apply_period(report);
+
 		// Print-out matching the legacy layout: same header block, Nepali digit
 		// grouping, and the "Report Parameters" footer.
 		report.page.add_inner_button(__("Download PDF"), function () {
