@@ -350,7 +350,9 @@ frappe.query_reports["Purchase Register Report"] = {
 	formatter: function (value, row, column, data, default_formatter) {
 		if (!data) return default_formatter(value, row, column, data);
 
-		if (column.fieldname === "voucher_no" && value && !data.bold) {
+		// The PI link lives on the supplier-name column ("<supplier name>::<pi.name>").
+		// मिति and बीजक नं. (voucher_no) are plain text — blank when the PI has no value.
+		if (column.fieldname === "supplier_name" && value && !data.bold) {
 			const parts = value.split("::");
 			const label = parts[0];
 			const docname = parts[1] || parts[0];

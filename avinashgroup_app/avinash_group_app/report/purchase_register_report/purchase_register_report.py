@@ -115,9 +115,10 @@ def _get_govt_heading_info(filters):
 # Type, Total VAT are dropped, not merely relabelled.
 # The मिति column shows the supplier's invoice date in BS (custom_supplier_invoice_miti,
 # date only, no time) and the बीजक नं. column shows the supplier's invoice number (bill_no) —
-# both taken from the Purchase Invoice's supplier-bill fields, since this is the VAT
-# purchase book and बीजक refers to the supplier's bill, not our internal voucher name.
-# voucher_no still carries "<bill_no>::<pi.name>" so the on-screen cell can link to the PI.
+# both plain text, left blank when the Purchase Invoice carries no supplier-bill value.
+# The link back to the Purchase Invoice lives on the आपूर्तिकर्ताको नाम (supplier_name) column
+# instead: supplier_name carries "<supplier name>::<pi.name>" and renders as the 'doclink'
+# kind — label is the text before "::", pi.name after it is used for the form link.
 # Dropping Date/Purchase Type/Total VAT makes voucher_no/pragyanpatra_no/supplier_name/vat_number
 # contiguous again, so बीजक/प्रज्ञापनपत्र नम्बर is a genuine 4-column merge — no column reordering needed.
 # pragyanpatra_no is a placeholder column the govt form has (Pragyanpatra/declaration no.)
@@ -196,7 +197,7 @@ def _build_govt_layout(selected_columns, is_return=False):
 	groups = _govt_groups(is_return)
 
 	body_fields = [
-		{'key': f, 'group': group, 'sub': label, 'css': 'l' if ftype == 'Data' else 'r', 'kind': 'currency' if ftype == 'Currency' else ('voucher' if f == 'voucher_no' else 'text')}
+		{'key': f, 'group': group, 'sub': label, 'css': 'l' if ftype == 'Data' else 'r', 'kind': 'currency' if ftype == 'Currency' else ('doclink' if f == 'supplier_name' else 'text')}
 		for f, group, label, ftype, width in _govt_fields(is_return)
 		if visible(f)
 	]
@@ -409,7 +410,7 @@ def download_excel(filters, selected_columns=None):
 	for d in data:
 		for ci, bf in enumerate(body_fields, start=1):
 			val = d.get(bf['key'])
-			if bf['kind'] == 'voucher':
+			if bf['kind'] == 'doclink':
 				val = (val or '').split('::')[0]
 			c = ws.cell(row=row, column=ci, value=val)
 			c.border = border
@@ -448,7 +449,7 @@ def execute(filters=None):
 					row[f] = abs(row[f])
 
 	if data:
-		total = {"voucher_no": _("Total"), "bold": 1}
+		total = {"supplier_name": _("Total"), "bold": 1}
 		for col in columns:
 			if col.get("fieldtype") in ("Currency", "Float"):
 				total[col["fieldname"]] = sum(row.get(col["fieldname"]) or 0 for row in data)
@@ -480,11 +481,11 @@ def get_data(filters):
 			pi.posting_date                                                                          AS date,
 			SUBSTRING_INDEX(pi.custom_supplier_invoice_miti, ' ', 1)                                 AS miti,
 			pi.custom_purchase_type                                                                  AS purchase_type,
-			CONCAT(IFNULL(pi.bill_no, ''), '::', pi.name)                                             AS voucher_no,
+			pi.bill_no                                                                               AS voucher_no,
 			pi.bill_no                                                                               AS supplier_invoice_no,
 			pi.bill_date                                                                             AS supplier_invoice_date,
 			SUBSTRING_INDEX(pi.custom_supplier_invoice_miti, ' ', 1)                                 AS supplier_invoice_miti,
-			pi.supplier_name                                                                         AS supplier_name,
+			CONCAT(pi.supplier_name, '::', pi.name)                                                   AS supplier_name,
 			s.tax_id                                                                                 AS vat_number,
 			pi.custom_total_amount_including_excise                                                  AS purchase,
 			SUM(CASE WHEN pii.custom_vat_apply_on = 'VAT 0%%'                                                                          THEN pii.amount ELSE 0 END) AS tax_free_purchase,

@@ -196,7 +196,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
     <tr{% if row.get('bold') %} class="tr-total"{% endif %}>
       {% for bf in govt_layout.body_fields %}
       {% if bf.kind == 'currency' %}<td class="{{ bf.css }} nowrap">{{ fmt(row.get(bf.key)) }}</td>
-      {% elif bf.kind == 'voucher' %}<td class="{{ bf.css }}">{{ (row.get(bf.key) or '').split('::')[0] }}</td>
+      {% elif bf.kind == 'doclink' %}<td class="{{ bf.css }}">{{ (row.get(bf.key) or '').split('::')[0] }}</td>
       {% else %}<td class="{{ bf.css }}">{{ row.get(bf.key) or '' }}</td>
       {% endif %}
       {% endfor %}
