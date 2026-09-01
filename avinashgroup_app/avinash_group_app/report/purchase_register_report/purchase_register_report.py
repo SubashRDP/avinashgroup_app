@@ -112,9 +112,14 @@ def _get_govt_heading_info(filters):
 # (Purchase Book, Is Return unticked) and "खरिद फिर्ता खाता" (Purchase Return Book, Is Return
 # ticked). The report ALWAYS shows one of these two govt layouts now — there is no more
 # plain flat register. Only fields with a govt Nepali equivalent are shown; Date, Purchase
-# Type, Supplier Invoice No/Date/Miti, Total VAT are dropped, not merely relabelled.
-# Dropping them makes voucher_no/pragyanpatra_no/supplier_name/vat_number contiguous again,
-# so बीजक/प्रज्ञापनपत्र नम्बर is a genuine 4-column merge — no column reordering needed.
+# Type, Total VAT are dropped, not merely relabelled.
+# The मिति column shows the supplier's invoice date in BS (custom_supplier_invoice_miti,
+# date only, no time) and the बीजक नं. column shows the supplier's invoice number (bill_no) —
+# both taken from the Purchase Invoice's supplier-bill fields, since this is the VAT
+# purchase book and बीजक refers to the supplier's bill, not our internal voucher name.
+# voucher_no still carries "<bill_no>::<pi.name>" so the on-screen cell can link to the PI.
+# Dropping Date/Purchase Type/Total VAT makes voucher_no/pragyanpatra_no/supplier_name/vat_number
+# contiguous again, so बीजक/प्रज्ञापनपत्र नम्बर is a genuine 4-column merge — no column reordering needed.
 # pragyanpatra_no is a placeholder column the govt form has (Pragyanpatra/declaration no.)
 # that this report has no data for — always blank, never pulled from Purchase Invoice.
 def _govt_groups(is_return):
@@ -473,9 +478,9 @@ def get_data(filters):
 		f"""
 		SELECT
 			pi.posting_date                                                                          AS date,
-			SUBSTRING_INDEX(pi.custom_nepali_miti, ' ', 1)                                           AS miti,
+			SUBSTRING_INDEX(pi.custom_supplier_invoice_miti, ' ', 1)                                 AS miti,
 			pi.custom_purchase_type                                                                  AS purchase_type,
-			CONCAT(IFNULL(pi.custom_name, pi.name), '::', pi.name)                                  AS voucher_no,
+			CONCAT(IFNULL(pi.bill_no, ''), '::', pi.name)                                             AS voucher_no,
 			pi.bill_no                                                                               AS supplier_invoice_no,
 			pi.bill_date                                                                             AS supplier_invoice_date,
 			SUBSTRING_INDEX(pi.custom_supplier_invoice_miti, ' ', 1)                                 AS supplier_invoice_miti,
