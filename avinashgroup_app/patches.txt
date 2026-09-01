@@ -58,3 +58,5 @@ avinashgroup_app.patches.allow_expected_grand_total_on_submit
 avinashgroup_app.patches.update_cheque_print_format
 
 avinashgroup_app.patches.add_payment_entry_party_index
+
+avinashgroup_app.patches.list_view_more_than_ten_columns
