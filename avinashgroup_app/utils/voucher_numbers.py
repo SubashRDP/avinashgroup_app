@@ -51,3 +51,22 @@ def resolve(pairs):
 				if row.number:
 					numbers[(voucher_type, row.name)] = row.number
 	return numbers
+
+
+def link(voucher_type, name, number=None):
+	"""The voucher number as a link to its document.
+
+	The number is not the document name, so it cannot be a Link/Dynamic Link
+	column -- the framework would build the URL from the displayed value and
+	land on nothing. An anchor carries both: the number is what you read, the
+	name is where it goes.
+	"""
+	if not (voucher_type and name):
+		return number or ""
+	label = frappe.utils.escape_html(str(number or name))
+	return '<a href="/app/{0}/{1}" data-doctype="{2}" data-name="{1}">{3}</a>'.format(
+		frappe.scrub(voucher_type).replace("_", "-"),
+		frappe.utils.escape_html(str(name)),
+		frappe.utils.escape_html(str(voucher_type)),
+		label,
+	)

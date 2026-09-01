@@ -11,7 +11,7 @@ a number there that is not a document name would leave a link that 404s. A
 
 import frappe
 
-from avinashgroup_app.utils.voucher_numbers import resolve
+from avinashgroup_app.utils.voucher_numbers import link, resolve
 
 COLUMN = {
 	"label": "Voucher No.",
@@ -45,8 +45,11 @@ def patch_general_ledger_voucher_no():
 			for row in data:
 				if not isinstance(row, dict):
 					continue
-				row["custom_voucher_number"] = numbers.get(
-					(row.get("voucher_type"), row.get("voucher_no")), ""
+				number = numbers.get((row.get("voucher_type"), row.get("voucher_no")))
+				row["custom_voucher_number"] = (
+					link(row.get("voucher_type"), row.get("voucher_no"), number)
+					if number
+					else ""
 				)
 
 			# sit next to the document name the number belongs to

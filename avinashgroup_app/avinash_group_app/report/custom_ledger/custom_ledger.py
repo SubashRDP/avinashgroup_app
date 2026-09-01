@@ -737,7 +737,9 @@ def _build_detail(filters, accounts, level):
 					{
 						"date": txn.posting_date,
 						"miti": txn.get("miti") or "",
+						# desk shows the linked anchor; the PDF uses voucher_number
 						"voucher_no": txn.voucher_no,
+						"voucher_number": txn.get("voucher_number") or "",
 						"description": (
 							(txn.remarks or txn.voucher_type or "").strip()[:180]
 							if show_remarks
@@ -778,16 +780,17 @@ def _apply_voucher_numbers(rows):
 	if not rows:
 		return
 
-	from avinashgroup_app.utils.voucher_numbers import resolve
+	from avinashgroup_app.utils.voucher_numbers import link, resolve
 
 	numbers = resolve((r.get("voucher_type"), r.get("voucher_no")) for r in rows)
 
 	for r in rows:
-		# keep the internal name so the row can still be traced back
-		r["voucher_name"] = r.get("voucher_no")
-		r["voucher_no"] = numbers.get(
-			(r.get("voucher_type"), r.get("voucher_no")), r.get("voucher_no")
-		)
+		# keep the internal name so the row can still be traced back, and so the
+		# link has somewhere to point
+		name = r.get("voucher_no")
+		r["voucher_name"] = name
+		r["voucher_number"] = numbers.get((r.get("voucher_type"), name), name)
+		r["voucher_no"] = link(r.get("voucher_type"), name, r["voucher_number"])
 		r["miti"] = _bs(r.get("posting_date"))
 
 
@@ -1028,6 +1031,9 @@ def download_pdf(filters, orientation="Portrait"):
 		out = frappe._dict()
 		for column in print_columns:
 			value = row.get(column.fieldname)
+			# the desk cell is an anchor; print wants the bare number
+			if column.fieldname == "voucher_no" and row.get("voucher_number"):
+				value = row["voucher_number"]
 			out[column.fieldname] = _fmt_npr(value) if column.numeric else (value or "")
 		out._class = (
 			"section"
