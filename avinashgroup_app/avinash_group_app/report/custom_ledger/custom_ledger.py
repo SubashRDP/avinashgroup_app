@@ -55,6 +55,14 @@ FORMATS = {
 
 DEFAULT_FORMAT = "Normal Sub Ledger - Summary"
 
+# "General Ledger Type" on the legacy parameter screen: Both / Profit & Loss /
+# Balance Sheet. Selecting one is how the legacy operator picks a whole class of
+# accounts at once instead of ticking them one by one.
+LEDGER_TYPE_ROOTS = {
+	"Profit & Loss": ("Income", "Expense"),
+	"Balance Sheet": ("Asset", "Liability", "Equity"),
+}
+
 NO_SUBLEDGER = "__none__"
 
 PARTY_NAME_FIELD = {
@@ -142,6 +150,11 @@ def _resolve_accounts(filters):
 
 		params["names"] = get_accounts_with_children(chosen)
 		conditions.append("name IN %(names)s")
+
+	roots = LEDGER_TYPE_ROOTS.get(filters.get("ledger_type"))
+	if roots:
+		params["roots"] = roots
+		conditions.append("root_type IN %(roots)s")
 
 	if not cint(filters.get("include_cash_bank")):
 		conditions.append("account_type NOT IN ('Cash', 'Bank') OR account_type IS NULL")
@@ -753,3 +766,42 @@ def _get_columns(depth):
 		_currency("credit", _("Credit")),
 		_currency("balance", _("Balance"), 150),
 	]
+
+
+# ── filter options ──────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def get_general_ledgers(company, txt=None, ledger_type=None):
+	"""Every account in the company, for the General Ledgers picker.
+
+	frappe.db.get_link_options caps at ten results, which is unusable against
+	the 395 accounts a company carries here — the legacy picker offers all of
+	them ("General Ledgers : 19 of 225"). This returns the full list, narrowed
+	by the typed text and the selected ledger type.
+	"""
+	if not company:
+		return []
+
+	conditions = ["company = %(company)s", "is_group = 0"]
+	params = {"company": company, "txt": "%{0}%".format((txt or "").strip())}
+
+	if txt:
+		conditions.append("(name LIKE %(txt)s OR account_name LIKE %(txt)s OR account_number LIKE %(txt)s)")
+
+	roots = LEDGER_TYPE_ROOTS.get(ledger_type)
+	if roots:
+		params["roots"] = roots
+		conditions.append("root_type IN %(roots)s")
+
+	return frappe.db.sql(
+		"""
+		SELECT name AS value,
+		       TRIM(CONCAT(IFNULL(account_number, ''), ' ', account_name)) AS description
+		FROM `tabAccount`
+		WHERE {0}
+		ORDER BY account_number, account_name
+		LIMIT 1000
+		""".format(" AND ".join(conditions)),
+		params,
+		as_dict=True,
+	)

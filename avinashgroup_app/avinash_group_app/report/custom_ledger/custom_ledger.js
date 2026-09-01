@@ -62,16 +62,44 @@ frappe.query_reports["Custom Ledger"] = {
 			default: erpnext.utils.get_fiscal_year(frappe.datetime.get_today(), true)[2],
 		},
 		{
+			// Legacy "General Ledger Type" radio. Picking one narrows the
+			// General Ledgers list AND the report itself, which is how the
+			// legacy operator selects a whole class of accounts at once.
+			fieldname: "ledger_type",
+			label: __("General Ledger Type"),
+			fieldtype: "Select",
+			options: ["Both", "Profit & Loss", "Balance Sheet"].join("\n"),
+			default: "Both",
+			on_change: function () {
+				// the account list depends on this, so clear a now-invalid pick
+				frappe.query_report.set_filter_value("general_ledger", []);
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			// The legacy footer's own account picker: "General Ledgers : 19 of 225".
 			// Leave blank for every account in the company.
+			//
+			// frappe.db.get_link_options caps at ten results, which cannot show
+			// the ~395 accounts a company has here, so this goes to the report's
+			// own endpoint for the full list.
 			fieldname: "general_ledger",
 			label: __("General Ledgers"),
 			fieldtype: "MultiSelectList",
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Account", txt, {
-					company: frappe.query_report.get_filter_value("company"),
-					is_group: 0,
-				});
+				const company = frappe.query_report.get_filter_value("company");
+				if (!company) return [];
+				return frappe
+					.call({
+						method:
+							"avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger.get_general_ledgers",
+						args: {
+							company: company,
+							txt: txt,
+							ledger_type: frappe.query_report.get_filter_value("ledger_type"),
+						},
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
