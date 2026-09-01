@@ -12,7 +12,7 @@ frappe.ui.form.on('Journal Entry', {
     refresh: function(frm) {
         setTimeout(() => setup_vehicle_query(frm), 50);
         prefetch_vehicles_for_existing_rows(frm);
-        add_default_account_rows(frm);
+        keep_minimum_account_rows(frm);
     },
 
     accounts_on_form_rendered: function(frm) {
@@ -21,6 +21,14 @@ frappe.ui.form.on('Journal Entry', {
 });
 
 frappe.ui.form.on('Journal Entry Account', {
+    // GridRow.remove fires `<fieldname>_remove` against the CHILD doctype, not
+    // the parent -- registering this on 'Journal Entry' looks right and never
+    // runs. It fires after the row is gone, so doc.accounts is already the
+    // post-delete list.
+    accounts_remove: function(frm) {
+        keep_minimum_account_rows(frm, { announce: true });
+    },
+
     account: function(frm, cdt, cdn) {
         const row = locals[cdt][cdn];
 
@@ -36,23 +44,36 @@ frappe.ui.form.on('Journal Entry Account', {
     }
 });
 
-// ── Default rows on a blank entry ──────────────────────────────
-// Only for an empty new doc: amended, duplicated, mapped-from-another-doc and
-// template-driven entries arrive with their accounts table already filled, and
-// picking a Journal Entry Template later clears the table anyway (core
-// update_jv_details), so the blank rows never survive to duplicate template rows.
-function add_default_account_rows(frm) {
-    if (!frm.is_new()) return;
-    // Run once per new doc: refresh fires repeatedly, and after the user
-    // deletes the seeded rows we must not keep re-adding them.
-    if (frm.__default_rows_added) return;
-    if ((frm.doc.accounts || []).length) return;
+// ── Always at least two account rows ───────────────────────────
+// A journal is double-entry, so the table is kept topped up to two rows: on a
+// blank new entry, and again if someone deletes their way below two.
+//
+// This deliberately replaces the earlier seed-once behaviour, which added two
+// rows to a new entry and then stood by if they were deleted. Requested so the
+// form always presents a debit line and a credit line.
+//
+// Amended, duplicated and mapped-from-another-doc entries arrive with their
+// table already filled, so they are past the minimum and nothing is added.
+// Draft only -- a submitted or cancelled entry is never touched.
+function keep_minimum_account_rows(frm, { announce = false } = {}) {
+    if (frm.doc.docstatus !== 0) return;
 
-    frm.__default_rows_added = true;
-    for (let i = 0; i < DEFAULT_ACCOUNT_ROWS; i++) {
+    const count = (frm.doc.accounts || []).length;
+    if (count >= DEFAULT_ACCOUNT_ROWS) return;
+
+    for (let i = count; i < DEFAULT_ACCOUNT_ROWS; i++) {
         frm.add_child('accounts');
     }
     frm.refresh_field('accounts');
+
+    // Only when a deletion caused it -- otherwise every refresh of a blank
+    // entry would pop a message for rows the user never asked about.
+    if (announce) {
+        frappe.show_alert({
+            message: __('An entry needs at least {0} account rows', [DEFAULT_ACCOUNT_ROWS]),
+            indicator: 'orange',
+        });
+    }
 }
 
 // ── Inline grid rows ──────────────────────────────────────────
