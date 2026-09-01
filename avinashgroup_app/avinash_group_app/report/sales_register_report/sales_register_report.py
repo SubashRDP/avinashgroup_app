@@ -486,6 +486,7 @@ def get_data(filters):
 			si.posting_date                                                                                                               AS date,
 			SUBSTRING_INDEX(si.custom_invoice_miti, ' ', 1)                                                                               AS miti,
 			COALESCE(si.custom_branch_name, si.name)                                                                                      AS bill_no,
+			si.name                                                                                                                        AS si_name,
 			si.customer_name                                                                                                               AS customer,
 			br.branch                                                                                                                      AS branch,
 			c.tax_id                                                                                                                       AS vat_number,

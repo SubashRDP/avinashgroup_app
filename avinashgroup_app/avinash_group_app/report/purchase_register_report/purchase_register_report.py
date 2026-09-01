@@ -488,16 +488,16 @@ def get_data(filters):
 			CONCAT(pi.supplier_name, '::', pi.name)                                                   AS supplier_name,
 			s.tax_id                                                                                 AS vat_number,
 			pi.custom_total_amount_including_excise                                                  AS purchase,
-			SUM(CASE WHEN pii.custom_vat_apply_on = 'VAT 0%%'                                                                          THEN pii.amount ELSE 0 END) AS tax_free_purchase,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory = 'Nepal'    THEN pii.amount ELSE 0 END) AS taxable_purchase,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount ELSE 0 END) AS vat,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory != 'Nepal'   THEN pii.amount ELSE 0 END) AS taxable_import,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory != 'Nepal'   THEN pii.custom_vat_amount ELSE 0 END) AS import_vat,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 1 AND s.custom_territory = 'Nepal'    THEN pii.amount ELSE 0 END) AS capitalized_purchase,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 1 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount ELSE 0 END) AS capitalized_vat,
-			SUM(CASE WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount
-			         WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 0 AND s.custom_territory != 'Nepal'   THEN pii.custom_vat_amount
-			         WHEN pii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND i.is_fixed_asset = 1 AND s.custom_territory = 'Nepal'    THEN pii.custom_vat_amount
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) = 0                                                                                                                                             THEN pii.amount ELSE 0 END) AS tax_free_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.amount ELSE 0 END) AS taxable_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_vat_amount ELSE 0 END) AS vat,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.amount ELSE 0 END) AS taxable_import,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_vat_amount ELSE 0 END) AS import_vat,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.amount ELSE 0 END) AS capitalized_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_vat_amount ELSE 0 END) AS capitalized_vat,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_vat_amount
+			         WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_vat_amount
+			         WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_vat_amount
 			         ELSE 0 END)                                                                      AS total_vat,
 			SUM(pii.qty)                                                                             AS qty,
 			GROUP_CONCAT(DISTINCT i.item_name SEPARATOR ', ')                                        AS item_description,
