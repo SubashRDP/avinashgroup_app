@@ -57,6 +57,10 @@ app_include_js = [
     # rest. Patches the Grid / GridRow prototypes, so it must load after
     # frappe's controls.bundle.js — every app_include_js does.
     "/assets/avinashgroup_app/js/grid_wide_columns.js?v=1.2",
+    # Sizes list-view columns to their content and scrolls sideways when
+    # they no longer fit, instead of v15's even split that clips long
+    # values. A list that already fits is left untouched.
+    "/assets/avinashgroup_app/js/list_wide_columns.js?v=1.3",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
