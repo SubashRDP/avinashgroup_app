@@ -17,6 +17,16 @@ def set_invoice_miti(doc, method=None):
 	if not doc.get("posting_date"):
 		return
 
+	if doc.posting_date:
+		posting = frappe.utils.getdate(doc.posting_date)
+		current = frappe.utils.getdate(frappe.utils.today())
+		if posting > current:
+			frappe.throw("Posting Date cannot be a future date. It must be today's date.")
+		if posting < current:
+			frappe.throw("Posting Date cannot be backdated. It must be today's date.")
+
+	
+
 	try:
 		doc.custom_invoice_miti = bs_date_str(doc.posting_date)
 	except Exception:
