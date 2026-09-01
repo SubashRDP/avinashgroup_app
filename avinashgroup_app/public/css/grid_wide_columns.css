@@ -1,0 +1,111 @@
+/* Wide child tables -- the styling half of grid_wide_columns.js.
+ *
+ * Everything here is gated on .column-limit-reached, which that file puts on
+ * the grid container only once the configured columns add up to more than ten
+ * width units. A grid inside the old budget renders exactly as it always did.
+ *
+ * Widths are the pixel ladder from Frappe v16's grid.scss. */
+
+/* Keep the scrollbar inside the field rather than widening the form column. */
+.frappe-control[data-fieldtype="Table"].form-group:has(.column-limit-reached) {
+	overflow-x: clip;
+}
+
+/* v15 pins the container both ways -- `overflow-x: clip` below md, and
+ * `overflow-x: unset !important` above it -- keyed on the single
+ * .form-grid-container class. Two classes plus !important outranks that in
+ * both, since a media query adds no specificity of its own. */
+.form-grid-container.column-limit-reached {
+	position: relative;
+	overflow-x: auto !important;
+	overflow-y: hidden;
+	border: 1px solid var(--table-border-color);
+	border-radius: var(--border-radius-md);
+}
+
+/* Frame stays put while the content scrolls under it, so the border moves off
+ * .form-grid and onto the container -- including the red mandatory state. */
+.form-grid-container.column-limit-reached:has(.form-grid.error) {
+	border-color: var(--error-border);
+}
+
+.form-grid-container.column-limit-reached .form-grid {
+	border: none;
+	/* As wide as the widest row, so there is something to scroll, but never
+	 * narrower than the container. Beats v15's `min-width: 738px` below md. */
+	width: max-content;
+	min-width: 100%;
+	/* v15 scrolls the grid on touch devices by dragging an inline `left`
+	 * offset on .form-grid. That fights native scrolling, so pin it flat --
+	 * !important beats the inline style the touch handler writes. */
+	position: static !important;
+	left: 0 !important;
+}
+
+/* Opening a row as a form drops the columns entirely; let it lay out normally. */
+.form-grid-container.column-limit-reached:has(.grid-row.grid-row-open) {
+	overflow-x: clip !important;
+}
+
+/* Columns are laid out one row at a time, and a row must not wrap. */
+.form-grid-container.column-limit-reached .data-row.row {
+	flex-wrap: nowrap;
+}
+
+/* Bootstrap's .col-N is `flex: 0 0 N/12%` with a matching max-width -- which
+ * is precisely why past 11 units the row wrapped. Fixed pixels instead, and
+ * the percentage ceiling has to be cleared or it clamps them straight back. */
+.form-grid-container.column-limit-reached .grid-static-col {
+	max-width: none;
+}
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-1 { flex: 1 0 60px; width: 60px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-2 { flex: 1 0 100px; width: 100px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-3 { flex: 1 0 140px; width: 140px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-4 { flex: 1 0 200px; width: 200px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-5 { flex: 1 0 250px; width: 250px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-6 { flex: 1 0 300px; width: 300px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-7 { flex: 1 0 350px; width: 350px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-8 { flex: 1 0 400px; width: 400px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-9 { flex: 1 0 450px; width: 450px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-10 { flex: 1 0 500px; width: 500px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-11 { flex: 1 0 550px; width: 550px; }
+.form-grid-container.column-limit-reached .grid-static-col.col-xs-12 { flex: 1 0 600px; width: 600px; }
+
+/* The checkbox and row-number gutters are bare .col (flex: 1 0 0%) -- under
+ * nowrap they would swallow whatever width is left over. Pin them. */
+.form-grid-container.column-limit-reached .data-row.row > .row-check {
+	flex: 0 0 31px;
+	max-width: 31px;
+}
+.form-grid-container.column-limit-reached .data-row.row > .row-index {
+	flex: 0 0 40px;
+	max-width: 40px;
+}
+
+/* Last column is the edit button (body), the settings gear (heading) or the
+ * filler cell (search row). Freeze it against the right edge so the way into
+ * a row stays reachable at any scroll offset. */
+.form-grid-container.column-limit-reached .data-row.row > .col:last-child {
+	flex: 0 0 30px;
+	min-width: 30px;
+	max-width: 30px;
+	position: sticky;
+	right: 0;
+	z-index: 1;
+	line-height: 1;
+}
+
+/* ...which means it needs to be opaque, or the columns scroll through it. */
+.form-grid-container.column-limit-reached .grid-heading-row .data-row.row > .col:last-child {
+	background-color: var(--subtle-fg);
+}
+.form-grid-container.column-limit-reached .grid-body .data-row.row > .col:last-child {
+	background-color: var(--fg-color);
+}
+
+/* Narrower ladder on small screens, matching v16. */
+@media (max-width: 768px) {
+	.form-grid-container.column-limit-reached .grid-static-col.col-xs-2 { flex: 1 0 90px; width: 90px; }
+	.form-grid-container.column-limit-reached .grid-static-col.col-xs-3 { flex: 1 0 120px; width: 120px; }
+	.form-grid-container.column-limit-reached .grid-static-col.col-xs-4 { flex: 1 0 160px; width: 160px; }
+}
