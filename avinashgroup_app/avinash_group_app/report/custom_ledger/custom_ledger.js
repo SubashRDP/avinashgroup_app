@@ -160,6 +160,14 @@ frappe.query_reports["Custom Ledger"] = {
 			default: 1,
 		},
 		{
+			// Legacy "Product Details" — nests the source document, its party
+			// and the tax line under each posting. Detail formats only.
+			fieldname: "product_details",
+			label: __("Product Details"),
+			fieldtype: "Check",
+			default: 0,
+		},
+		{
 			// Legacy "Month Total" — a subtotal at each BS month boundary.
 			// Detail formats only.
 			fieldname: "month_total",
@@ -236,6 +244,13 @@ frappe.query_reports["Custom Ledger"] = {
 	formatter: function (value, row, column, data, default_formatter) {
 		// Account header, and (in the detail formats) the sub ledger header:
 		// blank every other cell so empty numerics don't render as 0.00.
+		// a nested document line sits under its posting, in lighter type
+		if (data && data._nested && column.fieldname === "description") {
+			return `<span style="color:#6b7280;">${frappe.utils.escape_html(
+				data.description || ""
+			)}</span>`;
+		}
+
 		if (data && (data._section || data._subsection)) {
 			if (column.fieldname === "description") {
 				const indent = data._subsection ? "padding-left:14px;" : "";

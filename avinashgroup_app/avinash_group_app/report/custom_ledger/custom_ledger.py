@@ -635,6 +635,61 @@ def _vehicle_transactions(filters, accounts):
 	return rows
 
 
+def _document_details(accounts, transactions):
+	"""Party, bill number and tax line for each voucher in view.
+
+	The legacy Posting Detail nests these under the posting -- source document,
+	party code and name, then the tax line and its amount:
+
+	    PB/01259/82-83  VN01  Nepal Oil Corporation Ltd., Birgunj Branch
+	                          VAT 13%                    2,39,357.65
+
+	ERPNext keeps them on the invoice and its tax table, not on GL Entry, so
+	they are fetched per voucher here. Only Sales and Purchase Invoices carry
+	this shape; anything else nests nothing.
+	"""
+	wanted = {}
+	for txn in transactions:
+		if txn.get("voucher_type") in ("Sales Invoice", "Purchase Invoice"):
+			wanted.setdefault(txn["voucher_type"], set()).add(txn.get("voucher_name") or txn.get("voucher_no"))
+
+	details = {}
+	for doctype, names in wanted.items():
+		names = list(names)
+		party_field = "customer_name" if doctype == "Sales Invoice" else "supplier_name"
+		bill_field = "name" if doctype == "Sales Invoice" else "bill_no"
+		tax_table = "Sales Taxes and Charges" if doctype == "Sales Invoice" else "Purchase Taxes and Charges"
+
+		for start in range(0, len(names), 500):
+			chunk = names[start : start + 500]
+			for row in frappe.get_all(
+				doctype,
+				filters={"name": ("in", chunk)},
+				fields=["name", "{0} as party_name".format(party_field), "{0} as bill_no".format(bill_field)],
+			):
+				details[(doctype, row.name)] = frappe._dict(
+					party_name=row.party_name, bill_no=row.bill_no, taxes=[]
+				)
+
+			for tax in frappe.get_all(
+				tax_table,
+				filters={"parent": ("in", chunk), "account_head": ("in", list(accounts))},
+				fields=["parent", "description", "rate", "tax_amount"],
+				order_by="idx",
+			):
+				entry = details.get((doctype, tax.parent))
+				if entry is not None:
+					entry.taxes.append(tax)
+
+	return details
+
+
+# A full year of VAT postings is ~40,000 rows before nesting, and the legacy
+# report was only ever run a month at a time (its VAT print is 222 pages for
+# one month). Past this the browser stops coping, so say so rather than hang.
+DETAIL_ROW_LIMIT = 20000
+
+
 def _build_detail(filters, accounts, level):
 	by_party = level == "subledger"
 
@@ -654,6 +709,20 @@ def _build_detail(filters, accounts, level):
 		transactions = _gl_transactions(filters, accounts, False)
 
 	_apply_voucher_numbers(transactions)
+
+	if len(transactions) > DETAIL_ROW_LIMIT:
+		frappe.throw(
+			_(
+				"{0} postings in this period — too many to display. "
+				"Narrow the date range or select fewer accounts."
+			).format(frappe.utils.fmt_money(len(transactions), precision=0))
+		)
+
+	documents = (
+		_document_details(accounts, transactions)
+		if cint(filters.get("product_details"))
+		else {}
+	)
 
 	grouped = {}
 	for txn in transactions:
@@ -751,6 +820,26 @@ def _build_detail(filters, accounts, level):
 					}
 				)
 
+				# legacy "Product Details": the source document, its party and
+				# the tax line, nested under the posting
+				detail = documents.get(
+					(txn.get("voucher_type"), txn.get("voucher_name") or txn.get("voucher_no"))
+				)
+				if detail:
+					for tax in detail.taxes:
+						data.append(
+							{
+								"voucher_no": detail.bill_no or "",
+								"voucher_number": detail.bill_no or "",
+								"description": "    {0}{1}".format(
+									detail.party_name or "",
+									"  —  {0}".format(tax.description) if tax.description else "",
+								),
+								"doc_amount": flt(tax.tax_amount),
+								"_nested": 1,
+							}
+						)
+
 			if month_total and month_key is not None:
 				data.append(
 					{
@@ -845,6 +934,7 @@ def _get_columns(depth):
 		{"fieldname": "miti", "label": _("Miti (BS)"), "fieldtype": "Data", "width": 110},
 		{"fieldname": "voucher_no", "label": _("Voucher No"), "fieldtype": "Data", "width": 190},
 		{"fieldname": "description", "label": _("Description"), "fieldtype": "Data", "width": 340},
+		_currency("doc_amount", _("Product/Doc Amount"), 150),
 		_currency("debit", _("Debit")),
 		_currency("credit", _("Credit")),
 		_currency("balance", _("Balance"), 150),
