@@ -1,0 +1,62 @@
+/* Horizontal scrolling for list views whose columns no longer fit -- the
+ * styling half of list_wide_columns.js.
+ *
+ * Gated on .agx-list-scrolls, which that file puts on `.result` only after
+ * measuring that the columns genuinely need more room than the row has. A list
+ * that fits never gets the class and renders exactly as it always did.
+ *
+ * list_cleanup.css keeps ownership of the right-hand meta area; nothing here
+ * touches .level-right. */
+
+.result.agx-list-scrolls {
+	overflow-x: auto;
+}
+
+/* Rows must size to their content for there to be anything to scroll, and
+ * never be narrower than the viewport so short lists still fill the width. */
+.result.agx-list-scrolls .list-row-head,
+.result.agx-list-scrolls .list-row-container {
+	width: max-content;
+	min-width: 100%;
+}
+
+/* list_cleanup.css gives .level-left `flex: 1; min-width: 0`, which is right
+ * for the normal layout but holds it at viewport width here -- its columns
+ * then overflow it instead of widening it. That breaks header/row alignment
+ * AND leaves the sticky first column nothing to stick within, both of which
+ * showed up in testing before this rule existed. */
+.result.agx-list-scrolls .level-left {
+	flex: 0 0 auto;
+	width: max-content;
+	min-width: 0;
+	/* A row's .level-left also carries frappe's `.ellipsis` class, i.e.
+	 * `overflow: hidden`. An ancestor with hidden overflow becomes the sticky
+	 * containing block, so the first column silently stops freezing -- and
+	 * only in the rows, because the header's .level-left is
+	 * `.list-header-subject` and has visible overflow. Truncation is still
+	 * done per cell, which is where it belongs. */
+	overflow: visible;
+}
+
+/* Without this the pinned pixel widths wrap onto a second line rather than
+ * overflowing into the scroll. */
+.result.agx-list-scrolls .list-row-head,
+.result.agx-list-scrolls .list-row {
+	flex-wrap: nowrap;
+}
+
+/* Clear any percentage ceiling, or it clamps the measured pixel width back. */
+.result.agx-list-scrolls .list-row-col {
+	max-width: none;
+}
+
+/* NOT freezing the first column, deliberately.
+ *
+ * v16 pins the subject column so the link to the document stays reachable at
+ * any scroll offset, and the obvious rule for it is
+ * `position: sticky; left: 0` on `.level-left .list-row-col:first-child`.
+ * That was tried here and does not hold: computed style comes back
+ * `position: sticky; left: 0px`, every ancestor up to the scrollport has
+ * visible overflow and no transform, and the column still scrolls away with
+ * the rest. Left unexplained rather than shipped half-working -- a pinned
+ * column that does not pin is worse than an honest scroll. */

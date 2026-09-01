@@ -8,10 +8,9 @@
 // far less than its own 188px.
 //
 // v16 replaced the even split with per-column widths measured from the widest
-// value actually on screen. This is that half of it, as a prototype patch on
-// frappe.views.ListView so `bench update` cannot revert it. v16 also scrolls
-// the list sideways once the columns stop fitting; that part is deliberately
-// left out -- see the note on the flex rule below.
+// value actually on screen, and scrolls the list sideways once those widths no
+// longer fit the row. This is that behaviour, as a prototype patch on
+// frappe.views.ListView so `bench update` cannot revert it.
 //
 // Deliberately conservative:
 //   * One hook, `after_render`. Nothing here rewrites the list's HTML, so
@@ -20,8 +19,10 @@
 //     stock even split still applies, no widths are set, nothing scrolls.
 //   * Widths are only set when a column is genuinely being clipped, which is
 //     the only case v15 handles badly.
-//   * No new overflow container, so nothing that opens inside a list row can
-//     be clipped by this.
+//   * The overflow container only exists on a list that actually needs it.
+//     List rows are not editable -- no field controls, so nothing opens inside
+//     a row for it to clip. That is what makes this safe here and not in the
+//     child-table grid, where it swallowed Link dropdowns.
 //   * Any failure is caught and logged; a broken measurement must never take
 //     the list view down with it.
 //
@@ -30,6 +31,7 @@
 
 (() => {
 	const FLAG = "_agx_list_widths_patched";
+	const SCROLL_CLASS = "agx-list-scrolls";
 
 	// Breathing room added to a measured width, so text is not flush against
 	// the next column's border.
@@ -111,7 +113,8 @@
 		if (frappe.is_mobile && frappe.is_mobile()) return;
 		if (!lv.$result || !lv.$result.length) return;
 
-		const groups = column_groups(lv.$result[0]);
+		const result = lv.$result[0];
+		const groups = column_groups(result);
 		if (!groups) return;
 
 		// Start from a clean slate: last render's widths would otherwise be
@@ -122,6 +125,7 @@
 				cell.style.flex = "";
 			})
 		);
+		result.classList.remove(SCROLL_CLASS);
 
 		// What each column is getting under the stock even split, measured
 		// before we disturb anything.
@@ -144,33 +148,39 @@
 		const clipping = wanted.some((w, i) => w != null && w > allotted[i] + 1);
 		if (!clipping) return;
 
-		// If the columns cannot all have what they want, stand down and leave
-		// the stock even split in place.
-		//
-		// This is the one case v16 answers by scrolling the list sideways, and
-		// scrolling is deliberately not built here: it needs an overflow
-		// container (which would clip anything opening inside a row), sticky
-		// columns, and a second layout mode to keep working. Declining instead
-		// makes the rule strictly safe -- a list is either improved or left
-		// exactly as it is today, never made worse.
-		//
-		// Shrinking to fit is NOT a usable fallback: with a shrink factor the
-		// columns shrink in proportion to their bases, so a column that needed
-		// the extra room loses it again. Measured while trying it: clipping on
-		// this site's Sales Invoice list went from 19 cells to 54.
 		const available = groups[0][0].parentElement.getBoundingClientRect().width;
 		const total = wanted.reduce((sum, w) => sum + (w || 0), 0);
-		if (total > available) return;
 
-		// Fits: each column's own content is its flex basis, and they grow
-		// into whatever slack is left so the row still fills the width. A zero
-		// shrink factor is safe here precisely because we know it fits.
+		if (total <= available) {
+			// Fits: each column's own content is its flex basis, and they grow
+			// into whatever slack is left so the row still fills the width. A
+			// zero shrink factor is safe precisely because we know it fits.
+			groups.forEach((g) =>
+				wanted.forEach((w, i) => {
+					if (w == null) return;
+					g[i].style.flex = `1 0 ${w}px`;
+				})
+			);
+			return;
+		}
+
+		// Wider than the row: pin every column at the width its content needs
+		// and let the list scroll sideways, which is what v16 does.
+		//
+		// Shrinking to fit is NOT an alternative. With a flex shrink factor the
+		// columns shrink in proportion to their bases, so the column that
+		// needed the room loses it again -- measured while trying it, clipping
+		// on this site's Sales Invoice list went from 19 cells to 54, worse
+		// than stock. Either the columns get their width or they get
+		// truncated; there is no useful middle setting.
 		groups.forEach((g) =>
 			wanted.forEach((w, i) => {
 				if (w == null) return;
-				g[i].style.flex = `1 0 ${w}px`;
+				g[i].style.width = `${w}px`;
+				g[i].style.flex = `0 0 ${w}px`;
 			})
 		);
+		result.classList.add(SCROLL_CLASS);
 	}
 
 	const orig_after_render = LV.prototype.after_render;

@@ -60,7 +60,7 @@ app_include_js = [
     # Sizes list-view columns to their content and scrolls sideways when
     # they no longer fit, instead of v15's even split that clips long
     # values. A list that already fits is left untouched.
-    "/assets/avinashgroup_app/js/list_wide_columns.js?v=1.3",
+    "/assets/avinashgroup_app/js/list_wide_columns.js?v=1.4",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -72,6 +72,9 @@ app_include_css = [
     # styling half of grid_wide_columns.js — inert until that file
     # flags a grid with .column-limit-reached
     "/assets/avinashgroup_app/css/grid_wide_columns.css?v=1.1",
+    # styling half of list_wide_columns.js — inert until that file flags a
+    # list with .agx-list-scrolls
+    "/assets/avinashgroup_app/css/list_wide_columns.css?v=2.1",
 ]
 
 doctype_js = {
