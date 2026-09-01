@@ -195,34 +195,82 @@ def _gl_balances(company, accounts, from_date, to_date):
 	Opening follows ERPNext General Ledger: everything strictly before From Date
 	PLUS any is_opening='Yes' entry regardless of its date. Those opening entries
 	are then excluded from the period debit / credit so nothing is double counted.
+
+	Split into three plain range queries instead of one CASE aggregation: the
+	original single query had no posting_date bound in its WHERE clause (all the
+	date logic sat inside CASE), so it read every GL Entry of the company for all
+	time. Each query below carries a real posting_date predicate, so it runs as an
+	index range scan on GL Entry's fin_stmt_agg_index (company, account,
+	posting_date, ...). Same numbers, far less work.
 	"""
-	rows = frappe.db.sql(
+	params = {
+		"company": company,
+		"accounts": tuple(accounts),
+		"from_date": from_date,
+		"to_date": to_date,
+	}
+
+	# Opening, part 1: every entry strictly before From Date.
+	opening = frappe.db.sql(
 		"""
-		SELECT
-			gle.account AS account,
-			COALESCE(SUM(CASE WHEN gle.posting_date < %(from_date)s OR gle.is_opening = 'Yes'
-			                  THEN gle.debit - gle.credit END), 0) AS opening,
-			COALESCE(SUM(CASE WHEN gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
-			                   AND COALESCE(gle.is_opening, 'No') != 'Yes'
-			                  THEN gle.debit END), 0) AS period_debit,
-			COALESCE(SUM(CASE WHEN gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
-			                   AND COALESCE(gle.is_opening, 'No') != 'Yes'
-			                  THEN gle.credit END), 0) AS period_credit
+		SELECT gle.account AS account, SUM(gle.debit - gle.credit) AS amount
 		FROM `tabGL Entry` gle
 		WHERE gle.is_cancelled = 0
 			AND gle.company = %(company)s
 			AND gle.account IN %(accounts)s
+			AND gle.posting_date < %(from_date)s
 		GROUP BY gle.account
 		""",
-		{
-			"company": company,
-			"accounts": tuple(accounts),
-			"from_date": from_date,
-			"to_date": to_date,
-		},
+		params,
 		as_dict=True,
 	)
-	return {r.account: r for r in rows}
+
+	# Opening, part 2: is_opening entries dated on/after From Date (a small set;
+	# the pre-From-Date opening entries are already covered by part 1).
+	opening_on_after = frappe.db.sql(
+		"""
+		SELECT gle.account AS account, SUM(gle.debit - gle.credit) AS amount
+		FROM `tabGL Entry` gle
+		WHERE gle.is_cancelled = 0
+			AND gle.company = %(company)s
+			AND gle.account IN %(accounts)s
+			AND gle.is_opening = 'Yes'
+			AND gle.posting_date >= %(from_date)s
+		GROUP BY gle.account
+		""",
+		params,
+		as_dict=True,
+	)
+
+	# Period movement inside the window, excluding is_opening entries.
+	period = frappe.db.sql(
+		"""
+		SELECT gle.account AS account,
+			SUM(gle.debit) AS period_debit,
+			SUM(gle.credit) AS period_credit
+		FROM `tabGL Entry` gle
+		WHERE gle.is_cancelled = 0
+			AND gle.company = %(company)s
+			AND gle.account IN %(accounts)s
+			AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
+			AND COALESCE(gle.is_opening, 'No') != 'Yes'
+		GROUP BY gle.account
+		""",
+		params,
+		as_dict=True,
+	)
+
+	out = {}
+	for r in opening:
+		out.setdefault(r.account, {})["opening"] = flt(r.amount)
+	for r in opening_on_after:
+		d = out.setdefault(r.account, {})
+		d["opening"] = flt(d.get("opening")) + flt(r.amount)
+	for r in period:
+		d = out.setdefault(r.account, {})
+		d["period_debit"] = flt(r.period_debit)
+		d["period_credit"] = flt(r.period_credit)
+	return out
 
 
 # ── Small helpers ──────────────────────────────────────────────────────────────
