@@ -65,7 +65,7 @@ def execute(filters=None):
 	if not postings:
 		return _get_columns(), []
 
-	_decorate(postings)
+	_decorate(postings, filters.company)
 	return _get_columns(), _build_rows(filters, postings)
 
 
@@ -211,17 +211,69 @@ def _get_postings(filters):
 	return rows
 
 
-def _decorate(postings):
+def _describe_against(against, company, names=None):
+	"""What a party-less posting was posted against, in readable form.
+
+	`against` holds two quite different things. Usually it is contra accounts,
+	which arrive as "549301 - R & M - Vehicles O/O - NGI, 544121 - Office
+	Expenses - NGI" -- the account number and company abbreviation repeat on
+	every one and carry nothing here. But on a party-side posting it holds the
+	party id instead, so those are resolved to a name rather than printed raw.
+	"""
+	if not against:
+		return ""
+	suffix = " - {0}".format(frappe.get_cached_value("Company", company, "abbr")) if company else ""
+	names = names or {}
+	out = []
+	for part in str(against).split(","):
+		part = part.strip()
+		if not part:
+			continue
+		# a party id rather than an account
+		resolved = names.get(("", part))
+		if resolved:
+			out.append(resolved)
+			continue
+		if suffix and part.endswith(suffix):
+			part = part[: -len(suffix)]
+		# drop a leading account number ("549301 - R & M ..." -> "R & M ...")
+		head, sep, tail = part.partition(" - ")
+		if sep and head.strip().isdigit():
+			part = tail
+		out.append(part.strip())
+	return ", ".join(out)
+
+
+def _decorate(postings, filters_company=None):
 	"""Add the BS miti, the printed voucher number as a link, and party names."""
 	from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
 	from avinashgroup_app.utils.voucher_numbers import link, resolve
 
 	numbers = resolve((r.voucher_type, r.voucher_no) for r in postings)
 
+	# Some rows carry a party with no party_type -- 343 in a fortnight on NGI.
+	# Those still have a name to show, so they are looked up against every party
+	# doctype rather than skipped, which would print the raw id.
 	wanted = {}
+	untyped = set()
 	for r in postings:
-		if r.party_type and r.party:
+		if not r.party:
+			continue
+		if r.party_type:
 			wanted.setdefault(r.party_type, set()).add(r.party)
+		else:
+			untyped.add(r.party)
+	# `against` can hold a party id too, so those go through the same lookup
+	for r in postings:
+		if not r.party and r.against:
+			for part in str(r.against).split(","):
+				part = part.strip()
+				if part and " - " not in part:
+					untyped.add(part)
+
+	for party_type in PARTY_TYPES:
+		if untyped:
+			wanted.setdefault(party_type, set()).update(untyped)
 
 	party_names = {}
 	for party_type, names in wanted.items():
@@ -236,6 +288,8 @@ def _decorate(postings):
 				fields=["name", "{0} as label".format(field)],
 			):
 				party_names[(party_type, row.name)] = row.label
+				# so an untyped party can be found without knowing its type
+				party_names.setdefault(("", row.name), row.label)
 
 	for r in postings:
 		try:
@@ -244,7 +298,11 @@ def _decorate(postings):
 			r.miti = ""
 		r.number = numbers.get((r.voucher_type, r.voucher_no)) or r.voucher_no
 		r.voucher_link = link(r.voucher_type, r.voucher_no, r.number)
-		r.party_name = party_names.get((r.party_type, r.party)) or r.party or ""
+		r.party_name = (
+			party_names.get((r.party_type, r.party))
+			or (r.party if r.party else "")
+			or _describe_against(r.against, filters_company, party_names)
+		)
 
 
 def _section_key(filters, posting):
@@ -401,7 +459,7 @@ def _build_rows(filters, postings):
 					"voucher_type": posting.voucher_type,
 					"voucher_no": posting.voucher_link,
 					"voucher_number": posting.number,
-					"party_name": posting.party_name or posting.against or "",
+					"party_name": posting.party_name or "",
 					"debit": flt(posting.debit),
 					"credit": flt(posting.credit),
 					"balance": balance,
