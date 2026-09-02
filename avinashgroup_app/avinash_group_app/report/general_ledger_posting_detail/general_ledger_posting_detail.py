@@ -267,6 +267,24 @@ def _section_label(filters, key, postings):
 	return sample.account
 
 
+# ERPNext writes this placeholder when a voucher carries no narration at all --
+# 778,865 of avinas1's 954,582 GL rows, so printing it would put a noise line
+# under four postings in five.
+EMPTY_REMARKS = {"no remarks", "no remark", "none", "-"}
+
+
+def _clean_narration(remarks):
+	"""A one-line narration, or "" when there is nothing worth printing.
+
+	Remarks arrive with newlines (reference lines, multi-line notes) and with
+	_x000D_ left behind by the spreadsheet imports; both would break the row.
+	"""
+	if not remarks:
+		return ""
+	text = " ".join(str(remarks).replace("_x000D_", " ").split())
+	return "" if text.lower().strip(" .") in EMPTY_REMARKS else text
+
+
 def _build_rows(filters, postings):
 	show_remarks = cint(filters.get("remarks", 1))
 
@@ -301,10 +319,8 @@ def _build_rows(filters, postings):
 
 			# the narration sits on its own line under the posting, as the
 			# spec's layout has it -- remarks run long beside a number
-			if show_remarks and posting.remarks:
-				# remarks carry newlines (reference lines, multi-line notes) which
-				# would break the row -- collapse them to one line
-				narration = " ".join(posting.remarks.split())
+			if show_remarks:
+				narration = _clean_narration(posting.remarks)
 				if narration:
 					data.append(
 						{"voucher_no": "Narr: {0}".format(narration[:300]), "_narration": 1}
