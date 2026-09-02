@@ -513,11 +513,16 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 						}
 					)
 
+		# Balance on this line is the period's own net movement, not the running
+		# total -- the legacy print states it the same way, so that
+		#   opening + period movement = closing
+		# reads straight down the Balance column.
 		data.append(
 			{
 				"party_name": _("Period Total"),
 				"debit": section_debit,
 				"credit": section_credit,
+				"balance": section_debit - section_credit,
 				"_bold": 1,
 				"_band": 1,
 			}
@@ -538,6 +543,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 				"party_name": _("Grand Total"),
 				"debit": grand_debit,
 				"credit": grand_credit,
+				"balance": grand_debit - grand_credit,
 				"_bold": 1,
 				"_band": 1,
 			}
