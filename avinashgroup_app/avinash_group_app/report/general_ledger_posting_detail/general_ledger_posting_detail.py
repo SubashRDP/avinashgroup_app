@@ -285,6 +285,88 @@ def _clean_narration(remarks):
 	return "" if text.lower().strip(" .") in EMPTY_REMARKS else text
 
 
+def _opening_balances(filters, postings):
+	"""Balance carried into the period, keyed the same way the sections are.
+
+	Income and Expense accounts do not carry a balance across a year end -- a
+	Period Closing Voucher sweeps them into retained earnings, and this site
+	runs none -- so their history stops at the fiscal year start. When the
+	report begins on that date they carry nothing at all and are skipped.
+
+	The two classes are split in Python rather than joined to tabAccount in the
+	query: the join costs the optimiser the fin_stmt_agg_index and turned this
+	into a 14.8s scan, which alone tripped Frappe's 15s prepared-report timer.
+	"""
+	accounts = sorted({p.account for p in postings})
+	if not accounts:
+		return {}
+
+	pl = set(
+		frappe.db.sql_list(
+			"""SELECT name FROM `tabAccount`
+			   WHERE name IN %(accounts)s AND root_type IN ('Income', 'Expense')""",
+			{"accounts": accounts},
+		)
+	)
+	balance_sheet = [a for a in accounts if a not in pl]
+
+	floor = frappe.db.sql(
+		"""
+		SELECT year_start_date FROM `tabFiscal Year`
+		WHERE %(from_date)s BETWEEN year_start_date AND year_end_date
+		ORDER BY year_start_date DESC LIMIT 1
+		""",
+		{"from_date": filters.from_date},
+	)
+	floor = floor[0][0] if floor else None
+
+	def totals(account_list, since=None):
+		if not account_list:
+			return []
+		params = {
+			"company": filters.company,
+			"from_date": filters.from_date,
+			"accounts": account_list,
+		}
+		since_clause = ""
+		if since:
+			params["since"] = since
+			since_clause = "AND g.posting_date >= %(since)s"
+		return frappe.db.sql(
+			"""
+			SELECT g.account, IFNULL(g.party_type, '') AS party_type,
+			       IFNULL(g.party, '') AS party,
+			       SUM(g.debit) - SUM(g.credit) AS balance
+			FROM `tabGL Entry` g
+			WHERE g.company = %(company)s
+			  AND g.is_cancelled = 0
+			  AND g.account IN %(accounts)s
+			  AND g.posting_date < %(from_date)s
+			  {since_clause}
+			GROUP BY g.account, g.party_type, g.party
+			""".format(since_clause=since_clause),
+			params,
+			as_dict=True,
+		)
+
+	rows = totals(balance_sheet)
+	# a P&L account opening on its own year start carries nothing in
+	if pl and (not floor or getdate(floor) < getdate(filters.from_date)):
+		rows += totals(sorted(pl), since=floor)
+
+	category = filters.get("categorized_by") or "Account"
+	opening = {}
+	for r in rows:
+		if category == "Party":
+			key = (r.party_type or "", r.party or "")
+		elif category == "Both":
+			key = (r.account, r.party_type or "", r.party or "")
+		else:
+			key = (r.account,)
+		opening[key] = opening.get(key, 0.0) + flt(r.balance)
+	return opening
+
+
 def _build_rows(filters, postings):
 	show_remarks = cint(filters.get("remarks", 1))
 
@@ -292,14 +374,23 @@ def _build_rows(filters, postings):
 	for posting in postings:
 		sections.setdefault(_section_key(filters, posting), []).append(posting)
 
+	opening = _opening_balances(filters, postings)
+
 	data = []
-	grand_debit = grand_credit = 0.0
+	grand_opening = grand_debit = grand_credit = 0.0
 
 	for key in sorted(sections, key=lambda k: tuple(str(part) for part in k)):
 		rows = sections[key]
 		data.append({"_section": 1, "party_name": _section_label(filters, key, rows)})
 
-		balance = section_debit = section_credit = 0.0
+		# what this account/party carried into the period
+		balance = flt(opening.get(key, 0.0))
+		grand_opening += balance
+		data.append(
+			{"party_name": _("Opening Balance"), "balance": balance, "_bold": 1, "_band": 1}
+		)
+
+		section_debit = section_credit = 0.0
 		for posting in rows:
 			balance += flt(posting.debit) - flt(posting.credit)
 			section_debit += flt(posting.debit)
@@ -323,29 +414,43 @@ def _build_rows(filters, postings):
 				narration = _clean_narration(posting.remarks)
 				if narration:
 					data.append(
-						{"voucher_no": "Narr: {0}".format(narration[:300]), "_narration": 1}
+						{
+							"party_name": "Narr: {0}".format(narration[:300]),
+							"narration_full": "Narr: {0}".format(narration),
+							"_narration": 1,
+						}
 					)
 
 		data.append(
 			{
-				"party_name": _("Total"),
+				"party_name": _("Period Total"),
 				"debit": section_debit,
 				"credit": section_credit,
-				"balance": balance,
 				"_bold": 1,
+				"_band": 1,
 			}
+		)
+		data.append(
+			{"party_name": _("Closing Balance"), "balance": balance, "_bold": 1, "_band": 1}
 		)
 		data.append({})
 		grand_debit += section_debit
 		grand_credit += section_credit
 
 	if data:
+		data.append({"party_name": _("Opening Balance"), "balance": grand_opening, "_bold": 1})
 		data.append(
 			{
 				"party_name": _("Grand Total"),
 				"debit": grand_debit,
 				"credit": grand_credit,
-				"balance": grand_debit - grand_credit,
+				"_bold": 1,
+			}
+		)
+		data.append(
+			{
+				"party_name": _("Closing Balance"),
+				"balance": grand_opening + grand_debit - grand_credit,
 				"_bold": 1,
 			}
 		)

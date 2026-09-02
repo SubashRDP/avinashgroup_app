@@ -233,13 +233,17 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
-		// The narration is its own row under the posting, in lighter type,
-		// spanning from the Voucher No column.
+		// The narration is its own row under the posting. A datatable cell clips
+		// at its column width and there is no colspan, so it goes in the widest
+		// column (Party Name/Description) with the full text on hover. Absolute
+		// positioning was tried to span the row and froze the renderer on a
+		// thousand rows, so it is deliberately not used.
 		if (data && data._narration) {
-			if (column.fieldname === "voucher_no") {
-				return `<span style="color:#6b7280;font-style:italic;">${frappe.utils.escape_html(
-					data.voucher_no || ""
-				)}</span>`;
+			if (column.fieldname === "party_name") {
+				const full = data.narration_full || data.narration || "";
+				return `<span style="color:#6b7280;font-style:italic;" title="${frappe.utils.escape_html(
+					full
+				)}">${frappe.utils.escape_html(full)}</span>`;
 			}
 			return "";
 		}
