@@ -1,0 +1,105 @@
+{# General Ledger Summary print/PDF — Tally "General Ledger - Summary" layout:
+   borderless ledger rows, letter-spaced Opening/Period/Closing group labels,
+   "Page n/total" in the header. In-body page number works on plain / unpatched
+   wkhtmltopdf. #}
+<style>
+	* { box-sizing: border-box; }
+	body { font-family: Arial, sans-serif; color: #222; font-size: 12px; }
+
+	.gls-topline { border: none; border-top: 1.5px solid #000; margin: 0; }
+	.gls-head { margin-bottom: 4px; }
+	.gls-row { display: flex; justify-content: space-between; align-items: flex-start; }
+	.gls-l { max-width: 60%; }
+	.gls-r { text-align: right; }
+	.gls-company { font-size: 12px; font-weight: bold; padding-top: 2px; }
+	.gls-title { font-size: 15px; font-weight: bold; }
+	.gls-sub { font-size: 11px; color: #333; margin-top: 1px; }
+
+	table.grid { width: 100%; border-collapse: collapse; margin-top: 4px; }
+	table.grid col.c-acct { width: 28%; }
+	table.grid col.c-amt  { width: 12%; }
+	thead { display: table-header-group; }
+	table.grid th {
+		font-size: 11px; font-weight: bold; color: #000;
+		padding: 3px 6px; white-space: nowrap;
+	}
+	/* the two black rules run the full width, Account column included */
+	table.grid thead tr.top th { border-top: 1.2px solid #000; }
+	table.grid thead tr.bot th { border-bottom: 1.2px solid #000; }
+	table.grid thead th.acct-head { border-bottom: 1.2px solid #000; }
+	th.grp { text-align: center; letter-spacing: 3px; border-bottom: 0.8px solid #000; }
+
+	table.grid td { padding: 1.5px 6px; vertical-align: top; border: none; font-size: 9.5px; }
+	td.r, th.r { text-align: right; white-space: nowrap; }
+	td.acct { white-space: normal; overflow-wrap: anywhere; }
+
+	/* faint separators between the Opening / Period / Closing groups */
+	th.sep, td.sep { border-left: 0.6px solid #cfcfcf; }
+
+	tr { page-break-inside: avoid; }
+	tr.total td {
+		font-weight: bold;
+		border-top: 1px solid #000; border-bottom: 1px solid #000;
+	}
+
+	.brk { page-break-after: always; }
+</style>
+
+{% for page_rows in pages %}
+<div class="gls-sheet{% if not loop.last %} brk{% endif %}">
+
+	<hr class="gls-topline">
+	<div class="gls-head">
+		<div class="gls-row">
+			<div class="gls-l gls-company">{{ company }} FY [{{ fiscal_year }}]</div>
+			<div class="gls-r">
+				<div class="gls-title">General Ledger - Summary</div>
+				<div class="gls-sub">Accounting Period : {{ period_from_bs }} - {{ period_to_bs }}</div>
+			</div>
+		</div>
+		<div class="gls-row">
+			<div class="gls-l gls-sub">From {{ from_bs }} &nbsp; To {{ to_bs }}</div>
+			<div class="gls-r gls-sub">Page {{ loop.index }}/{{ total_pages }}</div>
+		</div>
+		<div class="gls-row">
+			<div class="gls-l"></div>
+			<div class="gls-r gls-sub">Amount in Nepalese Rupee</div>
+		</div>
+	</div>
+
+	<table class="grid">
+		<colgroup>
+			<col class="c-acct">
+			<col class="c-amt"><col class="c-amt">
+			<col class="c-amt"><col class="c-amt">
+			<col class="c-amt"><col class="c-amt">
+		</colgroup>
+		<thead>
+			<tr class="top">
+				<th class="grp"></th>
+				<th class="grp" colspan="2">Opening</th>
+				<th class="grp sep" colspan="2">Period</th>
+				<th class="grp sep" colspan="2">Closing</th>
+			</tr>
+			<tr class="bot">
+				<th class="acct-head" style="text-align:left;">Account</th>
+				<th class="r">Debit</th><th class="r">Credit</th>
+				<th class="r sep">Debit</th><th class="r">Credit</th>
+				<th class="r sep">Debit</th><th class="r">Credit</th>
+			</tr>
+		</thead>
+		<tbody>
+		{% for row in page_rows %}
+			<tr class="{{ 'total' if row.get('is_grand_total') else '' }}">
+				{% for col in columns %}
+				{%- set v = row.get(col.fieldname) -%}
+				{%- set sep = col.fieldname in ['period_debit', 'closing_debit'] -%}
+				<td class="{{ 'acct' if col.fieldname == 'account' else 'r' }}{{ ' sep' if sep else '' }}">{{ v if v is not none else '' }}</td>
+				{% endfor %}
+			</tr>
+		{% endfor %}
+		</tbody>
+	</table>
+
+</div>
+{% endfor %}
