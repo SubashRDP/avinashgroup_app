@@ -436,12 +436,17 @@ def _balance_band(label, balance):
 	kept on `balance` so the running column and any export stay arithmetic.
 	"""
 	balance = flt(balance)
-	row = {"party_name": label, "balance": balance, "_bold": 1, "_band": 1}
-	if balance > 0:
-		row["debit"] = balance
-	elif balance < 0:
-		row["credit"] = -balance
-	return row
+	# Both sides are stated, one of them as 0.00. A balance line with one cell
+	# filled and the other blank reads as though the empty side were unknown;
+	# an explicit zero says the account owes nothing on that side.
+	return {
+		"party_name": label,
+		"balance": balance,
+		"debit": balance if balance > 0 else 0.0,
+		"credit": -balance if balance < 0 else 0.0,
+		"_bold": 1,
+		"_band": 1,
+	}
 
 
 def _build_rows(filters, postings, with_narration=False, columns=None, always_narration=False):
@@ -569,7 +574,10 @@ def _get_columns(filters=None):
 		},
 		{"fieldname": "debit", "label": _("Debit"), "fieldtype": "Currency", "width": 130},
 		{"fieldname": "credit", "label": _("Credit"), "fieldtype": "Currency", "width": 130},
-		{"fieldname": "balance", "label": _("Balance"), "fieldtype": "Currency", "width": 150},
+		# wide enough for the Dr/Cr suffix -- at 150 the indicator rendered but
+		# sat outside the cell and was clipped, so the column read as a bare
+		# number and the fix looked like it had not worked
+		{"fieldname": "balance", "label": _("Balance"), "fieldtype": "Currency", "width": 190},
 	]
 
 
@@ -665,8 +673,14 @@ def download_pdf(filters, orientation="Landscape"):
 
 	printable = []
 	for row in rows:
-		if not row:
+		if not row or row.get("_spacer"):
 			continue
+
+		# On paper the balance is split into its own Dr and Cr columns rather
+		# than carrying a suffix -- a printed ledger is read down a column, and
+		# a reader should not have to check a tag on every line to know which
+		# side a figure falls on.
+		balance = flt(row.get("balance"))
 		printable.append(
 			frappe._dict(
 				date=row.get("date") or "",
@@ -679,7 +693,18 @@ def download_pdf(filters, orientation="Landscape"):
 				description=row.get("narration") or row.get("party_name") or "",
 				debit=_fmt_npr(row.get("debit")),
 				credit=_fmt_npr(row.get("credit")),
-				balance=_fmt_npr(row.get("balance")),
+				# a balance line states both sides, one of them 0.00; a posting
+				# line has a balance on one side only
+				balance_dr=(
+					_fmt_npr(balance)
+					if balance > 0
+					else ("0.00" if row.get("_band") else "")
+				),
+				balance_cr=(
+					_fmt_npr(-balance)
+					if balance < 0
+					else ("0.00" if row.get("_band") else "")
+				),
 				css=(
 					"section"
 					if row.get("_section")
@@ -707,6 +732,9 @@ def download_pdf(filters, orientation="Landscape"):
 			"grouped_by": filters.get("categorized_by") or "Account",
 			"rows": printable,
 			"printed_on": _bs(frappe.utils.nowdate()),
+			"printed_by": frappe.utils.get_fullname(frappe.session.user),
+			"fiscal_year": filters.get("fiscal_year") or "",
+			"scope": _print_scope(filters),
 		},
 	)
 
@@ -722,6 +750,24 @@ def download_pdf(filters, orientation="Landscape"):
 		},
 	)
 	frappe.local.response.type = "download"
+
+
+def _print_scope(filters):
+	"""The filters that actually narrowed this print, for the footer."""
+	parts = []
+	for label, key in (
+		("Voucher Type", "voucher_type"),
+		("Subtype", "voucher_subtype"),
+		("Party Type", "party_type"),
+		("Party", "party"),
+		("Account", "account"),
+	):
+		chosen = _normalize(filters.get(key))
+		if chosen:
+			parts.append("{0}: {1}".format(label, ", ".join(chosen[:4]) + ("…" if len(chosen) > 4 else "")))
+	if filters.get("voucher_no"):
+		parts.append("Voucher No: {0}".format(filters.voucher_no))
+	return parts or ["All vouchers, all parties, all accounts"]
 
 
 def _strip_tags(value):

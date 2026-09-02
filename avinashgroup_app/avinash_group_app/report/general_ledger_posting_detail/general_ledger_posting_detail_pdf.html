@@ -3,35 +3,99 @@
 <head>
 <meta charset="UTF-8">
 <style>
+/* Printed ledger. Two things the legacy print did not do: the balance is
+   split into its own Dr and Cr columns, so a reader follows one column down
+   rather than checking a suffix on every line; and the column headers repeat
+   on every page, so page four is as readable as page one. */
+
 * { box-sizing: border-box; }
-body { font-family: Arial, Helvetica, sans-serif; font-size: 8.5px; color: #000; margin: 0; }
 
-.head { display: table; width: 100%; margin-bottom: 6px; }
-.head-l { display: table-cell; vertical-align: top; }
-.head-r { display: table-cell; vertical-align: top; text-align: right; }
-.company { font-size: 11px; font-weight: bold; }
-.title   { font-size: 13px; font-weight: bold; }
-.meta    { font-size: 8px; }
+@page { margin: 10mm 8mm 14mm 8mm; }
 
-table { width: 100%; border-collapse: collapse; }
-thead { display: table-header-group; }
-th { font-size: 8.5px; font-weight: bold; padding: 3px 4px; border-bottom: 1px solid #000; text-align: left; }
-td { padding: 1.5px 4px; vertical-align: top; }
-.num { text-align: right; white-space: nowrap; }
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8.4px;
+  color: #111;
+  margin: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
 
-tr.section td { font-weight: bold; padding-top: 6px; border-top: 1px solid #000; }
-tr.band td    { font-weight: bold; background: #f4f4f4; }
-tr.total td   { font-weight: bold; }
+/* ── Masthead ─────────────────────────────────────────────────────────── */
+.head { display: table; width: 100%; border-bottom: 1.5px solid #111; padding-bottom: 5px; }
+.head-l { display: table-cell; vertical-align: bottom; }
+.head-r { display: table-cell; vertical-align: bottom; text-align: right; }
+.company { font-size: 12.5px; font-weight: bold; letter-spacing: .2px; }
+.title   { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1.1px; }
+.meta    { font-size: 8px; color: #444; padding-top: 2px; }
 
-/* The narration gets the whole row here — a page has the width for it,
-   which is exactly what a datatable cell does not. */
+.period { margin: 6px 0 4px; font-size: 8.4px; }
+.period b { font-size: 9px; }
+
+/* ── Ledger table ─────────────────────────────────────────────────────── */
+table.gl { width: 100%; border-collapse: collapse; }
+table.gl thead { display: table-header-group; }        /* repeat on every page */
+table.gl tfoot { display: table-footer-group; }
+
+table.gl thead th {
+  font-size: 7.6px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: #222;
+  background: #ececec;
+  padding: 4px;
+  border-top: .8px solid #111;
+  border-bottom: .8px solid #111;
+  text-align: left;
+}
+table.gl thead th.num { text-align: right; }
+table.gl thead th.grp { text-align: center; border-left: .8px solid #bbb; }
+
+table.gl td {
+  padding: 2px 4px;
+  vertical-align: top;
+  border-bottom: .4px solid #eee;
+}
+.num  { text-align: right; white-space: nowrap; }
+.sep  { border-left: .8px solid #ddd; }
+
+/* an account (or party) heading */
+tr.section td {
+  font-weight: bold;
+  font-size: 9px;
+  padding-top: 7px;
+  padding-bottom: 3px;
+  border-bottom: .8px solid #111;
+  border-top: none;
+}
+
+/* opening / period total / closing */
+tr.band td { font-weight: bold; background: #f6f6f6; border-bottom: .4px solid #ddd; }
+tr.band.closing td { border-bottom: 1.2px double #111; }
+tr.total td { font-weight: bold; }
+
+/* the narration takes the whole row here — a page has the width for it */
 tr.narration td {
   font-style: italic;
-  color: #444;
-  padding: 0 4px 3px 26px;
+  color: #555;
+  font-size: 7.9px;
+  padding: 0 4px 3px 30px;
+  border-bottom: .4px solid #f4f4f4;
   white-space: normal;
   word-wrap: break-word;
 }
+
+/* keep a posting and its narration on the same page */
+tr { page-break-inside: avoid; }
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+.foot { margin-top: 10px; padding-top: 5px; border-top: .8px solid #bbb; font-size: 7.4px; color: #555; }
+.foot .scope { margin-bottom: 5px; }
+.foot .scope span { display: inline-block; margin-right: 12px; }
+.sign { display: table; width: 100%; margin-top: 26px; }
+.sign div { display: table-cell; width: 33%; padding-right: 22px; }
+.sign .line { border-top: .8px solid #111; padding-top: 3px; font-size: 7.8px; color: #111; }
 </style>
 </head>
 <body>
@@ -39,46 +103,63 @@ tr.narration td {
 <div class="head">
   <div class="head-l">
     <div class="company">{{ company }}</div>
-    <div class="meta">From {{ from_bs }} To {{ to_bs }} &nbsp;·&nbsp; Grouped by {{ grouped_by }}</div>
+    <div class="meta">Amount in Nepalese Rupee ( NPR ){% if fiscal_year %} &nbsp;·&nbsp; FY {{ fiscal_year }}{% endif %}</div>
   </div>
   <div class="head-r">
-    <div class="title">General Ledger - Posting Detail</div>
-    <div class="meta">Amount in Nepalese Rupee ( NPR ) &nbsp;·&nbsp; Printed {{ printed_on }}</div>
+    <div class="title">General Ledger — Posting Detail</div>
+    <div class="meta">Grouped by {{ grouped_by }} &nbsp;·&nbsp; Printed {{ printed_on }}{% if printed_by %} by {{ printed_by }}{% endif %}</div>
   </div>
 </div>
 
-<table>
+<div class="period"><b>{{ from_bs }}</b> to <b>{{ to_bs }}</b> (BS)</div>
+
+<table class="gl">
   <thead>
     <tr>
-      <th style="width:66px">Posting Date</th>
-      <th style="width:66px">Posting Miti</th>
-      <th style="width:90px">Voucher Type</th>
-      <th style="width:130px">Voucher No.</th>
-      <th>Party Name/Description</th>
-      <th class="num" style="width:95px">Debit</th>
-      <th class="num" style="width:95px">Credit</th>
-      <th class="num" style="width:105px">Balance</th>
+      <th style="width:62px">Posting Date</th>
+      <th style="width:60px">Miti (BS)</th>
+      <th style="width:82px">Voucher Type</th>
+      <th style="width:118px">Voucher No.</th>
+      <th>Party Name / Description</th>
+      <th class="num sep" style="width:86px">Debit</th>
+      <th class="num" style="width:86px">Credit</th>
+      <th class="num grp" style="width:92px">Balance Dr</th>
+      <th class="num" style="width:92px">Balance Cr</th>
     </tr>
   </thead>
   <tbody>
     {%- for row in rows %}
     {%- if row.css == "narration" %}
-    <tr class="narration"><td colspan="8">{{ row.description }}</td></tr>
+    <tr class="narration"><td colspan="9">{{ row.description }}</td></tr>
+    {%- elif row.css == "section" %}
+    <tr class="section"><td colspan="9">{{ row.description }}</td></tr>
     {%- else %}
-    <tr class="{{ row.css }}">
+    <tr class="{{ row.css }}{% if row.description == 'Closing Balance' %} closing{% endif %}">
       <td>{{ row.date }}</td>
       <td>{{ row.miti }}</td>
       <td>{{ row.voucher_type }}</td>
       <td>{{ row.voucher_no }}</td>
       <td>{{ row.description }}</td>
-      <td class="num">{{ row.debit }}</td>
+      <td class="num sep">{{ row.debit }}</td>
       <td class="num">{{ row.credit }}</td>
-      <td class="num">{{ row.balance }}</td>
+      <td class="num sep">{{ row.balance_dr }}</td>
+      <td class="num">{{ row.balance_cr }}</td>
     </tr>
     {%- endif %}
     {%- endfor %}
   </tbody>
 </table>
+
+<div class="foot">
+  <div class="scope">
+    {%- for part in scope %}<span>{{ part }}</span>{%- endfor %}
+  </div>
+  <div class="sign">
+    <div><div class="line">Prepared By</div></div>
+    <div><div class="line">Checked By</div></div>
+    <div><div class="line">Approved By</div></div>
+  </div>
+</div>
 
 </body>
 </html>
