@@ -216,6 +216,24 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldtype: "Data",
 		},
 		{
+			// The shared rdp_common_app "Fit Columns" control steps aside for any
+			// report that defines autoFitColumns (report_fit_columns.js:
+			// reportHasOwnFit) -- including its checkbox. This replaces it, so
+			// the behaviour stays visible and switchable.
+			fieldname: "fit_columns",
+			label: __("Fit Columns"),
+			fieldtype: "Check",
+			default: 1,
+			on_change: function () {
+				const report = frappe.query_report;
+				if (report.datatable) {
+					frappe.query_reports["General Ledger Posting Detail"].autoFitColumns(
+						report.datatable
+					);
+				}
+			},
+		},
+		{
 			// One switch for both screen and print-out. On screen it is instant:
 			// a filter with its own on_change is responsible for refreshing
 			// (query_report.js), so this one hides or shows the rows already
@@ -352,6 +370,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 	autoFitColumns: function (dt) {
 		const wrapper = dt && dt.datatableWrapper;
 		if (!wrapper) return;
+		if (!frappe.query_report.get_filter_value("fit_columns")) return;
 
 		const columns = dt.datamanager.getColumns(true) || [];
 		const data = frappe.query_report.data || [];
@@ -407,10 +426,14 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		const me = frappe.query_reports["General Ledger Posting Detail"];
 		// a fresh render arrives with every row; apply the checkbox to it
 		me.applyNarrationVisibility(frappe.query_report);
-		// re-fit once the narration rows are tagged, so they are excluded
-		setTimeout(function () {
-			me.autoFitColumns(dt);
-		}, 60);
+		// Run after the datatable has finished its own sizing pass, otherwise
+		// these widths are computed and then immediately overwritten. 60ms was
+		// inside that window; a frame plus 150ms clears it.
+		window.requestAnimationFrame(function () {
+			setTimeout(function () {
+				me.autoFitColumns(dt);
+			}, 150);
+		});
 
 		// frappe-datatable virtualises rows: only those near the viewport exist
 		// in the DOM, and scrolling destroys and recreates them, wiping the
