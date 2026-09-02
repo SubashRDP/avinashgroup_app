@@ -360,8 +360,15 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			if (row && row._narration) narrationRows.add(i);
 		});
 
+		// A money column must fit its widest figure plus the currency symbol,
+		// and measuring cannot see that: on a page where every credit is zero,
+		// "Credit" as a header and "Rs 0.00" as a cell both measure narrow, the
+		// column stays at its floor, and the real figures elsewhere in the
+		// column are clipped to "R".
+		const MONEY_FLOOR = { debit: 130, credit: 130, balance: 165 };
+
 		columns.forEach(function (col) {
-			let width = 90;
+			let width = MONEY_FLOOR[col.fieldname] || 90;
 
 			const header = wrapper.querySelector(".dt-cell__content--header-" + col.colIndex);
 			if (header) width = Math.max(width, header.scrollWidth + 20);
