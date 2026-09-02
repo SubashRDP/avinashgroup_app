@@ -331,7 +331,12 @@ def _section_label(filters, key, postings):
 # ERPNext writes this placeholder when a voucher carries no narration at all --
 # 778,865 of avinas1's 954,582 GL rows, so printing it would put a noise line
 # under four postings in five.
-EMPTY_REMARKS = {"no remarks", "no remark", "none", "-"}
+EMPTY_REMARKS = {"no remarks", "no remark", "none", "-", "n/a", "na", "nil", "-do-"}
+
+# Labels that introduce a narration but carry none themselves. Stripped before
+# the emptiness test, so "Note:" and "Narration :-" are recognised as empty
+# rather than printed as a row that says nothing.
+NARRATION_LABELS = ("note", "narration", "narr", "remarks", "remark", "ref")
 
 
 def _clean_narration(remarks):
@@ -339,11 +344,30 @@ def _clean_narration(remarks):
 
 	Remarks arrive with newlines (reference lines, multi-line notes) and with
 	_x000D_ left behind by the spreadsheet imports; both would break the row.
+
+	A narration row exists to say something. Whitespace says nothing, and
+	neither does a bare label -- "Note:", "Narration :-", "N/A" -- so those are
+	treated as empty and no row is emitted at all.
 	"""
 	if not remarks:
 		return ""
+
 	text = " ".join(str(remarks).replace("_x000D_", " ").split())
-	return "" if text.lower().strip(" .") in EMPTY_REMARKS else text
+	if not text:
+		return ""
+
+	# what is left once the label and its punctuation are taken off
+	body = text
+	lowered = body.lower()
+	for label in NARRATION_LABELS:
+		if lowered.startswith(label):
+			body = body[len(label) :]
+			break
+	body = body.strip(" .:;-–—_*()[]/\\")
+
+	if not body or body.lower() in EMPTY_REMARKS:
+		return ""
+	return text
 
 
 def _opening_balances(filters, postings):
