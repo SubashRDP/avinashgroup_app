@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <style>
-/* Printed ledger. Two things the legacy print did not do: the balance is
-   split into its own Dr and Cr columns, so a reader follows one column down
+/* Printed ledger. The balance is stated the way the on-screen report states
+   it -- one column, the figure followed by the side it falls on ("1,234.56 Dr")
+   -- so paper and screen read identically and a figure can be checked against
+   the other without translating between two layouts. It was previously split
+   into separate Dr and Cr columns here, which did not match the screen
    rather than checking a suffix on every line; and the column headers repeat
    on every page, so page four is as readable as page one. */
 
@@ -123,16 +126,15 @@ tr { page-break-inside: avoid; }
       <th>Party Name / Description</th>
       <th class="num sep" style="width:86px">Debit</th>
       <th class="num" style="width:86px">Credit</th>
-      <th class="num grp" style="width:92px">Balance Dr</th>
-      <th class="num" style="width:92px">Balance Cr</th>
+      <th class="num grp" style="width:120px">Balance</th>
     </tr>
   </thead>
   <tbody>
     {%- for row in rows %}
     {%- if row.css == "narration" %}
-    <tr class="narration"><td colspan="9">{{ row.description }}</td></tr>
+    <tr class="narration"><td colspan="8">{{ row.description }}</td></tr>
     {%- elif row.css == "section" %}
-    <tr class="section"><td colspan="9">{{ row.description }}</td></tr>
+    <tr class="section"><td colspan="8">{{ row.description }}</td></tr>
     {%- else %}
     <tr class="{{ row.css }}{% if row.description == 'Closing Balance' %} closing{% endif %}">
       <td>{{ row.date }}</td>
@@ -142,8 +144,7 @@ tr { page-break-inside: avoid; }
       <td>{{ row.description }}</td>
       <td class="num sep">{{ row.debit }}</td>
       <td class="num">{{ row.credit }}</td>
-      <td class="num sep">{{ row.balance_dr }}</td>
-      <td class="num">{{ row.balance_cr }}</td>
+      <td class="num sep">{{ row.balance }}</td>
     </tr>
     {%- endif %}
     {%- endfor %}

@@ -745,11 +745,12 @@ def download_pdf(filters, orientation="Landscape"):
 		if not row or row.get("_spacer"):
 			continue
 
-		# On paper the balance is split into its own Dr and Cr columns rather
-		# than carrying a suffix -- a printed ledger is read down a column, and
-		# a reader should not have to check a tag on every line to know which
-		# side a figure falls on.
-		balance = flt(row.get("balance_value"))
+		# The balance is printed exactly as the screen states it -- the figure
+		# followed by the side it falls on -- so a number can be checked
+		# against the other view without translating between two layouts.
+		# _balance_text already produced that string for every row, including
+		# the "0.00" the Opening/Period/Closing lines state and the blank a
+		# posting leaves when its running balance happens to hit zero.
 		printable.append(
 			frappe._dict(
 				date=row.get("date") or "",
@@ -762,18 +763,7 @@ def download_pdf(filters, orientation="Landscape"):
 				description=row.get("narration") or row.get("party_name") or "",
 				debit=_fmt_npr(row.get("debit")),
 				credit=_fmt_npr(row.get("credit")),
-				# a balance line states both sides, one of them 0.00; a posting
-				# line has a balance on one side only
-				balance_dr=(
-					_fmt_npr(balance)
-					if balance > 0
-					else ("0.00" if row.get("_band") else "")
-				),
-				balance_cr=(
-					_fmt_npr(-balance)
-					if balance < 0
-					else ("0.00" if row.get("_band") else "")
-				),
+				balance=row.get("balance") or "",
 				css=(
 					"section"
 					if row.get("_section")
