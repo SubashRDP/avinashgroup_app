@@ -50,7 +50,8 @@ tr.narration td {
 <table>
   <thead>
     <tr>
-      <th style="width:70px">Posting Miti</th>
+      <th style="width:66px">Posting Date</th>
+      <th style="width:66px">Posting Miti</th>
       <th style="width:90px">Voucher Type</th>
       <th style="width:130px">Voucher No.</th>
       <th>Party Name/Description</th>
@@ -62,9 +63,10 @@ tr.narration td {
   <tbody>
     {%- for row in rows %}
     {%- if row.css == "narration" %}
-    <tr class="narration"><td colspan="7">{{ row.description }}</td></tr>
+    <tr class="narration"><td colspan="8">{{ row.description }}</td></tr>
     {%- else %}
     <tr class="{{ row.css }}">
+      <td>{{ row.date }}</td>
       <td>{{ row.miti }}</td>
       <td>{{ row.voucher_type }}</td>
       <td>{{ row.voucher_no }}</td>

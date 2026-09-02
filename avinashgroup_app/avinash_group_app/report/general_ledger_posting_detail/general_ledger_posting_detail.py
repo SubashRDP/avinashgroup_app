@@ -471,6 +471,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 			section_credit += flt(posting.credit)
 			data.append(
 				{
+					"date": posting.posting_date,
 					"miti": posting.miti,
 					"voucher_type": posting.voucher_type,
 					"voucher_no": posting.voucher_link,
@@ -533,6 +534,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 def _get_columns(filters=None):
 	filters = filters or {}
 	return [
+		{"fieldname": "date", "label": _("Posting Date"), "fieldtype": "Date", "width": 100},
 		{"fieldname": "miti", "label": _("Posting Miti"), "fieldtype": "Data", "width": 110},
 		{"fieldname": "voucher_type", "label": _("Voucher Type"), "fieldtype": "Data", "width": 140},
 		{"fieldname": "voucher_no", "label": _("Voucher No."), "fieldtype": "Data", "width": 210},
@@ -644,6 +646,7 @@ def download_pdf(filters, orientation="Landscape"):
 			continue
 		printable.append(
 			frappe._dict(
+				date=row.get("date") or "",
 				miti=row.get("miti") or "",
 				voucher_type=row.get("voucher_type") or "",
 				# the anchor is for the desk; print wants the bare number
