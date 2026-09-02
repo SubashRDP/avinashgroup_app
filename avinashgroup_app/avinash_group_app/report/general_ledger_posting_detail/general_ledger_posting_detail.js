@@ -432,6 +432,15 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
 			dt.columnmanager.setColumnWidth(col.colIndex);
 		});
+
+		// The body is laid out from a stylesheet the datatable rebuilds here.
+		// Without it the headers move and the cells do not: Balance's header
+		// sat at the full width while its cells still ended 185px short, so
+		// every Credit figure was clipped to "R". The library's own resize
+		// handler makes exactly this call after setColumnWidth.
+		if (dt.style && dt.style.setBodyStyle) {
+			dt.style.setBodyStyle();
+		}
 	},
 
 	// Tag the narration rows so the CSS above can apply to them.
