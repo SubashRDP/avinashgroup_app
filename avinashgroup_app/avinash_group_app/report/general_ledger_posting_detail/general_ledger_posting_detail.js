@@ -234,6 +234,26 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 	onload: function (report) {
 		frappe.query_reports["General Ledger Posting Detail"].apply_period(report);
 
+		// Let a narration cell spill across the row. frappe-datatable has no
+		// colspan (checked: zero occurrences in the library), and every cell is
+		// overflow:hidden with 0.5rem padding, so a full-width line is only
+		// possible by lifting overflow on the row. Same approach as Receipt
+		// Register's remarks sub-line.
+		if (!document.getElementById("glpd-narration-style")) {
+			const style = document.createElement("style");
+			style.id = "glpd-narration-style";
+			style.textContent = `
+				.glpd-narration-row .dt-cell { overflow: visible !important; }
+				.glpd-narration-row .dt-cell__content {
+					overflow: visible !important;
+					white-space: nowrap;
+					position: relative;
+					z-index: 5;
+				}
+			`;
+			document.head.appendChild(style);
+		}
+
 		report.page.add_inner_button(__("Download PDF"), function () {
 			const filters = report.get_values();
 			if (!filters.company) {
@@ -249,18 +269,53 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		});
 	},
 
+	// Tag the narration rows so the CSS above can apply to them.
+	tagNarrationRows: function (dt) {
+		const data = frappe.query_report.data || [];
+		const container = dt && dt.bodyScrollable;
+		if (!container) return;
+		data.forEach(function (row, i) {
+			if (!row || !row._narration) return;
+			const rowEl = container.querySelector(".dt-row-" + i);
+			if (rowEl) rowEl.classList.add("glpd-narration-row");
+		});
+	},
+
+	after_datatable_render: function (dt) {
+		const me = frappe.query_reports["General Ledger Posting Detail"];
+		me.tagNarrationRows(dt);
+
+		// frappe-datatable virtualises rows: only those near the viewport exist
+		// in the DOM, and scrolling destroys and recreates them, wiping the
+		// class off every row but the first few. Re-tag on scroll.
+		const container = dt && dt.bodyScrollable;
+		if (!container || container._glpdScanBound) return;
+		container._glpdScanBound = true;
+		let scheduled = false;
+		container.addEventListener("scroll", function () {
+			if (scheduled) return;
+			scheduled = true;
+			window.requestAnimationFrame(function () {
+				scheduled = false;
+				me.tagNarrationRows(dt);
+			});
+		});
+	},
+
 	formatter: function (value, row, column, data, default_formatter) {
-		// A narration is laid across every column so it reads as one full-width
-		// line — see _narration_row. Each cell is plain text, including the
-		// Currency ones, which would otherwise try to format a word as a number
-		// and right-align it away from the rest of the sentence.
+		// The whole narration sits in the Party Name/Description cell and spills
+		// right across the empty Debit/Credit/Balance cells — the datatable has
+		// no colspan, so overflow is the only way to an unbroken line. It goes
+		// in a middle column, not the first: Fit Columns measures cell content,
+		// and a narration in column one stretched it until Debit, Credit and
+		// Balance were pushed off the page.
 		if (data && data._narration) {
-			const part = data[column.fieldname];
-			if (!part) return "";
-			return `<span style="color:#6b7280;font-style:italic;text-align:left;display:block;
-				white-space:nowrap;" title="${frappe.utils.escape_html(
-					data.narration || ""
-				)}">${frappe.utils.escape_html(part)}</span>`;
+			if (column.fieldname === "party_name") {
+				return `<span style="color:#6b7280;font-style:italic;">${frappe.utils.escape_html(
+					data.party_name || ""
+				)}</span>`;
+			}
+			return "";
 		}
 
 		// Opening / Period Total / Closing carry only the figures that mean

@@ -426,48 +426,6 @@ def _opening_balances(filters, postings):
 	return opening
 
 
-# Roughly how many characters fit in a pixel of column width at this font.
-# Only used to lay the narration out, so an estimate is fine.
-CHARS_PER_PX = 1 / 6.4
-
-
-def _narration_row(columns, text):
-	"""A narration laid across the whole row.
-
-	The other cells on a narration row are empty, so the text is split over all
-	of them and reads as one line. This is how a datatable is given a full-width
-	row: it has no colspan, a single cell clips at its column width, and
-	absolute positioning to overflow one froze the renderer on a thousand rows.
-	"""
-	row = {"_narration": 1, "narration": text}
-	words = text.split()
-
-	for column in columns:
-		if column.get("hidden"):
-			continue
-		budget = max(int(column.get("width", 100) * CHARS_PER_PX) - 1, 6)
-		if not words:
-			row[column["fieldname"]] = ""
-			continue
-
-		chunk = []
-		length = 0
-		while words and length + len(words[0]) <= budget:
-			word = words.pop(0)
-			chunk.append(word)
-			length += len(word) + 1
-		# a single word longer than the column would otherwise stall the loop
-		if not chunk and words:
-			word = words.pop(0)
-			chunk.append(word[:budget])
-			remainder = word[budget:]
-			if remainder:
-				words.insert(0, remainder)
-		row[column["fieldname"]] = " ".join(chunk)
-
-	return row
-
-
 def _build_rows(filters, postings, with_narration=False, columns=None):
 	show_remarks = with_narration and cint(filters.get("remarks", 1))
 	columns = columns or _get_columns(filters)
@@ -515,8 +473,16 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 			if show_remarks:
 				narration = _clean_narration(posting.remarks)
 				if narration:
+					# The whole narration goes in the first cell; the JS then
+					# lets that cell spill across the row (Receipt Register does
+					# the same for its remarks sub-line). The datatable has no
+					# colspan, so overflow is the only way to a full-width row.
 					data.append(
-						_narration_row(columns, "Narr: {0}".format(narration[:400]))
+						{
+							"party_name": "Narr: {0}".format(narration[:400]),
+							"narration": narration,
+							"_narration": 1,
+						}
 					)
 
 		data.append(
