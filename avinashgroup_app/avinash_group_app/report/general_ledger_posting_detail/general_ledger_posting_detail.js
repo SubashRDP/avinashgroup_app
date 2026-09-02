@@ -370,7 +370,11 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 	autoFitColumns: function (dt) {
 		const wrapper = dt && dt.datatableWrapper;
 		if (!wrapper) return;
-		if (!frappe.query_report.get_filter_value("fit_columns")) return;
+		// autoFitColumns can be reached before the filters exist (the shared
+		// control calls it on its own schedule), so this must not assume one.
+		const report = frappe.query_report;
+		const fitFilter = report && report.get_filter && report.get_filter("fit_columns");
+		if (fitFilter && !report.get_filter_value("fit_columns")) return;
 
 		const columns = dt.datamanager.getColumns(true) || [];
 		const data = frappe.query_report.data || [];
