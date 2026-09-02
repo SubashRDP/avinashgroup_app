@@ -18,12 +18,12 @@ web_include_js = [
     "/assets/avinashgroup_app/js/portal_notifications.js?v=2",
     # login popup for customer portal users — see doctype "Portal Announcement".
     # Same file is in app_include_js so it also fires on the desk.
-    "/assets/avinashgroup_app/js/portal_announcement.js?v=9",
+    "/assets/avinashgroup_app/js/portal_announcement.js?v=13",
 ]
 
 app_include_js = [
     # login popup for customer portal users, desk side — see web_include_js
-    "/assets/avinashgroup_app/js/portal_announcement.js?v=9",
+    "/assets/avinashgroup_app/js/portal_announcement.js?v=13",
     # Wraps frappe.msgprint / show_alert to drop ERPNext's informational
     # negative-stock notifications (blue "Warning on Negative Stock",
     # green "valuation reposting in progress"). Load first so the wrapper is
