@@ -67,7 +67,9 @@ def execute(filters=None):
 
 	_decorate(postings, filters.company)
 	columns = _get_columns(filters)
-	return columns, _build_rows(filters, postings, with_narration=True, columns=columns)
+	return columns, _build_rows(
+		filters, postings, with_narration=True, columns=columns, always_narration=True
+	)
 
 
 def _validate(filters):
@@ -442,8 +444,11 @@ def _balance_band(label, balance):
 	return row
 
 
-def _build_rows(filters, postings, with_narration=False, columns=None):
-	show_remarks = with_narration and cint(filters.get("remarks", 1))
+def _build_rows(filters, postings, with_narration=False, columns=None, always_narration=False):
+	# The grid always receives narration rows and shows or hides them in the
+	# browser -- a checkbox toggle should not cost a five-second re-query. The
+	# print-out honours the setting server-side, since it has no browser.
+	show_remarks = with_narration and (always_narration or cint(filters.get("remarks", 1)))
 	columns = columns or _get_columns(filters)
 
 	sections = {}

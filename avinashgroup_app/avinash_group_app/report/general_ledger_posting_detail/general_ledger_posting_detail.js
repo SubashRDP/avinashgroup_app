@@ -177,12 +177,20 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldtype: "Data",
 		},
 		{
-			// One switch for both: off means no narration row anywhere, on the
-			// screen or in the print-out.
+			// One switch for both screen and print-out. On screen it is instant:
+			// a filter with its own on_change is responsible for refreshing
+			// (query_report.js), so this one hides or shows the rows already
+			// loaded rather than re-running a five-second query to drop them.
+			// The print-out reads the same value server-side.
 			fieldname: "remarks",
 			label: __("Show Narration"),
 			fieldtype: "Check",
 			default: 1,
+			on_change: function () {
+				frappe.query_reports["General Ledger Posting Detail"].applyNarrationVisibility(
+					frappe.query_report
+				);
+			},
 		},
 	],
 
@@ -268,6 +276,28 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		});
 	},
 
+	// Show or hide the narration rows the server already sent, without a
+	// round-trip. showRows re-renders just the indices given; showAllRows
+	// restores everything. Indices are positions in report.data, which is
+	// also what the .dt-row-N classes are keyed on, so tagging still lines up.
+	applyNarrationVisibility: function (report) {
+		const dt = report.datatable;
+		const data = report.data || [];
+		if (!dt || !dt.rowmanager || !data.length) return;
+
+		const show = !!report.get_filter_value("remarks");
+		if (show) {
+			dt.rowmanager.showAllRows();
+		} else {
+			const keep = [];
+			data.forEach(function (row, i) {
+				if (!row || !row._narration) keep.push(i);
+			});
+			dt.rowmanager.showRows(keep);
+		}
+		frappe.query_reports["General Ledger Posting Detail"].tagNarrationRows(dt);
+	},
+
 	// Tag the narration rows so the CSS above can apply to them.
 	tagNarrationRows: function (dt) {
 		const data = frappe.query_report.data || [];
@@ -282,7 +312,8 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 
 	after_datatable_render: function (dt) {
 		const me = frappe.query_reports["General Ledger Posting Detail"];
-		me.tagNarrationRows(dt);
+		// a fresh render arrives with every row; apply the checkbox to it
+		me.applyNarrationVisibility(frappe.query_report);
 
 		// frappe-datatable virtualises rows: only those near the viewport exist
 		// in the DOM, and scrolling destroys and recreates them, wiping the
