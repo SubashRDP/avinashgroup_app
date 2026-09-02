@@ -177,8 +177,11 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldtype: "Data",
 		},
 		{
+			// Narration is not rendered in the grid — a datatable cell clips it
+			// and there is no colspan. It goes in the print-out, where it takes
+			// the whole row, and this decides whether it is included.
 			fieldname: "remarks",
-			label: __("Show Narration"),
+			label: __("Narration in Print"),
 			fieldtype: "Check",
 			default: 1,
 		},
@@ -230,22 +233,35 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 
 	onload: function (report) {
 		frappe.query_reports["General Ledger Posting Detail"].apply_period(report);
+
+		report.page.add_inner_button(__("Download PDF"), function () {
+			const filters = report.get_values();
+			if (!filters.company) {
+				frappe.msgprint(__("Please select a Company."));
+				return;
+			}
+			window.open(
+				"/api/method/avinashgroup_app.avinash_group_app.report." +
+					"general_ledger_posting_detail.general_ledger_posting_detail.download_pdf" +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&orientation=Landscape"
+			);
+		});
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
-		// The narration is its own row under the posting. A datatable cell clips
-		// at its column width and there is no colspan, so it goes in the widest
-		// column (Party Name/Description) with the full text on hover. Absolute
-		// positioning was tried to span the row and froze the renderer on a
-		// thousand rows, so it is deliberately not used.
-		if (data && data._narration) {
-			if (column.fieldname === "party_name") {
-				const full = data.narration_full || data.narration || "";
-				return `<span style="color:#6b7280;font-style:italic;" title="${frappe.utils.escape_html(
-					full
-				)}">${frappe.utils.escape_html(full)}</span>`;
+		// Opening / Period Total / Closing carry only the figures that mean
+		// something on that line: a balance band has no movement, and Period
+		// Total is a movement with no balance. A Currency cell renders a missing
+		// value as 0.00, which reads as a real zero — so blank them instead.
+		if (data && data._band) {
+			const value = data[column.fieldname];
+			if (
+				(value === undefined || value === null) &&
+				["debit", "credit", "balance"].includes(column.fieldname)
+			) {
+				return "";
 			}
-			return "";
 		}
 
 		if (data && data._section) {

@@ -63,10 +63,14 @@ def execute(filters=None):
 
 	postings = _get_postings(filters)
 	if not postings:
-		return _get_columns(), []
+		return _get_columns(filters), []
 
 	_decorate(postings, filters.company)
-	return _get_columns(), _build_rows(filters, postings)
+	# The desk grid never carries narration rows. A datatable cell clips at its
+	# column width and has no colspan, so a narration could only ever be shown
+	# truncated -- and it was doubling the row count to do it. It belongs in the
+	# print-out, where there is a full page width to put it on.
+	return _get_columns(filters), _build_rows(filters, postings, with_narration=False)
 
 
 def _validate(filters):
@@ -425,8 +429,8 @@ def _opening_balances(filters, postings):
 	return opening
 
 
-def _build_rows(filters, postings):
-	show_remarks = cint(filters.get("remarks", 1))
+def _build_rows(filters, postings, with_narration=False):
+	show_remarks = with_narration and cint(filters.get("remarks", 1))
 
 	sections = {}
 	for posting in postings:
@@ -496,13 +500,16 @@ def _build_rows(filters, postings):
 		grand_credit += section_credit
 
 	if data:
-		data.append({"party_name": _("Opening Balance"), "balance": grand_opening, "_bold": 1})
+		data.append(
+			{"party_name": _("Opening Balance"), "balance": grand_opening, "_bold": 1, "_band": 1}
+		)
 		data.append(
 			{
 				"party_name": _("Grand Total"),
 				"debit": grand_debit,
 				"credit": grand_credit,
 				"_bold": 1,
+				"_band": 1,
 			}
 		)
 		data.append(
@@ -510,12 +517,14 @@ def _build_rows(filters, postings):
 				"party_name": _("Closing Balance"),
 				"balance": grand_opening + grand_debit - grand_credit,
 				"_bold": 1,
+				"_band": 1,
 			}
 		)
 	return data
 
 
-def _get_columns():
+def _get_columns(filters=None):
+	filters = filters or {}
 	return [
 		{"fieldname": "miti", "label": _("Posting Miti"), "fieldtype": "Data", "width": 110},
 		{"fieldname": "voucher_type", "label": _("Voucher Type"), "fieldtype": "Data", "width": 140},
@@ -524,7 +533,7 @@ def _get_columns():
 			"fieldname": "party_name",
 			"label": _("Party Name/Description"),
 			"fieldtype": "Data",
-			"width": 300,
+			"width": 320,
 		},
 		{"fieldname": "debit", "label": _("Debit"), "fieldtype": "Currency", "width": 130},
 		{"fieldname": "credit", "label": _("Credit"), "fieldtype": "Currency", "width": 130},
@@ -594,3 +603,94 @@ def get_parties(party_types=None, txt=None):
 			for r in rows
 		)
 	return options
+
+
+# ── print / PDF ─────────────────────────────────────────────────────────────────
+
+@frappe.whitelist()
+def download_pdf(filters, orientation="Landscape"):
+	"""The ledger as a print-out, with the narration under each posting.
+
+	This is where narration lives: a page has the width to carry a sentence,
+	where a datatable cell can only clip it. "Show Narration" is the setting
+	that decides whether it is included here.
+	"""
+	import os
+
+	from frappe.utils.pdf import get_pdf
+
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr, _bs
+
+	filters = frappe._dict(json.loads(filters) if isinstance(filters, str) else filters)
+	_validate(filters)
+
+	postings = _get_postings(filters)
+	if not postings:
+		frappe.throw(_("Nothing to print for these filters."))
+	_decorate(postings, filters.company)
+
+	rows = _build_rows(filters, postings, with_narration=True)
+
+	printable = []
+	for row in rows:
+		if not row:
+			continue
+		printable.append(
+			frappe._dict(
+				miti=row.get("miti") or "",
+				voucher_type=row.get("voucher_type") or "",
+				# the anchor is for the desk; print wants the bare number
+				voucher_no=row.get("voucher_number") or _strip_tags(row.get("voucher_no")),
+				description=row.get("party_name") or "",
+				debit=_fmt_npr(row.get("debit")),
+				credit=_fmt_npr(row.get("credit")),
+				balance=_fmt_npr(row.get("balance")),
+				css=(
+					"section"
+					if row.get("_section")
+					else "narration"
+					if row.get("_narration")
+					else "band"
+					if row.get("_band")
+					else "total"
+					if row.get("_bold")
+					else ""
+				),
+			)
+		)
+
+	template_path = os.path.join(os.path.dirname(__file__), "general_ledger_posting_detail_pdf.html")
+	with open(template_path) as handle:
+		template = handle.read()
+
+	html = frappe.render_template(
+		template,
+		{
+			"company": filters.company,
+			"from_bs": _bs(filters.from_date),
+			"to_bs": _bs(filters.to_date),
+			"grouped_by": filters.get("categorized_by") or "Account",
+			"rows": printable,
+			"printed_on": _bs(frappe.utils.nowdate()),
+		},
+	)
+
+	frappe.local.response.filename = "General Ledger Posting Detail - {0}.pdf".format(filters.company)
+	frappe.local.response.filecontent = get_pdf(
+		html,
+		{
+			"orientation": orientation if orientation in ("Portrait", "Landscape") else "Landscape",
+			"margin-top": "10mm",
+			"margin-bottom": "12mm",
+			"margin-left": "8mm",
+			"margin-right": "8mm",
+		},
+	)
+	frappe.local.response.type = "download"
+
+
+def _strip_tags(value):
+	"""The visible text of a cell that may carry an anchor."""
+	import re
+
+	return re.sub(r"<[^>]+>", "", str(value or ""))
