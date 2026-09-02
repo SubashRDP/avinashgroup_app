@@ -1,5 +1,5 @@
-// Login popup for customer portal users — shown once per browser session, on the
-// first page after login, on BOTH the desk and the website portal.
+// Announcement popup for customer portal users — shown on every page load
+// (including refresh), on BOTH the desk and the website portal.
 //
 // The server (Portal Announcement.get_login_popups) returns nothing for Guests and for
 // any login not listed in a Customer's Portal Users table, so this script can be
@@ -7,7 +7,6 @@
 // (System Manager / Accounts Manager) and rendered as-is.
 
 (function () {
-	var SEEN_KEY = "ag_portal_announcement_shown"; // sessionStorage: once per browser session
 	var METHOD =
 		"avinashgroup_app.avinash_group_app.doctype.portal_announcement.portal_announcement.get_login_popups";
 
@@ -31,34 +30,15 @@
 		}, 200);
 	}
 
-	function seen() {
-		try {
-			return !!sessionStorage.getItem(SEEN_KEY);
-		} catch (e) {
-			return false;
-		}
-	}
-	function mark_seen() {
-		try {
-			sessionStorage.setItem(SEEN_KEY, "1");
-		} catch (e) {
-			/* private mode / storage blocked */
-		}
-	}
-
 	whenReady(function () {
 		if (frappe.session.user === "Guest") return;
-		if (seen()) return;
+		if (document.querySelector(".ag-popup-backdrop")) return; // already open on this page
 
 		frappe.call({
 			method: METHOD,
 			callback: function (r) {
 				var popups = (r && r.message) || [];
-				// only burn the once-per-session flag once something actually shows
-				if (popups.length) {
-					mark_seen();
-					render(popups);
-				}
+				if (popups.length) render(popups);
 			},
 		});
 	});
@@ -68,7 +48,8 @@
 		var css =
 			".ag-popup-backdrop{position:fixed;inset:0;z-index:2000;display:flex;" +
 			"align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto;" +
-			"background:rgba(14,24,54,.55);}" +
+			"background:rgba(14,24,54,.5);" +
+			"-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);}" +
 			".ag-popup-card{position:relative;width:100%;max-width:520px;margin:auto;" +
 			"background:#fff;border-radius:14px;" +
 			"box-shadow:0 30px 70px -24px rgba(14,24,54,.6);overflow:hidden;" +
@@ -80,13 +61,15 @@
 			"border:1px solid rgba(0,0,0,.15);border-radius:50%;background:#fff;" +
 			"font-size:18px;line-height:1;color:#000;cursor:pointer;z-index:2;}" +
 			".ag-popup-close:hover{background:#000;color:#fff;border-color:#000;}" +
-			".ag-popup-body{padding:26px 24px 20px;}" +
+			".ag-popup-body{padding:16px 24px 20px;}" +
 			".ag-popup-card.is-custom .ag-popup-body{padding:0;}" +
-			".ag-popup-title{margin:0 0 12px;font-size:19px;font-weight:600;color:#22357F;" +
-			"padding-right:26px;}" +
-			".ag-popup-card.is-custom .ag-popup-title{margin:0;padding:22px 40px 10px 24px;}" +
-			".ag-popup-img{display:block;width:100%;height:auto;border-radius:10px;margin:12px 24px 14px;" +
-			"width:calc(100% - 48px);}" +
+			// title sits at the very top of the card, above the image
+			".ag-popup-title{margin:0;font-size:19px;font-weight:600;color:#22357F;" +
+			"padding:20px 46px 12px 24px;}" +
+			".ag-popup-img{display:block;width:calc(100% - 48px);height:auto;border-radius:10px;" +
+			"margin:0 24px 4px;}" +
+			// in custom mode the image is a full-bleed banner under the title
+			".ag-popup-card.is-custom .ag-popup-img{border-radius:0;margin:0;width:100%;}" +
 			// in custom mode the image is a full-bleed banner above the content
 			".ag-popup-card.is-custom .ag-popup-img{border-radius:0;margin:0;width:100%;}" +
 			".ag-popup-msg{font-size:14.5px;line-height:1.55;color:#0E1836;}" +
@@ -135,9 +118,9 @@
 				(p.custom ? " is-custom" : "") +
 				'" role="dialog" aria-modal="true">' +
 				'<button class="ag-popup-close" aria-label="Close">×</button>' +
+				title +
 				img +
 				'<div class="ag-popup-body">' +
-				title +
 				bodyInner +
 				"</div>" +
 				"</div>";
