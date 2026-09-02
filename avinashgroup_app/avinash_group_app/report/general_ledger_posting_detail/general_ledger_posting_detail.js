@@ -250,6 +250,19 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
+		// A narration is laid across every column so it reads as one full-width
+		// line — see _narration_row. Each cell is plain text, including the
+		// Currency ones, which would otherwise try to format a word as a number
+		// and right-align it away from the rest of the sentence.
+		if (data && data._narration) {
+			const part = data[column.fieldname];
+			if (!part) return "";
+			return `<span style="color:#6b7280;font-style:italic;text-align:left;display:block;
+				white-space:nowrap;" title="${frappe.utils.escape_html(
+					data.narration || ""
+				)}">${frappe.utils.escape_html(part)}</span>`;
+		}
+
 		// Opening / Period Total / Closing carry only the figures that mean
 		// something on that line: a balance band has no movement, and Period
 		// Total is a movement with no balance. A Currency cell renders a missing
