@@ -677,7 +677,9 @@ def download_pdf(filters, orientation="Landscape"):
 				voucher_type=row.get("voucher_type") or "",
 				# the anchor is for the desk; print wants the bare number
 				voucher_no=row.get("voucher_number") or _strip_tags(row.get("voucher_no")),
-				description=row.get("party_name") or "",
+				# a narration row's text is split across cells for the grid; the
+				# print-out spans it with colspan, so it wants the whole string
+				description=row.get("narration") or row.get("party_name") or "",
 				debit=_fmt_npr(row.get("debit")),
 				credit=_fmt_npr(row.get("credit")),
 				balance=_fmt_npr(row.get("balance")),
