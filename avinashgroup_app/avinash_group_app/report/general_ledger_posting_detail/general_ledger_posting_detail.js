@@ -389,6 +389,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		// column stays at its floor, and the real figures elsewhere in the
 		// column are clipped to "R".
 		const MONEY_FLOOR = { debit: 130, credit: 130, balance: 165 };
+		const widths = {};
 
 		columns.forEach(function (col) {
 			let width = MONEY_FLOOR[col.fieldname] || 90;
@@ -408,7 +409,26 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 				width = Math.max(width, cell.scrollWidth + 20);
 			}
 
-			dt.datamanager.updateColumn(col.colIndex, { width: Math.min(width, 340) });
+			widths[col.colIndex] = Math.min(width, 340);
+		});
+
+		// Fitting to content leaves the table narrower than the window -- on a
+		// wide screen ~665px of it sat empty while Credit and Balance looked
+		// cropped at the edge. The slack goes to Party Name/Description, the
+		// only column whose content is genuinely open-ended.
+		const available = (dt.bodyScrollable && dt.bodyScrollable.clientWidth) || 0;
+		const used = Object.values(widths).reduce(function (a, b) {
+			return a + b;
+		}, 0);
+		const description = columns.find(function (c) {
+			return c.fieldname === "party_name";
+		});
+		if (description && available && used < available - 24) {
+			widths[description.colIndex] += available - used - 24;
+		}
+
+		columns.forEach(function (col) {
+			dt.datamanager.updateColumn(col.colIndex, { width: widths[col.colIndex] });
 			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
 			dt.columnmanager.setColumnWidth(col.colIndex);
 		});
