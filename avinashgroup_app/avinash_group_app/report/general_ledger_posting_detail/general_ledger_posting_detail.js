@@ -2,6 +2,18 @@
 // For license information, please see license.txt
 
 frappe.query_reports["General Ledger Posting Detail"] = {
+	// The pickers below are scoped to the company and the period, so a filter
+	// only ever offers values that can actually appear in the report. Kept in
+	// one place because all of them need the same three arguments.
+	scope_args: function () {
+		const report = frappe.query_report;
+		return {
+			company: report.get_filter_value("company"),
+			from_date: report.get_filter_value("from_date"),
+			to_date: report.get_filter_value("to_date"),
+		};
+	},
+
 	filters: [
 		{
 			fieldname: "company",
@@ -10,6 +22,26 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			options: "Company",
 			reqd: 1,
 			default: frappe.defaults.get_user_default("Company"),
+			// Only the companies this user is permitted to see, and all of
+			// them -- the stock Link search pages ten at a time and ignores
+			// nothing, so it offered companies the user has no business in.
+			get_query: function () {
+				return {
+					query:
+						"avinashgroup_app.avinash_group_app.report.general_ledger_posting_detail." +
+						"general_ledger_posting_detail.company_query",
+				};
+			},
+			on_change: function () {
+				// Party, subtype and account all belong to a company; a
+				// selection carried over from the previous one would filter
+				// the report down to nothing.
+				const report = frappe.query_report;
+				report.set_filter_value("party", []);
+				report.set_filter_value("voucher_subtype", []);
+				report.set_filter_value("account", []);
+				report.refresh();
+			},
 		},
 		{
 			// Account / Party / Both — what each block of postings is headed by.
@@ -112,10 +144,14 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 						method:
 							"avinashgroup_app.avinash_group_app.report.general_ledger_posting_detail." +
 							"general_ledger_posting_detail.get_subtypes",
-						args: {
-							voucher_types: frappe.query_report.get_filter_value("voucher_type"),
-							txt: txt,
-						},
+						args: Object.assign(
+							{
+								voucher_types:
+									frappe.query_report.get_filter_value("voucher_type"),
+								txt: txt,
+							},
+							frappe.query_reports["General Ledger Posting Detail"].scope_args()
+						),
 					})
 					.then((r) => r.message || []);
 			},
@@ -145,10 +181,13 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 						method:
 							"avinashgroup_app.avinash_group_app.report.general_ledger_posting_detail." +
 							"general_ledger_posting_detail.get_parties",
-						args: {
-							party_types: frappe.query_report.get_filter_value("party_type"),
-							txt: txt,
-						},
+						args: Object.assign(
+							{
+								party_types: frappe.query_report.get_filter_value("party_type"),
+								txt: txt,
+							},
+							frappe.query_reports["General Ledger Posting Detail"].scope_args()
+						),
 					})
 					.then((r) => r.message || []);
 			},

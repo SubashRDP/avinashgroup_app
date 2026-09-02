@@ -72,9 +72,53 @@ def execute(filters=None):
 	)
 
 
+def _allowed_companies():
+	"""Company names the current user may see, from Company User Permissions.
+
+	None means unrestricted -- the Administrator, or a user with no Company
+	user permission at all (Frappe's "no user permission == see everything"
+	rule). Same shape as the helper in Invoice Activity Report.
+	"""
+	if frappe.session.user == "Administrator":
+		return None
+	from frappe.core.doctype.user_permission.user_permission import get_user_permissions
+
+	companies = [p.get("doc") for p in (get_user_permissions().get("Company") or []) if p.get("doc")]
+	return companies or None
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def company_query(doctype, txt, searchfield, start, page_len, filters):
+	"""Companies for the report's Company picker.
+
+	Deliberately not the stock Link search: this offers only the companies the
+	user actually has a Company User Permission for, and offers all of them --
+	no page limit, because the whole point is to choose from the full set
+	rather than page through it.
+	"""
+	allowed = _allowed_companies()
+	conditions = ["name LIKE %(txt)s"]
+	params = {"txt": "%{0}%".format(txt or "")}
+	if allowed is not None:
+		conditions.append("name IN %(allowed)s")
+		params["allowed"] = tuple(allowed)
+
+	return frappe.db.sql(
+		"SELECT name FROM `tabCompany` WHERE {0} ORDER BY name".format(" AND ".join(conditions)),
+		params,
+	)
+
+
 def _validate(filters):
 	if not filters.company:
 		frappe.throw(_("Please select a Company."))
+	# The picker only offers permitted companies, but the report is whitelisted
+	# and its filters arrive from the client, so the scope is enforced here too
+	# rather than trusted.
+	allowed = _allowed_companies()
+	if allowed is not None and filters.company not in allowed:
+		frappe.throw(_("You are not permitted to view {0}.").format(frappe.bold(filters.company)))
 	if not (filters.from_date and filters.to_date):
 		frappe.throw(_("Please select From Date and To Date."))
 	if getdate(filters.from_date) > getdate(filters.to_date):
@@ -601,8 +645,16 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 		grand_credit += section_credit
 
 	if data:
+		# The opening balance heads the ledger, it does not close it. It was
+		# previously appended with the Grand Total / Closing block, which put
+		# the figure the reader needs FIRST at the very bottom of the report --
+		# past every section, and on the last page of a long print. It is
+		# summed during the section loop above, so it can only be built here;
+		# inserting it at the front is what puts it where it reads.
+		data.insert(0, _balance_band(_("Opening Balance"), grand_opening))
+		data.insert(1, {"_spacer": 1})
+
 		data.append({"_spacer": 1})
-		data.append(_balance_band(_("Opening Balance"), grand_opening))
 		data.append(
 			{
 				"party_name": _("Grand Total"),
@@ -653,15 +705,23 @@ def _get_columns(filters=None):
 # ── filter options ──────────────────────────────────────────────────────────────
 
 @frappe.whitelist()
-def get_subtypes(voucher_types=None, txt=None):
+def get_subtypes(voucher_types=None, txt=None, company=None, from_date=None, to_date=None):
 	"""Subtypes available for the selected voucher types.
 
 	Each doctype keeps its subtype in its own field pointing at its own doctype,
 	so the options are the union of whichever ones are in play. With no voucher
 	type selected, everything is offered.
+
+	Narrowed to the subtypes actually used by the chosen company in the chosen
+	period, for the same reason as the party picker: a subtype nobody used
+	returns an empty report. This reads each voucher table directly rather than
+	GL Entry -- those tables are small and carry both company and posting_date,
+	so it costs a fraction of the party lookup. Falls back to the full list
+	when the company or the dates are not known yet.
 	"""
 	selected = _normalize(voucher_types) or list(SUBTYPE_SOURCE)
 	needle = (txt or "").strip().lower()
+	scoped = bool(company and from_date and to_date)
 
 	options = []
 	seen = set()
@@ -683,28 +743,100 @@ def get_subtypes(voucher_types=None, txt=None):
 
 		if not linked or not frappe.db.exists("DocType", linked):
 			continue
+
+		if scoped and frappe.db.has_column(doctype, field):
+			used = frappe.db.sql(
+				"""
+				SELECT DISTINCT `{0}` FROM `tab{1}`
+				WHERE company = %(company)s
+				  AND posting_date BETWEEN %(from_date)s AND %(to_date)s
+				  AND docstatus < 2
+				  AND `{0}` IS NOT NULL AND `{0}` <> ''
+				""".format(field, doctype),
+				{"company": company, "from_date": from_date, "to_date": to_date},
+				pluck=field,
+			)
+			for value in sorted(used):
+				add(value, doctype)
+			continue
+
 		for row in frappe.get_all(linked, fields=["name"], order_by="name", limit=200):
 			add(row.name, doctype)
 
 	return options
 
 
+def _parties_in_scope(company, from_date, to_date, party_type):
+	"""Parties of one type that actually posted to this company in the period.
+
+	A Customer or Supplier is not owned by a company in ERPNext, so "this
+	company's parties" can only mean the ones that transacted with it. That is
+	a DISTINCT over GL Entry, and the period is what makes it affordable:
+	filtered by company alone it takes ~41s on this site's 938k rows, because
+	no index leads with company+party. Adding the report's own date range lets
+	it use posting_date_company_index -- measured 124ms, returning 1,114 of the
+	1,151 customers the unscoped query finds.
+
+	Returns None when the scope is not known yet (no company or no dates), so
+	the caller falls back to offering everything rather than an empty picker.
+	"""
+	if not (company and from_date and to_date):
+		return None
+	rows = frappe.db.sql(
+		"""
+		SELECT DISTINCT party FROM `tabGL Entry`
+		WHERE company = %(company)s
+		  AND posting_date BETWEEN %(from_date)s AND %(to_date)s
+		  AND party_type = %(party_type)s
+		  AND ifnull(is_cancelled, 0) = 0
+		  AND party IS NOT NULL AND party <> ''
+		""",
+		{"company": company, "from_date": from_date, "to_date": to_date, "party_type": party_type},
+		pluck="party",
+	)
+	return rows
+
+
 @frappe.whitelist()
-def get_parties(party_types=None, txt=None):
-	"""Parties of the selected types, matched on id or name."""
+def get_parties(party_types=None, txt=None, company=None, from_date=None, to_date=None):
+	"""Parties of the selected types, narrowed to the company and period.
+
+	Offering a party that cannot appear in the report is a dead end: you pick
+	it, and the report comes back empty. So the list is the parties that
+	actually posted to the chosen company inside the chosen dates.
+	"""
 	selected = [p for p in (_normalize(party_types) or list(PARTY_TYPES)) if p in PARTY_TYPES]
 	needle = "%{0}%".format((txt or "").strip())
 
 	options = []
 	for party_type in selected:
 		field = PARTY_NAME_FIELD[party_type]
+		in_scope = _parties_in_scope(company, from_date, to_date, party_type)
+		if in_scope is not None and not in_scope:
+			continue
+
+		conditions = ["(name LIKE %(txt)s OR `{0}` LIKE %(txt)s)".format(field)]
+		params = {"txt": needle}
+		if in_scope is not None:
+			conditions.append("name IN %(in_scope)s")
+			params["in_scope"] = tuple(in_scope)
+
+		# Once the scope is known the IN-list already bounds the result, so the
+		# picker offers every party that can appear rather than a truncated
+		# slice of them. The cap only applies before a company and period are
+		# chosen, where the alternative is dumping every customer on the site.
 		rows = frappe.db.sql(
 			"""
 			SELECT name AS value, `{0}` AS label FROM `tab{1}`
-			WHERE name LIKE %(txt)s OR `{0}` LIKE %(txt)s
-			ORDER BY `{0}` LIMIT 200
-			""".format(field, party_type),
-			{"txt": needle},
+			WHERE {2}
+			ORDER BY `{0}` {3}
+			""".format(
+				field,
+				party_type,
+				" AND ".join(conditions),
+				"" if in_scope is not None else "LIMIT 500",
+			),
+			params,
 			as_dict=True,
 		)
 		options.extend(
