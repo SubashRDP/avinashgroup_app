@@ -428,6 +428,27 @@ def _opening_balances(filters, postings):
 	return opening
 
 
+def _balance_text(balance, always=False):
+	"""A balance as a ledger states it: the figure, then the side it falls on.
+
+	Built here rather than in the client formatter. A Currency column renders a
+	bare number with nowhere to put the side, so the indicator had to be
+	appended in JS -- and that quietly did nothing whenever the framework
+	handed the formatter something other than a native number.
+
+	`always` is for the Opening / Period Total / Closing lines, which state a
+	figure even when it is zero: a squared account has a balance of 0.00, and
+	an empty cell there reads as though the balance were unknown. It carries no
+	Dr or Cr, because zero falls on neither side.
+	"""
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
+
+	balance = flt(balance)
+	if not balance:
+		return "0.00" if always else ""
+	return "{0} {1}".format(_fmt_npr(abs(balance)), "Dr" if balance > 0 else "Cr")
+
+
 def _balance_band(label, balance):
 	"""An Opening/Closing line, with the balance on the side it belongs to.
 
@@ -441,7 +462,9 @@ def _balance_band(label, balance):
 	# an explicit zero says the account owes nothing on that side.
 	return {
 		"party_name": label,
-		"balance": balance,
+		"balance": _balance_text(balance, always=True),
+		# the signed number stays on the row for the print path and any export
+		"balance_value": balance,
 		"debit": balance if balance > 0 else 0.0,
 		"credit": -balance if balance < 0 else 0.0,
 		"_bold": 1,
@@ -497,7 +520,11 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 					"party_name": posting.party_name or "",
 					"debit": flt(posting.debit),
 					"credit": flt(posting.credit),
-					"balance": balance,
+					# a posting whose running balance happens to hit zero leaves
+					# the cell blank; only the Opening/Period/Closing lines are
+					# obliged to state a figure
+					"balance": _balance_text(balance),
+					"balance_value": balance,
 				}
 			)
 
@@ -510,9 +537,17 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 					# lets that cell spill across the row (Receipt Register does
 					# the same for its remarks sub-line). The datatable has no
 					# colspan, so overflow is the only way to a full-width row.
+					# The narration starts at Voucher Type, not Party Name.
+					# Fit Columns sizes a column to its widest cell, and a
+					# narration in Party Name made that the widest cell in the
+					# table -- it stretched to 600px and pushed Balance off the
+					# right edge. Voucher Type holds short values ("Journal
+					# Entry"), so its own width is set by the header and the
+					# narration is free to overflow rightwards across Voucher
+					# No. and Party Name, which are empty on this row.
 					data.append(
 						{
-							"party_name": "Narr: {0}".format(narration[:400]),
+							"voucher_type": "Narr: {0}".format(narration[:400]),
 							"narration": narration,
 							"_narration": 1,
 						}
@@ -527,7 +562,8 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 				"party_name": _("Period Total"),
 				"debit": section_debit,
 				"credit": section_credit,
-				"balance": section_debit - section_credit,
+				"balance": _balance_text(section_debit - section_credit, always=True),
+				"balance_value": section_debit - section_credit,
 				"_bold": 1,
 				"_band": 1,
 			}
@@ -548,7 +584,8 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 				"party_name": _("Grand Total"),
 				"debit": grand_debit,
 				"credit": grand_credit,
-				"balance": grand_debit - grand_credit,
+				"balance": _balance_text(grand_debit - grand_credit, always=True),
+				"balance_value": grand_debit - grand_credit,
 				"_bold": 1,
 				"_band": 1,
 			}
@@ -561,23 +598,31 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 
 def _get_columns(filters=None):
 	filters = filters or {}
+	# Widths are budgeted to ~1230px so Balance -- the column a ledger is read
+	# for -- lands on screen without scrolling. At 1330 it fell off the right
+	# edge and looked missing entirely. Dates and voucher fields are sized to
+	# their actual content (a BS miti is 10 characters, not 110px of one);
+	# Party Name/Description keeps the slack because the narration overflows
+	# from it, and Balance keeps room for its Dr/Cr suffix.
 	return [
-		{"fieldname": "date", "label": _("Posting Date"), "fieldtype": "Date", "width": 100},
-		{"fieldname": "miti", "label": _("Posting Miti"), "fieldtype": "Data", "width": 110},
-		{"fieldname": "voucher_type", "label": _("Voucher Type"), "fieldtype": "Data", "width": 140},
-		{"fieldname": "voucher_no", "label": _("Voucher No."), "fieldtype": "Data", "width": 210},
+		{"fieldname": "date", "label": _("Posting Date"), "fieldtype": "Date", "width": 92},
+		{"fieldname": "miti", "label": _("Posting Miti"), "fieldtype": "Data", "width": 88},
+		{"fieldname": "voucher_type", "label": _("Voucher Type"), "fieldtype": "Data", "width": 108},
+		{"fieldname": "voucher_no", "label": _("Voucher No."), "fieldtype": "Data", "width": 168},
 		{
 			"fieldname": "party_name",
 			"label": _("Party Name/Description"),
 			"fieldtype": "Data",
-			"width": 320,
+			"width": 280,
 		},
-		{"fieldname": "debit", "label": _("Debit"), "fieldtype": "Currency", "width": 130},
-		{"fieldname": "credit", "label": _("Credit"), "fieldtype": "Currency", "width": 130},
-		# wide enough for the Dr/Cr suffix -- at 150 the indicator rendered but
-		# sat outside the cell and was clipped, so the column read as a bare
-		# number and the fix looked like it had not worked
-		{"fieldname": "balance", "label": _("Balance"), "fieldtype": "Currency", "width": 190},
+		{"fieldname": "debit", "label": _("Debit"), "fieldtype": "Currency", "width": 118},
+		{"fieldname": "credit", "label": _("Credit"), "fieldtype": "Currency", "width": 118},
+		# Data, not Currency: the value is built as "1,09,45,494.08 Cr" server
+		# side. A Currency column formats a bare number and there is nowhere to
+		# put the side, so it was being appended in the client formatter --
+		# which silently did nothing whenever the framework handed the
+		# formatter something other than a native number.
+		{"fieldname": "balance", "label": _("Balance"), "fieldtype": "Data", "width": 160, "align": "right"},
 	]
 
 
@@ -680,7 +725,7 @@ def download_pdf(filters, orientation="Landscape"):
 		# than carrying a suffix -- a printed ledger is read down a column, and
 		# a reader should not have to check a tag on every line to know which
 		# side a figure falls on.
-		balance = flt(row.get("balance"))
+		balance = flt(row.get("balance_value"))
 		printable.append(
 			frappe._dict(
 				date=row.get("date") or "",

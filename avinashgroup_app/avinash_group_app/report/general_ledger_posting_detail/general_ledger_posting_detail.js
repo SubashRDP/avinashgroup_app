@@ -250,13 +250,10 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			const style = document.createElement("style");
 			style.id = "glpd-narration-style";
 			style.textContent = `
-				/* The Dr/Cr indicator is appended inside the cell, but Fit Columns
-				   sizes a column from its text and leaves no room for it — the
-				   suffix rendered and was then clipped at the cell edge, so the
-				   column read as a bare number. Reserve the space here, where
-				   Fit Columns cannot take it back. */
-				.glpd-balance-col .dt-cell__content { padding-right: 26px !important; }
 				.glpd-narration-row .dt-cell { overflow: visible !important; }
+				/* position:relative gives the absolutely-positioned narration
+				   span something to anchor to; overflow:visible lets it run
+				   past the cell edge across the empty cells to its right. */
 				.glpd-narration-row .dt-cell__content {
 					overflow: visible !important;
 					white-space: nowrap;
@@ -304,18 +301,6 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		frappe.query_reports["General Ledger Posting Detail"].tagNarrationRows(dt);
 	},
 
-	// Tag the Balance column by fieldname rather than by index, so adding a
-	// column later cannot silently move the padding onto the wrong one.
-	tagBalanceColumn: function (dt) {
-		const columns = (dt && dt.datamanager && dt.datamanager.columns) || [];
-		const balance = columns.find((c) => c.fieldname === "balance");
-		const container = dt && dt.bodyScrollable;
-		if (!balance || !container || balance.colIndex === undefined) return;
-		container.querySelectorAll(".dt-cell--col-" + balance.colIndex).forEach(function (cell) {
-			cell.classList.add("glpd-balance-col");
-		});
-	},
-
 	// Tag the narration rows so the CSS above can apply to them.
 	tagNarrationRows: function (dt) {
 		const data = frappe.query_report.data || [];
@@ -326,7 +311,6 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			const rowEl = container.querySelector(".dt-row-" + i);
 			if (rowEl) rowEl.classList.add("glpd-narration-row");
 		});
-		frappe.query_reports["General Ledger Posting Detail"].tagBalanceColumn(dt);
 	},
 
 	after_datatable_render: function (dt) {
@@ -352,17 +336,27 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
-		// The whole narration sits in the Party Name/Description cell and spills
-		// right across the empty Debit/Credit/Balance cells — the datatable has
-		// no colspan, so overflow is the only way to an unbroken line. It goes
-		// in a middle column, not the first: Fit Columns measures cell content,
-		// and a narration in column one stretched it until Debit, Credit and
-		// Balance were pushed off the page.
+		// The whole narration sits in the Voucher Type cell and spills right
+		// across Voucher No. and Party Name, which are empty on this row — the
+		// datatable has no colspan, so overflow is the only route to an
+		// unbroken line. Voucher Type is chosen because Fit Columns sizes a
+		// column to its widest cell: in Party Name the narration was the widest
+		// cell in the table and pushed Balance off the right edge, while
+		// Voucher Type's own width is set by short values like "Journal Entry".
 		if (data && data._narration) {
-			if (column.fieldname === "party_name") {
-				return `<span style="color:#6b7280;font-style:italic;">${frappe.utils.escape_html(
-					data.party_name || ""
-				)}</span>`;
+			if (column.fieldname === "voucher_type") {
+				// Absolutely positioned so it is out of flow: Fit Columns sizes
+				// each column by its cells' scrollWidth, and an in-flow
+				// narration made whichever column held it the widest in the
+				// table — it stretched to ~600px and pushed Balance off screen.
+				// Out of flow it contributes nothing to scrollWidth, so the
+				// column keeps its natural width and the text still runs the
+				// full width of the row.
+				return `<span style="position:absolute;left:8px;top:50%;
+					transform:translateY(-50%);white-space:nowrap;color:#6b7280;
+					font-style:italic;pointer-events:none;">${frappe.utils.escape_html(
+						data.voucher_type || ""
+					)}</span>`;
 			}
 			return "";
 		}
@@ -391,23 +385,6 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 				return `<b>${frappe.utils.escape_html(data.party_name || "")}</b>`;
 			}
 			return "";
-		}
-
-		// A ledger states a balance as a figure plus the side it falls on, not
-		// as a signed number: 1,09,45,494.08 Cr, never -1,09,45,494.08. The
-		// stored value stays signed so the running total and exports are
-		// arithmetic; only the display carries the indicator.
-		if (column.fieldname === "balance" && data) {
-			// Read the number off the row, not off `value` — a query report does
-			// not guarantee the formatter is handed a native number, and a
-			// typeof check on it silently skipped every row.
-			const amount = parseFloat(data.balance);
-			if (!isNaN(amount) && amount !== 0) {
-				const side = amount > 0 ? "Dr" : "Cr";
-				const shown = default_formatter(Math.abs(amount), row, column, data);
-				const html = `${shown}&thinsp;<small style="color:#6b7280;">${side}</small>`;
-				return data._bold ? `<b>${html}</b>` : html;
-			}
 		}
 
 		value = default_formatter(value, row, column, data);
