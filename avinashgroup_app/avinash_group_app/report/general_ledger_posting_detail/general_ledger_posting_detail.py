@@ -426,6 +426,22 @@ def _opening_balances(filters, postings):
 	return opening
 
 
+def _balance_band(label, balance):
+	"""An Opening/Closing line, with the balance on the side it belongs to.
+
+	A debit balance is a figure in the Debit column, a credit balance one in
+	Credit -- the sign alone is not how a ledger states it. The signed value is
+	kept on `balance` so the running column and any export stay arithmetic.
+	"""
+	balance = flt(balance)
+	row = {"party_name": label, "balance": balance, "_bold": 1, "_band": 1}
+	if balance > 0:
+		row["debit"] = balance
+	elif balance < 0:
+		row["credit"] = -balance
+	return row
+
+
 def _build_rows(filters, postings, with_narration=False, columns=None):
 	show_remarks = with_narration and cint(filters.get("remarks", 1))
 	columns = columns or _get_columns(filters)
@@ -446,9 +462,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 		# what this account/party carried into the period
 		balance = flt(opening.get(key, 0.0))
 		grand_opening += balance
-		data.append(
-			{"party_name": _("Opening Balance"), "balance": balance, "_bold": 1, "_band": 1}
-		)
+		data.append(_balance_band(_("Opening Balance"), balance))
 
 		section_debit = section_credit = 0.0
 		for posting in rows:
@@ -494,17 +508,13 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 				"_band": 1,
 			}
 		)
-		data.append(
-			{"party_name": _("Closing Balance"), "balance": balance, "_bold": 1, "_band": 1}
-		)
+		data.append(_balance_band(_("Closing Balance"), balance))
 		data.append({})
 		grand_debit += section_debit
 		grand_credit += section_credit
 
 	if data:
-		data.append(
-			{"party_name": _("Opening Balance"), "balance": grand_opening, "_bold": 1, "_band": 1}
-		)
+		data.append(_balance_band(_("Opening Balance"), grand_opening))
 		data.append(
 			{
 				"party_name": _("Grand Total"),
@@ -515,12 +525,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 			}
 		)
 		data.append(
-			{
-				"party_name": _("Closing Balance"),
-				"balance": grand_opening + grand_debit - grand_credit,
-				"_bold": 1,
-				"_band": 1,
-			}
+			_balance_band(_("Closing Balance"), grand_opening + grand_debit - grand_credit)
 		)
 	return data
 

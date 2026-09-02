@@ -339,6 +339,17 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			return "";
 		}
 
+		// A ledger states a balance as a figure plus the side it falls on, not
+		// as a signed number: 1,09,45,494.08 Cr, never -1,09,45,494.08. The
+		// stored value stays signed so the running total and exports are
+		// arithmetic; only the display carries the indicator.
+		if (column.fieldname === "balance" && typeof value === "number" && value !== 0) {
+			const side = value > 0 ? "Dr" : "Cr";
+			const shown = default_formatter(Math.abs(value), row, column, data);
+			const html = `${shown}&thinsp;<small style="color:#6b7280;">${side}</small>`;
+			return data && data._bold ? `<b>${html}</b>` : html;
+		}
+
 		value = default_formatter(value, row, column, data);
 		if (data && data._bold) {
 			value = `<b>${value}</b>`;
