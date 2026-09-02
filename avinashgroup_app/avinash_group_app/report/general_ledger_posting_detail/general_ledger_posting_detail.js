@@ -340,6 +340,50 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		frappe.query_reports["General Ledger Posting Detail"].tagNarrationRows(dt);
 	},
 
+	// rdp_common_app's shared Fit Columns sizes every column by its cells'
+	// scrollWidth, and a narration cell overflows by design -- so whichever
+	// column carried the narration was stretched to its 600px cap, pushing
+	// Credit and Balance off the right edge.
+	//
+	// Defining autoFitColumns makes that shared control stand aside
+	// (report_fit_columns.js: reportHasOwnFit) and use this instead. Same
+	// measurement, with narration rows left out of it: they are meant to
+	// overflow, so their width is not a column's width.
+	autoFitColumns: function (dt) {
+		const wrapper = dt && dt.datatableWrapper;
+		if (!wrapper) return;
+
+		const columns = dt.datamanager.getColumns(true) || [];
+		const data = frappe.query_report.data || [];
+		const narrationRows = new Set();
+		data.forEach(function (row, i) {
+			if (row && row._narration) narrationRows.add(i);
+		});
+
+		columns.forEach(function (col) {
+			let width = 90;
+
+			const header = wrapper.querySelector(".dt-cell__content--header-" + col.colIndex);
+			if (header) width = Math.max(width, header.scrollWidth + 20);
+
+			const cells = wrapper.querySelectorAll(".dt-cell__content--col-" + col.colIndex);
+			const sample = Math.min(100, cells.length);
+			for (let i = 0; i < sample; i++) {
+				const cell = cells[i];
+				const rowEl = cell.closest("[class*='dt-row-']");
+				if (rowEl) {
+					const match = /dt-row-(\d+)/.exec(rowEl.className);
+					if (match && narrationRows.has(parseInt(match[1], 10))) continue;
+				}
+				width = Math.max(width, cell.scrollWidth + 20);
+			}
+
+			dt.datamanager.updateColumn(col.colIndex, { width: Math.min(width, 340) });
+			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
+			dt.columnmanager.setColumnWidth(col.colIndex);
+		});
+	},
+
 	// Tag the narration rows so the CSS above can apply to them.
 	tagNarrationRows: function (dt) {
 		const data = frappe.query_report.data || [];
@@ -356,6 +400,10 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		const me = frappe.query_reports["General Ledger Posting Detail"];
 		// a fresh render arrives with every row; apply the checkbox to it
 		me.applyNarrationVisibility(frappe.query_report);
+		// re-fit once the narration rows are tagged, so they are excluded
+		setTimeout(function () {
+			me.autoFitColumns(dt);
+		}, 60);
 
 		// frappe-datatable virtualises rows: only those near the viewport exist
 		// in the DOM, and scrolling destroys and recreates them, wiping the
