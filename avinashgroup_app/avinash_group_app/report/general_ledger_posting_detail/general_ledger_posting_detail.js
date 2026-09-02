@@ -348,6 +348,11 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			return "";
 		}
 
+		// A blank line between sections carries nothing at all.
+		if (data && data._spacer) {
+			return "";
+		}
+
 		// Opening / Period Total / Closing carry only the figures that mean
 		// something on that line: a balance band has no movement, and Period
 		// Total is a movement with no balance. A Currency cell renders a missing

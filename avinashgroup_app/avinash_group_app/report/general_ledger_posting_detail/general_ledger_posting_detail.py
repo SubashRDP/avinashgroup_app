@@ -523,11 +523,15 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 			}
 		)
 		data.append(_balance_band(_("Closing Balance"), balance))
-		data.append({})
+		# blank line between sections -- flagged so the formatter empties it.
+		# An unflagged {} renders every Currency column as "Rs 0.00", which
+		# reads as a real zero on a row that means nothing at all.
+		data.append({"_spacer": 1})
 		grand_debit += section_debit
 		grand_credit += section_credit
 
 	if data:
+		data.append({"_spacer": 1})
 		data.append(_balance_band(_("Opening Balance"), grand_opening))
 		data.append(
 			{
