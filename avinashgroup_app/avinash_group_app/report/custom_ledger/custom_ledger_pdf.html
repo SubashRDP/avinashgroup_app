@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 8.5px;
+  color: #000;
+  line-height: 1.35;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Page header ─────────────────────────────────────────────────────────
+   The legacy print puts the company top-left and the report title top-right,
+   with the accounting period under the title. Table layout, not flexbox —
+   wkhtmltopdf does not support flex.                                      */
+.cl-head { display: table; width: 100%; }
+.cl-head-l { display: table-cell; vertical-align: top; width: 45%; }
+.cl-head-r { display: table-cell; vertical-align: top; text-align: right; }
+.cl-company { font-size: 9px; font-weight: bold; }
+.cl-title   { font-size: 13px; font-weight: bold; }
+.cl-period  { font-size: 8px; font-weight: bold; }
+.cl-contact { font-size: 8px; color: #000; line-height: 1.5; }
+
+.cl-bar { display: table; width: 100%; margin-top: 10px; font-size: 8.5px; }
+.cl-bar-l { display: table-cell; }
+.cl-bar-r { display: table-cell; text-align: right; }
+
+/* ── Ledger table ───────────────────────────────────────────────────────── */
+table.cl { width: 100%; border-collapse: collapse; margin-top: 2px; }
+table.cl thead { display: table-header-group; }
+table.cl thead th {
+  font-size: 8.5px;
+  font-weight: bold;
+  padding: 3px 4px 2px;
+  border-bottom: 1px solid #000;
+  text-align: left;
+  vertical-align: bottom;
+}
+table.cl td { padding: 1px 4px; vertical-align: top; }
+.num { text-align: right; white-space: nowrap; }
+
+/* an account heading, and a sub ledger heading nested under it */
+tr.section td   { font-weight: bold; padding-top: 5px; }
+tr.subsection td { font-weight: bold; padding-left: 12px; }
+tr.total td     { font-weight: bold; }
+tr.total        { border-top: 1px solid #000; }
+
+/* ── Report Parameters block, printed at the end like the legacy report ── */
+.cl-params { margin-top: 14px; font-size: 8.5px; page-break-inside: avoid; }
+.cl-params h4 { font-size: 9px; margin: 0 0 4px; font-weight: bold; }
+.cl-params table { width: 100%; border-collapse: collapse; }
+.cl-params td { padding: 1px 4px 1px 0; width: 33%; }
+
+.cl-foot { margin-top: 10px; font-size: 7.5px; color: #333; }
+</style>
+</head>
+<body>
+
+<div class="cl-head">
+  <div class="cl-head-l">
+    <div class="cl-company">{{ company }} FY [{{ fy_label }}]</div>
+    <div class="cl-contact">
+      Phone&nbsp;:&nbsp;{{ phone or "" }}<br>
+      Fax&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;{{ fax or "" }}<br>
+      Email&nbsp;&nbsp;:&nbsp;{{ email or "" }}
+    </div>
+  </div>
+  <div class="cl-head-r">
+    <div class="cl-title">{{ report_format }}</div>
+    <div class="cl-period">Accounting Period : {{ accounting_period }}</div>
+  </div>
+</div>
+
+<div class="cl-bar">
+  <div class="cl-bar-l">From {{ from_bs }} To {{ to_bs }} (All parameters listed at end of report)</div>
+  <div class="cl-bar-r">Amount in Nepalese Rupee ( NPR )</div>
+</div>
+
+<table class="cl">
+  <thead>
+    <tr>
+      {%- for col in columns %}
+      <th class="{{ 'num' if col.numeric else '' }}" style="width:{{ col.width }}">{{ col.label }}</th>
+      {%- endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {%- for row in rows %}
+    <tr class="{{ row._class }}">
+      {%- for col in columns %}
+      <td class="{{ 'num' if col.numeric else '' }}">{{ row[col.fieldname] }}</td>
+      {%- endfor %}
+    </tr>
+    {%- endfor %}
+  </tbody>
+</table>
+
+<div class="cl-params">
+  <h4>Report Parameters</h4>
+  <table>
+    <tr>
+      <td>Date Range : From {{ from_bs }} To {{ to_bs }}</td>
+      <td>Currency : Local</td>
+      <td>General Ledger Type : {{ ledger_type }}</td>
+    </tr>
+    <tr>
+      <td>General Ledgers : {{ ledgers_selected }} of {{ ledgers_total }}</td>
+      <td>Include Cash / Bank Code : {{ include_cash_bank }}</td>
+      <td>Show Grand Total : {{ show_grand_total }}</td>
+    </tr>
+    <tr>
+      <td>Suppress Zero Transaction General Ledger : {{ suppress_zero }}</td>
+      <td>Remarks : {{ remarks }}</td>
+      <td>Month Total : {{ month_total }}</td>
+    </tr>
+  </table>
+</div>
+
+<div class="cl-foot">Design Name : {{ report_format }} — {{ printed_on }}</div>
+
+</body>
+</html>
