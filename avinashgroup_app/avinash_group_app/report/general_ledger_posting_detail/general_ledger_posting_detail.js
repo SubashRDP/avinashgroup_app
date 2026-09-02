@@ -177,11 +177,10 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldtype: "Data",
 		},
 		{
-			// Narration is not rendered in the grid — a datatable cell clips it
-			// and there is no colspan. It goes in the print-out, where it takes
-			// the whole row, and this decides whether it is included.
+			// One switch for both: off means no narration row anywhere, on the
+			// screen or in the print-out.
 			fieldname: "remarks",
-			label: __("Narration in Print"),
+			label: __("Show Narration"),
 			fieldtype: "Check",
 			default: 1,
 		},

@@ -465,14 +465,22 @@ def _build_rows(filters, postings, with_narration=False, columns=None):
 		data.append(_balance_band(_("Opening Balance"), balance))
 
 		section_debit = section_credit = 0.0
+		# A date that has not changed is not restated -- Receipt Register does
+		# the same. A column of the same date repeated down twenty rows says
+		# nothing, and the eye wants the point where it moves.
+		last_date = None
+
 		for posting in rows:
 			balance += flt(posting.debit) - flt(posting.credit)
 			section_debit += flt(posting.debit)
 			section_credit += flt(posting.credit)
+			same_day = posting.posting_date == last_date
+			last_date = posting.posting_date
+
 			data.append(
 				{
-					"date": posting.posting_date,
-					"miti": posting.miti,
+					"date": "" if same_day else posting.posting_date,
+					"miti": "" if same_day else posting.miti,
 					"voucher_type": posting.voucher_type,
 					"voucher_no": posting.voucher_link,
 					"voucher_number": posting.number,

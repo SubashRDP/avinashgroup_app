@@ -376,6 +376,9 @@ before_request = [
     # Stock General Ledger prints the Frappe document name; adds a column
     # carrying the number actually written on the document.
     "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
+    # Frappe permanently flips prepared_report on after one slow run, after
+    # which the report serves a cached result and ignores its own filters.
+    "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
 ]
 
 # The repost runs in a background job, so the get_recipients patch must also be
@@ -384,6 +387,7 @@ before_job = [
     "avinashgroup_app.custom_code.Override.repost_valuation_notify.patch_repost_valuation_disable_error_email",
     # Prepared Reports render in a worker, where before_request never fires.
     "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
+    "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
 ]
 
 # The distro's unpatched-Qt wkhtmltopdf shrinks every length by 0.7688x, which
