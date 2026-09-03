@@ -71,11 +71,12 @@ def get_context(context):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
 
-	# The portal menu. Without this, web.html takes its no-sidebar branch and the
-	# page renders with no navigation at all -- a customer who lands here can
-	# only leave by the browser's back button.
-	context.show_sidebar = True
-
+	# NO sidebar here, deliberately. This page asks for the full window on
+	# purpose -- see the `.container { max-width: 100% !important; padding: 0
+	# 80px }` override in the template. Behind a col-sm-2 sidebar the filter row
+	# loses about a sixth of its width and the col-sm-3 fields go narrower than
+	# their own contents: the company reads "Nepal Gas Udhyc" and the customer
+	# "Seed Fourth H...", with the labels wider than the inputs beneath them.
 	portal_customers = _get_portal_customers()
 
 	# Customer dropdown — only this user's linked customers, with their company tag
