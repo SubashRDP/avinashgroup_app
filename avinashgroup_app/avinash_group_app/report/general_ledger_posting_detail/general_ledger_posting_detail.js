@@ -216,6 +216,16 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldtype: "Data",
 		},
 		{
+			// An opening entry states a balance brought forward, so by default it
+			// is folded into the Opening Balance rather than listed as movement.
+			// Tick this to see the entries themselves in the period instead --
+			// the same choice ERPNext's General Ledger offers.
+			fieldname: "show_opening_entries",
+			label: __("Show Opening Entries"),
+			fieldtype: "Check",
+			default: 0,
+		},
+		{
 			// The shared rdp_common_app "Fit Columns" control steps aside for any
 			// report that defines autoFitColumns (report_fit_columns.js:
 			// reportHasOwnFit) -- including its checkbox. This replaces it, so

@@ -205,6 +205,16 @@ def _get_postings(filters):
 		"g.posting_date BETWEEN %(from_date)s AND %(to_date)s",
 	]
 
+	# An entry flagged is_opening carries a balance forward; it is not something
+	# that happened in the period. It belongs in the Opening Balance, and is
+	# taken there by _opening_balances -- so it must not also be counted here,
+	# or the same row lands in both and the section stops footing. ERPNext makes
+	# the same split, as an if/elif so a row can only ever be in one place
+	# (general_ledger.py:527). "Show Opening Entries" moves them back into the
+	# period instead, and _opening_balances then leaves them alone.
+	if not cint(filters.get("show_opening_entries")):
+		conditions.append("g.is_opening = 'No'")
+
 	accounts = _normalize(filters.get("account"))
 	if accounts:
 		from erpnext.accounts.report.general_ledger.general_ledger import get_accounts_with_children
@@ -493,6 +503,25 @@ def _opening_balances(filters, postings):
 			params["since"] = since
 			since_clause = "AND g.posting_date >= %(since)s"
 
+		# On this data 1,139 opening entries sit on 2025-07-17 alongside 625
+		# ordinary ones -- the same day the fiscal year starts. Running from
+		# that date, the opening entries belong above the ledger and the 625
+		# below it, whatever order they were keyed in. Intra-day sequence does
+		# not matter: an opening entry states the position at the start of the
+		# period, not a movement within it.
+		params["to_date"] = filters.to_date
+		opening_dates = """
+			(
+				g.posting_date < %(from_date)s
+				OR (
+					g.is_opening = 'Yes'
+					AND g.posting_date BETWEEN %(from_date)s AND %(to_date)s
+				)
+			)
+		"""
+		if cint(filters.get("show_opening_entries")):
+			opening_dates = "g.posting_date < %(from_date)s"
+
 		# The opening must be narrowed by exactly what narrows the postings
 		# below it, or the two describe different ledgers. Filtering to one
 		# customer's Sales Invoices while opening on the whole account gave a
@@ -525,11 +554,15 @@ def _opening_balances(filters, postings):
 			WHERE g.company = %(company)s
 			  AND g.is_cancelled = 0
 			  AND g.account IN %(accounts)s
-			  AND g.posting_date < %(from_date)s
+			  AND {opening_dates}
 			  {since_clause}
 			  {narrowing}
 			GROUP BY g.account, g.party_type, g.party
-			""".format(since_clause=since_clause, narrowing=" ".join(narrowing)),
+			""".format(
+				opening_dates=opening_dates,
+				since_clause=since_clause,
+				narrowing=" ".join(narrowing),
+			),
 			params,
 			as_dict=True,
 		)
