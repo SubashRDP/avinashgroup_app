@@ -1,0 +1,842 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("My Account") }}{% endblock %}
+
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+/* ──────────────────────────────────────────────────────────────────────────
+   My Account — Nepal Gas customer portal.
+
+   Colour and type are NOT chosen here. They are the Place Order sheet's own
+   tokens, value for value, because the two pages sit behind one login and a
+   customer moving between them should not feel they changed product: the
+   group's crimson and navy, Barlow for text, Barlow Semi Condensed for the
+   signage eyebrows, IBM Plex Mono for figures. The muted tone is navy-biased
+   rather than a default grey, which is what stops the page reading as a
+   framework default.
+
+   Depth is spent by role instead of stamped on every block, so the page has a
+   hierarchy you can see without reading it:
+
+       account card   the one lifted object — radius and the single shadow
+       recent         a seated surface — radius and a hairline, no shadow
+       settings       bare rows on the paper, no surface at all
+
+   Mono is reserved strictly for money, counts and voucher numbers. A word set
+   in mono reads as terminal output, which is exactly how an earlier draft of
+   this page went wrong — "Advance only" and "None" set like machine output.
+
+   Phone-first: every row is a 56px+ target, nothing depends on :hover, one
+   breakpoint, and the safe-area inset is honoured for a handset with a home
+   indicator. Most of these customers open this inside the ERPNext mobile
+   app's webview.
+
+   Committed light-only, as a choice and not an omission: this page sits inside
+   frappe's white portal shell, so every colour and the page ground itself are
+   painted explicitly and a dark variant would read as a rendering fault rather
+   than a theme.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* On the body, not on the page div: the page ground below reads these too, and
+   a custom property inherits downwards only. */
+body[data-path="me"] {
+	--ag-navy-900: #141F4A;
+	--ag-navy-700: #233A86;
+	--ag-navy-500: #435CA8;
+	--ag-red-600: #D6202A;
+	--ag-red-050: #FDEDEE;
+	--ag-green-600: #12805C;
+	--ag-green-050: #E8F6F1;
+	--ag-amber-600: #9A5B08;
+	--ag-paper: #EDF0F7;
+	--ag-surface: #FFFFFF;
+	--ag-field: #F5F7FC;
+	--ag-line: #D8DFEE;
+	--ag-line-soft: #E9EDF6;
+	--ag-muted: #64719B;
+
+	--ag-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--ag-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--ag-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+	--ag-radius: 14px;
+	--ag-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
+
+	/* Set from JS to the navbar's height, but only when the navbar is actually
+	   pinned. A hard-coded offset leaves a gap on the portal (static navbar) or
+	   slides the bar under it in a webview that pins one. */
+	--ag-sticky-top: 0px;
+
+	background: var(--ag-paper);
+}
+body[data-path="me"] .page-breadcrumbs { display: none; }
+
+.ag-me {
+	max-width: 935px;
+	margin: 0 auto;
+	padding: 8px 0 calc(56px + env(safe-area-inset-bottom, 0px));
+	font-family: var(--ag-sans);
+	color: var(--ag-navy-900);
+	-webkit-font-smoothing: antialiased;
+	-webkit-text-size-adjust: 100%;
+}
+.ag-me *, .ag-me *::before, .ag-me *::after { box-sizing: border-box; }
+.ag-me a { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.ag-me a:hover { color: inherit; text-decoration: none; }
+.ag-me a:focus-visible, .ag-me button:focus-visible {
+	outline: 2px solid var(--ag-navy-500);
+	outline-offset: 2px;
+	border-radius: 8px;
+}
+
+.ag-icon { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor;
+	stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The group's signage lettering, the same face the Place Order masthead uses. */
+.ag-eyebrow {
+	font-family: var(--ag-cond);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .16em;
+	text-transform: uppercase;
+	color: var(--ag-muted);
+}
+.ag-head { margin: 26px 2px 10px; }
+
+/* ── The account card — the one lifted object on the page ───────────────── */
+.ag-card {
+	background: var(--ag-surface);
+	border-radius: var(--ag-radius);
+	box-shadow: var(--ag-shadow);
+	overflow: hidden;
+}
+.ag-card-top { display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
+.ag-avatar {
+	width: 60px; height: 60px;
+	flex: none;
+	border-radius: 50%;
+	display: flex; align-items: center; justify-content: center;
+	background: linear-gradient(140deg, #2C47A0, #16255C);
+	color: #fff;
+	font-size: 24px;
+	font-weight: 600;
+	overflow: hidden;
+	user-select: none;
+}
+.ag-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ag-who { flex: 1; min-width: 0; }
+.ag-name {
+	display: block;
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.3;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-account {
+	display: block;
+	margin-top: 1px;
+	font-size: 13.5px;
+	color: var(--ag-muted);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* State encoded in form as well as in the figures — the pill is what you read
+   at a glance, before any number. */
+.ag-pill {
+	flex: none;
+	align-self: flex-start;
+	padding: 5px 11px;
+	border-radius: 999px;
+	font-family: var(--ag-cond);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	background: var(--ag-green-050);
+	color: var(--ag-green-600);
+}
+.ag-pill[hidden] { display: none; }
+.ag-pill.is-alarm { background: var(--ag-red-050); color: var(--ag-red-600); }
+.ag-pill.is-info { background: var(--ag-field); color: var(--ag-navy-700); }
+
+/* Three numbers, evenly divided, each linking to the page that explains it.
+   Still reads correctly at nothing-owed — a row of zeroes is a fact, where the
+   four-cell table this replaced was simply empty. */
+.ag-stats { display: flex; border-top: 1px solid var(--ag-line-soft); }
+.ag-stats[hidden] { display: none; }
+.ag-stat {
+	flex: 1;
+	min-width: 0;
+	padding: 14px 8px 15px;
+	text-align: center;
+	border-left: 1px solid var(--ag-line-soft);
+	transition: background .12s ease;
+}
+.ag-stat:first-child { border-left: 0; }
+.ag-stat:hover, .ag-stat:active { background: var(--ag-field); }
+.ag-stat-value {
+	display: block;
+	font-family: var(--ag-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 22px;
+	font-weight: 600;
+	line-height: 1.15;
+	white-space: nowrap;
+	overflow: hidden; text-overflow: ellipsis;
+}
+.ag-stat.is-alarm .ag-stat-value { color: var(--ag-red-600); }
+.ag-stat-label { display: block; margin-top: 4px; font-size: 12px; color: var(--ag-muted); }
+
+/* How much of the limit is spoken for. Hidden for an advance account, which
+   has no limit to measure against. */
+.ag-meter { height: 5px; background: var(--ag-line-soft); }
+.ag-meter[hidden] { display: none; }
+.ag-meter span {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: linear-gradient(90deg, var(--ag-navy-500), var(--ag-navy-700));
+	transition: width .5s cubic-bezier(.2, .8, .3, 1);
+}
+.ag-card.is-warn .ag-meter span { background: linear-gradient(90deg, #E0A33C, var(--ag-amber-600)); }
+.ag-card.is-over .ag-meter span { background: linear-gradient(90deg, #E8636B, var(--ag-red-600)); }
+
+/* Only when there is something specific to say. A clean account gets the pill
+   and nothing more — the earlier draft stated "advance" twice, once in a pill
+   and again in a tile directly beneath it. */
+.ag-alert {
+	margin: 0;
+	padding: 12px 20px;
+	background: var(--ag-red-050);
+	color: var(--ag-red-600);
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 1.45;
+}
+.ag-alert[hidden] { display: none; }
+
+.ag-accounts {
+	display: flex;
+	gap: 7px;
+	padding: 12px 20px 14px;
+	border-top: 1px solid var(--ag-line-soft);
+	overflow-x: auto;
+	scrollbar-width: none;
+	-webkit-overflow-scrolling: touch;
+}
+.ag-accounts::-webkit-scrollbar { display: none; }
+.ag-chip {
+	flex: none;
+	min-height: 32px;
+	padding: 0 12px;
+	display: inline-flex; align-items: center;
+	border: 1px solid var(--ag-line);
+	border-radius: 999px;
+	background: var(--ag-surface);
+	color: var(--ag-muted);
+	font-family: var(--ag-sans);
+	font-size: 12.5px;
+	font-weight: 500;
+	white-space: nowrap;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.ag-chip.is-active { background: var(--ag-navy-900); border-color: var(--ag-navy-900); color: #fff; }
+
+/* ── The two things people come here to do ──────────────────────────────── */
+.ag-actions { display: flex; gap: 10px; margin-top: 14px; max-width: 480px; }
+.ag-btn {
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 44px;
+	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	padding: 0 14px;
+	border: 1px solid var(--ag-line);
+	border-radius: 11px;
+	background: var(--ag-surface);
+	font-size: 14px;
+	font-weight: 600;
+	white-space: nowrap;
+	transition: transform .06s ease, background .15s ease, border-color .15s ease;
+}
+.ag-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-btn:active { transform: scale(.98); }
+.ag-btn:hover { border-color: var(--ag-navy-500); }
+.ag-btn.is-primary {
+	background: var(--ag-navy-700);
+	border-color: var(--ag-navy-700);
+	color: #fff;
+	box-shadow: 0 10px 20px -14px rgba(35, 58, 134, .9);
+}
+.ag-btn.is-primary:hover, .ag-btn.is-primary:active { background: #1B2E6C; border-color: #1B2E6C; color: #fff; }
+.ag-btn .ag-icon { width: 17px; height: 17px; }
+
+/* ── Pinned bar ─────────────────────────────────────────────────────────────
+   A separate slim bar that arrives once the card scrolls away, rather than the
+   card collapsing in place: collapsing in place jumps the content beneath it,
+   and a bar that was never in the flow cannot. */
+.ag-bar {
+	position: fixed;
+	top: var(--ag-sticky-top);
+	left: 0; right: 0;
+	z-index: 30;
+	padding: 11px 16px;
+	background: rgba(255, 255, 255, .93);
+	-webkit-backdrop-filter: saturate(180%) blur(12px);
+	backdrop-filter: saturate(180%) blur(12px);
+	box-shadow: 0 10px 24px -18px rgba(20, 31, 74, .8);
+	border-bottom: 1px solid var(--ag-line);
+	transform: translateY(-100%);
+	opacity: 0;
+	transition: transform .22s ease, opacity .18s ease;
+	pointer-events: none;
+}
+.ag-bar.is-on { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.ag-bar-inner {
+	width: 100%; max-width: 935px;
+	margin: 0 auto;
+	display: flex; align-items: baseline; gap: 10px;
+}
+.ag-bar-label { flex: none; font-size: 12.5px; color: var(--ag-muted); }
+.ag-bar-value {
+	font-family: var(--ag-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 15px;
+	font-weight: 600;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-bar.is-alarm .ag-bar-value { color: var(--ag-red-600); }
+.ag-bar .ag-pill { margin-left: auto; align-self: center; }
+
+/* ── Recent — a seated surface, no shadow ───────────────────────────────── */
+.ag-panel {
+	background: var(--ag-surface);
+	border: 1px solid var(--ag-line-soft);
+	border-radius: var(--ag-radius);
+	overflow: hidden;
+}
+.ag-item {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 64px;
+	padding: 12px 18px;
+	border-top: 1px solid var(--ag-line-soft);
+	transition: background .12s ease;
+}
+.ag-item:first-child { border-top: 0; }
+.ag-item:hover, .ag-item:active { background: var(--ag-field); }
+.ag-item-icon {
+	width: 36px; height: 36px;
+	flex: none;
+	display: flex; align-items: center; justify-content: center;
+	border-radius: 10px;
+	background: var(--ag-field);
+	color: var(--ag-navy-700);
+}
+.ag-item-main { flex: 1; min-width: 0; }
+.ag-item-title {
+	display: block;
+	font-family: var(--ag-mono);
+	font-size: 13.5px;
+	font-weight: 600;
+	line-height: 1.3;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-item-sub {
+	display: block;
+	margin-top: 2px;
+	font-size: 12.5px;
+	color: var(--ag-muted);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-item-right { flex: none; text-align: right; padding-left: 8px; }
+.ag-item-amount {
+	display: block;
+	font-family: var(--ag-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+.ag-item-state { display: block; margin-top: 2px; font-size: 12px; color: var(--ag-muted); }
+.ag-item-state.is-due { color: var(--ag-amber-600); font-weight: 500; }
+.ag-item-state.is-ok { color: var(--ag-green-600); }
+.ag-empty { padding: 22px 18px 24px; font-size: 13.5px; line-height: 1.5; color: var(--ag-muted); }
+
+/* ── Settings, and the phone's nav — bare rows on the paper ─────────────── */
+.ag-rows { border-top: 1px solid var(--ag-line); }
+.ag-row {
+	display: flex;
+	align-items: center;
+	gap: 13px;
+	min-height: 56px;
+	padding: 8px 2px;
+	border-bottom: 1px solid var(--ag-line);
+}
+.ag-row:hover, .ag-row:active { color: var(--ag-navy-700); }
+.ag-row-icon { color: var(--ag-muted); display: flex; }
+.ag-row-title { display: block; flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; }
+.ag-row-chev { color: #AEB8D2; display: flex; }
+.ag-row.is-danger, .ag-row.is-danger .ag-row-icon { color: var(--ag-red-600); }
+
+/* The sidebar IS the portal's navigation. This list is its stand-in on a phone,
+   where the sidebar column stacks above the content and would push the account
+   itself under the fold — so exactly one of the two is ever on screen.
+
+   Two columns, not one. Nine routes down a single column is a long run of
+   scrolling between the bills above and the settings below; paired up they
+   read as one block you skim rather than a list you travel. No chevron here
+   either — a disclosure arrow on every cell of a grid is noise, and the icon
+   already says the row is a destination. */
+.ag-head.is-more, .ag-more { display: none; }
+.ag-more {
+	grid-template-columns: repeat(2, 1fr);
+	column-gap: 14px;
+	border-top: 1px solid var(--ag-line);
+}
+.ag-more-item {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	min-height: 52px;
+	padding: 8px 2px;
+	border-bottom: 1px solid var(--ag-line);
+	font-size: 14px;
+	font-weight: 500;
+	min-width: 0;
+}
+.ag-more-item .ag-icon { width: 17px; height: 17px; color: var(--ag-muted); }
+.ag-more-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-more-item:hover, .ag-more-item:active { color: var(--ag-navy-700); }
+/* An odd number of routes leaves the last one alone in its row, with its rule
+   stopping halfway and the block's bottom edge ragged. Let it take the full
+   width so the list closes flush. */
+.ag-more-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+/* ── Phone ──────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+	#page-me .sidebar-column { display: none; }
+	.ag-head.is-more { display: block; }
+	.ag-more { display: grid; }
+}
+
+@media (max-width: 640px) {
+	.ag-me { padding-top: 0; }
+	.ag-card-top { gap: 13px; padding: 15px 16px; }
+	.ag-avatar { width: 54px; height: 54px; font-size: 22px; }
+	.ag-stat { padding: 12px 5px 13px; }
+	.ag-stat-value { font-size: 19px; }
+	.ag-stat-label { font-size: 11px; }
+	.ag-accounts { padding: 11px 16px 12px; }
+	.ag-alert { padding: 11px 16px; }
+	.ag-item { padding: 11px 14px; gap: 12px; }
+	.ag-actions { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ag-me *, .ag-me *::before, .ag-me *::after,
+	.ag-bar { transition-duration: .01ms !important; }
+}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+	<symbol id="ag-i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+	<symbol id="ag-i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2"/><path d="m17 6 2.5 2.5"/><path d="m14.5 8.5 2 2"/></symbol>
+	<symbol id="ag-i-apps" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></symbol>
+	<symbol id="ag-i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></symbol>
+	<symbol id="ag-i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+	<symbol id="ag-i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+	<symbol id="ag-i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h3l2.4 12.2a2 2 0 0 0 2 1.6h8.2a2 2 0 0 0 2-1.6L21 7H6"/></symbol>
+	<symbol id="ag-i-receipt" viewBox="0 0 24 24"><path d="M5 3v18l2.5-1.6L10 21l2-1.6L14 21l2.5-1.6L19 21V3Z"/><path d="M9 8h6M9 12h6"/></symbol>
+	<symbol id="ag-i-invoice" viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+	<symbol id="ag-i-quote" viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/><path d="M12 11v6"/><path d="M14 12.5h-3a1.5 1.5 0 0 0 0 3h2a1.5 1.5 0 0 1 0 3h-3"/></symbol>
+	<symbol id="ag-i-truck" viewBox="0 0 24 24"><path d="M3 16V6a1 1 0 0 1 1-1h10v11"/><path d="M14 9h4l3 3v4h-7"/><circle cx="7.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></symbol>
+	<symbol id="ag-i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.2v.2"/></symbol>
+	<symbol id="ag-i-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="2.8"/></symbol>
+	<symbol id="ag-i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.2l3.2 1.9"/></symbol>
+	<symbol id="ag-i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6 8.5-6"/></symbol>
+	<symbol id="ag-i-box" viewBox="0 0 24 24"><path d="M21 8.5v7a1.8 1.8 0 0 1-1 1.6l-7 3.4a1.8 1.8 0 0 1-1.6 0l-7-3.4a1.8 1.8 0 0 1-1-1.6v-7"/><path d="m3 8 8.6-3.9a1.8 1.8 0 0 1 1.5 0L21 8l-9 4.2Z"/><path d="M12 12.2V20"/></symbol>
+	<symbol id="ag-i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+	<symbol id="ag-i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+	<symbol id="ag-i-link" viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 5.7.3l3-3a4 4 0 0 0-5.7-5.7L11.5 6"/><path d="M14 11a4 4 0 0 0-5.7-.3l-3 3a4 4 0 0 0 5.7 5.7L12.5 18"/></symbol>
+</defs></svg>
+
+{#- Fixed to the window, not to the column, so it lives outside .ag-me. It is
+	what carries the account position once the card has scrolled away. -#}
+<div class="ag-bar" id="ag-bar">
+	<div class="ag-bar-inner">
+		<span class="ag-bar-label">{{ _("Outstanding") }}</span>
+		<span class="ag-bar-value" id="ag-bar-value">—</span>
+		<span class="ag-pill" id="ag-bar-pill"></span>
+	</div>
+</div>
+
+<div class="ag-me">
+
+	{#- ── The account card ───────────────────────────────────────────────────
+		 Figures are filled in by JS from the snapshots below, so the accounts
+		 computed with the page and the ones fetched when a chip is tapped
+		 cannot drift apart. -#}
+	<section class="ag-card" id="ag-card">
+		<div class="ag-card-top">
+			<div class="ag-avatar">
+				{% if current_user.user_image %}
+				<img src="{{ current_user.user_image | e }}" alt="{{ current_user.full_name | e }}">
+				{% else %}
+				{{- (current_user.full_name or current_user.name)[:1] | upper -}}
+				{% endif %}
+			</div>
+			<div class="ag-who">
+				<span class="ag-name">{{ current_user.full_name | e }}</span>
+				<span class="ag-account" id="ag-account">{{ current_user.name | e }}</span>
+			</div>
+			<span class="ag-pill" id="ag-pill" hidden></span>
+		</div>
+
+		<div class="ag-stats" id="ag-stats" hidden>
+			<a class="ag-stat" id="ag-stat-1" href="/customer_statement">
+				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Outstanding") }}</span>
+			</a>
+			<a class="ag-stat" id="ag-stat-2" href="/invoices">
+				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Unpaid") }}</span>
+			</a>
+			<a class="ag-stat" id="ag-stat-3" href="/customer_statement">
+				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Available") }}</span>
+			</a>
+		</div>
+
+		<div class="ag-meter" id="ag-meter" hidden><span id="ag-meter-fill"></span></div>
+		<p class="ag-alert" id="ag-alert" hidden></p>
+
+		{% if customers | length > 1 %}
+		<div class="ag-accounts" id="ag-accounts">
+			{% for c in customers %}
+			<button type="button" class="ag-chip{{ ' is-active' if c.name == active_customer else '' }}"
+				data-customer="{{ c.name | e }}">{{ c.label | e }}</button>
+			{% endfor %}
+		</div>
+		{% endif %}
+	</section>
+
+	{% if primary_links %}
+	<div class="ag-actions">
+		{% for link in primary_links %}
+		<a class="ag-btn{{ ' is-primary' if loop.first else '' }}" href="{{ link.route }}">
+			<svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg>
+			<span class="ag-btn-text">{{ _(link.title) }}</span>
+		</a>
+		{% endfor %}
+	</div>
+	{% endif %}
+
+	{#- ── What this account has actually done ────────────────────────────── -#}
+	<div class="ag-head ag-eyebrow">{{ _("Recent") }}</div>
+	<div class="ag-panel">
+		{% if recent %}
+		{% for r in recent %}
+		<a class="ag-item" href="{{ r.route }}">
+			<span class="ag-item-icon"><svg class="ag-icon"><use href="#ag-i-{{ r.icon }}"></use></svg></span>
+			<span class="ag-item-main">
+				<span class="ag-item-title">{{ r.number }}</span>
+				<span class="ag-item-sub">{{ r.kind }} · {{ r.miti }}{% if r.account %} · {{ r.account }}{% endif %}</span>
+			</span>
+			<span class="ag-item-right">
+				<span class="ag-item-amount">{{ r.amount }}</span>
+				<span class="ag-item-state is-{{ r.tone }}">{{ r.state }}</span>
+			</span>
+		</a>
+		{% endfor %}
+		{% else %}
+		<div class="ag-empty">{{ _("Nothing billed to this account yet. Your bills and orders will appear here.") }}</div>
+		{% endif %}
+	</div>
+
+	{#- ── The portal's nav, on a phone only ──────────────────────────────── -#}
+	{% if more_links %}
+	<div class="ag-head ag-eyebrow is-more">{{ _("More") }}</div>
+	<div class="ag-more">
+		{% for link in more_links %}
+		<a class="ag-more-item" href="{{ link.route }}">
+			<svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg>
+			<span>{{ _(link.title) }}</span>
+		</a>
+		{% endfor %}
+	</div>
+	{% endif %}
+
+	{#- ── Settings ───────────────────────────────────────────────────────── -#}
+	<div class="ag-head ag-eyebrow">{{ _("Settings") }}</div>
+	<div class="ag-rows">
+		<a class="ag-row" href="/update-profile/{{ current_user.name | urlencode }}">
+			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-edit"></use></svg></span>
+			<span class="ag-row-title">{{ _("Edit profile") }}</span>
+			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
+		</a>
+		<a class="ag-row" href="/update-password">
+			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-key"></use></svg></span>
+			<span class="ag-row-title">{{ _("Reset password") }}</span>
+			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
+		</a>
+		<a class="ag-row" href="/third_party_apps">
+			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-apps"></use></svg></span>
+			<span class="ag-row-title">{{ _("Third party apps") }}</span>
+			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
+		</a>
+		{% if show_account_deletion_link %}
+		<a class="ag-row" href="/request-for-account-deletion?new=1">
+			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-trash"></use></svg></span>
+			<span class="ag-row-title">{{ _("Request account deletion") }}</span>
+			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
+		</a>
+		{% endif %}
+		<a class="ag-row is-danger" href="/?cmd=web_logout">
+			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-logout"></use></svg></span>
+			<span class="ag-row-title">{{ _("Log out") }}</span>
+			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
+		</a>
+	</div>
+</div>
+{% endblock %}
+
+{% block script %}
+{{ super() }}
+<script>
+window.ag_me_ctx = {
+	snapshots: {{ credit_snapshots | tojson }},
+	labels: {{ customer_labels | tojson }},
+	active: {{ active_customer | tojson }},
+	number_format: {{ number_format | tojson }},
+	email: {{ current_user.name | tojson }}
+};
+
+frappe.ready(function () {
+	new AgMyAccount();
+});
+
+class AgMyAccount {
+	constructor() {
+		this.ctx = window.ag_me_ctx;
+		// Snapshots fetched on tap join the ones that came with the page, so a
+		// customer switching back and forth pays for each account once.
+		this.cache = Object.assign({}, this.ctx.snapshots || {});
+
+		this.$card = $("#ag-card");
+		if (!this.$card.length) return;
+
+		this.measure_sticky_top();
+		this.watch_scroll();
+		this.bind_accounts();
+		this.show(this.ctx.active);
+	}
+
+	// ── Sticky offset ───────────────────────────────────────────────────
+	// The portal navbar is static, so the bar belongs at the very top of the
+	// window; but the shell is themable and the mobile app's webview has been
+	// seen pinning it. Ask the navbar where it actually is rather than
+	// assuming, and re-ask on resize — an orientation change alters its height.
+	measure_sticky_top() {
+		const apply = () => {
+			const nav = document.querySelector(".navbar");
+			let top = 0;
+			if (nav) {
+				const pos = window.getComputedStyle(nav).position;
+				if (pos === "fixed" || pos === "sticky") top = nav.offsetHeight;
+			}
+			document.body.style.setProperty("--ag-sticky-top", top + "px");
+		};
+		apply();
+		$(window).on("resize orientationchange", frappe.utils.debounce(apply, 150));
+	}
+
+	// ── The bar arrives when the card leaves ────────────────────────────
+	watch_scroll() {
+		const $bar = $("#ag-bar");
+		const card = this.$card.get(0);
+		if (!$bar.length || !card || typeof IntersectionObserver === "undefined") return;
+
+		new IntersectionObserver(
+			(entries) => $bar.toggleClass("is-on", !entries[0].isIntersecting),
+			{ threshold: 0 }
+		).observe(card);
+	}
+
+	// ── Account switcher ────────────────────────────────────────────────
+	bind_accounts() {
+		const me = this;
+		$("#ag-accounts").on("click", ".ag-chip", function () {
+			const customer = $(this).data("customer");
+			$("#ag-accounts .ag-chip").removeClass("is-active");
+			$(this).addClass("is-active");
+			me.show(customer);
+		});
+	}
+
+	show(customer) {
+		if (!customer) return this.render(customer, {});
+		if (this.cache[customer]) return this.render(customer, this.cache[customer]);
+
+		// Beyond the handful computed with the page. Same call, same figures.
+		// frappe.call lives in the desk bundle; on a portal shell that does not
+		// carry it there is nothing to fetch with, and an account past the
+		// eager few falls back to the plain card rather than throwing.
+		if (typeof frappe.call !== "function") return this.render(customer, {});
+
+		const me = this;
+		frappe.call({
+			method: "avinashgroup_app.templates.pages.place_order.get_credit_snapshot",
+			args: { customer: customer },
+			callback: function (r) {
+				me.cache[customer] = r.message || {};
+				// A chip tapped twice quickly must not paint the slower answer
+				// over the newer one.
+				const $active = $("#ag-accounts .ag-chip.is-active");
+				if (!$active.length || $active.data("customer") === customer) {
+					me.render(customer, me.cache[customer]);
+				}
+			}
+		});
+	}
+
+	// ── Render ──────────────────────────────────────────────────────────
+	money(value) {
+		return format_number(Number(value) || 0, this.ctx.number_format, 2);
+	}
+
+	// Short form for a stat slot: 4,54,618.00 does not fit in a third of a
+	// phone's width, and a truncated number is worse than a rounded one. The
+	// exact figure is one tap away on the statement.
+	compact(value) {
+		const n = Math.abs(Number(value) || 0);
+		if (n >= 100000) return (n / 100000).toFixed(n >= 1000000 ? 0 : 1) + "L";
+		if (n >= 1000) return format_number(Math.round(n), this.ctx.number_format, 0);
+		return format_number(n, this.ctx.number_format, n % 1 ? 2 : 0);
+	}
+
+	stat(slot, value, label, alarm) {
+		const $s = $("#ag-stat-" + slot).toggleClass("is-alarm", !!alarm);
+		$s.find(".ag-stat-value").text(value);
+		$s.find(".ag-stat-label").text(label);
+	}
+
+	render(customer, snap) {
+		snap = snap || {};
+
+		// An account with no limits is one credit control holds no opinion
+		// about, and get_credit_snapshot returns nothing for it. The card falls
+		// back to plain identity rather than printing three dashes.
+		if (!snap.currency) {
+			$("#ag-stats, #ag-meter, #ag-alert, #ag-pill").prop("hidden", true);
+			$("#ag-account").text(this.ctx.email || "");
+			return;
+		}
+
+		$("#ag-account").text((this.ctx.labels || {})[customer] || this.ctx.email || "");
+
+		// The server's own verdicts, not a rule re-derived here: amount uses
+		// `>` and the other two `>=`, and the day count is floored for an
+		// immaterial residual. Reimplementing any of that on the page is how
+		// the customer ends up reading a different answer from the counter.
+		const over = !!(snap.amount_exceeded || snap.days_exceeded || snap.count_exceeded);
+		const pct = this.meter_pct(snap);
+
+		this.$card.toggleClass("is-over", over)
+			.toggleClass("is-warn", !over && pct !== null && pct >= 75);
+
+		this.render_stats(snap, over);
+		this.render_meter(pct);
+		this.render_pill($("#ag-pill"), snap);
+		this.render_pill($("#ag-bar-pill"), snap);
+		this.render_alert(snap);
+		this.render_bar(snap, over);
+	}
+
+	render_stats(snap, over) {
+		$("#ag-stats").prop("hidden", false);
+
+		this.stat(1, this.compact(snap.outstanding), __("Outstanding"),
+			over && Number(snap.outstanding) > 0);
+		this.stat(2, String(Number(snap.unpaid_count) || 0), __("Unpaid"),
+			!!snap.count_exceeded);
+
+		// Third slot: what is left to spend. For a prepaid account that is the
+		// advance still in hand, not a credit limit — this group marks such an
+		// account with an amount limit of 1, which is a flag and not a rupee.
+		if (snap.advance_only) {
+			this.stat(3, this.compact(snap.leftover_advance), __("Advance held"), false);
+		} else if (Number(snap.amount_limit)) {
+			const left = Number(snap.remaining);
+			this.stat(3, this.compact(left), left < 0 ? __("Over limit") : __("Available"), left < 0);
+		} else {
+			this.stat(3, "—", __("No limit"), false);
+		}
+	}
+
+	// How much of the limit is spoken for, or null when there is nothing to
+	// measure against: an advance-only account or no amount limit at all.
+	meter_pct(snap) {
+		const limit = Number(snap.amount_limit) || 0;
+		if (!limit || snap.advance_only) return null;
+		return Math.min(100, (Math.max(0, Number(snap.outstanding) || 0) / limit) * 100);
+	}
+
+	render_meter(pct) {
+		const $meter = $("#ag-meter");
+		if (pct === null) { $meter.prop("hidden", true); return; }
+
+		$meter.prop("hidden", false);
+		// Next frame, so the bar grows from 0 on first paint instead of
+		// arriving already filled.
+		requestAnimationFrame(() => $("#ag-meter-fill").css("width", pct + "%"));
+	}
+
+	render_pill($pill, snap) {
+		$pill.removeClass("is-alarm is-info").prop("hidden", false);
+		if (snap.amount_exceeded) $pill.addClass("is-alarm").text(__("Over limit"));
+		else if (snap.days_exceeded) $pill.addClass("is-alarm").text(__("Overdue"));
+		else if (snap.count_exceeded) $pill.addClass("is-alarm").text(__("Bill limit"));
+		else if (snap.advance_only) $pill.addClass("is-info").text(__("Advance"));
+		else $pill.text(__("In good standing"));
+	}
+
+	// Only when there is something specific to say. A clean account gets the
+	// pill and nothing more; an earlier draft stated "advance" twice, once in a
+	// pill and again in a tile directly beneath it.
+	render_alert(snap) {
+		const cur = snap.currency ? snap.currency + " " : "";
+		let text = "";
+
+		if (snap.amount_exceeded) {
+			text = __("Over the credit limit by {0}. New bills will be held until the account is brought back within it.",
+				[cur + this.money(-Number(snap.remaining))]);
+		} else if (snap.days_exceeded) {
+			text = __("A bill is {0} days old, past the {1} day limit on this account.",
+				[snap.days_used, snap.days_limit]);
+		} else if (snap.count_exceeded) {
+			text = __("{0} unpaid bills, at this account's limit of {1}.",
+				[snap.unpaid_count, snap.bill_limit]);
+		}
+
+		$("#ag-alert").text(text).prop("hidden", !text);
+	}
+
+	// The bar carries only the one figure worth interrupting a scroll for.
+	render_bar(snap, over) {
+		const cur = snap.currency ? snap.currency + " " : "";
+		$("#ag-bar").toggleClass("is-alarm", over);
+		$("#ag-bar-value").text(cur + this.money(snap.outstanding));
+	}
+}
+</script>
+{% endblock %}
