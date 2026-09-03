@@ -426,7 +426,18 @@ def _opening_balances(filters, postings):
 	query: the join costs the optimiser the fin_stmt_agg_index and turned this
 	into a 14.8s scan, which alone tripped Frappe's 15s prepared-report timer.
 	"""
-	accounts = sorted({p.account for p in postings})
+	# Accounts come from the postings in the period, plus any the user asked
+	# for explicitly. Without the second half, an account picked by name that
+	# happened to have no movement in the window reported no opening balance at
+	# all -- a filtered month showed 0.00 where the account plainly carried a
+	# balance into it.
+	accounts = set(p.account for p in postings)
+	chosen = _normalize(filters.get("account"))
+	if chosen:
+		from erpnext.accounts.report.general_ledger.general_ledger import get_accounts_with_children
+
+		accounts.update(get_accounts_with_children(chosen))
+	accounts = sorted(accounts)
 	if not accounts:
 		return {}
 
@@ -461,6 +472,30 @@ def _opening_balances(filters, postings):
 		if since:
 			params["since"] = since
 			since_clause = "AND g.posting_date >= %(since)s"
+
+		# The opening must be narrowed by exactly what narrows the postings
+		# below it, or the two describe different ledgers. Filtering to one
+		# customer's Sales Invoices while opening on the whole account gave a
+		# month closing higher than the year that contains it.
+		narrowing = []
+
+		voucher_types = _normalize(filters.get("voucher_type"))
+		if voucher_types:
+			params["voucher_types"] = voucher_types
+			narrowing.append("AND g.voucher_type IN %(voucher_types)s")
+
+		party_types = _normalize(filters.get("party_type"))
+		if party_types:
+			params["party_types"] = party_types
+			narrowing.append("AND g.party_type IN %(party_types)s")
+
+		parties = _normalize(filters.get("party"))
+		if parties:
+			params["parties"] = parties
+			narrowing.append("AND g.party IN %(parties)s")
+
+		narrowing.append(_subtype_clause(filters, params))
+
 		return frappe.db.sql(
 			"""
 			SELECT g.account, IFNULL(g.party_type, '') AS party_type,
@@ -472,8 +507,9 @@ def _opening_balances(filters, postings):
 			  AND g.account IN %(accounts)s
 			  AND g.posting_date < %(from_date)s
 			  {since_clause}
+			  {narrowing}
 			GROUP BY g.account, g.party_type, g.party
-			""".format(since_clause=since_clause),
+			""".format(since_clause=since_clause, narrowing=" ".join(narrowing)),
 			params,
 			as_dict=True,
 		)
