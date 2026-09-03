@@ -1,5 +1,12 @@
-// Announcement popup for customer portal users — shown on every page load
-// (including refresh), on BOTH the desk and the website portal.
+// Announcement popup for customer portal users, on BOTH the desk and the website
+// portal. It appears on exactly two occasions:
+//
+//   1. a fresh login — the "sid" session cookie differs from the one we last
+//      showed for, so logging out and back in brings it up again;
+//   2. a browser reload (F5 / the reload button).
+//
+// Clicking through to another portal page is an ordinary navigation and does NOT
+// re-show it, which is the whole point of the two checks below.
 //
 // The server (Portal Announcement.get_login_popups) returns nothing for Guests and for
 // any login not listed in a Customer's Portal Users table, so this script can be
@@ -9,6 +16,36 @@
 (function () {
 	var METHOD =
 		"avinashgroup_app.avinash_group_app.doctype.portal_announcement.portal_announcement.get_login_popups";
+	var KEY = "ag_portal_announcement_session"; // localStorage: session_key last shown for
+
+	// "reload" only when the user actually reloaded. A link click is "navigate",
+	// the back/forward buttons are "back_forward".
+	function is_reload() {
+		try {
+			var entries = performance.getEntriesByType("navigation");
+			if (entries && entries.length) return entries[0].type === "reload";
+			// pre-Navigation-Timing-2 browsers
+			if (performance.navigation) return performance.navigation.type === 1;
+		} catch (e) {
+			/* timing API unavailable */
+		}
+		return false;
+	}
+
+	function read_key() {
+		try {
+			return localStorage.getItem(KEY);
+		} catch (e) {
+			return null;
+		}
+	}
+	function write_key(key) {
+		try {
+			localStorage.setItem(KEY, key);
+		} catch (e) {
+			/* private mode / storage blocked */
+		}
+	}
 
 	// Loaded from both app_include_js (desk) and web_include_js (portal). On the
 	// desk this file can parse before frappe.call exists, so wait for it rather
@@ -34,11 +71,21 @@
 		if (frappe.session.user === "Guest") return;
 		if (document.querySelector(".ag-popup-backdrop")) return; // already open on this page
 
+		var reloaded = is_reload(); // read before the call — it describes this page load
+
 		frappe.call({
 			method: METHOD,
 			callback: function (r) {
-				var popups = (r && r.message) || [];
-				if (popups.length) render(popups);
+				var data = (r && r.message) || {};
+				var key = data.session_key || "";
+				var popups = data.popups || [];
+
+				// a key we have not recorded yet means this is a login we have not
+				// greeted — including one made right after a logout
+				var fresh_login = !!key && read_key() !== key;
+				if (key) write_key(key);
+
+				if ((fresh_login || reloaded) && popups.length) render(popups);
 			},
 		});
 	});
