@@ -71,11 +71,30 @@ And with `is_opening` present, every balance-sheet account reconciles to raw
 GL in both modes — 62 accounts with opening entries folded into the balance,
 97 with them shown as postings, none off.
 
+## Confirmed on live
+
+Deployed to `ng-group` 2026-09-03 and re-checked there against the same
+ERPNext General Ledger, on the six busiest accounts of all seven companies
+for FY 83/84:
+
+| | Comparisons | Matched |
+| --- | ---: | ---: |
+| Balance sheet | 36 | **36** |
+| Profit & Loss (`411101 - LP Gas Sales`) | 5 | differs by the opening floor only |
+
+Every P&L difference is the opening alone — subtract it and the closings
+agree exactly, so the period movement is identical in both reports. NGK, for
+instance, closes at -70,996,609.90 here against -2,356,476,573.21 in ERPNext,
+a difference of -2,285,479,963.31, which is precisely the opening ERPNext
+carries in and this report floors at the year start.
+
+The reported contradiction that started this work is gone on live: for one
+customer's Sales Invoices, fiscal year 83/84 and a month inside it now both
+close at 719,727,746.63.
+
 ## Not covered
 
 - **Voucher Type and Voucher Subtype** have no counterpart in ERPNext's
   General Ledger, so those filters are verified against raw GL rather than
   against another report.
-- Checked on `nepalgas`. The live `ng-group` data is larger; the fixes above
-  were **not deployed there** at the time of writing.
 
