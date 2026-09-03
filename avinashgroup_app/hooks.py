@@ -438,7 +438,7 @@ fixtures = [
     },
     # Company-wise link filtering rules. Exported so a new site gets the same
     # rules on install instead of needing them re-entered by hand.
-    "Company Filter Config",
+    # "Company Filter Config",
     # Default Dynamic Approval notification templates. Scoped by name so the
     # fixture ONLY ever touches these four records — it never deletes or alters
     # any other Email Template. Admins who want custom wording per flow should
