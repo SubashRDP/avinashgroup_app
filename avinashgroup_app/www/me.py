@@ -16,9 +16,14 @@ What it adds over the stock page:
     Sales Invoice banner reads. One calculation, three screens -- the customer
     is never shown a number that differs from the one the office sees.
 
-  * The portal menu as a tap grid. The sidebar column is hidden below 768px
-    (and the ERPNext mobile app is where most of these customers open this
-    page), so on a phone the stock /me is three links and a dead end.
+  * The account's recent bills and orders, with the number the customer was
+    actually handed and what is still due on each. This is the page's content;
+    the stock /me had none, and a customer opening it learned nothing.
+
+  * The portal menu, laid out by weight instead of alphabetically: the two
+    routes worth a tap get the width, the rest get a line each. The sidebar is
+    turned OFF here because it lists the very same routes -- with both on, the
+    page printed every link twice, side by side.
 
 Nothing here widens what anyone can see: get_credit_snapshot refuses a customer
 the session user is not linked to, and every figure on the page is that user's
@@ -27,9 +32,11 @@ own account.
 
 import frappe
 from frappe import _
+from frappe.utils import fmt_money
 from frappe.website.utils import get_portal_sidebar_items
 
 from avinashgroup_app.templates.pages.place_order import get_credit_snapshot
+from avinashgroup_app.utils.voucher_numbers import resolve as resolve_voucher_numbers
 
 # Rendered HTML for a website page is cached by path and language only
 # (frappe/website/utils.py: cache_html) -- not by user. This page is built from
@@ -91,6 +98,151 @@ def _quick_links():
 	return links
 
 
+# The two the page leads with, in order of preference, matched the same way as
+# the icons. Everything else falls back into the quiet list under "More".
+_PRIMARY_TOKENS = ("place-order", "statement", "invoice", "order")
+
+# How many documents the activity list shows. Long enough to be worth reading,
+# short enough that nobody scrolls past it to reach the settings.
+RECENT_LIMIT = 6
+
+
+def _split_links(links):
+	"""Two headline actions, and the rest.
+
+	Eleven identical tiles is a control panel, not a page. The customer came to
+	order gas or to look at what they owe; those two get the width, the other
+	nine get a line of text each.
+	"""
+	primary, rest = [], list(links)
+	for token in _PRIMARY_TOKENS:
+		if len(primary) == 2:
+			break
+		for link in list(rest):
+			if token in f"{link['route']} {link['title']}".lower():
+				primary.append(link)
+				rest.remove(link)
+				break
+	return primary, rest
+
+
+def _miti(date):
+	"""posting_date as a BS string. The books, the bills and the customer all
+	run on Bikram Sambat, so that is the date this list prints; the AD date is
+	the fallback for a date the converter cannot take."""
+	if not date:
+		return ""
+	try:
+		from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+
+		return bs_date_str(date) or ""
+	except Exception:
+		return ""
+
+
+def _recent_activity(customer_names, labels, exposure):
+	"""The customer's last few submitted bills and orders, newest first.
+
+	Deliberately across ALL of this login's accounts rather than following the
+	stat row's account switch: the credit position is a property of one account,
+	but "what have I done lately" is not. Rows carry the account name only when
+	there is more than one to tell apart.
+
+	Scoped by an explicit `customer IN (...)` over the links resolved for
+	frappe.session.user, which is the same guard get_credit_snapshot applies --
+	this reads past the doctype's own permissions and must never be handed a
+	customer that did not come from _portal_customers.
+
+	`exposure` is {customer: what the credit engine says the account owes}, and
+	it is what decides whether a bill may be called "Due". A Sales Invoice's own
+	outstanding_amount ignores the unallocated advance pool, so a prepaid dealer
+	carrying 161,392 in advance had every bill on this list flagged Due directly
+	beneath a header reading "Nothing outstanding" -- both from real data, and
+	the page contradicting itself. The engine has the only account-level answer,
+	so the engine decides; a customer whose position was not computed (past
+	MAX_EAGER_SNAPSHOTS) gets no flag rather than a guessed one.
+	"""
+	if not customer_names:
+		return []
+
+	# The LIMIT sits INSIDE each branch, not only on the union. There is no
+	# composite (customer, posting_date) index -- only one on each column -- so
+	# a union that sorts afterwards has to read and filesort every bill the
+	# customer has ever had: 1.11s on NGI-CUS-00592, which holds 10,121 of them.
+	# Limited per branch the optimizer walks the posting_date index backwards
+	# and stops at six. Same six rows, 0.00s.
+	rows = frappe.db.sql(
+		"""
+		SELECT * FROM (
+			SELECT 'Sales Invoice' AS doctype, name, customer, posting_date AS date,
+			       grand_total, outstanding_amount, status, currency
+			FROM `tabSales Invoice`
+			WHERE docstatus = 1 AND customer IN %(customers)s
+			ORDER BY posting_date DESC, name DESC
+			LIMIT %(limit)s
+		) AS bills
+		UNION ALL
+		SELECT * FROM (
+			SELECT 'Sales Order' AS doctype, name, customer, transaction_date AS date,
+			       grand_total, NULL AS outstanding_amount, status, currency
+			FROM `tabSales Order`
+			WHERE docstatus = 1 AND customer IN %(customers)s
+			ORDER BY transaction_date DESC, name DESC
+			LIMIT %(limit)s
+		) AS orders
+		ORDER BY date DESC, name DESC
+		LIMIT %(limit)s
+		""",
+		{"customers": customer_names, "limit": RECENT_LIMIT},
+		as_dict=True,
+	)
+	if not rows:
+		return []
+
+	# The number on the paper the customer was handed, never the Frappe name --
+	# custom_branch_name on a Sales Invoice, custom_name elsewhere, and the
+	# Numbering Configuration rule is what says which.
+	numbers = resolve_voucher_numbers((r.doctype, r.name) for r in rows)
+
+	out = []
+	for r in rows:
+		is_invoice = r.doctype == "Sales Invoice"
+		due = float(r.outstanding_amount or 0) if is_invoice else 0.0
+
+		if not is_invoice:
+			state, tone = _(r.status or ""), "plain"
+		elif due <= 0:
+			state, tone = _("Paid"), "ok"
+		elif exposure.get(r.customer) is None:
+			state, tone = "", "plain"
+		elif exposure[r.customer] <= 0:
+			# The bill is open, but the account is square: the customer's
+			# advance covers it. Saying so is both true and the answer to the
+			# question the row would otherwise raise.
+			state, tone = _("Covered by advance"), "ok"
+		else:
+			# On an untouched bill the outstanding IS the grand total, and
+			# printing it under the amount stacked the same figure twice. Only
+			# a part-paid bill has a second number worth stating.
+			part_paid = abs(due - float(r.grand_total or 0)) > 0.01
+			state = _("{0} due").format(fmt_money(due, 2)) if part_paid else _("Due")
+			tone = "due"
+
+		out.append({
+			"number": numbers.get((r.doctype, r.name)) or r.name,
+			"route": ("/invoices/" if is_invoice else "/orders/") + r.name,
+			"kind": _("Bill") if is_invoice else _("Order"),
+			"icon": "invoice" if is_invoice else "cart",
+			"miti": _miti(r.date) or frappe.utils.formatdate(r.date, "d MMM yyyy"),
+			"amount": fmt_money(r.grand_total or 0, 2),
+			"state": state,
+			"tone": tone,
+			# only worth printing when the customer holds more than one account
+			"account": labels.get(r.customer, "") if len(customer_names) > 1 else "",
+		})
+	return out
+
+
 def _portal_customers():
 	"""Customers this login is linked to, via the Portal User child table.
 
@@ -137,7 +289,6 @@ def get_context(context):
 		frappe.throw(_("You need to be logged in to access this page"), frappe.PermissionError)
 
 	context.current_user = frappe.get_doc("User", frappe.session.user)
-	context.show_sidebar = True
 
 	customers = _portal_customers()
 	context.customers = customers
@@ -164,4 +315,17 @@ def get_context(context):
 		"Website Settings", "show_account_deletion_link"
 	)
 
-	context.quick_links = _quick_links()
+	context.primary_links, context.more_links = _split_links(_quick_links())
+	context.recent = _recent_activity(
+		[row.name for row in customers],
+		context.customer_labels,
+		{name: snap.get("outstanding") for name, snap in snapshots.items() if snap},
+	)
+
+	# The sidebar IS the portal's navigation and it stays. What was wrong was
+	# printing it twice: the tile grid this page used to carry listed the very
+	# same routes beside it. Now the two never coexist -- the sidebar is the nav
+	# from 768px up, and the "More" list below only appears where the sidebar is
+	# hidden, on a phone, where a column of links stacked above the profile
+	# would push the account itself under the fold.
+	context.show_sidebar = True

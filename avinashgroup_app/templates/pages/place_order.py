@@ -308,6 +308,11 @@ def get_credit_snapshot(customer):
 		# does not print.
 		"bill_limit": position.get("bill_limit") or 0,
 		"days_limit": position.get("days_limit") or 0,
+		# What a prepaid customer has left to spend. FIFO leaves this at 0 while
+		# any bill is still uncovered, so it is only ever positive for exactly
+		# the account whose headroom is not a credit limit at all -- which is
+		# the only honest figure to put in an advance-only account's third slot.
+		"leftover_advance": flt(position.get("leftover_advance")),
 		"amount_exceeded": position.get("amount_exceeded") or 0,
 		"count_exceeded": position.get("count_exceeded") or 0,
 		"days_exceeded": position.get("days_exceeded") or 0,

@@ -6,7 +6,7 @@
 {{ super() }}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 {% endblock %}
 
 {% block style %}
@@ -15,297 +15,146 @@
 /* ──────────────────────────────────────────────────────────────────────────
    My Account — Nepal Gas customer portal.
 
-   Same crimson-and-navy identity as the Place Order sheet, and the same rule
-   for figures: money is set in a mono face with tabular numerals so a column
-   of balances lines up on the decimal point.
+   The shape of a profile screen: who you are, three numbers that matter, the
+   two things you came to do, then your actual recent documents. Navigation
+   sits at the bottom in plain text, because nobody opens their account page
+   to look at a menu.
 
-   Built phone-first. Most of these customers open this page inside the
-   ERPNext mobile app's webview, so: every target is at least 44px tall,
-   nothing depends on :hover, the layout reflows at one breakpoint rather
-   than four, and the safe-area inset is honoured at the bottom of the page
-   for a handset with a home indicator.
+   Restraint is the design. One accent (navy), one alarm (crimson), a single
+   hairline between rows, and no card borders or drop shadows in the body —
+   the type carries the hierarchy. Mono is reserved strictly for money, counts
+   and document numbers; a word set in mono reads as terminal output, which is
+   exactly how the first draft of this page went wrong.
 
-   Light-only on purpose — this page sits inside the white portal shell, and
-   a dark card on a light shell reads as a rendering fault, not a theme.
+   Phone-first: every row is a 56px+ target, nothing depends on :hover, one
+   breakpoint, and the safe-area inset is honoured for a handset with a home
+   indicator. Most of these customers open this inside the ERPNext mobile
+   app's webview.
+
+   Light-only on purpose — this page sits inside the white portal shell, and a
+   dark card on a light shell reads as a rendering fault, not a theme.
    ────────────────────────────────────────────────────────────────────────── */
 
-/* On the body, not on #page-me: the page background below reads these too, and
-   a custom property inherits downwards only. */
+/* On the body, not on the page div: the page background below reads these too,
+   and a custom property inherits downwards only. */
 body[data-path="me"] {
-	--ag-navy-900: #141F4A;
-	--ag-navy-700: #233A86;
-	--ag-navy-500: #435CA8;
-	--ag-red-600: #D6202A;
-	--ag-red-050: #FDEDEE;
-	--ag-green-600: #12805C;
-	--ag-green-050: #E8F6F1;
-	--ag-amber-600: #B4690E;
-	--ag-paper: #EDF0F7;
-	--ag-surface: #FFFFFF;
-	--ag-field: #F5F7FC;
-	--ag-line: #D8DFEE;
-	--ag-line-soft: #E9EDF6;
-	--ag-muted: #64719B;
+	--ag-ink: #101A3D;
+	--ag-navy: #233A86;
+	--ag-navy-soft: #F0F3FA;
+	--ag-red: #D6202A;
+	--ag-red-soft: #FDEDEE;
+	--ag-green: #12805C;
+	--ag-green-soft: #E8F6F1;
+	--ag-amber: #9A5B08;
+	--ag-muted: #6B7699;
+	--ag-line: #E7EAF3;
 
 	--ag-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
-	--ag-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
 	--ag-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-	--ag-radius: 16px;
-	--ag-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
-
-	/* Set from JS to the height of the navbar, but only when the navbar is
-	   actually pinned. A hard-coded offset leaves a gap on the portal (static
-	   navbar) or slides the strip under it in a webview that pins one. */
+	/* Set from JS to the navbar's height, but only when the navbar is actually
+	   pinned. A hard-coded offset leaves a gap on the portal (static navbar) or
+	   slides the bar under it in a webview that pins one. */
 	--ag-sticky-top: 0px;
 
-	background: var(--ag-paper);
+	background: #FFFFFF;
 }
+body[data-path="me"] .page-breadcrumbs { display: none; }
 
 .ag-me {
-	max-width: 760px;
+	max-width: 935px;
 	margin: 0 auto;
-	padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+	padding: 4px 0 calc(56px + env(safe-area-inset-bottom, 0px));
 	font-family: var(--ag-sans);
-	color: var(--ag-navy-900);
+	color: var(--ag-ink);
 	-webkit-text-size-adjust: 100%;
 }
 .ag-me *, .ag-me *::before, .ag-me *::after { box-sizing: border-box; }
+.ag-me a { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
+.ag-me a:hover { color: inherit; text-decoration: none; }
 
-.ag-icon { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor;
+.ag-icon { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor;
 	stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-.ag-section-title {
-	margin: 26px 4px 10px;
-	font-family: var(--ag-cond);
-	font-size: 12px;
+.ag-head {
+	margin: 30px 0 10px;
+	font-size: 11.5px;
 	font-weight: 600;
-	letter-spacing: .16em;
+	letter-spacing: .13em;
 	text-transform: uppercase;
 	color: var(--ag-muted);
 }
 
-/* ── Profile header ─────────────────────────────────────────────────────── */
-.ag-profile {
-	display: flex;
-	align-items: center;
-	gap: 14px;
-	padding: 18px;
-	background: var(--ag-surface);
-	border: 1px solid var(--ag-line-soft);
-	border-radius: var(--ag-radius);
-	box-shadow: var(--ag-shadow);
-}
+/* ── Identity ───────────────────────────────────────────────────────────── */
+.ag-id { display: flex; align-items: center; gap: 18px; padding: 6px 0 2px; }
 .ag-avatar {
-	position: relative;
-	width: 56px; height: 56px;
+	width: 68px; height: 68px;
 	flex: none;
 	border-radius: 50%;
 	display: flex; align-items: center; justify-content: center;
-	background: linear-gradient(135deg, var(--ag-navy-700), var(--ag-navy-500));
+	background: linear-gradient(140deg, #2C47A0, #16255C);
 	color: #fff;
-	font-family: var(--ag-cond);
-	font-size: 22px;
+	font-size: 26px;
 	font-weight: 600;
-	letter-spacing: .04em;
 	overflow: hidden;
 	user-select: none;
 }
 .ag-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.ag-profile-text { min-width: 0; flex: 1; }
-.ag-profile-name {
-	font-size: 18px;
-	font-weight: 600;
-	line-height: 1.25;
-	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ag-profile-sub {
-	margin-top: 2px;
-	font-size: 13px;
-	color: var(--ag-muted);
-	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ag-btn {
-	display: inline-flex; align-items: center; gap: 7px;
-	min-height: 40px;
-	padding: 0 14px;
-	flex: none;
-	border: 1px solid var(--ag-line);
-	border-radius: 999px;
-	background: var(--ag-surface);
-	color: var(--ag-navy-700);
-	font-family: var(--ag-sans);
-	font-size: 14px;
-	font-weight: 600;
-	text-decoration: none;
-	-webkit-tap-highlight-color: transparent;
-	transition: background .15s ease, border-color .15s ease, transform .06s ease;
-}
-.ag-btn:active { transform: scale(.97); background: var(--ag-field); }
-.ag-btn:hover { text-decoration: none; color: var(--ag-navy-700); border-color: var(--ag-navy-500); }
-.ag-btn .ag-icon { width: 16px; height: 16px; }
-@media (max-width: 380px) { .ag-btn .ag-btn-text { display: none; } .ag-btn { padding: 0 12px; } }
 
-/* ── Account position ───────────────────────────────────────────────────── */
-
-/* Zero-height marker just above the strip. It leaving the viewport is what
-   "the card has reached the top" means — cheaper and steadier than reading
-   scrollTop on every frame, which stutters on a webview. */
-.ag-credit-sentinel { height: 1px; margin-top: 18px; }
-
-.ag-credit {
-	position: -webkit-sticky;
-	position: sticky;
-	top: var(--ag-sticky-top);
-	z-index: 20;
-	background: var(--ag-surface);
-	border: 1px solid var(--ag-line-soft);
-	border-radius: var(--ag-radius);
-	box-shadow: var(--ag-shadow);
-	overflow: hidden;
-	transition: box-shadow .2s ease, border-radius .2s ease;
-}
-.ag-credit[hidden] { display: none; }
-/* The pinned strip is what the customer reads while scrolling their history,
-   so it earns a harder shadow and square top corners — it is now a bar
-   against the top of the window, not a card floating on the page. */
-.ag-credit.is-pinned {
-	border-top-left-radius: 0;
-	border-top-right-radius: 0;
-	box-shadow: 0 10px 24px -14px rgba(20, 31, 74, .55);
-}
-.ag-credit-inner { padding: 16px 18px 12px; transition: padding .22s ease; }
-.ag-credit.is-pinned .ag-credit-inner { padding: 10px 16px; }
-
-.ag-credit-top {
-	display: flex; align-items: center; gap: 10px;
-	margin-bottom: 10px;
-}
-.ag-credit-who { min-width: 0; flex: 1; }
-.ag-credit-eyebrow {
+/* The stat row. Three numbers, evenly divided, each a link to the page that
+   explains it. It still reads correctly at nothing-owed — a row of zeroes is a
+   fact, where the four-cell card it replaced was just empty. */
+.ag-stats { display: flex; flex: 1; min-width: 0; max-width: 400px; }
+.ag-stat { flex: 1; min-width: 0; text-align: center; padding: 3px 2px 5px; border-radius: 10px; }
+.ag-stat:active { background: var(--ag-navy-soft); }
+.ag-stat-value {
 	display: block;
-	font-family: var(--ag-cond);
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: .16em;
-	text-transform: uppercase;
-	color: var(--ag-muted);
-}
-.ag-credit-name {
-	display: block;
-	font-size: 14.5px;
-	font-weight: 600;
-	line-height: 1.3;
-	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.ag-credit.is-pinned .ag-credit-eyebrow { display: none; }
-
-.ag-pill {
-	flex: none;
-	padding: 5px 11px;
-	border-radius: 999px;
-	font-family: var(--ag-cond);
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: .08em;
-	text-transform: uppercase;
-	white-space: nowrap;
-}
-.ag-pill.is-ok { background: var(--ag-green-050); color: var(--ag-green-600); }
-.ag-pill.is-over { background: var(--ag-red-050); color: var(--ag-red-600); }
-.ag-pill.is-info { background: var(--ag-field); color: var(--ag-navy-700); }
-
-.ag-credit-amount { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.ag-credit-label {
-	font-size: 13px;
-	color: var(--ag-muted);
-}
-.ag-credit-value {
 	font-family: var(--ag-mono);
 	font-variant-numeric: tabular-nums;
-	font-size: 27px;
+	font-size: 19px;
 	font-weight: 600;
-	line-height: 1.15;
-	letter-spacing: -.01em;
-	transition: font-size .22s ease;
-}
-.ag-credit.is-pinned .ag-credit-value { font-size: 20px; }
-.ag-credit.is-over .ag-credit-value { color: var(--ag-red-600); }
-
-.ag-meter {
-	position: relative;
-	height: 6px;
-	margin: 12px 0 0;
-	border-radius: 999px;
-	background: var(--ag-line-soft);
-	overflow: hidden;
-}
-.ag-meter[hidden] { display: none; }
-.ag-meter span {
-	display: block;
-	height: 100%;
-	width: 0;
-	border-radius: 999px;
-	background: linear-gradient(90deg, var(--ag-navy-500), var(--ag-navy-700));
-	transition: width .5s cubic-bezier(.2, .8, .3, 1);
-}
-.ag-credit.is-warn .ag-meter span { background: linear-gradient(90deg, #E0A33C, var(--ag-amber-600)); }
-.ag-credit.is-over .ag-meter span { background: linear-gradient(90deg, #E8636B, var(--ag-red-600)); }
-
-/* Collapsed with max-height rather than the grid-rows trick: the webview in
-   the mobile app is not always new enough for animating to 0fr, and a strip
-   that snaps shut looks broken in a way a slightly imprecise ease does not. */
-.ag-credit-detail {
-	max-height: 420px;
-	opacity: 1;
-	overflow: hidden;
-	transition: max-height .24s ease, opacity .18s ease;
-}
-.ag-credit.is-pinned .ag-credit-detail { max-height: 0; opacity: 0; }
-
-.ag-tiles {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-	gap: 1px;
-	margin: 16px -18px 0;
-	padding: 1px 0 0;
-	background: var(--ag-line-soft);
-	border-top: 1px solid var(--ag-line-soft);
-}
-.ag-tile { padding: 11px 18px 12px; background: var(--ag-surface); }
-.ag-tile-label {
-	font-size: 11.5px;
-	letter-spacing: .04em;
-	color: var(--ag-muted);
+	line-height: 1.2;
 	white-space: nowrap;
 	overflow: hidden; text-overflow: ellipsis;
 }
-.ag-tile-value {
-	margin-top: 3px;
-	font-family: var(--ag-mono);
-	font-variant-numeric: tabular-nums;
-	font-size: 15px;
+.ag-stat.is-alarm .ag-stat-value { color: var(--ag-red); }
+.ag-stat-label { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.25; color: var(--ag-muted); }
+
+.ag-name { margin-top: 14px; font-size: 16px; font-weight: 600; line-height: 1.3; }
+.ag-bio { margin-top: 3px; font-size: 13.5px; line-height: 1.45; color: var(--ag-muted); }
+.ag-bio .ag-tag { font-weight: 600; color: var(--ag-green); }
+.ag-bio .ag-tag.is-alarm { color: var(--ag-red); }
+.ag-bio .ag-tag.is-info { color: var(--ag-navy); }
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.ag-actions { display: flex; gap: 8px; margin-top: 16px; max-width: 480px; }
+.ag-btn {
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 42px;
+	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	padding: 0 12px;
+	border: 1px solid var(--ag-line);
+	border-radius: 10px;
+	background: #fff;
+	font-size: 14px;
 	font-weight: 600;
+	white-space: nowrap;
+	transition: transform .06s ease, background .15s ease;
 }
-.ag-tile-sub { margin-top: 2px; font-size: 11.5px; color: var(--ag-muted); }
-.ag-tile.is-breach .ag-tile-value { color: var(--ag-red-600); }
+.ag-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-btn:active { transform: scale(.98); background: var(--ag-navy-soft); }
+.ag-btn.is-primary { background: var(--ag-navy); border-color: var(--ag-navy); color: #fff; }
+.ag-btn.is-primary:hover { color: #fff; }
+.ag-btn.is-primary:active { background: #1B2E6C; color: #fff; }
+.ag-btn .ag-icon { width: 17px; height: 17px; }
 
-.ag-credit-note {
-	margin: 0;
-	padding: 12px 0 0;
-	font-size: 12px;
-	line-height: 1.45;
-	color: var(--ag-muted);
-}
-
-/* Account switcher — only rendered for a login linked to more than one
-   customer, which on this site is a dealer holding accounts with two of the
-   group companies. */
+/* ── Account switcher ───────────────────────────────────────────────────── */
 .ag-accounts {
 	display: flex;
-	gap: 8px;
-	margin: 0 -18px;
-	padding: 0 18px 14px;
+	gap: 7px;
+	margin: 14px -16px 0;
+	padding: 0 16px;
 	overflow-x: auto;
 	scrollbar-width: none;
 	-webkit-overflow-scrolling: touch;
@@ -313,123 +162,186 @@ body[data-path="me"] {
 .ag-accounts::-webkit-scrollbar { display: none; }
 .ag-chip {
 	flex: none;
-	min-height: 34px;
-	padding: 0 13px;
+	min-height: 32px;
+	padding: 0 12px;
 	display: inline-flex; align-items: center;
 	border: 1px solid var(--ag-line);
 	border-radius: 999px;
-	background: var(--ag-surface);
+	background: #fff;
 	color: var(--ag-muted);
-	font-size: 13px;
+	font-family: var(--ag-sans);
+	font-size: 12.5px;
 	font-weight: 500;
 	white-space: nowrap;
 	cursor: pointer;
 	-webkit-tap-highlight-color: transparent;
-	transition: transform .06s ease;
 }
-.ag-chip:active { transform: scale(.96); }
-.ag-chip.is-active {
-	background: var(--ag-navy-900);
-	border-color: var(--ag-navy-900);
-	color: #fff;
-}
+.ag-chip.is-active { background: var(--ag-ink); border-color: var(--ag-ink); color: #fff; }
 
-/* ── Quick links ────────────────────────────────────────────────────────── */
-.ag-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-	gap: 10px;
+/* ── Pinned bar ─────────────────────────────────────────────────────────────
+   A separate slim bar that fades in once the stats scroll away, rather than
+   the stat block collapsing in place: collapsing in place jumps the content
+   beneath it, and a bar that was never in the flow cannot. */
+.ag-bar {
+	position: fixed;
+	top: var(--ag-sticky-top);
+	left: 0; right: 0;
+	z-index: 30;
+	padding: 10px 16px;
+	background: rgba(255, 255, 255, .93);
+	-webkit-backdrop-filter: saturate(180%) blur(12px);
+	backdrop-filter: saturate(180%) blur(12px);
+	border-bottom: 1px solid var(--ag-line);
+	transform: translateY(-100%);
+	opacity: 0;
+	transition: transform .22s ease, opacity .18s ease;
+	pointer-events: none;
 }
-.ag-grid-item {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	min-height: 92px;
-	padding: 12px 8px;
-	background: var(--ag-surface);
-	border: 1px solid var(--ag-line-soft);
-	border-radius: 14px;
-	color: var(--ag-navy-900);
-	text-align: center;
-	text-decoration: none;
-	-webkit-tap-highlight-color: transparent;
-	transition: transform .06s ease, border-color .15s ease;
+.ag-bar.is-on { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.ag-bar-inner {
+	width: 100%; max-width: 935px;
+	margin: 0 auto;
+	display: flex; align-items: baseline; gap: 10px;
 }
-.ag-grid-item:active { transform: scale(.96); }
-.ag-grid-item:hover { text-decoration: none; color: var(--ag-navy-900); border-color: var(--ag-navy-500); }
-.ag-grid-icon {
-	width: 38px; height: 38px;
-	display: flex; align-items: center; justify-content: center;
-	border-radius: 12px;
-	background: var(--ag-field);
-	color: var(--ag-navy-700);
+.ag-bar-label { flex: none; font-size: 12px; color: var(--ag-muted); }
+.ag-bar-value {
+	font-family: var(--ag-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 15px;
+	font-weight: 600;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ag-grid-text {
-	font-size: 12.5px;
-	font-weight: 500;
-	line-height: 1.25;
-	/* two lines then ellipsis — "Material Request" must not shove the tile
-	   taller than its neighbours */
-	display: -webkit-box;
-	-webkit-line-clamp: 2;
-	-webkit-box-orient: vertical;
-	overflow: hidden;
+.ag-bar.is-alarm .ag-bar-value { color: var(--ag-red); }
+.ag-bar-tag {
+	margin-left: auto;
+	flex: none;
+	align-self: center;
+	padding: 3px 9px;
+	border-radius: 999px;
+	font-size: 11.5px;
+	font-weight: 600;
+	background: var(--ag-green-soft);
+	color: var(--ag-green);
+	white-space: nowrap;
 }
+.ag-bar-tag.is-alarm { background: var(--ag-red-soft); color: var(--ag-red); }
+.ag-bar-tag.is-info { background: var(--ag-navy-soft); color: var(--ag-navy); }
 
-/* ── Settings rows ──────────────────────────────────────────────────────── */
-.ag-rows {
-	background: var(--ag-surface);
-	border: 1px solid var(--ag-line-soft);
-	border-radius: var(--ag-radius);
-	overflow: hidden;
-}
-.ag-row {
+/* ── Activity ───────────────────────────────────────────────────────────── */
+.ag-list { border-top: 1px solid var(--ag-line); }
+.ag-item {
 	display: flex;
 	align-items: center;
 	gap: 13px;
-	min-height: 60px;
-	padding: 12px 16px;
-	color: var(--ag-navy-900);
-	text-decoration: none;
-	border-top: 1px solid var(--ag-line-soft);
-	-webkit-tap-highlight-color: transparent;
+	min-height: 62px;
+	padding: 11px 2px;
+	border-bottom: 1px solid var(--ag-line);
 	transition: background .12s ease;
 }
-.ag-row:first-child { border-top: 0; }
-.ag-row:active { background: var(--ag-field); }
-.ag-row:hover { text-decoration: none; color: var(--ag-navy-900); background: var(--ag-field); }
-.ag-row-icon { color: var(--ag-navy-700); display: flex; }
-.ag-row-text { flex: 1; min-width: 0; }
-.ag-row-title { display: block; font-size: 14.5px; font-weight: 600; line-height: 1.3; }
-.ag-row-desc { display: block; margin-top: 1px; font-size: 12.5px; color: var(--ag-muted); line-height: 1.35; }
-.ag-row-chev { color: #B9C1D8; display: flex; }
-.ag-row.is-danger, .ag-row.is-danger .ag-row-icon { color: var(--ag-red-600); }
-.ag-row.is-danger:hover { color: var(--ag-red-600); }
+.ag-item:active { background: var(--ag-navy-soft); }
+.ag-item-icon {
+	width: 36px; height: 36px;
+	flex: none;
+	display: flex; align-items: center; justify-content: center;
+	border-radius: 10px;
+	background: var(--ag-navy-soft);
+	color: var(--ag-navy);
+}
+.ag-item-main { flex: 1; min-width: 0; }
+.ag-item-title {
+	display: block;
+	font-family: var(--ag-mono);
+	font-size: 13.5px;
+	font-weight: 600;
+	line-height: 1.3;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-item-sub {
+	display: block;
+	margin-top: 2px;
+	font-size: 12.5px;
+	color: var(--ag-muted);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-item-right { flex: none; text-align: right; padding-left: 6px; }
+.ag-item-amount {
+	display: block;
+	font-family: var(--ag-mono);
+	font-variant-numeric: tabular-nums;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+.ag-item-state { display: block; margin-top: 2px; font-size: 12px; color: var(--ag-muted); }
+.ag-item-state.is-due { color: var(--ag-amber); font-weight: 500; }
+.ag-item-state.is-ok { color: var(--ag-green); }
+
+.ag-empty {
+	padding: 22px 2px 24px;
+	font-size: 13.5px;
+	line-height: 1.5;
+	color: var(--ag-muted);
+	border-top: 1px solid var(--ag-line);
+}
+
+/* ── The quiet nav, and settings ────────────────────────────────────────── */
+.ag-head.is-more { display: none; }
+.ag-more {
+	display: none;
+	grid-template-columns: repeat(2, 1fr);
+	column-gap: 12px;
+	border-top: 1px solid var(--ag-line);
+}
+.ag-more-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 46px;
+	font-size: 14px;
+}
+.ag-more-item .ag-icon { width: 17px; height: 17px; color: var(--ag-muted); }
+.ag-more-item:active { color: var(--ag-navy); }
+
+.ag-rows { border-top: 1px solid var(--ag-line); }
+.ag-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 56px;
+	padding: 8px 2px;
+	border-bottom: 1px solid var(--ag-line);
+	transition: background .12s ease;
+}
+.ag-row:active { background: var(--ag-navy-soft); }
+.ag-row-icon { color: var(--ag-muted); display: flex; }
+.ag-row-title { display: block; flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; }
+.ag-row-chev { color: #C3C9DC; display: flex; }
+.ag-row.is-danger, .ag-row.is-danger .ag-row-icon { color: var(--ag-red); }
 
 /* ── Phone ──────────────────────────────────────────────────────────────── */
+/* The sidebar stacks ABOVE the content below Bootstrap's sm breakpoint, which
+   opens the page on a list of links with the account itself under the fold. On
+   a phone the "More" list takes over instead — same routes, at the bottom,
+   where they belong. Exactly one of the two is ever on screen. */
 @media (max-width: 767px) {
-	/* The portal sidebar stacks ABOVE the content on a phone, so the stock
-	   page opens on a list of links with the account itself pushed below the
-	   fold. Every one of those links is a tile further down this page. */
 	#page-me .sidebar-column { display: none; }
-	#page-me .main-column { padding-left: 0; padding-right: 0; }
-	.ag-me { padding-left: 2px; padding-right: 2px; }
-	.ag-profile { padding: 15px; }
-	.ag-credit-inner { padding: 14px 15px 12px; }
-	.ag-credit.is-pinned .ag-credit-inner { padding: 9px 14px; }
-	.ag-tiles { margin-left: -15px; margin-right: -15px; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
-	.ag-tile { padding: 10px 15px 11px; }
-	.ag-accounts { margin: 0 -15px; padding: 0 15px 12px; }
-	.ag-credit-value { font-size: 24px; }
+	.ag-me .ag-more, .ag-me .ag-head.is-more { display: grid; }
+	.ag-me .ag-head.is-more { display: block; }
+}
+
+@media (max-width: 640px) {
+	.ag-me { padding-top: 0; }
+	.ag-id { gap: 14px; }
+	.ag-avatar { width: 60px; height: 60px; font-size: 23px; }
+	.ag-stat-value { font-size: 17px; }
+	.ag-stat-label { font-size: 11px; }
+	.ag-more { grid-template-columns: 1fr; }
+	.ag-more-item { border-bottom: 1px solid var(--ag-line); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.ag-me *, .ag-me *::before, .ag-me *::after {
-		transition-duration: .01ms !important;
-		animation-duration: .01ms !important;
-	}
+	.ag-me *, .ag-me *::before, .ag-me *::after,
+	.ag-bar { transition-duration: .01ms !important; }
 }
 </style>
 {% endblock %}
@@ -457,10 +369,23 @@ body[data-path="me"] {
 	<symbol id="ag-i-link" viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 5.7.3l3-3a4 4 0 0 0-5.7-5.7L11.5 6"/><path d="M14 11a4 4 0 0 0-5.7-.3l-3 3a4 4 0 0 0 5.7 5.7L12.5 18"/></symbol>
 </defs></svg>
 
+{#- The pinned bar. Outside .ag-me because it is fixed to the window, not to the
+	column, and it is what carries the account position once the stat row has
+	scrolled away. -#}
+{% if customers %}
+<div class="ag-bar" id="ag-bar">
+	<div class="ag-bar-inner">
+		<span class="ag-bar-label">{{ _("Outstanding") }}</span>
+		<span class="ag-bar-value" id="ag-bar-value">—</span>
+		<span class="ag-bar-tag" id="ag-bar-tag"></span>
+	</div>
+</div>
+{% endif %}
+
 <div class="ag-me">
 
-	{#- ── Who you are ────────────────────────────────────────────────────── -#}
-	<div class="ag-profile">
+	{#- ── Identity, and the three numbers ───────────────────────────────── -#}
+	<div class="ag-id">
 		<div class="ag-avatar">
 			{% if current_user.user_image %}
 			<img src="{{ current_user.user_image | e }}" alt="{{ current_user.full_name | e }}">
@@ -468,114 +393,111 @@ body[data-path="me"] {
 			{{- (current_user.full_name or current_user.name)[:1] | upper -}}
 			{% endif %}
 		</div>
-		<div class="ag-profile-text">
-			<div class="ag-profile-name">{{ current_user.full_name | e }}</div>
-			<div class="ag-profile-sub">{{ current_user.name | e }}</div>
+
+		{#- Filled by JS from the snapshots below, so the accounts computed with
+			the page and the ones fetched on tap cannot drift apart. -#}
+		{% if customers %}
+		<div class="ag-stats" id="ag-stats">
+			<a class="ag-stat" id="ag-stat-1" href="/customer_statement">
+				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Outstanding") }}</span>
+			</a>
+			<a class="ag-stat" id="ag-stat-2" href="/invoices">
+				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Unpaid") }}</span>
+			</a>
+			<a class="ag-stat" id="ag-stat-3" href="/customer_statement">
+				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Available") }}</span>
+			</a>
 		</div>
-		<a class="ag-btn" href="/update-profile/{{ current_user.name | urlencode }}">
-			<svg class="ag-icon"><use href="#ag-i-edit"></use></svg>
-			<span class="ag-btn-text">{{ _("Edit") }}</span>
-		</a>
+		{% endif %}
 	</div>
 
-	{#- ── Account position ───────────────────────────────────────────────────
-		 Rendered empty and filled by JS from the snapshots below, so the strip
-		 has ONE renderer: the accounts computed with the page and the ones
-		 fetched when a chip is tapped cannot drift apart. Hidden outright for
-		 a login with no customer, which is every member of staff.
-	-#}
-	{% if customers %}
-	<div class="ag-credit-sentinel" id="ag-credit-sentinel"></div>
-	<section class="ag-credit" id="ag-credit" hidden>
-		<div class="ag-credit-inner">
-			<div class="ag-credit-top">
-				<div class="ag-credit-who">
-					<span class="ag-credit-eyebrow">{{ _("Account position") }}</span>
-					<span class="ag-credit-name" id="ag-credit-name"></span>
-				</div>
-				<span class="ag-pill" id="ag-credit-pill"></span>
-			</div>
+	<div class="ag-name">{{ current_user.full_name | e }}</div>
+	<div class="ag-bio" id="ag-bio">{{ current_user.name | e }}</div>
 
-			<div class="ag-credit-amount">
-				<span class="ag-credit-value" id="ag-credit-value">—</span>
-				<span class="ag-credit-label">{{ _("outstanding") }}</span>
-			</div>
-
-			<div class="ag-meter" id="ag-credit-meter" hidden><span id="ag-credit-meter-fill"></span></div>
-
-			<div class="ag-credit-detail">
-				{% if customers | length > 1 %}
-				<div class="ag-accounts" id="ag-accounts" style="margin-top:14px">
-					{% for c in customers %}
-					<button type="button" class="ag-chip{{ ' is-active' if c.name == active_customer else '' }}"
-						data-customer="{{ c.name | e }}">{{ c.label | e }}</button>
-					{% endfor %}
-				</div>
-				{% endif %}
-				<div class="ag-tiles" id="ag-credit-tiles"></div>
-				<p class="ag-credit-note">
-					{{ _("For your information only — these figures do not stop you placing an order.") }}
-				</p>
-			</div>
-		</div>
-	</section>
+	{% if customers | length > 1 %}
+	<div class="ag-accounts" id="ag-accounts">
+		{% for c in customers %}
+		<button type="button" class="ag-chip{{ ' is-active' if c.name == active_customer else '' }}"
+			data-customer="{{ c.name | e }}">{{ c.label | e }}</button>
+		{% endfor %}
+	</div>
 	{% endif %}
 
-	{#- ── Everything the portal offers this login ────────────────────────── -#}
-	{% if quick_links %}
-	<div class="ag-section-title">{{ _("Quick links") }}</div>
-	<div class="ag-grid">
-		{% for link in quick_links %}
-		<a class="ag-grid-item" href="{{ link.route }}">
-			<span class="ag-grid-icon"><svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg></span>
-			<span class="ag-grid-text">{{ _(link.title) }}</span>
+	{% if primary_links %}
+	<div class="ag-actions">
+		{% for link in primary_links %}
+		<a class="ag-btn{{ ' is-primary' if loop.first else '' }}" href="{{ link.route }}">
+			<svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg>
+			<span class="ag-btn-text">{{ _(link.title) }}</span>
 		</a>
 		{% endfor %}
 	</div>
 	{% endif %}
 
-	{#- ── Account settings ───────────────────────────────────────────────── -#}
-	<div class="ag-section-title">{{ _("Account") }}</div>
+	{#- ── The content: what this account has actually done ───────────────── -#}
+	{% if customers %}
+	<div class="ag-head">{{ _("Recent") }}</div>
+	{% if recent %}
+	<div class="ag-list">
+		{% for r in recent %}
+		<a class="ag-item" href="{{ r.route }}">
+			<span class="ag-item-icon"><svg class="ag-icon"><use href="#ag-i-{{ r.icon }}"></use></svg></span>
+			<span class="ag-item-main">
+				<span class="ag-item-title">{{ r.number }}</span>
+				<span class="ag-item-sub">{{ r.kind }} · {{ r.miti }}{% if r.account %} · {{ r.account }}{% endif %}</span>
+			</span>
+			<span class="ag-item-right">
+				<span class="ag-item-amount">{{ r.amount }}</span>
+				<span class="ag-item-state is-{{ r.tone }}">{{ r.state }}</span>
+			</span>
+		</a>
+		{% endfor %}
+	</div>
+	{% else %}
+	<div class="ag-empty">{{ _("Nothing billed to this account yet. Your bills and orders will appear here.") }}</div>
+	{% endif %}
+	{% endif %}
+
+	{#- ── The rest of the portal, quietly ────────────────────────────────── -#}
+	{% if more_links %}
+	<div class="ag-head is-more">{{ _("More") }}</div>
+	<div class="ag-more">
+		{% for link in more_links %}
+		<a class="ag-more-item" href="{{ link.route }}">
+			<svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg>{{ _(link.title) }}
+		</a>
+		{% endfor %}
+	</div>
+	{% endif %}
+
+	{#- ── Settings ───────────────────────────────────────────────────────── -#}
+	<div class="ag-head">{{ _("Settings") }}</div>
 	<div class="ag-rows">
 		<a class="ag-row" href="/update-profile/{{ current_user.name | urlencode }}">
 			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-edit"></use></svg></span>
-			<span class="ag-row-text">
-				<span class="ag-row-title">{{ _("Edit Profile") }}</span>
-				<span class="ag-row-desc">{{ _("Your name, photo and contact details") }}</span>
-			</span>
+			<span class="ag-row-title">{{ _("Edit profile") }}</span>
 			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
 		</a>
 		<a class="ag-row" href="/update-password">
 			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-key"></use></svg></span>
-			<span class="ag-row-text">
-				<span class="ag-row-title">{{ _("Reset Password") }}</span>
-				<span class="ag-row-desc">{{ _("Reset the password for your account") }}</span>
-			</span>
+			<span class="ag-row-title">{{ _("Reset password") }}</span>
 			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
 		</a>
 		<a class="ag-row" href="/third_party_apps">
 			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-apps"></use></svg></span>
-			<span class="ag-row-text">
-				<span class="ag-row-title">{{ _("Third party apps") }}</span>
-				<span class="ag-row-desc">{{ _("Apps you have authorised to use this account") }}</span>
-			</span>
+			<span class="ag-row-title">{{ _("Third party apps") }}</span>
 			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
 		</a>
 		{% if show_account_deletion_link %}
 		<a class="ag-row" href="/request-for-account-deletion?new=1">
 			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-trash"></use></svg></span>
-			<span class="ag-row-text">
-				<span class="ag-row-title">{{ _("Request Account Deletion") }}</span>
-				<span class="ag-row-desc">{{ _("Send a request to delete your account") }}</span>
-			</span>
+			<span class="ag-row-title">{{ _("Request account deletion") }}</span>
 			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
 		</a>
 		{% endif %}
 		<a class="ag-row is-danger" href="/?cmd=web_logout">
 			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-logout"></use></svg></span>
-			<span class="ag-row-text">
-				<span class="ag-row-title">{{ _("Log out") }}</span>
-			</span>
+			<span class="ag-row-title">{{ _("Log out") }}</span>
 			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
 		</a>
 	</div>
@@ -589,7 +511,8 @@ window.ag_me_ctx = {
 	snapshots: {{ credit_snapshots | tojson }},
 	labels: {{ customer_labels | tojson }},
 	active: {{ active_customer | tojson }},
-	number_format: {{ number_format | tojson }}
+	number_format: {{ number_format | tojson }},
+	email: {{ current_user.name | tojson }}
 };
 
 frappe.ready(function () {
@@ -603,17 +526,17 @@ class AgMyAccount {
 		// customer switching back and forth pays for each account once.
 		this.cache = Object.assign({}, this.ctx.snapshots || {});
 
-		this.$strip = $("#ag-credit");
-		if (!this.$strip.length) return;   // staff login: no customer, no strip
+		this.$stats = $("#ag-stats");
+		if (!this.$stats.length) return;   // staff login: no customer, no figures
 
 		this.measure_sticky_top();
-		this.watch_pinned();
+		this.watch_scroll();
 		this.bind_accounts();
 		this.show(this.ctx.active);
 	}
 
 	// ── Sticky offset ───────────────────────────────────────────────────
-	// The portal navbar is static, so the strip belongs at the very top of the
+	// The portal navbar is static, so the bar belongs at the very top of the
 	// window; but the shell is themable and the mobile app's webview has been
 	// seen pinning it. Ask the navbar where it actually is rather than
 	// assuming, and re-ask on resize — an orientation change alters its height.
@@ -625,29 +548,22 @@ class AgMyAccount {
 				const pos = window.getComputedStyle(nav).position;
 				if (pos === "fixed" || pos === "sticky") top = nav.offsetHeight;
 			}
-			document.getElementById("page-me")
-				.style.setProperty("--ag-sticky-top", top + "px");
+			document.body.style.setProperty("--ag-sticky-top", top + "px");
 		};
 		apply();
 		$(window).on("resize orientationchange", frappe.utils.debounce(apply, 150));
 	}
 
-	// ── Pinned state ────────────────────────────────────────────────────
-	watch_pinned() {
-		const sentinel = document.getElementById("ag-credit-sentinel");
-		const strip = this.$strip;
-		if (!sentinel || typeof IntersectionObserver === "undefined") return;
-
-		// rootMargin pulls the trigger line down to wherever the strip comes to
-		// rest, so the collapse happens exactly as it touches the top edge and
-		// not a scroll-length early.
-		const top = getComputedStyle(document.getElementById("page-me"))
-			.getPropertyValue("--ag-sticky-top").trim() || "0px";
+	// ── The bar arrives when the stat row leaves ────────────────────────
+	watch_scroll() {
+		const $bar = $("#ag-bar");
+		const stats = this.$stats.get(0);
+		if (!$bar.length || !stats || typeof IntersectionObserver === "undefined") return;
 
 		new IntersectionObserver(
-			(entries) => strip.toggleClass("is-pinned", !entries[0].isIntersecting),
-			{ threshold: 0, rootMargin: `-${parseInt(top, 10) || 0}px 0px 0px 0px` }
-		).observe(sentinel);
+			(entries) => $bar.toggleClass("is-on", !entries[0].isIntersecting),
+			{ threshold: 0 }
+		).observe(stats);
 	}
 
 	// ── Account switcher ────────────────────────────────────────────────
@@ -663,13 +579,12 @@ class AgMyAccount {
 
 	show(customer) {
 		if (!customer) return this.render(customer, {});
-
 		if (this.cache[customer]) return this.render(customer, this.cache[customer]);
 
 		// Beyond the handful computed with the page. Same call, same figures.
 		// frappe.call lives in the desk bundle; on a portal shell that does not
 		// carry it there is nothing to fetch with, and an account past the
-		// eager few simply shows no strip rather than throwing here.
+		// eager few falls back to the plain identity rather than throwing.
 		if (typeof frappe.call !== "function") return this.render(customer, {});
 
 		const me = this;
@@ -680,8 +595,8 @@ class AgMyAccount {
 				me.cache[customer] = r.message || {};
 				// A chip tapped twice quickly must not paint the slower answer
 				// over the newer one.
-				if ($("#ag-accounts .ag-chip.is-active").data("customer") === customer
-					|| !$("#ag-accounts").length) {
+				const $active = $("#ag-accounts .ag-chip.is-active");
+				if (!$active.length || $active.data("customer") === customer) {
 					me.render(customer, me.cache[customer]);
 				}
 			}
@@ -689,125 +604,109 @@ class AgMyAccount {
 	}
 
 	// ── Render ──────────────────────────────────────────────────────────
-	money(value, snap) {
-		const amount = format_number(Number(value) || 0, this.ctx.number_format, 2);
-		return snap.currency ? `${snap.currency} ${amount}` : amount;
+	money(value) {
+		return format_number(Number(value) || 0, this.ctx.number_format, 2);
+	}
+
+	// Short form for a stat slot: 4,54,618.00 does not fit in a third of a
+	// phone's width, and a truncated number is worse than a rounded one. The
+	// exact figure is one tap away on the statement.
+	compact(value) {
+		const n = Math.abs(Number(value) || 0);
+		if (n >= 100000) return (n / 100000).toFixed(n >= 1000000 ? 0 : 1) + "L";
+		if (n >= 1000) return format_number(Math.round(n), this.ctx.number_format, 0);
+		return format_number(n, this.ctx.number_format, n % 1 ? 2 : 0);
+	}
+
+	stat(slot, value, label, alarm) {
+		const $s = $("#ag-stat-" + slot).toggleClass("is-alarm", !!alarm);
+		$s.find(".ag-stat-value").text(value);
+		$s.find(".ag-stat-label").text(label);
 	}
 
 	render(customer, snap) {
 		snap = snap || {};
-		// An account with no limits on it is one credit control holds no
-		// opinion about, and get_credit_snapshot returns nothing for it. Better
-		// a page without a strip than a strip full of zeroes, which reads as
-		// "you owe nothing" rather than "we are not tracking this".
-		if (!snap.currency) { this.$strip.prop("hidden", true); return; }
 
-		const label = (this.ctx.labels || {})[customer] || customer || "";
-		$("#ag-credit-name").text(label).attr("title", label);
-		$("#ag-credit-value").text(this.money(snap.outstanding, snap));
+		// An account with no limits is one credit control holds no opinion
+		// about, and get_credit_snapshot returns nothing for it. Leave the
+		// identity block plain rather than printing three dashes.
+		if (!snap.currency) {
+			this.$stats.hide();
+			$("#ag-bio").text(this.ctx.email || "");
+			return;
+		}
+		this.$stats.show();
 
-		// The server's own verdicts, not a rule re-derived here. `amount` uses
+		// The server's own verdicts, not a rule re-derived here: amount uses
 		// `>` and the other two `>=`, and the day count is floored for an
-		// immaterial residual -- reimplementing any of that on the page is how
+		// immaterial residual. Reimplementing any of that on the page is how
 		// the customer ends up reading a different answer from the counter.
 		const over = !!(snap.amount_exceeded || snap.days_exceeded || snap.count_exceeded);
-		const pct = this.meter_pct(snap);
 
-		this.$strip
-			.toggleClass("is-over", over)
-			.toggleClass("is-warn", !over && pct !== null && pct >= 75);
+		this.stat(1, this.compact(snap.outstanding), __("Outstanding"),
+			over && Number(snap.outstanding) > 0);
+		this.stat(2, String(Number(snap.unpaid_count) || 0), __("Unpaid"),
+			!!snap.count_exceeded);
 
-		this.render_pill(snap, over);
-		this.render_meter(pct);
-		$("#ag-credit-tiles").html(this.tiles(snap).join(""));
-
-		this.$strip.prop("hidden", false);
-	}
-
-	render_pill(snap, over) {
-		const $pill = $("#ag-credit-pill").removeClass("is-ok is-over is-info");
+		// Third slot: what is left to spend. For a prepaid account that is the
+		// advance still in hand, not a credit limit — this group marks such an
+		// account with an amount limit of 1, which is a flag and not a rupee.
 		if (snap.advance_only) {
-			$pill.addClass("is-info").text(__("Advance account"));
-		} else if (snap.amount_exceeded) {
-			$pill.addClass("is-over").text(__("Over limit"));
-		} else if (snap.days_exceeded) {
-			$pill.addClass("is-over").text(__("Overdue"));
-		} else if (snap.count_exceeded) {
-			$pill.addClass("is-over").text(__("Bill limit"));
-		} else if (over) {
-			$pill.addClass("is-over").text(__("On hold"));
-		} else {
-			$pill.addClass("is-ok").text(__("In good standing"));
-		}
-	}
-
-	// How much of the credit limit is spoken for, or null when there is nothing
-	// to measure against: an advance-only account (the group's marker for that
-	// is a limit of 1, not a rupee of headroom) or no amount limit at all.
-	meter_pct(snap) {
-		const limit = Number(snap.amount_limit) || 0;
-		if (!limit || snap.advance_only) return null;
-		const used = Math.max(0, Number(snap.outstanding) || 0);
-		return Math.min(100, (used / limit) * 100);
-	}
-
-	render_meter(pct) {
-		const $meter = $("#ag-credit-meter");
-		if (pct === null) { $meter.prop("hidden", true); return; }
-
-		$meter.prop("hidden", false);
-		// Next frame, so the bar grows from 0 on first paint instead of
-		// arriving already filled.
-		requestAnimationFrame(() => $("#ag-credit-meter-fill").css("width", pct + "%"));
-	}
-
-	tile(label, value, sub, breach) {
-		return `<div class="ag-tile${breach ? " is-breach" : ""}">
-			<div class="ag-tile-label">${frappe.utils.escape_html(label)}</div>
-			<div class="ag-tile-value">${frappe.utils.escape_html(value)}</div>
-			${sub ? `<div class="ag-tile-sub">${frappe.utils.escape_html(sub)}</div>` : ""}
-		</div>`;
-	}
-
-	tiles(snap) {
-		const out = [];
-
-		if (snap.advance_only) {
-			out.push(this.tile(__("Credit limit"), __("Advance only"), __("Paid before dispatch"), false));
+			this.stat(3, this.compact(snap.leftover_advance), __("Advance held"), false);
 		} else if (Number(snap.amount_limit)) {
-			out.push(this.tile(__("Credit limit"), this.money(snap.amount_limit, snap), "", false));
-			const remaining = Number(snap.remaining);
-			out.push(remaining >= 0
-				? this.tile(__("Still available"), this.money(remaining, snap), "", false)
-				: this.tile(__("Over by"), this.money(-remaining, snap), "", true));
-		}
-
-		const count = Number(snap.unpaid_count) || 0;
-		out.push(this.tile(
-			__("Unpaid bills"),
-			String(count),
-			Number(snap.bill_limit) ? __("limit {0}", [snap.bill_limit]) : "",
-			!!snap.count_exceeded
-		));
-
-		// oldest_date can be empty while money is owed: every uncovered rupee
-		// sits inside the one bill the advance is part-way through paying, so
-		// nothing is ageing. Saying "none" there would contradict the
-		// Outstanding figure two tiles to the left.
-		let age_value, age_sub;
-		if (snap.oldest_date) {
-			age_value = __("{0} days", [snap.days_used]);
-			age_sub = Number(snap.days_limit) ? __("limit {0} days", [snap.days_limit]) : snap.oldest_date;
-		} else if (snap.days_partial_only) {
-			age_value = "—";
-			age_sub = __("part paid");
+			const left = Number(snap.remaining);
+			this.stat(3, this.compact(left), left < 0 ? __("Over limit") : __("Available"), left < 0);
 		} else {
-			age_value = __("None");
-			age_sub = __("nothing overdue");
+			this.stat(3, "—", __("No limit"), false);
 		}
-		out.push(this.tile(__("Oldest unpaid"), age_value, age_sub, !!snap.days_exceeded));
 
-		return out;
+		this.render_bio(customer, snap);
+		this.render_bar(snap, over);
+	}
+
+	// The line under the name: which account this is, and one plain sentence
+	// about where it stands. Everything the four-cell table used to say, in the
+	// slot a profile page keeps for a bio.
+	render_bio(customer, snap) {
+		const cur = snap.currency ? snap.currency + " " : "";
+		let verdict, tone = "";
+
+		if (snap.amount_exceeded) {
+			verdict = __("Over the credit limit by {0}", [cur + this.money(-Number(snap.remaining))]);
+			tone = "is-alarm";
+		} else if (snap.days_exceeded) {
+			verdict = __("A bill is {0} days old, past the {1} day limit", [snap.days_used, snap.days_limit]);
+			tone = "is-alarm";
+		} else if (snap.count_exceeded) {
+			verdict = __("{0} unpaid bills, at the limit of {1}", [snap.unpaid_count, snap.bill_limit]);
+			tone = "is-alarm";
+		} else if (snap.advance_only) {
+			verdict = __("Advance payment account");
+			tone = "is-info";
+		} else if (Number(snap.outstanding) > 0) {
+			verdict = __("In good standing");
+		} else {
+			verdict = __("Nothing outstanding");
+		}
+
+		const label = (this.ctx.labels || {})[customer] || "";
+		const $bio = $("#ag-bio").empty();
+		if (label) $bio.append(document.createTextNode(label + " · "));
+		$bio.append($("<span>").addClass("ag-tag " + tone).text(verdict));
+	}
+
+	// The bar carries only the one figure worth interrupting a scroll for.
+	render_bar(snap, over) {
+		const cur = snap.currency ? snap.currency + " " : "";
+		$("#ag-bar").toggleClass("is-alarm", over);
+		$("#ag-bar-value").text(cur + this.money(snap.outstanding));
+
+		const $tag = $("#ag-bar-tag").removeClass("is-alarm is-info");
+		if (snap.amount_exceeded) $tag.addClass("is-alarm").text(__("Over limit"));
+		else if (snap.days_exceeded) $tag.addClass("is-alarm").text(__("Overdue"));
+		else if (snap.count_exceeded) $tag.addClass("is-alarm").text(__("Bill limit"));
+		else if (snap.advance_only) $tag.addClass("is-info").text(__("Advance"));
+		else $tag.text(__("In good standing"));
 	}
 }
 </script>
