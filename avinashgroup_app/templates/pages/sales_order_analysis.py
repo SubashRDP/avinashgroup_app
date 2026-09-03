@@ -335,64 +335,18 @@ def search_sales_orders(companies=None, customers=None, period_type=None, fiscal
 
 # ── Data ────────────────────────────────────────────────────────────────────
 def _get_rows(companies, customers, sales_orders, statuses, from_date, to_date):
-	"""One row per Sales Order Item, mirroring the standard report's figures.
+	"""One row per Sales Order Item.
 
-	`billed_qty` is summed from submitted Sales Invoice Items pointing back at the
-	Sales Order Item, which is why the join is grouped by `soi.name`.
+	The query lives in the desk report (NG Sales Order Analysis) and is imported
+	rather than repeated, so the portal and the desk can never report different
+	figures for the same orders. Everything that scopes this page to the logged-in
+	customer stays here — the shared query reads no session state of its own.
 	"""
-	values = {
-		"companies": tuple(companies),
-		"from_date": from_date,
-		"to_date": to_date,
-	}
-	conditions = ""
-
-	if customers:
-		conditions += " AND so.customer IN %(customers)s"
-		values["customers"] = tuple(customers)
-	if sales_orders:
-		conditions += " AND so.name IN %(sales_orders)s"
-		values["sales_orders"] = tuple(sales_orders)
-	if statuses:
-		conditions += " AND so.billing_status IN %(statuses)s"
-		values["statuses"] = tuple(statuses)
-
-	return frappe.db.sql(
-		f"""
-		SELECT
-			so.transaction_date AS date,
-			so.custom_miti AS custom_miti,
-			so.name AS sales_order,
-			so.billing_status AS status,
-			so.customer,
-			soi.item_code,
-			soi.item_name,
-			IF(
-				so.status IN ('Completed', 'To Bill'),
-				0,
-				GREATEST(IFNULL(DATEDIFF(CURRENT_DATE, soi.delivery_date), 0), 0)
-			) AS delay,
-			soi.qty,
-			IFNULL(SUM(sii.qty), 0) AS billed_qty,
-			soi.base_amount AS amount,
-			(soi.billed_amt * IFNULL(so.conversion_rate, 1)) AS billed_amount,
-			(soi.base_amount - (soi.billed_amt * IFNULL(so.conversion_rate, 1))) AS pending_amount
-		FROM `tabSales Order` so
-		INNER JOIN `tabSales Order Item` soi
-			ON soi.parent = so.name
-		LEFT JOIN `tabSales Invoice Item` sii
-			ON sii.so_detail = soi.name AND sii.docstatus = 1
-		WHERE so.docstatus = 1
-		  AND so.status NOT IN ('Stopped', 'On Hold')
-		  AND so.transaction_date BETWEEN %(from_date)s AND %(to_date)s
-		  AND so.company IN %(companies)s
-		  {conditions}
-		GROUP BY soi.name
-		ORDER BY so.transaction_date ASC, so.name ASC, soi.idx ASC
-		""",
-		values,
-		as_dict=True,
+	from avinashgroup_app.avinash_group_app.report.ng_sales_order_analysis.ng_sales_order_analysis import (
+		get_rows,
 	)
+
+	return get_rows(companies, customers, sales_orders, statuses, from_date, to_date)
 
 
 def _build(companies, customers, sales_orders, statuses, from_date, to_date, fy_label):
