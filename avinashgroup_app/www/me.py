@@ -25,6 +25,10 @@ What it adds over the stock page:
     turned OFF here because it lists the very same routes -- with both on, the
     page printed every link twice, side by side.
 
+Only a customer sees it. /me belongs to every website login, so a session with
+no Portal User row -- staff, a supplier, anyone else -- is handed frappe's own
+page untouched.
+
 Nothing here widens what anyone can see: get_credit_snapshot refuses a customer
 the session user is not linked to, and every figure on the page is that user's
 own account.
@@ -288,9 +292,27 @@ def get_context(context):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("You need to be logged in to access this page"), frappe.PermissionError)
 
-	context.current_user = frappe.get_doc("User", frappe.session.user)
-
 	customers = _portal_customers()
+
+	# /me is frappe's account page for EVERY website login -- a supplier, an
+	# employee, a member of staff who happens to open it, anyone at all with a
+	# User record. This page is built for the gas customer portal and reads as
+	# one: stats, bills, an account position. Anyone who is not a customer gets
+	# frappe's own page instead, unchanged.
+	#
+	# context.template is read by get_raw_template AFTER get_context returns
+	# (set_page_properties seeds it, we overwrite it), and the "frappe/" prefix
+	# resolves through the jinja PrefixLoader to frappe/www/me.html
+	# specifically -- not to whichever installed app's www/me.html happens to
+	# come first, which is how this file wins the route in the first place.
+	if not customers:
+		from frappe.www.me import get_context as stock_me_context
+
+		stock_me_context(context)
+		context.template = "frappe/www/me.html"
+		return
+
+	context.current_user = frappe.get_doc("User", frappe.session.user)
 	context.customers = customers
 
 	# Snapshots are keyed by customer id and handed to the page as JSON: one
