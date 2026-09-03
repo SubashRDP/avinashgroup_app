@@ -1,6 +1,8 @@
 # Copyright (c) 2026, Avinash Group and contributors
 # For license information, please see license.txt
 
+import hashlib
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -47,17 +49,29 @@ def _body_html(popup):
 	return ""
 
 
+def _session_key():
+	"""A marker the browser can compare across page loads to tell one login from
+	the next. The sid cookie itself is httponly, so JS cannot read it — this is a
+	one-way, truncated hash of it, which changes on every fresh login and gives
+	away nothing about the session."""
+	sid = frappe.session.sid or ""
+	return hashlib.sha256(sid.encode()).hexdigest()[:16]
+
+
 @frappe.whitelist()
 def get_login_popups():
-	"""Active popups for the logged-in customer portal user, highest priority first.
+	"""Active announcements for the logged-in customer portal user, highest priority first.
 
-	Called once per browser session by portal_announcement.js on both the desk and the
-	website portal. Returns [] for Guests and for any login that is not in a
-	Customer's Portal Users table, so nothing here widens what a user can see.
+	Returns {"session_key": str, "popups": [...]}. portal_announcement.js calls this
+	on page load and shows the popups only when the session_key differs from the one
+	it last saw (a fresh login) or the page was reloaded.
+
+	`popups` is empty for Guests and for any login that is not in a Customer's
+	Portal Users table, so nothing here widens what a user can see.
 	"""
 	user = frappe.session.user
 	if user == "Guest" or not _is_customer_portal_user(user):
-		return []
+		return {"session_key": _session_key(), "popups": []}
 
 	today = getdate(nowdate())
 	popups = []
@@ -81,4 +95,4 @@ def get_login_popups():
 				"modified": str(row.modified),
 			}
 		)
-	return popups
+	return {"session_key": _session_key(), "popups": popups}
