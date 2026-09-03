@@ -391,14 +391,43 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 
 /* The sidebar IS the portal's navigation. This list is its stand-in on a phone,
    where the sidebar column stacks above the content and would push the account
-   itself under the fold — so exactly one of the two is ever on screen. */
+   itself under the fold — so exactly one of the two is ever on screen.
+
+   Two columns, not one. Nine routes down a single column is a long run of
+   scrolling between the bills above and the settings below; paired up they
+   read as one block you skim rather than a list you travel. No chevron here
+   either — a disclosure arrow on every cell of a grid is noise, and the icon
+   already says the row is a destination. */
 .ag-head.is-more, .ag-more { display: none; }
-.ag-more { border-top: 1px solid var(--ag-line); }
+.ag-more {
+	grid-template-columns: repeat(2, 1fr);
+	column-gap: 14px;
+	border-top: 1px solid var(--ag-line);
+}
+.ag-more-item {
+	display: flex;
+	align-items: center;
+	gap: 11px;
+	min-height: 52px;
+	padding: 8px 2px;
+	border-bottom: 1px solid var(--ag-line);
+	font-size: 14px;
+	font-weight: 500;
+	min-width: 0;
+}
+.ag-more-item .ag-icon { width: 17px; height: 17px; color: var(--ag-muted); }
+.ag-more-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-more-item:hover, .ag-more-item:active { color: var(--ag-navy-700); }
+/* An odd number of routes leaves the last one alone in its row, with its rule
+   stopping halfway and the block's bottom edge ragged. Let it take the full
+   width so the list closes flush. */
+.ag-more-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
 /* ── Phone ──────────────────────────────────────────────────────────────── */
 @media (max-width: 767px) {
 	#page-me .sidebar-column { display: none; }
-	.ag-head.is-more, .ag-more { display: block; }
+	.ag-head.is-more { display: block; }
+	.ag-more { display: grid; }
 }
 
 @media (max-width: 640px) {
@@ -539,10 +568,9 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	<div class="ag-head ag-eyebrow is-more">{{ _("More") }}</div>
 	<div class="ag-more">
 		{% for link in more_links %}
-		<a class="ag-row" href="{{ link.route }}">
-			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg></span>
-			<span class="ag-row-title">{{ _(link.title) }}</span>
-			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
+		<a class="ag-more-item" href="{{ link.route }}">
+			<svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg>
+			<span>{{ _(link.title) }}</span>
 		</a>
 		{% endfor %}
 	</div>
