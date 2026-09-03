@@ -13,6 +13,8 @@
 // loaded everywhere without widening what anyone sees. Content is admin-entered
 // (System Manager / Accounts Manager) and rendered as-is.
 
+
+
 (function () {
 	var METHOD =
 		"avinashgroup_app.avinash_group_app.doctype.portal_announcement.portal_announcement.get_login_popups";
