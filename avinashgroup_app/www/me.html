@@ -6,7 +6,7 @@
 {{ super() }}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
 {% endblock %}
 
 {% block style %}
@@ -15,146 +15,220 @@
 /* ──────────────────────────────────────────────────────────────────────────
    My Account — Nepal Gas customer portal.
 
-   The shape of a profile screen: who you are, three numbers that matter, the
-   two things you came to do, then your actual recent documents. Navigation
-   sits at the bottom in plain text, because nobody opens their account page
-   to look at a menu.
+   Colour and type are NOT chosen here. They are the Place Order sheet's own
+   tokens, value for value, because the two pages sit behind one login and a
+   customer moving between them should not feel they changed product: the
+   group's crimson and navy, Barlow for text, Barlow Semi Condensed for the
+   signage eyebrows, IBM Plex Mono for figures. The muted tone is navy-biased
+   rather than a default grey, which is what stops the page reading as a
+   framework default.
 
-   Restraint is the design. One accent (navy), one alarm (crimson), a single
-   hairline between rows, and no card borders or drop shadows in the body —
-   the type carries the hierarchy. Mono is reserved strictly for money, counts
-   and document numbers; a word set in mono reads as terminal output, which is
-   exactly how the first draft of this page went wrong.
+   Depth is spent by role instead of stamped on every block, so the page has a
+   hierarchy you can see without reading it:
+
+       account card   the one lifted object — radius and the single shadow
+       recent         a seated surface — radius and a hairline, no shadow
+       settings       bare rows on the paper, no surface at all
+
+   Mono is reserved strictly for money, counts and voucher numbers. A word set
+   in mono reads as terminal output, which is exactly how an earlier draft of
+   this page went wrong — "Advance only" and "None" set like machine output.
 
    Phone-first: every row is a 56px+ target, nothing depends on :hover, one
    breakpoint, and the safe-area inset is honoured for a handset with a home
    indicator. Most of these customers open this inside the ERPNext mobile
    app's webview.
 
-   Light-only on purpose — this page sits inside the white portal shell, and a
-   dark card on a light shell reads as a rendering fault, not a theme.
+   Committed light-only, as a choice and not an omission: this page sits inside
+   frappe's white portal shell, so every colour and the page ground itself are
+   painted explicitly and a dark variant would read as a rendering fault rather
+   than a theme.
    ────────────────────────────────────────────────────────────────────────── */
 
-/* On the body, not on the page div: the page background below reads these too,
-   and a custom property inherits downwards only. */
+/* On the body, not on the page div: the page ground below reads these too, and
+   a custom property inherits downwards only. */
 body[data-path="me"] {
-	--ag-ink: #101A3D;
-	--ag-navy: #233A86;
-	--ag-navy-soft: #F0F3FA;
-	--ag-red: #D6202A;
-	--ag-red-soft: #FDEDEE;
-	--ag-green: #12805C;
-	--ag-green-soft: #E8F6F1;
-	--ag-amber: #9A5B08;
-	--ag-muted: #6B7699;
-	--ag-line: #E7EAF3;
+	--ag-navy-900: #141F4A;
+	--ag-navy-700: #233A86;
+	--ag-navy-500: #435CA8;
+	--ag-red-600: #D6202A;
+	--ag-red-050: #FDEDEE;
+	--ag-green-600: #12805C;
+	--ag-green-050: #E8F6F1;
+	--ag-amber-600: #9A5B08;
+	--ag-paper: #EDF0F7;
+	--ag-surface: #FFFFFF;
+	--ag-field: #F5F7FC;
+	--ag-line: #D8DFEE;
+	--ag-line-soft: #E9EDF6;
+	--ag-muted: #64719B;
 
 	--ag-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--ag-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
 	--ag-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+	--ag-radius: 14px;
+	--ag-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
 
 	/* Set from JS to the navbar's height, but only when the navbar is actually
 	   pinned. A hard-coded offset leaves a gap on the portal (static navbar) or
 	   slides the bar under it in a webview that pins one. */
 	--ag-sticky-top: 0px;
 
-	background: #FFFFFF;
+	background: var(--ag-paper);
 }
 body[data-path="me"] .page-breadcrumbs { display: none; }
 
 .ag-me {
 	max-width: 935px;
 	margin: 0 auto;
-	padding: 4px 0 calc(56px + env(safe-area-inset-bottom, 0px));
+	padding: 8px 0 calc(56px + env(safe-area-inset-bottom, 0px));
 	font-family: var(--ag-sans);
-	color: var(--ag-ink);
+	color: var(--ag-navy-900);
+	-webkit-font-smoothing: antialiased;
 	-webkit-text-size-adjust: 100%;
 }
 .ag-me *, .ag-me *::before, .ag-me *::after { box-sizing: border-box; }
 .ag-me a { color: inherit; text-decoration: none; -webkit-tap-highlight-color: transparent; }
 .ag-me a:hover { color: inherit; text-decoration: none; }
+.ag-me a:focus-visible, .ag-me button:focus-visible {
+	outline: 2px solid var(--ag-navy-500);
+	outline-offset: 2px;
+	border-radius: 8px;
+}
 
 .ag-icon { width: 19px; height: 19px; flex: none; fill: none; stroke: currentColor;
 	stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
-.ag-head {
-	margin: 30px 0 10px;
-	font-size: 11.5px;
+/* The group's signage lettering, the same face the Place Order masthead uses. */
+.ag-eyebrow {
+	font-family: var(--ag-cond);
+	font-size: 12px;
 	font-weight: 600;
-	letter-spacing: .13em;
+	letter-spacing: .16em;
 	text-transform: uppercase;
 	color: var(--ag-muted);
 }
+.ag-head { margin: 26px 2px 10px; }
 
-/* ── Identity ───────────────────────────────────────────────────────────── */
-.ag-id { display: flex; align-items: center; gap: 18px; padding: 6px 0 2px; }
+/* ── The account card — the one lifted object on the page ───────────────── */
+.ag-card {
+	background: var(--ag-surface);
+	border-radius: var(--ag-radius);
+	box-shadow: var(--ag-shadow);
+	overflow: hidden;
+}
+.ag-card-top { display: flex; align-items: center; gap: 16px; padding: 18px 20px; }
 .ag-avatar {
-	width: 68px; height: 68px;
+	width: 60px; height: 60px;
 	flex: none;
 	border-radius: 50%;
 	display: flex; align-items: center; justify-content: center;
 	background: linear-gradient(140deg, #2C47A0, #16255C);
 	color: #fff;
-	font-size: 26px;
+	font-size: 24px;
 	font-weight: 600;
 	overflow: hidden;
 	user-select: none;
 }
 .ag-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ag-who { flex: 1; min-width: 0; }
+.ag-name {
+	display: block;
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.3;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ag-account {
+	display: block;
+	margin-top: 1px;
+	font-size: 13.5px;
+	color: var(--ag-muted);
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
-/* The stat row. Three numbers, evenly divided, each a link to the page that
-   explains it. It still reads correctly at nothing-owed — a row of zeroes is a
-   fact, where the four-cell card it replaced was just empty. */
-.ag-stats { display: flex; flex: 1; min-width: 0; max-width: 400px; }
-.ag-stat { flex: 1; min-width: 0; text-align: center; padding: 3px 2px 5px; border-radius: 10px; }
-.ag-stat:active { background: var(--ag-navy-soft); }
+/* State encoded in form as well as in the figures — the pill is what you read
+   at a glance, before any number. */
+.ag-pill {
+	flex: none;
+	align-self: flex-start;
+	padding: 5px 11px;
+	border-radius: 999px;
+	font-family: var(--ag-cond);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	background: var(--ag-green-050);
+	color: var(--ag-green-600);
+}
+.ag-pill[hidden] { display: none; }
+.ag-pill.is-alarm { background: var(--ag-red-050); color: var(--ag-red-600); }
+.ag-pill.is-info { background: var(--ag-field); color: var(--ag-navy-700); }
+
+/* Three numbers, evenly divided, each linking to the page that explains it.
+   Still reads correctly at nothing-owed — a row of zeroes is a fact, where the
+   four-cell table this replaced was simply empty. */
+.ag-stats { display: flex; border-top: 1px solid var(--ag-line-soft); }
+.ag-stats[hidden] { display: none; }
+.ag-stat {
+	flex: 1;
+	min-width: 0;
+	padding: 14px 8px 15px;
+	text-align: center;
+	border-left: 1px solid var(--ag-line-soft);
+	transition: background .12s ease;
+}
+.ag-stat:first-child { border-left: 0; }
+.ag-stat:hover, .ag-stat:active { background: var(--ag-field); }
 .ag-stat-value {
 	display: block;
 	font-family: var(--ag-mono);
 	font-variant-numeric: tabular-nums;
-	font-size: 19px;
+	font-size: 22px;
 	font-weight: 600;
-	line-height: 1.2;
+	line-height: 1.15;
 	white-space: nowrap;
 	overflow: hidden; text-overflow: ellipsis;
 }
-.ag-stat.is-alarm .ag-stat-value { color: var(--ag-red); }
-.ag-stat-label { display: block; margin-top: 3px; font-size: 11.5px; line-height: 1.25; color: var(--ag-muted); }
+.ag-stat.is-alarm .ag-stat-value { color: var(--ag-red-600); }
+.ag-stat-label { display: block; margin-top: 4px; font-size: 12px; color: var(--ag-muted); }
 
-.ag-name { margin-top: 14px; font-size: 16px; font-weight: 600; line-height: 1.3; }
-.ag-bio { margin-top: 3px; font-size: 13.5px; line-height: 1.45; color: var(--ag-muted); }
-.ag-bio .ag-tag { font-weight: 600; color: var(--ag-green); }
-.ag-bio .ag-tag.is-alarm { color: var(--ag-red); }
-.ag-bio .ag-tag.is-info { color: var(--ag-navy); }
-
-/* ── Buttons ────────────────────────────────────────────────────────────── */
-.ag-actions { display: flex; gap: 8px; margin-top: 16px; max-width: 480px; }
-.ag-btn {
-	flex: 1 1 0;
-	min-width: 0;
-	min-height: 42px;
-	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-	padding: 0 12px;
-	border: 1px solid var(--ag-line);
-	border-radius: 10px;
-	background: #fff;
-	font-size: 14px;
-	font-weight: 600;
-	white-space: nowrap;
-	transition: transform .06s ease, background .15s ease;
+/* How much of the limit is spoken for. Hidden for an advance account, which
+   has no limit to measure against. */
+.ag-meter { height: 5px; background: var(--ag-line-soft); }
+.ag-meter[hidden] { display: none; }
+.ag-meter span {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: linear-gradient(90deg, var(--ag-navy-500), var(--ag-navy-700));
+	transition: width .5s cubic-bezier(.2, .8, .3, 1);
 }
-.ag-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ag-btn:active { transform: scale(.98); background: var(--ag-navy-soft); }
-.ag-btn.is-primary { background: var(--ag-navy); border-color: var(--ag-navy); color: #fff; }
-.ag-btn.is-primary:hover { color: #fff; }
-.ag-btn.is-primary:active { background: #1B2E6C; color: #fff; }
-.ag-btn .ag-icon { width: 17px; height: 17px; }
+.ag-card.is-warn .ag-meter span { background: linear-gradient(90deg, #E0A33C, var(--ag-amber-600)); }
+.ag-card.is-over .ag-meter span { background: linear-gradient(90deg, #E8636B, var(--ag-red-600)); }
 
-/* ── Account switcher ───────────────────────────────────────────────────── */
+/* Only when there is something specific to say. A clean account gets the pill
+   and nothing more — the earlier draft stated "advance" twice, once in a pill
+   and again in a tile directly beneath it. */
+.ag-alert {
+	margin: 0;
+	padding: 12px 20px;
+	background: var(--ag-red-050);
+	color: var(--ag-red-600);
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 1.45;
+}
+.ag-alert[hidden] { display: none; }
+
 .ag-accounts {
 	display: flex;
 	gap: 7px;
-	margin: 14px -16px 0;
-	padding: 0 16px;
+	padding: 12px 20px 14px;
+	border-top: 1px solid var(--ag-line-soft);
 	overflow-x: auto;
 	scrollbar-width: none;
 	-webkit-overflow-scrolling: touch;
@@ -167,7 +241,7 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	display: inline-flex; align-items: center;
 	border: 1px solid var(--ag-line);
 	border-radius: 999px;
-	background: #fff;
+	background: var(--ag-surface);
 	color: var(--ag-muted);
 	font-family: var(--ag-sans);
 	font-size: 12.5px;
@@ -176,21 +250,50 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	cursor: pointer;
 	-webkit-tap-highlight-color: transparent;
 }
-.ag-chip.is-active { background: var(--ag-ink); border-color: var(--ag-ink); color: #fff; }
+.ag-chip.is-active { background: var(--ag-navy-900); border-color: var(--ag-navy-900); color: #fff; }
+
+/* ── The two things people come here to do ──────────────────────────────── */
+.ag-actions { display: flex; gap: 10px; margin-top: 14px; max-width: 480px; }
+.ag-btn {
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 44px;
+	display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+	padding: 0 14px;
+	border: 1px solid var(--ag-line);
+	border-radius: 11px;
+	background: var(--ag-surface);
+	font-size: 14px;
+	font-weight: 600;
+	white-space: nowrap;
+	transition: transform .06s ease, background .15s ease, border-color .15s ease;
+}
+.ag-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-btn:active { transform: scale(.98); }
+.ag-btn:hover { border-color: var(--ag-navy-500); }
+.ag-btn.is-primary {
+	background: var(--ag-navy-700);
+	border-color: var(--ag-navy-700);
+	color: #fff;
+	box-shadow: 0 10px 20px -14px rgba(35, 58, 134, .9);
+}
+.ag-btn.is-primary:hover, .ag-btn.is-primary:active { background: #1B2E6C; border-color: #1B2E6C; color: #fff; }
+.ag-btn .ag-icon { width: 17px; height: 17px; }
 
 /* ── Pinned bar ─────────────────────────────────────────────────────────────
-   A separate slim bar that fades in once the stats scroll away, rather than
-   the stat block collapsing in place: collapsing in place jumps the content
-   beneath it, and a bar that was never in the flow cannot. */
+   A separate slim bar that arrives once the card scrolls away, rather than the
+   card collapsing in place: collapsing in place jumps the content beneath it,
+   and a bar that was never in the flow cannot. */
 .ag-bar {
 	position: fixed;
 	top: var(--ag-sticky-top);
 	left: 0; right: 0;
 	z-index: 30;
-	padding: 10px 16px;
+	padding: 11px 16px;
 	background: rgba(255, 255, 255, .93);
 	-webkit-backdrop-filter: saturate(180%) blur(12px);
 	backdrop-filter: saturate(180%) blur(12px);
+	box-shadow: 0 10px 24px -18px rgba(20, 31, 74, .8);
 	border-bottom: 1px solid var(--ag-line);
 	transform: translateY(-100%);
 	opacity: 0;
@@ -203,7 +306,7 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	margin: 0 auto;
 	display: flex; align-items: baseline; gap: 10px;
 }
-.ag-bar-label { flex: none; font-size: 12px; color: var(--ag-muted); }
+.ag-bar-label { flex: none; font-size: 12.5px; color: var(--ag-muted); }
 .ag-bar-value {
 	font-family: var(--ag-mono);
 	font-variant-numeric: tabular-nums;
@@ -211,41 +314,34 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	font-weight: 600;
 	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ag-bar.is-alarm .ag-bar-value { color: var(--ag-red); }
-.ag-bar-tag {
-	margin-left: auto;
-	flex: none;
-	align-self: center;
-	padding: 3px 9px;
-	border-radius: 999px;
-	font-size: 11.5px;
-	font-weight: 600;
-	background: var(--ag-green-soft);
-	color: var(--ag-green);
-	white-space: nowrap;
-}
-.ag-bar-tag.is-alarm { background: var(--ag-red-soft); color: var(--ag-red); }
-.ag-bar-tag.is-info { background: var(--ag-navy-soft); color: var(--ag-navy); }
+.ag-bar.is-alarm .ag-bar-value { color: var(--ag-red-600); }
+.ag-bar .ag-pill { margin-left: auto; align-self: center; }
 
-/* ── Activity ───────────────────────────────────────────────────────────── */
-.ag-list { border-top: 1px solid var(--ag-line); }
+/* ── Recent — a seated surface, no shadow ───────────────────────────────── */
+.ag-panel {
+	background: var(--ag-surface);
+	border: 1px solid var(--ag-line-soft);
+	border-radius: var(--ag-radius);
+	overflow: hidden;
+}
 .ag-item {
 	display: flex;
 	align-items: center;
-	gap: 13px;
-	min-height: 62px;
-	padding: 11px 2px;
-	border-bottom: 1px solid var(--ag-line);
+	gap: 14px;
+	min-height: 64px;
+	padding: 12px 18px;
+	border-top: 1px solid var(--ag-line-soft);
 	transition: background .12s ease;
 }
-.ag-item:active { background: var(--ag-navy-soft); }
+.ag-item:first-child { border-top: 0; }
+.ag-item:hover, .ag-item:active { background: var(--ag-field); }
 .ag-item-icon {
 	width: 36px; height: 36px;
 	flex: none;
 	display: flex; align-items: center; justify-content: center;
 	border-radius: 10px;
-	background: var(--ag-navy-soft);
-	color: var(--ag-navy);
+	background: var(--ag-field);
+	color: var(--ag-navy-700);
 }
 .ag-item-main { flex: 1; min-width: 0; }
 .ag-item-title {
@@ -263,7 +359,7 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	color: var(--ag-muted);
 	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ag-item-right { flex: none; text-align: right; padding-left: 6px; }
+.ag-item-right { flex: none; text-align: right; padding-left: 8px; }
 .ag-item-amount {
 	display: block;
 	font-family: var(--ag-mono);
@@ -273,70 +369,49 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	line-height: 1.3;
 }
 .ag-item-state { display: block; margin-top: 2px; font-size: 12px; color: var(--ag-muted); }
-.ag-item-state.is-due { color: var(--ag-amber); font-weight: 500; }
-.ag-item-state.is-ok { color: var(--ag-green); }
+.ag-item-state.is-due { color: var(--ag-amber-600); font-weight: 500; }
+.ag-item-state.is-ok { color: var(--ag-green-600); }
+.ag-empty { padding: 22px 18px 24px; font-size: 13.5px; line-height: 1.5; color: var(--ag-muted); }
 
-.ag-empty {
-	padding: 22px 2px 24px;
-	font-size: 13.5px;
-	line-height: 1.5;
-	color: var(--ag-muted);
-	border-top: 1px solid var(--ag-line);
-}
-
-/* ── The quiet nav, and settings ────────────────────────────────────────── */
-.ag-head.is-more { display: none; }
-.ag-more {
-	display: none;
-	grid-template-columns: repeat(2, 1fr);
-	column-gap: 12px;
-	border-top: 1px solid var(--ag-line);
-}
-.ag-more-item {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-height: 46px;
-	font-size: 14px;
-}
-.ag-more-item .ag-icon { width: 17px; height: 17px; color: var(--ag-muted); }
-.ag-more-item:active { color: var(--ag-navy); }
-
+/* ── Settings, and the phone's nav — bare rows on the paper ─────────────── */
 .ag-rows { border-top: 1px solid var(--ag-line); }
 .ag-row {
 	display: flex;
 	align-items: center;
-	gap: 12px;
+	gap: 13px;
 	min-height: 56px;
 	padding: 8px 2px;
 	border-bottom: 1px solid var(--ag-line);
-	transition: background .12s ease;
 }
-.ag-row:active { background: var(--ag-navy-soft); }
+.ag-row:hover, .ag-row:active { color: var(--ag-navy-700); }
 .ag-row-icon { color: var(--ag-muted); display: flex; }
 .ag-row-title { display: block; flex: 1; min-width: 0; font-size: 14.5px; font-weight: 500; }
-.ag-row-chev { color: #C3C9DC; display: flex; }
-.ag-row.is-danger, .ag-row.is-danger .ag-row-icon { color: var(--ag-red); }
+.ag-row-chev { color: #AEB8D2; display: flex; }
+.ag-row.is-danger, .ag-row.is-danger .ag-row-icon { color: var(--ag-red-600); }
+
+/* The sidebar IS the portal's navigation. This list is its stand-in on a phone,
+   where the sidebar column stacks above the content and would push the account
+   itself under the fold — so exactly one of the two is ever on screen. */
+.ag-head.is-more, .ag-more { display: none; }
+.ag-more { border-top: 1px solid var(--ag-line); }
 
 /* ── Phone ──────────────────────────────────────────────────────────────── */
-/* The sidebar stacks ABOVE the content below Bootstrap's sm breakpoint, which
-   opens the page on a list of links with the account itself under the fold. On
-   a phone the "More" list takes over instead — same routes, at the bottom,
-   where they belong. Exactly one of the two is ever on screen. */
 @media (max-width: 767px) {
 	#page-me .sidebar-column { display: none; }
-	.ag-me .ag-more, .ag-me .ag-head.is-more { display: grid; }
-	.ag-me .ag-head.is-more { display: block; }
+	.ag-head.is-more, .ag-more { display: block; }
 }
 
 @media (max-width: 640px) {
 	.ag-me { padding-top: 0; }
-	.ag-id { gap: 14px; }
-	.ag-avatar { width: 60px; height: 60px; font-size: 23px; }
-	.ag-stat-value { font-size: 17px; }
+	.ag-card-top { gap: 13px; padding: 15px 16px; }
+	.ag-avatar { width: 54px; height: 54px; font-size: 22px; }
+	.ag-stat { padding: 12px 5px 13px; }
+	.ag-stat-value { font-size: 19px; }
 	.ag-stat-label { font-size: 11px; }
-	.ag-more { grid-template-columns: 1fr; }
-	.ag-more-item { border-bottom: 1px solid var(--ag-line); }
+	.ag-accounts { padding: 11px 16px 12px; }
+	.ag-alert { padding: 11px 16px; }
+	.ag-item { padding: 11px 14px; gap: 12px; }
+	.ag-actions { max-width: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -369,35 +444,39 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	<symbol id="ag-i-link" viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 5.7.3l3-3a4 4 0 0 0-5.7-5.7L11.5 6"/><path d="M14 11a4 4 0 0 0-5.7-.3l-3 3a4 4 0 0 0 5.7 5.7L12.5 18"/></symbol>
 </defs></svg>
 
-{#- The pinned bar. Outside .ag-me because it is fixed to the window, not to the
-	column, and it is what carries the account position once the stat row has
-	scrolled away. -#}
-{% if customers %}
+{#- Fixed to the window, not to the column, so it lives outside .ag-me. It is
+	what carries the account position once the card has scrolled away. -#}
 <div class="ag-bar" id="ag-bar">
 	<div class="ag-bar-inner">
 		<span class="ag-bar-label">{{ _("Outstanding") }}</span>
 		<span class="ag-bar-value" id="ag-bar-value">—</span>
-		<span class="ag-bar-tag" id="ag-bar-tag"></span>
+		<span class="ag-pill" id="ag-bar-pill"></span>
 	</div>
 </div>
-{% endif %}
 
 <div class="ag-me">
 
-	{#- ── Identity, and the three numbers ───────────────────────────────── -#}
-	<div class="ag-id">
-		<div class="ag-avatar">
-			{% if current_user.user_image %}
-			<img src="{{ current_user.user_image | e }}" alt="{{ current_user.full_name | e }}">
-			{% else %}
-			{{- (current_user.full_name or current_user.name)[:1] | upper -}}
-			{% endif %}
+	{#- ── The account card ───────────────────────────────────────────────────
+		 Figures are filled in by JS from the snapshots below, so the accounts
+		 computed with the page and the ones fetched when a chip is tapped
+		 cannot drift apart. -#}
+	<section class="ag-card" id="ag-card">
+		<div class="ag-card-top">
+			<div class="ag-avatar">
+				{% if current_user.user_image %}
+				<img src="{{ current_user.user_image | e }}" alt="{{ current_user.full_name | e }}">
+				{% else %}
+				{{- (current_user.full_name or current_user.name)[:1] | upper -}}
+				{% endif %}
+			</div>
+			<div class="ag-who">
+				<span class="ag-name">{{ current_user.full_name | e }}</span>
+				<span class="ag-account" id="ag-account">{{ current_user.name | e }}</span>
+			</div>
+			<span class="ag-pill" id="ag-pill" hidden></span>
 		</div>
 
-		{#- Filled by JS from the snapshots below, so the accounts computed with
-			the page and the ones fetched on tap cannot drift apart. -#}
-		{% if customers %}
-		<div class="ag-stats" id="ag-stats">
+		<div class="ag-stats" id="ag-stats" hidden>
 			<a class="ag-stat" id="ag-stat-1" href="/customer_statement">
 				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Outstanding") }}</span>
 			</a>
@@ -408,20 +487,19 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 				<span class="ag-stat-value">—</span><span class="ag-stat-label">{{ _("Available") }}</span>
 			</a>
 		</div>
+
+		<div class="ag-meter" id="ag-meter" hidden><span id="ag-meter-fill"></span></div>
+		<p class="ag-alert" id="ag-alert" hidden></p>
+
+		{% if customers | length > 1 %}
+		<div class="ag-accounts" id="ag-accounts">
+			{% for c in customers %}
+			<button type="button" class="ag-chip{{ ' is-active' if c.name == active_customer else '' }}"
+				data-customer="{{ c.name | e }}">{{ c.label | e }}</button>
+			{% endfor %}
+		</div>
 		{% endif %}
-	</div>
-
-	<div class="ag-name">{{ current_user.full_name | e }}</div>
-	<div class="ag-bio" id="ag-bio">{{ current_user.name | e }}</div>
-
-	{% if customers | length > 1 %}
-	<div class="ag-accounts" id="ag-accounts">
-		{% for c in customers %}
-		<button type="button" class="ag-chip{{ ' is-active' if c.name == active_customer else '' }}"
-			data-customer="{{ c.name | e }}">{{ c.label | e }}</button>
-		{% endfor %}
-	</div>
-	{% endif %}
+	</section>
 
 	{% if primary_links %}
 	<div class="ag-actions">
@@ -434,11 +512,10 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 	</div>
 	{% endif %}
 
-	{#- ── The content: what this account has actually done ───────────────── -#}
-	{% if customers %}
-	<div class="ag-head">{{ _("Recent") }}</div>
-	{% if recent %}
-	<div class="ag-list">
+	{#- ── What this account has actually done ────────────────────────────── -#}
+	<div class="ag-head ag-eyebrow">{{ _("Recent") }}</div>
+	<div class="ag-panel">
+		{% if recent %}
 		{% for r in recent %}
 		<a class="ag-item" href="{{ r.route }}">
 			<span class="ag-item-icon"><svg class="ag-icon"><use href="#ag-i-{{ r.icon }}"></use></svg></span>
@@ -452,26 +529,27 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 			</span>
 		</a>
 		{% endfor %}
+		{% else %}
+		<div class="ag-empty">{{ _("Nothing billed to this account yet. Your bills and orders will appear here.") }}</div>
+		{% endif %}
 	</div>
-	{% else %}
-	<div class="ag-empty">{{ _("Nothing billed to this account yet. Your bills and orders will appear here.") }}</div>
-	{% endif %}
-	{% endif %}
 
-	{#- ── The rest of the portal, quietly ────────────────────────────────── -#}
+	{#- ── The portal's nav, on a phone only ──────────────────────────────── -#}
 	{% if more_links %}
-	<div class="ag-head is-more">{{ _("More") }}</div>
+	<div class="ag-head ag-eyebrow is-more">{{ _("More") }}</div>
 	<div class="ag-more">
 		{% for link in more_links %}
-		<a class="ag-more-item" href="{{ link.route }}">
-			<svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg>{{ _(link.title) }}
+		<a class="ag-row" href="{{ link.route }}">
+			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-{{ link.icon }}"></use></svg></span>
+			<span class="ag-row-title">{{ _(link.title) }}</span>
+			<span class="ag-row-chev"><svg class="ag-icon"><use href="#ag-i-chev"></use></svg></span>
 		</a>
 		{% endfor %}
 	</div>
 	{% endif %}
 
 	{#- ── Settings ───────────────────────────────────────────────────────── -#}
-	<div class="ag-head">{{ _("Settings") }}</div>
+	<div class="ag-head ag-eyebrow">{{ _("Settings") }}</div>
 	<div class="ag-rows">
 		<a class="ag-row" href="/update-profile/{{ current_user.name | urlencode }}">
 			<span class="ag-row-icon"><svg class="ag-icon"><use href="#ag-i-edit"></use></svg></span>
@@ -526,8 +604,8 @@ class AgMyAccount {
 		// customer switching back and forth pays for each account once.
 		this.cache = Object.assign({}, this.ctx.snapshots || {});
 
-		this.$stats = $("#ag-stats");
-		if (!this.$stats.length) return;   // staff login: no customer, no figures
+		this.$card = $("#ag-card");
+		if (!this.$card.length) return;
 
 		this.measure_sticky_top();
 		this.watch_scroll();
@@ -554,16 +632,16 @@ class AgMyAccount {
 		$(window).on("resize orientationchange", frappe.utils.debounce(apply, 150));
 	}
 
-	// ── The bar arrives when the stat row leaves ────────────────────────
+	// ── The bar arrives when the card leaves ────────────────────────────
 	watch_scroll() {
 		const $bar = $("#ag-bar");
-		const stats = this.$stats.get(0);
-		if (!$bar.length || !stats || typeof IntersectionObserver === "undefined") return;
+		const card = this.$card.get(0);
+		if (!$bar.length || !card || typeof IntersectionObserver === "undefined") return;
 
 		new IntersectionObserver(
 			(entries) => $bar.toggleClass("is-on", !entries[0].isIntersecting),
 			{ threshold: 0 }
-		).observe(stats);
+		).observe(card);
 	}
 
 	// ── Account switcher ────────────────────────────────────────────────
@@ -584,7 +662,7 @@ class AgMyAccount {
 		// Beyond the handful computed with the page. Same call, same figures.
 		// frappe.call lives in the desk bundle; on a portal shell that does not
 		// carry it there is nothing to fetch with, and an account past the
-		// eager few falls back to the plain identity rather than throwing.
+		// eager few falls back to the plain card rather than throwing.
 		if (typeof frappe.call !== "function") return this.render(customer, {});
 
 		const me = this;
@@ -628,20 +706,36 @@ class AgMyAccount {
 		snap = snap || {};
 
 		// An account with no limits is one credit control holds no opinion
-		// about, and get_credit_snapshot returns nothing for it. Leave the
-		// identity block plain rather than printing three dashes.
+		// about, and get_credit_snapshot returns nothing for it. The card falls
+		// back to plain identity rather than printing three dashes.
 		if (!snap.currency) {
-			this.$stats.hide();
-			$("#ag-bio").text(this.ctx.email || "");
+			$("#ag-stats, #ag-meter, #ag-alert, #ag-pill").prop("hidden", true);
+			$("#ag-account").text(this.ctx.email || "");
 			return;
 		}
-		this.$stats.show();
+
+		$("#ag-account").text((this.ctx.labels || {})[customer] || this.ctx.email || "");
 
 		// The server's own verdicts, not a rule re-derived here: amount uses
 		// `>` and the other two `>=`, and the day count is floored for an
 		// immaterial residual. Reimplementing any of that on the page is how
 		// the customer ends up reading a different answer from the counter.
 		const over = !!(snap.amount_exceeded || snap.days_exceeded || snap.count_exceeded);
+		const pct = this.meter_pct(snap);
+
+		this.$card.toggleClass("is-over", over)
+			.toggleClass("is-warn", !over && pct !== null && pct >= 75);
+
+		this.render_stats(snap, over);
+		this.render_meter(pct);
+		this.render_pill($("#ag-pill"), snap);
+		this.render_pill($("#ag-bar-pill"), snap);
+		this.render_alert(snap);
+		this.render_bar(snap, over);
+	}
+
+	render_stats(snap, over) {
+		$("#ag-stats").prop("hidden", false);
 
 		this.stat(1, this.compact(snap.outstanding), __("Outstanding"),
 			over && Number(snap.outstanding) > 0);
@@ -659,40 +753,54 @@ class AgMyAccount {
 		} else {
 			this.stat(3, "—", __("No limit"), false);
 		}
-
-		this.render_bio(customer, snap);
-		this.render_bar(snap, over);
 	}
 
-	// The line under the name: which account this is, and one plain sentence
-	// about where it stands. Everything the four-cell table used to say, in the
-	// slot a profile page keeps for a bio.
-	render_bio(customer, snap) {
+	// How much of the limit is spoken for, or null when there is nothing to
+	// measure against: an advance-only account or no amount limit at all.
+	meter_pct(snap) {
+		const limit = Number(snap.amount_limit) || 0;
+		if (!limit || snap.advance_only) return null;
+		return Math.min(100, (Math.max(0, Number(snap.outstanding) || 0) / limit) * 100);
+	}
+
+	render_meter(pct) {
+		const $meter = $("#ag-meter");
+		if (pct === null) { $meter.prop("hidden", true); return; }
+
+		$meter.prop("hidden", false);
+		// Next frame, so the bar grows from 0 on first paint instead of
+		// arriving already filled.
+		requestAnimationFrame(() => $("#ag-meter-fill").css("width", pct + "%"));
+	}
+
+	render_pill($pill, snap) {
+		$pill.removeClass("is-alarm is-info").prop("hidden", false);
+		if (snap.amount_exceeded) $pill.addClass("is-alarm").text(__("Over limit"));
+		else if (snap.days_exceeded) $pill.addClass("is-alarm").text(__("Overdue"));
+		else if (snap.count_exceeded) $pill.addClass("is-alarm").text(__("Bill limit"));
+		else if (snap.advance_only) $pill.addClass("is-info").text(__("Advance"));
+		else $pill.text(__("In good standing"));
+	}
+
+	// Only when there is something specific to say. A clean account gets the
+	// pill and nothing more; an earlier draft stated "advance" twice, once in a
+	// pill and again in a tile directly beneath it.
+	render_alert(snap) {
 		const cur = snap.currency ? snap.currency + " " : "";
-		let verdict, tone = "";
+		let text = "";
 
 		if (snap.amount_exceeded) {
-			verdict = __("Over the credit limit by {0}", [cur + this.money(-Number(snap.remaining))]);
-			tone = "is-alarm";
+			text = __("Over the credit limit by {0}. New bills will be held until the account is brought back within it.",
+				[cur + this.money(-Number(snap.remaining))]);
 		} else if (snap.days_exceeded) {
-			verdict = __("A bill is {0} days old, past the {1} day limit", [snap.days_used, snap.days_limit]);
-			tone = "is-alarm";
+			text = __("A bill is {0} days old, past the {1} day limit on this account.",
+				[snap.days_used, snap.days_limit]);
 		} else if (snap.count_exceeded) {
-			verdict = __("{0} unpaid bills, at the limit of {1}", [snap.unpaid_count, snap.bill_limit]);
-			tone = "is-alarm";
-		} else if (snap.advance_only) {
-			verdict = __("Advance payment account");
-			tone = "is-info";
-		} else if (Number(snap.outstanding) > 0) {
-			verdict = __("In good standing");
-		} else {
-			verdict = __("Nothing outstanding");
+			text = __("{0} unpaid bills, at this account's limit of {1}.",
+				[snap.unpaid_count, snap.bill_limit]);
 		}
 
-		const label = (this.ctx.labels || {})[customer] || "";
-		const $bio = $("#ag-bio").empty();
-		if (label) $bio.append(document.createTextNode(label + " · "));
-		$bio.append($("<span>").addClass("ag-tag " + tone).text(verdict));
+		$("#ag-alert").text(text).prop("hidden", !text);
 	}
 
 	// The bar carries only the one figure worth interrupting a scroll for.
@@ -700,13 +808,6 @@ class AgMyAccount {
 		const cur = snap.currency ? snap.currency + " " : "";
 		$("#ag-bar").toggleClass("is-alarm", over);
 		$("#ag-bar-value").text(cur + this.money(snap.outstanding));
-
-		const $tag = $("#ag-bar-tag").removeClass("is-alarm is-info");
-		if (snap.amount_exceeded) $tag.addClass("is-alarm").text(__("Over limit"));
-		else if (snap.days_exceeded) $tag.addClass("is-alarm").text(__("Overdue"));
-		else if (snap.count_exceeded) $tag.addClass("is-alarm").text(__("Bill limit"));
-		else if (snap.advance_only) $tag.addClass("is-info").text(__("Advance"));
-		else $tag.text(__("In good standing"));
 	}
 }
 </script>
