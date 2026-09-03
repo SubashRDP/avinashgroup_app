@@ -565,6 +565,8 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 		grand_opening += balance
 		data.append(_balance_band(_("Opening Balance"), balance))
 
+		# Kept so the closing balance is derived, not accumulated -- see below.
+		section_opening = balance
 		section_debit = section_credit = 0.0
 		# A date that has not changed is not restated -- Receipt Register does
 		# the same. A column of the same date repeated down twenty rows says
@@ -636,7 +638,18 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 				"_band": 1,
 			}
 		)
-		data.append(_balance_band(_("Closing Balance"), balance))
+		# Derived from the opening and the period totals, not from the running
+		# accumulator. Adding `debit - credit` once per posting compounds float
+		# error: on one Gandaki account the accumulator reached
+		# 106195401.19999996 where opening + period gives 106195401.2, so the
+		# section and grand closing balances disagreed by 4.5e-08 while both
+		# displayed as 10,61,95,401.20. A closing balance that does not equal
+		# opening plus movement is the first thing an accountant checks.
+		data.append(
+			_balance_band(
+				_("Closing Balance"), section_opening + section_debit - section_credit
+			)
+		)
 		# blank line between sections -- flagged so the formatter empties it.
 		# An unflagged {} renders every Currency column as "Rs 0.00", which
 		# reads as a real zero on a row that means nothing at all.
