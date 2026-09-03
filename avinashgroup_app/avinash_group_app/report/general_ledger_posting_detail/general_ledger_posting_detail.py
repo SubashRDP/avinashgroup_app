@@ -62,9 +62,11 @@ def execute(filters=None):
 	_validate(filters)
 
 	postings = _get_postings(filters)
-	if not postings:
-		return _get_columns(filters), []
-
+	# No early return on an empty period: an account can carry a balance into a
+	# window in which nothing moved, and that balance is the answer to the
+	# question being asked. Returning nothing meant splitting a year in two
+	# gave a first half closing at 8,50,63,74,498.62 and a second half showing
+	# an empty report.
 	_decorate(postings, filters.company)
 	columns = _get_columns(filters)
 	return columns, _build_rows(
@@ -362,8 +364,26 @@ def _section_key(filters, posting):
 	return (posting.account,)
 
 
+def _party_label(party_type, party):
+	"""A party's display name, for a section with no postings to read it from."""
+	if not (party_type and party):
+		return ""
+	field = PARTY_NAME_FIELD.get(party_type)
+	if not field or not frappe.db.has_column(party_type, field):
+		return ""
+	return frappe.db.get_value(party_type, party, field) or ""
+
+
 def _section_label(filters, key, postings):
 	category = filters.get("categorized_by") or "Account"
+	if not postings:
+		# a section that carries a balance but saw no movement -- the key is all
+		# there is to name it by
+		if category == "Party":
+			return _party_label(key[0], key[1]) or key[1] or _("No Party")
+		if category == "Both":
+			return "{0}  —  {1}".format(key[0], _party_label(key[1], key[2]) or key[2] or _("No Party"))
+		return key[0]
 	sample = postings[0]
 	if category == "Party":
 		return sample.party_name or _("No Party")
@@ -588,6 +608,15 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 		sections.setdefault(_section_key(filters, posting), []).append(posting)
 
 	opening = _opening_balances(filters, postings)
+
+	# A balance carried into the period is worth reporting even when nothing
+	# moved. Sections are built from postings, so a window with no activity
+	# produced an empty report -- splitting a year in two gave a first half
+	# closing at 8,50,63,74,498.62 and a second half showing nothing at all,
+	# rather than opening and closing on that same figure.
+	for key in opening:
+		if opening[key]:
+			sections.setdefault(key, [])
 
 	data = []
 	grand_opening = grand_debit = grand_credit = 0.0
