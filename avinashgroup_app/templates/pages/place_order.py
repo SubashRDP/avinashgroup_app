@@ -60,6 +60,11 @@ def get_context(context):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
 
+	# The portal menu. Without this, web.html takes its no-sidebar branch and the
+	# page renders with no navigation at all -- a customer who lands here can
+	# only leave by the browser's back button.
+	context.show_sidebar = True
+
 	gas_companies = _lp_gas_companies()
 
 	# Fetch ALL customers linked to this portal user
