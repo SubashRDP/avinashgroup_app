@@ -658,31 +658,47 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 		grand_credit += section_credit
 
 	if data:
-		# The opening balance heads the ledger, it does not close it. It was
-		# previously appended with the Grand Total / Closing block, which put
-		# the figure the reader needs FIRST at the very bottom of the report --
-		# past every section, and on the last page of a long print. It is
-		# summed during the section loop above, so it can only be built here;
-		# inserting it at the front is what puts it where it reads.
+		# The opening balance heads the ledger, it does not close it -- appended
+		# with the Grand Total block it put the figure the reader needs first at
+		# the very bottom, past every section and on the last page of a print.
+		# It is summed during the section loop, so it can only be built here.
+		#
+		# The rest of the grand block is skipped when there is only one section:
+		# it restates that section's own Period Total and Closing Balance line
+		# for line, so on a single-account run the same figure appeared four
+		# times over.
+		sections = sum(1 for row in data if row and row.get("_section"))
+
 		data.insert(0, _balance_band(_("Opening Balance"), grand_opening))
 		data.insert(1, {"_spacer": 1})
 
-		data.append({"_spacer": 1})
-		data.append(
-			{
-				"party_name": _("Grand Total"),
-				"debit": grand_debit,
-				"credit": grand_credit,
-				"balance": _balance_text(grand_debit - grand_credit, always=True),
-				"balance_value": grand_debit - grand_credit,
-				"_bold": 1,
-				"_band": 1,
-			}
-		)
-		data.append(
-			_balance_band(_("Closing Balance"), grand_opening + grand_debit - grand_credit)
-		)
-	return data
+		if sections > 1:
+			data.append({"_spacer": 1})
+			data.append(
+				{
+					"party_name": _("Grand Total"),
+					"debit": grand_debit,
+					"credit": grand_credit,
+					"balance": _balance_text(grand_debit - grand_credit, always=True),
+					"balance_value": grand_debit - grand_credit,
+					"_bold": 1,
+					"_band": 1,
+				}
+			)
+			data.append(
+				_balance_band(_("Closing Balance"), grand_opening + grand_debit - grand_credit)
+			)
+
+	# Every section ends with a spacer, so the grand block adds a second one and
+	# a run without it ends on a trailing blank. Collapse both.
+	while data and data[-1] and data[-1].get("_spacer"):
+		data.pop()
+	collapsed = []
+	for row in data:
+		if row and row.get("_spacer") and collapsed and collapsed[-1] and collapsed[-1].get("_spacer"):
+			continue
+		collapsed.append(row)
+	return collapsed
 
 
 def _get_columns(filters=None):
