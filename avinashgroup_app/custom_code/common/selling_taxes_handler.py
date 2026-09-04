@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe.utils import flt
 
@@ -168,11 +170,42 @@ def update_taxes_table(doc):
         # amount charged (e.g. all excise values cleared on an edited draft)
         update_or_create_tax_row(doc, excise_account, total_excise, position,
                                  f"Excise Duty - {doc.company}", "Actual", "Add")
+        pin_item_wise_tax_detail(doc, excise_account, "custom_excise_value")
         position += 1
 
     if vat_account and (total_vat != 0 or has_tax_row(doc, vat_account)):
         update_or_create_tax_row(doc, vat_account, total_vat, position,
                                  f"VAT - {doc.company}", "Actual", "Add")
+        pin_item_wise_tax_detail(doc, vat_account, "custom_vat_amount", "custom_vat_rate")
+
+
+def pin_item_wise_tax_detail(doc, account_head, amount_attr, rate_attr=None, flat_rate=0):
+    """Freeze an Actual tax row's per-item breakup to our own figures so the
+    printed tax breakup equals the item VAT column. Mirrors
+    salesinvoice_taxes.pin_item_wise_tax_detail — see the note there. ERPNext
+    would otherwise redistribute the row total proportionally by net amount
+    and round each share on its own.
+    """
+    row = next(
+        (t for t in (doc.taxes or [])
+         if t.account_head == account_head and t.charge_type == "Actual"),
+        None,
+    )
+    if not row:
+        return
+
+    detail = {}
+    for item in doc.items:
+        key = item.item_code or item.item_name
+        amount = flt(getattr(item, amount_attr, 0) or 0, 2)
+        rate = flt(getattr(item, rate_attr, 0)) if rate_attr else flat_rate
+        if key in detail:
+            detail[key][1] = flt(detail[key][1] + amount, 2)
+        else:
+            detail[key] = [rate, amount]
+
+    row.item_wise_tax_detail = json.dumps(detail, separators=(",", ":"))
+    row.dont_recompute_tax = 1
 
 
 def has_tax_row(doc, account_head, charge_type="Actual"):

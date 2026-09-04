@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import flt
@@ -340,6 +342,7 @@ def update_taxes_table(doc):
             charge_type="Actual",
             add_deduct="Add"
         )
+        pin_item_wise_tax_detail(doc, excise_account, "custom_excise_value")
         position += 1
 
 
@@ -353,7 +356,48 @@ def update_taxes_table(doc):
             charge_type="Actual",
             add_deduct="Add"
         )
+        pin_item_wise_tax_detail(doc, vat_account, "custom_vat_amount", "custom_vat_rate")
         position += 1
+
+
+def pin_item_wise_tax_detail(doc, account_head, amount_attr, rate_attr=None, flat_rate=0):
+    """Freeze an Actual tax row's per-item breakup to our own figures.
+
+    The VAT / Excise rows are charge_type "Actual". ERPNext's
+    calculate_taxes_and_totals redistributes the row total across items
+    proportionally by net amount and rounds each share on its own; that split
+    is what feeds the printed "Taxable Amount / VAT" table
+    (other_charges_calculation), and it does NOT match our per-line
+    custom_vat_amount — NGK-SB-83/84-00527 printed VAT 237.00 for a line whose
+    VAT is 236.99.
+
+    Write item_wise_tax_detail ourselves, as the JSON string ERPNext expects
+    ({"<item>": [rate, amount], ...}), and set dont_recompute_tax so
+    initialize_taxes / set_item_wise_tax / _cleanup all leave it untouched.
+    set_item_wise_tax_breakup then json.loads our string and the breakup table
+    shows exactly the item VAT column. Amounts carry their sign (returns are
+    negative), so they always sum to the row's tax_amount.
+    """
+    row = next(
+        (t for t in (doc.taxes or [])
+         if t.account_head == account_head and t.charge_type == "Actual"),
+        None,
+    )
+    if not row:
+        return
+
+    detail = {}
+    for item in doc.items:
+        key = item.item_code or item.item_name
+        amount = flt(getattr(item, amount_attr, 0) or 0, 2)
+        rate = flt(getattr(item, rate_attr, 0)) if rate_attr else flat_rate
+        if key in detail:
+            detail[key][1] = flt(detail[key][1] + amount, 2)
+        else:
+            detail[key] = [rate, amount]
+
+    row.item_wise_tax_detail = json.dumps(detail, separators=(",", ":"))
+    row.dont_recompute_tax = 1
 
 
 def has_tax_row(doc, account_head, charge_type="Actual"):
