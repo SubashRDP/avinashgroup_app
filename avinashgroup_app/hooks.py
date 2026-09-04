@@ -33,14 +33,14 @@ app_include_js = [
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
     "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.8",
-    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.1",
+    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.2",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.3",
     # Loaded globally (not doctype_js) so it survives even when another app's
     # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
     # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=4.7",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
