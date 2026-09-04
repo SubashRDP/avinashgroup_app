@@ -67,7 +67,8 @@ def calculate_custom_total(doc):
     for item in doc.items:
         base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(getattr(item, 'custom_excise_value', 0)) or 0
-        item.custom_total = flt(base_net_amount + excise_value, 5)
+        # Money is paisa (2 dp) — only rate fields keep more decimals.
+        item.custom_total = flt(base_net_amount + excise_value, 2)
 
 
 def calculate_item_vat_amounts(doc):
@@ -81,7 +82,10 @@ def calculate_item_vat_amounts(doc):
 
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
-            item.custom_vat_amount = flt((flt(item.custom_total) * 13) / 100, 5)
+            # Paisa-round per line so the VAT column foots to the header VAT
+            # (which is their sum). Matches Sales Invoice
+            # (salesinvoice_taxes.calculate_item_vat_amounts).
+            item.custom_vat_amount = flt((flt(item.custom_total) * 13) / 100, 2)
         elif vat_apply_on == 'VAT 0%':
             item.custom_vat_rate = 0
             item.custom_vat_amount = 0
@@ -96,28 +100,29 @@ def calculate_item_vat_amounts(doc):
 
 def calculate_total_amount_including_excise(doc):
     doc.custom_total_amount_including_excise = flt(
-        sum(flt(getattr(item, 'custom_total', 0)) for item in doc.items), 5
+        sum(flt(getattr(item, 'custom_total', 0)) for item in doc.items), 2
     )
 
 
 def calculate_total_excise_amount(doc):
     total_excise = flt(
-        sum(flt(getattr(item, 'custom_excise_value', 0)) for item in doc.items), 5
+        sum(flt(getattr(item, 'custom_excise_value', 0)) for item in doc.items), 2
     )
     doc.custom_total_excise_amount = total_excise
     doc.custom_excise = total_excise
 
 
 def calculate_total_vat_amount(doc):
+    # Sum of the per-line paisa-rounded VAT amounts; 2 dp only clears float dust.
     doc.custom_total_vat_amount = flt(
-        sum(flt(getattr(item, 'custom_vat_amount', 0)) for item in doc.items), 5
+        sum(flt(getattr(item, 'custom_vat_amount', 0)) for item in doc.items), 2
     )
 
 
 def calculate_custom_total_amount(doc):
     """Sum of base_net_amount only (excludes excise)."""
     doc.custom_total_amount = flt(
-        sum(flt(item.base_net_amount) for item in doc.items), 5
+        sum(flt(item.base_net_amount) for item in doc.items), 2
     )
 
 
@@ -150,8 +155,8 @@ def update_taxes_table(doc):
     Write Excise (account prefix 348204) at position 0
     and VAT (account prefix VAT) at position 1.
     """
-    total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 5)
-    total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 5)
+    total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 2)
+    total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 2)
 
     excise_account = find_account_by_prefix(doc.company, "348204")
     vat_account = find_account_by_prefix(doc.company, "VAT")
