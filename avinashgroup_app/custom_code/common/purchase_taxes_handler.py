@@ -310,7 +310,25 @@ def get_tds_account_from_custom_tax_withholding(doc):
 
 
 def update_taxes_table(doc):
-    """Update or create tax rows for Excise, VAT, and TDS"""
+    """Rebuild the Excise / VAT / TDS rows from the current item values.
+
+    Clear first, then rebuild -- never update in place. A duplicated or amended
+    document arrives with the source document's taxes table already copied in,
+    and the old code only rewrote a row when its own total was non-zero. So a
+    source carrying VAT, duplicated into a document whose items are all
+    VAT 0%, kept the source's VAT row untouched and charged it: on ng-group
+    that left Rs 3,710.96 of input VAT on 37 zero-rated purchases in Shrawan
+    2083, with one stale amount (88.14) riding through a chain of 22
+    duplicates while the net total changed underneath it. Clearing first means
+    these rows can only ever reflect the document they are on.
+
+    Only the three rows we manage are cleared -- any other tax row on the
+    document is left alone.
+
+    Returns need no special case: their signs come from negative qty flowing
+    through the same arithmetic, so a return rebuilds to negative rows
+    (apply_return_vat_sign is only a safety net over already-negative values).
+    """
     total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 2)
     total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 2)
     total_tds = flt(getattr(doc, 'custom_total_tds_amount', 0), 2)
@@ -319,15 +337,17 @@ def update_taxes_table(doc):
     vat_account = find_account_by_prefix(doc.company, "VAT")
     tds_account = get_tds_account_from_custom_tax_withholding(doc)
 
+    # Drop our own rows unconditionally, whatever they currently say
+    remove_excise_tax_rows(doc)
+    remove_vat_tax_rows(doc)
+    remove_tds_tax_rows(doc)
+
     position = 0
 
     if excise_account and total_excise != 0:
         update_or_create_tax_row(doc, excise_account, total_excise, position,
                                  f"Excise Duty - {doc.company}", "Actual", "Add")
         position += 1
-    else:
-        # Remove any stale excise rows (total_excise is now 0, e.g. on a duplicated document)
-        remove_excise_tax_rows(doc)
 
     if vat_account and total_vat != 0:
         update_or_create_tax_row(doc, vat_account, total_vat, position,
@@ -339,9 +359,31 @@ def update_taxes_table(doc):
         update_or_create_tax_row(doc, tds_account, total_tds, position,
                                  f"TDS - {custom_tax_category}", "Actual", "Deduct")
         position += 1
-    else:
-        # Remove any stale TDS rows (total_tds is now 0 or no account found)
-        remove_tds_tax_rows(doc)
+
+
+def remove_vat_tax_rows(doc):
+    """Remove every VAT row from the taxes table.
+
+    Matched on the account head starting with "VAT" rather than on this
+    company's VAT account: a document duplicated across companies carries the
+    *source* company's row (e.g. "VAT - NGN" on an NGG invoice), which an
+    exact-account match would leave behind. Same test the CBMS booking code
+    uses to recognise a VAT row.
+    """
+    if not doc.taxes:
+        return
+
+    rows_to_remove = [
+        row for row in doc.taxes
+        if (row.account_head or "").upper().startswith("VAT")
+    ]
+
+    for row in rows_to_remove:
+        doc.taxes.remove(row)
+
+    if rows_to_remove:
+        for idx, tax_row in enumerate(doc.taxes):
+            tax_row.idx = idx + 1
 
 
 def remove_excise_tax_rows(doc):
