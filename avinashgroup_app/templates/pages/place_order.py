@@ -60,6 +60,15 @@ def get_context(context):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
 
+	# NO sidebar here, deliberately. Every breakpoint on this page is keyed to
+	# the VIEWPORT -- .po-grid is `minmax(0,1fr) 356px` until 991px, .po-fields
+	# is four columns above 1320px, .po-items-table carries a 900px min-width --
+	# and all of it assumes the page IS the viewport. Behind a col-sm-2 sidebar
+	# the content column is ~17% narrower while the media queries still read the
+	# full window, so the field grid and the register keep their wide layout,
+	# .po-main overflows its column, and the order summary ends up printed on
+	# top of the form. Turning the menu on here needs those queries moved to
+	# container queries first.
 	gas_companies = _lp_gas_companies()
 
 	# Fetch ALL customers linked to this portal user
@@ -300,6 +309,27 @@ def get_credit_snapshot(customer):
 		"unpaid_count": position.get("unpaid_count") or 0,
 		"days_used": position.get("days_used") or 0,
 		"oldest_date": position.get("oldest_date"),
+		# The other two limits and the verdicts. A bare "41 days" tells the
+		# customer nothing about whether 41 is fine; against a stated limit of
+		# 30 it tells them why the counter turned an order away. The flags are
+		# the server's own verdicts, so the page never has to re-derive one and
+		# get it wrong -- /me reads all of this, Place Order ignores what it
+		# does not print.
+		"bill_limit": position.get("bill_limit") or 0,
+		"days_limit": position.get("days_limit") or 0,
+		# What a prepaid customer has left to spend. FIFO leaves this at 0 while
+		# any bill is still uncovered, so it is only ever positive for exactly
+		# the account whose headroom is not a credit limit at all -- which is
+		# the only honest figure to put in an advance-only account's third slot.
+		"leftover_advance": flt(position.get("leftover_advance")),
+		"amount_exceeded": position.get("amount_exceeded") or 0,
+		"count_exceeded": position.get("count_exceeded") or 0,
+		"days_exceeded": position.get("days_exceeded") or 0,
+		# Money is owed, but every uncovered rupee sits inside the one bill the
+		# customer's advance is part-way through paying, so nothing is ageing.
+		# Without this the page would print "nothing overdue" beside a positive
+		# Outstanding and look broken.
+		"days_partial_only": position.get("days_partial_only") or 0,
 		"currency": frappe.db.get_value("Customer", customer, "default_currency")
 			or frappe.db.get_single_value("Global Defaults", "default_currency") or "",
 	}

@@ -601,7 +601,9 @@ function sync_custom_totals(frm) {
     (frm.doc.items || []).forEach(function(item) {
         const base_net_amount = flt(item.base_net_amount);
         const excise = flt(item.custom_excise_value);
-        const total = flt(base_net_amount + excise, 5);
+        // Money is paisa (2 dp) — only rate fields keep more decimals. Every
+        // amount and total below is 2 dp so the invoice columns foot.
+        const total = flt(base_net_amount + excise, 2);
 
         const mode = item.custom_vat_apply_on || "VAT 13%";
         let vat_rate;
@@ -609,21 +611,25 @@ function sync_custom_totals(frm) {
 
         if (mode === "VAT 13%") {
             vat_rate = 13;
-            vat = flt((total * 13) / 100, 5);
+            // Paisa-round each line, mirroring the server
+            // (salesinvoice_taxes.calculate_item_vat_amounts). The header VAT is
+            // the sum of these rows, so rounding per line is what makes the VAT
+            // column foot to the header instead of trailing it by a paisa.
+            vat = flt((total * 13) / 100, 2);
         } else if (mode === "VAT 0%") {
             vat_rate = 0;
             vat = 0;
         } else {
             // Amount: manual entry, never recalculated
             vat_rate = 0;
-            vat = flt(item.custom_vat_amount, 5);
+            vat = flt(item.custom_vat_amount, 2);
         }
 
         if (is_return && vat > 0) vat = -Math.abs(vat);
 
-        if (flt(item.custom_total, 5) !== total) { item.custom_total = total; changed = true; }
+        if (flt(item.custom_total, 2) !== total) { item.custom_total = total; changed = true; }
         if (flt(item.custom_vat_rate) !== vat_rate) { item.custom_vat_rate = vat_rate; changed = true; }
-        if (flt(item.custom_vat_amount, 5) !== vat) { item.custom_vat_amount = vat; changed = true; }
+        if (flt(item.custom_vat_amount, 2) !== vat) { item.custom_vat_amount = vat; changed = true; }
 
         total_including_excise += total;
         vat_total += vat;
@@ -631,10 +637,10 @@ function sync_custom_totals(frm) {
         excise_total += excise;
     });
 
-    frm.doc.custom_total_amount_including_excise = flt(total_including_excise, 5);
-    frm.doc.custom_total_vat_amount = flt(vat_total, 5);
-    frm.doc.custom_total_amount = flt(net_total, 5);
-    frm.doc.custom_excise = flt(excise_total, 5);
+    frm.doc.custom_total_amount_including_excise = flt(total_including_excise, 2);
+    frm.doc.custom_total_vat_amount = flt(vat_total, 2);
+    frm.doc.custom_total_amount = flt(net_total, 2);
+    frm.doc.custom_excise = flt(excise_total, 2);
 
     if (changed) frm.refresh_field("items");
     frm.refresh_field("custom_total_amount_including_excise");
@@ -735,7 +741,11 @@ function update_total_amount_preview(frm) {
     const total = flt(frm.doc.custom_total_amount_including_excise)
                 + flt(frm.doc.custom_total_vat_amount);
 
-    frm.doc.custom_expected_grand_total = flt(total, 5);
+    // Round to paisa: this previews what grand_total becomes after save, and
+    // ERPNext stores grand_total at 2 dp (net total + the paisa-rounded tax
+    // rows). Previewing at 5 dp put a sub-paisa tail on "Total Amount" that the
+    // saved grand total never had.
+    frm.doc.custom_expected_grand_total = flt(total, 2);
     frm.refresh_field('custom_expected_grand_total');
 
     sync_pos_payment_amount(frm);
@@ -894,8 +904,8 @@ async function restore_return_vat(frm) {
     for (const item of items) {
         if (flt(item.custom_vat_amount)) continue;             // already filled -> skip
         if (item.custom_vat_apply_on === "VAT 13%") {
-            const base = flt(item.base_net_amount) + flt(item.custom_excise_value);
-            const val = flt((base * 13) / 100, 5);
+            const base = flt(flt(item.base_net_amount) + flt(item.custom_excise_value), 2);
+            const val = flt((base * 13) / 100, 2);
             if (val) {
                 await frappe.model.set_value(item.doctype, item.name, "custom_vat_amount", val);
                 changed = true;
@@ -925,7 +935,7 @@ async function restore_return_vat(frm) {
                 if (!src || !flt(src.qty)) continue;
                 if (src.custom_vat_apply_on === "Amount" && flt(src.custom_vat_amount)) {
                     const ratio = Math.abs(flt(item.qty)) / Math.abs(flt(src.qty));
-                    const val = flt(-Math.abs(flt(src.custom_vat_amount) * ratio), 5);
+                    const val = flt(-Math.abs(flt(src.custom_vat_amount) * ratio), 2);
                     await frappe.model.set_value(item.doctype, item.name, "custom_vat_amount", val);
                     changed = true;
                 }

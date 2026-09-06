@@ -1,6 +1,19 @@
 // Copyright (c) 2026, Raindrop and contributors
 // For license information, please see license.txt
 
+// "2026-08-01" -> "2083/04/16", using the same NepaliFunctions converter the shared
+// rdp_common_app date widgets use. Returns "" when the library has not loaded or the
+// date will not convert, so the printed filter simply keeps its AD date.
+function ad_to_miti(ad_date) {
+	if (!ad_date || typeof window.NepaliFunctions === "undefined") return "";
+	try {
+		const bs = window.NepaliFunctions.AD2BS(String(ad_date).trim(), "YYYY-MM-DD");
+		return bs ? String(bs).replace(/-/g, "/") : "";
+	} catch (e) {
+		return "";
+	}
+}
+
 frappe.query_reports["Advance Tax TDS Details"] = {
 	filters: [
 		{
@@ -36,7 +49,9 @@ frappe.query_reports["Advance Tax TDS Details"] = {
 		},
 	],
 
-	// Keep "Fit Columns" (a view toggle) out of the printed "Include filters" block.
+	// Keep "Fit Columns" (a view toggle) out of the printed "Include filters" block,
+	// and show each date as "2026-08-01 (2083/04/16)" — the AD date the report ran on,
+	// with the Nepali miti alongside it.
 	onload: function (report) {
 		report.get_filters_html_for_print = function () {
 			const applied = report.get_filter_values();
@@ -46,10 +61,12 @@ frappe.query_reports["Advance Tax TDS Details"] = {
 					const filter = report.get_filter(fieldname);
 					if (!filter || filter.df.hidden_due_to_dependency) return null;
 					const df = filter.df;
-					return `<div class="filter-row"><b>${__(df.label, null, df.parent)}:</b> ${frappe.format(
-						applied[fieldname],
-						df
-					)}</div>`;
+					let value = frappe.format(applied[fieldname], df);
+					if (df.fieldtype === "Date") {
+						const miti = ad_to_miti(applied[fieldname]);
+						if (miti) value = `${value} (${miti})`;
+					}
+					return `<div class="filter-row"><b>${__(df.label, null, df.parent)}:</b> ${value}</div>`;
 				})
 				.filter(Boolean)
 				.join("");

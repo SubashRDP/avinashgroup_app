@@ -1,6 +1,8 @@
 import frappe
 from frappe.utils import flt
 
+from avinashgroup_app.utils.site_scope import app_installed
+
 
 def patch_insert_item_price_set_company():
 	"""
@@ -14,11 +16,17 @@ def patch_insert_item_price_set_company():
 	if getattr(gid, "_avinashgroup_insert_item_price_company_patched", False):
 		return
 
+	original_insert_item_price = gid.insert_item_price
+
 	def _get_stock_uom_rate(rate, args):
 		return rate / args.conversion_factor if args.conversion_factor else rate
 
 	def insert_item_price(args):
 		"""Insert Item Price if Price List and Price List Rate are specified and currency is the same"""
+		# Only this app's sites make Item Price.company mandatory.
+		if not app_installed():
+			return original_insert_item_price(args)
+
 		if (
 			not args.price_list
 			or not args.rate

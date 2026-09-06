@@ -115,7 +115,7 @@ def calculate_item_excise_values(doc):
         excise_apply_on = getattr(item, 'custom_excise_apply_on', None)
         if excise_apply_on == 'Percentage (%)':
             rate = flt(getattr(item, 'custom_excise_duty_rate', 0)) or 0
-            item.custom_excise_value = flt(flt(item.base_net_amount) * rate / 100, 5)
+            item.custom_excise_value = flt(flt(item.base_net_amount) * rate / 100, 2)
         elif excise_apply_on == 'Amount':
             # rate belongs to Percentage mode only (mirrors TDS Amount mode)
             item.custom_excise_duty_rate = 0
@@ -126,20 +126,23 @@ def calculate_custom_total(doc):
     for item in doc.items:
         base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(getattr(item, 'custom_excise_value', 0)) or 0
-        item.custom_total = flt(base_net_amount + excise_value, 5)
+        # Money is paisa (2 dp). Only *rate* fields keep more decimals; every
+        # amount and total here must be 2 dp so the item columns foot to the
+        # header. Mirrors the sales side (selling_taxes_handler).
+        item.custom_total = flt(base_net_amount + excise_value, 2)
 
 
 def calculate_total_amount_including_excise(doc):
     """Sum all custom_total from items"""
     total_including_excise = sum(flt(getattr(item, 'custom_total', 0)) or 0 for item in doc.items)
-    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
+    doc.custom_total_amount_including_excise = flt(total_including_excise, 2)
 
 
 def calculate_total_excise_amount(doc):
     """Sum all custom_excise_value from items"""
     total_excise = sum(flt(getattr(item, 'custom_excise_value', 0)) or 0 for item in doc.items)
-    doc.custom_total_excise_amount = flt(total_excise, 5)
-    doc.custom_excise = flt(total_excise, 5)
+    doc.custom_total_excise_amount = flt(total_excise, 2)
+    doc.custom_excise = flt(total_excise, 2)
 
 
 def calculate_item_vat_amounts(doc):
@@ -154,7 +157,14 @@ def calculate_item_vat_amounts(doc):
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
             custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-            item.custom_vat_amount = flt((custom_total * 13) / 100, 5)
+            # Round each line's VAT to paisa. The header VAT and the taxes-table
+            # row are built by summing these lines, so the rounding must happen
+            # HERE, once per line. At precision 5 the header summed the unrounded
+            # values while ERPNext's round_floats_in stored each row at 2 dp, so
+            # the VAT column came out a paisa under the header -- and the govt VAT
+            # Purchase Book (purchase_register_report) sums the *item* field while
+            # the GL input credit comes from the tax row, so the two disagreed.
+            item.custom_vat_amount = flt((custom_total * 13) / 100, 2)
         elif vat_apply_on == 'VAT 0%':
             item.custom_vat_rate = 0
             item.custom_vat_amount = 0
@@ -165,7 +175,7 @@ def calculate_item_vat_amounts(doc):
 def calculate_total_vat_amount(doc):
     """Sum all custom_vat_amount from items"""
     total_vat = sum(flt(getattr(item, 'custom_vat_amount', 0)) or 0 for item in doc.items)
-    doc.custom_total_vat_amount = flt(total_vat, 5)
+    doc.custom_total_vat_amount = flt(total_vat, 2)
 
 
 def apply_return_vat_sign(doc):
@@ -224,7 +234,11 @@ def calculate_item_tds_amounts(doc):
 
             if custom_tds_rate > 0:
                 custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-                item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 5)
+                # Paisa per line, same rule as VAT: custom_total_tds_amount is
+                # the sum of these, and the deduction posted to the GL must equal
+                # what the item rows show. Trade-off: the total withheld can land
+                # a paisa under custom_total x rate.
+                item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 2)
             else:
                 item.custom_tds_amount = 0
 
@@ -246,7 +260,7 @@ def calculate_total_tds_amount(doc):
         if item_apply_tds:
             total_tds += flt(getattr(item, 'custom_tds_amount', 0)) or 0
 
-    doc.custom_total_tds_amount = flt(total_tds, 5)
+    doc.custom_total_tds_amount = flt(total_tds, 2)
 
 
 def get_tds_rate_from_custom_tax_withholding(doc):
@@ -296,14 +310,37 @@ def get_tds_account_from_custom_tax_withholding(doc):
 
 
 def update_taxes_table(doc):
-    """Update or create tax rows for Excise, VAT, and TDS"""
-    total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 5)
-    total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 5)
-    total_tds = flt(getattr(doc, 'custom_total_tds_amount', 0), 5)
+    """Rebuild the Excise / VAT / TDS rows from the current item values.
+
+    Clear first, then rebuild -- never update in place. A duplicated or amended
+    document arrives with the source document's taxes table already copied in,
+    and the old code only rewrote a row when its own total was non-zero. So a
+    source carrying VAT, duplicated into a document whose items are all
+    VAT 0%, kept the source's VAT row untouched and charged it: on ng-group
+    that left Rs 3,710.96 of input VAT on 37 zero-rated purchases in Shrawan
+    2083, with one stale amount (88.14) riding through a chain of 22
+    duplicates while the net total changed underneath it. Clearing first means
+    these rows can only ever reflect the document they are on.
+
+    Only the three rows we manage are cleared -- any other tax row on the
+    document is left alone.
+
+    Returns need no special case: their signs come from negative qty flowing
+    through the same arithmetic, so a return rebuilds to negative rows
+    (apply_return_vat_sign is only a safety net over already-negative values).
+    """
+    total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 2)
+    total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 2)
+    total_tds = flt(getattr(doc, 'custom_total_tds_amount', 0), 2)
 
     excise_account = find_account_by_prefix(doc.company, "348204")
     vat_account = find_account_by_prefix(doc.company, "VAT")
     tds_account = get_tds_account_from_custom_tax_withholding(doc)
+
+    # Drop our own rows unconditionally, whatever they currently say
+    remove_excise_tax_rows(doc)
+    remove_vat_tax_rows(doc)
+    remove_tds_tax_rows(doc)
 
     position = 0
 
@@ -311,9 +348,6 @@ def update_taxes_table(doc):
         update_or_create_tax_row(doc, excise_account, total_excise, position,
                                  f"Excise Duty - {doc.company}", "Actual", "Add")
         position += 1
-    else:
-        # Remove any stale excise rows (total_excise is now 0, e.g. on a duplicated document)
-        remove_excise_tax_rows(doc)
 
     if vat_account and total_vat != 0:
         update_or_create_tax_row(doc, vat_account, total_vat, position,
@@ -325,9 +359,31 @@ def update_taxes_table(doc):
         update_or_create_tax_row(doc, tds_account, total_tds, position,
                                  f"TDS - {custom_tax_category}", "Actual", "Deduct")
         position += 1
-    else:
-        # Remove any stale TDS rows (total_tds is now 0 or no account found)
-        remove_tds_tax_rows(doc)
+
+
+def remove_vat_tax_rows(doc):
+    """Remove every VAT row from the taxes table.
+
+    Matched on the account head starting with "VAT" rather than on this
+    company's VAT account: a document duplicated across companies carries the
+    *source* company's row (e.g. "VAT - NGN" on an NGG invoice), which an
+    exact-account match would leave behind. Same test the CBMS booking code
+    uses to recognise a VAT row.
+    """
+    if not doc.taxes:
+        return
+
+    rows_to_remove = [
+        row for row in doc.taxes
+        if (row.account_head or "").upper().startswith("VAT")
+    ]
+
+    for row in rows_to_remove:
+        doc.taxes.remove(row)
+
+    if rows_to_remove:
+        for idx, tax_row in enumerate(doc.taxes):
+            tax_row.idx = idx + 1
 
 
 def remove_excise_tax_rows(doc):
@@ -387,7 +443,7 @@ def find_account_by_prefix(company, prefix):
 def update_or_create_tax_row(doc, account_head, tax_amount, position,
                              description, charge_type="Actual", add_deduct="Add"):
     """Update existing tax row or create new one"""
-    tax_amount = flt(tax_amount, 5)
+    tax_amount = flt(tax_amount, 2)
 
     existing_row = None
     existing_index = -1

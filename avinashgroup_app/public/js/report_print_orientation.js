@@ -342,4 +342,72 @@
 		setTimeout(function () { clearInterval(retry); }, 15000);
 	}
 
+	// ─────────────────────────────────────────────────────────────────
+	// 4) General Ledger Summary — force the ⋮ Print / PDF menu actions
+	//    through the report's own server render (Tally-style header,
+	//    pagination, in-body page numbers). Frappe's native path would
+	//    instead go through render_grid / render_pdf and produce the
+	//    plain bordered datatable. Patched on the class prototype so it
+	//    does not depend on the report's own onload firing.
+	// ─────────────────────────────────────────────────────────────────
+
+	const GLS_REPORT = "General Ledger Summary";
+	const GLS_PDF_METHOD =
+		"/api/method/avinashgroup_app.avinash_group_app.report" +
+		".general_ledger_summary.general_ledger_summary.download_pdf";
+
+	function currentReportName() {
+		const route = (frappe.get_route && frappe.get_route()) || [];
+		return route[1] || (frappe.query_report && frappe.query_report.report_name);
+	}
+
+	function openGlsPdf(orientation, inline) {
+		const report = frappe.query_report;
+		if (!report) return;
+		const filters = report.get_filter_values(true);
+		if (!filters.company) {
+			frappe.msgprint(__("Please set Company"));
+			return;
+		}
+		const url =
+			GLS_PDF_METHOD +
+			"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+			"&orientation=" + encodeURIComponent(orientation || "Landscape") +
+			(inline ? "&view=1" : "");
+		_origOpen.call(window, url);
+	}
+
+	function installGlsPrintRoute() {
+		const proto =
+			frappe.views && frappe.views.QueryReport && frappe.views.QueryReport.prototype;
+		if (!proto) return false;
+		if (proto._glsPrintRouted) return true;
+
+		const origPrint = proto.print_report;
+		const origPdf = proto.pdf_report;
+
+		proto.print_report = function (print_settings) {
+			if (currentReportName() === GLS_REPORT) {
+				return openGlsPdf(print_settings && print_settings.orientation, true);
+			}
+			return origPrint.apply(this, arguments);
+		};
+		proto.pdf_report = function (print_settings) {
+			if (currentReportName() === GLS_REPORT) {
+				return openGlsPdf(print_settings && print_settings.orientation, false);
+			}
+			return origPdf.apply(this, arguments);
+		};
+
+		proto._glsPrintRouted = true;
+		return true;
+	}
+
+	if (!installGlsPrintRoute()) {
+		const retryGls = setInterval(function () {
+			if (installGlsPrintRoute()) clearInterval(retryGls);
+		}, 200);
+		setTimeout(function () { clearInterval(retryGls); }, 15000);
+	}
+
 })();

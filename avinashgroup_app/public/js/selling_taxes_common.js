@@ -226,7 +226,8 @@ function selling_toggle_vat_fields(frm, cdt, cdn) {
 function selling_calculate_item_custom_total(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     if (!row) return;
-    const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 5);
+    // Money is paisa (2 dp) — only rate fields keep more decimals.
+    const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 2);
     frappe.model.set_value(cdt, cdn, 'custom_total', custom_total);
     // VAT recalculates via custom_total change handler
 }
@@ -236,10 +237,12 @@ function selling_calculate_item_vat_amount(frm, cdt, cdn) {
     if (!row) return;
 
     const vat_apply_on = row.custom_vat_apply_on || 'VAT 13%';
-    const custom_total = flt(row.base_net_amount) + flt(row.custom_excise_value);
+    const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 2);
 
     if (vat_apply_on === 'VAT 13%') {
-        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', flt((custom_total * 13) / 100, 5));
+        // Paisa-round per line, mirroring the server (selling_taxes_handler) and
+        // Sales Invoice — the header VAT is the sum of these rows.
+        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', flt((custom_total * 13) / 100, 2));
     } else if (vat_apply_on === 'VAT 0%') {
         frappe.model.set_value(cdt, cdn, 'custom_vat_amount', 0);
     }
@@ -258,7 +261,7 @@ function selling_calculate_total_amount_including_excise(frm) {
     if (!frm || !frm.doc) return;
     let total = 0;
     (frm.doc.items || []).forEach(item => { total += flt(item.custom_total) || 0; });
-    frm.set_value('custom_total_amount_including_excise', flt(total, 5));
+    frm.set_value('custom_total_amount_including_excise', flt(total, 2));
     frm.refresh_field('custom_total_amount_including_excise');
 }
 
@@ -266,7 +269,7 @@ function selling_calculate_vat_total(frm) {
     if (!frm || !frm.doc) return;
     let vat_total = 0;
     (frm.doc.items || []).forEach(item => { vat_total += flt(item.custom_vat_amount) || 0; });
-    frm.set_value('custom_total_vat_amount', flt(vat_total, 5));
+    frm.set_value('custom_total_vat_amount', flt(vat_total, 2));
     frm.refresh_field('custom_total_vat_amount');
 }
 
@@ -278,8 +281,8 @@ function selling_calculate_total(frm) {
         total_excl_excise += flt(item.base_net_amount) || 0;
         total_excise += flt(item.custom_excise_value) || 0;
     });
-    frm.doc.custom_total_amount = flt(total_excl_excise, 5);
-    frm.doc.custom_excise = flt(total_excise, 5);
+    frm.doc.custom_total_amount = flt(total_excl_excise, 2);
+    frm.doc.custom_excise = flt(total_excise, 2);
     frm.refresh_field('custom_total_amount');
     frm.refresh_field('custom_excise');
     selling_calculate_vat_total(frm);

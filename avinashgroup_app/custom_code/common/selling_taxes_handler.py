@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe.utils import flt
 
@@ -67,7 +69,8 @@ def calculate_custom_total(doc):
     for item in doc.items:
         base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(getattr(item, 'custom_excise_value', 0)) or 0
-        item.custom_total = flt(base_net_amount + excise_value, 5)
+        # Money is paisa (2 dp) — only rate fields keep more decimals.
+        item.custom_total = flt(base_net_amount + excise_value, 2)
 
 
 def calculate_item_vat_amounts(doc):
@@ -81,7 +84,10 @@ def calculate_item_vat_amounts(doc):
 
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
-            item.custom_vat_amount = flt((flt(item.custom_total) * 13) / 100, 5)
+            # Paisa-round per line so the VAT column foots to the header VAT
+            # (which is their sum). Matches Sales Invoice
+            # (salesinvoice_taxes.calculate_item_vat_amounts).
+            item.custom_vat_amount = flt((flt(item.custom_total) * 13) / 100, 2)
         elif vat_apply_on == 'VAT 0%':
             item.custom_vat_rate = 0
             item.custom_vat_amount = 0
@@ -96,28 +102,29 @@ def calculate_item_vat_amounts(doc):
 
 def calculate_total_amount_including_excise(doc):
     doc.custom_total_amount_including_excise = flt(
-        sum(flt(getattr(item, 'custom_total', 0)) for item in doc.items), 5
+        sum(flt(getattr(item, 'custom_total', 0)) for item in doc.items), 2
     )
 
 
 def calculate_total_excise_amount(doc):
     total_excise = flt(
-        sum(flt(getattr(item, 'custom_excise_value', 0)) for item in doc.items), 5
+        sum(flt(getattr(item, 'custom_excise_value', 0)) for item in doc.items), 2
     )
     doc.custom_total_excise_amount = total_excise
     doc.custom_excise = total_excise
 
 
 def calculate_total_vat_amount(doc):
+    # Sum of the per-line paisa-rounded VAT amounts; 2 dp only clears float dust.
     doc.custom_total_vat_amount = flt(
-        sum(flt(getattr(item, 'custom_vat_amount', 0)) for item in doc.items), 5
+        sum(flt(getattr(item, 'custom_vat_amount', 0)) for item in doc.items), 2
     )
 
 
 def calculate_custom_total_amount(doc):
     """Sum of base_net_amount only (excludes excise)."""
     doc.custom_total_amount = flt(
-        sum(flt(item.base_net_amount) for item in doc.items), 5
+        sum(flt(item.base_net_amount) for item in doc.items), 2
     )
 
 
@@ -150,8 +157,8 @@ def update_taxes_table(doc):
     Write Excise (account prefix 348204) at position 0
     and VAT (account prefix VAT) at position 1.
     """
-    total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 5)
-    total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 5)
+    total_excise = flt(getattr(doc, 'custom_total_excise_amount', 0), 2)
+    total_vat = flt(getattr(doc, 'custom_total_vat_amount', 0), 2)
 
     excise_account = find_account_by_prefix(doc.company, "348204")
     vat_account = find_account_by_prefix(doc.company, "VAT")
@@ -163,11 +170,42 @@ def update_taxes_table(doc):
         # amount charged (e.g. all excise values cleared on an edited draft)
         update_or_create_tax_row(doc, excise_account, total_excise, position,
                                  f"Excise Duty - {doc.company}", "Actual", "Add")
+        pin_item_wise_tax_detail(doc, excise_account, "custom_excise_value")
         position += 1
 
     if vat_account and (total_vat != 0 or has_tax_row(doc, vat_account)):
         update_or_create_tax_row(doc, vat_account, total_vat, position,
                                  f"VAT - {doc.company}", "Actual", "Add")
+        pin_item_wise_tax_detail(doc, vat_account, "custom_vat_amount", "custom_vat_rate")
+
+
+def pin_item_wise_tax_detail(doc, account_head, amount_attr, rate_attr=None, flat_rate=0):
+    """Freeze an Actual tax row's per-item breakup to our own figures so the
+    printed tax breakup equals the item VAT column. Mirrors
+    salesinvoice_taxes.pin_item_wise_tax_detail — see the note there. ERPNext
+    would otherwise redistribute the row total proportionally by net amount
+    and round each share on its own.
+    """
+    row = next(
+        (t for t in (doc.taxes or [])
+         if t.account_head == account_head and t.charge_type == "Actual"),
+        None,
+    )
+    if not row:
+        return
+
+    detail = {}
+    for item in doc.items:
+        key = item.item_code or item.item_name
+        amount = flt(getattr(item, amount_attr, 0) or 0, 2)
+        rate = flt(getattr(item, rate_attr, 0)) if rate_attr else flat_rate
+        if key in detail:
+            detail[key][1] = flt(detail[key][1] + amount, 2)
+        else:
+            detail[key] = [rate, amount]
+
+    row.item_wise_tax_detail = json.dumps(detail, separators=(",", ":"))
+    row.dont_recompute_tax = 1
 
 
 def has_tax_row(doc, account_head, charge_type="Actual"):

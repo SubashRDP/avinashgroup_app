@@ -1,5 +1,7 @@
 import frappe
 
+from avinashgroup_app.utils.site_scope import app_installed
+
 
 def patch_repost_valuation_disable_error_email():
 	"""
@@ -19,7 +21,12 @@ def patch_repost_valuation_disable_error_email():
 	if getattr(riv, "_avinashgroup_repost_error_email_disabled", False):
 		return
 
+	original_get_recipients = riv.get_recipients
+
 	def get_recipients():
+		# Other sites on this bench still want their repost failure emails.
+		if not app_installed():
+			return original_get_recipients()
 		return []
 
 	riv.get_recipients = get_recipients

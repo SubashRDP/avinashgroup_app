@@ -14,9 +14,16 @@ page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 # ?v= is a cache buster. Plain files under public/ are served without a content
 # hash, so a phone that has the file keeps it — the bell reached a customer's
 # handset in a half-finished state for exactly this reason. Bump on every edit.
-web_include_js = ["/assets/avinashgroup_app/js/portal_notifications.js?v=2"]
+web_include_js = [
+    "/assets/avinashgroup_app/js/portal_notifications.js?v=2",
+    # login popup for customer portal users — see doctype "Portal Announcement".
+    # Same file is in app_include_js so it also fires on the desk.
+    "/assets/avinashgroup_app/js/portal_announcement.js?v=14",
+]
 
 app_include_js = [
+    # login popup for customer portal users, desk side — see web_include_js
+    "/assets/avinashgroup_app/js/portal_announcement.js?v=14",
     # Wraps frappe.msgprint / show_alert to drop ERPNext's informational
     # negative-stock notifications (blue "Warning on Negative Stock",
     # green "valuation reposting in progress"). Load first so the wrapper is
@@ -25,15 +32,15 @@ app_include_js = [
     "/assets/avinashgroup_app/js/suppress_negative_stock_msg.js?v=1.0",
     "/assets/avinashgroup_app/js/fiscal_year_cache.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.8",
-    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.1",
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.9",
+    "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.2",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.3",
     # Loaded globally (not doctype_js) so it survives even when another app's
     # Sales Invoice doctype_js errors and breaks the concatenated form-script on a
     # site. Must come AFTER sales_warehouse_common.js (defines _fetch_selling_wh).
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
-    "/assets/avinashgroup_app/js/sales_invoice.js?v=4.7",
+    "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -41,7 +48,7 @@ app_include_js = [
     # v3.5: stale-value clear on auto flip + wildcard scope watching (SCOPE_FIELDS removed)
     "/assets/avinashgroup_app/js/auto_update_document_no.js?v=3.5",
     "/assets/avinashgroup_app/js/auto_fiscal_year.js?v=1.0",
-    "/assets/avinashgroup_app/js/report_print_orientation.js?v=10",
+    "/assets/avinashgroup_app/js/report_print_orientation.js?v=11",
     "/assets/avinashgroup_app/js/vehicle_mandatory.js?v=1.0",
     # print_bridge defines avinash.print_bridge; load it before the two files
     # that route raw jobs through it — ngi_print (Print-view button) and
@@ -388,12 +395,21 @@ scheduler_events = {
 before_request = [
     "avinashgroup_app.custom_code.Override.auto_insert_item_price.patch_insert_item_price_set_company",
     "avinashgroup_app.custom_code.Override.repost_valuation_notify.patch_repost_valuation_disable_error_email",
+    # Stock General Ledger prints the Frappe document name; adds a column
+    # carrying the number actually written on the document.
+    "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
+    # Frappe permanently flips prepared_report on after one slow run, after
+    # which the report serves a cached result and ignores its own filters.
+    "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
 ]
 
 # The repost runs in a background job, so the get_recipients patch must also be
 # applied worker-side; before_request alone never fires there.
 before_job = [
     "avinashgroup_app.custom_code.Override.repost_valuation_notify.patch_repost_valuation_disable_error_email",
+    # Prepared Reports render in a worker, where before_request never fires.
+    "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
+    "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
 ]
 
 # The distro's unpatched-Qt wkhtmltopdf shrinks every length by 0.7688x, which
@@ -437,7 +453,7 @@ fixtures = [
     },
     # Company-wise link filtering rules. Exported so a new site gets the same
     # rules on install instead of needing them re-entered by hand.
-    "Company Filter Config",
+    # "Company Filter Config",
     # Default Dynamic Approval notification templates. Scoped by name so the
     # fixture ONLY ever touches these four records — it never deletes or alters
     # any other Email Template. Admins who want custom wording per flow should

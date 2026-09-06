@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe import _
 from frappe.utils import flt
@@ -104,9 +106,11 @@ def calculate_custom_total(doc):
     for item in doc.items:
         base_net_amount = flt(item.base_net_amount) or 0
         excise_value = flt(item.custom_excise_value) or 0
-        
-        item.custom_total = flt(base_net_amount + excise_value, 5)
-        
+
+        # Money is paisa (2 dp). Only *rate* fields keep more decimals; every
+        # amount and every total on the invoice must be 2 dp so the columns foot.
+        item.custom_total = flt(base_net_amount + excise_value, 2)
+
         frappe.logger().debug(
             f"Custom Total for {item.item_code}: "
             f"base_net_amount={base_net_amount} + excise={excise_value} = {item.custom_total}"
@@ -116,8 +120,8 @@ def calculate_custom_total(doc):
 def calculate_total_amount_including_excise(doc):
     """Sum all custom_total from items"""
     total_including_excise = sum(flt(item.custom_total) or 0 for item in doc.items)
-    doc.custom_total_amount_including_excise = flt(total_including_excise, 5)
-    
+    doc.custom_total_amount_including_excise = flt(total_including_excise, 2)
+
     frappe.logger().debug(f"Total Amount Including Excise: {total_including_excise}")
 
 
@@ -127,9 +131,9 @@ def calculate_total_excise_amount(doc):
     No calculation, just aggregation
     """
     total_excise = sum(flt(item.custom_excise_value) or 0 for item in doc.items)
-    
-    doc.custom_total_excise_amount = flt(total_excise, 5)
-    doc.custom_excise = flt(total_excise, 5)
+
+    doc.custom_total_excise_amount = flt(total_excise, 2)
+    doc.custom_excise = flt(total_excise, 2)
     
     frappe.logger().debug(f"Total Excise: {total_excise}")
 
@@ -153,7 +157,13 @@ def calculate_item_vat_amounts(doc):
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
             custom_total = flt(item.custom_total) or 0
-            item.custom_vat_amount = flt((custom_total * 13) / 100, 5)
+            # Round each line's VAT to paisa (2 dp). The header VAT, the taxes-table
+            # row and the grand total are all built by summing these lines, so the
+            # rounding must happen HERE, once per line — not at precision 5 with a
+            # single round at the end, which makes the VAT column (2 dp per row)
+            # foot to one paisa less than the header. Per-line is the figure the
+            # invoice must report.
+            item.custom_vat_amount = flt((custom_total * 13) / 100, 2)
             frappe.logger().debug(
                 f"[VAT 13%] {item.item_code}: total={custom_total}, vat={item.custom_vat_amount}"
             )
@@ -175,8 +185,10 @@ def calculate_total_vat_amount(doc):
     Sum all custom_vat_amount from items
     """
     total_vat = sum(flt(item.custom_vat_amount) or 0 for item in doc.items)
-    
-    doc.custom_total_vat_amount = flt(total_vat,5)
+
+    # Sum of the per-line paisa-rounded VAT amounts (see calculate_item_vat_amounts).
+    # flt(..., 2) only clears float dust here — the inputs are already 2 dp.
+    doc.custom_total_vat_amount = flt(total_vat, 2)
     
     frappe.logger().debug(f"Total VAT: {total_vat}")
 
@@ -209,9 +221,9 @@ def restore_return_item_taxes(doc):
             continue
         ratio = abs(flt(item.qty)) / abs(flt(src.qty))
         if src.custom_vat_apply_on == "Amount" and not flt(item.custom_vat_amount):
-            item.custom_vat_amount = flt(-abs(flt(src.custom_vat_amount) * ratio), 5)
+            item.custom_vat_amount = flt(-abs(flt(src.custom_vat_amount) * ratio), 2)
         if not flt(item.custom_excise_value):
-            item.custom_excise_value = flt(-abs(flt(src.custom_excise_value) * ratio), 5)
+            item.custom_excise_value = flt(-abs(flt(src.custom_excise_value) * ratio), 2)
 
 
 def apply_return_excise_sign(doc):
@@ -330,6 +342,7 @@ def update_taxes_table(doc):
             charge_type="Actual",
             add_deduct="Add"
         )
+        pin_item_wise_tax_detail(doc, excise_account, "custom_excise_value")
         position += 1
 
 
@@ -343,7 +356,48 @@ def update_taxes_table(doc):
             charge_type="Actual",
             add_deduct="Add"
         )
+        pin_item_wise_tax_detail(doc, vat_account, "custom_vat_amount", "custom_vat_rate")
         position += 1
+
+
+def pin_item_wise_tax_detail(doc, account_head, amount_attr, rate_attr=None, flat_rate=0):
+    """Freeze an Actual tax row's per-item breakup to our own figures.
+
+    The VAT / Excise rows are charge_type "Actual". ERPNext's
+    calculate_taxes_and_totals redistributes the row total across items
+    proportionally by net amount and rounds each share on its own; that split
+    is what feeds the printed "Taxable Amount / VAT" table
+    (other_charges_calculation), and it does NOT match our per-line
+    custom_vat_amount — NGK-SB-83/84-00527 printed VAT 237.00 for a line whose
+    VAT is 236.99.
+
+    Write item_wise_tax_detail ourselves, as the JSON string ERPNext expects
+    ({"<item>": [rate, amount], ...}), and set dont_recompute_tax so
+    initialize_taxes / set_item_wise_tax / _cleanup all leave it untouched.
+    set_item_wise_tax_breakup then json.loads our string and the breakup table
+    shows exactly the item VAT column. Amounts carry their sign (returns are
+    negative), so they always sum to the row's tax_amount.
+    """
+    row = next(
+        (t for t in (doc.taxes or [])
+         if t.account_head == account_head and t.charge_type == "Actual"),
+        None,
+    )
+    if not row:
+        return
+
+    detail = {}
+    for item in doc.items:
+        key = item.item_code or item.item_name
+        amount = flt(getattr(item, amount_attr, 0) or 0, 2)
+        rate = flt(getattr(item, rate_attr, 0)) if rate_attr else flat_rate
+        if key in detail:
+            detail[key][1] = flt(detail[key][1] + amount, 2)
+        else:
+            detail[key] = [rate, amount]
+
+    row.item_wise_tax_detail = json.dumps(detail, separators=(",", ":"))
+    row.dont_recompute_tax = 1
 
 
 def has_tax_row(doc, account_head, charge_type="Actual"):
@@ -453,12 +507,12 @@ def calculate_custom_total_amount(doc):
     This is the sum of all item net_amounts (qty * net_rate)
     """
     custom_total_amount = 0
-    
+
     for item in doc.items:
         base_net_amount = flt(item.base_net_amount) or 0
         custom_total_amount += base_net_amount
-    
-    doc.custom_total_amount = flt(custom_total_amount, 5)
+
+    doc.custom_total_amount = flt(custom_total_amount, 2)
     
     frappe.logger().debug(f"Custom Total Amount (excluding excise): {custom_total_amount}")
 

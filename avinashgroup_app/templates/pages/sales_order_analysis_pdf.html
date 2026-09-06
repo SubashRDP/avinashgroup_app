@@ -1,0 +1,92 @@
+{#-
+	Sales Order Analysis — PDF body.
+	Column set and header block mirror the customer-approved layout exactly:
+	Company / From Date / To Date down the left, Customer / FY down the right.
+-#}
+<style>
+	body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #000; }
+	.soa-header { width: 100%; margin-bottom: 10px; }
+	.soa-header td { padding: 1px 4px; vertical-align: top; border: none; }
+	.soa-header .k { width: 90px; }
+	.soa-header .b { font-weight: bold; }
+	table.soa { width: 100%; border-collapse: collapse; }
+	table.soa th, table.soa td { border: 1px solid #000; padding: 3px 5px; }
+	table.soa thead th { font-weight: bold; text-align: left; }
+	table.soa th.r, table.soa td.r { text-align: right; }
+	table.soa tbody tr.total td { font-weight: bold; }
+	.nowrap { white-space: nowrap; }
+	.empty { margin-top: 20px; font-style: italic; }
+</style>
+
+<table class="soa-header">
+	<tr>
+		<td class="k">Company</td>
+		<td>{{ res.company_label }}</td>
+		<td class="k b">Customer</td>
+		<td>{{ res.customer_label }}</td>
+	</tr>
+	<tr>
+		<td class="k">From Date</td>
+		<td>{{ res.from_date }}</td>
+		<td class="k">FY</td>
+		<td>{{ res.fiscal_year }}</td>
+	</tr>
+	<tr>
+		<td class="k">To Date</td>
+		<td>{{ res.to_date }}</td>
+		<td></td>
+		<td></td>
+	</tr>
+</table>
+
+{% if res.rows %}
+<table class="soa">
+	<thead>
+		<tr>
+			<th>Miti</th>
+			<th>Order No.</th>
+			<th>Status</th>
+			<th>Item Name</th>
+			<th class="r">Qty</th>
+			<th class="r">Billed Qty</th>
+			<th class="r">Qty to Bill</th>
+			<th class="r">Amount</th>
+			<th class="r">Billed Amount</th>
+			<th class="r">Pending Amount</th>
+			<th class="r">Delay (in Days)</th>
+		</tr>
+	</thead>
+	<tbody>
+		{% for row in res.rows %}
+		<tr>
+			<td class="nowrap">{{ row.miti }}</td>
+			<td class="nowrap">{{ row.sales_order }}</td>
+			<td>{{ row.status }}</td>
+			<td>{{ row.item_name }}</td>
+			<td class="r">{{ row.qty }}</td>
+			<td class="r">{{ row.billed_qty }}</td>
+			<td class="r">{{ row.qty_to_bill }}</td>
+			<td class="r">{{ row.amount }}</td>
+			<td class="r">{{ row.billed_amount }}</td>
+			<td class="r">{{ row.pending_amount }}</td>
+			<td class="r">{{ row.delay }}</td>
+		</tr>
+		{% endfor %}
+		<tr class="total">
+			<td></td>
+			<td>total</td>
+			<td></td>
+			<td></td>
+			<td class="r">{{ res.totals.qty }}</td>
+			<td class="r">{{ res.totals.billed_qty }}</td>
+			<td class="r">{{ res.totals.qty_to_bill }}</td>
+			<td class="r">{{ res.totals.amount }}</td>
+			<td class="r">{{ res.totals.billed_amount }}</td>
+			<td class="r">{{ res.totals.pending_amount }}</td>
+			<td class="r"></td>
+		</tr>
+	</tbody>
+</table>
+{% else %}
+<div class="empty">No sales orders found for the selected filters.</div>
+{% endif %}
