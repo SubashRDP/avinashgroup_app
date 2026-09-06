@@ -20,6 +20,7 @@ def execute(filters=None):
 	from_date, to_date = _resolve_period(filters)
 
 	rows = _get_tds_rows(filters.company, from_date, to_date)
+	rows += _get_partyless_je_rows(filters.company, from_date, to_date)
 	columns = _get_columns()
 	data = _build_rows(rows)
 	return columns, data
@@ -42,7 +43,10 @@ def _get_tds_rows(company, from_date, to_date):
 
 	karobar = sum of item amounts that have Apply TDS ticked (un-ticked items
 	          are excluded, i.e. invoice total minus the un-ticked lines).
-	tds     = sum of item TDS amounts.
+	tds     = the invoice's own Total TDS Amount field, added up across the invoices in
+	          the group — NOT re-summed from the item lines. The items are pre-aggregated
+	          to one row per invoice so this header figure is counted once per invoice
+	          rather than once per item line.
 	"""
 	return frappe.db.sql(
 		"""
@@ -50,11 +54,18 @@ def _get_tds_rows(company, from_date, to_date):
 			pi.supplier_name AS supplier_name,
 			sup.tax_id AS pan,
 			pi.custom_tax_withholding_category_custom AS category,
-			SUM(CASE WHEN it.apply_tds = 1 THEN it.amount ELSE 0 END) AS turnover,
-			SUM(it.custom_tds_amount) AS tds_amount,
-			MAX(CASE WHEN it.custom_tds_apply_on = 'Amount' THEN 1 ELSE 0 END) AS amount_based
+			SUM(it.turnover) AS turnover,
+			SUM(pi.custom_total_tds_amount) AS tds_amount,
+			MAX(it.amount_based) AS amount_based
 		FROM `tabPurchase Invoice` pi
-		INNER JOIN `tabPurchase Invoice Item` it ON it.parent = pi.name
+		INNER JOIN (
+			SELECT
+				parent,
+				SUM(CASE WHEN apply_tds = 1 THEN amount ELSE 0 END) AS turnover,
+				MAX(CASE WHEN custom_tds_apply_on = 'Amount' THEN 1 ELSE 0 END) AS amount_based
+			FROM `tabPurchase Invoice Item`
+			GROUP BY parent
+		) it ON it.parent = pi.name
 		LEFT JOIN `tabSupplier` sup ON sup.name = pi.supplier
 		WHERE pi.company = %(company)s
 			AND pi.docstatus = 1
@@ -68,6 +79,161 @@ def _get_tds_rows(company, from_date, to_date):
 		{"company": company, "from_date": from_date, "to_date": to_date},
 		as_dict=True,
 	)
+
+
+NO_SUBLEDGER = "No Subledger"
+
+
+def _tds_accounts(company):
+	"""TDS account names for the company: the ones the Tax Withholding Categories post to,
+	plus any other account named as TDS (the SST accounts are not on a category)."""
+	mapped = frappe.get_all(
+		"Tax Withholding Account", filters={"company": company}, pluck="account"
+	)
+	named = frappe.get_all(
+		"Account",
+		filters={"company": company, "account_name": ("like", "%TDS%")},
+		pluck="name",
+	)
+	return sorted(set(mapped) | set(named))
+
+
+def _strip_account_name(account, abbr):
+	"""'348101 - 11111 TDS-Individual or Proprietorship - NGK' -> '11111 TDS-Individual or
+	Proprietorship', i.e. drop the leading account number and the trailing company abbr."""
+	name = account or ""
+	if abbr and name.endswith(f" - {abbr}"):
+		name = name[: -len(f" - {abbr}")]
+	return re.sub(r"^\s*\d+\s*-\s*", "", name).strip()
+
+
+def _fmt_rate(rate):
+	"""2.5 -> '2.5', 15.0 -> '15' so the rate column reads like the invoice-based rows."""
+	return ("%f" % rate).rstrip("0").rstrip(".")
+
+
+def _split_account(account, abbr):
+	"""(khata, title) for the account a journal entry posted its TDS to, e.g.
+	'348101 - 11111 TDS-Individual or Proprietorship - NGK' -> ('11111', 'TDS-Individual
+	or Proprietorship'). An account with no khata in its name gives ('', title), which is
+	the same empty-khata section the invoice rows use."""
+	name = _strip_account_name(account, abbr)
+	match = re.match(r"^(\d+)\s+(.+?)$", name)
+	if match:
+		return match.group(1), match.group(2).strip()
+	return "", name
+
+
+def _get_partyless_je_rows(company, from_date, to_date):
+	"""Journal Entry TDS postings where the line carries no party.
+
+	These never reach the Purchase Invoice query above, so without this they are missing
+	from the report entirely. They are reported under "No Subledger" in the नाम column,
+	inside the section of the account they were posted to.
+
+	कारोबार रकम is the expense side of the same journal entry — for a salary JE of
+	47,400 with 474 deducted, the turnover is 47,400 and the rate 1%. A voucher carrying
+	several TDS lines has that expense split across them in proportion to each deduction.
+	"""
+	accounts = _tds_accounts(company)
+	if not accounts:
+		return []
+
+	abbr = frappe.get_cached_value("Company", company, "abbr")
+
+	lines = frappe.db.sql(
+		"""
+		SELECT gle.voucher_no, gle.account, (gle.credit - gle.debit) AS tds_amount
+		FROM `tabGL Entry` gle
+		WHERE gle.company = %(company)s
+			AND gle.is_cancelled = 0
+			AND gle.voucher_type = 'Journal Entry'
+			AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
+			AND gle.account IN %(accounts)s
+			AND COALESCE(gle.party, '') = ''
+			AND (gle.credit - gle.debit) > 0
+		""",
+		{
+			"company": company,
+			"from_date": from_date,
+			"to_date": to_date,
+			"accounts": tuple(accounts),
+		},
+		as_dict=True,
+	)
+	if not lines:
+		return []
+
+	# The expense (debit) side of each voucher, excluding the TDS lines themselves.
+	turnovers = dict(
+		frappe.db.sql(
+			"""
+			SELECT gle.voucher_no, SUM(gle.debit)
+			FROM `tabGL Entry` gle
+			WHERE gle.company = %(company)s
+				AND gle.is_cancelled = 0
+				AND gle.voucher_no IN %(vouchers)s
+				AND gle.account NOT IN %(accounts)s
+			GROUP BY gle.voucher_no
+			""",
+			{
+				"company": company,
+				"vouchers": tuple({line.voucher_no for line in lines}),
+				"accounts": tuple(accounts),
+			},
+		)
+	)
+
+	# A voucher with several TDS lines shares its expense across them by deduction size.
+	tds_per_voucher = {}
+	for line in lines:
+		tds_per_voucher[line.voucher_no] = tds_per_voucher.get(line.voucher_no, 0) + flt(line.tds_amount)
+
+	rows = []
+	for line in lines:
+		tds_amount = flt(line.tds_amount)
+		voucher_tds = tds_per_voucher.get(line.voucher_no) or 0
+		voucher_turnover = flt(turnovers.get(line.voucher_no))
+		turnover = voucher_turnover * (tds_amount / voucher_tds) if voucher_tds else 0.0
+
+		# The account tells us which section the row belongs in; the rate is what was
+		# actually deducted, since one account serves several rates (15%, 2.5%, 1.5%).
+		khata, title = _split_account(line.account, abbr)
+		rows.append(
+			frappe._dict(
+				supplier_name=NO_SUBLEDGER,
+				pan=None,
+				category=None,
+				khata=khata,
+				title=title,
+				rate=round(tds_amount / turnover * 100, 2) if turnover else 0,
+				turnover=turnover,
+				tds_amount=tds_amount,
+				amount_based=0,
+			)
+		)
+
+	return _merge_partyless(rows)
+
+
+def _merge_partyless(rows):
+	"""One "No Subledger" line per section, rather than one per journal entry.
+
+	The rate is only shown when every journal entry merged into the line deducted at the
+	same rate. Salary/SST vouchers bundle several expenses behind one deduction, so their
+	implied rates differ line by line and no single rate describes the merged row.
+	"""
+	merged = {}
+	for row in rows:
+		entry = merged.get((row.khata, row.title))
+		if entry is None:
+			merged[(row.khata, row.title)] = row
+			continue
+		entry.turnover += row.turnover
+		entry.tds_amount += row.tds_amount
+		if entry.rate != row.rate:
+			entry.rate = 0
+	return list(merged.values())
 
 
 def _parse_category(name):
@@ -100,7 +266,12 @@ def _build_rows(rows):
 	# group (supplier, category) rows into sections keyed by khata (account no)
 	sections = {}
 	for r in rows:
-		rate, khata, title = _parse_category(r.category)
+		if r.get("khata") is not None:
+			# Journal Entry rows already know their section and rate (see _split_account).
+			rate = _fmt_rate(r.rate) if r.rate else ""
+			khata, title = r.khata, r.title
+		else:
+			rate, khata, title = _parse_category(r.category)
 		section = sections.setdefault(khata, {"title": title, "khata": khata, "rows": []})
 		# keep the first non-empty title seen for the account
 		if not section["title"] and title:
