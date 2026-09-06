@@ -19,6 +19,8 @@ on the Report doc if one of these genuinely needs to go async.
 
 import frappe
 
+from avinashgroup_app.utils.site_scope import app_installed
+
 KEEP_INTERACTIVE = {
 	"Custom Ledger",
 	"General Ledger Posting Detail",
@@ -36,7 +38,7 @@ def patch_keep_reports_interactive():
 	original = report_module.enable_prepared_report
 
 	def enable_prepared_report(report: str, site: str):
-		if report in KEEP_INTERACTIVE:
+		if app_installed() and report in KEEP_INTERACTIVE:
 			return
 		return original(report, site)
 

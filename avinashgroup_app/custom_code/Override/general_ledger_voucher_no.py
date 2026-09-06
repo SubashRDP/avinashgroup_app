@@ -24,6 +24,7 @@ number.
 
 import frappe
 
+from avinashgroup_app.utils.site_scope import app_installed
 from avinashgroup_app.utils.voucher_numbers import link, resolve
 
 COLUMN = {
@@ -51,6 +52,11 @@ def patch_general_ledger_voucher_no():
 	original_execute = gl.execute
 
 	def execute(filters=None):
+		# This worker serves every site on the bench, and Numbering Configuration
+		# exists only where this app is installed.
+		if not app_installed():
+			return original_execute(filters)
+
 		columns, data, *rest = original_execute(filters)
 
 		if not data:
