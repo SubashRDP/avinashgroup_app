@@ -21,6 +21,7 @@
 	Ticking "Pick Columns" in the print dialog makes Frappe fall back to
 	print_grid, so the "#" column reappears on that path only.
 -->
+<div class="srs-print">
 <h2>{{ __(title) }}</h2>
 
 {%
@@ -101,4 +102,15 @@
 	.srs-filters { margin-bottom: 12px; }
 	.srs-filters .filter-row { line-height: 1.5; }
 	.srs-company { font-weight: bold; text-align: center; background: #f2f2f2; }
+
+	/* Type size for the printed sheet.
+	   The shared report_print_portrait.css (injected into the print popup for every
+	   query report) forces `table td` to 7px and `table th` to 7.5px with !important,
+	   which left this report's figures tiny inside tall cells. These rules are scoped
+	   to .srs-print so they outrank that bare-element selector without changing the
+	   size of any other printed report. Adjust the two font-size values to taste. */
+	.srs-print table td { font-size: 9.5px !important; line-height: 1.35 !important; }
+	.srs-print table th { font-size: 10px !important; line-height: 1.25 !important; }
+	.srs-print .srs-company { font-size: 10px !important; }
 </style>
+</div>

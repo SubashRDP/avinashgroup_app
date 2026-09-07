@@ -140,9 +140,54 @@ frappe.query_reports["Sales Report Summary"] = {
 		},
 	],
 
+	// Keep the report's own print template (sales_report_summary.html) even when the
+	// print dialog's "Pick Columns" is used.
+	//
+	// Frappe chooses the template as `print_settings.columns ? "print_grid" : custom_format`,
+	// so ticking Pick Columns drops this report back to the stock grid — which brings back
+	// the Rs symbol and the leading "#" column. The picked columns are honoured here
+	// instead: the report's own column list is narrowed to the chosen fieldnames and the
+	// flag is cleared, so Frappe renders the custom template with only those columns.
+	// Both methods are async, so the originals are restored once the render settles.
+	// Patched on the instance, not the prototype, so no other report is affected.
+	keepCustomFormatOnPickColumns: function (report) {
+		["print_report", "pdf_report"].forEach(function (method) {
+			const original = report[method];
+			if (typeof original !== "function" || report["_srs_" + method]) return;
+			report["_srs_" + method] = true;
+
+			report[method] = function (print_settings) {
+				const picked = print_settings && print_settings.columns;
+				if (!picked || !picked.length) {
+					return original.apply(this, arguments);
+				}
+
+				const saved_columns = this.columns;
+				this.columns = (this.columns || []).filter((col) =>
+					picked.includes(col.fieldname)
+				);
+				print_settings.columns = null;
+
+				const restore = () => {
+					this.columns = saved_columns;
+					print_settings.columns = picked;
+				};
+
+				try {
+					return Promise.resolve(original.apply(this, arguments)).finally(restore);
+				} catch (e) {
+					restore();
+					throw e;
+				}
+			};
+		});
+	},
+
 	// Select every company on first open. A report opened from a saved link or with the
 	// filter already set keeps what it was given.
 	onload: function (report) {
+		this.keepCustomFormatOnPickColumns(report);
+
 		// The company heading is drawn as a full-width banner. frappe-datatable has no
 		// colspan, so the name is allowed to spill out of its cell (overflow: visible)
 		// across the empty, uniformly shaded cells to its right — the same approach the
