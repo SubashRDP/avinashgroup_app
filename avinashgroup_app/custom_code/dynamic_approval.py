@@ -923,10 +923,49 @@ def _render_comparison_html(doc):
 			row_style = "background:#f0f0f0;font-weight:bold;"
 		else:
 			row_style = ""
+
+		# Commercial-terms rows: the label spans the fixed columns, then the
+		# free-text value under each supplier spans its Rate/Amount/Ordered set.
+		if row.get("is_term_row"):
+			term_cells = [
+				f'<td colspan="3" style="{cell}">'
+				f'{frappe.utils.escape_html(str(row.get("qty") or ""))}</td>'
+			]
+			for c in columns:
+				fieldname = c.get("fieldname") or ""
+				if not c.get("supplier_group") or not fieldname.endswith("_rate"):
+					continue
+				value = row.get(fieldname[: -len("_rate")])
+				text = frappe.utils.escape_html(str(value)).replace("\n", "<br>") if value else ""
+				term_cells.append(f'<td colspan="3" style="{cell}">{text}</td>')
+			body_rows.append(f'<tr style="{row_style}">{"".join(term_cells)}</tr>')
+			continue
+
 		cells = []
 		for c in columns:
-			value = row.get(c.get("fieldname"))
-			if c.get("fieldtype") == "Currency":
+			fieldname = c.get("fieldname") or ""
+			value = row.get(fieldname)
+			# "Ordered" column: qty of this item placed on a PO against this
+			# supplier's quotation - tick + qty, linked to the quotation.
+			if fieldname.endswith("_ordered"):
+				if not value:
+					cells.append(f'<td style="{cell}"></td>')
+					continue
+				shown = frappe.utils.escape_html(str(value))
+				sq = c.get("sq_link")
+				if sq:
+					href = frappe.utils.escape_html(frappe.utils.get_url("/app/supplier-quotation/" + sq))
+					shown = f'<a href="{href}" style="color:#000;">{shown}</a>'
+				badge = (
+					'<span style="display:inline-block;width:14px;height:14px;line-height:14px;'
+					'border-radius:50%;background:#28a745;color:#fff;font-size:10px;font-weight:bold;'
+					'text-align:center;">&#10003;</span>'
+				)
+				cells.append(
+					f'<td style="{cell}text-align:right;white-space:nowrap;background:#f4faf4;">'
+					f'{badge} {shown}</td>'
+				)
+			elif c.get("fieldtype") == "Currency":
 				text = frappe.utils.fmt_money(value, currency=currency) if value is not None else ""
 				cells.append(f'<td style="{cell}text-align:right;white-space:nowrap;">{text}</td>')
 			else:
