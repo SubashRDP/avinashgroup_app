@@ -154,6 +154,31 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {
+		// "Ordered" column: qty of this item already placed on a Purchase Order
+		// against this supplier's quotation. Tick + qty, linked to the quotation;
+		// blank when this item was not ordered from this supplier. Applies to every
+		// row type - summary / term rows never set it, so they stay blank.
+		if (column.fieldname.endsWith("_ordered")) {
+			if (value === null || value === undefined || value === "" || value === 0) return "";
+			const shown = frappe.utils.escape_html(String(value));
+			const tick = '<span style="display:inline-block;width:15px;height:15px;line-height:15px;border-radius:50%;background:#28a745;color:#fff;font-size:10px;font-weight:bold;text-align:center;vertical-align:middle;">\u2713</span>&nbsp;';
+			const sq = column.sq_link;
+			return sq
+				? `${tick}<a href="/app/supplier-quotation/${encodeURIComponent(sq)}" onclick="event.stopPropagation()">${shown}</a>`
+				: tick + shown;
+		}
+
+		// Commercial-terms rows (Specification / Warranty / Payment Terms /
+		// Delivery Period) carry free text under each supplier's Amount column -
+		// no currency formatting, and the per-unit Rate column stays empty.
+		if (data && data.is_term_row) {
+			if (column.fieldname === "sn" || column.fieldname === "item_name") return "";
+			if (column.fieldname === "qty") return default_formatter(value, row, column, data);
+			if (column.fieldname.endsWith("_rate")) return "";
+			if (value === null || value === undefined || value === "") return "";
+			return frappe.utils.escape_html(String(value)).replace(/\n/g, "<br>");
+		}
+
 		// Summary rows are quotation-level values - a per-unit Rate makes no sense there.
 		if (
 			data &&

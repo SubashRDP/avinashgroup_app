@@ -13,6 +13,13 @@
 	.summary-label { font-weight: normal; }
 	.total-row td { font-weight: bold; background: #f2f2f2; }
 	.invoice-row td { font-weight: bold; background: #f2f2f2; border-top: 2px solid #444; }
+	.term-row td { background: #fafafa; }
+	.term-val { text-align: left; white-space: pre-line; font-size: 8.5pt; }
+	.ord { text-align: right; white-space: nowrap; background: #f4faf4; }
+	.ord a { color: #000; text-decoration: none; }
+	.tick { display: inline-block; width: 13px; height: 13px; line-height: 13px;
+		border-radius: 50%; background: #28a745; color: #fff; font-size: 9px;
+		font-weight: bold; text-align: center; }
 </style>
 
 <div class="company">{{ company }}</div>
@@ -29,7 +36,7 @@
 		<tr>
 			<th class="no-border" colspan="3"></th>
 			{% for g in groups %}
-			<th class="sup-group" colspan="2">
+			<th class="sup-group" colspan="3">
 				{{ g.display }}
 				{% if g.sq %}<div class="sq-no">{{ g.sq }}</div>{% endif %}
 			</th>
@@ -40,8 +47,9 @@
 			<th>Item Name</th>
 			<th style="width: 55px;">Qty</th>
 			{% for g in groups %}
-			<th class="num" style="width: 85px;">Rate</th>
-			<th class="num" style="width: 100px;">Amount</th>
+			<th class="num" style="width: 80px;">Rate</th>
+			<th class="num" style="width: 70px;">Ordered</th>
+			<th class="num" style="width: 95px;">Amount</th>
 			{% endfor %}
 		</tr>
 	</thead>
@@ -54,13 +62,29 @@
 			<td class="num">{{ row.qty }}</td>
 			{% for g in groups %}
 			<td class="num">{{ fmt(row.get(g.rate_field)) }}</td>
+			{% set ov = row.get(g.ordered_field) %}
+			<td class="ord">
+				{%- if ov -%}
+					<span class="tick">&#10003;</span>&nbsp;
+					{%- if g.sq %}<a href="{{ frappe.utils.get_url('/app/supplier-quotation/' ~ g.sq) }}">{{ ov }}</a>
+					{%- else %}{{ ov }}{% endif -%}
+				{%- endif -%}
+			</td>
 			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
+			{% endfor %}
+		</tr>
+		{% elif row.is_term_row %}
+		<tr class="term-row">
+			<td class="summary-label" colspan="3">{{ row.qty }}</td>
+			{% for g in groups %}
+			<td class="term-val" colspan="3">{{ row.get(g.amount_field) or "" }}</td>
 			{% endfor %}
 		</tr>
 		{% else %}
 		<tr class="{{ 'total-row' if row.is_total_row else ('invoice-row' if row.is_invoice_row else '') }}">
 			<td class="summary-label" colspan="3">{{ row.qty }}</td>
 			{% for g in groups %}
+			<td></td>
 			<td></td>
 			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
 			{% endfor %}

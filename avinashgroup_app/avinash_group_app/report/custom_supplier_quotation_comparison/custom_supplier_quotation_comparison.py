@@ -192,6 +192,10 @@ def get_data(filters):
 			sq.supplier.as_("supplier_id"),
 			sq.supplier_name,
 			sq.valid_till,
+			sq.custom_specification,
+			sq.custom_warrenty,
+			sq.custom_payment_terms,
+			sq.custom_delivery_period,
 			sq.transaction_date,
 			sq.taxes_and_charges,
 			sq.discount_amount,
@@ -333,11 +337,51 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"total_taxes": flt(row.get("base_total_taxes_and_charges"), float_precision),
 				"grand_total": flt(row.get("base_grand_total"), float_precision),
 				"apply_discount_on": row.get("apply_discount_on"),
+				# Quotation-level commercial terms, rendered as free-text rows below
+				# the invoice total (one row per attribute, value per supplier).
+				"specification": row.get("custom_specification"),
+				"warranty": row.get("custom_warrenty"),
+				"payment_terms": row.get("custom_payment_terms"),
+				"delivery_period": row.get("custom_delivery_period"),
 			}
 
 	# Sort suppliers alphabetically for consistent column order
 	suppliers = sorted(list(all_suppliers))
-	
+
+	# ------------------------------------------------------------------
+	# Per-(item, supplier) breakdown of what a Purchase Order has already
+	# ordered against these quotations. Purchase Order Item.supplier_quotation
+	# records which quotation each PO line came from; grouping by item + quotation
+	# lets the "Ordered" column show, per item and per supplier, how much has been
+	# taken from that supplier (a single item can be split across suppliers).
+	# Independent of the Purchase Order filter; scoped to it when one is set.
+	# ------------------------------------------------------------------
+	sq_supplier = {r.get("parent"): r.get("supplier_id") for r in supplier_quotation_data if r.get("parent")}
+	ordered_item_supplier = {}  # (item_code, supplier_id) -> ordered qty
+	sq_names = [s for s in sq_supplier if s]
+	if sq_names:
+		conditions = ["poi.parent = po.name", "po.docstatus < 2", "poi.supplier_quotation IN %(sqs)s"]
+		values = {"sqs": tuple(sq_names)}
+		if filters.get("purchase_order"):
+			conditions.append("po.name = %(po)s")
+			values["po"] = filters.get("purchase_order")
+		for pr in frappe.db.sql(
+			f"""
+			SELECT poi.item_code AS item_code, poi.supplier_quotation AS sq,
+			       SUM(poi.qty) AS qty
+			FROM `tabPurchase Order Item` poi, `tabPurchase Order` po
+			WHERE {" AND ".join(conditions)}
+			GROUP BY poi.item_code, poi.supplier_quotation
+			""",
+			values,
+			as_dict=True,
+		):
+			supplier = sq_supplier.get(pr.sq)
+			if not supplier:
+				continue
+			key = (pr.item_code, supplier)
+			ordered_item_supplier[key] = ordered_item_supplier.get(key, 0.0) + flt(pr.qty)
+
 	# Build output rows
 	data = []
 	sn = 1
@@ -368,6 +412,10 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			else:
 				row[col_fieldname + "_rate"] = None
 				row[col_fieldname] = None
+
+			# Qty of this item already ordered from this supplier's quotation
+			ordered_qty = ordered_item_supplier.get((item_code, supplier))
+			row[col_fieldname + "_ordered"] = flt(ordered_qty, float_precision) if ordered_qty else None
 
 		data.append(row)
 	
@@ -460,6 +508,31 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			invoice_row[col_fieldname] = taxable + vat - discount_grand
 	data.append(invoice_row)
 
+	# ============================================
+	# COMMERCIAL-TERMS ROWS
+	# One free-text row per quotation-level attribute (Specification, Warranty,
+	# Payment Terms, Delivery Period), the value shown under each supplier. A row
+	# is dropped entirely when no quotation in the comparison carries that field.
+	# Marked is_term_row so the client formatter / PDF / email skip currency
+	# formatting and the per-unit Rate column for these lines.
+	# ============================================
+	term_rows = [
+		(_("Specification"), "specification"),
+		(_("Warranty"), "warranty"),
+		(_("Payment Terms"), "payment_terms"),
+		(_("Delivery Period"), "delivery_period"),
+	]
+	for label, key in term_rows:
+		term_row = summary_row(label, is_term_row=1)
+		for supplier in suppliers:
+			col_fieldname = frappe.scrub(supplier)
+			value = ""
+			if supplier in supplier_quotation_map:
+				value = (supplier_quotation_map[supplier].get(key) or "").strip()
+			term_row[col_fieldname] = value
+		if any(term_row[frappe.scrub(s)] for s in suppliers):
+			data.append(term_row)
+
 	# supplier -> quotation name, used to link the column header to the document
 	supplier_sq_map = {s: supplier_quotation_map[s]["quotation"] for s in supplier_quotation_map}
 
@@ -496,10 +569,11 @@ def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=
 		},
 	]
 
-	# Dynamic supplier columns. Each supplier contributes a Rate + Amount pair;
+	# Dynamic supplier columns. Each supplier contributes Rate + Ordered + Amount;
 	# `supplier_group` carries the supplier's display name so the client script
 	# (and the approval-email renderer) can draw it as one spanning header cell
-	# above the two columns.
+	# above the three columns. `Ordered` shows, per item, the qty already placed
+	# on a Purchase Order against that supplier's quotation (tick + link to the SQ).
 	for supplier in sorted(suppliers):
 		col_fieldname = frappe.scrub(supplier)
 		display = (supplier_display_name or {}).get(supplier, supplier)
@@ -510,6 +584,14 @@ def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
 			"width": 110,
+			"sq_link": sq_link,
+			"supplier_group": display,
+		})
+		columns.append({
+			"fieldname": col_fieldname + "_ordered",
+			"label": _("Ordered"),
+			"fieldtype": "Float",
+			"width": 100,
 			"sq_link": sq_link,
 			"supplier_group": display,
 		})
@@ -542,16 +624,18 @@ def get_message():
 
 
 def _supplier_groups(columns):
-	"""The dynamic Rate+Amount column pairs, one per supplier, rebuilt from the
-	columns: everything after the three fixed ones shares a supplier_group."""
+	"""The dynamic Rate+Amount+Ordered column sets, one per supplier, rebuilt from
+	the columns: everything after the three fixed ones shares a supplier_group."""
 	groups = []
 	for col in columns[3:]:
 		if col["fieldname"].endswith("_rate"):
+			base = col["fieldname"][: -len("_rate")]
 			groups.append({
 				"display": col.get("supplier_group") or "",
 				"sq": col.get("sq_link"),
 				"rate_field": col["fieldname"],
-				"amount_field": col["fieldname"][: -len("_rate")],
+				"amount_field": base,
+				"ordered_field": base + "_ordered",
 			})
 	return groups
 
@@ -574,10 +658,10 @@ def export_xlsx(filters):
 
 	supplier_row = ["", "", ""]
 	for g in groups:
-		supplier_row += [g["display"], ""]
+		supplier_row += [g["display"], "", ""]
 	label_row = ["SN", "Item Name", "Qty"]
 	for _g in groups:
-		label_row += ["Rate", "Amount"]
+		label_row += ["Rate", "Ordered", "Amount"]
 
 	rows = [supplier_row, label_row]
 	for d in data:
@@ -585,7 +669,7 @@ def export_xlsx(filters):
 			continue
 		row = [d.get("sn"), d.get("item_name") or d.get("item_code"), d.get("qty")]
 		for g in groups:
-			row += [d.get(g["rate_field"]), d.get(g["amount_field"])]
+			row += [d.get(g["rate_field"]), d.get(g["ordered_field"]), d.get(g["amount_field"])]
 		rows.append(row)
 
 	xlsx = make_xlsx(rows, "Supplier Quotation Comparison")
@@ -596,11 +680,11 @@ def export_xlsx(filters):
 	ws = wb.active
 	col = 4
 	for _g in groups:
-		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
+		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 2)
 		cell = ws.cell(row=1, column=col)
 		cell.alignment = Alignment(horizontal="center")
 		cell.font = Font(bold=True)
-		col += 2
+		col += 3
 	out = BytesIO()
 	wb.save(out)
 
@@ -658,9 +742,9 @@ def download_pdf(filters, view=None):
 		},
 	)
 
-	# The three fixed columns plus up to three supplier pairs sit comfortably on
-	# portrait A4; beyond that the pairs get too narrow, so flip to landscape.
-	orientation = "Portrait" if len(groups) <= 3 else "Landscape"
+	# The three fixed columns plus two supplier blocks (Rate/Amount/Ordered each)
+	# sit on portrait A4; beyond that the columns get too narrow, so use landscape.
+	orientation = "Portrait" if len(groups) <= 2 else "Landscape"
 	pdf_data = get_pdf(html, {
 		"page-size": "A4",
 		"orientation": orientation,
