@@ -6,11 +6,9 @@ import json
 import frappe
 from frappe import _
 
-# Nepal Gas Udhyog trades a single Item per company, literally named "LP Gas"
-# (see avinashgroup_app.templates.pages.place_order.LP_GAS_ITEM_NAME) — the
-# different cylinder sizes shown as separate product codes in the legacy FACT
-# WebNG report are UOMs on that one item, priced per UOM via the Price List.
-LP_GAS_ITEM_NAME = "LP Gas"
+# Every item that moved in the period is reported, not just gas. Rows are scoped by the
+# company on the stock document itself rather than by the item's custom_company, so an
+# item used by more than one company is reported under whichever company moved it.
 
 
 def _as_list(value):
@@ -117,14 +115,56 @@ def get_columns():
 	]
 
 
-def _lp_gas_items(companies):
-	"""The LP Gas item for each selected company, as {item_code: {company, item_name}}."""
-	rows = frappe.get_all(
-		"Item",
-		filters={"item_name": LP_GAS_ITEM_NAME, "custom_company": ["in", companies]},
-		fields=["name", "custom_company", "item_name"],
+@frappe.whitelist()
+def get_company_items(company=None, txt=None):
+	"""Item options scoped to the selected company via the item's custom_company.
+	Every company has its own "LP Gas", so the label carries the company abbreviation."""
+	companies = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["(it.name LIKE %(txt)s OR it.item_name LIKE %(txt)s)"]
+	values = {"txt": like}
+	if companies:
+		conditions.append("(it.custom_company IN %(companies)s OR COALESCE(it.custom_company, '') = '')")
+		values["companies"] = tuple(companies)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT
+			it.name AS value,
+			CASE WHEN co.abbr IS NULL OR co.abbr = '' THEN it.item_name
+			     ELSE CONCAT(it.item_name, ' - ', co.abbr) END AS label,
+			it.name AS description
+		FROM `tabItem` it
+		LEFT JOIN `tabCompany` co ON co.name = it.custom_company
+		WHERE {where}
+		ORDER BY co.abbr, it.item_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
 	)
-	return {r.name: {"company": r.custom_company, "item_name": r.item_name} for r in rows}
+
+
+def _item_filter(column, items):
+	"""SQL condition for the Item filter, or "" when nothing is selected."""
+	if not items:
+		return ""
+	return "AND {0} IN %(items)s".format(column)
+
+
+def _item_names(item_codes):
+	"""{item_code: item_name} for the items that actually appear in the report."""
+	if not item_codes:
+		return {}
+	return dict(
+		frappe.get_all(
+			"Item",
+			filters=[["name", "in", list(item_codes)]],
+			fields=["name", "item_name"],
+			as_list=True,
+		)
+	)
 
 
 def _price_list_filter(column, price_lists):
@@ -139,92 +179,97 @@ def _price_list_filter(column, price_lists):
 	return "AND ({0} IN %(price_lists)s OR {0} IS NULL OR {0} = '')".format(column)
 
 
-def _received(item_codes, from_date, to_date, price_lists):
+def _received(companies, from_date, to_date, price_lists, items):
 	"""Purchase Receipt (always stock-effecting) + Purchase Invoice with update_stock=1
 	(a PI billed against a PR, update_stock=0, is skipped — that PR already counted it).
 	Return rows carry negative qty already, so a Purchase Return nets straight out."""
-	if not item_codes:
-		return []
 	price_list_condition = _price_list_filter("pr.buying_price_list", price_lists)
 	price_list_condition_pi = _price_list_filter("pi.buying_price_list", price_lists)
+	item_condition = _item_filter("pri.item_code", items)
+	item_condition_pi = _item_filter("pii.item_code", items)
 	return frappe.db.sql(
 		"""
-		SELECT item_code, uom, price_list, SUM(qty) AS qty FROM (
-			SELECT pri.item_code AS item_code, pri.uom AS uom, NULLIF(pr.buying_price_list, '') AS price_list, pri.qty AS qty
+		SELECT company, item_code, uom, price_list, SUM(qty) AS qty FROM (
+			SELECT pr.company AS company, pri.item_code AS item_code, pri.uom AS uom, NULLIF(pr.buying_price_list, '') AS price_list, pri.qty AS qty
 			FROM `tabPurchase Receipt Item` pri
 			JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
-			WHERE pr.docstatus = 1 AND pri.item_code IN %(items)s
+			WHERE pr.docstatus = 1 AND pr.company IN %(companies)s
 			  AND pr.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition}
+			  {item_condition}
 
 			UNION ALL
 
-			SELECT pii.item_code AS item_code, pii.uom AS uom, NULLIF(pi.buying_price_list, '') AS price_list, pii.qty AS qty
+			SELECT pi.company AS company, pii.item_code AS item_code, pii.uom AS uom, NULLIF(pi.buying_price_list, '') AS price_list, pii.qty AS qty
 			FROM `tabPurchase Invoice Item` pii
 			JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
-			WHERE pi.docstatus = 1 AND pi.update_stock = 1 AND pii.item_code IN %(items)s
+			WHERE pi.docstatus = 1 AND pi.update_stock = 1 AND pi.company IN %(companies)s
 			  AND pi.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition_pi}
+			  {item_condition_pi}
 		) t
-		GROUP BY item_code, uom, price_list
-		""".format(price_list_condition=price_list_condition, price_list_condition_pi=price_list_condition_pi),
-		{"items": tuple(item_codes), "from_date": from_date, "to_date": to_date, "price_lists": price_lists},
+		GROUP BY company, item_code, uom, price_list
+		""".format(price_list_condition=price_list_condition, price_list_condition_pi=price_list_condition_pi,
+			item_condition=item_condition, item_condition_pi=item_condition_pi),
+		{"companies": tuple(companies), "from_date": from_date, "to_date": to_date,
+		 "price_lists": price_lists, "items": items},
 		as_dict=True,
 	)
 
 
-def _delivered(item_codes, from_date, to_date, price_lists):
+def _delivered(companies, from_date, to_date, price_lists, items):
 	"""Delivery Note (always stock-effecting) + Sales Invoice with update_stock=1
 	(an SI billed against a DN, update_stock=0, is skipped — that DN already counted it).
 	Sales Return rows carry negative qty already, so they net straight out."""
-	if not item_codes:
-		return []
 	price_list_condition = _price_list_filter("dn.selling_price_list", price_lists)
 	price_list_condition_si = _price_list_filter("si.selling_price_list", price_lists)
+	item_condition = _item_filter("dni.item_code", items)
+	item_condition_si = _item_filter("sii.item_code", items)
 	return frappe.db.sql(
 		"""
-		SELECT item_code, uom, price_list, SUM(qty) AS qty FROM (
-			SELECT dni.item_code AS item_code, dni.uom AS uom, NULLIF(dn.selling_price_list, '') AS price_list, dni.qty AS qty
+		SELECT company, item_code, uom, price_list, SUM(qty) AS qty FROM (
+			SELECT dn.company AS company, dni.item_code AS item_code, dni.uom AS uom, NULLIF(dn.selling_price_list, '') AS price_list, dni.qty AS qty
 			FROM `tabDelivery Note Item` dni
 			JOIN `tabDelivery Note` dn ON dn.name = dni.parent
-			WHERE dn.docstatus = 1 AND dni.item_code IN %(items)s
+			WHERE dn.docstatus = 1 AND dn.company IN %(companies)s
 			  AND dn.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition}
+			  {item_condition}
 
 			UNION ALL
 
-			SELECT sii.item_code AS item_code, sii.uom AS uom, NULLIF(si.selling_price_list, '') AS price_list, sii.qty AS qty
+			SELECT si.company AS company, sii.item_code AS item_code, sii.uom AS uom, NULLIF(si.selling_price_list, '') AS price_list, sii.qty AS qty
 			FROM `tabSales Invoice Item` sii
 			JOIN `tabSales Invoice` si ON si.name = sii.parent
-			WHERE si.docstatus = 1 AND si.update_stock = 1 AND sii.item_code IN %(items)s
+			WHERE si.docstatus = 1 AND si.update_stock = 1 AND si.company IN %(companies)s
 			  AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition_si}
+			  {item_condition_si}
 		) t
-		GROUP BY item_code, uom, price_list
-		""".format(price_list_condition=price_list_condition, price_list_condition_si=price_list_condition_si),
-		{"items": tuple(item_codes), "from_date": from_date, "to_date": to_date, "price_lists": price_lists},
+		GROUP BY company, item_code, uom, price_list
+		""".format(price_list_condition=price_list_condition, price_list_condition_si=price_list_condition_si,
+			item_condition=item_condition, item_condition_si=item_condition_si),
+		{"companies": tuple(companies), "from_date": from_date, "to_date": to_date,
+		 "price_lists": price_lists, "items": items},
 		as_dict=True,
 	)
 
 
 def get_data(filters, companies):
-	items = _lp_gas_items(companies)
-	if not items:
-		return []
-	item_codes = list(items.keys())
 	price_lists = tuple(_as_list(filters.get("price_list"))) or None
+	items = tuple(_as_list(filters.get("item"))) or None
 
 	received = {
-		(r.item_code, r.uom, r.price_list): r.qty or 0
-		for r in _received(item_codes, filters["from_date"], filters["to_date"], price_lists)
+		(r.company, r.item_code, r.uom, r.price_list): r.qty or 0
+		for r in _received(companies, filters["from_date"], filters["to_date"], price_lists, items)
 	}
 	delivered = {
-		(r.item_code, r.uom, r.price_list): r.qty or 0
-		for r in _delivered(item_codes, filters["from_date"], filters["to_date"], price_lists)
+		(r.company, r.item_code, r.uom, r.price_list): r.qty or 0
+		for r in _delivered(companies, filters["from_date"], filters["to_date"], price_lists, items)
 	}
 
 	price_list_names = {}
-	all_price_lists = {k[2] for k in set(received) | set(delivered) if k[2]}
+	all_price_lists = {k[3] for k in set(received) | set(delivered) if k[3]}
 	if all_price_lists:
 		price_list_docs = frappe.get_all(
 			"Price List",
@@ -249,16 +294,18 @@ def get_data(filters, companies):
 			for d in price_list_docs
 		}
 
+	keys = set(received) | set(delivered)
+	item_names = _item_names({k[1] for k in keys})
+
 	rows = []
-	for key in sorted(set(received) | set(delivered), key=lambda k: (k[0], k[1], k[2] or "")):
-		item_code, uom, row_price_list = key
-		item = items[item_code]
+	for key in sorted(keys, key=lambda k: (k[0] or "", k[1], k[2], k[3] or "")):
+		company, item_code, uom, row_price_list = key
 		r = received.get(key, 0)
 		d = delivered.get(key, 0)
 		rows.append({
-			"company": item["company"],
+			"company": company,
 			"item_code": item_code,
-			"item_name": item["item_name"],
+			"item_name": item_names.get(item_code, item_code),
 			"uom": uom,
 			"price_list": price_list_names.get(row_price_list, row_price_list),
 			"received": r,

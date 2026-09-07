@@ -224,10 +224,14 @@ p { text-align: center; margin: 0; padding: 2px; }
 {#- Trailing rows: Total Before Tax, VAT, Total Including Vat, TDS, Discount (if
    any), Total — rendered at the tight .pi-total-row line-height, not PAD_PX+LINE_PX. -#}
 {% set TOTAL_ROW_PX = 18 %}
-{% for _ in range(5 + (1 if doc.write_off_amount else 0)) %}
+{#- The Discount row shows the Write Off. grand_total does not include it, so the
+   payable figure printed as Total is grand_total less the write off. -#}
+{% set discount_total = doc.write_off_amount or 0 %}
+{% set net_payable = (doc.grand_total or 0) - (doc.write_off_amount or 0) %}
+{% for _ in range(5 + (1 if discount_total else 0)) %}
   {% set _add = G.items.append(TOTAL_ROW_PX) %}
 {% endfor %}
-{% set words = frappe.utils.money_in_words(doc.grand_total).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
+{% set words = frappe.utils.money_in_words(net_payable).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.remarks or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {#- The closing group — the five total rows, In Words and Remarks — is measured as
@@ -328,23 +332,23 @@ p { text-align: center; margin: 0; padding: 2px; }
       <td colspan="2">Less : TDS</td>
       <td colspan="2" style="text-align:right;">{{ amt(doc.taxes_and_charges_deducted) }}</td>
     </tr>
-    {% if doc.write_off_amount %}
+    {% if discount_total %}
     <tr class="pi-total-row">
       <td colspan="3" style="border:none;"></td>
       <td colspan="2">Less : Discount</td>
-      <td colspan="2" style="text-align:right;">{{ amt(doc.write_off_amount) }}</td>
+      <td colspan="2" style="text-align:right;">{{ amt(discount_total) }}</td>
     </tr>
     {% endif %}
     <tr class="pi-total-row">
       <td colspan="3" style="border:none;"></td>
       <td colspan="2" style="border-bottom:1px solid #000; border-top:1px solid #000;"><strong>Total</strong></td>
       <td colspan="2" style="border-top:1px solid #000; text-align:right;">
-        <strong>{{ amt(doc.grand_total) }}</strong>
+        <strong>{{ amt(net_payable) }}</strong>
       </td>
     </tr>
     <tr style="border:solid #000 1px;">
       <td colspan="7" style="border:none; padding-top:5px;">
-        {{ frappe.utils.money_in_words(doc.grand_total).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}
+        {{ words }}
      
       </td>
     </tr>

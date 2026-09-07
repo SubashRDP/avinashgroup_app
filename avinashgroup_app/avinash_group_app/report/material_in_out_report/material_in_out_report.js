@@ -31,6 +31,23 @@ frappe.query_reports["Material In Out Report"] = {
 			reqd: 1,
 		},
 		{
+			fieldname: "item",
+			label: __("Item"),
+			fieldtype: "MultiSelectList",
+			get_data: function (txt) {
+				const companies = frappe.query_report.get_filter_value("company") || [];
+				if (!companies.length) return [];
+
+				return frappe
+					.call({
+						method:
+							"avinashgroup_app.avinash_group_app.report.material_in_out_report.material_in_out_report.get_company_items",
+						args: { company: companies, txt: txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
 			fieldname: "price_list",
 			label: __("Price List"),
 			fieldtype: "MultiSelectList",
