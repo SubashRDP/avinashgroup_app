@@ -306,6 +306,19 @@ padding: 3px !important;
    .main-table tr.jv-total { height:auto !important; }
    .main-table tr.jv-total td { padding-top:0 !important; }
 
+   /* Narration line: it belongs to the line item directly above it, so it drops
+      the uniform 20px row height and the cell padding that would otherwise open
+      a gap between the two. */
+   /* The line item that owns a Narration gives up the uniform 20px row height
+      too: at 12px text that row was ~6px taller than its own line box, and with
+      top-aligned cells all of that slack fell between the item and its
+      Narration. Both rows now size to their text, closing the gap to 0. */
+   .main-table tr.jv-hasnarration { height:auto !important; }
+   .main-table tr.jv-hasnarration td { padding-bottom:0 !important; }
+
+   .main-table tr.jv-narration { height:auto !important; }
+   .main-table tr.jv-narration td { padding-top:0 !important; padding-bottom:0 !important; line-height:1.1 !important; }
+
   
   .bottom-table td
   {
@@ -891,7 +904,7 @@ padding:0px 30px;
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
@@ -900,7 +913,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
       {% if row.user_remark and row.user_remark|trim %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-narration {% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="{{ ncols - 1 }}"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
@@ -932,7 +945,7 @@ padding:0px 30px;
       {% set sn.i = sn.i + 1 %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
@@ -941,7 +954,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
       {% if row.user_remark and row.user_remark|trim %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-narration {% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
@@ -973,7 +986,7 @@ padding:0px 30px;
       {% if acc.account_type not in ["Cash", "Bank"] %}
       {% set sn.i = sn.i + 1 %}
       {% set amount = row.debit_in_account_currency or row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
@@ -982,7 +995,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if amount %}{{ amt(amount) }}{% endif %}</td>
       </tr>
       {% if row.user_remark and row.user_remark|trim %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-narration {% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
@@ -1009,7 +1022,7 @@ padding:0px 30px;
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
@@ -1019,7 +1032,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
       {% if row.user_remark and row.user_remark|trim %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-narration {% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="{{ ncols - 1 }}"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
       </tr>
@@ -1085,7 +1098,7 @@ padding:0px 30px;
               <td style="border:none;"></td>
             </tr>
             {% if row.user_remark and row.user_remark|trim %}
-            <tr>
+            <tr class="jv-narration">
               <td style="border:none; vertical-align:top;">Narration</td>
               <td colspan="3" style="border:none; vertical-align:top;">: {{ row.user_remark|replace("\n", " ")|trim }}</td>
             </tr>
@@ -1114,7 +1127,7 @@ padding:0px 30px;
     {% else %}
     {% for row in doc.accounts %}
   {% set acc = frappe.get_cached_doc("Account", row.account) %}
-  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
     <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
     <td>
       <strong>{{ acc.account_name }}</strong>
@@ -1144,7 +1157,7 @@ padding:0px 30px;
     </td>
   </tr>
   {% if row.user_remark and row.user_remark|trim %}
-  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-narration {% if R.i in S.breaks %}jv-break{% endif %}">
     <td></td>
     <td colspan="{{ ncols - 1 }}"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
   </tr>
