@@ -11,7 +11,8 @@ A4 sheet and drops the signatures at ~98% instead of using the top half and ~47%
 Any change to the voucher body belongs in BOTH files. Per-JV-type columns after Account:
   Cash Entry / Cash-Bank-Contra / Journal Entry -> Vehicle | Party | Party Name
   all other types                               -> Party | Party Name
-S.N. column always shown. Narration only for Cash Entry.
+S.N. column always shown. Every type prints a row's user_remark as a
+"Narration:" line directly under that line item.
 =========================================================================== -#}
 <style>
 @page {
@@ -556,8 +557,9 @@ padding:0px 30px;
 .print-format { margin-top: 10mm; margin-bottom: 6mm; margin-left: 10mm; margin-right: 10mm; }
 @media print { .print-format { margin: 0 !important; } }
 
-/* Force all text black */
-.print-format, .print-format * { color:#000 !important; }
+/* Force all text black, and typewriter (monospace) throughout — matches the
+   half-page Nepal Gas Journal Voucher and the NG Cash Payment (CV) Voucher. */
+.print-format, .print-format * { color:#000 !important; font-family:"Courier New", Courier, monospace !important; }
 </style>
 
 {% set company = frappe.get_doc("Company", doc.company) %}
@@ -678,7 +680,9 @@ padding:0px 30px;
   {#- Party Journal rows are a 4-line key-value block (Code / Name / gap / Amount /
      Document Class) rather than a single line, and end with In Words + Remarks. -#}
   {% for row in doc.accounts %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * 5) %}
+    {#- A row carrying a Narration prints one more line inside the same block. -#}
+    {% set nlines = ([1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max) if (row.user_remark and row.user_remark|trim) else 0 %}
+    {% set _add = G.items.append(PAD_PX + LINE_PX * (5 + nlines)) %}
   {% endfor %}
   {% set G.data_count = G.items|length %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
@@ -699,8 +703,8 @@ padding:0px 30px;
       {% set lines = [1, ((acc.account_name|length) + CH_ACC - 1) // CH_ACC,
                          ((pname|string|length) + CH_PARTY - 1) // CH_PARTY]|max %}
       {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
-      {#- Cash Entry and Contra print a per-row Narration on its own line. -#}
-      {% if (is_cash_entry or is_cash_contra) and row.user_remark %}
+      {#- Every type prints a per-row Narration on its own line when the row carries one. -#}
+      {% if row.user_remark and row.user_remark|trim %}
         {% set nlines = [1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max %}
         {% set _add = G.items.append(PAD_PX + LINE_PX * nlines) %}
       {% endif %}
@@ -895,6 +899,12 @@ padding:0px 30px;
         <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
+      {% if row.user_remark and row.user_remark|trim %}
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+        <td></td>
+        <td colspan="{{ ncols - 1 }}"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
+      </tr>
+      {% endif %}
     {% endfor %}
 {{ tail_spacer(ncols) }}
       <tr class="jv-total">
@@ -930,7 +940,7 @@ padding:0px 30px;
         <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
-      {% if row.user_remark %}
+      {% if row.user_remark and row.user_remark|trim %}
       {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
@@ -971,7 +981,7 @@ padding:0px 30px;
         <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% endif %}</td>
         <td style="text-align:right;">{% if amount %}{{ amt(amount) }}{% endif %}</td>
       </tr>
-      {% if row.user_remark %}
+      {% if row.user_remark and row.user_remark|trim %}
       {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td></td>
         <td colspan="5"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
@@ -1008,6 +1018,12 @@ padding:0px 30px;
         <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
+      {% if row.user_remark and row.user_remark|trim %}
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+        <td></td>
+        <td colspan="{{ ncols - 1 }}"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
+      </tr>
+      {% endif %}
     {% endfor %}
 {{ tail_spacer(ncols) }}
       <tr class="jv-total">
@@ -1068,6 +1084,12 @@ padding:0px 30px;
               <td style="border:none;"></td>
               <td style="border:none;"></td>
             </tr>
+            {% if row.user_remark and row.user_remark|trim %}
+            <tr>
+              <td style="border:none; vertical-align:top;">Narration</td>
+              <td colspan="3" style="border:none; vertical-align:top;">: {{ row.user_remark|replace("\n", " ")|trim }}</td>
+            </tr>
+            {% endif %}
           </table>
         </td>
       </tr>
@@ -1096,9 +1118,6 @@ padding:0px 30px;
     <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
     <td>
       <strong>{{ acc.account_name }}</strong>
-      {% if row.user_remark and doc.custom_p_type == "Cash Entry" %}
-        <div><strong>Narration :</strong> {{ row.user_remark }}</div>
-      {% endif %}
     </td>
     {% if show_vehicle %}<td style="white-space:nowrap;"><strong>{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</strong></td>{% endif %}{% if show_party %}<td><strong>{{ row.party_type or "" }}</strong></td>{% endif %}
 
@@ -1124,6 +1143,12 @@ padding:0px 30px;
       {% if row.credit_in_account_currency %}{{ amt(row.credit_in_account_currency) }}{% endif %}
     </td>
   </tr>
+  {% if row.user_remark and row.user_remark|trim %}
+  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
+    <td></td>
+    <td colspan="{{ ncols - 1 }}"><strong>Narration:</strong> {{ row.user_remark|replace("\n", " ")|trim }}</td>
+  </tr>
+  {% endif %}
 {% endfor %}
 {{ tail_spacer(ncols) }}
       <tr>

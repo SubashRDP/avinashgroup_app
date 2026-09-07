@@ -223,7 +223,7 @@ def _comparison(filters, companies):
 	data = [rows[key] for key in sorted(rows)]
 	if data:
 		data.append(_total_row(_("Total"), data, columns))
-	return columns, data
+	return columns, _fill_columns(data, columns)
 
 
 def _blocks(company, rows, branch_wise):
@@ -251,6 +251,23 @@ def _blocks(company, rows, branch_wise):
 		("{0} - {1}".format(company, branch) if branch else company, by_branch[branch])
 		for branch in sorted(by_branch)
 	]
+
+
+def _fill_columns(data, columns):
+	"""Give every row a key for every column, defaulting to None.
+
+	Frappe's Excel/CSV export reads a Currency column that declares a precision with a
+	bare `row[fieldname]` (frappe/desk/query_report.py, format_fields), so a row missing
+	that key raises KeyError and the export 500s. Heading and spacer rows carry only
+	item_name, and a comparison row only carries the companies that sell that item, so
+	without this the export breaks. None keeps the cell blank on screen, exactly as a
+	missing key did.
+	"""
+	fieldnames = [col["fieldname"] for col in columns]
+	for row in data:
+		for fieldname in fieldnames:
+			row.setdefault(fieldname, None)
+	return data
 
 
 def _total_row(label, rows, columns):
@@ -300,7 +317,7 @@ def execute(filters=None):
 	if everything and len(data) and sum(1 for row in data if row.get("_section")) > 1:
 		data.append(_total_row(_("Grand Total"), everything, columns))
 
-	return columns, data
+	return columns, _fill_columns(data, columns)
 
 
 def get_columns():
