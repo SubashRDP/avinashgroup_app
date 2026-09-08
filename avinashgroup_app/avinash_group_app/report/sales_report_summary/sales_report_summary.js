@@ -50,12 +50,17 @@ frappe.query_reports["Sales Report Summary"] = {
 			},
 		},
 		{
+			// On This Month and Fiscal Year the server resolves the window and fills the
+			// From/To Date boxes, which stay visible in every mode (see syncResolvedDates).
 			fieldname: "date_filter_type",
 			label: __("Filter By"),
 			fieldtype: "Select",
-			options: ["Date Range", "Fiscal Year"],
+			options: ["Date Range", "This Month", "Fiscal Year"],
 			default: "Date Range",
 			reqd: 1,
+			on_change: function () {
+				frappe.query_reports["Sales Report Summary"].syncResolvedDates();
+			},
 		},
 		{
 			// The fiscal year's start/end dates are resolved on the server from the
@@ -66,23 +71,26 @@ frappe.query_reports["Sales Report Summary"] = {
 			options: "Fiscal Year",
 			default: frappe.defaults.get_user_default("fiscal_year"),
 			depends_on: "eval:doc.date_filter_type=='Fiscal Year'",
+			on_change: function () {
+				frappe.query_reports["Sales Report Summary"].syncResolvedDates();
+			},
 		},
 		{
+			// No depends_on: From/To Date stay on screen whatever the Filter By choice,
+			// so the dates in play are always readable, and stay editable in every mode.
+			// This Month and Fiscal Year prefill them (see syncResolvedDates).
 			// The shared rdp_common_app hook (report_nepali_date.js) auto-attaches a BS
-			// (Miti) twin to every Date filter and the "📅 Select Month" picker, which
-			// fills these AD dates.
+			// (Miti) twin to every Date filter, so the BS dates appear beside these.
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
 			default: frappe.datetime.now_date(),
-			depends_on: "eval:doc.date_filter_type=='Date Range'",
 		},
 		{
 			fieldname: "to_date",
 			label: __("To Date"),
 			fieldtype: "Date",
 			default: frappe.datetime.now_date(),
-			depends_on: "eval:doc.date_filter_type=='Date Range'",
 		},
 		{
 			fieldname: "item",
@@ -183,10 +191,70 @@ frappe.query_reports["Sales Report Summary"] = {
 		});
 	},
 
+	// Fill and lock the From/To Date boxes for the modes that derive their own window.
+	//
+	// The dates are always on screen and always editable. This Month and Fiscal Year do
+	// not lock them: they prefill them — the server resolves the Nepali month, or the
+	// Fiscal Year record's own start/end, and writes the pair into the two boxes. The
+	// boxes are then what the query runs on (see _period), so a date typed over the top
+	// is honoured rather than silently recomputed.
+	// Only ever written when the value actually differs, so setting them cannot feed
+	// back into another refresh.
+	syncResolvedDates: function () {
+		const report = frappe.query_report;
+		if (!report) return;
+
+		const filter_type = report.get_filter_value("date_filter_type");
+		const derived = ["This Month", "Fiscal Year"].includes(filter_type);
+
+		// Switching back to Date Range hands the boxes back to the user, and they start
+		// at today rather than keeping the month or fiscal year that was resolved into
+		// them. Only a real switch resets them: the previous choice is remembered so a
+		// report opened on Date Range — from a saved link carrying its own dates, say —
+		// keeps the dates it was given.
+		const switched_to_range =
+			!derived && this._last_filter_type && this._last_filter_type !== filter_type;
+		this._last_filter_type = filter_type;
+
+		if (!derived) {
+			if (switched_to_range) {
+				const today = frappe.datetime.now_date();
+				if (
+					report.get_filter_value("from_date") !== today ||
+					report.get_filter_value("to_date") !== today
+				) {
+					report.set_filter_value({ from_date: today, to_date: today });
+				}
+			}
+			return;
+		}
+
+		frappe
+			.call({
+				method: `${METHOD_PATH}.get_period`,
+				args: { filters: report.get_filter_values() },
+			})
+			.then(function (r) {
+				const period = r.message;
+				if (!period) return;
+				if (
+					report.get_filter_value("from_date") === period.from_date &&
+					report.get_filter_value("to_date") === period.to_date
+				) {
+					return;
+				}
+				report.set_filter_value({
+					from_date: period.from_date,
+					to_date: period.to_date,
+				});
+			});
+	},
+
 	// Select every company on first open. A report opened from a saved link or with the
 	// filter already set keeps what it was given.
 	onload: function (report) {
 		this.keepCustomFormatOnPickColumns(report);
+		this.syncResolvedDates();
 
 		// The company heading is drawn as a full-width banner. frappe-datatable has no
 		// colspan, so the name is allowed to spill out of its cell (overflow: visible)
@@ -200,9 +268,13 @@ frappe.query_reports["Sales Report Summary"] = {
 				.srs-company-row { position: relative; }
 				.srs-company-row .dt-cell { background: #f2f2f2 !important; overflow: visible !important; position: static !important; }
 				.srs-company-row .dt-cell__content { overflow: visible !important; }
+				/* No z-index. Being absolutely positioned already paints the banner over
+				   the plain cells beside it, while a positive z-index would also paint it
+				   over the filter dropdowns — Awesomplete's list is only z-index 1, so a
+				   banner at 10 showed through the open Fiscal Year list. */
 				.srs-company-banner {
 					position: absolute; left: 0; right: 0; text-align: center;
-					font-weight: bold; white-space: nowrap; z-index: 10;
+					font-weight: bold; white-space: nowrap;
 				}
 			`;
 			document.head.appendChild(style);
@@ -227,6 +299,7 @@ frappe.query_reports["Sales Report Summary"] = {
 			me.bindCompanyRescan(dt);
 		}, 100);
 	},
+
 
 	tagCompanyRows: function (dt) {
 		const data = frappe.query_report.data || [];

@@ -1,9 +1,11 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
+import datetime
 import json
 
 import frappe
+import nepali_datetime as nd
 from frappe import _
 
 from avinashgroup_app.custom_code.CBMS.utils import get_fiscal_year_dates
@@ -123,18 +125,83 @@ def get_company_price_lists(company=None, txt=None):
 	)
 
 
-def _period(filters):
-	"""(from_date, to_date) for the report, honouring the "Filter By" dropdown.
-	On Fiscal Year the window is the Fiscal Year record's own start/end dates, read on
-	the server; the From/To Date boxes are hidden in that mode and ignored here."""
+def _current_nepali_month():
+	"""(from_date, to_date) in AD covering the current Bikram Sambat month.
+
+	The books run on the BS calendar, so "This Month" means the Nepali month —
+	Bhadra, not September. The first day of the BS month and the first day of the
+	next one are converted to AD, and a day is taken off the latter: BS months are
+	29-32 days long, so the last day is found by stepping back from the next month
+	rather than assuming a length."""
+	today = nd.date.today()
+	first = nd.date(today.year, today.month, 1)
+	if today.month == 12:
+		next_first = nd.date(today.year + 1, 1, 1)
+	else:
+		next_first = nd.date(today.year, today.month + 1, 1)
+
+	return (
+		first.to_datetime_date(),
+		next_first.to_datetime_date() - datetime.timedelta(days=1),
+	)
+
+
+
+def _mode_window(filters):
+	"""(from_date, to_date) the "Filter By" mode stands for, ignoring the date boxes.
+
+	Kept apart from _period() on purpose: _period() prefers whatever the boxes hold, so
+	asking it what a mode means would just hand back the dates already on screen and the
+	prefill would never move off them."""
 	if filters.get("date_filter_type") == "Fiscal Year":
 		if not filters.get("fiscal_year"):
 			return None, None
 		dates = get_fiscal_year_dates(filters.get("fiscal_year"))
 		return dates.get("from_date"), dates.get("to_date")
 
-	return filters.get("from_date"), filters.get("to_date")
+	if filters.get("date_filter_type") == THIS_MONTH:
+		return _current_nepali_month()
 
+	return None, None
+
+
+@frappe.whitelist()
+def get_period(filters=None):
+	"""The window a mode resolves to, used to prefill the From/To Date filters.
+
+	Dates stay resolved on the server — the Nepali month and the Fiscal Year record are
+	never worked out in the browser — and the desk writes the answer into the two boxes,
+	which is then what the report runs on."""
+	if isinstance(filters, str):
+		filters = json.loads(filters)
+
+	from_date, to_date = _mode_window(frappe._dict(filters or {}))
+	if not from_date or not to_date:
+		return None
+
+	return {
+		"from_date": str(frappe.utils.getdate(from_date)),
+		"to_date": str(frappe.utils.getdate(to_date)),
+	}
+
+
+def _period(filters):
+	"""(from_date, to_date) for the report.
+
+	The From/To Date filters win whenever they carry values, whatever the "Filter By"
+	choice. That is what keeps the boxes honest: This Month and Fiscal Year fill them
+	through get_period() and the desk then runs on exactly what is shown, so a date
+	edited by hand is used rather than quietly recomputed.
+
+	The dropdown is only consulted when the dates are missing — a direct API or
+	scheduled call that names a mode but no dates still gets that mode's window."""
+	if filters.get("from_date") and filters.get("to_date"):
+		return filters.get("from_date"), filters.get("to_date")
+
+	return _mode_window(filters)
+
+
+THIS_MONTH = "This Month"
 
 BRANCH_WISE = "Sales Report Summary Branch Wise"
 COMPARISON = "Sales Report Summary Company-wise Comparison"
