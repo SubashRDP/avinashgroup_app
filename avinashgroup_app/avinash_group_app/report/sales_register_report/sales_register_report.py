@@ -421,8 +421,23 @@ def download_excel(filters, selected_columns=None):
 				c.font = Font(bold=True)
 		row += 1
 
-	for i in range(1, total_cols + 1):
-		ws.column_dimensions[get_column_letter(i)].width = 18
+	# Column widths: 18 as before, widened only where the longest value in the column
+	# needs it. Cells carry wrap_text, so a name longer than the column was breaking
+	# onto a second line inside the cell — party names ("Nepal Oil Corporation Limited",
+	# "T.R.S. Himalayan Logipark Pvt. Ltd. - ICP") are the ones that overflow 18. Only
+	# the data is measured, not the Nepali headers, which are meant to wrap. Capped so
+	# one long value cannot push a column off the page.
+	MIN_WIDTH, MAX_WIDTH = 18, 45
+	for ci, bf in enumerate(body_fields, start=1):
+		longest = 0
+		for d in data:
+			val = d.get(bf['key'])
+			if bf['kind'] == 'doclink':
+				val = (val or '').split('::')[0]
+			if isinstance(val, str):
+				longest = max(longest, len(val))
+		width = min(max(MIN_WIDTH, longest + 2), MAX_WIDTH)
+		ws.column_dimensions[get_column_letter(ci)].width = width
 
 	buf = BytesIO()
 	wb.save(buf)
@@ -491,9 +506,9 @@ def get_data(filters):
 			br.branch                                                                                                                      AS branch,
 			c.tax_id                                                                                                                       AS vat_number,
 			si.custom_total_amount_including_excise                                                                                        AS total_sales,
-			SUM(CASE WHEN sii.custom_vat_apply_on = 'VAT 0%%'                                             AND c.territory = 'Nepal'    THEN sii.amount ELSE 0 END) AS tax_free_sale,
-			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory != 'Nepal' THEN sii.base_amount ELSE 0 END)      AS export_npr,
-			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory = 'Nepal'  THEN sii.amount ELSE 0 END)           AS taxable_sales,
+			SUM(CASE WHEN sii.custom_vat_apply_on = 'VAT 0%%'                                             AND c.territory = 'Nepal'    THEN sii.custom_total ELSE 0 END) AS tax_free_sale,
+			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory != 'Nepal' THEN sii.custom_total ELSE 0 END)      AS export_npr,
+			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory = 'Nepal'  THEN sii.custom_total ELSE 0 END)           AS taxable_sales,
 			SUM(CASE WHEN sii.custom_vat_apply_on IN ('VAT 13%%','Amount') AND c.territory = 'Nepal'  THEN sii.custom_vat_amount ELSE 0 END) AS vat,
 			SUM(sii.qty)                                                                                                                     AS qty,
 			GROUP_CONCAT(DISTINCT sii.item_name SEPARATOR ', ')                                                                              AS item_description,

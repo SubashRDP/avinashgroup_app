@@ -423,8 +423,23 @@ def download_excel(filters, selected_columns=None):
 				c.font = Font(bold=True)
 		row += 1
 
-	for i in range(1, total_cols + 1):
-		ws.column_dimensions[get_column_letter(i)].width = 18
+	# Column widths: 18 as before, widened only where the longest value in the column
+	# needs it. Cells carry wrap_text, so a name longer than the column was breaking
+	# onto a second line inside the cell — party names ("Nepal Oil Corporation Limited",
+	# "T.R.S. Himalayan Logipark Pvt. Ltd. - ICP") are the ones that overflow 18. Only
+	# the data is measured, not the Nepali headers, which are meant to wrap. Capped so
+	# one long value cannot push a column off the page.
+	MIN_WIDTH, MAX_WIDTH = 18, 45
+	for ci, bf in enumerate(body_fields, start=1):
+		longest = 0
+		for d in data:
+			val = d.get(bf['key'])
+			if bf['kind'] == 'doclink':
+				val = (val or '').split('::')[0]
+			if isinstance(val, str):
+				longest = max(longest, len(val))
+		width = min(max(MIN_WIDTH, longest + 2), MAX_WIDTH)
+		ws.column_dimensions[get_column_letter(ci)].width = width
 
 	buf = BytesIO()
 	wb.save(buf)
@@ -488,12 +503,12 @@ def get_data(filters):
 			CONCAT(pi.supplier_name, '::', pi.name)                                                   AS supplier_name,
 			s.tax_id                                                                                 AS vat_number,
 			pi.custom_total_amount_including_excise                                                  AS purchase,
-			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) = 0                                                                                                                                             THEN pii.amount ELSE 0 END) AS tax_free_purchase,
-			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.amount ELSE 0 END) AS taxable_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) = 0                                                                                                                                             THEN pii.custom_total ELSE 0 END) AS tax_free_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_total ELSE 0 END) AS taxable_purchase,
 			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_vat_amount ELSE 0 END) AS vat,
-			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.amount ELSE 0 END) AS taxable_import,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_total ELSE 0 END) AS taxable_import,
 			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_vat_amount ELSE 0 END) AS import_vat,
-			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.amount ELSE 0 END) AS capitalized_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_total ELSE 0 END) AS capitalized_purchase,
 			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_vat_amount ELSE 0 END) AS capitalized_vat,
 			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_vat_amount
 			         WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_vat_amount
