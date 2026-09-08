@@ -36,7 +36,7 @@
 		<tr>
 			<th class="no-border" colspan="3"></th>
 			{% for g in groups %}
-			<th class="sup-group" colspan="3">
+			<th class="sup-group" colspan="{{ 3 if g.ordered_field else 2 }}">
 				{{ g.display }}
 				{% if g.sq %}<div class="sq-no">{{ g.sq }}</div>{% endif %}
 			</th>
@@ -48,7 +48,9 @@
 			<th style="width: 55px;">Qty</th>
 			{% for g in groups %}
 			<th class="num" style="width: 80px;">Rate</th>
+			{% if g.ordered_field %}
 			<th class="num" style="width: 70px;">Ordered</th>
+			{% endif %}
 			<th class="num" style="width: 95px;">Amount</th>
 			{% endfor %}
 		</tr>
@@ -62,14 +64,17 @@
 			<td class="num">{{ row.qty }}</td>
 			{% for g in groups %}
 			<td class="num">{{ fmt(row.get(g.rate_field)) }}</td>
+			{% if g.ordered_field %}
 			{% set ov = row.get(g.ordered_field) %}
+			{% set opo = row.get(g.ordered_field ~ "_po") %}
 			<td class="ord">
 				{%- if ov -%}
 					<span class="tick">&#10003;</span>&nbsp;
-					{%- if g.sq %}<a href="{{ frappe.utils.get_url('/app/supplier-quotation/' ~ g.sq) }}">{{ ov }}</a>
+					{%- if opo %}<a href="{{ frappe.utils.get_url('/app/purchase-order/' ~ opo) }}">{{ ov }}</a>
 					{%- else %}{{ ov }}{% endif -%}
 				{%- endif -%}
 			</td>
+			{% endif %}
 			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
 			{% endfor %}
 		</tr>
@@ -77,7 +82,7 @@
 		<tr class="term-row">
 			<td class="summary-label" colspan="3">{{ row.qty }}</td>
 			{% for g in groups %}
-			<td class="term-val" colspan="3">{{ row.get(g.amount_field) or "" }}</td>
+			<td class="term-val" colspan="{{ 3 if g.ordered_field else 2 }}">{{ row.get(g.amount_field) or "" }}</td>
 			{% endfor %}
 		</tr>
 		{% else %}
@@ -85,7 +90,7 @@
 			<td class="summary-label" colspan="3">{{ row.qty }}</td>
 			{% for g in groups %}
 			<td></td>
-			<td></td>
+			{% if g.ordered_field %}<td></td>{% endif %}
 			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
 			{% endfor %}
 		</tr>

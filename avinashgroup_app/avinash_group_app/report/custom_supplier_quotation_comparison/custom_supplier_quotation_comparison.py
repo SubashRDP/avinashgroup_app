@@ -153,12 +153,19 @@ def execute(filters=None):
 	supplier_quotation_data = get_data(filters)
 
 	# Prepare pivoted data and get list of suppliers
-	data, suppliers, supplier_display_name, supplier_sq_map = prepare_pivoted_data(
-		supplier_quotation_data, filters
-	)
+	(
+		data,
+		suppliers,
+		supplier_display_name,
+		supplier_sq_map,
+		suppliers_with_orders,
+		suppliers_with_narration,
+	) = prepare_pivoted_data(supplier_quotation_data, filters)
 
 	# Generate columns dynamically based on suppliers found
-	columns = get_columns(filters, suppliers, supplier_display_name, supplier_sq_map)
+	columns = get_columns(
+		filters, suppliers, supplier_display_name, supplier_sq_map, suppliers_with_orders, suppliers_with_narration
+	)
 
 	message = get_message()
 
@@ -177,6 +184,7 @@ def get_data(filters):
 			sq_item.parent,
 			sq_item.item_code,
 			sq_item.item_name,
+			sq_item.custom_narration,
 			sq_item.qty,
 			sq.currency,
 			sq_item.stock_qty,
@@ -268,7 +276,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# Options: 'base_rate', 'base_amount', 'rate', 'amount'
 	# ============================================
 	if not supplier_quotation_data:
-		return [], [], {}, {}
+		return [], [], {}, {}, set(), set()
 
 	price_field = filters.get("price_field", "base_amount")
 	rate_field = "base_rate" if price_field.startswith("base_") else "rate"
@@ -308,7 +316,13 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"qty": row.get("qty"),
 				"uom": row.get("uom"),
 			}
-		
+
+		# Narration (custom_narration, Small Text) is each supplier's own
+		# free-text note on their quotation line for this item - it varies per
+		# supplier for the same item, so it's stored per (item, supplier)
+		# rather than once per item.
+		narration_value = (row.get("custom_narration") or "").strip()
+
 		# Store item-supplier price
 		if supplier not in item_supplier_map[item_code]:
 			item_supplier_map[item_code][supplier] = {
@@ -316,6 +330,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"rate": rate_value,
 				"qty": row.get("qty"),
 				"quotation": quotation_name,
+				"narration": narration_value,
 			}
 		else:
 			# If multiple quotations, keep the one with lowest price
@@ -325,6 +340,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 					"rate": rate_value,
 					"qty": row.get("qty"),
 					"quotation": quotation_name,
+					"narration": narration_value,
 				}
 
 		# Store quotation-level data (discount, taxes) per supplier
@@ -348,6 +364,16 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# Sort suppliers alphabetically for consistent column order
 	suppliers = sorted(list(all_suppliers))
 
+	# Suppliers with at least one non-blank narration anywhere in the comparison -
+	# like Ordered, the Narration column is dropped entirely for a supplier with
+	# none, rather than showing an always-blank column.
+	suppliers_with_narration = {
+		supplier
+		for item_supplier in item_supplier_map.values()
+		for supplier, supplier_data in item_supplier.items()
+		if (supplier_data.get("narration") or "").strip()
+	}
+
 	# ------------------------------------------------------------------
 	# Per-(item, supplier) breakdown of what a Purchase Order has already
 	# ordered against these quotations. Purchase Order Item.supplier_quotation
@@ -357,7 +383,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# Independent of the Purchase Order filter; scoped to it when one is set.
 	# ------------------------------------------------------------------
 	sq_supplier = {r.get("parent"): r.get("supplier_id") for r in supplier_quotation_data if r.get("parent")}
-	ordered_item_supplier = {}  # (item_code, supplier_id) -> ordered qty
+	ordered_item_supplier = {}  # (item_code, supplier_id) -> {"qty": total, "pos": [po_name, ...]}
 	sq_names = [s for s in sq_supplier if s]
 	if sq_names:
 		conditions = ["poi.parent = po.name", "po.docstatus < 2", "poi.supplier_quotation IN %(sqs)s"]
@@ -367,11 +393,11 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			values["po"] = filters.get("purchase_order")
 		for pr in frappe.db.sql(
 			f"""
-			SELECT poi.item_code AS item_code, poi.supplier_quotation AS sq,
+			SELECT poi.item_code AS item_code, poi.supplier_quotation AS sq, po.name AS po,
 			       SUM(poi.qty) AS qty
 			FROM `tabPurchase Order Item` poi, `tabPurchase Order` po
 			WHERE {" AND ".join(conditions)}
-			GROUP BY poi.item_code, poi.supplier_quotation
+			GROUP BY poi.item_code, poi.supplier_quotation, po.name
 			""",
 			values,
 			as_dict=True,
@@ -380,7 +406,15 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			if not supplier:
 				continue
 			key = (pr.item_code, supplier)
-			ordered_item_supplier[key] = ordered_item_supplier.get(key, 0.0) + flt(pr.qty)
+			entry = ordered_item_supplier.setdefault(key, {"qty": 0.0, "pos": []})
+			entry["qty"] += flt(pr.qty)
+			if pr.po not in entry["pos"]:
+				entry["pos"].append(pr.po)
+
+	# Suppliers with at least one ordered item anywhere in the comparison - the
+	# Ordered column is dropped entirely for a supplier that has none, rather
+	# than showing an always-blank column.
+	suppliers_with_orders = {supplier for (_, supplier), o in ordered_item_supplier.items() if o.get("qty")}
 
 	# Build output rows
 	data = []
@@ -399,7 +433,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 
 		sn += 1
 
-		# Add supplier rate + amount as columns
+		# Add supplier rate + amount + narration as columns
 		for supplier in suppliers:
 			col_fieldname = frappe.scrub(supplier)
 
@@ -408,14 +442,23 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				price = supplier_data["price"]
 				row[col_fieldname + "_rate"] = supplier_data["rate"]
 				row[col_fieldname] = price
+				row[col_fieldname + "_narration"] = supplier_data.get("narration") or ""
 				supplier_totals[supplier] += price
 			else:
 				row[col_fieldname + "_rate"] = None
 				row[col_fieldname] = None
+				row[col_fieldname + "_narration"] = None
 
-			# Qty of this item already ordered from this supplier's quotation
-			ordered_qty = ordered_item_supplier.get((item_code, supplier))
-			row[col_fieldname + "_ordered"] = flt(ordered_qty, float_precision) if ordered_qty else None
+			# Qty of this item already ordered from this supplier's quotation, and
+			# the Purchase Order it was ordered on - the tick links to that PO when
+			# there's exactly one; ambiguous (split across POs) shows the qty only.
+			ordered = ordered_item_supplier.get((item_code, supplier))
+			if ordered and ordered["qty"]:
+				row[col_fieldname + "_ordered"] = flt(ordered["qty"], float_precision)
+				row[col_fieldname + "_ordered_po"] = ordered["pos"][0] if len(ordered["pos"]) == 1 else None
+			else:
+				row[col_fieldname + "_ordered"] = None
+				row[col_fieldname + "_ordered_po"] = None
 
 		data.append(row)
 	
@@ -536,10 +579,17 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# supplier -> quotation name, used to link the column header to the document
 	supplier_sq_map = {s: supplier_quotation_map[s]["quotation"] for s in supplier_quotation_map}
 
-	return data, suppliers, supplier_display_name, supplier_sq_map
+	return data, suppliers, supplier_display_name, supplier_sq_map, suppliers_with_orders, suppliers_with_narration
 
 
-def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=None):
+def get_columns(
+	filters,
+	suppliers,
+	supplier_display_name=None,
+	supplier_sq_map=None,
+	suppliers_with_orders=None,
+	suppliers_with_narration=None,
+):
 	"""
 	Generate columns dynamically:
 	- Fixed columns for SN, item info, qty
@@ -553,45 +603,53 @@ def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=
 			"fieldname": "sn",
 			"label": _("SN"),
 			"fieldtype": "Int",
-			"width": 50,
+			"width": 40,
 		},
 		{
 			"fieldname": "item_name",
 			"label": _("Item Name"),
 			"fieldtype": "Data",
-			"width": 200,
+			"width": 140,
 		},
 		{
 			"fieldname": "qty",
 			"label": _("Qty"),
 			"fieldtype": "Data",  # Data type to allow "Total" text
-			"width": 100,
+			"width": 60,
 		},
 	]
 
-	# Dynamic supplier columns. Each supplier contributes Rate + Ordered + Amount;
-	# `supplier_group` carries the supplier's display name so the client script
-	# (and the approval-email renderer) can draw it as one spanning header cell
-	# above the three columns. `Ordered` shows, per item, the qty already placed
-	# on a Purchase Order against that supplier's quotation (tick + link to the SQ).
+	suppliers_with_orders = suppliers_with_orders or set()
+	suppliers_with_narration = suppliers_with_narration or set()
+
+	# Dynamic supplier columns, in order: Ordered, Rate, Amount, Narration.
+	# Ordered and Narration are each dropped entirely for a supplier that has
+	# none anywhere in the comparison, rather than showing an always-blank
+	# column. `supplier_group` carries the supplier's display name so the
+	# client script (and the approval-email renderer) can draw it as one
+	# spanning header cell above its columns. `Ordered` shows, per item, the
+	# qty already placed on a Purchase Order against that supplier's quotation
+	# (tick + link to the PO). `Narration` is that supplier's own item
+	# description, which can differ supplier to supplier.
 	for supplier in sorted(suppliers):
 		col_fieldname = frappe.scrub(supplier)
 		display = (supplier_display_name or {}).get(supplier, supplier)
 		sq_link = (supplier_sq_map or {}).get(supplier)
+		if supplier in suppliers_with_orders:
+			columns.append({
+				"fieldname": col_fieldname + "_ordered",
+				"label": _("Ordered"),
+				"fieldtype": "Float",
+				"width": 70,
+				"sq_link": sq_link,
+				"supplier_group": display,
+			})
 		columns.append({
 			"fieldname": col_fieldname + "_rate",
 			"label": _("Rate"),
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
-			"width": 110,
-			"sq_link": sq_link,
-			"supplier_group": display,
-		})
-		columns.append({
-			"fieldname": col_fieldname + "_ordered",
-			"label": _("Ordered"),
-			"fieldtype": "Float",
-			"width": 100,
+			"width": 85,
 			"sq_link": sq_link,
 			"supplier_group": display,
 		})
@@ -600,10 +658,19 @@ def get_columns(filters, suppliers, supplier_display_name=None, supplier_sq_map=
 			"label": _("Amount"),
 			"fieldtype": "Currency",
 			"options": "Company:company:default_currency",
-			"width": 130,
+			"width": 100,
 			"sq_link": sq_link,
 			"supplier_group": display,
 		})
+		if supplier in suppliers_with_narration:
+			columns.append({
+				"fieldname": col_fieldname + "_narration",
+				"label": _("Narration"),
+				"fieldtype": "Data",
+				"width": 90,
+				"sq_link": sq_link,
+				"supplier_group": display,
+			})
 
 	return columns
 
@@ -624,18 +691,23 @@ def get_message():
 
 
 def _supplier_groups(columns):
-	"""The dynamic Rate+Amount+Ordered column sets, one per supplier, rebuilt from
-	the columns: everything after the three fixed ones shares a supplier_group."""
+	"""The dynamic Rate(+Ordered)+Amount column sets, one per supplier, rebuilt
+	from the columns (matched by "_rate" suffix, so it doesn't care how many
+	fixed columns precede them). `ordered_field` is None when that supplier's
+	Ordered column was dropped (no orders anywhere) - matches the on-screen
+	report instead of always showing an empty Ordered column."""
+	fieldnames = {col["fieldname"] for col in columns}
 	groups = []
-	for col in columns[3:]:
+	for col in columns:
 		if col["fieldname"].endswith("_rate"):
 			base = col["fieldname"][: -len("_rate")]
+			ordered_field = base + "_ordered"
 			groups.append({
 				"display": col.get("supplier_group") or "",
 				"sq": col.get("sq_link"),
 				"rate_field": col["fieldname"],
 				"amount_field": base,
-				"ordered_field": base + "_ordered",
+				"ordered_field": ordered_field if ordered_field in fieldnames else None,
 			})
 	return groups
 
@@ -643,7 +715,9 @@ def _supplier_groups(columns):
 @frappe.whitelist()
 def export_xlsx(filters):
 	"""Excel export with the supplier-group header row the stock export drops:
-	each supplier's name sits merged and centered above its Rate+Amount pair."""
+	each supplier's name sits merged and centered above its Rate(+Ordered)+Amount
+	columns. A supplier's Ordered column only appears when it has an order
+	somewhere in the comparison, matching the on-screen report."""
 	from io import BytesIO
 
 	from frappe.utils.xlsxutils import make_xlsx
@@ -656,12 +730,13 @@ def export_xlsx(filters):
 	columns, data = execute(filters)[:2]
 	groups = _supplier_groups(columns)
 
-	supplier_row = ["", "", ""]
+	fixed_labels = ["SN", "Item Name", "Qty"]
+	supplier_row = [""] * len(fixed_labels)
+	label_row = list(fixed_labels)
 	for g in groups:
-		supplier_row += [g["display"], "", ""]
-	label_row = ["SN", "Item Name", "Qty"]
-	for _g in groups:
-		label_row += ["Rate", "Ordered", "Amount"]
+		group_labels = ["Rate", "Ordered", "Amount"] if g["ordered_field"] else ["Rate", "Amount"]
+		supplier_row += [g["display"]] + [""] * (len(group_labels) - 1)
+		label_row += group_labels
 
 	rows = [supplier_row, label_row]
 	for d in data:
@@ -669,22 +744,27 @@ def export_xlsx(filters):
 			continue
 		row = [d.get("sn"), d.get("item_name") or d.get("item_code"), d.get("qty")]
 		for g in groups:
-			row += [d.get(g["rate_field"]), d.get(g["ordered_field"]), d.get(g["amount_field"])]
+			row.append(d.get(g["rate_field"]))
+			if g["ordered_field"]:
+				row.append(d.get(g["ordered_field"]))
+			row.append(d.get(g["amount_field"]))
 		rows.append(row)
 
 	xlsx = make_xlsx(rows, "Supplier Quotation Comparison")
 
-	# Merge each supplier's name across its Rate+Amount pair and center it.
-	# make_xlsx works on a write-only workbook, so restyle by reopening the file.
+	# Merge each supplier's name across its Rate(+Ordered)+Amount columns and
+	# center it. make_xlsx works on a write-only workbook, so restyle by
+	# reopening the file.
 	wb = load_workbook(xlsx)
 	ws = wb.active
-	col = 4
-	for _g in groups:
-		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 2)
+	col = len(fixed_labels) + 1
+	for g in groups:
+		span = 3 if g["ordered_field"] else 2
+		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + span - 1)
 		cell = ws.cell(row=1, column=col)
 		cell.alignment = Alignment(horizontal="center")
 		cell.font = Font(bold=True)
-		col += 3
+		col += span
 	out = BytesIO()
 	wb.save(out)
 
