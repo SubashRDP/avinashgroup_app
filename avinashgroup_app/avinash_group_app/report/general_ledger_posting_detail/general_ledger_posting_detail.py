@@ -395,10 +395,18 @@ def _section_label(filters, key, postings):
 			return "{0}  —  {1}".format(key[0], _party_label(key[1], key[2]) or key[2] or _("No Party"))
 		return key[0]
 	sample = postings[0]
+	# Named from the key, not from the first posting in it. A posting with no party
+	# still carries a Party Name -- for those, _describe_against() fills the column
+	# with whoever the entry was posted against, so the expense and VAT legs of a
+	# purchase read "Bhat-Bhateni Super Market". Useful on the line, wrong on the
+	# heading: every party-less posting in the period shares the one ("", "") key,
+	# so the block holding all of them was titled after whichever sorted first and
+	# claimed the other suppliers' expense legs as its own.
 	if category == "Party":
-		return sample.party_name or _("No Party")
+		return (sample.party_name or _("No Party")) if key[1] else _("No Party")
 	if category == "Both":
-		return "{0}  —  {1}".format(sample.account, sample.party_name or _("No Party"))
+		party = (sample.party_name or _("No Party")) if key[2] else _("No Party")
+		return "{0}  —  {1}".format(sample.account, party)
 	return sample.account
 
 
@@ -636,7 +644,10 @@ def _party_section_label(key, postings):
 	headed by the party alone. Repeating the account on every one of its forty
 	customers is exactly what the nesting removes.
 	"""
-	if postings:
+	# key[2] is the party itself -- empty for the block of party-less postings,
+	# whose Party Name column names what they were posted against rather than a
+	# party of their own. See _section_label().
+	if postings and key[2]:
 		return postings[0].party_name or _("No Party")
 	return _party_label(key[1], key[2]) or key[2] or _("No Party")
 
@@ -667,11 +678,39 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 	show_remarks = with_narration and (always_narration or cint(filters.get("remarks", 1)))
 	columns = columns or _get_columns(filters)
 
+	category = filters.get("categorized_by") or "Account"
+
+	# Categorised by party, a posting with no party is left out entirely.
+	#
+	# ERPNext writes the party onto the receivable / payable side only, so the
+	# expense, VAT and bank legs of every voucher carry none -- 8,130 such rows on
+	# NGI's purchase invoices alone. Grouped by party they all shared the one
+	# ("", "") key and formed a single block holding every supplier's expense legs,
+	# which then took its heading from whichever posting sorted first: a block
+	# titled "ABC Electrical Works" listing Bhat-Bhateni Super Market underneath.
+	#
+	# There is no party to file them under -- 260.00 of VAT is not owed to the
+	# supplier it was bought from -- so they are dropped rather than shown beneath a
+	# party that is not theirs. They remain in the account-wise view, under the
+	# accounts they were actually posted to, which is where an expense belongs.
+	#
+	# The consequence is deliberate: a party-wise run no longer foots to the whole
+	# general ledger, because it is now only the party side of it.
+	if category in ("Party", "Both"):
+		postings = [posting for posting in postings if posting.party]
+
 	sections = {}
 	for posting in postings:
 		sections.setdefault(_section_key(filters, posting), []).append(posting)
 
 	opening = _opening_balances(filters, postings)
+
+	# The same rule for balances carried in: a party-less opening has no block to
+	# head, and left in it would seed one through the loop below.
+	if category == "Party":
+		opening = {key: value for key, value in opening.items() if key[1]}
+	elif category == "Both":
+		opening = {key: value for key, value in opening.items() if key[2]}
 
 	# A balance carried into the period is worth reporting even when nothing
 	# moved. Sections are built from postings, so a window with no activity
@@ -767,7 +806,6 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 		return block_opening, block_debit, block_credit
 
 	ordered = sorted(sections, key=lambda k: tuple(str(part) for part in k))
-	category = filters.get("categorized_by") or "Account"
 
 	if category == "Both":
 		# The account is written once and its parties nest under it. Flat, the
