@@ -863,6 +863,8 @@ def download_pdf(filters, view=None):
 	Both menu entries call this — Print opens it inline (view=1), PDF downloads."""
 	from frappe.utils.pdf import get_pdf
 
+	from avinashgroup_app.custom_code.printing.chrome_pdf import render as chrome_render
+
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 
@@ -901,11 +903,14 @@ def download_pdf(filters, view=None):
 			"groups": groups,
 			"data": data,
 			"fmt": fmt,
+			# Wide enough for a formatted NPR amount at the table's font size -
+			# "Rs 1,98,750.00" plus cell padding. Too narrow and the money cells,
+			# which must not wrap, spill over the column border into their neighbour.
 			"field_widths": {
-				"ordered": "45px",
-				"rate": "65px",
-				"amount": "80px",
-				"narration": "110px",
+				"ordered": "42px",
+				"rate": "72px",
+				"amount": "88px",
+				"narration": "95px",
 			},
 		},
 	)
@@ -915,15 +920,30 @@ def download_pdf(filters, view=None):
 	# (rather than the suppliers) keeps this right whatever each block holds.
 	total_columns = 3 + sum(g["span"] for g in groups)
 	orientation = "Portrait" if total_columns <= 9 else "Landscape"
-	pdf_data = get_pdf(html, {
-		"page-size": "A4",
-		"orientation": orientation,
-		"margin-top": "10mm",
-		"margin-right": "10mm",
-		"margin-bottom": "12mm",
-		"margin-left": "10mm",
-		"encoding": "UTF-8",
-	})
+
+	# Page geometry has to be stated twice because the two renderers read it from
+	# different places: wkhtmltopdf takes the options dict below, Chrome honours
+	# only an @page rule in the document itself.
+	html = (
+		"<style>@page { size: A4 %s; margin: 10mm 10mm 12mm 10mm; }</style>"
+		% orientation.lower()
+	) + html
+
+	# This app renders print formats with headless Chrome (hooks.py: pdf_generator),
+	# and a bench that has Chrome generally has no wkhtmltopdf at all - calling
+	# get_pdf first would raise "No wkhtmltopdf executable found" before anything
+	# else got a chance. So try Chrome, and fall back only when it isn't there.
+	pdf_data = chrome_render(html=html, pdf_generator="chrome")
+	if pdf_data is None:
+		pdf_data = get_pdf(html, {
+			"page-size": "A4",
+			"orientation": orientation,
+			"margin-top": "10mm",
+			"margin-right": "10mm",
+			"margin-bottom": "12mm",
+			"margin-left": "10mm",
+			"encoding": "UTF-8",
+		})
 
 	frappe.response.filename = "supplier_quotation_comparison.pdf"
 	frappe.response.filecontent = pdf_data

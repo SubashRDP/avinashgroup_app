@@ -3,8 +3,11 @@
 	.company { font-size: 13pt; font-weight: bold; }
 	.title { font-size: 10.5pt; font-weight: bold; margin-top: 1px; }
 	.subline { font-size: 8pt; color: #555; margin: 2px 0 8px 0; }
-	table { width: 100%; border-collapse: collapse; }
-	th, td { border: 1px solid #b0b0b0; padding: 2px 4px; vertical-align: top; }
+	/* Fixed layout so the per-column widths below are honoured. Left to size
+	   itself, the renderer gives the space to whatever cannot wrap - the nowrap
+	   money columns - and squeezes Narration down to one letter per line. */
+	table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+	th, td { border: 1px solid #b0b0b0; padding: 2px 3px; vertical-align: top; font-size: 7.5pt; }
 	th { background: #f2f2f2; }
 	.sup-group { text-align: center; }
 	.sq-no { font-size: 7.5pt; font-weight: normal; color: #555; }
@@ -35,6 +38,18 @@
 <p>No supplier quotations found for the selected filters.</p>
 {% else %}
 <table>
+	{# The widths have to live here: under table-layout:fixed only the first row
+	   or a colgroup sizes the columns, and this table's first row is the merged
+	   supplier band, whose colspans say nothing about the columns beneath. Item
+	   Name is left unsized on purpose so it takes whatever space is left. #}
+	<colgroup>
+		<col style="width: 26px;">
+		<col>
+		<col style="width: 45px;">
+		{% for g in groups %}{% for f in g.fields %}
+		<col style="width: {{ field_widths.get(f.kind, '80px') }};">
+		{% endfor %}{% endfor %}
+	</colgroup>
 	<thead>
 		<tr>
 			<th class="no-border" colspan="3"></th>
