@@ -786,6 +786,8 @@ def export_xlsx(filters):
 	from frappe.utils.xlsxutils import make_xlsx
 	from openpyxl import load_workbook
 	from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+	from openpyxl.utils import get_column_letter
+	from openpyxl.worksheet.properties import PageSetupProperties
 
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
@@ -801,6 +803,7 @@ def export_xlsx(filters):
 		label_row += [f["label"] for f in g["fields"]]
 
 	rows = [supplier_row, label_row]
+	row_kinds = ["header", "header"]      # per sheet row, for the styling pass below
 	ordered_links = []  # (row, column, purchase order) for the Ordered cells
 	for d in data:
 		if not isinstance(d, dict) or not d:
@@ -816,6 +819,14 @@ def export_xlsx(filters):
 						ordered_links.append((len(rows) + 1, len(row) + 1, po))
 				row.append(value)
 		rows.append(row)
+		if d.get("is_data_row"):
+			row_kinds.append("data")
+		elif d.get("is_term_row"):
+			row_kinds.append("term")
+		elif d.get("is_total_row") or d.get("is_invoice_row"):
+			row_kinds.append("emphasis")
+		else:
+			row_kinds.append("summary")
 
 	xlsx = make_xlsx(rows, "Supplier Quotation Comparison")
 
@@ -823,28 +834,176 @@ def export_xlsx(filters):
 	wb = load_workbook(xlsx)
 	ws = wb.active
 	last_row = ws.max_row
-	divider = Border(left=Side(style="medium"))
+	last_col = len(label_row)
 
+	# Nepali digit grouping (1,98,750.00), matching what the report and the PDF show.
+	MONEY = r"[>=10000000]##\,##\,##\,##0.00;[>=100000]##\,##\,##0.00;#,##0.00"
+	QTY = "#,##0.##"
+
+	hair = Side(style="thin", color="B0B0B0")
+	thick = Side(style="medium", color="6B7280")
+	grid = Border(left=hair, right=hair, top=hair, bottom=hair)
+
+	def bordered(cell, block_start=False):
+		"""Grid on every cell, with the heavier divider kept on a block's left edge."""
+		cell.border = Border(left=thick if block_start else hair, right=hair, top=hair, bottom=hair)
+
+	# Which sheet column each supplier block starts at, and what kind each column is.
+	col_kind = {}          # 1-based sheet column -> ordered / rate / amount / narration
+	block_starts = set()
+	col = len(fixed_labels) + 1
+	for g in groups:
+		block_starts.add(col)
+		for offset, f in enumerate(g["fields"]):
+			col_kind[col + offset] = f["kind"]
+		col += g["span"]
+
+	# --- the two header rows -------------------------------------------------
 	col = len(fixed_labels) + 1
 	for g in groups:
 		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + g["span"] - 1)
 		cell = ws.cell(row=1, column=col)
-		cell.alignment = Alignment(horizontal="center")
+		cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 		cell.font = Font(bold=True)
+		col += g["span"]
 
+	for c in range(1, last_col + 1):
+		head = ws.cell(row=2, column=c)
+		head.font = Font(bold=True)
+		head.alignment = Alignment(
+			horizontal="left" if c <= len(fixed_labels) else "right",
+			vertical="center",
+			wrap_text=True,
+		)
+	ws.row_dimensions[1].height = 30
+	ws.row_dimensions[2].height = 18
+
+	# --- body ----------------------------------------------------------------
+	for r in range(1, last_row + 1):
+		kind = row_kinds[r - 1] if r - 1 < len(row_kinds) else "data"
+		for c in range(1, last_col + 1):
+			cell = ws.cell(row=r, column=c)
+			bordered(cell, block_start=c in block_starts)
+
+			if r <= 2:
+				continue
+
+			column_kind = col_kind.get(c)
+			if kind in ("emphasis",):
+				cell.font = Font(bold=True)
+
+			if kind == "term":
+				# Free text (Payment Terms, Delivery Period, ...) - let it wrap
+				# inside the column rather than run under the next supplier.
+				cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+			elif column_kind in ("rate", "amount"):
+				cell.number_format = MONEY
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			elif column_kind == "ordered":
+				cell.number_format = QTY
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			elif column_kind == "narration":
+				cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+			elif c == 1:
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			elif c == 3 and kind == "data":
+				cell.number_format = QTY
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			else:
+				cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+	# --- merges, as the PDF lays them out ------------------------------------
+	# A summary / term label belongs across the three fixed columns, not squeezed
+	# into Qty; a term's free text belongs across its whole supplier block rather
+	# than under whichever single column happened to carry it.
+	for r in range(3, last_row + 1):
+		kind = row_kinds[r - 1] if r - 1 < len(row_kinds) else "data"
+		if kind == "data":
+			continue
+
+		label = ws.cell(row=r, column=3).value
+		ws.cell(row=r, column=1).value = label
+		ws.cell(row=r, column=3).value = None
+		ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=len(fixed_labels))
+		ws.cell(row=r, column=1).alignment = Alignment(
+			horizontal="left", vertical="center", wrap_text=True
+		)
+		if kind == "emphasis":
+			ws.cell(row=r, column=1).font = Font(bold=True)
+
+		if kind != "term":
+			continue
+		col = len(fixed_labels) + 1
+		for g in groups:
+			# The value sits in the block's Amount column; merging keeps only the
+			# top-left cell, so carry it to the block's first column first.
+			amount_offset = next(
+				(i for i, f in enumerate(g["fields"]) if f["kind"] == "amount"), 0
+			)
+			value = ws.cell(row=r, column=col + amount_offset).value
+			for offset in range(g["span"]):
+				ws.cell(row=r, column=col + offset).value = None
+			ws.cell(row=r, column=col).value = value
+			if g["span"] > 1:
+				ws.merge_cells(start_row=r, start_column=col, end_row=r, end_column=col + g["span"] - 1)
+			ws.cell(row=r, column=col).alignment = Alignment(
+				horizontal="left", vertical="top", wrap_text=True
+			)
+			col += g["span"]
+
+	# Supplier tints last, so they sit under every cell of the block.
+	col = len(fixed_labels) + 1
+	for g in groups:
 		fill = PatternFill("solid", fgColor=g["band"].lstrip("#").upper())
 		for offset in range(g["span"]):
-			for row_index in range(1, last_row + 1):
-				sheet_cell = ws.cell(row=row_index, column=col + offset)
-				sheet_cell.fill = fill
-				if offset == 0:
-					sheet_cell.border = divider
+			for r in range(1, last_row + 1):
+				ws.cell(row=r, column=col + offset).fill = fill
 		col += g["span"]
 
 	for row_index, col_index, po in ordered_links:
 		cell = ws.cell(row=row_index, column=col_index)
 		cell.hyperlink = frappe.utils.get_url("/app/purchase-order/{0}".format(po))
-		cell.style = "Hyperlink"
+		cell.font = Font(color="0563C1", underline="single")
+
+	# --- column widths -------------------------------------------------------
+	# Sized from the widest value actually in each column, so the sheet opens
+	# readable and nobody has to drag a single column border. Capped, because a
+	# long narration or item name would otherwise push the money columns off
+	# screen; those columns wrap instead.
+	CAPS = {"narration": 34, "rate": 15, "amount": 16, "ordered": 11}
+	for c in range(1, last_col + 1):
+		longest = 0
+		for r in range(2, last_row + 1):     # row 1 is merged, it would skew the width
+			value = ws.cell(row=r, column=c).value
+			if value is None:
+				continue
+			if isinstance(value, (int, float)):
+				# what it will look like once the number format is applied
+				text = f"{value:,.2f}"
+			else:
+				text = max(str(value).split("\n"), key=len)
+			longest = max(longest, len(text))
+
+		kind = col_kind.get(c)
+		if c == 1:
+			width = 5
+		elif c == 2:
+			width = min(max(longest + 2, 16), 30)
+		elif c == 3:
+			width = 9
+		else:
+			width = min(max(longest + 2, 10), CAPS.get(kind, 16))
+		ws.column_dimensions[get_column_letter(c)].width = width
+
+	# Item / label column and both header rows stay put while scrolling right.
+	ws.freeze_panes = "D3"
+
+	# Printing from Excel should need no setup either.
+	ws.print_title_rows = "1:2"
+	ws.page_setup.orientation = "landscape"
+	ws.page_setup.fitToWidth = 1
+	ws.page_setup.fitToHeight = 0
+	ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
 
 	out = BytesIO()
 	wb.save(out)
