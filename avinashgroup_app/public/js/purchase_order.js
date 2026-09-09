@@ -28,11 +28,13 @@ frappe.ui.form.on("Purchase Order", {
 		if (!has_source_mr) return;
 
 		frm.add_custom_button(__("Supplier Quotation Comparison"), function () {
-			const today = frappe.datetime.get_today();
+			// No date window. The PO's Material Request(s) already scope the report
+			// exactly, and a range anchored on this order's own date would hide every
+			// quotation behind it - they were raised before the order, not after it.
 			frappe.route_options = {
 				company: frm.doc.company,
-				from_date: frm.doc.transaction_date || frappe.datetime.add_months(today, -1),
-				to_date: today,
+				from_date: "",
+				to_date: "",
 				purchase_order: frm.doc.name,
 			};
 			frappe.set_route("query-report", "Custom Supplier Quotation Comparison");

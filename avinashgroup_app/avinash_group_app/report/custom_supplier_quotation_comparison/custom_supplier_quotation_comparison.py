@@ -224,15 +224,22 @@ def get_data(filters):
 		.orderby(sq_item.item_code, sq.supplier)
 	)
 
-	query = (
-		query
-		.where(
-			(sq_item.parent == sq.name)
-			& (sq_item.docstatus < 2)
-			& (sq.company == filters.get("company"))
-			& (sq.transaction_date.between(filters.get("from_date"), filters.get("to_date")))
-		)
+	query = query.where(
+		(sq_item.parent == sq.name)
+		& (sq_item.docstatus < 2)
+		& (sq.company == filters.get("company"))
 	)
+
+	# The date window is a convenience for browsing the report on its own, so it is
+	# applied only when given. Opened from a Purchase Order it is deliberately left
+	# empty: that PO's Material Request(s) are already an exact scope, and a window
+	# could only ever hide quotations from it - a quotation is always raised before
+	# the order it leads to, so a range starting at the PO's own date excludes every
+	# one of them.
+	if filters.get("from_date"):
+		query = query.where(sq.transaction_date >= filters.get("from_date"))
+	if filters.get("to_date"):
+		query = query.where(sq.transaction_date <= filters.get("to_date"))
 
 	# Source-document filter. A Supplier Quotation Item links directly to the
 	# Material Request it was raised from. A Purchase Order carries the Material

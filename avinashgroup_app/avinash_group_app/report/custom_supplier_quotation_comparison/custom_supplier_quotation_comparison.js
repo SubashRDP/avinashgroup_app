@@ -8,12 +8,14 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
 		},
+		// Not mandatory: a Purchase Order (or Material Request) is an exact scope on
+		// its own and runs with the dates cleared - see the purchase_order filter
+		// below and get_data(). Left alone, they default to the last month.
 		{
 			fieldname: "from_date",
 			label: __("From Date"),
 			fieldtype: "Date",
 			width: "80",
-			reqd: 1,
 			default: frappe.datetime.add_months(frappe.datetime.get_today(), -1),
 		},
 		{
@@ -21,7 +23,6 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			label: __("To Date"),
 			fieldtype: "Date",
 			width: "80",
-			reqd: 1,
 			default: frappe.datetime.get_today(),
 		},
 		{
@@ -142,6 +143,13 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 					if (mrs.length === 1 && mrs[0] !== report.get_filter_value("material_request")) {
 						values.material_request = mrs[0];
 					}
+					// A Purchase Order is an exact scope by itself, so the date window
+					// comes off. Keeping it can only hide the very quotations the order
+					// was raised from - they predate it. Clearing the filters (rather
+					// than widening them) also shows the user why the range stopped
+					// applying.
+					if (report.get_filter_value("from_date")) values.from_date = "";
+					if (report.get_filter_value("to_date")) values.to_date = "";
 					if (Object.keys(values).length) {
 						// setting the filters triggers the refresh itself
 						report.set_filter_value(values);
