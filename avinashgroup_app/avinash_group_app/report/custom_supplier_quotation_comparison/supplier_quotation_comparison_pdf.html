@@ -1,18 +1,28 @@
 <style>
-	body { font-family: Helvetica, Arial, sans-serif; font-size: 9pt; color: #000; }
+	body { font-family: Helvetica, Arial, sans-serif; font-size: 8.5pt; color: #000; }
 	.company { font-size: 13pt; font-weight: bold; }
 	.title { font-size: 10.5pt; font-weight: bold; margin-top: 1px; }
 	.subline { font-size: 8pt; color: #555; margin: 2px 0 8px 0; }
 	table { width: 100%; border-collapse: collapse; }
-	th, td { border: 1px solid #b0b0b0; padding: 3px 6px; vertical-align: top; }
+	th, td { border: 1px solid #b0b0b0; padding: 2px 4px; vertical-align: top; }
 	th { background: #f2f2f2; }
 	.sup-group { text-align: center; }
 	.sq-no { font-size: 7.5pt; font-weight: normal; color: #555; }
 	.no-border { border: none; background: none; }
 	.num { text-align: right; white-space: nowrap; }
+	.narr { text-align: left; white-space: normal; word-break: break-word; font-size: 8pt; }
 	.summary-label { font-weight: normal; }
 	.total-row td { font-weight: bold; background: #f2f2f2; }
 	.invoice-row td { font-weight: bold; background: #f2f2f2; border-top: 2px solid #444; }
+	.term-row td { background: #fafafa; }
+	.term-val { text-align: left; white-space: pre-line; font-size: 8pt; }
+	.ord { text-align: right; white-space: nowrap; }
+	.ord a { color: #000; text-decoration: none; }
+	.tick { display: inline-block; width: 11px; height: 11px; line-height: 11px;
+		border-radius: 50%; background: #28a745; color: #fff; font-size: 8px;
+		font-weight: bold; text-align: center; }
+	/* Left edge of each supplier block, so neighbouring suppliers stay apart */
+	.grp-start { border-left: 2px solid #6b7280; }
 </style>
 
 <div class="company">{{ company }}</div>
@@ -29,19 +39,21 @@
 		<tr>
 			<th class="no-border" colspan="3"></th>
 			{% for g in groups %}
-			<th class="sup-group" colspan="2">
+			<th class="sup-group grp-start" colspan="{{ g.span }}" style="background: {{ g.band }};">
 				{{ g.display }}
 				{% if g.sq %}<div class="sq-no">{{ g.sq }}</div>{% endif %}
 			</th>
 			{% endfor %}
 		</tr>
 		<tr>
-			<th style="width: 30px;">SN</th>
+			<th style="width: 26px;">SN</th>
 			<th>Item Name</th>
-			<th style="width: 55px;">Qty</th>
+			<th style="width: 45px;">Qty</th>
 			{% for g in groups %}
-			<th class="num" style="width: 85px;">Rate</th>
-			<th class="num" style="width: 100px;">Amount</th>
+			{% for f in g.fields %}
+			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }}{{ ' grp-start' if loop.first else '' }}"
+				style="background: {{ g.band }}; width: {{ field_widths.get(f.kind, '80px') }};">{{ f.label }}</th>
+			{% endfor %}
 			{% endfor %}
 		</tr>
 	</thead>
@@ -53,16 +65,43 @@
 			<td>{{ row.item_name or row.item_code or "" }}</td>
 			<td class="num">{{ row.qty }}</td>
 			{% for g in groups %}
-			<td class="num">{{ fmt(row.get(g.rate_field)) }}</td>
-			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
+			{% for f in g.fields %}
+			{% set v = row.get(f.field) %}
+			{% if f.kind == "ordered" %}
+			<td class="ord{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">
+				{%- if v -%}
+					<span class="tick">&#10003;</span>&nbsp;
+					{%- set po = row.get(f.field ~ "_po") -%}
+					{%- if po %}<a href="{{ frappe.utils.get_url('/app/purchase-order/' ~ po) }}">{{ v }}</a>
+					{%- else %}{{ v }}{% endif -%}
+				{%- endif -%}
+			</td>
+			{% elif f.kind == "narration" %}
+			<td class="narr{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">{{ v or "" }}</td>
+			{% else %}
+			<td class="num{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">{{ fmt(v) }}</td>
+			{% endif %}
+			{% endfor %}
+			{% endfor %}
+		</tr>
+		{% elif row.is_term_row %}
+		<tr class="term-row">
+			<td class="summary-label" colspan="3">{{ row.qty }}</td>
+			{% for g in groups %}
+			<td class="term-val grp-start" colspan="{{ g.span }}">{{ row.get(g.amount_field) or "" }}</td>
 			{% endfor %}
 		</tr>
 		{% else %}
 		<tr class="{{ 'total-row' if row.is_total_row else ('invoice-row' if row.is_invoice_row else '') }}">
 			<td class="summary-label" colspan="3">{{ row.qty }}</td>
 			{% for g in groups %}
-			<td></td>
-			<td class="num">{{ fmt(row.get(g.amount_field)) }}</td>
+			{% for f in g.fields %}
+			{% if f.kind == "amount" %}
+			<td class="num{{ ' grp-start' if loop.first else '' }}">{{ fmt(row.get(f.field)) }}</td>
+			{% else %}
+			<td class="{{ 'grp-start' if loop.first else '' }}"></td>
+			{% endif %}
+			{% endfor %}
 			{% endfor %}
 		</tr>
 		{% endif %}
