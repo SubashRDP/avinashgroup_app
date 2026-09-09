@@ -134,8 +134,21 @@ def _miti(custom_miti, date):
 		return ""
 
 
-def get_columns():
-	return [
+def get_columns(grouped=False):
+	"""Report columns. `grouped` moves the Customer column to the front, where it stops
+	being a per-row value and becomes the block structure instead: it carries the customer
+	name on a heading row and the Total label on a total row, and is blank on the detail
+	rows underneath. Repeating the name on every line is what the heading replaces."""
+	customer = {
+		"fieldname": "customer_name",
+		# The customer's name, not their ID — "NGI-CUS-00001" means nothing to the
+		# person reading the report. Data rather than Link for that reason: a Link
+		# column always renders the docname.
+		"label": _("Customer"),
+		"fieldtype": "Data",
+		"width": 220 if grouped else 200,
+	}
+	columns = [
 		{"fieldname": "miti", "label": _("Miti"), "fieldtype": "Data", "width": 100},
 		{"fieldname": "date", "label": _("Date"), "fieldtype": "Date", "width": 100},
 		{
@@ -146,10 +159,6 @@ def get_columns():
 			"width": 160,
 		},
 		{"fieldname": "status", "label": _("Status"), "fieldtype": "Data", "width": 110},
-		# The customer's name, not their ID — "NGI-CUS-00001" means nothing to the
-		# person reading the report. Data rather than Link for that reason: a Link
-		# column always renders the docname.
-		{"fieldname": "customer_name", "label": _("Customer"), "fieldtype": "Data", "width": 200},
 		{"fieldname": "item_name", "label": _("Item Name"), "fieldtype": "Data", "width": 200},
 		{"fieldname": "qty", "label": _("Qty"), "fieldtype": "Float", "width": 100},
 		{"fieldname": "billed_qty", "label": _("Billed Qty"), "fieldtype": "Float", "width": 110},
@@ -169,6 +178,12 @@ def get_columns():
 		},
 		{"fieldname": "delay", "label": _("Delay (in Days)"), "fieldtype": "Int", "width": 120},
 	]
+	# Ungrouped, Customer sits where it always has — after Status, next to the order it
+	# belongs to. Grouped, it leads the row so the heading reads as a heading.
+	if grouped:
+		return [customer] + columns
+	columns.insert(4, customer)
+	return columns
 
 
 def execute(filters=None):
@@ -213,7 +228,65 @@ def execute(filters=None):
 			}
 		)
 
-	return get_columns(), data
+	grouped = _by_customer(data)
+	if grouped is None:
+		# Flat: Frappe's own add_total_row closes the report, as it always has.
+		return get_columns(), data
+
+	# Grouped: the blocks already carry their own subtotals and a Grand Total, and
+	# Frappe's add_total_row would sum the detail rows, the subtotals AND that grand
+	# total into one meaningless figure. The sixth return value is skip_total_row.
+	return get_columns(grouped=True), grouped, None, None, None, 1
+
+
+NUMERIC_FIELDS = [
+	col["fieldname"] for col in get_columns() if col["fieldtype"] in ("Float", "Currency", "Int")
+]
+
+
+def _total_row(label, rows):
+	"""A bold row summing every numeric column of `rows`, labelled in the Customer column."""
+	total = {"customer_name": label, "bold": 1}
+	for field in NUMERIC_FIELDS:
+		total[field] = sum(row.get(field) or 0 for row in rows)
+	# Delay is a per-order age in days; adding them up would be meaningless.
+	total["delay"] = None
+	return total
+
+
+def _by_customer(data):
+	"""One block per customer, or None when the result covers a single customer.
+
+	A block is a bold heading naming the customer, that customer's rows, and its own
+	total; a grand total closes the report. The detail rows have their Customer cell
+	cleared — the heading above them already says whose orders these are, and repeating
+	it down every line is what the blocks exist to avoid.
+
+	None rather than the rows themselves, so the caller can tell a grouped result from a
+	flat one and pick the matching column layout.
+	"""
+	order = list(dict.fromkeys(row["customer_name"] for row in data))
+	if len(order) < 2:
+		return None
+
+	by_customer = {}
+	for row in data:
+		by_customer.setdefault(row["customer_name"], []).append(row)
+
+	grouped = []
+	for customer in order:
+		block = by_customer[customer]
+		# _section is not a column — the print template reads it to draw the heading as
+		# one banner across every column, which the on-screen datatable cannot do.
+		grouped.append({"customer_name": customer, "_section": 1, "bold": 1})
+		for row in block:
+			row["customer_name"] = None
+			grouped.append(row)
+		grouped.append(_total_row(_("Total"), block))
+		grouped.append({})  # spacer between blocks
+
+	grouped.append(_total_row(_("Grand Total"), data))
+	return grouped
 
 
 # ── Filter options ──────────────────────────────────────────────────────────

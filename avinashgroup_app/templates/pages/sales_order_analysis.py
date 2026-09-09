@@ -349,6 +349,34 @@ def _get_rows(companies, customers, sales_orders, statuses, from_date, to_date):
 	return get_rows(companies, customers, sales_orders, statuses, from_date, to_date)
 
 
+def _customer_groups(per_customer):
+	"""[{customer, rows, totals}] once the result covers more than one customer.
+
+	Totals are summed from the raw figures rather than re-parsing the formatted
+	strings kept for display, then formatted the same way the grand total is."""
+	if len(per_customer) < 2:
+		return []
+
+	groups = []
+	for bucket in per_customer.values():
+		raw = bucket["raw"]
+		qty = sum(flt(d.qty) for d in raw)
+		billed_qty = sum(flt(d.billed_qty) for d in raw)
+		groups.append({
+			"customer": bucket["customer"],
+			"rows": bucket["rows"],
+			"totals": {
+				"qty": _fmt_qty(qty),
+				"billed_qty": _fmt_qty(billed_qty),
+				"qty_to_bill": _fmt_qty(qty - billed_qty),
+				"amount": _fmt_amount(sum(flt(d.amount) for d in raw)),
+				"billed_amount": _fmt_amount(sum(flt(d.billed_amount) for d in raw)),
+				"pending_amount": _fmt_amount(sum(flt(d.pending_amount) for d in raw)),
+			},
+		})
+	return groups
+
+
 def _build(companies, customers, sales_orders, statuses, from_date, to_date, fy_label):
 	"""Shape the rows + totals both the screen table and the PDF render from."""
 	raw = _get_rows(companies, customers, sales_orders, statuses, from_date, to_date)
@@ -358,6 +386,9 @@ def _build(companies, customers, sales_orders, statuses, from_date, to_date, fy_
 		"amount": 0.0, "billed_amount": 0.0, "pending_amount": 0.0,
 	}
 	rows = []
+	# One bucket per customer, kept in the order the customers first appear, so the
+	# blocks follow the same date ordering the flat list already has.
+	per_customer = {}
 	for d in raw:
 		qty_to_bill = flt(d.qty) - flt(d.billed_qty)
 		totals["qty"] += flt(d.qty)
@@ -367,7 +398,7 @@ def _build(companies, customers, sales_orders, statuses, from_date, to_date, fy_
 		totals["billed_amount"] += flt(d.billed_amount)
 		totals["pending_amount"] += flt(d.pending_amount)
 
-		rows.append({
+		row = {
 			"miti": _miti(d.custom_miti, d.date),
 			"date": formatdate(d.date) if d.date else "",
 			"sales_order": d.sales_order or "",
@@ -380,7 +411,15 @@ def _build(companies, customers, sales_orders, statuses, from_date, to_date, fy_
 			"billed_amount": _fmt_amount(d.billed_amount),
 			"pending_amount": _fmt_amount(d.pending_amount),
 			"delay": str(int(flt(d.delay))),
-		})
+		}
+		rows.append(row)
+
+		bucket = per_customer.setdefault(
+			d.customer_name or d.customer,
+			{"customer": d.customer_name or d.customer, "rows": [], "raw": []},
+		)
+		bucket["rows"].append(row)
+		bucket["raw"].append(d)
 
 	return {
 		"companies": companies,
@@ -393,6 +432,11 @@ def _build(companies, customers, sales_orders, statuses, from_date, to_date, fy_
 		"from_date_disp": formatdate(from_date),
 		"to_date_disp": formatdate(to_date),
 		"rows": rows,
+		# Populated only when the result covers more than one customer; the screen and
+		# the PDF render these blocks instead of the flat `rows`. A single-customer
+		# result leaves it empty, since a heading and subtotal would just repeat the
+		# grand total.
+		"groups": _customer_groups(per_customer),
 		"totals": {
 			"qty": _fmt_qty(totals["qty"]),
 			"billed_qty": _fmt_qty(totals["billed_qty"]),
@@ -433,6 +477,7 @@ def _empty(companies, customers, from_date, to_date, fy_label):
 		"from_date_disp": formatdate(from_date),
 		"to_date_disp": formatdate(to_date),
 		"rows": [],
+		"groups": [],
 		"totals": {
 			"qty": zero_qty, "billed_qty": zero_qty, "qty_to_bill": zero_qty,
 			"amount": zero_amt, "billed_amount": zero_amt, "pending_amount": zero_amt,
@@ -467,7 +512,7 @@ def get_report(companies=None, customers=None, sales_orders=None, statuses=None,
 @frappe.whitelist()
 def download_pdf(companies=None, customers=None, sales_orders=None, statuses=None,
                  period_type=None, fiscal_year=None, from_date=None, to_date=None, view=None):
-	"""The same report as a Landscape A4 PDF.
+	"""The same report as a Portrait A4 PDF.
 
 	Security is re-validated here exactly as in get_report — the browser cannot
 	ask for a company or customer that is not the logged-in user's, whatever it
@@ -486,7 +531,7 @@ def download_pdf(companies=None, customers=None, sales_orders=None, statuses=Non
 
 	pdf_data = get_pdf(html, {
 		"page-size": "A4",
-		"orientation": "Landscape",
+		"orientation": "Portrait",
 		"margin-top": "10mm",
 		"margin-right": "10mm",
 		"margin-bottom": "12mm",

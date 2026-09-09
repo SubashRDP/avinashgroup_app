@@ -1,0 +1,115 @@
+<!--
+	Print / PDF layout for NG Sales Order Analysis.
+
+	Frappe picks this file up automatically as the report html_format (see
+	frappe/desk/query_report.py, print_path) and renders it instead of the stock
+	print_grid template for both Print and Download PDF. It exists so the printed
+	sheet can differ from print_grid in three ways:
+	  - no leading "#" serial column,
+	  - a cell with no value prints blank, where print_grid prints 0.000 / Rs 0.00
+	    because it formats a missing number as zero,
+	  - the customer heading is one merged banner across every column, which the
+	    on-screen datatable cannot do.
+
+	Three notes on the template engine (frappe/public/js/frappe/microtemplate.js):
+	it is EJS-style, so a block opened inside a tag must be closed by a tag
+	holding the matching brace; it strips newlines before compiling, so only
+	block comments are safe inside a tag and single quotes are avoided
+	throughout; and it scans this comment too, so no template tag may be written
+	out here as an example.
+
+	Ticking "Pick Columns" in the print dialog makes Frappe fall back to
+	print_grid, so the "#" column reappears on that path only.
+-->
+<div class="soa-print">
+<h2>{{ __(title) }}</h2>
+
+{%
+	/* Frappe sets subtitle to the filter HTML only when "Include Filters" is
+	   ticked in the print dialog, and to null when it is not. This template
+	   builds its own filter list rather than printing that HTML, so it reads
+	   subtitle purely as the on/off signal. It is the one signal present on both
+	   paths: print_report passes print_settings, pdf_report does not. */
+%}
+{% if (subtitle) { %}
+<div class="soa-filters">
+	{% for (let fieldname of Object.keys(filters || {})) { %}
+		{% var df = report.get_filter(fieldname) ? report.get_filter(fieldname).df : null; %}
+		{% var value = filters[fieldname]; %}
+		{%
+			/* An empty filter prints nothing at all: no label, no blank line. A
+			   filter switched off by its depends_on is skipped the way print_grid
+			   skips it, and an unticked checkbox counts as empty rather than
+			   printing a bare 0. */
+			var is_empty = value === null || value === undefined || value === ""
+				|| (Array.isArray(value) && value.length === 0)
+				|| (df && df.fieldtype === "Check" && !value);
+		%}
+		{% if (df && !df.hidden_due_to_dependency && !is_empty) { %}
+			<div class="filter-row">
+				<b>{{ __(df.label) }}:</b>
+				{{ Array.isArray(value) ? value.join(", ") : frappe.format(value, df) }}
+			</div>
+		{% } %}
+	{% } %}
+</div>
+{% } %}
+
+<table class="table table-bordered">
+	<thead>
+		<tr>
+			{% for col in columns %}
+				{% if (col.name && col._id !== "_check") { %}
+					<th {% if (col.fieldtype == "Currency" || col.fieldtype == "Float" || col.fieldtype == "Int") { %} class="text-right" {% } %}>
+						{{ __(col.name) }}
+					</th>
+				{% } %}
+			{% endfor %}
+		</tr>
+	</thead>
+	<tbody>
+		{% for row in data %}
+			{% if (row._section) { %}
+				{% /* Customer heading: one bold banner across every column. */ %}
+				<tr>
+					<td colspan="{{ columns.length }}" class="soa-customer">{{ row.customer_name || "" }}</td>
+				</tr>
+			{% } else { %}
+				<tr>
+					{% for col in columns %}
+						{% if (col.name && col._id !== "_check") { %}
+							{% var value = col.fieldname ? row[col.fieldname] : row[col.id]; %}
+							{% var numeric = col.fieldtype == "Currency" || col.fieldtype == "Float" || col.fieldtype == "Int"; %}
+							{%
+								/* A missing figure stays blank rather than printing as
+								   zero: the heading, spacer and total rows carry no value
+								   for most columns, and a page of 0.000 reads as data. */
+								var has_value = value !== null && value !== undefined && value !== "";
+								var precision = col.precision != null ? col.precision : (col.fieldtype == "Int" ? 0 : 2);
+							%}
+							<td {% if (row.bold) { %} style="font-weight: bold" {% } %} {% if (numeric) { %} class="text-right" {% } %}>
+								{{ numeric ? (has_value ? format_number(value, null, precision) : "") : (value || "") }}
+							</td>
+						{% } %}
+					{% endfor %}
+				</tr>
+			{% } %}
+		{% endfor %}
+	</tbody>
+</table>
+
+<style>
+	.soa-filters { margin-bottom: 12px; }
+	.soa-filters .filter-row { line-height: 1.5; }
+	.soa-customer { font-weight: bold; background: #f2f2f2; }
+
+	/* Type size for the printed sheet.
+	   The shared report_print_portrait.css (injected into the print popup for every
+	   query report) forces `table td` to 7px and `table th` to 7.5px with !important.
+	   These rules are scoped to .soa-print so they outrank that bare-element selector
+	   without changing the size of any other printed report. */
+	.soa-print table td { font-size: 9.5px !important; line-height: 1.35 !important; }
+	.soa-print table th { font-size: 10px !important; line-height: 1.25 !important; }
+	.soa-print .soa-customer { font-size: 10px !important; }
+</style>
+</div>

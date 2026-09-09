@@ -10,6 +10,21 @@ var sales_register_fy = erpnext.utils.get_fiscal_year(frappe.datetime.get_today(
 frappe.query_reports["Sales Register Report"] = {
 	filters: [
 		{
+			// IRD Format = the govt VAT book (Nepali labels, merged group headers).
+			// Detail Format = the register as it was before that book: English columns
+			// and the older classification. Changing it re-runs the report, and the
+			// Nepali heading overlay below is skipped for Detail.
+			fieldname: "report_format",
+			label: __("Report Format"),
+			fieldtype: "Select",
+			options: ["IRD Format", "Detail Format"],
+			default: "IRD Format",
+			reqd: 1,
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "company",
 			label: __("Company"),
 			fieldtype: "MultiSelectList",
@@ -119,6 +134,10 @@ frappe.query_reports["Sales Register Report"] = {
 
 		$(wrapper).prev(".sr-vat-heading-onscreen").remove();
 		if (dt.bodyScrollable) $(dt.bodyScrollable).off("scroll.srVatHeading");
+
+		// Detail Format has no column groups, so there is no merged header to draw —
+		// its English labels already sit in the datatable's own header row.
+		if (frappe.query_report.get_filter_value("report_format") === "Detail Format") return;
 
 		// Both states show a govt-form group-header row: "बिक्री खाता" (Sales) when
 		// unticked, "बिक्री फिर्ता खाता" (Sales Return) when ticked — same overlay

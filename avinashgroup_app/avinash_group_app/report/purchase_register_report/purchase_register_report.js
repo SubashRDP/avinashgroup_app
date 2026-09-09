@@ -4,6 +4,21 @@
 frappe.query_reports["Purchase Register Report"] = {
 	filters: [
 		{
+			// IRD Format = the govt VAT book (Nepali labels, merged group headers).
+			// Detail Format = the register as it was before that book: English columns
+			// and the older classification. Changing it re-runs the report, and the
+			// Nepali heading overlay below is skipped for Detail.
+			fieldname: "report_format",
+			label: __("Report Format"),
+			fieldtype: "Select",
+			options: ["IRD Format", "Detail Format"],
+			default: "IRD Format",
+			reqd: 1,
+			on_change: function () {
+				frappe.query_report.refresh();
+			},
+		},
+		{
 			fieldname: "company",
 			label: __("Company"),
 			fieldtype: "MultiSelectList",
@@ -88,6 +103,10 @@ frappe.query_reports["Purchase Register Report"] = {
 
 		$(wrapper).prev(".pr-vat-heading-onscreen").remove();
 		if (dt.bodyScrollable) $(dt.bodyScrollable).off("scroll.prVatHeading");
+
+		// Detail Format has no column groups, so there is no merged header to draw —
+		// its English labels already sit in the datatable's own header row.
+		if (frappe.query_report.get_filter_value("report_format") === "Detail Format") return;
 
 		// Both states now show a govt-form group-header row: "खरिद खाता" (Purchase) when
 		// unticked, "खरिद फिर्ता खाता" (Purchase Return) when ticked — same overlay mechanism,
@@ -352,6 +371,14 @@ frappe.query_reports["Purchase Register Report"] = {
 
 		// The PI link lives on the supplier-name column ("<supplier name>::<pi.name>").
 		// मिति and बीजक नं. (voucher_no) are plain text — blank when the PI has no value.
+		// Detail Format keeps the old convention: the PI link sits on Voucher No as
+		// "<display no>::<pi.name>". Without this it rendered as raw text with the
+		// separator showing.
+		if (column.fieldname === "voucher_no" && value && !data.bold && String(value).includes("::")) {
+			const parts = String(value).split("::");
+			return frappe.utils.get_form_link("Purchase Invoice", parts[1] || parts[0], true, parts[0]);
+		}
+
 		if (column.fieldname === "supplier_name" && value && !data.bold) {
 			const parts = value.split("::");
 			const label = parts[0];
