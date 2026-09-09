@@ -406,13 +406,18 @@ def get_data(filters, company, branch_wise=False):
 	submitted Sales Invoice line in the period. All items are included, gas and non-gas.
 
 	branch_wise adds the invoice's branch to the grouping, so each row also carries the
-	branch it belongs to and the caller can split the company into per-branch blocks."""
+	branch it belongs to and the caller can split the company into per-branch blocks.
+
+	With Include Return on, a credit note's negative line is summed into the same row as the
+	sale it reverses, so a sale that was returned in full nets to zero and is then dropped —
+	see the all-zero check below."""
 	conditions = ["si.docstatus = 1", "si.company = %(company)s"]
 	values = {"company": company}
 
 	# Frappe's query report drops falsy filter values before sending them, so an UNCHECKED
 	# "Include Return" (value 0) never reaches the server. Treat absent as OFF.
-	if not frappe.utils.cint(filters.get("include_return")):
+	include_return = frappe.utils.cint(filters.get("include_return"))
+	if not include_return:
 		conditions.append("si.is_return = 0")
 
 	from_date, to_date = _period(filters)
@@ -474,7 +479,8 @@ def get_data(filters, company, branch_wise=False):
 		# Gas Qty in KG is the stock quantity, which only reads as KG for items stocked in a
 		# kilogram UOM; an item stocked in Nos (freight, cylinders) contributes 0.
 		stock_qty = (r.stock_qty or 0) if (r.stock_uom or "") in kg_uoms else 0
-		data.append({
+
+		row = {
 			# Not a report column — execute() groups on it and drops it.
 			"branch": r.get("branch") or "",
 			"item_name": r.item_name,
@@ -488,9 +494,29 @@ def get_data(filters, company, branch_wise=False):
 			"taxable_amount": taxable_amount,
 			"vat_amount": vat_amount,
 			"total_amount": taxable_amount + vat_amount,
-		})
+		}
+
+		# A row is dropped only when every numeric column — Quantity through Total Amount —
+		# is zero. That happens when returns are included and a line was returned in full:
+		# the credit note's negative values net against the sale in the SUM and the row says
+		# nothing. A row still carrying a value anywhere, including a partial return that
+		# nets to a real quantity or amount, is kept.
+		if _all_zero(row):
+			continue
+
+		data.append(row)
 
 	return data
+
+
+def _all_zero(row):
+	"""True when every numeric column of `row` rounds to zero at the report's precision.
+
+	Quantities show 3 decimals and amounts 2, so anything under half of the smallest
+	displayed unit prints as 0.000/0.00 anyway. Comparing to an exact 0 would keep rows
+	holding a stray 0.0000001 left by floating-point sums of a sale and its return."""
+	fields = [col["fieldname"] for col in get_columns() if col["fieldtype"] in ("Currency", "Float")]
+	return all(abs(frappe.utils.flt(row.get(f))) < 0.0005 for f in fields)
 
 
 def _kg_uoms():
