@@ -73,6 +73,17 @@ tr.section td {
   border-top: none;
 }
 
+/* a party nested under its account, in "Both" — the account is written once,
+   in the heading above, so this line carries only the party */
+tr.subsection td {
+  font-weight: bold;
+  font-size: 8.4px;
+  padding-top: 5px;
+  padding-bottom: 2px;
+  padding-left: 16px;
+  border-bottom: .5px solid #999;
+}
+
 /* opening / period total / closing */
 tr.band td { font-weight: bold; background: #f6f6f6; border-bottom: .4px solid #ddd; }
 tr.band.closing td { border-bottom: 1.2px double #111; }
@@ -135,6 +146,8 @@ tr { page-break-inside: avoid; }
     <tr class="narration"><td colspan="8">{{ row.description }}</td></tr>
     {%- elif row.css == "section" %}
     <tr class="section"><td colspan="8">{{ row.description }}</td></tr>
+    {%- elif row.css == "subsection" %}
+    <tr class="subsection"><td colspan="8">{{ row.description }}</td></tr>
     {%- else %}
     <tr class="{{ row.css }}{% if row.description == 'Closing Balance' %} closing{% endif %}">
       <td>{{ row.date }}</td>

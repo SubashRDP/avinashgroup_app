@@ -629,6 +629,37 @@ def _balance_band(label, balance):
 	}
 
 
+def _party_section_label(key, postings):
+	"""The party heading a nested sub-block carries.
+
+	"Both" names the account once, in the heading above, so the sub-block is
+	headed by the party alone. Repeating the account on every one of its forty
+	customers is exactly what the nesting removes.
+	"""
+	if postings:
+		return postings[0].party_name or _("No Party")
+	return _party_label(key[1], key[2]) or key[2] or _("No Party")
+
+
+def _period_total(debit, credit, label=None):
+	"""The movement line that closes a block.
+
+	Balance on this line is the block's own net movement, not the running
+	total -- the legacy print states it the same way, so that
+	    opening + period movement = closing
+	reads straight down the Balance column.
+	"""
+	return {
+		"party_name": label or _("Period Total"),
+		"debit": debit,
+		"credit": credit,
+		"balance": _balance_text(debit - credit, always=True),
+		"balance_value": debit - credit,
+		"_bold": 1,
+		"_band": 1,
+	}
+
+
 def _build_rows(filters, postings, with_narration=False, columns=None, always_narration=False):
 	# The grid always receives narration rows and shows or hides them in the
 	# browser -- a checkbox toggle should not cost a five-second re-query. The
@@ -654,18 +685,21 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 	data = []
 	grand_opening = grand_debit = grand_credit = 0.0
 
-	for key in sorted(sections, key=lambda k: tuple(str(part) for part in k)):
-		rows = sections[key]
-		data.append({"_section": 1, "party_name": _section_label(filters, key, rows)})
+	def emit_block(key, rows, heading, heading_flag):
+		"""One ledger block: heading, opening, postings, period total, closing.
+
+		Returns the block's (opening, debit, credit), so a caller nesting these
+		can total them into a block of its own.
+		"""
+		data.append({heading_flag: 1, "party_name": heading})
 
 		# what this account/party carried into the period
 		balance = flt(opening.get(key, 0.0))
-		grand_opening += balance
 		data.append(_balance_band(_("Opening Balance"), balance))
 
 		# Kept so the closing balance is derived, not accumulated -- see below.
-		section_opening = balance
-		section_debit = section_credit = 0.0
+		block_opening = balance
+		block_debit = block_credit = 0.0
 		# A date that has not changed is not restated -- Receipt Register does
 		# the same. A column of the same date repeated down twenty rows says
 		# nothing, and the eye wants the point where it moves.
@@ -673,8 +707,8 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 
 		for posting in rows:
 			balance += flt(posting.debit) - flt(posting.credit)
-			section_debit += flt(posting.debit)
-			section_credit += flt(posting.credit)
+			block_debit += flt(posting.debit)
+			block_credit += flt(posting.credit)
 			same_day = posting.posting_date == last_date
 			last_date = posting.posting_date
 
@@ -721,21 +755,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 						}
 					)
 
-		# Balance on this line is the period's own net movement, not the running
-		# total -- the legacy print states it the same way, so that
-		#   opening + period movement = closing
-		# reads straight down the Balance column.
-		data.append(
-			{
-				"party_name": _("Period Total"),
-				"debit": section_debit,
-				"credit": section_credit,
-				"balance": _balance_text(section_debit - section_credit, always=True),
-				"balance_value": section_debit - section_credit,
-				"_bold": 1,
-				"_band": 1,
-			}
-		)
+		data.append(_period_total(block_debit, block_credit))
 		# Derived from the opening and the period totals, not from the running
 		# accumulator. Adding `debit - credit` once per posting compounds float
 		# error: on one Gandaki account the accumulator reached
@@ -743,17 +763,71 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 		# section and grand closing balances disagreed by 4.5e-08 while both
 		# displayed as 10,61,95,401.20. A closing balance that does not equal
 		# opening plus movement is the first thing an accountant checks.
-		data.append(
-			_balance_band(
-				_("Closing Balance"), section_opening + section_debit - section_credit
+		data.append(_balance_band(_("Closing Balance"), block_opening + block_debit - block_credit))
+		return block_opening, block_debit, block_credit
+
+	ordered = sorted(sections, key=lambda k: tuple(str(part) for part in k))
+	category = filters.get("categorized_by") or "Account"
+
+	if category == "Both":
+		# The account is written once and its parties nest under it. Flat, the
+		# heading read "411101 - LP Gas Sales  —  ABC Traders" and restated the
+		# account for every party it trades with; nested, the account is named
+		# once and gains an opening and a closing of its own, which the flat
+		# layout had nowhere to put.
+		by_account = {}
+		for key in ordered:
+			by_account.setdefault(key[0], []).append(key)
+
+		for account in sorted(by_account):
+			party_keys = by_account[account]
+			# The account's own opening is every party's, including any whose
+			# balance is zero and so never became a block of its own.
+			account_opening = flt(sum(v for k, v in opening.items() if k[0] == account))
+
+			# Every account totals itself, including one holding a single party
+			# -- where the account's figures are that party's, restated. The
+			# alternative was to drop them there, and it reads worse: an account
+			# with a total sits above one without, and nothing on the page says
+			# why. A reader who finds the closing balance under one account
+			# expects to find it under the next.
+			data.append({"_section": 1, "party_name": account})
+			data.append(_balance_band(_("Opening Balance"), account_opening))
+
+			account_debit = account_credit = 0.0
+			for key in party_keys:
+				_block_opening, debit, credit = emit_block(
+					key, sections[key], _party_section_label(key, sections[key]), "_subsection"
+				)
+				account_debit += debit
+				account_credit += credit
+				# blank line between parties -- flagged so the formatter empties
+				# it. An unflagged {} renders every Currency column as
+				# "Rs 0.00", which reads as a real zero on a row that means
+				# nothing at all.
+				data.append({"_spacer": 1})
+
+			data.append(_period_total(account_debit, account_credit))
+			data.append(
+				_balance_band(_("Closing Balance"), account_opening + account_debit - account_credit)
 			)
-		)
-		# blank line between sections -- flagged so the formatter empties it.
-		# An unflagged {} renders every Currency column as "Rs 0.00", which
-		# reads as a real zero on a row that means nothing at all.
-		data.append({"_spacer": 1})
-		grand_debit += section_debit
-		grand_credit += section_credit
+
+			grand_opening += account_opening
+			grand_debit += account_debit
+			grand_credit += account_credit
+			data.append({"_spacer": 1})
+	else:
+		for key in ordered:
+			block_opening, debit, credit = emit_block(
+				key, sections[key], _section_label(filters, key, sections[key]), "_section"
+			)
+			grand_opening += block_opening
+			grand_debit += debit
+			grand_credit += credit
+			# blank line between sections -- flagged so the formatter empties it.
+			# An unflagged {} renders every Currency column as "Rs 0.00", which
+			# reads as a real zero on a row that means nothing at all.
+			data.append({"_spacer": 1})
 
 	if data:
 		# The opening balance heads the ledger, it does not close it -- appended
@@ -772,17 +846,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 
 		if sections > 1:
 			data.append({"_spacer": 1})
-			data.append(
-				{
-					"party_name": _("Grand Total"),
-					"debit": grand_debit,
-					"credit": grand_credit,
-					"balance": _balance_text(grand_debit - grand_credit, always=True),
-					"balance_value": grand_debit - grand_credit,
-					"_bold": 1,
-					"_band": 1,
-				}
-			)
+			data.append(_period_total(grand_debit, grand_credit, _("Grand Total")))
 			data.append(
 				_balance_band(_("Closing Balance"), grand_opening + grand_debit - grand_credit)
 			)
@@ -1026,6 +1090,8 @@ def download_pdf(filters, orientation="Landscape"):
 				css=(
 					"section"
 					if row.get("_section")
+					else "subsection"
+					if row.get("_subsection")
 					else "narration"
 					if row.get("_narration")
 					else "band"

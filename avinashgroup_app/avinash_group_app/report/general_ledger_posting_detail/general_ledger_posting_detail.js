@@ -547,6 +547,17 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			return "";
 		}
 
+		// A party nested under its account, in "Both". The account is named
+		// once in the heading above, so this line carries only the party —
+		// indented, so the eye can see which account it belongs to.
+		if (data && data._subsection) {
+			if (column.fieldname === "party_name") {
+				return `<span style="padding-left:16px;">
+					<b>${frappe.utils.escape_html(data.party_name || "")}</b></span>`;
+			}
+			return "";
+		}
+
 		value = default_formatter(value, row, column, data);
 		if (data && data._bold) {
 			value = `<b>${value}</b>`;
