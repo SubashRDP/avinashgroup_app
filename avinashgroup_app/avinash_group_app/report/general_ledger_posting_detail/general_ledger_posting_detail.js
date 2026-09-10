@@ -390,7 +390,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		const data = frappe.query_report.data || [];
 		const narrationRows = new Set();
 		data.forEach(function (row, i) {
-			if (row && row._narration) narrationRows.add(i);
+			if (row && (row._narration || row._subline)) narrationRows.add(i);
 		});
 
 		// A money column must fit its widest figure plus the currency symbol,
@@ -459,7 +459,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		const container = dt && dt.bodyScrollable;
 		if (!container) return;
 		data.forEach(function (row, i) {
-			if (!row || !row._narration) return;
+			if (!row || !(row._narration || row._subline)) return;
 			const rowEl = container.querySelector(".dt-row-" + i);
 			if (rowEl) rowEl.classList.add("glpd-narration-row");
 		});
@@ -503,7 +503,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		// column to its widest cell: in Party Name the narration was the widest
 		// cell in the table and pushed Balance off the right edge, while
 		// Voucher Type's own width is set by short values like "Journal Entry".
-		if (data && data._narration) {
+		if (data && (data._narration || data._subline)) {
 			if (column.fieldname === "voucher_type") {
 				// Absolutely positioned so it is out of flow: Fit Columns sizes
 				// each column by its cells' scrollWidth, and an in-flow

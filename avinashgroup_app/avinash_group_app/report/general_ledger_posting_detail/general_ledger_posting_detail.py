@@ -56,6 +56,12 @@ PARTY_NAME_FIELD = {
 
 CATEGORIES = ("Account", "Party", "Both")
 
+# The JV Types whose postings carry the legacy "Bank/Cash/Journal Description"
+# rather than the party name. Every other type -- Cash Entry, Bank Entry,
+# Cash/ Bank or Contra Voucher, Credit Note, Debit Note, Contract Form, Cylinder
+# Deposit Slip, Opening Entry, Party Journal -- keeps the party name it had.
+JOURNAL_DESCRIBED_TYPES = ("Journal Entry",)
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -281,7 +287,7 @@ def _describe_against(against, company, names=None):
 	"""
 	if not against:
 		return ""
-	suffix = " - {0}".format(frappe.get_cached_value("Company", company, "abbr")) if company else ""
+	suffix = _company_suffix(company)
 	names = names or {}
 	out = []
 	for part in str(against).split(","):
@@ -293,14 +299,111 @@ def _describe_against(against, company, names=None):
 		if resolved:
 			out.append(resolved)
 			continue
-		if suffix and part.endswith(suffix):
-			part = part[: -len(suffix)]
-		# drop a leading account number ("549301 - R & M ..." -> "R & M ...")
-		head, sep, tail = part.partition(" - ")
-		if sep and head.strip().isdigit():
-			part = tail
-		out.append(part.strip())
+		out.append(_trim_account(part, suffix))
 	return ", ".join(out)
+
+
+def _trim_account(account, suffix):
+	"""An account as a ledger prints it: no leading number, no company suffix.
+
+	"145201 - Global IME Bank A/c 10101010000310 - NGI" reads
+	"Global IME Bank A/c 10101010000310", which is what the legacy Posting Detail
+	puts in its Bank/Cash/Journal Description column.
+	"""
+	part = str(account or "").strip()
+	if suffix and part.endswith(suffix):
+		part = part[: -len(suffix)]
+	head, sep, tail = part.partition(" - ")
+	if sep and head.strip().isdigit():
+		part = tail
+	return part.strip()
+
+
+def _company_suffix(company):
+	return " - {0}".format(frappe.get_cached_value("Company", company, "abbr")) if company else ""
+
+
+def _journal_descriptions(postings):
+	"""Per Journal Entry in view: its JV Type, its cash/bank legs, its cheque.
+
+	Only the JV Types in JOURNAL_DESCRIBED_TYPES are loaded; a posting from any
+	other keeps the party name it already had.
+	"""
+	vouchers = sorted(
+		{p.voucher_no for p in postings if p.voucher_type == "Journal Entry" and p.voucher_no}
+	)
+	if not vouchers:
+		return {}
+
+	entries = {}
+	for start in range(0, len(vouchers), 500):
+		for row in frappe.db.sql(
+			"""SELECT name, custom_p_type, custom_paid_to, cheque_no, custom_reference_miti
+			   FROM `tabJournal Entry`
+			   WHERE name IN %(names)s AND custom_p_type IN %(types)s""",
+			{"names": vouchers[start : start + 500], "types": JOURNAL_DESCRIBED_TYPES},
+			as_dict=True,
+		):
+			row.cash_bank = []
+			entries[row.name] = row
+
+	if not entries:
+		return {}
+
+	names = sorted(entries)
+	for start in range(0, len(names), 500):
+		for row in frappe.db.sql(
+			"""SELECT ja.parent, ja.account FROM `tabJournal Entry Account` ja
+			   JOIN `tabAccount` a ON a.name = ja.account
+			   WHERE ja.parent IN %(names)s AND a.account_type IN ('Cash', 'Bank')
+			   ORDER BY ja.idx""",
+			{"names": names[start : start + 500]},
+			as_dict=True,
+		):
+			entries[row.parent].cash_bank.append(row.account)
+
+	return entries
+
+
+def _journal_description(entry, own_account, suffix):
+	"""The Bank/Cash/Journal Description for one posting.
+
+	An entry that moved through cash or a bank names that account; one that did
+	not names its JV Type -- "1 of 108 Journal Entry-type vouchers touch a cash or
+	bank account", so the two cases split cleanly.
+
+	The row's own account is skipped when choosing: on a bank account's own ledger
+	the cash/bank leg *is* the account being read, and a line that names the ledger
+	it sits in says nothing. Those fall back to the JV Type as well.
+	"""
+	for account in entry.cash_bank:
+		if account != own_account:
+			return _trim_account(account, suffix)
+	return entry.custom_p_type or ""
+
+
+def _paid_line(entry, party_name=""):
+	"""The legacy sub-line: "Paid: <who> by chq no <no> dt <miti>".
+
+	`custom_paid_to` is set on only 174 of the 3,255 entries in scope, so the
+	party the posting is against stands in when it is blank -- which is what the
+	legacy print shows: "Paid:Nepal L.P. Gas Udhyog Sangh by chq no 55263396".
+	"""
+	paid_to = (entry.custom_paid_to or "").strip()
+	cheque = str(entry.cheque_no or "").strip()
+	miti = str(entry.custom_reference_miti or "").strip().split(" ")[0]
+	# Nothing to say without a cheque or a named payee: falling back to the party
+	# there produced a line reading "Paid: Gita Gas Udyog Pvt. Ltd." directly under
+	# the block already headed by that name.
+	if not (cheque or paid_to):
+		return ""
+	who = paid_to or (party_name or "").strip()
+	out = "Paid: {0}".format(who) if who else "Paid:"
+	if cheque:
+		out += " by chq no {0}".format(cheque)
+	if miti:
+		out += " dt {0}".format(miti)
+	return out
 
 
 def _decorate(postings, filters_company=None):
@@ -309,6 +412,8 @@ def _decorate(postings, filters_company=None):
 	from avinashgroup_app.utils.voucher_numbers import link, resolve
 
 	numbers = resolve((r.voucher_type, r.voucher_no) for r in postings)
+	journals = _journal_descriptions(postings)
+	suffix = _company_suffix(filters_company)
 
 	# Some rows carry a party with no party_type -- 343 in a fortnight on NGI.
 	# Those still have a name to show, so they are looked up against every party
@@ -362,6 +467,14 @@ def _decorate(postings, filters_company=None):
 			or (r.party if r.party else "")
 			or _describe_against(r.against, filters_company, party_names)
 		)
+
+		# The legacy Posting Detail's Bank/Cash/Journal Description column. Kept
+		# beside party_name rather than replacing it: the party name is what a
+		# Party or Both block is headed by, and a block titled "Journal" would be
+		# the same defect 47c8774 fixed at the other end.
+		entry = journals.get(r.voucher_no) if r.voucher_type == "Journal Entry" else None
+		r.description = _journal_description(entry, r.account, suffix) if entry else ""
+		r.paid = _paid_line(entry, r.party_name) if entry and entry.cash_bank else ""
 
 
 def _section_key(filters, posting):
@@ -750,7 +863,9 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 					"voucher_type": posting.voucher_type,
 					"voucher_no": posting.voucher_link,
 					"voucher_number": posting.number,
-					"party_name": posting.party_name or "",
+					# the Bank/Cash/Journal Description where there is one, else
+					# the party as before
+					"party_name": posting.description or posting.party_name or "",
 					"debit": flt(posting.debit),
 					"credit": flt(posting.credit),
 					# a posting whose running balance happens to hit zero leaves
@@ -760,6 +875,14 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 					"balance_value": balance,
 				}
 			)
+
+			# "Paid: <who> by chq no <no> dt <miti>", between the posting and its
+			# narration, exactly where the legacy print puts it. Not gated on
+			# Show Narration: it describes the payment, it is not a remark.
+			if posting.paid:
+				data.append(
+					{"voucher_type": posting.paid, "narration": posting.paid, "_subline": 1}
+				)
 
 			# the narration sits on its own line under the posting, as the
 			# spec's layout has it -- remarks run long beside a number
@@ -1123,7 +1246,7 @@ def download_pdf(filters, orientation="Landscape"):
 					else "subsection"
 					if row.get("_subsection")
 					else "narration"
-					if row.get("_narration")
+					if row.get("_narration") or row.get("_subline")
 					else "band"
 					if row.get("_band")
 					else "total"
