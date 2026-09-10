@@ -1,0 +1,37 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("My Announcements") }}{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+.ag-ann-list { display: flex; flex-direction: column; gap: 16px; padding-block: 8px 32px; }
+.ag-ann { border: 1px solid var(--border-color, #e2e6ee); border-radius: 10px; overflow: hidden; background: #fff; }
+.ag-ann-img { display: block; width: 100%; height: auto; }
+.ag-ann-body { padding: 14px 16px; }
+.ag-ann-title { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
+.ag-ann-date { font-size: .8rem; color: #6b7280; margin-bottom: 10px; }
+.ag-ann-msg { overflow-wrap: anywhere; }
+.ag-ann-empty { padding: 24px 0; color: #6b7280; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<h3>{{ _("My Announcements") }}</h3>
+<div class="ag-ann-list">
+	{% for a in announcements %}
+	<article class="ag-ann">
+		{% if a.image %}<img class="ag-ann-img" src="{{ a.image | e }}" alt="">{% endif %}
+		<div class="ag-ann-body">
+			<p class="ag-ann-title">{{ a.title | e }}</p>
+			<div class="ag-ann-date">{{ frappe.format(a.sent_on, {"fieldtype": "Datetime"}) }}</div>
+			{# same rule as the popup: Custom HTML replaces the message #}
+			{% if a.custom_html and a.custom_html.strip() %}<div class="ag-ann-msg">{{ a.custom_html }}</div>
+			{% elif a.message %}<div class="ag-ann-msg">{{ a.message }}</div>{% endif %}
+		</div>
+	</article>
+	{% else %}
+	<div class="ag-ann-empty">{{ _("No announcements yet.") }}</div>
+	{% endfor %}
+</div>
+{% endblock %}

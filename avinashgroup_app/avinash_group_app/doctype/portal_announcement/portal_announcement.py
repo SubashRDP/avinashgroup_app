@@ -6,7 +6,7 @@ import hashlib
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import get_url, getdate, nowdate
+from frappe.utils import get_url, getdate, now_datetime, nowdate
 
 
 class PortalAnnouncement(Document):
@@ -16,6 +16,31 @@ class PortalAnnouncement(Document):
 
 		if not self.custom_html and not (self.message or self.image):
 			frappe.throw(_("Provide a Message, an Image, or Custom HTML for the popup to show anything."))
+
+	def on_update(self):
+		# Once sent, the history record follows every edit of the announcement.
+		if frappe.db.exists(HISTORY, self.name):
+			frappe.db.set_value(
+				HISTORY,
+				self.name,
+				{
+					"title": self.title,
+					"valid_from": self.valid_from,
+					"valid_upto": self.valid_upto,
+					"message": self.message,
+					"image": self.image,
+					"custom_html": self.custom_html,
+				},
+			)
+
+	def after_rename(self, old, new, merge=False):
+		if frappe.db.exists(HISTORY, old):
+			frappe.rename_doc(HISTORY, old, new, force=True)
+			frappe.db.set_value(HISTORY, new, "title", new)
+
+
+# One record per announcement, named the same as the announcement.
+HISTORY = "Portal Announcement History"
 
 
 def _is_customer_portal_user(user):
@@ -58,6 +83,27 @@ def _session_key():
 	return hashlib.sha256(sid.encode()).hexdigest()[:16]
 
 
+def _record_history(popup):
+	"""Copy this announcement to Portal Announcement History the first time it is
+	sent. The record is named the same as the announcement; later edits reach it
+	through PortalAnnouncement.on_update, so it is never inserted twice."""
+	if frappe.db.exists(HISTORY, popup.name):
+		return
+
+	frappe.get_doc(
+		{
+			"doctype": HISTORY,
+			"sent_on": now_datetime(),
+			"title": popup.title,
+			"valid_from": popup.valid_from,
+			"valid_upto": popup.valid_upto,
+			"message": popup.message,
+			"image": popup.image,
+			"custom_html": popup.custom_html,
+		}
+	).insert(ignore_permissions=True, set_name=popup.name)
+
+
 @frappe.whitelist()
 def get_login_popups():
 	"""Active announcements for the logged-in customer portal user, highest priority first.
@@ -85,6 +131,7 @@ def get_login_popups():
 			continue
 		if row.valid_upto and getdate(row.valid_upto) < today:
 			continue
+		_record_history(row)
 		popups.append(
 			{
 				"name": row.name,
