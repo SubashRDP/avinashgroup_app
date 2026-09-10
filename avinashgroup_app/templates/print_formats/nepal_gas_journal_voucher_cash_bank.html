@@ -636,10 +636,10 @@ padding:0px 30px;
 {%- set chq = "" if chq == "1" else chq -%}
 {%- set ref_date = ((d.custom_reference_miti|string).split(" ")[0] if d.custom_reference_miti else (frappe.utils.formatdate(d.cheque_date, "yyyy-MM-dd") if d.cheque_date else "")) if chq else "" -%}
 {%- if d.custom_paid_to %}
-      <tr><td colspan="{{ ncols }}"><strong>Paid To:</strong> {{ d.custom_paid_to }}</td></tr>
+      <tr><td colspan="{{ ncols }}"><strong>Paid To/Receive From:</strong> {{ d.custom_paid_to }}</td></tr>
 {%- endif %}
 {%- if chq %}
-      <tr><td colspan="{{ ncols }}"><strong>Cheque No:</strong> {{ chq }}{% if ref_date %}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Dated:</strong> {{ ref_date }}{% endif %}</td></tr>
+      <tr><td colspan="{{ ncols }}"><strong>Ref:</strong> {{ chq }}{% if ref_date %}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Dt:</strong> {{ ref_date }}{% endif %}</td></tr>
 {%- endif %}
 {%- endmacro -%}
 {#- Empty row that pushes the closing block (Total .. signatures) down to the fold.
@@ -752,7 +752,7 @@ padding:0px 30px;
   {#- Trailing rows: Total, [Paid To], [Cheque No / Dated], In Words, Remarks. -#}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% if doc.custom_paid_to %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((doc.custom_paid_to|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
+    {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((("Paid To/Receive From: " ~ doc.custom_paid_to)|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
   {% endif %}
   {% if (doc.cheque_no or "")|string|trim not in ("", "1") %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}

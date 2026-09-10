@@ -68,10 +68,16 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
             reference miti is filled on all 27,421. Printed as they stand, two
             payments in three state a date for a cheque that does not exist, so the
             number and its date are shown together or not at all. -#}
+        {#- The payee as keyed in Paid To/ From -- only when someone filled it in
+            (34 payments on the site). This is the free-text field, not the party,
+            which the header still leaves out. -#}
+        {%- if doc.custom_paid_to_from %}
+        <div><strong>Paid To/Receive From :</strong> {{ doc.custom_paid_to_from }}</div>
+        {%- endif %}
         {%- set chq = (doc.reference_no or "")|string|trim -%}
         {%- if chq and chq != "1" %}
-        <div><strong>Cheque No :</strong> {{ chq }}</div>
-        <div><strong>Cheque Date :</strong> {% if doc.custom_chequereference_miti %}{{ (doc.custom_chequereference_miti|string).split(" ")[0] }}{% endif %}{% if doc.reference_date %} ({{ frappe.utils.formatdate(doc.reference_date, "yyyy-MM-dd") }}){% endif %}</div>
+        <div><strong>Ref :</strong> {{ chq }}</div>
+        <div><strong>Dt :</strong> {% if doc.custom_chequereference_miti %}{{ (doc.custom_chequereference_miti|string).split(" ")[0] }}{% endif %}{% if doc.reference_date %} ({{ frappe.utils.formatdate(doc.reference_date, "yyyy-MM-dd") }}){% endif %}</div>
         {%- endif %}
       </td>
       <td class="r">

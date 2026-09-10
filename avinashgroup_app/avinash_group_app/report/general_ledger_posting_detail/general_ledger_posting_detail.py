@@ -924,9 +924,17 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 					"voucher_type": posting.voucher_type,
 					"voucher_no": posting.voucher_link,
 					"voucher_number": posting.number,
-					# the Bank/Cash/Journal Description where there is one, else
-					# the party as before
-					"party_name": posting.description or posting.party_name or "",
+					# The description stands in for the party only where the party is
+					# already on the page: a posting with none of its own, or a Party /
+					# Both block headed by it. In Account mode this column is the only
+					# place a party is named -- 2,628 of 2,733 journal rows in one NGI
+					# month would otherwise read "Opening Entry" where a customer was.
+					"party_name": (
+						posting.description
+						if posting.description and (not posting.party or category in ("Party", "Both"))
+						else posting.party_name
+					)
+					or "",
 					"debit": flt(posting.debit),
 					"credit": flt(posting.credit),
 					# a posting whose running balance happens to hit zero leaves
