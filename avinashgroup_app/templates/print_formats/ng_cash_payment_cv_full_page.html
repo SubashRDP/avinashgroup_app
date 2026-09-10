@@ -592,9 +592,14 @@ padding:0px 30px;
 .jv-sheet { position:relative; }
 .jv-footer { page-break-inside:avoid; }
 /* The spacer is a <tr>, so it has to out-shout .main-table tr's forced 20px height
-   and its cells' 4px padding; page-break-inside is reset because a tall row that
-   refuses to break would be bumped to a page of its own. */
-.main-table tr.jv-spacer { height:auto !important; page-break-inside:auto !important; }
+   and its cells' 4px padding. It must NOT split across a page boundary: Firefox
+   splits a breakable spacer wherever the page happens to end, which left the closing
+   group (Total .. signatures) stranded at the TOP of the last sheet with the rest of
+   the spacer spent on the sheet before. Kept whole, a spacer that does not fit moves
+   to the next sheet and the closing group lands at that sheet's foot as intended.
+   It can never force a blank sheet: spacer + closing group is at most
+   TARGET_PX - HEAD_PX (718px), which always fits a fresh 930px page. */
+.main-table tr.jv-spacer { height:auto !important; page-break-inside:avoid !important; }
 .main-table tr.jv-spacer td { padding:0 !important; border:none !important; }
 
 
@@ -700,11 +705,23 @@ padding:0px 30px;
                capacity is (its % of the 718px printable width) less ~10px of
                padding and borders, divided by 7.2.
 
-   Only PAGE_PX and TARGET_PX differ from the half-page twin
-   (nepal_gas_journal_voucher_cash_bank.html): the body font is the same 12px, so
-   the text-driven values (HEAD_PX / LINE_PX / FOOT_PX / CH_*) carry over as-is
-   and only the page geometry grows to the full sheet. -#}
-{% set PAGE_PX = 1028 %}
+   BUDGETED FOR "FIT TO PAGE WIDTH". These vouchers are printed from Firefox with
+   Scale set to "Fit to page width", which stretches the 190mm content box to the
+   full 210mm sheet — everything renders ~1.105x larger. That costs twice: each page
+   holds fewer rows, and every column holds fewer characters, so 38-character account
+   names that fit one line at 100% wrap to two. Budgeted at 100%, Firefox broke each
+   page before the forced break arrived and 2-4 rows printed alone on the next sheet
+   (a 444-row voucher took 23 sheets). So PAGE_PX and the CH_* values below are the
+   100% measurements divided by 1.105: 1028px -> 930, and 38/24/92 -> 34/21/83.
+   Printed at Scale 100% instead, every page simply ends ~10% short of the margin.
+   The row heights (LINE_PX / PAD_PX) and HEAD_PX / FOOT_PX stay in unscaled px:
+   the zoom scales them and the band alike, so only the band and the character
+   counts have to be divided down.
+
+   Only the page geometry differs from the half-page twin
+   (nepal_gas_journal_voucher_cash_bank.html), which has not been recalibrated. -#}
+{#- 272mm printable band at 100% is 1028px; divided by the 1.105 fit-to-width scale. -#}
+{% set PAGE_PX = 930 %}
 {% set HEAD_PX = 132 %}
 {#- PAD_PX + LINE_PX * lines, so a row costs 20px for its first line and 10px for
    each extra one. Both numbers were read off a printed sheet rather than guessed:
@@ -720,25 +737,33 @@ padding:0px 30px;
 {#- Where the footer's bottom edge is asked to land, measured from the top of the
    printable band. It has to stay INSIDE the band (<= PAGE_PX): pushed past it, the
    signature block does not fit under the closing rows and a short voucher that used
-   to print on one sheet grows a second one carrying nothing but the signatures. -#}
-{% set TARGET_PX = 1010 %}
-{#- Description is 40% of the printable width: 287px less padding/borders is 277px,
-    which holds 38 Courier characters. It was 30, which billed a second line to
-    every account name of 31-38 characters — names that in fact print on one line.
-    A sheet of them exhausted the row budget at roughly 60% of the page, so the
-    forced break fired with the bottom of the page still empty. Party Name is 26%
-    (~24 characters) on the same arithmetic. -#}
-{% set CH_ACC = 38 %}
-{% set CH_PARTY = 24 %}
-{% set CH_WIDE = 92 %}
+   to print on one sheet grows a second one carrying nothing but the signatures.
+   Tuned against Firefox, which is what prints these: measured off a real Firefox
+   print, "Fit to page width" there enlarges the sheet only ~1.02x, not the 1.105x
+   the band above is budgeted for, so the last page has more room than the band
+   arithmetic credits. 1000 is chosen to MATCH "A5 Avinash Purchase Invoice A4
+   Full Page": measured the same way at 1.02, that format's footer ends 28mm off the
+   sheet foot, and so does this one's at 1000. 1010 still adds no sheet on any tested
+   voucher, so this keeps a step in hand. In CHROME with fit-to-width (1.105x)
+   anything above 900 gives short vouchers an extra sheet carrying only the
+   signatures. -#}
+{% set TARGET_PX = 1000 %}
+{#- At 100% scale, Description (40% of the printable width, 277px after padding and
+    borders) holds 38 Courier characters and Party Name (26%) holds ~24. Divided by
+    the 1.105 fit-to-width scale that is 34 and 21; CH_WIDE (the full-width
+    Narration / In Words rows) 92 -> 83. Leaving these at their 100% values is what
+    let "11111 TDS-Individual or Proprietorship" (38 chars) wrap on every row
+    unbilled: no row budget could fix that voucher until the wraps were counted. -#}
+{% set CH_ACC = 34 %}
+{% set CH_PARTY = 21 %}
+{% set CH_WIDE = 83 %}
 {#- Rows per page are budgeted 20px short of the band so the forced breaks always fire
    BEFORE the browser would have broken by itself — the browser winning that race is
-   what puts an unplanned near-blank page between the data and the footer. The margin
-   is thin because the row heights above are now exact rather than rounded up, so
-   there is no longer a pile of over-statement to absorb the error: swept across 14
-   vouchers of 2 to 51 rows, -10 is already where the first voucher spills, so this
-   sits one row's worth below that. Re-sweep after any change to the row heights,
-   the header, or the @page margins.
+   what prints 2-4 rows alone on a sheet of their own. Verified by printing 11
+   vouchers of 2 to 444 rows at A4 / Margins None / fit-to-width and comparing the
+   pages the template planned (forced breaks + 1) with the pages that came out: equal
+   on every one. Re-verify after any change to the row heights, the header, the
+   @page margins, or the print dialog's Scale setting.
    The numbers hold for both Firefox and Chrome, which both reprint the <thead> on
    every page now that it is under Chrome's 25% limit. wkhtmltopdf ("Get PDF") still
    does not reprint it, so on that path alone the footer lands about HEAD_PX higher
@@ -806,9 +831,10 @@ padding:0px 30px;
   {% set _add = S.breaks.append(G.data_count) %}
   {% set S.used = 0 %}
 {% endif %}
-{#- Clamped to the band (less a 15px reserve) as well as to TARGET_PX, so an
-   under-estimated row can't push the closing group onto a page of its own. -#}
-{% set spacer_px = [TARGET_PX, PAGE_PX - 15]|min - HEAD_PX - S.used - TRAIL_PX - FOOT_PX %}
+{#- Clamped to PAGE_PX + 100 as well as to TARGET_PX, so a mistyped TARGET_PX can't
+   push the closing group onto a page of its own. The cap sits past PAGE_PX because
+   Firefox prints at ~1.02x, leaving real room beyond the 1.105x-budgeted band. -#}
+{% set spacer_px = [TARGET_PX, PAGE_PX + 100]|min - HEAD_PX - S.used - TRAIL_PX - FOOT_PX %}
 {% set TOTAL_PAGES = S.breaks|length + 1 %}
 <style>
   /* Forced breaks are marked with a class on the row rather than nth-child: the
