@@ -50,17 +50,17 @@ def _bal_str(v):
 
 
 _PL_CAPACITY = {
-	'Portrait':  {False: 64, True: 51},
-	'Landscape': {False: 23, True: 23},
+	'Portrait':  {False: 51, True: 41},
+	'Landscape': {False: 19, True: 19},
 }
-_PL_CHARS_PER_LINE = {'Portrait': 55, 'Landscape': 90}  # remark chars before it wraps to another line
+_PL_CHARS_PER_LINE = {'Portrait': 45, 'Landscape': 76}  # remark chars before it wraps to another line
 
 
 def _pl_block_height(block, show_remarks, chars_per_line):
 	h = 0.0
 	for r in block:
 		if r.get('is_detail'):
-			h += 0.85   # detail rows use a smaller font (10px) so they're shorter
+			h += 0.9   # detail rows use a smaller font (12px) so they're shorter
 		elif r.get('is_separator'):
 			h += 0.4
 		elif r.get('is_customer_header'):

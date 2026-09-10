@@ -347,7 +347,7 @@ def download_pdf(company=None, customers=None, from_date=None, to_date=None):
 		orientation="Portrait",
 		report_title="Customer Statement",
 		filename="customer_statement.pdf",
-		# Pack a few more rows per page than the Party Ledger report's default (64),
+		# Pack a few more rows per page than the Party Ledger report's default (51),
 		# for the customer statement PDF only.
-		capacity_override=76,
+		capacity_override=61,
 	)
