@@ -586,12 +586,16 @@ def execute(filters=None):
 	# Always the official govt VAT book view now — "खरिद खाता" (Purchase) when Is Return is
 	# unticked, "खरिद फिर्ता खाता" (Purchase Return) when ticked. Only fields with a govt
 	# Nepali equivalent are shown; there is no more plain flat register.
-	if _is_detail(filters):
-		columns = get_detail_columns()
-		data = get_detail_data(filters)
-	else:
-		columns = get_govt_columns(is_return=is_return)
-		data = get_data(filters)
+	detail = _is_detail(filters)
+	columns = get_detail_columns() if detail else get_govt_columns(is_return=is_return)
+
+	# Company is a required filter (see the report JS), so the UI blocks the report
+	# with a "Please set the company first" prompt before execute runs. This guard
+	# still protects any direct/API call from running the full query with no Company.
+	if not _as_list(filters.get("company")):
+		return columns, []
+
+	data = get_detail_data(filters) if detail else get_data(filters)
 
 	# Purchase Returns store amounts as negatives in the DB. Show them as positives in the register.
 	if is_return and data:
