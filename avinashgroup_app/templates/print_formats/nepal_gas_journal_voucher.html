@@ -825,7 +825,10 @@ padding:0px 30px;
              so it adds no height — HEAD_PX stays the same whatever the page count. Shown
              on every voucher, including single-page ones. -#}
           <div class="page-of">Page {{ page_no }} of {{ total_pages }}</div>
-          <h4>{{ doc.custom_p_type or "" }}</h4>
+          {#- The JV Type record is named "Journal Entry"; the voucher has always
+             been headed "Journal". Only the printed label differs -- the record is
+             left alone, 108 vouchers point at it. -#}
+          <h4>{{ "Journal" if doc.custom_p_type == "Journal Entry" else (doc.custom_p_type or "") }}</h4>
           <h2>{{ company.company_name }}</h2>
           <div>Kathmandu</div>
         </td>

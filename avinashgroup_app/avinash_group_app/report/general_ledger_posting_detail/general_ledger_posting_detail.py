@@ -69,6 +69,12 @@ JOURNAL_DESCRIBED_TYPES = ("Journal Entry",)
 # cheque that does not exist.
 CHEQUE_PLACEHOLDERS = {"", "1"}
 
+# What a JV Type is *called* where it stands in for a description. The legacy
+# Posting Detail heads a plain journal "Journal", and so does the voucher; the JV
+# Type record is named "Journal Entry". Only the printed label differs -- the
+# record is left alone, 108 vouchers point at it.
+JV_TYPE_LABEL = {"Journal Entry": "Journal"}
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -386,7 +392,8 @@ def _journal_description(entry, own_account, suffix):
 	for account in entry.cash_bank:
 		if account != own_account:
 			return _trim_account(account, suffix)
-	return entry.custom_p_type or ""
+	p_type = entry.custom_p_type or ""
+	return JV_TYPE_LABEL.get(p_type, p_type)
 
 
 def _cheque(number):
