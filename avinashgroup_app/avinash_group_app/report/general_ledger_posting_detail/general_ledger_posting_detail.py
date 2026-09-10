@@ -659,6 +659,36 @@ def _opening_balances(filters, postings, totals_out=None):
 		from erpnext.accounts.report.general_ledger.general_ledger import get_accounts_with_children
 
 		accounts.update(get_accounts_with_children(chosen))
+
+	# Categorised by party, a party's block is its whole position -- every account
+	# it has used, not only those that moved in the window. Taking accounts from
+	# the postings alone dropped a customer's cylinder deposit from its opening
+	# whenever nobody touched the deposit account that month: 135 of 1,123 NGI
+	# parties opened wrong against ERPNext's party-wise General Ledger, all of it
+	# on 313101 / 313102 / 313201-style deposit accounts. The extra accounts are
+	# read for the listed parties only, so no new opening-only parties appear.
+	extra, in_scope = set(), set()
+	if not chosen and (filters.get("categorized_by") or "Account") == "Party":
+		in_scope = {p.party for p in postings if p.party} | set(_normalize(filters.get("party")))
+		if in_scope:
+			extra = (
+				set(
+					frappe.db.sql_list(
+						"""SELECT DISTINCT account FROM `tabGL Entry`
+						   WHERE company = %(company)s AND is_cancelled = 0 AND party IN %(parties)s
+						     AND (posting_date < %(from_date)s
+						          OR (is_opening = 'Yes' AND posting_date <= %(to_date)s))""",
+						{
+							"company": filters.company,
+							"parties": tuple(sorted(in_scope)),
+							"from_date": filters.from_date,
+							"to_date": filters.to_date,
+						},
+					)
+				)
+				- accounts
+			)
+			accounts.update(extra)
 	accounts = sorted(accounts)
 	if not accounts:
 		return {}
@@ -768,6 +798,8 @@ def _opening_balances(filters, postings, totals_out=None):
 	category = filters.get("categorized_by") or "Account"
 	opening = {}
 	for r in rows:
+		if r.account in extra and (r.party or "") not in in_scope:
+			continue
 		if category == "Party":
 			key = (r.party_type or "", r.party or "")
 		elif category == "Both":
