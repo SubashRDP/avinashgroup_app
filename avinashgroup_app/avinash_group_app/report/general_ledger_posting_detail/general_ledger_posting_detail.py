@@ -70,13 +70,6 @@ CHEQUE_PLACEHOLDERS = {"", "1"}
 # record is left alone, 108 vouchers point at it.
 JV_TYPE_LABEL = {"Journal Entry": "Journal"}
 
-# The JV Types whose postings take the Bank/Cash/Journal Description. Only a plain
-# journal: every other type -- Cash Entry, Bank Entry, Cash/ Bank or Contra
-# Voucher, Credit Note, Debit Note and the rest -- keeps the party name, or the
-# contra accounts where it has no party. The Paid To / Receive From sub-line is
-# not gated by this; it follows its own field on every voucher.
-JOURNAL_DESCRIBED_TYPES = ("Journal Entry",)
-
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -341,8 +334,9 @@ def _company_suffix(company):
 def _journal_descriptions(postings):
 	"""Per Journal Entry in view: its JV Type, its cash/bank legs, its cheque.
 
-	Every Journal Entry is loaded, since the Paid To / Receive From sub-line reads
-	from all of them; only JOURNAL_DESCRIBED_TYPES take the description.
+	Every Journal Entry, whatever its JV Type. The type is not a gate -- it is only
+	what the description falls back to when the entry moved through no cash or
+	bank account. See _journal_description().
 	"""
 	vouchers = sorted(
 		{p.voucher_no for p in postings if p.voucher_type == "Journal Entry" and p.voucher_no}
@@ -533,11 +527,9 @@ def _decorate(postings, filters_company=None):
 		# Party or Both block is headed by, and a block titled "Journal" would be
 		# the same defect 47c8774 fixed at the other end.
 		entry = journals.get(r.voucher_no) if r.voucher_type == "Journal Entry" else None
-		r.description = (
-			_journal_description(entry, r.account, suffix)
-			if entry and entry.custom_p_type in JOURNAL_DESCRIBED_TYPES
-			else ""
-		)
+		# Every Journal Entry, whatever its JV Type: the JV Type is only what the
+		# description falls back to when the entry touched no cash or bank account.
+		r.description = _journal_description(entry, r.account, suffix) if entry else ""
 
 		# The Paid To / Receive From sub-line: only where the voucher's own field
 		# says who. Journal Entry keeps it in custom_paid_to, Payment Entry in
