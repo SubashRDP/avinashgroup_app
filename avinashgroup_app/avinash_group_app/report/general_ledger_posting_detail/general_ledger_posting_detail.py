@@ -680,37 +680,29 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 
 	category = filters.get("categorized_by") or "Account"
 
-	# Categorised by party, a posting with no party is left out entirely.
+	# A posting with no party is kept, and blocks under "No Party".
 	#
 	# ERPNext writes the party onto the receivable / payable side only, so the
 	# expense, VAT and bank legs of every voucher carry none -- 8,130 such rows on
-	# NGI's purchase invoices alone. Grouped by party they all shared the one
-	# ("", "") key and formed a single block holding every supplier's expense legs,
-	# which then took its heading from whichever posting sorted first: a block
-	# titled "ABC Electrical Works" listing Bhat-Bhateni Super Market underneath.
+	# NGI's purchase invoices alone. Dropping them was tried, and it cost the
+	# report the one thing a ledger is checked for: on NGI for Bhadra 2083 it took
+	# 134 accounts -- every bank, cash, stock and expense account -- off the page
+	# and left the movement footing to 3,05,75,41,768.72 against the general
+	# ledger's 17,93,48,95,822.53. A general ledger that does not foot to the
+	# general ledger is not one.
 	#
-	# There is no party to file them under -- 260.00 of VAT is not owed to the
-	# supplier it was bought from -- so they are dropped rather than shown beneath a
-	# party that is not theirs. They remain in the account-wise view, under the
-	# accounts they were actually posted to, which is where an expense belongs.
-	#
-	# The consequence is deliberate: a party-wise run no longer foots to the whole
-	# general ledger, because it is now only the party side of it.
-	if category in ("Party", "Both"):
-		postings = [posting for posting in postings if posting.party]
+	# What was actually wrong is fixed in _section_label(): the block took its
+	# heading from the first posting in it, and a party-less row still carries a
+	# Party Name -- _describe_against() fills that column with whoever the entry was
+	# posted against -- so the block holding every supplier's expense legs was
+	# titled "ABC Electrical Works". Named from the key instead, it reads
+	# "No Party", which is what it holds.
 
 	sections = {}
 	for posting in postings:
 		sections.setdefault(_section_key(filters, posting), []).append(posting)
 
 	opening = _opening_balances(filters, postings)
-
-	# The same rule for balances carried in: a party-less opening has no block to
-	# head, and left in it would seed one through the loop below.
-	if category == "Party":
-		opening = {key: value for key, value in opening.items() if key[1]}
-	elif category == "Both":
-		opening = {key: value for key, value in opening.items() if key[2]}
 
 	# A balance carried into the period is worth reporting even when nothing
 	# moved. Sections are built from postings, so a window with no activity
