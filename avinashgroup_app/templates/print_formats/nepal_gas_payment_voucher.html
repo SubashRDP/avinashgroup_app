@@ -63,8 +63,16 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
   <table class="pv-info">
     <tr>
       <td>
-        <div><strong>Cheque No :</strong> {{ doc.reference_no or "" }}</div>
+        {#- "1" is what an operator types to get past a required field, not a cheque
+            number -- 17,505 of the site's 27,421 payments carry it, while the
+            reference miti is filled on all 27,421. Printed as they stand, two
+            payments in three state a date for a cheque that does not exist, so the
+            number and its date are shown together or not at all. -#}
+        {%- set chq = (doc.reference_no or "")|string|trim -%}
+        {%- if chq and chq != "1" %}
+        <div><strong>Cheque No :</strong> {{ chq }}</div>
         <div><strong>Cheque Date :</strong> {% if doc.custom_chequereference_miti %}{{ (doc.custom_chequereference_miti|string).split(" ")[0] }}{% endif %}{% if doc.reference_date %} ({{ frappe.utils.formatdate(doc.reference_date, "yyyy-MM-dd") }}){% endif %}</div>
+        {%- endif %}
       </td>
       <td class="r">
         <div><strong>Voucher :</strong> {{ doc.custom_name or "" }}</div>

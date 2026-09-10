@@ -578,12 +578,18 @@ padding:0px 30px;
 {#- Paid To + Cheque No/Dated rows, shown in every JV type. Each part renders only
    when it has a value — an empty field shows neither the label nor the row. -#}
 {%- macro paid_cheque(d, ncols) -%}
-{%- set ref_date = (d.custom_reference_miti|string).split(" ")[0] if d.custom_reference_miti else (frappe.utils.formatdate(d.cheque_date, "yyyy-MM-dd") if d.cheque_date else "") -%}
+{#- "1" is what an operator types to get past a required field, not a cheque
+   number. The reference miti is filled either way, so the number and its date are
+   shown together or not at all -- otherwise the voucher dates a cheque that does
+   not exist. -#}
+{%- set chq = (d.cheque_no or "")|string|trim -%}
+{%- set chq = "" if chq == "1" else chq -%}
+{%- set ref_date = ((d.custom_reference_miti|string).split(" ")[0] if d.custom_reference_miti else (frappe.utils.formatdate(d.cheque_date, "yyyy-MM-dd") if d.cheque_date else "")) if chq else "" -%}
 {%- if d.custom_paid_to %}
       <tr><td colspan="{{ ncols }}"><strong>Paid To:</strong> {{ d.custom_paid_to }}</td></tr>
 {%- endif %}
-{%- if d.cheque_no or ref_date %}
-      <tr><td colspan="{{ ncols }}">{% if d.cheque_no %}<strong>Cheque No:</strong> {{ d.cheque_no }}{% endif %}{% if ref_date %}{% if d.cheque_no %}&nbsp;&nbsp;&nbsp;&nbsp;{% endif %}<strong>Dated:</strong> {{ ref_date }}{% endif %}</td></tr>
+{%- if chq %}
+      <tr><td colspan="{{ ncols }}"><strong>Cheque No:</strong> {{ chq }}{% if ref_date %}&nbsp;&nbsp;&nbsp;&nbsp;<strong>Dated:</strong> {{ ref_date }}{% endif %}</td></tr>
 {%- endif %}
 {%- endmacro -%}
 {#- Empty row that pushes the closing block (Total .. signatures) down to the fold.
@@ -725,7 +731,7 @@ padding:0px 30px;
   {% if doc.custom_paid_to %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
-  {% if doc.cheque_no or doc.custom_reference_miti or doc.cheque_date %}
+  {% if (doc.cheque_no or "")|string|trim not in ("", "1") %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
@@ -752,7 +758,7 @@ padding:0px 30px;
   {% if doc.custom_paid_to %}
     {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((doc.custom_paid_to|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
   {% endif %}
-  {% if doc.cheque_no or doc.custom_reference_miti or doc.cheque_date %}
+  {% if (doc.cheque_no or "")|string|trim not in ("", "1") %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
   {% set words = frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
