@@ -341,7 +341,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 				"/api/method/avinashgroup_app.avinash_group_app.report." +
 					"general_ledger_posting_detail.general_ledger_posting_detail.download_pdf" +
 					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
-					"&orientation=Landscape"
+					"&orientation=Portrait"
 			);
 		});
 	},

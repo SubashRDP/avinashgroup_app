@@ -25,6 +25,7 @@ it. Remarks run long, and the spec's layout puts them on a second line.
 """
 
 import json
+import os
 
 import frappe
 from frappe import _
@@ -640,8 +641,11 @@ def _clean_narration(remarks):
 	return text
 
 
-def _opening_balances(filters, postings):
+def _opening_balances(filters, postings, totals_out=None):
 	"""Balance carried into the period, keyed the same way the sections are.
+
+	`totals_out`, when given, is filled with key -> [debit, credit]: the gross
+	totals behind each balance, which the printed ledger states beside it.
 
 	Income and Expense accounts do not carry a balance across a year end -- a
 	Period Closing Voucher sweeps them into retained earnings, and this site
@@ -745,7 +749,8 @@ def _opening_balances(filters, postings):
 			"""
 			SELECT g.account, IFNULL(g.party_type, '') AS party_type,
 			       IFNULL(g.party, '') AS party,
-			       SUM(g.debit) - SUM(g.credit) AS balance
+			       SUM(g.debit) - SUM(g.credit) AS balance,
+			       SUM(g.debit) AS dr, SUM(g.credit) AS cr
 			FROM `tabGL Entry` g
 			WHERE g.company = %(company)s
 			  AND g.is_cancelled = 0
@@ -778,6 +783,10 @@ def _opening_balances(filters, postings):
 		else:
 			key = (r.account,)
 		opening[key] = opening.get(key, 0.0) + flt(r.balance)
+		if totals_out is not None:
+			pair = totals_out.setdefault(key, [0.0, 0.0])
+			pair[0] += flt(r.dr)
+			pair[1] += flt(r.cr)
 	return opening
 
 
@@ -823,6 +832,20 @@ def _balance_band(label, balance):
 		"_bold": 1,
 		"_band": 1,
 	}
+
+
+def _row_description(posting, category):
+	"""What a posting's Party Name / Description cell says -- on screen and in print.
+
+	The Bank/Cash/Journal Description stands in for the party only where the
+	party is already on the page: a posting with none of its own, or a Party /
+	Both block headed by it. In Account mode this column is the only place a
+	party is named -- 2,628 of 2,733 journal rows in one NGI month would
+	otherwise read "Opening Entry" where a customer was.
+	"""
+	if posting.description and (not posting.party or category in ("Party", "Both")):
+		return posting.description
+	return posting.party_name or ""
 
 
 def _party_section_label(key, postings):
@@ -938,17 +961,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 					"voucher_type": posting.voucher_type,
 					"voucher_no": posting.voucher_link,
 					"voucher_number": posting.number,
-					# The description stands in for the party only where the party is
-					# already on the page: a posting with none of its own, or a Party /
-					# Both block headed by it. In Account mode this column is the only
-					# place a party is named -- 2,628 of 2,733 journal rows in one NGI
-					# month would otherwise read "Opening Entry" where a customer was.
-					"party_name": (
-						posting.description
-						if posting.description and (not posting.party or category in ("Party", "Both"))
-						else posting.party_name
-					)
-					or "",
+					"party_name": _row_description(posting, category),
 					"debit": flt(posting.debit),
 					"credit": flt(posting.credit),
 					# a posting whose running balance happens to hit zero leaves
@@ -1275,119 +1288,503 @@ def get_parties(party_types=None, txt=None, company=None, from_date=None, to_dat
 
 # ── print / PDF ─────────────────────────────────────────────────────────────────
 
-@frappe.whitelist()
-def download_pdf(filters, orientation="Landscape"):
-	"""The ledger as a print-out, with the narration under each posting.
+# ---------------------------------------------------------------------------
+# The printed ledger -- the legacy "Normal Sub Ledger - Detail - Posting Detail"
+# ---------------------------------------------------------------------------
+#
+# Drawn the way DevExpress drew it: every line of text placed at a measured point
+# on the page. The coordinates below were read off the legacy PDF itself
+# ("Ledger of supplier.pdf", DXperience v13.2.6, via pdftotext -bbox and its
+# vector rules). The font is Carlito -- metric-identical to the Calibri that
+# report embeds, bundled under public/fonts/carlito (SIL OFL) -- and text is
+# wrapped here by the font's own advance widths, never by the browser. So the
+# page breaks are known before anything is rendered, every page can say
+# "Page 3/7", and Chrome and wkhtmltopdf put every word at the same point.
 
-	This is where narration lives: a page has the width to carry a sentence,
-	where a datatable cell can only clip it. "Show Narration" is the setting
-	that decides whether it is included here.
+PRINT_PAGE_W = 595.28  # A4, points
+PRINT_PAGE_H = 841.89
+PRINT_BODY_TOP = 147.9  # first line under the column box
+PRINT_BODY_BOTTOM = 792.0  # the last line may start here; the footer is at 813.4
+PRINT_PITCH = 13.65  # one field's first line to the next field's
+PRINT_WRAP_PITCH = 11.0  # a wrapped line inside the same field
+PRINT_RULE_GAP = 2.05  # extra drop for a line with a rule above it
+PRINT_TEXT_W = 207.5  # Description field, x 188.4 -> 395.9: where narration wraps
+PRINT_VOUCHER_W = 84.0  # Voucher Number field, x 101.3 -> 185.3
+PRINT_NARRATION_MAX = 8  # a longer narration is cut, so no posting outgrows a page
+PRINT_GREY_RULE = "#d3d3d3"  # the legacy's 82.7% grey, above Period Total and Balance
+PRINT_GREY_TEXT = "#808080"  # parameter values
+
+# x positions in points: left edges, or right edges for amounts
+PRINT_X = frappe._dict(
+	code=23.0,  # General Ledger / Sub Ledger code, band labels
+	desc=110.3,  # General Ledger / Sub Ledger description
+	date=50.2,
+	voucher=101.3,
+	text=188.4,  # description, Paid To line, narration
+	net=197.7,  # right edge of a band's figure
+	side=201.4,  # DEBIT / CREDIT
+	debit=486.7,
+	credit=578.3,
+	params=(23.0, 196.4, 361.6),
+)
+
+_CARLITO = {}
+
+
+def _carlito():
+	"""Carlito's advance widths and the fonts themselves, loaded once."""
+	if not _CARLITO:
+		import base64
+
+		folder = frappe.get_app_path("avinashgroup_app", "public", "fonts", "carlito")
+		with open(os.path.join(folder, "metrics.json")) as handle:
+			_CARLITO.update(json.load(handle))
+		for weight in ("Regular", "Bold"):
+			with open(os.path.join(folder, "Carlito-{0}.ttf".format(weight)), "rb") as handle:
+				_CARLITO["font_" + weight.lower()] = base64.b64encode(handle.read()).decode()
+	return _CARLITO
+
+
+def _text_pt(text, size=9.0, bold=False):
+	"""Printed width of `text`, in points."""
+	metrics = _carlito()
+	widths = metrics["bold" if bold else "regular"]
+	fallback = metrics["avg_bold" if bold else "avg_regular"]
+	return sum(widths.get(str(ord(ch)), fallback) for ch in str(text)) * size / metrics["upm"]
+
+
+def _wrap_pt(text, width=PRINT_TEXT_W, size=9.0, bold=False):
+	"""Greedy word wrap to a printed width; a word wider than the line is cut."""
+	lines, current = [], ""
+	for word in str(text or "").split():
+		trial = "{0} {1}".format(current, word) if current else word
+		if _text_pt(trial, size, bold) <= width:
+			current = trial
+			continue
+		if current:
+			lines.append(current)
+		while _text_pt(word, size, bold) > width:
+			cut = len(word)
+			while cut > 1 and _text_pt(word[:cut], size, bold) > width:
+				cut -= 1
+			lines.append(word[:cut])
+			word = word[cut:]
+		current = word
+	if current:
+		lines.append(current)
+	return lines or [""]
+
+
+def _pt(x, text, size=9.0, bold=False, align="l", grey=False):
+	"""One run of text at x; its y is set when its line is placed."""
+	return {"kind": "text", "x": x, "size": size, "bold": bold, "align": align, "grey": grey, "text": text}
+
+
+def _set_y(item, y):
+	"""Fix a text run's top from the y its glyph box should start at.
+
+	pdftotext reports the top of the glyph box, one em tall with the baseline at
+	0.75 em. In CSS with line-height 1, Carlito's baseline sits at 0.8418 em below
+	the box top (hhea ascent 1950 and descent 550 of 2048 units), so the box goes
+	0.0918 em above that point.
 	"""
-	import os
+	placed = dict(item)
+	placed["top"] = round(y - 0.0918 * item["size"], 2)
+	placed["text"] = frappe.utils.escape_html(item["text"])
+	return placed
 
+
+def _print_frame(head, page_no, total_pages):
+	"""What every page carries: masthead, rules, the boxed column heads, the foot."""
+	X = PRINT_X
+	right = PRINT_PAGE_W - 16.0  # the masthead's right edge, x 579.3
+	items = [
+		{"kind": "rule", "y": 14.4, "w": 1.5, "colour": "#000"},
+		_set_y(_pt(X.code, "{0}{1}".format(head.company, " FY [{0}]".format(head.fy) if head.fy else ""), bold=True), 17.3),
+		_set_y(_pt(right, "Normal Sub Ledger - Detail - Posting Detail", size=14.0, bold=True, align="r"), 18.2),
+		_set_y(_pt(right, "Accounting Period : {0}".format(head.period) if head.period else "", bold=True, align="r"), 36.6),
+		_set_y(_pt(right, "Page {0}/{1}".format(page_no, total_pages), bold=True, align="r"), 75.4),
+		_set_y(_pt(X.code, "From {0} To {1}".format(head.from_bs, head.to_bs)), 88.2),
+		_set_y(_pt(151.2, "(All parameters listed at end of report)"), 88.2),
+		_set_y(_pt(right, "Amount in Nepalese Rupee ( NPR )", align="r"), 88.2),
+		{"kind": "rule", "y": 99.9, "w": 0.75, "colour": "#000"},
+		{"kind": "box", "top": 102.8, "height": 43.3, "w": 0.8},
+		_set_y(_pt(X.code, "General Ledger Code", bold=True), 107.1),
+		_set_y(_pt(X.desc, "General Ledger Description", bold=True), 107.1),
+		_set_y(_pt(X.code, "Sub Ledger Code", bold=True), 120.7),
+		_set_y(_pt(X.desc, "Sub Ledger Description", bold=True), 120.7),
+		_set_y(_pt(X.date, "Date", bold=True), 134.5),
+		_set_y(_pt(X.voucher, "Voucher Number", bold=True), 134.5),
+		_set_y(_pt(X.text, "Bank/Cash/Journal Description", bold=True), 134.5),
+		_set_y(_pt(324.7, "Document Amount", bold=True), 134.5),
+		_set_y(_pt(X.debit, "Debit", bold=True, align="r"), 134.5),
+		_set_y(_pt(578.0, "Credit", bold=True, align="r"), 134.5),
+	]
+	label = "Design Name : "
+	items.append(_set_y(_pt(X.code, label, size=6.0, bold=True), 813.4))
+	items.append(
+		_set_y(
+			_pt(X.code + _text_pt(label, 6.0, True), "Posting Detail [DEFAULT] in Version 7.0.5", size=6.0), 813.4
+		)
+	)
+	return items
+
+
+def _place(items, cursor, field):
+	"""Draw one field at `cursor` into `items`; return the cursor after it."""
+	first = cursor
+	if field.get("rule"):
+		items.append({"kind": "rule", "y": cursor - 1.25, "w": 0.75, "colour": field["rule"]})
+		first = cursor + PRINT_RULE_GAP
+	for index, line in enumerate(field["lines"]):
+		y = first + index * PRINT_WRAP_PITCH
+		items.extend(_set_y(run, y) for run in line)
+	last = first + (len(field["lines"]) - 1) * PRINT_WRAP_PITCH
+	if field.get("rule_after"):
+		rule_y = last + 12.6
+		items.append({"kind": "rule", "y": rule_y, "w": 0.75, "colour": "#000"})
+		return rule_y + 4.6
+	return last + PRINT_PITCH
+
+
+def _measure(cursor, fields):
+	"""Where the cursor would end after `fields`, without drawing anything."""
+	for field in fields:
+		cursor = _place([], cursor, field)
+	return cursor
+
+
+def _print_pages(filters, postings):
+	"""The ledger as the legacy print lays it out, cut into pages of placed items.
+
+	A heading travels with its Opening Balance, a posting with its sub-lines, a
+	block's totals with each other; a page that opens in the middle of a block
+	repeats that block's heading lines first, so no page of postings is left
+	without saying whose they are.
+	"""
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
+
+	X = PRINT_X
+	category = filters.get("categorized_by") or "Account"
+	show_remarks = cint(filters.get("remarks", 1))
+	totals = {}
+	opening = _opening_balances(filters, postings, totals_out=totals)
+
+	sections = {}
+	for posting in postings:
+		sections.setdefault(_section_key(filters, posting), []).append(posting)
+	for key, value in opening.items():
+		if value:
+			sections.setdefault(key, [])
+	if not sections:
+		return []
+
+	meta = {}
+	if category in ("Account", "Both"):
+		for row in frappe.get_all(
+			"Account",
+			filters={"name": ("in", sorted({key[0] for key in sections}))},
+			fields=["name", "account_number", "account_name"],
+		):
+			meta[row.name] = row
+
+	def heading(code, desc):
+		return {"lines": [[_pt(X.code, code, bold=True), _pt(X.desc, desc, bold=True)]]}
+
+	def gl(account):
+		m = meta.get(account) or frappe._dict()
+		return heading(m.account_number or "", m.account_name or account)
+
+	def sub(party_type, party, rows):
+		if not party:
+			return heading("", _("No Party"))
+		name = next((r.party_name for r in rows if r.party == party and r.party_name), "")
+		return heading(party, name or _party_label(party_type, party) or party)
+
+	def band(label, net, dr, cr, rule=None, rule_after=False):
+		net = flt(net, 2)
+		runs = [_pt(X.code, label, bold=True), _pt(X.net, _fmt_npr(abs(net)) or "0.00", bold=True, align="r")]
+		if net:
+			runs.append(_pt(X.side, "DEBIT" if net > 0 else "CREDIT", bold=True))
+		if flt(dr, 2):
+			runs.append(_pt(X.debit, _fmt_npr(dr), align="r"))
+		if flt(cr, 2):
+			runs.append(_pt(X.credit, _fmt_npr(cr), align="r"))
+		return {"lines": [runs], "rule": rule, "rule_after": rule_after}
+
+	def text_field(lines):
+		return {"lines": [[_pt(X.text, line)] for line in lines]}
+
+	def posting_fields(posting):
+		desc = _wrap_pt(_row_description(posting, category))
+		voucher = posting.number or posting.voucher_no or ""
+		# Our voucher numbers run longer than the legacy's "JV/00001/82-83"; one
+		# that would reach into the description is set a touch smaller instead.
+		size = min(9.0, round(9.0 * PRINT_VOUCHER_W / max(_text_pt(voucher), 1), 2))
+		first = [
+			_pt(X.date, (posting.miti or "").replace("-", "/")),
+			_pt(X.voucher, voucher, size=size),
+			_pt(X.text, desc[0]),
+		]
+		if flt(posting.debit):
+			first.append(_pt(X.debit, _fmt_npr(posting.debit), align="r"))
+		if flt(posting.credit):
+			first.append(_pt(X.credit, _fmt_npr(posting.credit), align="r"))
+		fields = [{"lines": [first] + [[_pt(X.text, line)] for line in desc[1:]]}]
+		if posting.paid:
+			fields.append(text_field(_wrap_pt(posting.paid)))
+		if show_remarks:
+			narration = _clean_narration(posting.remarks)
+			if narration:
+				lines = _wrap_pt("Narration : {0}".format(narration))
+				if len(lines) > PRINT_NARRATION_MAX:
+					lines = lines[:PRINT_NARRATION_MAX]
+					lines[-1] = lines[-1].rstrip(". ") + " …"
+				fields.append(text_field(lines))
+		return fields
+
+	units = []
+
+	def block(key, rows, head_fields, context):
+		opening_net = flt(opening.get(key, 0.0))
+		dr0, cr0 = totals.get(key, (0.0, 0.0))
+		units.append(
+			{"fields": head_fields + [band(_("Opening Balance"), opening_net, dr0, cr0)], "ctx": context, "head": True}
+		)
+		moved_dr = moved_cr = 0.0
+		for posting in rows:
+			units.append({"fields": posting_fields(posting), "ctx": context, "head": False})
+			moved_dr += flt(posting.debit)
+			moved_cr += flt(posting.credit)
+		units.append(
+			{
+				"fields": [
+					band(_("Period Total"), moved_dr - moved_cr, moved_dr, moved_cr, rule=PRINT_GREY_RULE),
+					band(_("Closing Balance"), opening_net + moved_dr - moved_cr, dr0 + moved_dr, cr0 + moved_cr),
+				],
+				"ctx": context,
+				"head": False,
+			}
+		)
+		return [opening_net, dr0, cr0, moved_dr, moved_cr]
+
+	ordered = sorted(sections, key=lambda k: tuple(str(part) for part in k))
+	if category == "Both":
+		# General Ledger once, each Sub Ledger under it, and a Balance line for the
+		# ledger as a whole -- the legacy layout.
+		by_account = {}
+		for key in ordered:
+			by_account.setdefault(key[0], []).append(key)
+		for account in sorted(by_account):
+			ledger = [0.0] * 5
+			for index, key in enumerate(by_account[account]):
+				rows = sections[key]
+				party_line = sub(key[1], key[2], rows)
+				head_fields = ([gl(account)] if index == 0 else []) + [party_line]
+				figures = block(key, rows, head_fields, [gl(account), party_line])
+				ledger = [a + b for a, b in zip(ledger, figures)]
+			net, dr0, cr0, moved_dr, moved_cr = ledger
+			units.append(
+				{
+					"fields": [
+						band(
+							_("Balance"),
+							net + moved_dr - moved_cr,
+							dr0 + moved_dr,
+							cr0 + moved_cr,
+							rule=PRINT_GREY_RULE,
+							rule_after=True,
+						)
+					],
+					"ctx": [gl(account)],
+					"head": False,
+				}
+			)
+	elif category == "Party":
+		for key in ordered:
+			party_line = sub(key[0], key[1], sections[key])
+			block(key, sections[key], [party_line], [party_line])
+	else:
+		for key in ordered:
+			ledger_line = gl(key[0])
+			block(key, sections[key], [ledger_line], [ledger_line])
+
+	pages = [[]]
+	cursor = PRINT_BODY_TOP
+	after_rule = False
+	for unit in units:
+		end = _measure(cursor, unit["fields"])
+		if end - PRINT_PITCH > PRINT_BODY_BOTTOM and cursor > PRINT_BODY_TOP:
+			pages.append([])
+			cursor = PRINT_BODY_TOP
+			if not unit["head"] and unit["ctx"]:
+				for field in unit["ctx"]:
+					cursor = _place(pages[-1], cursor, field)
+		for field in unit["fields"]:
+			cursor = _place(pages[-1], cursor, field)
+			after_rule = bool(field.get("rule_after"))
+
+	# Report Parameters: under the Balance line's rule, or under a rule of its own
+	params = _print_parameters(filters)
+	height = (0 if after_rule else 4.6) + 13.0 + 12.2 * (len(params) - 1) + 11.9
+	if cursor + height > PRINT_BODY_BOTTOM + PRINT_PITCH:
+		pages.append([])
+		cursor = PRINT_BODY_TOP
+		after_rule = True
+	if not after_rule:
+		pages[-1].append({"kind": "rule", "y": cursor - 1.25, "w": 0.75, "colour": "#000"})
+		cursor += 3.35
+	pages[-1].append(_set_y(_pt(X.code, "Report Parameters", size=8.5, bold=True), cursor))
+	for row, line in enumerate(params):
+		y = cursor + 13.0 + 12.2 * row
+		for column, cell in enumerate(line):
+			if not cell:
+				continue
+			label = "{0} : ".format(cell[0])
+			x = X.params[column]
+			pages[-1].append(_set_y(_pt(x, label, size=8.5), y))
+			pages[-1].append(_set_y(_pt(x + _text_pt(label, 8.5), cell[1], size=8.5, grey=True), y))
+	pages[-1].append(
+		{"kind": "rule", "y": cursor + 13.0 + 12.2 * (len(params) - 1) + 11.9, "w": 0.75, "colour": "#000"}
+	)
+	return pages
+
+
+def _print_masthead(filters):
+	"""Company, fiscal year and dates for the page head, in BS with slashes."""
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _bs
+
+	def bs(date):
+		return (_bs(date) or "").replace("-", "/")
+
+	fy = frappe.db.sql(
+		"""SELECT name, year_start_date, year_end_date FROM `tabFiscal Year`
+		   WHERE %(d)s BETWEEN year_start_date AND year_end_date
+		   ORDER BY year_start_date DESC LIMIT 1""",
+		{"d": filters.from_date},
+		as_dict=True,
+	)
+	fy = fy[0] if fy else frappe._dict()
+	name = str(fy.get("name") or filters.get("fiscal_year") or "")
+	# "83/84" prints as the legacy "2083.084"
+	parts = name.split("/")
+	if len(parts) == 2 and all(part.isdigit() and len(part) == 2 for part in parts):
+		name = "20{0}.0{1}".format(*parts)
+	return frappe._dict(
+		company=filters.company,
+		fy=name,
+		period="{0} - {1}".format(bs(fy.year_start_date), bs(fy.year_end_date)) if fy else "",
+		from_bs=bs(filters.from_date),
+		to_bs=bs(filters.to_date),
+	)
+
+
+def _print_parameters(filters):
+	"""The legacy "Report Parameters" block, three to a line.
+
+	Four settings the old report had -- Month Total, Month Total Exclusive, Include
+	Cash / Bank Code, Closing Narration -- have no counterpart here and print as its
+	default, No, which is also true of this report: it does none of them.
+	"""
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _bs
+
+	def listed(values, limit=3):
+		if not values:
+			return "All"
+		return ", ".join(values[:limit]) + ("…" if len(values) > limit else "")
+
+	accounts = _normalize(filters.get("account"))
+	numbers = (
+		[n for n in frappe.get_all("Account", filters={"name": ("in", accounts)}, pluck="account_number") if n]
+		if accounts
+		else []
+	)
+	narrowing = []
+	for label, key in (("Voucher Type", "voucher_type"), ("Subtype", "voucher_subtype"), ("Party Type", "party_type")):
+		chosen = _normalize(filters.get(key))
+		if chosen:
+			narrowing.append("{0}: {1}".format(label, listed(chosen, 2)))
+	if filters.get("voucher_no"):
+		narrowing.append("Voucher No: {0}".format(filters.voucher_no))
+
+	date_range = "From {0} To {1}".format(
+		(_bs(filters.from_date) or "").replace("-", "/"), (_bs(filters.to_date) or "").replace("-", "/")
+	)
+	return [
+		[("Date Range", date_range), ("General Ledgers", listed(numbers or accounts)), ("Month Total", "No")],
+		[
+			("Month Total Exclusive", "No"),
+			("Include Cash / Bank Code", "No"),
+			("Remarks", "Yes" if cint(filters.get("remarks", 1)) else "No"),
+		],
+		[
+			("Closing Narration", "No"),
+			("Show Grand Total", "No"),
+			("Class Segment Wise", listed(_normalize(filters.get("party")))),
+		],
+		[("Filter", "; ".join(narrowing) or "All"), None, None],
+	]
+
+
+@frappe.whitelist()
+def download_pdf(filters, orientation="Portrait"):
+	"""The ledger printed exactly the way the legacy system printed it.
+
+	See the note above PRINT_PAGE_W. Always A4 portrait -- every coordinate is
+	measured for it; `orientation` is accepted only so an old link still works.
+	"""
 	from frappe.utils.pdf import get_pdf
 
-	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr, _bs
+	from avinashgroup_app.custom_code.printing.chrome_pdf import render as chrome_render
 
 	filters = frappe._dict(json.loads(filters) if isinstance(filters, str) else filters)
 	_validate(filters)
 
 	postings = _get_postings(filters)
-	if not postings:
-		frappe.throw(_("Nothing to print for these filters."))
 	_decorate(postings, filters.company)
+	pages = _print_pages(filters, postings)
+	if not pages:
+		frappe.throw(_("Nothing to print for these filters."))
 
-	rows = _build_rows(filters, postings, with_narration=True)
-
-	printable = []
-	for row in rows:
-		if not row or row.get("_spacer"):
-			continue
-
-		# The balance is printed exactly as the screen states it -- the figure
-		# followed by the side it falls on -- so a number can be checked
-		# against the other view without translating between two layouts.
-		# _balance_text already produced that string for every row, including
-		# the "0.00" the Opening/Period/Closing lines state and the blank a
-		# posting leaves when its running balance happens to hit zero.
-		printable.append(
-			frappe._dict(
-				date=row.get("date") or "",
-				miti=row.get("miti") or "",
-				voucher_type=row.get("voucher_type") or "",
-				# the anchor is for the desk; print wants the bare number
-				voucher_no=row.get("voucher_number") or _strip_tags(row.get("voucher_no")),
-				# a narration row's text is split across cells for the grid; the
-				# print-out spans it with colspan, so it wants the whole string
-				description=row.get("narration") or row.get("party_name") or "",
-				debit=_fmt_npr(row.get("debit")),
-				credit=_fmt_npr(row.get("credit")),
-				balance=row.get("balance") or "",
-				css=(
-					"section"
-					if row.get("_section")
-					else "subsection"
-					if row.get("_subsection")
-					else "narration"
-					if row.get("_narration") or row.get("_subline")
-					else "band"
-					if row.get("_band")
-					else "total"
-					if row.get("_bold")
-					else ""
-				),
-			)
-		)
+	head = _print_masthead(filters)
+	sheets = [_print_frame(head, index + 1, len(pages)) + body for index, body in enumerate(pages)]
+	metrics = _carlito()
 
 	template_path = os.path.join(os.path.dirname(__file__), "general_ledger_posting_detail_pdf.html")
 	with open(template_path) as handle:
 		template = handle.read()
-
 	html = frappe.render_template(
 		template,
 		{
-			"company": filters.company,
-			"from_bs": _bs(filters.from_date),
-			"to_bs": _bs(filters.to_date),
-			"grouped_by": filters.get("categorized_by") or "Account",
-			"rows": printable,
-			"printed_on": _bs(frappe.utils.nowdate()),
-			"printed_by": frappe.utils.get_fullname(frappe.session.user),
-			"fiscal_year": filters.get("fiscal_year") or "",
-			"scope": _print_scope(filters),
+			"sheets": sheets,
+			"page_w": PRINT_PAGE_W,
+			"page_h": PRINT_PAGE_H,
+			"grey": PRINT_GREY_TEXT,
+			"font_regular": metrics["font_regular"],
+			"font_bold": metrics["font_bold"],
 		},
 	)
+
+	# Chrome first, as every print format in this app is rendered: a bench set up
+	# that way may have no wkhtmltopdf at all, and get_pdf would raise before
+	# anything was tried. get_pdf stays as the fallback for a bench without Chrome.
+	pdf = chrome_render(html=html, pdf_generator="chrome")
+	if not pdf:
+		pdf = get_pdf(
+			html,
+			{
+				"page-size": "A4",
+				"orientation": "Portrait",
+				"margin-top": "0mm",
+				"margin-bottom": "0mm",
+				"margin-left": "0mm",
+				"margin-right": "0mm",
+			},
+		)
 
 	frappe.local.response.filename = "General Ledger Posting Detail - {0}.pdf".format(filters.company)
-	frappe.local.response.filecontent = get_pdf(
-		html,
-		{
-			"orientation": orientation if orientation in ("Portrait", "Landscape") else "Landscape",
-			"margin-top": "10mm",
-			"margin-bottom": "12mm",
-			"margin-left": "8mm",
-			"margin-right": "8mm",
-		},
-	)
+	frappe.local.response.filecontent = pdf
 	frappe.local.response.type = "download"
-
-
-def _print_scope(filters):
-	"""The filters that actually narrowed this print, for the footer."""
-	parts = []
-	for label, key in (
-		("Voucher Type", "voucher_type"),
-		("Subtype", "voucher_subtype"),
-		("Party Type", "party_type"),
-		("Party", "party"),
-		("Account", "account"),
-	):
-		chosen = _normalize(filters.get(key))
-		if chosen:
-			parts.append("{0}: {1}".format(label, ", ".join(chosen[:4]) + ("…" if len(chosen) > 4 else "")))
-	if filters.get("voucher_no"):
-		parts.append("Voucher No: {0}".format(filters.voucher_no))
-	return parts or ["All vouchers, all parties, all accounts"]
 
 
 def _strip_tags(value):
