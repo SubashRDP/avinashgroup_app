@@ -69,6 +69,13 @@ CHEQUE_PLACEHOLDERS = {"", "1"}
 # record is left alone, 108 vouchers point at it.
 JV_TYPE_LABEL = {"Journal Entry": "Journal"}
 
+# The JV Types whose postings take the Bank/Cash/Journal Description. Only a plain
+# journal: every other type -- Cash Entry, Bank Entry, Cash/ Bank or Contra
+# Voucher, Credit Note, Debit Note and the rest -- keeps the party name, or the
+# contra accounts where it has no party. The Paid To / Receive From sub-line is
+# not gated by this; it follows its own field on every voucher.
+JOURNAL_DESCRIBED_TYPES = ("Journal Entry",)
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -333,9 +340,8 @@ def _company_suffix(company):
 def _journal_descriptions(postings):
 	"""Per Journal Entry in view: its JV Type, its cash/bank legs, its cheque.
 
-	Every Journal Entry, whatever its JV Type. The type is not a gate -- it is
-	only what the description falls back to when the entry moved through no cash
-	or bank account. See _journal_description().
+	Every Journal Entry is loaded, since the Paid To / Receive From sub-line reads
+	from all of them; only JOURNAL_DESCRIBED_TYPES take the description.
 	"""
 	vouchers = sorted(
 		{p.voucher_no for p in postings if p.voucher_type == "Journal Entry" and p.voucher_no}
@@ -384,13 +390,17 @@ def _journal_description(entry, own_account, suffix):
 	against "Journal" -- and the ledger reads the same whether the voucher was
 	keyed as a Bank Entry, a Contra or a plain journal.
 
-	The row's own account is skipped when choosing: on a bank account's own ledger
-	the cash/bank leg *is* the account being read, and a line that names the ledger
-	it sits in says nothing. Those fall back to the JV Type as well.
+	A cash/bank leg other than the row's own is preferred, so on a bank-to-bank
+	contra each bank's row names the other bank. When the row's own account is the
+	only cash/bank leg, it is named all the same -- the JV Type is for entries that
+	touched no cash or bank at all. Falling back to it there printed "Cash/ Bank or
+	Contra Voucher" on the bank's own ledger where the bank's name belongs.
 	"""
 	for account in entry.cash_bank:
 		if account != own_account:
 			return _trim_account(account, suffix)
+	if entry.cash_bank:
+		return _trim_account(entry.cash_bank[0], suffix)
 	p_type = entry.custom_p_type or ""
 	return JV_TYPE_LABEL.get(p_type, p_type)
 
@@ -522,7 +532,11 @@ def _decorate(postings, filters_company=None):
 		# Party or Both block is headed by, and a block titled "Journal" would be
 		# the same defect 47c8774 fixed at the other end.
 		entry = journals.get(r.voucher_no) if r.voucher_type == "Journal Entry" else None
-		r.description = _journal_description(entry, r.account, suffix) if entry else ""
+		r.description = (
+			_journal_description(entry, r.account, suffix)
+			if entry and entry.custom_p_type in JOURNAL_DESCRIBED_TYPES
+			else ""
+		)
 
 		# The Paid To / Receive From sub-line: only where the voucher's own field
 		# says who. Journal Entry keeps it in custom_paid_to, Payment Entry in
