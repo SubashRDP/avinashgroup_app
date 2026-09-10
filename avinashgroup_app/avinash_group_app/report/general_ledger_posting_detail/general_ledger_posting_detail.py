@@ -56,12 +56,6 @@ PARTY_NAME_FIELD = {
 
 CATEGORIES = ("Account", "Party", "Both")
 
-# The JV Types whose postings carry the legacy "Bank/Cash/Journal Description"
-# rather than the party name. Every other type -- Cash Entry, Bank Entry,
-# Cash/ Bank or Contra Voucher, Credit Note, Debit Note, Contract Form, Cylinder
-# Deposit Slip, Opening Entry, Party Journal -- keeps the party name it had.
-JOURNAL_DESCRIBED_TYPES = ("Journal Entry",)
-
 # A cheque number typed to fill the field rather than to record a cheque. 17,505
 # of 27,421 Payment Entries carry "1", and 37 Journal Entries do. It matters
 # because custom_chequereference_miti is written on every one of those 27,421
@@ -339,8 +333,9 @@ def _company_suffix(company):
 def _journal_descriptions(postings):
 	"""Per Journal Entry in view: its JV Type, its cash/bank legs, its cheque.
 
-	Only the JV Types in JOURNAL_DESCRIBED_TYPES are loaded; a posting from any
-	other keeps the party name it already had.
+	Every Journal Entry, whatever its JV Type. The type is not a gate -- it is
+	only what the description falls back to when the entry moved through no cash
+	or bank account. See _journal_description().
 	"""
 	vouchers = sorted(
 		{p.voucher_no for p in postings if p.voucher_type == "Journal Entry" and p.voucher_no}
@@ -352,9 +347,8 @@ def _journal_descriptions(postings):
 	for start in range(0, len(vouchers), 500):
 		for row in frappe.db.sql(
 			"""SELECT name, custom_p_type, custom_paid_to, cheque_no, custom_reference_miti
-			   FROM `tabJournal Entry`
-			   WHERE name IN %(names)s AND custom_p_type IN %(types)s""",
-			{"names": vouchers[start : start + 500], "types": JOURNAL_DESCRIBED_TYPES},
+			   FROM `tabJournal Entry` WHERE name IN %(names)s""",
+			{"names": vouchers[start : start + 500]},
 			as_dict=True,
 		):
 			row.cash_bank = []
@@ -381,9 +375,14 @@ def _journal_descriptions(postings):
 def _journal_description(entry, own_account, suffix):
 	"""The Bank/Cash/Journal Description for one posting.
 
-	An entry that moved through cash or a bank names that account; one that did
-	not names its JV Type -- "1 of 108 Journal Entry-type vouchers touch a cash or
-	bank account", so the two cases split cleanly.
+	Two rules, and the JV Type gates neither of them:
+
+	  1. the entry moved through cash or a bank -> that account
+	  2. it did not                             -> its JV Type
+
+	Which is what the legacy print does -- "Prabhu Bank Ltd A/C 0010101244800011"
+	against "Journal" -- and the ledger reads the same whether the voucher was
+	keyed as a Bank Entry, a Contra or a plain journal.
 
 	The row's own account is skipped when choosing: on a bank account's own ledger
 	the cash/bank leg *is* the account being read, and a line that names the ledger
@@ -402,31 +401,33 @@ def _cheque(number):
 	return "" if number in CHEQUE_PLACEHOLDERS else number
 
 
-def _paid_line(who, cheque_no, miti, party_name=""):
-	"""The legacy sub-line: "Paid: <who> by chq no <no> dt <miti>".
+def _paid_line(who, ref_no, miti):
+	"""The sub-line: "Paid To/Receive From: <who>  Ref: <no>  Dt: <miti>".
 
-	The cheque number and its miti stand or fall together -- a placeholder number
-	has no date worth printing, and the miti field is filled on every Payment
-	Entry on the site, so keeping it would date a cheque that does not exist.
+	Printed only when the voucher's own Paid To / Receive From field holds
+	something, and that field is the only source of the name. Two earlier forms
+	were wrong in ways worth remembering:
 
-	The payee field is set on only 34 Payment Entries and 174 Journal Entries, so
-	the party the posting is against stands in, which is what the legacy print
-	shows: "Paid:Nepal L.P. Gas Udhyog Sangh by chq no 55263396". With neither a
-	cheque nor a named payee there is nothing to say, and falling back to the
-	party there produced a line reading "Paid: Gita Gas Udyog Pvt. Ltd." directly
-	under the block already headed by that name.
+	  - A fixed "Paid:" read every receipt backwards -- 8,614 Payment Entry
+	    receipts and 136 journals were printing "Paid:" for money that came in.
+	    The field's own label says both directions, so the line uses it.
+	  - Falling back to the party misfired on a leg with no party of its own,
+	    where the "party" is its contra accounts: "Paid: Global IME Bank A/c ...",
+	    a bank standing where a payee belongs.
+
+	Ref and Dt follow the cheque rule -- a placeholder number has no date worth
+	printing, so both go together or not at all.
 	"""
 	who = str(who or "").strip()
-	cheque = _cheque(cheque_no)
-	miti = str(miti or "").strip().split(" ")[0] if cheque else ""
-	if not (cheque or who):
+	if not who:
 		return ""
-	name = who or str(party_name or "").strip()
-	out = "Paid: {0}".format(name) if name else "Paid:"
-	if cheque:
-		out += " by chq no {0}".format(cheque)
-	if miti:
-		out += " dt {0}".format(miti)
+	out = "Paid To/Receive From: {0}".format(who)
+	ref = _cheque(ref_no)
+	if ref:
+		out += "  Ref: {0}".format(ref)
+		miti = str(miti or "").strip().split(" ")[0]
+		if miti:
+			out += "  Dt: {0}".format(miti)
 	return out
 
 
@@ -523,20 +524,15 @@ def _decorate(postings, filters_company=None):
 		entry = journals.get(r.voucher_no) if r.voucher_type == "Journal Entry" else None
 		r.description = _journal_description(entry, r.account, suffix) if entry else ""
 
-		# The "Paid:" sub-line, on whichever voucher can carry one. A journal
-		# earns it by having moved through cash or a bank; a Payment Entry always
-		# can, and keeps the description column it already had.
+		# The Paid To / Receive From sub-line: only where the voucher's own field
+		# says who. Journal Entry keeps it in custom_paid_to, Payment Entry in
+		# custom_paid_to_from; each has its own reference number and miti.
 		payment = payments.get(r.voucher_no) if r.voucher_type == "Payment Entry" else None
-		if entry and entry.cash_bank:
-			r.paid = _paid_line(
-				entry.custom_paid_to, entry.cheque_no, entry.custom_reference_miti, r.party_name
-			)
+		if entry:
+			r.paid = _paid_line(entry.custom_paid_to, entry.cheque_no, entry.custom_reference_miti)
 		elif payment:
 			r.paid = _paid_line(
-				payment.custom_paid_to_from,
-				payment.reference_no,
-				payment.custom_chequereference_miti,
-				r.party_name,
+				payment.custom_paid_to_from, payment.reference_no, payment.custom_chequereference_miti
 			)
 		else:
 			r.paid = ""
