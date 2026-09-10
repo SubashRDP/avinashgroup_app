@@ -36,6 +36,7 @@ body {
 .t.b { font-weight: 700; }
 .t.g { color: {{ grey }}; }
 .rule { position: absolute; left: 21.6pt; width: 559.4pt; }
+.fill { position: absolute; }
 .box { position: absolute; left: 21.6pt; width: 559.4pt; border: 0.8pt solid #000; box-sizing: border-box; }
 </style>
 </head>
@@ -45,12 +46,14 @@ body {
 {%- for i in items %}
 {%- if i.kind == "text" %}
 {%- if i.align == "r" %}
-<div class="t{% if i.bold %} b{% endif %}{% if i.grey %} g{% endif %}" style="right:{{ (page_w - i.x)|round(2) }}pt;top:{{ i.top }}pt;font-size:{{ i.size }}pt">{{ i.text }}</div>
+<div class="t{% if i.bold %} b{% endif %}{% if i.grey %} g{% endif %}" style="right:{{ (page_w - i.x)|round(2) }}pt;top:{{ i.top }}pt;font-size:{{ i.size }}pt;{% if i.italic %}font-style:italic;{% endif %}{% if i.colour %}color:{{ i.colour }};{% endif %}">{{ i.text }}</div>
 {%- else %}
-<div class="t{% if i.bold %} b{% endif %}{% if i.grey %} g{% endif %}" style="left:{{ i.x|round(2) }}pt;top:{{ i.top }}pt;font-size:{{ i.size }}pt">{{ i.text }}</div>
+<div class="t{% if i.bold %} b{% endif %}{% if i.grey %} g{% endif %}" style="left:{{ i.x|round(2) }}pt;top:{{ i.top }}pt;font-size:{{ i.size }}pt;{% if i.italic %}font-style:italic;{% endif %}{% if i.colour %}color:{{ i.colour }};{% endif %}">{{ i.text }}</div>
 {%- endif %}
 {%- elif i.kind == "rule" %}
-<div class="rule" style="top:{{ (i.y - i.w / 2)|round(2) }}pt;height:{{ i.w }}pt;background:{{ i.colour }}"></div>
+<div class="rule" style="top:{{ (i.y - i.w / 2)|round(2) }}pt;height:{{ i.w }}pt;background:{{ i.colour }}{% if i.width %};left:{{ i.x|round(2) }}pt;width:{{ i.width|round(2) }}pt{% endif %}"></div>
+{%- elif i.kind == "fill" %}
+<div class="fill" style="left:{{ i.x|round(2) }}pt;top:{{ i.top|round(2) }}pt;width:{{ i.w|round(2) }}pt;height:{{ i.h|round(2) }}pt;background:{{ i.colour }}"></div>
 {%- elif i.kind == "box" %}
 <div class="box" style="top:{{ i.top }}pt;height:{{ i.height }}pt"></div>
 {%- endif %}

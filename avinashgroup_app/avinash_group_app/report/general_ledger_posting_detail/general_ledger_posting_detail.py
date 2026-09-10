@@ -30,6 +30,7 @@ import os
 import frappe
 from frappe import _
 from frappe.utils import cint, flt, getdate
+from frappe.core.doctype.user_permission.user_permission import get_user_permissions
 
 # The doctypes worth ledgering, and where each keeps its subtype.
 #   doctype -> (field on the document, the doctype that field links to)
@@ -89,15 +90,10 @@ def execute(filters=None):
 
 
 def _allowed_companies():
-	"""Company names the current user may see, from Company User Permissions.
 
-	None means unrestricted -- the Administrator, or a user with no Company
-	user permission at all (Frappe's "no user permission == see everything"
-	rule). Same shape as the helper in Invoice Activity Report.
-	"""
 	if frappe.session.user == "Administrator":
 		return None
-	from frappe.core.doctype.user_permission.user_permission import get_user_permissions
+	
 
 	companies = [p.get("doc") for p in (get_user_permissions().get("Company") or []) if p.get("doc")]
 	return companies or None
@@ -1399,9 +1395,19 @@ def _wrap_pt(text, width=PRINT_TEXT_W, size=9.0, bold=False):
 	return lines or [""]
 
 
-def _pt(x, text, size=9.0, bold=False, align="l", grey=False):
+def _pt(x, text, size=9.0, bold=False, align="l", grey=False, italic=False, colour=None):
 	"""One run of text at x; its y is set when its line is placed."""
-	return {"kind": "text", "x": x, "size": size, "bold": bold, "align": align, "grey": grey, "text": text}
+	return {
+		"kind": "text",
+		"x": x,
+		"size": size,
+		"bold": bold,
+		"align": align,
+		"grey": grey,
+		"italic": italic,
+		"colour": colour,
+		"text": text,
+	}
 
 
 def _set_y(item, y):
@@ -1750,8 +1756,519 @@ def _print_parameters(filters):
 	]
 
 
+# ---------------------------------------------------------------------------
+# The standard print -- the same ledger, laid out for reading
+# ---------------------------------------------------------------------------
+#
+# The legacy print above reproduces the old DevExpress page point for point. This
+# one keeps everything that page carries -- account and party blocks, opening and
+# closing with their gross Dr / Cr, the Paid To line, narration -- and takes what
+# the Cash Book print does well: a running balance on every posting and a Day
+# closing line. On top of that:
+#
+#   - opening and closing say which date they stand "as at"
+#   - a ledger that crosses a page break is "Carried forward" at the foot of one
+#     page and "Brought forward" at the head of the next
+#   - dates read BS first with the AD date beneath, as the screen shows both
+#   - the voucher type sits under the voucher number
+#   - a block with no postings says so, instead of a Period Total of 0.00
+#   - the filters open the first page, a summary closes the last, and every page
+#     says "Page n of N" and who printed it
+#
+# Same machinery as the legacy print: Carlito, text wrapped by the font's own
+# widths, every line placed at a computed point, pages decided before rendering.
+
+STD = frappe._dict(
+	left=28.0,
+	right=PRINT_PAGE_W - 28.0,
+	date=31.0,
+	voucher=84.0,
+	voucher_w=90.0,
+	text=178.0,
+	text_w=170.0,
+	debit=418.0,
+	credit=484.0,
+	amount_w=62.0,
+	balance=PRINT_PAGE_W - 31.0,
+	balance_w=78.0,
+	body_bottom=798.0,
+	first_body_top=130.0,
+	body_top=86.0,
+	ink="#111827",
+	muted="#6b7280",
+	faint="#9ca3af",
+	hair="#e5e7eb",
+	band="#eef1f5",
+	subband="#f7f8fa",
+	accent="#1f2937",
+)
+STD_LINE = 11.0  # the first line of a posting
+STD_SUBLINE = 9.4  # each further line of it
+STD_GAP = 3.0  # air under a posting, above its hairline
+STD_CF = 12.0  # a Carried / Brought forward line
+
+
+def _fit(text, width, size, bold=False, floor=6.0):
+	"""The largest size, up to `size`, at which `text` fits `width`."""
+	w = _text_pt(text, size, bold)
+	return size if w <= width else max(floor, round(size * width / w, 2))
+
+
+def _std_place(items, y, line):
+	"""Draw one line of the standard print at y; return the y under it."""
+	S = STD
+	h = line["h"]
+	if line.get("fill"):
+		items.append({"kind": "fill", "x": S.left, "w": S.right - S.left, "top": y, "h": h, "colour": line["fill"]})
+	if line.get("rule_top"):
+		colour, weight = line["rule_top"]
+		items.append({"kind": "rule", "x": S.left, "width": S.right - S.left, "y": y, "w": weight, "colour": colour})
+	for run in line["runs"]:
+		items.append(_set_y(run, y + (h - run["size"]) / 2.0))
+	if line.get("rule_bottom"):
+		colour, weight = line["rule_bottom"]
+		items.append({"kind": "rule", "x": S.left, "width": S.right - S.left, "y": y + h, "w": weight, "colour": colour})
+	return y + h
+
+
+def _std_context(filters):
+	"""Everything the page frame says, worked out once for the whole document."""
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _bs
+
+	def bs(date):
+		return (_bs(date) or "").replace("-", "/")
+
+	fy = frappe.db.sql(
+		"""SELECT name FROM `tabFiscal Year`
+		   WHERE %(d)s BETWEEN year_start_date AND year_end_date
+		   ORDER BY year_start_date DESC LIMIT 1""",
+		{"d": filters.from_date},
+	)
+	fy = str((fy[0][0] if fy else "") or filters.get("fiscal_year") or "")
+	parts = fy.split("/")
+	if len(parts) == 2 and all(part.isdigit() and len(part) == 2 for part in parts):
+		fy = "20{0}/{1}".format(*parts)
+
+	def listed(values, limit=3):
+		if not values:
+			return _("All")
+		return ", ".join(values[:limit]) + ("…" if len(values) > limit else "")
+
+	accounts = _normalize(filters.get("account"))
+	numbers = (
+		[n for n in frappe.get_all("Account", filters={"name": ("in", accounts)}, pluck="account_number") if n]
+		if accounts
+		else []
+	)
+	category = filters.get("categorized_by") or "Account"
+	pairs = [
+		(_("Categorised by"), {"Account": _("Account"), "Party": _("Party"), "Both": _("Account & Party")}[category]),
+		(_("Accounts"), listed(numbers or accounts)),
+		(_("Voucher type"), listed(_normalize(filters.get("voucher_type")))),
+		(_("Party type"), listed(_normalize(filters.get("party_type")))),
+		(_("Parties"), listed(_normalize(filters.get("party")))),
+		(_("Voucher subtype"), listed(_normalize(filters.get("voucher_subtype")))),
+		(_("Voucher No."), filters.get("voucher_no") or _("All")),
+		(
+			_("Opening entries"),
+			_("Shown as postings") if cint(filters.get("show_opening_entries")) else _("In the opening balance"),
+		),
+		(_("Narration"), _("Shown") if cint(filters.get("remarks", 1)) else _("Hidden")),
+	]
+	now = frappe.utils.now_datetime()
+	return frappe._dict(
+		company=filters.company,
+		left="{0}   ·   {1}".format(
+			_("Fiscal Year {0}").format(fy) if fy else "", _("Amounts in Nepalese Rupee (NPR)")
+		).strip(" ·"),
+		period="{0} – {1} BS   ·   {2} – {3} AD".format(
+			bs(filters.from_date), bs(filters.to_date), getdate(filters.from_date), getdate(filters.to_date)
+		),
+		printed=_("Printed {0} {1} by {2}").format(
+			bs(now.date()), now.strftime("%H:%M"), frappe.utils.get_fullname(frappe.session.user)
+		),
+		filters=[pairs[i : i + 3] for i in range(0, len(pairs), 3)],
+		as_at_open=bs(filters.from_date),
+		as_at_close=bs(filters.to_date),
+	)
+
+
+def _std_frame(ctx, page_no, total_pages):
+	"""Masthead, the first page's filters, the column heads and the foot."""
+	S = STD
+	items = [
+		_set_y(_pt(S.left, ctx.company, size=12.5, bold=True, colour=S.ink), 28.0),
+		_set_y(_pt(S.right, _("General Ledger Posting Detail"), size=15.0, bold=True, align="r", colour=S.ink), 26.5),
+		_set_y(_pt(S.left, ctx.left, size=7.5, colour=S.muted), 47.0),
+		_set_y(_pt(S.right, ctx.period, size=7.5, align="r", colour=S.muted), 47.0),
+		{"kind": "rule", "x": S.left, "width": S.right - S.left, "y": 59.0, "w": 1.0, "colour": S.accent},
+	]
+	head_y = 66.0
+	if page_no == 1:
+		column_w = (S.right - S.left) / 3.0
+		for row, pairs in enumerate(ctx.filters):
+			y = 66.0 + 10.0 * row
+			for column, (label, value) in enumerate(pairs):
+				x = S.left + column * column_w
+				items.append(_set_y(_pt(x, label, size=7.0, colour=S.muted), y))
+				value_x = x + 62.0
+				items.append(_set_y(_pt(value_x, value, size=_fit(value, column_w - 66.0, 7.0), colour=S.ink), y))
+		items.append(
+			_set_y(
+				_pt(
+					S.left,
+					_("Figures in grey on opening and closing lines are the gross debits and credits behind the balance."),
+					size=6.8,
+					italic=True,
+					colour=S.faint,
+				),
+				96.0,
+			)
+		)
+		head_y = 110.0
+	items.append({"kind": "fill", "x": S.left, "w": S.right - S.left, "top": head_y, "h": 16.0, "colour": S.band})
+	for x, label, align in (
+		(S.date, _("Date"), "l"),
+		(S.voucher, _("Voucher"), "l"),
+		(S.text, _("Particulars"), "l"),
+		(S.debit, _("Debit"), "r"),
+		(S.credit, _("Credit"), "r"),
+		(S.balance, _("Balance"), "r"),
+	):
+		items.append(_set_y(_pt(x, label, size=7.5, bold=True, align=align, colour=S.ink), head_y + 4.25))
+	items.append(
+		{"kind": "rule", "x": S.left, "width": S.right - S.left, "y": head_y + 16.0, "w": 0.6, "colour": S.faint}
+	)
+	items.append({"kind": "rule", "x": S.left, "width": S.right - S.left, "y": 810.0, "w": 0.4, "colour": S.hair})
+	items.append(_set_y(_pt(S.left, ctx.printed, size=6.5, colour=S.muted), 815.0))
+	items.append(
+		_set_y(_pt(S.right, _("Page {0} of {1}").format(page_no, total_pages), size=6.5, bold=True, align="r", colour=S.muted), 815.0)
+	)
+	return items
+
+
+def _std_pages(filters, postings, ctx):
+	"""The standard print, cut into pages of placed items."""
+	from collections import Counter
+
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
+
+	S = STD
+	category = filters.get("categorized_by") or "Account"
+	show_remarks = cint(filters.get("remarks", 1))
+	totals = {}
+	opening = _opening_balances(filters, postings, totals_out=totals)
+
+	sections = {}
+	for posting in postings:
+		sections.setdefault(_section_key(filters, posting), []).append(posting)
+	for key, value in opening.items():
+		if value:
+			sections.setdefault(key, [])
+	if not sections:
+		return []
+
+	meta = {}
+	if category in ("Account", "Both"):
+		for row in frappe.get_all(
+			"Account",
+			filters={"name": ("in", sorted({key[0] for key in sections}))},
+			fields=["name", "account_number", "account_name"],
+		):
+			meta[row.name] = row
+
+	def runs(*items):
+		return [item for item in items if item]
+
+	def amt(value, x, bold=False, colour=None):
+		text = _fmt_npr(value)
+		if not text:
+			return None
+		return _pt(x, text, size=_fit(text, S.amount_w, 8.0, bold), bold=bold, align="r", colour=colour or S.ink)
+
+	def bal(value, bold=False, colour=None, size=8.0):
+		value = flt(value, 2)
+		text = "0.00" if not value else "{0} {1}".format(_fmt_npr(abs(value)), "Dr" if value > 0 else "Cr")
+		return _pt(S.balance, text, size=_fit(text, S.balance_w, size, bold), bold=bold, align="r", colour=colour or S.ink)
+
+	def labelled(label, note, size=8.0, bold=True, colour=None):
+		"""A label with a quieter note after it, as two runs."""
+		out = [_pt(S.text, label, size=size, bold=bold, colour=colour or S.ink)]
+		if note:
+			out.append(_pt(S.text + _text_pt(label + "   ", size, bold), note, size=7.0, colour=S.muted))
+		return out
+
+	def account_band(account, cont=False):
+		m = meta.get(account) or frappe._dict()
+		label = "{0}   {1}".format(m.account_number or "", m.account_name or account).strip()
+		return {
+			"h": 16.0,
+			"fill": S.band,
+			"runs": [
+				_pt(S.left + 6.0, label, size=9.0, bold=True, colour=S.ink),
+				_pt(S.right - 6.0, _("continued") if cont else _("Account"), size=7.0, italic=cont, align="r", colour=S.muted),
+			],
+		}
+
+	def party_band(party_type, party, rows, cont=False, nested=True):
+		if party:
+			name = next((r.party_name for r in rows if r.party == party and r.party_name), "")
+			label = "{0}   {1}".format(party, name or _party_label(party_type, party) or "")
+		else:
+			label = _("No Party")
+		return {
+			"h": 14.0 if nested else 16.0,
+			"fill": S.subband if nested else S.band,
+			"runs": [
+				_pt(S.left + (14.0 if nested else 6.0), label, size=8.5 if nested else 9.0, bold=True, colour=S.ink),
+				_pt(S.right - 6.0, _("continued") if cont else (party_type or ""), size=7.0, italic=cont, align="r", colour=S.muted),
+			],
+		}
+
+	def opening_line(value, dr0, cr0):
+		return {
+			"h": 14.0,
+			"runs": labelled(_("Opening balance"), _("as at {0}").format(ctx.as_at_open))
+			+ runs(amt(dr0, S.debit, colour=S.faint), amt(cr0, S.credit, colour=S.faint), bal(value, bold=True)),
+			"rule_bottom": (S.hair, 0.4),
+		}
+
+	def posting_lines(posting, balance):
+		stream = [(line, 8.0, False, S.ink) for line in _wrap_pt(_row_description(posting, category), S.text_w, 8.0)]
+		if posting.paid:
+			stream += [(line, 7.2, False, S.muted) for line in _wrap_pt(posting.paid, S.text_w, 7.2)]
+		if show_remarks:
+			narration = _clean_narration(posting.remarks)
+			if narration:
+				lines = _wrap_pt(narration, S.text_w, 7.2)
+				if len(lines) > PRINT_NARRATION_MAX:
+					lines = lines[:PRINT_NARRATION_MAX]
+					lines[-1] = lines[-1].rstrip(". ") + " …"
+				stream += [(line, 7.2, True, S.muted) for line in lines]
+		voucher = posting.number or posting.voucher_no or ""
+		out = []
+		for index in range(max(len(stream), 2)):
+			line_runs = []
+			if index == 0:
+				line_runs += runs(
+					_pt(S.date, (posting.miti or "").replace("-", "/"), size=8.0, colour=S.ink),
+					_pt(S.voucher, voucher, size=_fit(voucher, S.voucher_w, 8.0), colour=S.ink),
+					amt(posting.debit, S.debit),
+					amt(posting.credit, S.credit),
+					bal(balance),
+				)
+			elif index == 1:
+				line_runs += runs(
+					_pt(S.date, str(getdate(posting.posting_date)) if posting.posting_date else "", size=6.8, colour=S.faint),
+					_pt(S.voucher, posting.voucher_type or "", size=_fit(posting.voucher_type or "", S.voucher_w, 6.8), colour=S.faint),
+				)
+			if index < len(stream):
+				text, size, italic, colour = stream[index]
+				line_runs.append(_pt(S.text, text, size=size, italic=italic, colour=colour))
+			out.append({"h": STD_LINE if index == 0 else STD_SUBLINE, "runs": line_runs})
+		out[-1]["h"] += STD_GAP
+		out[-1]["rule_bottom"] = (S.hair, 0.4)
+		return out
+
+	def day_closing(miti, balance):
+		return {
+			"h": 12.0,
+			"runs": labelled(_("Day closing"), (miti or "").replace("-", "/"), size=7.4, colour=S.muted)
+			+ [bal(balance, bold=True, colour=S.muted, size=7.4)],
+			"rule_bottom": (S.hair, 0.4),
+		}
+
+	def period_total(dr, cr):
+		return {
+			"h": 13.0,
+			"runs": labelled(_("Total for the period"), _("net change"))
+			+ runs(amt(dr, S.debit, bold=True), amt(cr, S.credit, bold=True), bal(dr - cr, colour=S.muted)),
+			"rule_top": (S.faint, 0.6),
+		}
+
+	def closing_line(value, drc, crc):
+		return {
+			"h": 14.0,
+			"runs": labelled(_("Closing balance"), _("as at {0}").format(ctx.as_at_close))
+			+ runs(amt(drc, S.debit, colour=S.faint), amt(crc, S.credit, colour=S.faint), bal(value, bold=True)),
+			"rule_bottom": (S.accent, 0.9),
+		}
+
+	def forward(label, balance):
+		return {"h": STD_CF, "runs": [_pt(S.text, label, size=7.2, italic=True, colour=S.muted), bal(balance, colour=S.muted, size=7.6)]}
+
+	units = []
+	grand = [0.0, 0.0, 0.0]
+	vouchers = set()
+
+	def unchanged_line(value, dr0, cr0):
+		"""A ledger that did not move, as one line: its balance, opening and closing alike."""
+		return {
+			"h": 14.0,
+			"runs": labelled(_("Balance"), _("no transactions from {0} to {1}").format(ctx.as_at_open, ctx.as_at_close))
+			+ runs(amt(dr0, S.debit, colour=S.faint), amt(cr0, S.credit, colour=S.faint), bal(value, bold=True)),
+			"rule_bottom": (S.accent, 0.9),
+		}
+
+	def block(key, rows, bands, context):
+		opening_net = flt(opening.get(key, 0.0))
+		dr0, cr0 = totals.get(key, (0.0, 0.0))
+		grand[0] += opening_net
+		if not rows:
+			# An opening, a "no transactions" line and a closing that repeats the
+			# opening say one thing three times. One line says it once, and it
+			# cannot be split across a page.
+			units.append({"lines": bands + [unchanged_line(opening_net, dr0, cr0)], "head": True})
+			return opening_net, 0.0, 0.0
+		head = bands + [opening_line(opening_net, dr0, cr0)]
+		balance = opening_net
+		moved_dr = moved_cr = 0.0
+		per_day = Counter(posting.posting_date for posting in rows)
+		for index, posting in enumerate(rows):
+			brought = balance
+			balance += flt(posting.debit) - flt(posting.credit)
+			moved_dr += flt(posting.debit)
+			moved_cr += flt(posting.credit)
+			vouchers.add((posting.voucher_type, posting.voucher_no))
+			lines = posting_lines(posting, balance)
+			following = rows[index + 1].posting_date if index + 1 < len(rows) else None
+			if per_day[posting.posting_date] > 1 and following != posting.posting_date:
+				lines.append(day_closing(posting.miti, balance))
+			if index == 0:
+				# the heading and opening travel with the first posting, so a page
+				# never ends on a heading with nothing under it
+				units.append({"lines": head + lines, "head": True})
+			else:
+				units.append({"lines": lines, "ctx": context, "bf": brought, "head": False})
+		units.append(
+			{
+				"lines": [
+					period_total(moved_dr, moved_cr),
+					closing_line(opening_net + moved_dr - moved_cr, dr0 + moved_dr, cr0 + moved_cr),
+				],
+				"ctx": context,
+				"bf": balance,
+				"head": False,
+			}
+		)
+		grand[1] += moved_dr
+		grand[2] += moved_cr
+		return opening_net, moved_dr, moved_cr
+
+	ordered = sorted(sections, key=lambda k: tuple(str(part) for part in k))
+	parties = set()
+	if category == "Both":
+		by_account = {}
+		for key in ordered:
+			by_account.setdefault(key[0], []).append(key)
+		for account in sorted(by_account):
+			ledger = [0.0, 0.0, 0.0]
+			for index, key in enumerate(by_account[account]):
+				rows = sections[key]
+				parties.add((key[1], key[2]))
+				bands = ([account_band(account)] if index == 0 else []) + [party_band(key[1], key[2], rows)]
+				context = [account_band(account, True), party_band(key[1], key[2], rows, True)]
+				ledger = [a + b for a, b in zip(ledger, block(key, rows, bands, context))]
+			m = meta.get(account) or frappe._dict()
+			opening_net, moved_dr, moved_cr = ledger
+			units.append(
+				{
+					"lines": [
+						{
+							"h": 15.0,
+							"fill": S.band,
+							"rule_top": (S.accent, 0.6),
+							"runs": labelled(_("Total for {0}").format(m.account_number or account), m.account_name or "")
+							+ runs(
+								amt(moved_dr, S.debit, bold=True),
+								amt(moved_cr, S.credit, bold=True),
+								bal(opening_net + moved_dr - moved_cr, bold=True),
+							),
+						}
+					],
+					"ctx": [account_band(account, True)],
+					"head": False,
+				}
+			)
+		accounts = set(by_account)
+	elif category == "Party":
+		for key in ordered:
+			parties.add(key)
+			band = party_band(key[0], key[1], sections[key], nested=False)
+			block(key, sections[key], [band], [party_band(key[0], key[1], sections[key], True, nested=False)])
+		accounts = {p.account for p in postings}
+	else:
+		for key in ordered:
+			block(key, sections[key], [account_band(key[0])], [account_band(key[0], True)])
+		accounts = {key[0] for key in sections}
+		parties = {(p.party_type, p.party) for p in postings if p.party}
+
+	# the summary that closes the document
+	width = (S.right - S.left) / 4.0
+	close_net = grand[0] + grand[1] - grand[2]
+	labels, values = [], []
+	for column, (label, text) in enumerate(
+		(
+			(_("Opening balance"), bal(grand[0])["text"]),
+			(_("Total debit"), _fmt_npr(grand[1]) or "0.00"),
+			(_("Total credit"), _fmt_npr(grand[2]) or "0.00"),
+			(_("Closing balance"), bal(close_net)["text"]),
+		)
+	):
+		x = S.left + column * width + 8.0
+		labels.append(_pt(x, label.upper(), size=6.5, bold=True, colour=S.muted))
+		values.append(_pt(x, text, size=_fit(text, width - 16.0, 11.0, True), bold=True, colour=S.ink))
+	def counted(n, one, many):
+		return "{0} {1}".format(n, one if n == 1 else many)
+
+	party_count = len({p for p in parties if p and p[-1]})
+	counts = "   ·   ".join(
+		part
+		for part in (
+			counted(len(accounts), _("account"), _("accounts")),
+			counted(party_count, _("party"), _("parties")) if party_count else "",
+			counted(len(vouchers), _("voucher"), _("vouchers")),
+			counted(len(postings), _("posting"), _("postings")),
+		)
+		if part
+	)
+	units.append(
+		{
+			"lines": [
+				{"h": 10.0, "runs": []},
+				{"h": 16.0, "runs": [_pt(S.left, _("Summary"), size=9.0, bold=True, colour=S.ink)], "rule_bottom": (S.accent, 0.9)},
+				{"h": 16.0, "fill": S.subband, "runs": labels},
+				{"h": 20.0, "fill": S.subband, "runs": values, "rule_bottom": (S.hair, 0.4)},
+				{"h": 14.0, "runs": [_pt(S.left, counts, size=7.2, colour=S.muted)]},
+			],
+			"head": True,
+		}
+	)
+
+	pages = [[]]
+	y = S.first_body_top
+	for unit in units:
+		need = sum(line["h"] for line in unit["lines"])
+		mid = not unit["head"] and unit.get("ctx")
+		room = S.body_bottom - (STD_CF if mid and unit.get("bf") is not None else 0.0)
+		top = S.first_body_top if len(pages) == 1 else S.body_top
+		if y + need > room and y > top + 0.5:
+			if mid and unit.get("bf") is not None:
+				y = _std_place(pages[-1], y, forward(_("Carried forward"), unit["bf"]))
+			pages.append([])
+			y = S.body_top
+			if mid:
+				for line in unit["ctx"]:
+					y = _std_place(pages[-1], y, line)
+				if unit.get("bf") is not None:
+					y = _std_place(pages[-1], y, forward(_("Brought forward"), unit["bf"]))
+		for line in unit["lines"]:
+			y = _std_place(pages[-1], y, line)
+	return pages
+
+
 @frappe.whitelist()
-def download_pdf(filters, orientation="Portrait"):
+def download_pdf(filters, orientation="Portrait", style="legacy"):
 	"""The ledger printed exactly the way the legacy system printed it.
 
 	See the note above PRINT_PAGE_W. Always A4 portrait -- every coordinate is
@@ -1766,12 +2283,25 @@ def download_pdf(filters, orientation="Portrait"):
 
 	postings = _get_postings(filters)
 	_decorate(postings, filters.company)
-	pages = _print_pages(filters, postings)
+	# "standard" prints the same ledger laid out for reading (see the note above
+	# STD); anything else is the legacy Posting Detail page.
+	if style == "standard":
+		ctx = _std_context(filters)
+		pages = _std_pages(filters, postings, ctx)
+
+		def frame(index, total):
+			return _std_frame(ctx, index + 1, total)
+
+	else:
+		pages = _print_pages(filters, postings)
+		head = _print_masthead(filters)
+
+		def frame(index, total):
+			return _print_frame(head, index + 1, total)
+
 	if not pages:
 		frappe.throw(_("Nothing to print for these filters."))
-
-	head = _print_masthead(filters)
-	sheets = [_print_frame(head, index + 1, len(pages)) + body for index, body in enumerate(pages)]
+	sheets = [frame(index, len(pages)) + body for index, body in enumerate(pages)]
 	metrics = _carlito()
 
 	template_path = os.path.join(os.path.dirname(__file__), "general_ledger_posting_detail_pdf.html")

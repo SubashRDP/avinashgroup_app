@@ -331,7 +331,10 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			document.head.appendChild(style);
 		}
 
-		report.page.add_inner_button(__("Download PDF"), function () {
+		// Two prints of the same ledger: "Standard" is laid out for reading --
+		// running balance, day closings, brought/carried forward -- and "Legacy"
+		// reproduces the old DevExpress Posting Detail page point for point.
+		const downloadPdf = function (style) {
 			const filters = report.get_values();
 			if (!filters.company) {
 				frappe.msgprint(__("Please select a Company."));
@@ -341,9 +344,11 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 				"/api/method/avinashgroup_app.avinash_group_app.report." +
 					"general_ledger_posting_detail.general_ledger_posting_detail.download_pdf" +
 					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
-					"&orientation=Portrait"
+					"&orientation=Portrait&style=" + style
 			);
-		});
+		};
+		report.page.add_inner_button(__("Standard"), () => downloadPdf("standard"), __("Download PDF"));
+		report.page.add_inner_button(__("Legacy Posting Detail"), () => downloadPdf("legacy"), __("Download PDF"));
 	},
 
 	// Show or hide the narration rows the server already sent, without a
