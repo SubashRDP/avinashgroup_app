@@ -1,39 +1,30 @@
 {#- ==========================================================================
-NG Cash Payment(CV) Voucher — Journal Entry voucher (avinashgroup_app).
-Source of truth for the "NG Cash Payment(CV) Voucher" standard Print
-Format (formerly "Nepal Gas Journal Voucher Cash Bank");
-print_format/ng_cash_payment_cv_voucher/ng_cash_payment_cv_voucher.json
+NG Cash Payment(CV) Full Page — Journal Entry voucher (avinashgroup_app).
+Source of truth for the "NG Cash Payment(CV) Full Page" standard Print Format;
+print_format/ng_cash_payment_cv_full_page/ng_cash_payment_cv_full_page.json
 only {% include %}s this file.
 
-Created 2026-08-06 from nepal_gas_journal_voucher.html, carrying ONLY that
-file's "Cash/ Bank or Contra Voucher" branch. All the other JV-type branches
-(Cash Entry, Journal Entry, Debit/Credit Note, Party Journal) were stripped,
-so this format renders every voucher with the Cash/Bank layout regardless of
-doc.custom_p_type.
+FULL-SHEET TWIN of nepal_gas_journal_voucher_cash_bank.html ("NG Cash
+Payment(CV) Voucher"): identical markup, identical body font size and
+identical footer-placement logic, the only differences being the @page bottom
+margin and the page geometry constants in the "Footer placement" block — this
+one fills the whole A4 sheet and drops the signatures at ~95% instead of using
+the top half and ~47%. Any change to the voucher body belongs in BOTH files.
 
 Columns: S.N. | Description | Party | Party Name | Payment (5).
 The parent's Receipt (debit) + Payment (credit) pair is collapsed into ONE
 amount column headed "Payment", showing the row's own amount.
-
-The two files are independent copies, not a shared partial — a change meant
-for both must be made in both (the same rule that already applies to the A4
-Full Page twin).
-
-This format has its own full-sheet twin, ng_cash_payment_cv_full_page.html
-("NG Cash Payment(CV) Full Page"), which differs only in the @page bottom
-margin and the PAGE_PX / TARGET_PX constants. Body changes belong in it too.
 =========================================================================== -#}
 <style>
 @page {
-  /* Top margin pinned to 10mm; large bottom margin confines the whole voucher to the
-     TOP HALF of the A4 sheet (bottom half stays blank). The .jv-sheet footer box
-     below fits within this top-half area, so a normal voucher is one page with the
-     footer at ~49%. A voucher with too many rows to fit the top half breaks to a 2nd
-     page (each page still top-half). */
+  /* Margins leave the whole A4 sheet usable (the half-page twin instead reserves
+     the bottom 148mm). The 6mm bottom margin is what the signatures at ~95% sit
+     just above. A voucher with too many rows to fit one sheet breaks to a 2nd
+     page, with the footer on the last one. */
   /* Paper is pinned to A4: the footer-pin arithmetic further down is in mm of an
      A4 sheet, so a Letter print would put the footer in the wrong place. */
   size: A4;
-  margin: 10mm 10mm 148mm 10mm;
+  margin: 10mm 10mm 6mm 10mm;
   /* No @bottom-center page counter: Chrome renders @page margin boxes but Firefox
      ignores them, so the counter appeared on the Chrome print only and the two
      browsers disagreed on the sheet. The voucher is not numbered on either now. */
@@ -586,9 +577,9 @@ padding:0px 30px;
   
   
 
-/* Half-page sheet. The closing block is NOT positioned — it is plain flow content
+/* Full sheet. The closing block is NOT positioned — it is plain flow content
    preceded by .jv-spacer, an empty row whose height is computed in the markup
-   below so the block lands just above the fold on the LAST page. Flow layout
+   below so the block lands at the foot of the LAST page. Flow layout
    (rather than the absolute pin this used to use) is what keeps it from printing
    on top of the data when the voucher runs to a 2nd page.
 
@@ -613,7 +604,7 @@ padding:0px 30px;
    signatures spill onto a page of their own. These must stay in step with @page
    above. The @media print reset stops browsers (and webkit inside wkhtmltopdf)
    from ALSO applying them as element margins on top of the page margins. */
-.print-format { margin-top: 10mm; margin-bottom: 148mm; margin-left: 10mm; margin-right: 10mm; }
+.print-format { margin-top: 10mm; margin-bottom: 6mm; margin-left: 10mm; margin-right: 10mm; }
 @media print { .print-format { margin: 0 !important; } }
 
 /* Force all text black, and typewriter (monospace) throughout — matches the
@@ -636,7 +627,7 @@ padding:0px 30px;
       <tr><td colspan="{{ ncols }}">{% if d.cheque_no %}<strong>Cheque No:</strong> {{ d.cheque_no }}{% endif %}{% if ref_date %}{% if d.cheque_no %}&nbsp;&nbsp;&nbsp;&nbsp;{% endif %}<strong>Dated:</strong> {{ ref_date }}{% endif %}</td></tr>
 {%- endif %}
 {%- endmacro -%}
-{#- Empty row that pushes the closing block (Total .. signatures) down to the fold.
+{#- Empty row that pushes the closing block (Total .. signatures) down to the page foot.
    Height comes from .jv-spacer in the computed <style> further down. -#}
 {%- macro tail_spacer(ncols) -%}
 {%- if G.data_count in S.breaks %}{{ page_head(TOTAL_PAGES, TOTAL_PAGES) }}{% endif %}
@@ -673,7 +664,7 @@ padding:0px 30px;
 {% set show_cash_bank_header = cash_bank.count == 1 %}
 
 {#- ---- Footer placement -----------------------------------------------------
-   The signature block has to print just above the fold (~49% down the sheet) on
+   The signature block has to print at the foot of the sheet (~95% down) on
    the LAST page, and never on top of the data. It used to be absolutely pinned to
    the bottom of a fixed-height .jv-sheet, which broke as soon as a voucher ran to
    a 2nd page: the box's bottom edge landed wherever the data happened to end, so
@@ -681,35 +672,42 @@ padding:0px 30px;
 
    Instead, the height of every <tr> is estimated here, the page breaks are forced
    to match that arithmetic, and .jv-spacer — an empty flow box — pushes the
-   signatures down to the fold on the last page. Everything is in normal flow, so
+   signatures down to the foot of the last page. Everything is in normal flow, so
    even if the estimate is off the footer can only sit a few mm high or low; it
    can no longer overlap anything.
 
    Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
-     PAGE_PX   printable height of one page (297 - 10 top - 148 bottom = 139mm)
+     PAGE_PX   printable height of one page (297 - 10 top - 6 bottom = 281mm)
      HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
                little over, like the row heights, so the breaks err early. It must
-               stay under 131px (25% of PAGE_PX) or Chrome stops reprinting it —
+               stay under 265px (25% of PAGE_PX) or Chrome stops reprinting it —
                see the .company-info rules up in the stylesheet.
      LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
      FOOT_PX   the signature block + "Printed on" line
      TARGET_PX where the footer's bottom edge should land, measured from the top
-               of the printable area (132mm -> 142mm down the sheet, just above the
-               fold at 148.5mm). The gap to PAGE_PX is the cushion that absorbs
-               estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
+               of the printable area (267mm -> 277mm down the sheet, just above
+               the 6mm bottom margin). The gap to PAGE_PX is the cushion that
+               absorbs estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
      CH_*      characters that fit on one line of a column, for guessing wraps
 
-   RECALIBRATED 2026-08-06 for 12px body text (this format prints 2px larger than
-   nepal_gas_journal_voucher.html, which is still on 10px and keeps the old
-   numbers). Text-driven values were scaled by 12/10: line heights up a fifth,
-   characters-per-line down a fifth. PAGE_PX / TARGET_PX / PAD_PX are page and
-   padding geometry, not text, so they are unchanged. -#}
-{% set PAGE_PX = 525 %}
+   Only PAGE_PX and TARGET_PX differ from the half-page twin
+   (nepal_gas_journal_voucher_cash_bank.html): the body font is the same 12px, so
+   the text-driven values (HEAD_PX / LINE_PX / FOOT_PX / CH_*) carry over as-is
+   and only the page geometry grows to the full sheet. -#}
+{% set PAGE_PX = 1062 %}
 {% set HEAD_PX = 132 %}
 {% set LINE_PX = 16 %}
-{% set PAD_PX = 11 %}
+{#- PAD_PX is 4, not the half-page twin's 11, because `.main-table tr` up in the
+   stylesheet forces every row to exactly 20px: a one-line row measures 20px, and
+   11 + 16 charged it 27px. On the half sheet that 7px-per-row overcharge is
+   absorbed by the small row count, but over a full sheet it added up to roughly
+   a third of a page of phantom height — a 20-row voucher broke after row 16 and
+   left the bottom third of page 1 blank. At 4 a one-line row costs exactly its
+   real 20px; a wrapped row still bills 36px against a real ~28px, so the estimate
+   stays on the safe side and the forced breaks still fire early. -#}
+{% set PAD_PX = 4 %}
 {% set FOOT_PX = 92 %}
-{% set TARGET_PX = 495 %}
+{% set TARGET_PX = 1010 %}
 {% set CH_ACC = 30 %}
 {% set CH_PARTY = 22 %}
 {% set CH_WIDE = 92 %}
@@ -756,7 +754,7 @@ padding:0px 30px;
   {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.user_remark or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
 {% endif %}
 {#- The closing group — Total, Paid To, Cheque No, In Words, Remarks — is measured
-   as one lump because it travels down to the fold together with the signatures
+   as one lump because it travels down to the page foot together with the signatures
    rather than sitting under the data. -#}
 {% set T = namespace(px=0) %}
 {% for h in G.items[G.data_count:] %}
@@ -793,7 +791,7 @@ padding:0px 30px;
      per-page header rows sit in the same <tbody>, so child positions no longer line
      up with the row numbering the breaks were worked out from. */
   .jv-sheet tbody > tr.jv-break { page-break-after: always; }
-  /* Pushes the closing group (Total .. Remarks .. signatures) down to the fold on
+  /* Pushes the closing group (Total .. Remarks .. signatures) down to the foot of
      the last page. !important because .main-table tr forces every row to 20px. */
   .main-table tr.jv-spacer { height: {{ [0, spacer_px]|max }}px !important; }
 </style>
@@ -931,7 +929,7 @@ padding:0px 30px;
      {#- Footer (signatories + printed-on). The .jv-spacer row inside the table above,
         just before the Total row, is sized in the page geometry block near the top
         of this file — it carries the whole closing group (Total .. Remarks .. these
-        signatures) down to the fold (~49%) on the last page without ever
+        signatures) down to the page foot (~95%) on the last page without ever
         overlapping the data. -#}
      <div class="jv-footer">
        {#- The Cash/Bank signature set: "Received By" in front of the usual four. -#}

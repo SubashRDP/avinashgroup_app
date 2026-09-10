@@ -136,6 +136,46 @@ def _get_govt_heading_info(filters):
 # customer/vat_number contiguous, so बीजक is a genuine 4-column merge, no reordering needed.
 # export_declaration_no/miti are placeholder columns the govt form has that this report has
 # no data for — always blank, never pulled from Sales Invoice.
+DETAIL_FORMAT = "Detail Format"
+
+
+def _is_detail(filters):
+	"""True when the report is asked for in the plain English "Detail Format".
+
+	The Report Format filter picks between the IRD govt VAT book (default) and the
+	register as it stood before that book was introduced. Detail Format is a faithful
+	restore: the old English columns AND the old classification, so it will not agree
+	line-for-line with the IRD view — the two split the buckets on different fields."""
+	return (filters or {}).get("report_format") == DETAIL_FORMAT
+
+
+def _detail_fields():
+	"""(fieldname, group, English label, fieldtype, width) — the pre-IRD flat register.
+
+	Shaped like _govt_fields so the same layout builder, PDF template and Excel writer
+	serve both formats; every field is ungrouped, so no merged header row is produced."""
+	return [
+		('date',          None, 'Date',          'Date',     100),
+		('miti',          None, 'Miti',          'Data',     120),
+		('bill_no',       None, 'Bill No',       'Data',     170),
+		('customer',      None, 'Customer Name', 'Data',     180),
+		('branch',        None, 'Branch',        'Data',     120),
+		('vat_number',    None, 'VAT Number',    'Data',     130),
+		('total_sales',   None, 'Total Sales',   'Currency', 130),
+		('tax_free_sale', None, 'Tax Free Sale', 'Currency', 140),
+		('export_npr',    None, 'Export NPR',    'Currency', 130),
+		('taxable_sales', None, 'Taxable Sales', 'Currency', 140),
+		('vat',           None, 'VAT',           'Currency', 110),
+	]
+
+
+def get_detail_columns():
+	return [
+		{"fieldname": f, "label": _(label), "fieldtype": ftype, "width": width}
+		for f, _group, label, ftype, width in _detail_fields()
+	]
+
+
 def _govt_groups(is_return):
 	if is_return:
 		return {
@@ -190,7 +230,7 @@ def get_govt_columns(is_return=False):
 	]
 
 
-def _build_govt_layout(selected_columns, is_return=False):
+def _build_govt_layout(selected_columns, is_return=False, detail=False):
 	"""Row1 (group super-headers only) for the govt book layout. Individual (non-grouped)
 	sub labels come from get_govt_columns() as the real column headers, not from this overlay."""
 	show_all = not selected_columns
@@ -198,8 +238,8 @@ def _build_govt_layout(selected_columns, is_return=False):
 	groups = _govt_groups(is_return)
 
 	body_fields = [
-		{'key': f, 'group': group, 'sub': label, 'css': 'l' if ftype == 'Data' else 'r', 'kind': 'currency' if ftype == 'Currency' else ('bill' if f == 'bill_no' else 'text')}
-		for f, group, label, ftype, width in _govt_fields(is_return)
+		{'key': f, 'group': group, 'sub': label, 'css': 'l' if ftype in ('Data', 'Date') else 'r', 'kind': 'currency' if ftype == 'Currency' else ('bill' if f == 'bill_no' else 'text')}
+		for f, group, label, ftype, width in (_detail_fields() if detail else _govt_fields(is_return))
 		if visible(f)
 	]
 
@@ -252,7 +292,7 @@ def get_print_html(filters, selected_columns=None, orientation=None):
 	is_return = bool(filters.get('is_return'))
 	_, data = execute(filters)
 	customer_display = _get_customer_display(filters)
-	govt_layout = _build_govt_layout(selected_columns, is_return=is_return)
+	govt_layout = _build_govt_layout(selected_columns, is_return=is_return, detail=_is_detail(filters))
 	govt_heading = _get_govt_heading_info(filters)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'sales_register_report_pdf.html')
@@ -269,6 +309,7 @@ def get_print_html(filters, selected_columns=None, orientation=None):
 		'customer_display': customer_display,
 		'govt_layout': govt_layout,
 		'govt_heading': govt_heading,
+		'detail': _is_detail(filters),
 	})
 
 
@@ -286,7 +327,7 @@ def download_pdf(filters, orientation=None, selected_columns=None, view=None):
 	is_return = bool(filters.get('is_return'))
 	_, data = execute(filters)
 	customer_display = _get_customer_display(filters)
-	govt_layout = _build_govt_layout(selected_columns, is_return=is_return)
+	govt_layout = _build_govt_layout(selected_columns, is_return=is_return, detail=_is_detail(filters))
 	govt_heading = _get_govt_heading_info(filters)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'sales_register_report_pdf.html')
@@ -307,6 +348,7 @@ def download_pdf(filters, orientation=None, selected_columns=None, view=None):
 		'customer_display': customer_display,
 		'govt_layout': govt_layout,
 		'govt_heading': govt_heading,
+		'detail': _is_detail(filters),
 	})
 
 	options = {
@@ -357,28 +399,44 @@ def download_excel(filters, selected_columns=None):
 	left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
 	right_align = Alignment(horizontal='right', vertical='center')
 
-	layout = _build_govt_layout(selected_columns, is_return=is_return)
+	layout = _build_govt_layout(selected_columns, is_return=is_return, detail=_is_detail(filters))
 	groups = _govt_groups(is_return)
 	heading = _get_govt_heading_info(filters)
 	body_fields = layout['body_fields']
 	total_cols = len(body_fields)
 
-	title = 'बिक्री फिर्ता खाता' if is_return else 'बिक्री खाता'
+	# Detail Format prints a plain English heading — the govt title, rule reference and
+	# PAN/साल line describe the IRD book and would be wrong above the flat register.
+	detail = _is_detail(filters)
+	if detail:
+		title = 'Sales Return Register' if is_return else 'Sales Register'
+	else:
+		title = 'बिक्री फिर्ता खाता' if is_return else 'बिक्री खाता'
 	c = ws.cell(row=1, column=1, value=title)
 	c.font = Font(bold=True, size=16)
 	c.alignment = center
 	ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
 
-	c = ws.cell(row=2, column=1, value='(नियम २३ को उपनियम (१) को खण्ड  (ज) संग सम्बन्धित )')
-	c.alignment = center
-	ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=total_cols)
+	if not detail:
+		c = ws.cell(row=2, column=1, value='(नियम २३ को उपनियम (१) को खण्ड  (ज) संग सम्बन्धित )')
+		c.alignment = center
+		ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=total_cols)
 
-	pan_line = (
-		f"करदाता दर्ता नं (PAN) : {heading['pan']}      "
-		f"करदाताको नाम: {heading['company_name']}      "
-		f"साल: {heading['bs_year']}      "
-		f"कर अवधि: {heading['tax_period']}"
-	)
+	if detail:
+		period = ''
+		if filters.get('from_date') and filters.get('to_date'):
+			period = "      {0} to {1}".format(
+				frappe.utils.formatdate(filters.get('from_date')),
+				frappe.utils.formatdate(filters.get('to_date')),
+			)
+		pan_line = f"{heading['company_name']}{period}"
+	else:
+		pan_line = (
+			f"करदाता दर्ता नं (PAN) : {heading['pan']}      "
+			f"करदाताको नाम: {heading['company_name']}      "
+			f"साल: {heading['bs_year']}      "
+			f"कर अवधि: {heading['tax_period']}"
+		)
 	c = ws.cell(row=4, column=1, value=pan_line)
 	c.font = Font(bold=True)
 	c.alignment = left_align
@@ -450,7 +508,8 @@ def execute(filters=None):
 	# Always the official govt VAT book view now — "बिक्री खाता" (Sales) when Is Return is
 	# unticked, "बिक्री फिर्ता खाता" (Sales Return) when ticked. Only fields with a govt
 	# Nepali equivalent are shown; there is no more plain flat register.
-	columns = get_govt_columns(is_return=is_return)
+	detail = _is_detail(filters)
+	columns = get_detail_columns() if detail else get_govt_columns(is_return=is_return)
 
 	# Company is a required filter (see the report JS), so the UI blocks the report
 	# with a "Please set the company first" prompt before execute runs. This guard
@@ -458,6 +517,8 @@ def execute(filters=None):
 	if not _as_list(filters.get("company")):
 		return columns, []
 
+	# Both formats run the same query — Detail Format differs only in which columns it
+	# shows and what they are labelled, never in what the numbers mean.
 	data = get_data(filters)
 
 	# Sales Returns store amounts as negatives in the DB. Show them as positives in the register.

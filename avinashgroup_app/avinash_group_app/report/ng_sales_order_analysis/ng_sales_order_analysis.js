@@ -99,4 +99,52 @@ frappe.query_reports["NG Sales Order Analysis"] = {
 			},
 		},
 	],
+
+	// Keep the report's own print template (ng_sales_order_analysis.html) even when the
+	// print dialog's "Pick Columns" is used.
+	//
+	// Frappe chooses the template as `print_settings.columns ? "print_grid" : custom_format`,
+	// so ticking Pick Columns drops this report back to the stock grid — which brings back
+	// the leading "#" column, the 0.000 in every empty cell and the unmerged customer
+	// heading. The picked columns are honoured here instead: the report's own column list
+	// is narrowed to the chosen fieldnames and the flag is cleared, so Frappe renders the
+	// custom template with only those columns. Both methods are async, so the originals
+	// are restored once the render settles. Patched on the instance, not the prototype,
+	// so no other report is affected.
+	keepCustomFormatOnPickColumns: function (report) {
+		["print_report", "pdf_report"].forEach(function (method) {
+			const original = report[method];
+			if (typeof original !== "function" || report["_soa_" + method]) return;
+			report["_soa_" + method] = true;
+
+			report[method] = function (print_settings) {
+				const picked = print_settings && print_settings.columns;
+				if (!picked || !picked.length) {
+					return original.apply(this, arguments);
+				}
+
+				const saved_columns = this.columns;
+				this.columns = (this.columns || []).filter((col) =>
+					picked.includes(col.fieldname)
+				);
+				print_settings.columns = null;
+
+				const restore = () => {
+					this.columns = saved_columns;
+					print_settings.columns = picked;
+				};
+
+				try {
+					return Promise.resolve(original.apply(this, arguments)).finally(restore);
+				} catch (e) {
+					restore();
+					throw e;
+				}
+			};
+		});
+	},
+
+	onload: function (report) {
+		this.keepCustomFormatOnPickColumns(report);
+	},
 };

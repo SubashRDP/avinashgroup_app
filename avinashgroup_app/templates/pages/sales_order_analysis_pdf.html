@@ -14,6 +14,10 @@
 	table.soa thead th { font-weight: bold; text-align: left; }
 	table.soa th.r, table.soa td.r { text-align: right; }
 	table.soa tbody tr.total td { font-weight: bold; }
+	/* Customer blocks — shaded heading, lightly ruled subtotal, so the closing
+	   grand total still reads as the heaviest line on the page. */
+	table.soa tbody tr.section td { background: #f1f1f1; font-weight: bold; }
+	table.soa tbody tr.subtotal td { font-weight: bold; border-top: 1px solid #999; }
 	.nowrap { white-space: nowrap; }
 	.empty { margin-top: 20px; font-style: italic; }
 </style>
@@ -57,7 +61,9 @@
 		</tr>
 	</thead>
 	<tbody>
-		{% for row in res.rows %}
+		{#- A block per customer once the result covers more than one; otherwise the
+		    flat list, exactly as before. Both end with the same closing total row. -#}
+		{% macro detail(row) %}
 		<tr>
 			<td class="nowrap">{{ row.miti }}</td>
 			<td class="nowrap">{{ row.sales_order }}</td>
@@ -71,20 +77,34 @@
 			<td class="r">{{ row.pending_amount }}</td>
 			<td class="r">{{ row.delay }}</td>
 		</tr>
-		{% endfor %}
-		<tr class="total">
+		{% endmacro %}
+		{% macro total_row(label, t, cls) %}
+		<tr class="{{ cls }}">
 			<td></td>
-			<td>total</td>
+			<td>{{ label }}</td>
 			<td></td>
 			<td></td>
-			<td class="r">{{ res.totals.qty }}</td>
-			<td class="r">{{ res.totals.billed_qty }}</td>
-			<td class="r">{{ res.totals.qty_to_bill }}</td>
-			<td class="r">{{ res.totals.amount }}</td>
-			<td class="r">{{ res.totals.billed_amount }}</td>
-			<td class="r">{{ res.totals.pending_amount }}</td>
+			<td class="r">{{ t.qty }}</td>
+			<td class="r">{{ t.billed_qty }}</td>
+			<td class="r">{{ t.qty_to_bill }}</td>
+			<td class="r">{{ t.amount }}</td>
+			<td class="r">{{ t.billed_amount }}</td>
+			<td class="r">{{ t.pending_amount }}</td>
 			<td class="r"></td>
 		</tr>
+		{% endmacro %}
+
+		{% if res.groups %}
+			{% for g in res.groups %}
+			<tr class="section"><td colspan="11">{{ g.customer }}</td></tr>
+			{% for row in g.rows %}{{ detail(row) }}{% endfor %}
+			{{ total_row("Total", g.totals, "subtotal") }}
+			{% endfor %}
+			{{ total_row("Grand Total", res.totals, "total") }}
+		{% else %}
+			{% for row in res.rows %}{{ detail(row) }}{% endfor %}
+			{{ total_row("Total", res.totals, "total") }}
+		{% endif %}
 	</tbody>
 </table>
 {% else %}

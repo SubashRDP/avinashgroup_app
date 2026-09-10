@@ -337,7 +337,7 @@ class SalesOrderAnalysis {
 		);
 		const $tb = $('<tbody>').appendTo($table);
 
-		rows.forEach(function (row) {
+		function appendDetail(row) {
 			const $tr = $('<tr class="pl-row-main">');
 			$('<td class="nowrap">').text(row.miti).appendTo($tr);
 			$('<td class="nowrap">').text(row.sales_order).appendTo($tr);
@@ -351,18 +351,38 @@ class SalesOrderAnalysis {
 			$('<td class="r">').text(row.pending_amount).appendTo($tr);
 			$('<td class="r">').text(row.delay).appendTo($tr);
 			$tb.append($tr);
-		});
+		}
 
-		const t = res.totals || {};
-		const $tot = $('<tr class="pl-row-closing">');
-		$('<td>').appendTo($tot);
-		$('<td>').text("total").appendTo($tot);
-		$('<td>').appendTo($tot);
-		$('<td>').appendTo($tot);
-		[t.qty, t.billed_qty, t.qty_to_bill, t.amount, t.billed_amount, t.pending_amount]
-			.forEach(function (v) { $('<td class="r">').text(v || "").appendTo($tot); });
-		$('<td class="r">').appendTo($tot);
-		$tb.append($tot);
+		// The label sits in the Order No. column, the one the eye already follows down
+		// the page; Delay is left blank because summing per-order ages says nothing.
+		function appendTotal(label, t, cls) {
+			const $tot = $('<tr class="' + cls + '">');
+			$('<td>').appendTo($tot);
+			$('<td>').text(label).appendTo($tot);
+			$('<td>').appendTo($tot);
+			$('<td>').appendTo($tot);
+			[t.qty, t.billed_qty, t.qty_to_bill, t.amount, t.billed_amount, t.pending_amount]
+				.forEach(function (v) { $('<td class="r">').text(v || "").appendTo($tot); });
+			$('<td class="r">').appendTo($tot);
+			$tb.append($tot);
+		}
+
+		const groups = res.groups || [];
+		if (groups.length) {
+			// More than one customer in the result: a heading naming the customer, that
+			// customer's orders, then its own total — closed by a grand total.
+			groups.forEach(function (g) {
+				const $head = $('<tr class="pl-row-section">');
+				$('<td colspan="11">').text(g.customer).appendTo($head);
+				$tb.append($head);
+				g.rows.forEach(appendDetail);
+				appendTotal("Total", g.totals || {}, "pl-row-subtotal");
+			});
+			appendTotal("Grand Total", res.totals || {}, "pl-row-closing");
+		} else {
+			rows.forEach(appendDetail);
+			appendTotal("Total", res.totals || {}, "pl-row-closing");
+		}
 
 		$wrap.append($pl);
 	}
@@ -420,6 +440,11 @@ class SalesOrderAnalysis {
 .pl td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
 .pl-row-main td { background: #fff; }
 .pl-row-closing td { font-weight: bold; border-top: 2px solid #555; border-bottom: 2px solid #555; }
+/* Customer blocks, shown only when the result covers more than one customer. The
+   heading is shaded so a block is findable at a glance; its subtotal is bold but
+   ruled more lightly than the closing grand total, so the two do not compete. */
+.pl-row-section td { background: #f1f1f1; font-weight: bold; border-top: 1px solid #999; }
+.pl-row-subtotal td { font-weight: bold; border-top: 1px solid #999; }
 .pl .r { text-align: right; }
 .pl .l { text-align: left; }
 .pl .nowrap { white-space: nowrap; }

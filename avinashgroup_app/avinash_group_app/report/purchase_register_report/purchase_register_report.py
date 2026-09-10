@@ -123,6 +123,117 @@ def _get_govt_heading_info(filters):
 # contiguous again, so बीजक/प्रज्ञापनपत्र नम्बर is a genuine 4-column merge — no column reordering needed.
 # pragyanpatra_no is a placeholder column the govt form has (Pragyanpatra/declaration no.)
 # that this report has no data for — always blank, never pulled from Purchase Invoice.
+DETAIL_FORMAT = "Detail Format"
+
+
+def _is_detail(filters):
+	"""True when the report is asked for in the plain English "Detail Format".
+
+	The Report Format filter picks between the IRD govt VAT book (default) and the
+	register as it stood before that book was introduced. Detail Format is a faithful
+	restore: the old English columns AND the old classification, so it will not agree
+	line-for-line with the IRD view — the two split the buckets on different fields."""
+	return (filters or {}).get("report_format") == DETAIL_FORMAT
+
+
+def _detail_fields():
+	"""(fieldname, group, English label, fieldtype, width) — the pre-IRD flat register.
+
+	Shaped like _govt_fields so the same layout builder, PDF template and Excel writer
+	serve both formats; every field is ungrouped, so no merged header row is produced."""
+	return [
+		('date',                  None, 'Date',                  'Date',     100),
+		('miti',                  None, 'Miti',                  'Data',     120),
+		('purchase_type',         None, 'Purchase Type',         'Data',     120),
+		('voucher_no',            None, 'Voucher No',            'Data',     170),
+		('supplier_invoice_no',   None, 'Supplier Invoice No',   'Data',     150),
+		('supplier_invoice_date', None, 'Supplier Invoice Date', 'Date',     130),
+		('supplier_invoice_miti', None, 'Supplier Invoice Miti', 'Data',     130),
+		('supplier_name',         None, 'Supplier Name',         'Data',     180),
+		('vat_number',            None, 'VAT Number',            'Data',     130),
+		('purchase',              None, 'Purchase',              'Currency', 130),
+		('tax_free_purchase',     None, 'Tax Free Purchase',     'Currency', 140),
+		('taxable_purchase',      None, 'Taxable Purchase',      'Currency', 140),
+		('vat',                   None, 'VAT',                   'Currency', 110),
+		('taxable_import',        None, 'Taxable Import',        'Currency', 140),
+		('import_vat',            None, 'Import VAT',            'Currency', 110),
+		('capitalized_purchase',  None, 'Capitalized Purchase',  'Currency', 170),
+		('capitalized_vat',       None, 'Capitalized VAT',       'Currency', 120),
+		('total_vat',             None, 'Total VAT',             'Currency', 110),
+		('qty',                   None, 'QTY',                   'Float',     80),
+	]
+
+
+def get_detail_columns():
+	return [
+		{"fieldname": f, "label": _(label), "fieldtype": ftype, "width": width}
+		for f, _group, label, ftype, width in _detail_fields()
+	]
+
+
+def get_detail_data(filters):
+	"""The pre-IRD column set, with the IRD book's own money logic.
+
+	Every amount bucket — which lines fall in it and which field is summed — is identical
+	to get_data(), so Detail Format and the govt book always agree figure for figure. Only
+	the identity columns stay as they were before the govt book: Voucher No is the internal
+	`custom_name` rather than the supplier's bill number, and Miti comes from
+	`custom_nepali_miti` rather than the supplier invoice miti."""
+	is_return = 1 if filters.get("is_return") else 0
+	conditions = f"pi.docstatus = 1 AND pi.is_return = {is_return}"
+
+	if filters.get("company"):
+		placeholders = ", ".join(["'{}'".format(c) for c in filters.get("company")])
+		conditions += " AND pi.company IN ({})".format(placeholders)
+	if filters.get("from_date"):
+		conditions += " AND pi.posting_date >= %(from_date)s"
+	if filters.get("to_date"):
+		conditions += " AND pi.posting_date <= %(to_date)s"
+	if filters.get("supplier"):
+		placeholders = ", ".join(["'{}'".format(c) for c in filters.get("supplier")])
+		conditions += " AND pi.supplier IN ({})".format(placeholders)
+	if filters.get("purchase_type"):
+		placeholders = ", ".join(["'{}'".format(c) for c in filters.get("purchase_type")])
+		conditions += " AND pi.custom_purchase_type IN ({})".format(placeholders)
+
+	return frappe.db.sql(
+		f"""
+		SELECT
+			pi.posting_date                                                                          AS date,
+			SUBSTRING_INDEX(pi.custom_nepali_miti, ' ', 1)                                           AS miti,
+			pi.custom_purchase_type                                                                  AS purchase_type,
+			CONCAT(IFNULL(pi.custom_name, pi.name), '::', pi.name)                                   AS voucher_no,
+			pi.bill_no                                                                               AS supplier_invoice_no,
+			pi.bill_date                                                                             AS supplier_invoice_date,
+			SUBSTRING_INDEX(pi.custom_supplier_invoice_miti, ' ', 1)                                 AS supplier_invoice_miti,
+			pi.supplier_name                                                                         AS supplier_name,
+			s.tax_id                                                                                 AS vat_number,
+			pi.custom_total_amount_including_excise                                                  AS purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) = 0                                                                                                                                             THEN pii.custom_total ELSE 0 END) AS tax_free_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_total ELSE 0 END) AS taxable_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_vat_amount ELSE 0 END) AS vat,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_total ELSE 0 END) AS taxable_import,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_vat_amount ELSE 0 END) AS import_vat,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_total ELSE 0 END) AS capitalized_purchase,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_vat_amount ELSE 0 END) AS capitalized_vat,
+			SUM(CASE WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory = 'Nepal'                            THEN pii.custom_vat_amount
+			         WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND i.is_fixed_asset = 0 AND COALESCE(i.custom_item_type, '') != 'Fixed Assets' AND s.custom_territory != 'Nepal'                           THEN pii.custom_vat_amount
+			         WHEN COALESCE(pii.custom_vat_amount, 0) <> 0 AND (i.is_fixed_asset = 1 OR i.custom_item_type = 'Fixed Assets')                                                                          THEN pii.custom_vat_amount
+			         ELSE 0 END)                                                                      AS total_vat,
+			SUM(pii.qty)                                                                             AS qty
+		FROM `tabPurchase Invoice` pi
+		JOIN `tabPurchase Invoice Item` pii ON pii.parent = pi.name
+		JOIN `tabSupplier` s ON s.name = pi.supplier
+		JOIN `tabItem` i ON i.name = pii.item_code
+		WHERE {conditions}
+		GROUP BY pi.name
+		ORDER BY pi.posting_date ASC
+		""",
+		filters,
+		as_dict=True,
+	)
+
+
 def _govt_groups(is_return):
 	"""Group id -> Nepali super-header spanning its sub-columns."""
 	if is_return:
@@ -189,16 +300,21 @@ def get_govt_columns(is_return=False):
 	]
 
 
-def _build_govt_layout(selected_columns, is_return=False):
+def _build_govt_layout(selected_columns, is_return=False, detail=False):
 	"""Row1 (group super-headers only) for the govt book layout. Individual (non-grouped)
 	sub labels come from get_govt_columns() as the real column headers, not from this overlay."""
 	show_all = not selected_columns
 	visible = lambda f: show_all or f in selected_columns
 	groups = _govt_groups(is_return)
 
+	# Detail Format has no groups, so row1 below ends up one plain header row and the
+	# merged-header machinery simply never fires — same builder, both formats.
+	fields = _detail_fields() if detail else _govt_fields(is_return)
+	doclink_field = 'voucher_no' if detail else 'supplier_name'
+
 	body_fields = [
-		{'key': f, 'group': group, 'sub': label, 'css': 'l' if ftype == 'Data' else 'r', 'kind': 'currency' if ftype == 'Currency' else ('doclink' if f == 'supplier_name' else 'text')}
-		for f, group, label, ftype, width in _govt_fields(is_return)
+		{'key': f, 'group': group, 'sub': label, 'css': 'l' if ftype in ('Data', 'Date') else 'r', 'kind': 'currency' if ftype == 'Currency' else ('doclink' if f == doclink_field else 'text')}
+		for f, group, label, ftype, width in fields
 		if visible(f)
 	]
 
@@ -251,7 +367,7 @@ def get_print_html(filters, selected_columns=None, orientation=None):
 	is_return = bool(filters.get('is_return'))
 	_, data = execute(filters)
 	supplier_display, ptype_display = _get_display_names(filters)
-	govt_layout = _build_govt_layout(selected_columns, is_return=is_return)
+	govt_layout = _build_govt_layout(selected_columns, is_return=is_return, detail=_is_detail(filters))
 	govt_heading = _get_govt_heading_info(filters)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'purchase_register_report_pdf.html')
@@ -269,6 +385,7 @@ def get_print_html(filters, selected_columns=None, orientation=None):
 		'ptype_display': ptype_display,
 		'govt_layout': govt_layout,
 		'govt_heading': govt_heading,
+		'detail': _is_detail(filters),
 	})
 
 
@@ -286,7 +403,7 @@ def download_pdf(filters, orientation=None, selected_columns=None, view=None):
 	is_return = bool(filters.get('is_return'))
 	_, data = execute(filters)
 	supplier_display, ptype_display = _get_display_names(filters)
-	govt_layout = _build_govt_layout(selected_columns, is_return=is_return)
+	govt_layout = _build_govt_layout(selected_columns, is_return=is_return, detail=_is_detail(filters))
 	govt_heading = _get_govt_heading_info(filters)
 
 	template_path = os.path.join(os.path.dirname(__file__), 'purchase_register_report_pdf.html')
@@ -307,6 +424,7 @@ def download_pdf(filters, orientation=None, selected_columns=None, view=None):
 		'orientation': orientation,
 		'govt_layout': govt_layout,
 		'govt_heading': govt_heading,
+		'detail': _is_detail(filters),
 	})
 
 	options = {
@@ -357,28 +475,44 @@ def download_excel(filters, selected_columns=None):
 	left_align = Alignment(horizontal='left', vertical='center', wrap_text=True)
 	right_align = Alignment(horizontal='right', vertical='center')
 
-	layout = _build_govt_layout(selected_columns, is_return=is_return)
+	layout = _build_govt_layout(selected_columns, is_return=is_return, detail=_is_detail(filters))
 	groups = _govt_groups(is_return)
 	heading = _get_govt_heading_info(filters)
 	body_fields = layout['body_fields']
 	total_cols = len(body_fields)
 
-	title = 'खरिद फिर्ता खाता' if is_return else 'खरिद खाता'
+	# Detail Format prints a plain English heading — the govt title, rule reference and
+	# PAN/साल line describe the IRD book and would be wrong above the flat register.
+	detail = _is_detail(filters)
+	if detail:
+		title = 'Purchase Return Register' if is_return else 'Purchase Register'
+	else:
+		title = 'खरिद फिर्ता खाता' if is_return else 'खरिद खाता'
 	c = ws.cell(row=1, column=1, value=title)
 	c.font = Font(bold=True, size=16)
 	c.alignment = center
 	ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
 
-	c = ws.cell(row=2, column=1, value='(नियम २३ को उपनियम (१) को खण्ड  (छ) संग सम्बन्धित )')
-	c.alignment = center
-	ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=total_cols)
+	if not detail:
+		c = ws.cell(row=2, column=1, value='(नियम २३ को उपनियम (१) को खण्ड  (छ) संग सम्बन्धित )')
+		c.alignment = center
+		ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=total_cols)
 
-	pan_line = (
-		f"करदाता दर्ता नं (PAN) : {heading['pan']}      "
-		f"करदाताको नाम: {heading['company_name']}      "
-		f"साल: {heading['bs_year']}      "
-		f"कर अवधि: {heading['tax_period']}"
-	)
+	if detail:
+		period = ''
+		if filters.get('from_date') and filters.get('to_date'):
+			period = "      {0} to {1}".format(
+				frappe.utils.formatdate(filters.get('from_date')),
+				frappe.utils.formatdate(filters.get('to_date')),
+			)
+		pan_line = f"{heading['company_name']}{period}"
+	else:
+		pan_line = (
+			f"करदाता दर्ता नं (PAN) : {heading['pan']}      "
+			f"करदाताको नाम: {heading['company_name']}      "
+			f"साल: {heading['bs_year']}      "
+			f"कर अवधि: {heading['tax_period']}"
+		)
 	c = ws.cell(row=4, column=1, value=pan_line)
 	c.font = Font(bold=True)
 	c.alignment = left_align
@@ -452,8 +586,12 @@ def execute(filters=None):
 	# Always the official govt VAT book view now — "खरिद खाता" (Purchase) when Is Return is
 	# unticked, "खरिद फिर्ता खाता" (Purchase Return) when ticked. Only fields with a govt
 	# Nepali equivalent are shown; there is no more plain flat register.
-	columns = get_govt_columns(is_return=is_return)
-	data = get_data(filters)
+	if _is_detail(filters):
+		columns = get_detail_columns()
+		data = get_detail_data(filters)
+	else:
+		columns = get_govt_columns(is_return=is_return)
+		data = get_data(filters)
 
 	# Purchase Returns store amounts as negatives in the DB. Show them as positives in the register.
 	if is_return and data:

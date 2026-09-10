@@ -163,7 +163,20 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
   <thead>
     <tr>
       <td colspan="{{ total_cols }}" style="padding:4px 0 0 0; border:none;">
+        {# Detail Format is the plain pre-IRD register, so it carries a plain heading:
+           the govt VAT-book title, rule reference and PAN/नाम/साल line belong to the
+           IRD format only. #}
+        {% if detail %}
         <div class="sr-vat-heading">
+          <div class="sr-vat-title">{{ 'Sales Return Register' if filters.get('is_return') else 'Sales Register' }}</div>
+          <div class="sr-vat-info">
+            <span>{{ govt_heading.company_name or '' }}</span>
+            {% if filters.get('from_date') and filters.get('to_date') %}
+            <span>{{ frappe.utils.formatdate(filters.get('from_date')) }} to {{ frappe.utils.formatdate(filters.get('to_date')) }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}        <div class="sr-vat-heading">
           <div class="sr-vat-title">{{ 'बिक्री फिर्ता खाता' if filters.get('is_return') else 'बिक्री खाता' }}</div>
           <div class="sr-vat-subtitle">(नियम २३ को उपनियम (१) को खण्ड  (ज) संग सम्बन्धित )</div>
           <div class="sr-vat-info">
@@ -173,6 +186,7 @@ td, th               { word-break: break-word !important; overflow-wrap: anywher
             <span>कर अवधि: <span class="sr-vat-value">{{ govt_heading.tax_period or '' }}</span></span>
           </div>
         </div>
+        {% endif %}
         {% if customer_label %}
         <div class="sr-title-l">Customer: {{ customer_label }}</div>
         {% endif %}
