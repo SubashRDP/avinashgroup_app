@@ -62,6 +62,13 @@ CATEGORIES = ("Account", "Party", "Both")
 # Deposit Slip, Opening Entry, Party Journal -- keeps the party name it had.
 JOURNAL_DESCRIBED_TYPES = ("Journal Entry",)
 
+# A cheque number typed to fill the field rather than to record a cheque. 17,505
+# of 27,421 Payment Entries carry "1", and 37 Journal Entries do. It matters
+# because custom_chequereference_miti is written on every one of those 27,421
+# rows: without this, two payments in three would state a cheque date for a
+# cheque that does not exist.
+CHEQUE_PLACEHOLDERS = {"", "1"}
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -382,27 +389,60 @@ def _journal_description(entry, own_account, suffix):
 	return entry.custom_p_type or ""
 
 
-def _paid_line(entry, party_name=""):
+def _cheque(number):
+	"""A cheque number, or "" when the field holds a placeholder instead."""
+	number = str(number or "").strip()
+	return "" if number in CHEQUE_PLACEHOLDERS else number
+
+
+def _paid_line(who, cheque_no, miti, party_name=""):
 	"""The legacy sub-line: "Paid: <who> by chq no <no> dt <miti>".
 
-	`custom_paid_to` is set on only 174 of the 3,255 entries in scope, so the
-	party the posting is against stands in when it is blank -- which is what the
-	legacy print shows: "Paid:Nepal L.P. Gas Udhyog Sangh by chq no 55263396".
+	The cheque number and its miti stand or fall together -- a placeholder number
+	has no date worth printing, and the miti field is filled on every Payment
+	Entry on the site, so keeping it would date a cheque that does not exist.
+
+	The payee field is set on only 34 Payment Entries and 174 Journal Entries, so
+	the party the posting is against stands in, which is what the legacy print
+	shows: "Paid:Nepal L.P. Gas Udhyog Sangh by chq no 55263396". With neither a
+	cheque nor a named payee there is nothing to say, and falling back to the
+	party there produced a line reading "Paid: Gita Gas Udyog Pvt. Ltd." directly
+	under the block already headed by that name.
 	"""
-	paid_to = (entry.custom_paid_to or "").strip()
-	cheque = str(entry.cheque_no or "").strip()
-	miti = str(entry.custom_reference_miti or "").strip().split(" ")[0]
-	# Nothing to say without a cheque or a named payee: falling back to the party
-	# there produced a line reading "Paid: Gita Gas Udyog Pvt. Ltd." directly under
-	# the block already headed by that name.
-	if not (cheque or paid_to):
+	who = str(who or "").strip()
+	cheque = _cheque(cheque_no)
+	miti = str(miti or "").strip().split(" ")[0] if cheque else ""
+	if not (cheque or who):
 		return ""
-	who = paid_to or (party_name or "").strip()
-	out = "Paid: {0}".format(who) if who else "Paid:"
+	name = who or str(party_name or "").strip()
+	out = "Paid: {0}".format(name) if name else "Paid:"
 	if cheque:
 		out += " by chq no {0}".format(cheque)
 	if miti:
 		out += " dt {0}".format(miti)
+	return out
+
+
+def _payment_details(postings):
+	"""Per Payment Entry in view: its payee and its cheque.
+
+	Only the sub-line is loaded. A Payment Entry's description column is left as
+	it is -- it already reads correctly through its contra accounts.
+	"""
+	vouchers = sorted(
+		{p.voucher_no for p in postings if p.voucher_type == "Payment Entry" and p.voucher_no}
+	)
+	if not vouchers:
+		return {}
+	out = {}
+	for start in range(0, len(vouchers), 500):
+		for row in frappe.db.sql(
+			"""SELECT name, custom_paid_to_from, reference_no, custom_chequereference_miti
+			   FROM `tabPayment Entry` WHERE name IN %(names)s""",
+			{"names": vouchers[start : start + 500]},
+			as_dict=True,
+		):
+			out[row.name] = row
 	return out
 
 
@@ -413,6 +453,7 @@ def _decorate(postings, filters_company=None):
 
 	numbers = resolve((r.voucher_type, r.voucher_no) for r in postings)
 	journals = _journal_descriptions(postings)
+	payments = _payment_details(postings)
 	suffix = _company_suffix(filters_company)
 
 	# Some rows carry a party with no party_type -- 343 in a fortnight on NGI.
@@ -474,7 +515,24 @@ def _decorate(postings, filters_company=None):
 		# the same defect 47c8774 fixed at the other end.
 		entry = journals.get(r.voucher_no) if r.voucher_type == "Journal Entry" else None
 		r.description = _journal_description(entry, r.account, suffix) if entry else ""
-		r.paid = _paid_line(entry, r.party_name) if entry and entry.cash_bank else ""
+
+		# The "Paid:" sub-line, on whichever voucher can carry one. A journal
+		# earns it by having moved through cash or a bank; a Payment Entry always
+		# can, and keeps the description column it already had.
+		payment = payments.get(r.voucher_no) if r.voucher_type == "Payment Entry" else None
+		if entry and entry.cash_bank:
+			r.paid = _paid_line(
+				entry.custom_paid_to, entry.cheque_no, entry.custom_reference_miti, r.party_name
+			)
+		elif payment:
+			r.paid = _paid_line(
+				payment.custom_paid_to_from,
+				payment.reference_no,
+				payment.custom_chequereference_miti,
+				r.party_name,
+			)
+		else:
+			r.paid = ""
 
 
 def _section_key(filters, posting):
