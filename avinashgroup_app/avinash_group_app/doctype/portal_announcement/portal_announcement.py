@@ -53,6 +53,31 @@ def _is_customer_portal_user(user):
 	)
 
 
+def history_query_conditions(user=None):
+	"""List filter for Portal Announcement History: all rows for a customer portal
+	user, none for anyone else."""
+	user = user or frappe.session.user
+	return "" if _is_customer_portal_user(user) else "1=0"
+
+
+def history_has_permission(doc, ptype=None, user=None):
+	"""Only a login listed in some Customer's Portal Users table may open a record."""
+	user = user or frappe.session.user
+	return _is_customer_portal_user(user)
+
+
+def hide_history_from_non_portal_users(bootinfo):
+	"""The desk search bar lists doctypes from bootinfo.user.can_read, which is role
+	based. Staff with the Customer role would see Portal Announcement History there
+	(with an empty list behind it), so drop it for anyone who is not a portal user."""
+	if _is_customer_portal_user(frappe.session.user):
+		return
+	for key in ("can_read", "can_search", "can_get_report"):
+		doctypes = bootinfo.user.get(key)
+		if doctypes and HISTORY in doctypes:
+			doctypes.remove(HISTORY)
+
+
 def _has_custom_html(popup):
 	return bool((popup.custom_html or "").strip())
 
