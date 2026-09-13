@@ -261,7 +261,8 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		// so a short or over quote stands out without reading every number.
 		if (column.fieldname.endsWith("_qty")) {
 			if (value === null || value === undefined || value === "") return "";
-			const shown = default_formatter(value, row, column, data);
+			// Only the decimals the number needs (1, 1.5, 1,250), like MR Qty and Ordered
+			const shown = format_number(value, null, 3).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 			const asked = data && data.qty;
 			if (asked !== null && asked !== undefined && asked !== "" && flt(value) !== flt(asked)) {
 				const tip = frappe.utils.escape_html(__("Material Request asked for {0}", [format_number(asked)]));
@@ -399,11 +400,16 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		const $main = report.$report;
 		$main.siblings(".sq-stack").remove();
 		const token = (settings._stack_token = (settings._stack_token || 0) + 1);
+		// Hidden by a class, not .hide(): Frappe calls $report.show() right after this
+		// hook runs (query_report.js refresh), which would bring the lumped table back.
+		if (!document.getElementById("sq-stack-style")) {
+			$('<style id="sq-stack-style">.sq-main-hidden { display: none !important; }</style>').appendTo("head");
+		}
 		if ((report.get_filter_value("purchase_order") || []).length < 2) {
-			$main.show();
+			$main.removeClass("sq-main-hidden");
 			return;
 		}
-		$main.hide();
+		$main.addClass("sq-main-hidden");
 		const $stack = $('<div class="sq-stack"></div>').insertAfter($main);
 		frappe
 			.call({
@@ -451,7 +457,34 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		});
 		// the header-click handler finds this table's own columns through it
 		$host.data("sq_datatable", datatable);
-		frappe.query_reports["Custom Supplier Quotation Comparison"].decorate_datatable(datatable);
+		const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
+		settings.decorate_datatable(datatable);
+		// The desk's "Fit Columns" toggle only sizes the report's own table, so the
+		// stacked ones fit themselves - same on/off preference, same rule.
+		if (localStorage.getItem("rdp_fit_columns_enabled") !== "0") {
+			setTimeout(() => settings.fit_columns(datatable), 100);
+		}
+	},
+
+	// Size each column to its header and content, 120-600px - the rule the desk's
+	// "Fit Columns" toggle applies to the report's own table.
+	fit_columns: (datatable) => {
+		const wrapper = datatable && datatable.datatableWrapper;
+		if (!wrapper) return;
+		datatable.datamanager.getColumns(true).forEach((col) => {
+			let width = 120;
+			const head = wrapper.querySelector(`.dt-cell__content--header-${col.colIndex}`);
+			if (head) width = Math.max(width, head.scrollWidth + 20);
+			const cells = wrapper.querySelectorAll(`.dt-cell__content--col-${col.colIndex}`);
+			for (let i = 0; i < Math.min(100, cells.length); i++) {
+				width = Math.max(width, cells[i].scrollWidth + 20);
+			}
+			datatable.datamanager.updateColumn(col.colIndex, { width: Math.min(width, 600) });
+			datatable.columnmanager.setColumnHeaderWidth(col.colIndex);
+			datatable.columnmanager.setColumnWidth(col.colIndex);
+		});
+		// resync the body with the new row width, or the right-most columns clip
+		if (datatable.style && datatable.style.setBodyStyle) datatable.style.setBodyStyle();
 	},
 
 	onload: (report) => {
