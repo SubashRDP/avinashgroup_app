@@ -231,58 +231,6 @@ def get_filter_material_requests(doctype, txt, searchfield, start, page_len, fil
 	)
 
 
-def get_sections(filters):
-	"""The comparison as a list of tables. With several Purchase Orders picked it is
-	the very same report run once per PO - exactly what opening that PO on its own
-	shows - so the tables stack one under another, each headed by its PO. Otherwise
-	it is the one table, with no heading. Screen, PDF and Excel all lay out from this."""
-	filters = frappe._dict(filters)
-	purchase_orders = _as_list(filters.get("purchase_order"))
-	if len(purchase_orders) < 2:
-		columns, data = execute(filters)[:2]
-		return [frappe._dict(purchase_order=None, columns=columns, data=data)]
-
-	suppliers = dict(frappe.get_all(
-		"Purchase Order",
-		filters={"name": ("in", purchase_orders)},
-		fields=["name", "supplier_name"],
-		as_list=True,
-	))
-	sections = []
-	for purchase_order in purchase_orders:
-		# The Material Request filter is left out: each PO's own MR(s) scope its
-		# table, as when the comparison is opened from that PO.
-		columns, data = execute(
-			frappe._dict(filters, purchase_order=[purchase_order], material_request=None)
-		)[:2]
-		sections.append(frappe._dict(
-			purchase_order=purchase_order,
-			supplier_name=suppliers.get(purchase_order),
-			material_requests=get_material_requests_from_purchase_order(purchase_order),
-			columns=columns,
-			data=data,
-		))
-	return sections
-
-
-def _section_heading(section):
-	"""One-line heading above a stacked table: the PO, its supplier and its MR(s)."""
-	parts = [_("Purchase Order: {0}").format(section.purchase_order)]
-	if section.supplier_name:
-		parts.append(section.supplier_name)
-	if section.material_requests:
-		parts.append(_("Material Request: {0}").format(", ".join(section.material_requests)))
-	return "  ·  ".join(parts)
-
-
-@frappe.whitelist()
-def get_stacked_comparison(filters):
-	"""The per-PO tables the report page stacks when several Purchase Orders are picked."""
-	if isinstance(filters, str):
-		filters = json.loads(filters)
-	return get_sections(filters)
-
-
 def execute(filters=None):
 	if not filters:
 		return [], []
@@ -296,18 +244,21 @@ def execute(filters=None):
 		quotations,
 		quotation_display_name,
 		column_key,
-		quotations_with_orders,
+		quotation_pos,
 		quotations_with_narration,
+		po_key,
 	) = prepare_pivoted_data(supplier_quotation_data, filters)
 
-	# Generate columns dynamically, one block per quotation found
+	# Generate columns dynamically: a group per quotation, and inside it the Quoted
+	# sub-group plus one sub-group per Purchase Order made from that quotation
 	columns = get_columns(
 		filters,
 		quotations,
 		quotation_display_name,
 		column_key,
-		quotations_with_orders,
+		quotation_pos,
 		quotations_with_narration,
+		po_key,
 	)
 
 	message = get_message()
@@ -433,7 +384,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# Options: 'base_rate', 'base_amount', 'rate', 'amount'
 	# ============================================
 	if not supplier_quotation_data:
-		return [], [], {}, {}, set(), set()
+		return [], [], {}, {}, {}, set(), {}
 
 	price_field = filters.get("price_field", "base_amount")
 	rate_field = "base_rate" if price_field.startswith("base_") else "rate"
@@ -570,43 +521,39 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	}
 
 	# ------------------------------------------------------------------
-	# Per-(item, quotation) breakdown of what a Purchase Order has already
-	# ordered against these quotations. Purchase Order Item.supplier_quotation
-	# records which quotation each PO line came from, so the "Ordered" column
-	# shows, per item, how much was taken from that exact quotation - two
-	# quotations from the same supplier each report their own.
-	# Independent of the Purchase Order filter; scoped to the chosen orders when
-	# any are set.
+	# The Purchase Orders made from each quotation. Purchase Order Item.
+	# supplier_quotation records the quotation each PO line came from, so each
+	# quotation gets one sub-group per PO raised from it, showing that PO's own
+	# qty, rate and amount per item beside what was quoted. Every such PO is
+	# shown whatever the Purchase Order filter says: the filter picks which
+	# Material Requests are compared and stars its own POs, it does not hide
+	# the sibling orders.
 	# ------------------------------------------------------------------
-	ordered_item_quotation = {}  # (item_code, quotation) -> {"qty": total, "pos": [po_name, ...]}
+	po_lines = {}                      # (item_code, quotation, po) -> {"qty", "amount"}
+	quotation_pos = defaultdict(list)  # quotation -> its POs, in name order
 	if quotations:
-		conditions = ["poi.parent = po.name", "po.docstatus < 2", "poi.supplier_quotation IN %(sqs)s"]
-		values = {"sqs": tuple(quotations)}
-		purchase_orders = _as_list(filters.get("purchase_order"))
-		if purchase_orders:
-			conditions.append("po.name IN %(pos)s")
-			values["pos"] = tuple(purchase_orders)
 		for pr in frappe.db.sql(
-			f"""
+			"""
 			SELECT poi.item_code AS item_code, poi.supplier_quotation AS sq, po.name AS po,
-			       SUM(poi.qty) AS qty
+			       SUM(poi.qty) AS qty, SUM(poi.base_amount) AS amount
 			FROM `tabPurchase Order Item` poi, `tabPurchase Order` po
-			WHERE {" AND ".join(conditions)}
+			WHERE poi.parent = po.name AND po.docstatus < 2 AND poi.supplier_quotation IN %(sqs)s
 			GROUP BY poi.item_code, poi.supplier_quotation, po.name
+			ORDER BY po.name
 			""",
-			values,
+			{"sqs": tuple(quotations)},
 			as_dict=True,
 		):
-			key = (pr.item_code, pr.sq)
-			entry = ordered_item_quotation.setdefault(key, {"qty": 0.0, "pos": []})
-			entry["qty"] += flt(pr.qty)
-			if pr.po not in entry["pos"]:
-				entry["pos"].append(pr.po)
+			po_lines[(pr.item_code, pr.sq, pr.po)] = {
+				"qty": flt(pr.qty),
+				"amount": flt(pr.amount, float_precision),
+			}
+			if pr.po not in quotation_pos[pr.sq]:
+				quotation_pos[pr.sq].append(pr.po)
 
-	# Quotations with at least one ordered item anywhere in the comparison - the
-	# Ordered column is dropped entirely for a quotation that has none, rather
-	# than showing an always-blank column.
-	quotations_with_orders = {q for (_, q), o in ordered_item_quotation.items() if o.get("qty")}
+	# Fieldname stem per PO, cleaned like the quotation stems (names carry "/").
+	po_key = {po: frappe.scrub(po).replace("/", "_") for pos in quotation_pos.values() for po in pos}
+	po_totals = defaultdict(float)  # (quotation, po) -> amount of this quotation's items on that PO
 
 	# Build output rows
 	data = []
@@ -643,16 +590,18 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				row[col_fieldname] = None
 				row[col_fieldname + "_narration"] = None
 
-			# Qty of this item already ordered against this quotation, and the
-			# Purchase Order it was ordered on - the tick links to that PO when
-			# there's exactly one; ambiguous (split across POs) shows the qty only.
-			ordered = ordered_item_quotation.get((item_code, quotation))
-			if ordered and ordered["qty"]:
-				row[col_fieldname + "_ordered"] = flt(ordered["qty"], float_precision)
-				row[col_fieldname + "_ordered_po"] = ordered["pos"][0] if len(ordered["pos"]) == 1 else None
-			else:
-				row[col_fieldname + "_ordered"] = None
-				row[col_fieldname + "_ordered_po"] = None
+			# Each Purchase Order made from this quotation: that PO's own qty, rate
+			# and amount for the item (blank when the PO did not take it).
+			for po in quotation_pos.get(quotation, []):
+				stem = f"{col_fieldname}__{po_key[po]}"
+				line = po_lines.get((item_code, quotation, po))
+				if line and line["qty"]:
+					row[stem + "_poqty"] = line["qty"]
+					row[stem + "_porate"] = flt(line["amount"] / line["qty"], float_precision)
+					row[stem + "_poamt"] = line["amount"]
+					po_totals[(quotation, po)] += line["amount"]
+				else:
+					row[stem + "_poqty"] = row[stem + "_porate"] = row[stem + "_poamt"] = None
 
 		data.append(row)
 	
@@ -671,6 +620,9 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	total_row = summary_row("Total", is_total_row=1)
 	for quotation in quotations:
 		total_row[column_key[quotation]] = quotation_totals[quotation]
+		# and each PO's own total for this quotation's items
+		for po in quotation_pos.get(quotation, []):
+			total_row[f"{column_key[quotation]}__{po_key[po]}_poamt"] = po_totals[(quotation, po)]
 	data.append(total_row)
 
 	# Discount on Net Total row
@@ -768,7 +720,15 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 		if any(term_row[column_key[q]] for q in quotations):
 			data.append(term_row)
 
-	return data, quotations, quotation_display_name, column_key, quotations_with_orders, quotations_with_narration
+	return (
+		data,
+		quotations,
+		quotation_display_name,
+		column_key,
+		dict(quotation_pos),
+		quotations_with_narration,
+		po_key,
+	)
 
 
 def get_columns(
@@ -776,16 +736,18 @@ def get_columns(
 	quotations,
 	quotation_display_name=None,
 	column_key=None,
-	quotations_with_orders=None,
+	quotation_pos=None,
 	quotations_with_narration=None,
+	po_key=None,
 ):
 	"""
-	Generate columns dynamically:
-	- Fixed columns for SN, item info, qty
-	- One block of columns per Supplier Quotation
-	- Every column in a block carries `sq_link` - that block's own Supplier
-	  Quotation - so the client script opens the right document when its header
-	  is clicked, including when one supplier holds several quotations
+	Generate columns dynamically, three header levels deep like a hand-made sheet:
+	- Fixed columns for SN, item name and MR Qty
+	- A group per Supplier Quotation (`supplier_group`, `sq_link`)
+	- Inside it the "Quoted" sub-group (the quotation's Qty / Rate / Amount /
+	  Narration), then one sub-group per Purchase Order made from that quotation
+	  (the PO's own Qty / Rate / Amount), labelled with the PO number (`sub_group`,
+	  `po_link`). A PO picked in the Purchase Order filter is starred.
 	"""
 	# Fixed columns
 	columns = [
@@ -803,7 +765,7 @@ def get_columns(
 		},
 		{
 			"fieldname": "qty",
-			# What the Material Request asked for; each quotation's own qty is its Quoted column
+			# What the Material Request asked for; each quotation's own qty is in its block
 			"label": _("MR Qty"),
 			"fieldtype": "Data",  # Data type to allow "Total" text
 			"width": 60,
@@ -811,67 +773,45 @@ def get_columns(
 	]
 
 	column_key = column_key or {}
-	quotations_with_orders = quotations_with_orders or set()
+	quotation_pos = quotation_pos or {}
 	quotations_with_narration = quotations_with_narration or set()
+	po_key = po_key or {}
+	starred = set(_as_list((filters or {}).get("purchase_order")))
 
-	# Dynamic per-quotation columns, in order: Ordered, Quoted, Rate, Amount, Narration.
-	# Quoted is the qty this quotation offers (MR Qty is what was asked for).
-	# Ordered and Narration are each dropped entirely for a quotation that has
-	# none anywhere in the comparison, rather than showing an always-blank
-	# column. `supplier_group` carries the block's display name - the supplier,
-	# numbered when that supplier quoted more than once - so the client script
-	# (and the approval-email renderer) can draw it as one spanning header cell
-	# above its columns. `Ordered` shows, per item, the qty already placed on a
-	# Purchase Order against that quotation (tick + link to the PO).
-	# `Narration` is that quotation's own note for the item.
 	for quotation in quotations:
 		col_fieldname = column_key.get(quotation) or frappe.scrub(quotation).replace("/", "_")
-		display = (quotation_display_name or {}).get(quotation, quotation)
-		sq_link = quotation
-		if quotation in quotations_with_orders:
-			columns.append({
-				"fieldname": col_fieldname + "_ordered",
-				"label": _("Ordered"),
-				"fieldtype": "Float",
-				"width": 70,
-				"sq_link": sq_link,
-				"supplier_group": display,
-			})
-		columns.append({
-			"fieldname": col_fieldname + "_qty",
-			"label": _("Quoted"),
-			"fieldtype": "Float",
-			"width": 70,
-			"sq_link": sq_link,
-			"supplier_group": display,
-		})
-		columns.append({
-			"fieldname": col_fieldname + "_rate",
-			"label": _("Rate"),
-			"fieldtype": "Currency",
-			"options": "Company:company:default_currency",
-			"width": 85,
-			"sq_link": sq_link,
-			"supplier_group": display,
-		})
-		columns.append({
-			"fieldname": col_fieldname,
-			"label": _("Amount"),
-			"fieldtype": "Currency",
-			"options": "Company:company:default_currency",
-			"width": 100,
-			"sq_link": sq_link,
-			"supplier_group": display,
-		})
+		block = {
+			"sq_link": quotation,
+			"supplier_group": (quotation_display_name or {}).get(quotation, quotation),
+		}
+
+		# What the quotation offered. Narration is dropped for a quotation that has
+		# none anywhere in the comparison, rather than showing an always-blank column.
+		quoted = {**block, "sub_group": _("Quoted")}
+		columns += [
+			{**quoted, "fieldname": col_fieldname + "_qty", "label": _("Qty"),
+			 "fieldtype": "Float", "width": 70},
+			{**quoted, "fieldname": col_fieldname + "_rate", "label": _("Rate"),
+			 "fieldtype": "Currency", "options": "Company:company:default_currency", "width": 85},
+			{**quoted, "fieldname": col_fieldname, "label": _("Amount"),
+			 "fieldtype": "Currency", "options": "Company:company:default_currency", "width": 100},
+		]
 		if quotation in quotations_with_narration:
-			columns.append({
-				"fieldname": col_fieldname + "_narration",
-				"label": _("Narration"),
-				"fieldtype": "Data",
-				"width": 90,
-				"sq_link": sq_link,
-				"supplier_group": display,
-			})
+			columns.append({**quoted, "fieldname": col_fieldname + "_narration",
+							"label": _("Narration"), "fieldtype": "Data", "width": 90})
+
+		# What each Purchase Order made from it actually ordered.
+		for po in quotation_pos.get(quotation, []):
+			stem = f"{col_fieldname}__{po_key[po]}"
+			ordered = {**block, "sub_group": ("★ " if po in starred else "") + po, "po_link": po}
+			columns += [
+				{**ordered, "fieldname": stem + "_poqty", "label": _("Qty"),
+				 "fieldtype": "Float", "width": 70},
+				{**ordered, "fieldname": stem + "_porate", "label": _("Rate"),
+				 "fieldtype": "Currency", "options": "Company:company:default_currency", "width": 85},
+				{**ordered, "fieldname": stem + "_poamt", "label": _("Amount"),
+				 "fieldtype": "Currency", "options": "Company:company:default_currency", "width": 100},
+			]
 
 	return columns
 
@@ -887,7 +827,7 @@ def get_message():
 		</span>
 		<br>
 		<span class="indicator green">
-		{_("Click a supplier column header to open its Supplier Quotation")}
+		{_("Each quotation shows what was Quoted, then every Purchase Order made from it (★ = the order you opened). Click a heading to open it")}
 		</span>
 		<br>
 		<span class="indicator orange">
@@ -899,10 +839,13 @@ def get_message():
 # BAND_COLORS in the report's client script) so print and Excel read the same way.
 SUPPLIER_BAND_COLORS = ["#eef3ff", "#fff8ec", "#eefaf1", "#fdeef4"]
 
-# Suffix -> kind, for classifying a supplier's columns. Anything else in the
-# block is the Amount column, which carries the bare scrubbed supplier name.
+# Suffix -> kind, for classifying a quotation block's columns. The PO suffixes are
+# checked first; anything unmatched is the quotation's Amount column, which carries
+# the bare scrubbed quotation name.
 _SUPPLIER_FIELD_KINDS = (
-	("_ordered", "ordered"),
+	("_poqty", "poqty"),
+	("_porate", "porate"),
+	("_poamt", "poamt"),
 	("_narration", "narration"),
 	("_rate", "rate"),
 	("_qty", "qty"),
@@ -910,64 +853,68 @@ _SUPPLIER_FIELD_KINDS = (
 
 
 def _supplier_groups(columns):
-	"""The per-supplier column blocks, rebuilt from the columns exactly as the
-	on-screen report renders them: consecutive columns sharing a `supplier_group`
-	form one block, kept in their real order (Ordered, Rate, Amount, Narration),
-	with Ordered / Narration simply absent when the report dropped them for
-	having nothing to show. Print and Excel walk `fields` so they stay in step
-	with the report instead of restating its column rules."""
+	"""The column blocks exactly as the on-screen report draws them, three header
+	levels deep: a group per Supplier Quotation (consecutive columns sharing an
+	`sq_link`), inside it a sub-group per `sub_group` - "Quoted", then one per
+	Purchase Order made from that quotation - and inside those the columns. Print,
+	Excel and the approval email all walk this instead of restating the report's
+	column rules. Each field's `edge` says whether it opens a group or a sub-group,
+	for the dividers."""
 	groups = []
-	current = None
 	for col in columns:
-		group_name = col.get("supplier_group")
-		if not group_name:
-			current = None
+		sq = col.get("sq_link")
+		if not sq:
 			continue
-
-		kind = "amount"
-		for suffix, name in _SUPPLIER_FIELD_KINDS:
-			if col["fieldname"].endswith(suffix):
-				kind = name
-				break
-
-		# A new block starts on a different supplier name, and also when the same
-		# name repeats a column kind - two suppliers can share a display name.
-		if current is None or current["display"] != group_name or current[kind + "_field"]:
-			current = {
-				"display": group_name,
-				"sq": col.get("sq_link"),
+		if not groups or groups[-1]["sq"] != sq:
+			groups.append({
+				"display": col.get("supplier_group") or sq,
+				"sq": sq,
 				"fields": [],
-				"ordered_field": None,
+				"subgroups": [],
 				"qty_field": None,
 				"rate_field": None,
 				"amount_field": None,
 				"narration_field": None,
-			}
-			groups.append(current)
+			})
+		group = groups[-1]
 
-		current["fields"].append({
+		kind = next(
+			(name for suffix, name in _SUPPLIER_FIELD_KINDS if col["fieldname"].endswith(suffix)),
+			"amount",
+		)
+		field = {
 			"kind": kind,
 			"field": col["fieldname"],
 			"label": col.get("label") or "",
-		})
-		current[kind + "_field"] = col["fieldname"]
+			"po": col.get("po_link"),
+			"edge": "",
+		}
+		group["fields"].append(field)
+		if kind in ("qty", "rate", "amount", "narration"):
+			group[kind + "_field"] = col["fieldname"]
+
+		label = col.get("sub_group") or ""
+		if not group["subgroups"] or group["subgroups"][-1]["label"] != label:
+			group["subgroups"].append({"label": label, "po": col.get("po_link"), "fields": []})
+		group["subgroups"][-1]["fields"].append(field)
 
 	for index, group in enumerate(groups):
 		group["span"] = len(group["fields"])
 		group["band"] = SUPPLIER_BAND_COLORS[index % len(SUPPLIER_BAND_COLORS)]
+		for position, sub in enumerate(group["subgroups"]):
+			sub["span"] = len(sub["fields"])
+			sub["fields"][0]["edge"] = "grp-start" if position == 0 else "sub-start"
 	return groups
 
 
 @frappe.whitelist()
 def export_xlsx(filters):
-	"""Excel export laid out like the on-screen comparison: each supplier's name
-	merged and centered above that supplier's own columns, in the report's order
-	(Ordered, Rate, Amount, Narration) and with the same columns dropped when the
-	report drops them. Supplier blocks carry the report's alternating tint and a
-	divider on the left edge, and an Ordered qty links to its Purchase Order.
-
-	With several Purchase Orders picked the sheet holds one such table per PO,
-	stacked down the sheet, each under a heading row naming the PO - as on screen."""
+	"""Excel export laid out like the on-screen comparison, with the same three
+	header rows merged like a hand-made sheet: the Supplier Quotation across its
+	whole block; under it "Quoted" and each Purchase Order made from that quotation
+	across their own columns; under those Qty / Rate / Amount. Quotation blocks
+	carry the report's alternating tint and a divider on the left edge, and the
+	quotation and PO headings link to their documents."""
 	from io import BytesIO
 
 	from frappe.utils.xlsxutils import make_xlsx
@@ -979,231 +926,197 @@ def export_xlsx(filters):
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 
-	sections = get_sections(filters)
-	stacked = len(sections) > 1
+	columns, data = execute(filters)[:2]
+	groups = _supplier_groups(columns)
 
 	fixed_labels = ["SN", "Item Name", "MR Qty"]
-	rows = []
-	tables = []          # per table drawn: its groups, first sheet row, row kinds and width
-	heading_rows = {}    # sheet row of a PO heading -> width of the table under it
-	note_rows = []       # "no quotations" lines under a heading
-	ordered_links = []   # (row, column, purchase order) for the Ordered cells
-	for section in sections:
-		groups = _supplier_groups(section.columns)
-		width = len(fixed_labels) + sum(g["span"] for g in groups)
+	FIXED = len(fixed_labels)
+	HEAD = 3  # header rows: quotation / Quoted or PO / Qty, Rate, Amount
 
-		if stacked:
-			if rows:
-				rows.append([])  # a blank row between two tables
-			rows.append([_section_heading(section)])
-			heading_rows[len(rows)] = width
-			if not groups:
-				rows.append([_("No supplier quotations found for this Purchase Order.")])
-				note_rows.append(len(rows))
-				continue
+	group_row = list(fixed_labels)  # fixed labels sit in row 1, merged down all three
+	sub_row = [""] * FIXED
+	label_row = [""] * FIXED
+	for g in groups:
+		group_row += [f"{g['display']}\n{g['sq']}"] + [""] * (g["span"] - 1)
+		for sub in g["subgroups"]:
+			sub_row += [sub["label"]] + [""] * (sub["span"] - 1)
+			label_row += [f["label"] for f in sub["fields"]]
 
-		supplier_row = [""] * len(fixed_labels)
-		label_row = list(fixed_labels)
+	rows = [group_row, sub_row, label_row]
+	row_kinds = ["header"] * HEAD  # per sheet row, for the styling pass below
+	for d in data:
+		if not isinstance(d, dict) or not d:
+			continue
+		row = [d.get("sn"), d.get("item_name") or d.get("item_code"), d.get("qty")]
 		for g in groups:
-			supplier_row += [g["display"]] + [""] * (g["span"] - 1)
-			label_row += [f["label"] for f in g["fields"]]
-
-		top = len(rows) + 1
-		rows += [supplier_row, label_row]
-		kinds = ["header", "header"]  # per sheet row, for the styling pass below
-		for d in section.data:
-			if not isinstance(d, dict) or not d:
-				continue
-			row = [d.get("sn"), d.get("item_name") or d.get("item_code"), d.get("qty")]
-			for g in groups:
-				for f in g["fields"]:
-					value = d.get(f["field"])
-					if f["kind"] == "ordered" and value:
-						po = d.get(f["field"] + "_po")
-						if po:
-							# 1-based sheet coordinates of the cell this value lands in
-							ordered_links.append((len(rows) + 1, len(row) + 1, po))
-					row.append(value)
-			rows.append(row)
-			if d.get("is_data_row"):
-				kinds.append("data")
-			elif d.get("is_term_row"):
-				kinds.append("term")
-			elif d.get("is_total_row") or d.get("is_invoice_row"):
-				kinds.append("emphasis")
-			else:
-				kinds.append("summary")
-		tables.append({"groups": groups, "top": top, "kinds": kinds, "width": width})
+			row += [d.get(f["field"]) for f in g["fields"]]
+		rows.append(row)
+		if d.get("is_data_row"):
+			row_kinds.append("data")
+		elif d.get("is_term_row"):
+			row_kinds.append("term")
+		elif d.get("is_total_row") or d.get("is_invoice_row"):
+			row_kinds.append("emphasis")
+		else:
+			row_kinds.append("summary")
 
 	xlsx = make_xlsx(rows, "Supplier Quotation Comparison")
 
 	# make_xlsx works on a write-only workbook, so restyle by reopening the file.
 	wb = load_workbook(xlsx)
 	ws = wb.active
+	last_row = ws.max_row
+	last_col = len(label_row)
 
 	# Nepali digit grouping (1,98,750.00), matching what the report and the PDF show.
 	MONEY = r"[>=10000000]##\,##\,##\,##0.00;[>=100000]##\,##\,##0.00;#,##0.00"
 	QTY = "#,##0.##"
 
 	hair = Side(style="thin", color="B0B0B0")
-	thick = Side(style="medium", color="6B7280")
+	thick = Side(style="medium", color="6B7280")  # left edge of a quotation block
+	sub_edge = Side(style="thin", color="6B7280")  # left edge of a PO sub-group
 
-	def bordered(cell, block_start=False):
-		"""Grid on every cell, with the heavier divider kept on a block's left edge."""
-		cell.border = Border(left=thick if block_start else hair, right=hair, top=hair, bottom=hair)
-
-	col_kinds = defaultdict(set)  # sheet column -> every kind it holds, across all the tables
-	header_rows = set()           # merged supplier rows - they would skew the column widths
-
-	# Each table is styled on its own: its supplier blocks start at its own columns.
-	for table in tables:
-		groups, top, kinds = table["groups"], table["top"], table["kinds"]
-		bottom = top + len(kinds) - 1
-		last_col = table["width"]
-		header_rows.add(top)
-
-		# Which sheet column each supplier block starts at, and what kind each column is.
-		col_kind = {}          # 1-based sheet column -> ordered / rate / amount / narration
-		block_starts = set()
-		col = len(fixed_labels) + 1
-		for g in groups:
-			block_starts.add(col)
-			for offset, f in enumerate(g["fields"]):
+	# Which sheet column each block / sub-group starts at, and what kind each column is.
+	col_kind = {}  # 1-based sheet column -> qty / rate / amount / narration / poqty / porate / poamt
+	block_starts, sub_starts = set(), set()
+	col = FIXED + 1
+	for g in groups:
+		block_starts.add(col)
+		for sub in g["subgroups"]:
+			sub_starts.add(col)
+			for offset, f in enumerate(sub["fields"]):
 				col_kind[col + offset] = f["kind"]
-				col_kinds[col + offset].add(f["kind"])
-			col += g["span"]
+			col += sub["span"]
 
-		# --- the two header rows ---------------------------------------------
-		col = len(fixed_labels) + 1
-		for g in groups:
-			ws.merge_cells(start_row=top, start_column=col, end_row=top, end_column=col + g["span"] - 1)
-			cell = ws.cell(row=top, column=col)
+	def left_edge(c):
+		return thick if c in block_starts else (sub_edge if c in sub_starts else hair)
+
+	# --- the three header rows ------------------------------------------------
+	for c in range(1, FIXED + 1):
+		ws.merge_cells(start_row=1, start_column=c, end_row=HEAD, end_column=c)
+		cell = ws.cell(row=1, column=c)
+		cell.font = Font(bold=True)
+		cell.alignment = Alignment(horizontal="left", vertical="bottom", wrap_text=True)
+
+	col = FIXED + 1
+	for g in groups:
+		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + g["span"] - 1)
+		cell = ws.cell(row=1, column=col)
+		cell.font = Font(bold=True)
+		cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+		cell.hyperlink = frappe.utils.get_url(f"/app/supplier-quotation/{g['sq']}")
+		for sub in g["subgroups"]:
+			if sub["span"] > 1:
+				ws.merge_cells(start_row=2, start_column=col, end_row=2, end_column=col + sub["span"] - 1)
+			cell = ws.cell(row=2, column=col)
 			cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-			cell.font = Font(bold=True)
-			col += g["span"]
+			if sub["po"]:
+				cell.hyperlink = frappe.utils.get_url(f"/app/purchase-order/{sub['po']}")
+				cell.font = Font(bold=True, color="0563C1")
+			else:
+				cell.font = Font(bold=True)
+			col += sub["span"]
 
+	for c in range(FIXED + 1, last_col + 1):
+		head = ws.cell(row=HEAD, column=c)
+		head.font = Font(bold=True)
+		head.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+	ws.row_dimensions[1].height = 32
+	ws.row_dimensions[2].height = 18
+	ws.row_dimensions[3].height = 18
+
+	# --- body ----------------------------------------------------------------
+	for r in range(1, last_row + 1):
+		kind = row_kinds[r - 1] if r - 1 < len(row_kinds) else "data"
 		for c in range(1, last_col + 1):
-			head = ws.cell(row=top + 1, column=c)
-			head.font = Font(bold=True)
-			head.alignment = Alignment(
-				horizontal="left" if c <= len(fixed_labels) else "right",
-				vertical="center",
-				wrap_text=True,
-			)
-		ws.row_dimensions[top].height = 30
-		ws.row_dimensions[top + 1].height = 18
+			cell = ws.cell(row=r, column=c)
+			cell.border = Border(left=left_edge(c), right=hair, top=hair, bottom=hair)
 
-		# --- body ------------------------------------------------------------
-		for r in range(top, bottom + 1):
-			kind = kinds[r - top]
-			for c in range(1, last_col + 1):
-				cell = ws.cell(row=r, column=c)
-				bordered(cell, block_start=c in block_starts)
-
-				if r <= top + 1:
-					continue
-
-				column_kind = col_kind.get(c)
-				if kind == "emphasis":
-					cell.font = Font(bold=True)
-
-				if kind == "term":
-					# Free text (Payment Terms, Delivery Period, ...) - let it wrap
-					# inside the column rather than run under the next supplier.
-					cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-				elif column_kind in ("rate", "amount"):
-					cell.number_format = MONEY
-					cell.alignment = Alignment(horizontal="right", vertical="center")
-				elif column_kind in ("ordered", "qty"):
-					cell.number_format = QTY
-					cell.alignment = Alignment(horizontal="right", vertical="center")
-				elif column_kind == "narration":
-					cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-				elif c == 1:
-					cell.alignment = Alignment(horizontal="right", vertical="center")
-				elif c == 3 and kind == "data":
-					cell.number_format = QTY
-					cell.alignment = Alignment(horizontal="right", vertical="center")
-				else:
-					cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-
-		# --- merges, as the PDF lays them out --------------------------------
-		# A summary / term label belongs across the three fixed columns, not squeezed
-		# into Qty; a term's free text belongs across its whole supplier block rather
-		# than under whichever single column happened to carry it.
-		for r in range(top + 2, bottom + 1):
-			kind = kinds[r - top]
-			if kind == "data":
+			if r <= HEAD:
 				continue
 
-			label = ws.cell(row=r, column=3).value
-			ws.cell(row=r, column=1).value = label
-			ws.cell(row=r, column=3).value = None
-			ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=len(fixed_labels))
-			ws.cell(row=r, column=1).alignment = Alignment(
-				horizontal="left", vertical="center", wrap_text=True
-			)
+			column_kind = col_kind.get(c)
 			if kind == "emphasis":
-				ws.cell(row=r, column=1).font = Font(bold=True)
+				cell.font = Font(bold=True)
 
-			if kind != "term":
-				continue
-			col = len(fixed_labels) + 1
-			for g in groups:
-				# The value sits in the block's Amount column; merging keeps only the
-				# top-left cell, so carry it to the block's first column first.
-				amount_offset = next(
-					(i for i, f in enumerate(g["fields"]) if f["kind"] == "amount"), 0
-				)
-				value = ws.cell(row=r, column=col + amount_offset).value
-				for offset in range(g["span"]):
-					ws.cell(row=r, column=col + offset).value = None
-				ws.cell(row=r, column=col).value = value
-				if g["span"] > 1:
-					ws.merge_cells(start_row=r, start_column=col, end_row=r, end_column=col + g["span"] - 1)
-				ws.cell(row=r, column=col).alignment = Alignment(
-					horizontal="left", vertical="top", wrap_text=True
-				)
-				col += g["span"]
+			if kind == "term":
+				# Free text (Payment Terms, Delivery Period, ...) - let it wrap
+				# inside the column rather than run under the next supplier.
+				cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+			elif column_kind in ("rate", "amount", "porate", "poamt"):
+				cell.number_format = MONEY
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			elif column_kind in ("qty", "poqty"):
+				cell.number_format = QTY
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			elif column_kind == "narration":
+				cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+			elif c == 1:
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			elif c == 3 and kind == "data":
+				cell.number_format = QTY
+				cell.alignment = Alignment(horizontal="right", vertical="center")
+			else:
+				cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
 
-		# Supplier tints last, so they sit under every cell of the block.
-		col = len(fixed_labels) + 1
+	# --- merges, as the PDF lays them out ------------------------------------
+	# A summary / term label belongs across the three fixed columns, not squeezed
+	# into MR Qty; a term's free text belongs across its whole quotation block
+	# rather than under whichever single column happened to carry it.
+	for r in range(HEAD + 1, last_row + 1):
+		kind = row_kinds[r - 1] if r - 1 < len(row_kinds) else "data"
+		if kind == "data":
+			continue
+
+		label = ws.cell(row=r, column=3).value
+		ws.cell(row=r, column=1).value = label
+		ws.cell(row=r, column=3).value = None
+		ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=FIXED)
+		ws.cell(row=r, column=1).alignment = Alignment(
+			horizontal="left", vertical="center", wrap_text=True
+		)
+		if kind == "emphasis":
+			ws.cell(row=r, column=1).font = Font(bold=True)
+
+		if kind != "term":
+			continue
+		col = FIXED + 1
 		for g in groups:
-			fill = PatternFill("solid", fgColor=g["band"].lstrip("#").upper())
+			# The value sits in the block's Amount column; merging keeps only the
+			# top-left cell, so carry it to the block's first column first.
+			amount_offset = next(
+				(i for i, f in enumerate(g["fields"]) if f["kind"] == "amount"), 0
+			)
+			value = ws.cell(row=r, column=col + amount_offset).value
 			for offset in range(g["span"]):
-				for r in range(top, bottom + 1):
-					ws.cell(row=r, column=col + offset).fill = fill
+				ws.cell(row=r, column=col + offset).value = None
+			ws.cell(row=r, column=col).value = value
+			if g["span"] > 1:
+				ws.merge_cells(start_row=r, start_column=col, end_row=r, end_column=col + g["span"] - 1)
+			ws.cell(row=r, column=col).alignment = Alignment(
+				horizontal="left", vertical="top", wrap_text=True
+			)
 			col += g["span"]
 
-	# PO headings of a stacked sheet, each across the width of its own table.
-	for r, width in heading_rows.items():
-		cell = ws.cell(row=r, column=1)
-		cell.font = Font(bold=True, size=12)
-		cell.alignment = Alignment(horizontal="left", vertical="center")
-		if width > 1:
-			ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=width)
-		ws.row_dimensions[r].height = 22
-	for r in note_rows:
-		ws.cell(row=r, column=1).font = Font(italic=True, color="6B7280")
-
-	for row_index, col_index, po in ordered_links:
-		cell = ws.cell(row=row_index, column=col_index)
-		cell.hyperlink = frappe.utils.get_url("/app/purchase-order/{0}".format(po))
-		cell.font = Font(color="0563C1", underline="single")
+	# Quotation tints last, so they sit under every cell of the block.
+	col = FIXED + 1
+	for g in groups:
+		fill = PatternFill("solid", fgColor=g["band"].lstrip("#").upper())
+		for offset in range(g["span"]):
+			for r in range(1, last_row + 1):
+				ws.cell(row=r, column=col + offset).fill = fill
+		col += g["span"]
 
 	# --- column widths -------------------------------------------------------
-	# Sized from the widest value actually in each column, so the sheet opens
-	# readable and nobody has to drag a single column border. Capped, because a
+	# Sized from the widest value actually in each column (header rows 1-2 are
+	# merged and would skew it), so the sheet opens readable. Capped, because a
 	# long narration or item name would otherwise push the money columns off
 	# screen; those columns wrap instead.
-	CAPS = {"narration": 34, "rate": 15, "amount": 16, "ordered": 11, "qty": 11}
-	skip_rows = header_rows | set(heading_rows) | set(note_rows)
-	last_col = max((t["width"] for t in tables), default=len(fixed_labels))
+	CAPS = {"narration": 34, "rate": 15, "amount": 16, "qty": 11,
+			"porate": 15, "poamt": 16, "poqty": 11}
 	for c in range(1, last_col + 1):
 		longest = 0
-		for r in range(1, ws.max_row + 1):
-			if r in skip_rows:
-				continue
+		for r in range(HEAD, last_row + 1):
 			value = ws.cell(row=r, column=c).value
 			if value is None:
 				continue
@@ -1214,6 +1127,7 @@ def export_xlsx(filters):
 				text = max(str(value).split("\n"), key=len)
 			longest = max(longest, len(text))
 
+		kind = col_kind.get(c)
 		if c == 1:
 			width = 5
 		elif c == 2:
@@ -1221,20 +1135,14 @@ def export_xlsx(filters):
 		elif c == 3:
 			width = 9
 		else:
-			# A column can hold a different kind in each stacked table; allow the widest.
-			cap = max((CAPS.get(k, 16) for k in col_kinds.get(c, ())), default=16)
-			width = min(max(longest + 2, 10), cap)
+			width = min(max(longest + 2, 10), CAPS.get(kind, 16))
 		ws.column_dimensions[get_column_letter(c)].width = width
 
-	if stacked:
-		# Every table carries its own header rows, so only the item columns stay put.
-		ws.freeze_panes = "D1"
-	else:
-		# Item / label column and both header rows stay put while scrolling right.
-		ws.freeze_panes = "D3"
-		ws.print_title_rows = "1:2"
+	# Item / label column and all three header rows stay put while scrolling.
+	ws.freeze_panes = f"D{HEAD + 1}"
 
 	# Printing from Excel should need no setup either.
+	ws.print_title_rows = f"1:{HEAD}"
 	ws.page_setup.orientation = "landscape"
 	ws.page_setup.fitToWidth = 1
 	ws.page_setup.fitToHeight = 0
@@ -1253,8 +1161,8 @@ def download_pdf(filters, view=None):
 	"""Print / PDF of the comparison in document form: company + title header,
 	one column block per supplier (quotation number under the supplier's name)
 	holding the same columns in the same order as the on-screen report, and the
-	same summary rows below. With several Purchase Orders picked, one such table per
-	PO, stacked, each under a heading naming the PO.
+	same summary rows below, under the same three header rows (quotation / Quoted
+	and each Purchase Order / Qty, Rate, Amount).
 	Both menu entries call this — Print opens it inline (view=1), PDF downloads."""
 	from frappe.utils.pdf import get_pdf
 
@@ -1263,11 +1171,8 @@ def download_pdf(filters, view=None):
 	if isinstance(filters, str):
 		filters = frappe._dict(json.loads(filters))
 
-	# One table per Purchase Order when several are picked, else the one table.
-	sections = get_sections(filters)
-	for section in sections:
-		section.groups = _supplier_groups(section.columns)
-		section.heading = _section_heading(section) if len(sections) > 1 else None
+	columns, data = execute(filters)[:2]
+	groups = _supplier_groups(columns)
 
 	purchase_orders = _as_list(filters.get("purchase_order"))
 	report_title = "Supplier Quotation Comparison"
@@ -1299,27 +1204,29 @@ def download_pdf(filters, view=None):
 			"company": filters.get("company"),
 			"report_title": report_title,
 			"subline_parts": subline_parts,
-			"sections": sections,
+			"groups": groups,
+			"data": data,
 			"fmt": fmt,
 			"fmt_qty": fmt_qty,
 			# Wide enough for a formatted NPR amount at the table's font size -
 			# "Rs 1,98,750.00" plus cell padding. Too narrow and the money cells,
 			# which must not wrap, spill over the column border into their neighbour.
 			"field_widths": {
-				"ordered": "42px",
 				"qty": "40px",
 				"rate": "72px",
 				"amount": "88px",
 				"narration": "95px",
+				"poqty": "40px",
+				"porate": "72px",
+				"poamt": "88px",
 			},
 		},
 	)
 
 	# The three fixed columns plus about six supplier columns sit on portrait A4;
 	# beyond that they get too narrow, so use landscape. Counting the real columns
-	# (rather than the suppliers) keeps this right whatever each block holds. Stacked
-	# tables share the page, so the widest of them decides.
-	total_columns = 3 + max((sum(g["span"] for g in s.groups) for s in sections), default=0)
+	# (rather than the suppliers) keeps this right whatever each block holds.
+	total_columns = 3 + sum(g["span"] for g in groups)
 	orientation = "Portrait" if total_columns <= 9 else "Landscape"
 
 	# Page geometry has to be stated twice because the two renderers read it from

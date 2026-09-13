@@ -9,9 +9,11 @@
 	table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 	th, td { border: 1px solid #b0b0b0; padding: 2px 3px; vertical-align: top; font-size: 7.5pt; }
 	th { background: #f2f2f2; }
-	.sup-group { text-align: center; }
+	.fixed-head { vertical-align: bottom; text-align: left; }
+	.sup-group, .sub-group { text-align: center; }
+	.sub-group a { color: #000; text-decoration: none; }
+	.starred { color: #c2410c; }
 	.sq-no { font-size: 7.5pt; font-weight: normal; color: #555; }
-	.no-border { border: none; background: none; }
 	.num { text-align: right; white-space: nowrap; }
 	.narr { text-align: left; white-space: normal; word-break: break-word; font-size: 8pt; }
 	.summary-label { font-weight: normal; }
@@ -19,17 +21,9 @@
 	.invoice-row td { font-weight: bold; background: #f2f2f2; border-top: 2px solid #444; }
 	.term-row td { background: #fafafa; }
 	.term-val { text-align: left; white-space: pre-line; font-size: 8pt; }
-	.ord { text-align: right; white-space: nowrap; }
-	.ord a { color: #000; text-decoration: none; }
-	.tick { display: inline-block; width: 11px; height: 11px; line-height: 11px;
-		border-radius: 50%; background: #28a745; color: #fff; font-size: 8px;
-		font-weight: bold; text-align: center; }
-	/* Left edge of each supplier block, so neighbouring suppliers stay apart */
+	/* Left edge of each quotation block, and a lighter one for each PO inside it */
 	.grp-start { border-left: 2px solid #6b7280; }
-	/* Several Purchase Orders: one table each, stacked under a heading naming the PO */
-	.section + .section { margin-top: 16px; }
-	.po-head { font-size: 9.5pt; font-weight: bold; padding: 3px 0; margin-bottom: 4px;
-		border-bottom: 1.5px solid #444; }
+	.sub-start { border-left: 1.5px solid #9ca3af; }
 </style>
 
 <div class="company">{{ company }}</div>
@@ -38,18 +32,13 @@
 <div class="subline">{{ subline_parts | join(" &nbsp;&middot;&nbsp; ") }}</div>
 {% endif %}
 
-{% for section in sections %}
-{% set groups = section.groups %}
-{% set data = section.data %}
-<div class="section">
-{% if section.heading %}<div class="po-head">{{ section.heading }}</div>{% endif %}
 {% if not groups %}
-<p>{{ "No supplier quotations found for this Purchase Order." if section.heading else "No supplier quotations found for the selected filters." }}</p>
+<p>No supplier quotations found for the selected filters.</p>
 {% else %}
 <table>
 	{# The widths have to live here: under table-layout:fixed only the first row
-	   or a colgroup sizes the columns, and this table's first row is the merged
-	   supplier band, whose colspans say nothing about the columns beneath. Item
+	   or a colgroup sizes the columns, and this table's first rows are merged
+	   headings, whose colspans say nothing about the columns beneath. Item
 	   Name is left unsized on purpose so it takes whatever space is left. #}
 	<colgroup>
 		<col style="width: 26px;">
@@ -60,25 +49,32 @@
 		{% endfor %}{% endfor %}
 	</colgroup>
 	<thead>
+		{# Three header rows like the report: quotation / Quoted and each PO /
+		   Qty, Rate, Amount. The fixed columns span all three. #}
 		<tr>
-			<th class="no-border" colspan="3"></th>
+			<th class="fixed-head" rowspan="3">SN</th>
+			<th class="fixed-head" rowspan="3">Item Name</th>
+			<th class="fixed-head" rowspan="3">MR Qty</th>
 			{% for g in groups %}
 			<th class="sup-group grp-start" colspan="{{ g.span }}" style="background: {{ g.band }};">
-				{{ g.display }}
-				{% if g.sq %}<div class="sq-no">{{ g.sq }}</div>{% endif %}
+				{{ g.display }}<div class="sq-no">{{ g.sq }}</div>
 			</th>
 			{% endfor %}
 		</tr>
 		<tr>
-			<th style="width: 26px;">SN</th>
-			<th>Item Name</th>
-			<th style="width: 45px;">MR Qty</th>
-			{% for g in groups %}
-			{% for f in g.fields %}
-			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }}{{ ' grp-start' if loop.first else '' }}"
-				style="background: {{ g.band }}; width: {{ field_widths.get(f.kind, '80px') }};">{{ f.label }}</th>
-			{% endfor %}
-			{% endfor %}
+			{% for g in groups %}{% for sub in g.subgroups %}
+			<th class="sub-group {{ sub.fields[0].edge }}{{ ' starred' if sub.label.startswith('★') else '' }}"
+				colspan="{{ sub.span }}" style="background: {{ g.band }};">
+				{%- if sub.po %}<a href="{{ frappe.utils.get_url('/app/purchase-order/' ~ sub.po) }}">{{ sub.label }}</a>
+				{%- else %}{{ sub.label }}{% endif -%}
+			</th>
+			{% endfor %}{% endfor %}
+		</tr>
+		<tr>
+			{% for g in groups %}{% for f in g.fields %}
+			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }} {{ f.edge }}"
+				style="background: {{ g.band }};">{{ f.label }}</th>
+			{% endfor %}{% endfor %}
 		</tr>
 	</thead>
 	<tbody>
@@ -91,24 +87,17 @@
 			{% for g in groups %}
 			{% for f in g.fields %}
 			{% set v = row.get(f.field) %}
-			{% if f.kind == "ordered" %}
-			<td class="ord{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">
-				{%- if v -%}
-					<span class="tick">&#10003;</span>&nbsp;
-					{%- set po = row.get(f.field ~ "_po") -%}
-					{%- if po %}<a href="{{ frappe.utils.get_url('/app/purchase-order/' ~ po) }}">{{ v }}</a>
-					{%- else %}{{ v }}{% endif -%}
-				{%- endif -%}
-			</td>
-			{% elif f.kind == "qty" %}
+			{% if f.kind == "qty" %}
 			{# Quoted qty; orange when it differs from what the Material Request asked for #}
 			{% set differs = v is not none and row.qty is not none and (v | float) != (row.qty | float) %}
-			<td class="num{{ ' grp-start' if loop.first else '' }}"
+			<td class="num {{ f.edge }}"
 				style="background: {{ g.band }};{{ ' color: #c2410c; font-weight: bold;' if differs else '' }}">{{ fmt_qty(v) }}</td>
+			{% elif f.kind == "poqty" %}
+			<td class="num {{ f.edge }}" style="background: {{ g.band }};">{{ fmt_qty(v) }}</td>
 			{% elif f.kind == "narration" %}
-			<td class="narr{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">{{ v or "" }}</td>
+			<td class="narr {{ f.edge }}" style="background: {{ g.band }};">{{ v or "" }}</td>
 			{% else %}
-			<td class="num{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">{{ fmt(v) }}</td>
+			<td class="num {{ f.edge }}" style="background: {{ g.band }};">{{ fmt(v) }}</td>
 			{% endif %}
 			{% endfor %}
 			{% endfor %}
@@ -125,10 +114,10 @@
 			<td class="summary-label" colspan="3">{{ row.qty }}</td>
 			{% for g in groups %}
 			{% for f in g.fields %}
-			{% if f.kind == "amount" %}
-			<td class="num{{ ' grp-start' if loop.first else '' }}">{{ fmt(row.get(f.field)) }}</td>
+			{% if f.kind in ("amount", "poamt") %}
+			<td class="num {{ f.edge }}">{{ fmt(row.get(f.field)) if row.get(f.field) is not none else "" }}</td>
 			{% else %}
-			<td class="{{ 'grp-start' if loop.first else '' }}"></td>
+			<td class="{{ f.edge }}"></td>
 			{% endif %}
 			{% endfor %}
 			{% endfor %}
@@ -138,5 +127,3 @@
 	</tbody>
 </table>
 {% endif %}
-</div>
-{% endfor %}

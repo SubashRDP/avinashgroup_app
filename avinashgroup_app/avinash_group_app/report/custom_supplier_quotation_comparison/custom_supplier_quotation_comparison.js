@@ -214,20 +214,11 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {
-		// "Ordered" column: qty of this item already placed on a Purchase Order
-		// against this supplier's quotation. Tick + qty, linked to that Purchase
-		// Order (when it's a single PO - ambiguous when split across several);
-		// blank when this item was not ordered from this supplier. Applies to every
-		// row type - summary / term rows never set it, so they stay blank.
-		if (column.fieldname.endsWith("_ordered")) {
-			if (value === null || value === undefined || value === "" || value === 0) return "";
-			const shown = frappe.utils.escape_html(String(value));
-			const tick = '<span style="display:inline-block;width:15px;height:15px;line-height:15px;border-radius:50%;background:#28a745;color:#fff;font-size:10px;font-weight:bold;text-align:center;vertical-align:middle;">\u2713</span>&nbsp;';
-			const po = data && data[column.fieldname + "_po"];
-			return po
-				? `${tick}<a href="/app/purchase-order/${encodeURIComponent(po)}" onclick="event.stopPropagation()">${shown}</a>`
-				: tick + shown;
-		}
+		// Per-unit columns (quoted / PO qty and rate, narration) mean nothing on the
+		// summary and terms rows, which only carry block-level values.
+		const PER_UNIT = ["_qty", "_rate", "_narration", "_poqty", "_porate"];
+		const per_unit = PER_UNIT.some((suffix) => column.fieldname.endsWith(suffix));
+		const qty_text = (v) => format_number(v, null, 3).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 
 		// Commercial-terms rows (Specification / Warranty / Payment Terms /
 		// Delivery Period) carry free text under each supplier's Amount column -
@@ -235,25 +226,19 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		if (data && data.is_term_row) {
 			if (column.fieldname === "sn" || column.fieldname === "item_name") return "";
 			if (column.fieldname === "qty") return default_formatter(value, row, column, data);
-			if (
-				column.fieldname.endsWith("_rate") ||
-				column.fieldname.endsWith("_qty") ||
-				column.fieldname.endsWith("_narration")
-			)
-				return "";
+			if (per_unit) return "";
 			if (value === null || value === undefined || value === "") return "";
 			return frappe.utils.escape_html(String(value)).replace(/\n/g, "<br>");
 		}
 
 		// Summary rows are quotation-level values - a per-unit Rate/Narration makes no sense there.
-		if (
-			data &&
-			(data.is_total_row || data.is_summary_row || data.is_invoice_row) &&
-			(column.fieldname.endsWith("_rate") ||
-				column.fieldname.endsWith("_qty") ||
-				column.fieldname.endsWith("_narration"))
-		) {
+		if (data && (data.is_total_row || data.is_summary_row || data.is_invoice_row) && per_unit) {
 			return "";
+		}
+
+		// A PO's qty: only the decimals it needs (1, 1.5, 1,250), like the others.
+		if (column.fieldname.endsWith("_poqty")) {
+			return value === null || value === undefined || value === "" ? "" : qty_text(value);
 		}
 
 		// Quoted column: the qty this quotation offers. Flagged orange when it differs
@@ -261,8 +246,7 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		// so a short or over quote stands out without reading every number.
 		if (column.fieldname.endsWith("_qty")) {
 			if (value === null || value === undefined || value === "") return "";
-			// Only the decimals the number needs (1, 1.5, 1,250), like MR Qty and Ordered
-			const shown = format_number(value, null, 3).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+			const shown = qty_text(value);
 			const asked = data && data.qty;
 			if (asked !== null && asked !== undefined && asked !== "" && flt(value) !== flt(asked)) {
 				const tip = frappe.utils.escape_html(__("Material Request asked for {0}", [format_number(asked)]));
@@ -288,87 +272,105 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	},
 
 	after_datatable_render: (datatable) => {
-		const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
-		settings.decorate_datatable(datatable);
-		settings.render_stacked(frappe.query_report);
+		frappe.query_reports["Custom Supplier Quotation Comparison"].decorate_datatable(datatable);
 	},
 
-	// Draw one spanning supplier-name cell above each Rate + Amount column pair.
-	// Injected above the datatable header on every render; scrolls with it because
-	// the datatable applies its translateX to the whole .dt-header element. Used for
-	// the report's own table and for every stacked per-PO table alike.
+	// Two merged header rows above the datatable's own column labels, like a
+	// hand-made sheet: the Supplier Quotation across its whole block, and under it
+	// "Quoted" and each Purchase Order made from that quotation across their own
+	// columns. Injected on every render; scrolls with the header because the
+	// datatable applies its translateX to the whole .dt-header element.
 	decorate_datatable: (datatable) => {
 		if (!datatable || !datatable.wrapper) return;
 
-		// Alternating tints, one per supplier, so adjacent suppliers are visibly
-		// distinct instead of blending together behind identical thin gray
-		// column borders. Applied via each cell's stable "dt-cell--col-N" class,
-		// which the datatable puts on header, filter and body cells alike - so
-		// one CSS rule per column tints that supplier's cells top to bottom.
+		// Alternating tints, one per quotation, so adjacent blocks are visibly
+		// distinct. Applied via each cell's stable "dt-cell--col-N" class, which the
+		// datatable puts on header, filter and body cells alike - one CSS rule per
+		// column tints that block top to bottom.
 		const BAND_COLORS = ["#eef3ff", "#fff8ec", "#eefaf1", "#fdeef4"];
-		// Scoped to this table's own instance class: stacked tables lay their
-		// suppliers out differently, and one table's "col-5" must not tint another's.
-		const scope = datatable.style && datatable.style.scopeClass ? `.${datatable.style.scopeClass} ` : "";
+		const esc = frappe.utils.escape_html;
 
-		const render_supplier_header = () => {
+		const render_group_header = () => {
 			const $header = $(datatable.wrapper).find(".dt-header");
 			$header.find(".sq-supplier-group-row").remove();
 
 			const header_cells = $header.find(".dt-row-header .dt-cell--header").toArray();
 			if (!header_cells.length) return;
 
-			// Merge consecutive rendered header cells that share a supplier_group.
-			// Widths come from invisible "keeper" divs carrying the datatable's own
-			// .dt-cell__content--col-N classes - its width stylesheet keeps them in
-			// sync with the real columns, including later resizes / fit-columns.
 			const cols = header_cells.map((cell) => {
 				const idx = parseInt(cell.getAttribute("data-col-index"));
 				const col = (!isNaN(idx) && datatable.datamanager.getColumn(idx)) || {};
-				return { idx: idx, group: col.supplier_group || "", sq_link: col.sq_link };
+				return {
+					idx: idx,
+					sq: col.sq_link || "",
+					group: col.supplier_group || "",
+					sub: col.sub_group || "",
+					po: col.po_link || "",
+				};
 			});
-			if (!cols.some((c) => c.group)) return;
+			if (!cols.some((c) => c.sq)) return;
 
+			// Widths come from invisible "keeper" divs carrying the datatable's own
+			// .dt-cell__content--col-N classes - its width stylesheet keeps them in
+			// sync with the real columns, including later resizes / fit-columns.
 			const keeper = (idx) => `<div class="dt-cell__content--col-${idx}" style="height:0;"></div>`;
 			const border = "1px solid var(--dt-border-color, #d1d8dd)";
-			const group_divider = "2px solid var(--dt-border-color-dark, #8a94a6)";
-			let cells_html = "";
+			const block_edge = "2px solid var(--dt-border-color-dark, #8a94a6)";
+
+			const band = {};
 			let band_rules = "";
-			let band_index = 0;
-			let i = 0;
-			while (i < cols.length) {
-				const c = cols[i];
-				if (!c.group) {
-					cells_html += `<div style="display:flex;border-right:1px solid transparent;">${keeper(c.idx)}</div>`;
-					i++;
-					continue;
+			cols.forEach((c) => {
+				if (!c.sq) return;
+				if (!(c.sq in band)) band[c.sq] = BAND_COLORS[Object.keys(band).length % BAND_COLORS.length];
+				band_rules += `.dt-cell--col-${c.idx}{background-color:${band[c.sq]};}\n`;
+			});
+
+			const label = (html, weight) =>
+				`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+					font-weight:${weight};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 8px;">${html}</div>`;
+
+			// One merged cell per run of consecutive columns sharing key(c).
+			const build_row = (key, cell_html) => {
+				let html = "";
+				let i = 0;
+				while (i < cols.length) {
+					const c = cols[i];
+					let j = i;
+					let keepers = "";
+					while (j < cols.length && key(cols[j]) === key(c)) {
+						keepers += keeper(cols[j].idx);
+						j++;
+					}
+					const block_end = j >= cols.length || cols[j].sq !== c.sq;
+					html += c.sq
+						? cell_html(c, keepers, block_end ? block_edge : border)
+						: `<div style="display:flex;border-right:1px solid transparent;">${keepers}</div>`;
+					i = j;
 				}
-				let keepers = "";
-				let j = i;
-				const group_indexes = [];
-				while (j < cols.length && cols[j].group === c.group) {
-					keepers += keeper(cols[j].idx);
-					group_indexes.push(cols[j].idx);
-					j++;
-				}
-				const band = BAND_COLORS[band_index % BAND_COLORS.length];
-				band_index++;
-				group_indexes.forEach((idx) => {
-					band_rules += `${scope}.dt-cell--col-${idx}{background-color:${band};}\n`;
-				});
-				const link_attr = c.sq_link
-					? ` data-sq-link="${frappe.utils.escape_html(c.sq_link)}" title="${__("Open Supplier Quotation")}"`
-					: "";
-				cells_html += `<div class="sq-group-cell"${link_attr}
-					style="position:relative;display:flex;border-right:${group_divider};background:${band};${c.sq_link ? "cursor:pointer;" : ""}">${keepers}
-					<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-						font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 8px;">
-						${frappe.utils.escape_html(c.group)}</div></div>`;
-				i = j;
-			}
-			$header.prepend(
-				`<div class="sq-supplier-group-row"
-					style="display:flex;height:26px;background:var(--dt-header-cell-bg, #f7fafc);border-bottom:${border};">${cells_html}</div>`
+				return html;
+			};
+
+			const quotation_row = build_row(
+				(c) => c.sq,
+				(c, keepers, edge) =>
+					`<div class="sq-group-cell" data-sq-link="${esc(c.sq)}" title="${__("Open Supplier Quotation")}"
+						style="position:relative;display:flex;cursor:pointer;border-right:${edge};background:${band[c.sq]};">${keepers}
+						${label(`${esc(c.group)} <span style="font-weight:400;color:var(--text-muted);">&middot; ${esc(c.sq)}</span>`, 600)}</div>`
 			);
+			const sub_row = build_row(
+				(c) => `${c.sq}|${c.sub}`,
+				(c, keepers, edge) => {
+					const starred = c.sub.startsWith("★");
+					const link = c.po ? ` data-po-link="${esc(c.po)}" title="${__("Open Purchase Order")}"` : "";
+					return `<div class="sq-sub-cell"${link}
+						style="position:relative;display:flex;border-right:${edge};border-top:${border};background:${band[c.sq]};
+						${c.po ? "cursor:pointer;" : ""}${starred ? "color:var(--orange-600, #c2410c);" : ""}">${keepers}
+						${label(esc(c.sub), c.po ? 600 : 500)}</div>`;
+				}
+			);
+			const row_style = `display:flex;height:26px;background:var(--dt-header-cell-bg, #f7fafc);`;
+			$header.prepend(`<div class="sq-supplier-group-row" style="${row_style}border-bottom:${border};">${sub_row}</div>`);
+			$header.prepend(`<div class="sq-supplier-group-row" style="${row_style}">${quotation_row}</div>`);
 
 			let $band_style = $(datatable.wrapper).find("style.sq-supplier-band-style");
 			if (!$band_style.length) {
@@ -377,130 +379,20 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			$band_style.text(band_rules);
 		};
 
-		render_supplier_header();
+		render_group_header();
 
 		// Dragging a column to reorder it only swaps columns inside the datatable
 		// widget itself - it doesn't go through a report refresh, so this hook
-		// never re-fires and our merged supplier-name row is left describing the
-		// old column order while the real columns underneath have moved. The
-		// datatable library fires its own "onSwitchColumn" event for that case;
-		// hook it once per datatable instance to rebuild the header in sync.
+		// never re-fires and the merged header rows would describe the old column
+		// order. The datatable fires "onSwitchColumn" for that; hook it once per
+		// datatable instance to rebuild the header in sync.
 		if (!datatable._sq_switch_column_hooked) {
 			datatable._sq_switch_column_hooked = true;
-			datatable.on("onSwitchColumn", () => render_supplier_header());
+			datatable.on("onSwitchColumn", () => render_group_header());
 		}
-	},
-
-	// Several Purchase Orders picked: the report's own table (all of them lumped
-	// together) is hidden and one table per PO is drawn instead, stacked one under
-	// another, each headed by its PO. Each is the same report run once per PO on the
-	// server (get_stacked_comparison), drawn with the same formatter and header.
-	render_stacked: (report) => {
-		const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
-		const $main = report.$report;
-		$main.siblings(".sq-stack").remove();
-		const token = (settings._stack_token = (settings._stack_token || 0) + 1);
-		// Hidden by a class, not .hide(): Frappe calls $report.show() right after this
-		// hook runs (query_report.js refresh), which would bring the lumped table back.
-		if (!document.getElementById("sq-stack-style")) {
-			$('<style id="sq-stack-style">.sq-main-hidden { display: none !important; }</style>').appendTo("head");
-		}
-		if ((report.get_filter_value("purchase_order") || []).length < 2) {
-			$main.removeClass("sq-main-hidden");
-			return;
-		}
-		$main.addClass("sq-main-hidden");
-		const $stack = $('<div class="sq-stack"></div>').insertAfter($main);
-		frappe
-			.call({
-				method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_stacked_comparison",
-				args: { filters: report.get_filter_values(true) },
-			})
-			.then((r) => {
-				if (token !== settings._stack_token) return; // a newer refresh has taken over
-				(r.message || []).forEach((section) => settings.render_section($stack, report, section));
-			});
-	},
-
-	render_section: ($stack, report, section) => {
-		const link = (doctype, name) =>
-			`<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}">${frappe.utils.escape_html(name)}</a>`;
-		const parts = [`${__("Purchase Order")}: ${link("Purchase Order", section.purchase_order)}`];
-		if (section.supplier_name) parts.push(frappe.utils.escape_html(section.supplier_name));
-		if ((section.material_requests || []).length) {
-			parts.push(
-				`${__("Material Request")}: ` +
-					section.material_requests.map((mr) => link("Material Request", mr)).join(", ")
-			);
-		}
-		const $section = $(`<div class="sq-stack-section" style="margin: 0 0 28px;">
-			<div style="font-size: var(--text-lg); font-weight: 600; padding: 10px 2px 6px;
-				margin-bottom: 6px; border-bottom: 2px solid var(--border-color);">
-				${parts.join(" &nbsp;&middot;&nbsp; ")}</div></div>`).appendTo($stack);
-
-		if (!(section.data || []).some((d) => d.is_data_row)) {
-			$section.append(
-				`<div class="text-muted" style="padding: 8px 2px;">${__("No supplier quotations found for this Purchase Order.")}</div>`
-			);
-			return;
-		}
-		const $host = $('<div class="sq-dt-host"></div>').appendTo($section);
-		const datatable = new window.DataTable($host[0], {
-			// Frappe's own column preparation, so the report formatter applies as-is
-			columns: report.prepare_columns(section.columns),
-			data: section.data,
-			layout: "fixed",
-			cellHeight: 33,
-			language: frappe.boot.lang,
-			translations: frappe.utils.datatable.get_translations(),
-			direction: frappe.utils.is_rtl() ? "rtl" : "ltr",
-		});
-		// the header-click handler finds this table's own columns through it
-		$host.data("sq_datatable", datatable);
-		const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
-		settings.decorate_datatable(datatable);
-		// The desk's "Fit Columns" toggle only sizes the report's own table, so the
-		// stacked ones fit themselves - same on/off preference, same rule.
-		if (localStorage.getItem("rdp_fit_columns_enabled") !== "0") {
-			setTimeout(() => settings.fit_columns(datatable), 100);
-		}
-	},
-
-	// Size each column to its header and content, 120-600px - the rule the desk's
-	// "Fit Columns" toggle applies to the report's own table.
-	fit_columns: (datatable) => {
-		const wrapper = datatable && datatable.datatableWrapper;
-		if (!wrapper) return;
-		datatable.datamanager.getColumns(true).forEach((col) => {
-			let width = 120;
-			const head = wrapper.querySelector(`.dt-cell__content--header-${col.colIndex}`);
-			if (head) width = Math.max(width, head.scrollWidth + 20);
-			const cells = wrapper.querySelectorAll(`.dt-cell__content--col-${col.colIndex}`);
-			for (let i = 0; i < Math.min(100, cells.length); i++) {
-				width = Math.max(width, cells[i].scrollWidth + 20);
-			}
-			datatable.datamanager.updateColumn(col.colIndex, { width: Math.min(width, 600) });
-			datatable.columnmanager.setColumnHeaderWidth(col.colIndex);
-			datatable.columnmanager.setColumnWidth(col.colIndex);
-		});
-		// resync the body with the new row width, or the right-most columns clip
-		if (datatable.style && datatable.style.setBodyStyle) datatable.style.setBodyStyle();
 	},
 
 	onload: (report) => {
-		// A refresh that ends in "nothing to show" never reaches after_datatable_render,
-		// so the previous stack is cleared on the way in rather than left behind.
-		if (!report._sq_refresh_wrapped) {
-			report._sq_refresh_wrapped = true;
-			const refresh = report.refresh.bind(report);
-			report.refresh = function (...args) {
-				const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
-				settings._stack_token = (settings._stack_token || 0) + 1;
-				if (report.$report) report.$report.siblings(".sq-stack").remove();
-				return refresh(...args);
-			};
-		}
-
 		// Menu -> Print / PDF both render the server-side comparison document
 		// (supplier column groups + summary rows) instead of the generic report
 		// printout. Print opens the PDF inline for printing; PDF downloads it.
@@ -538,25 +430,28 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			__("Tools")
 		);
 
-		// Supplier group cell -> open that supplier's quotation
+		// Quotation heading -> its Supplier Quotation; PO heading -> that Purchase Order
 		$(report.page.wrapper)
 			.off("click.sq_group")
 			.on("click.sq_group", ".sq-group-cell[data-sq-link]", function () {
 				frappe.set_route("Form", "Supplier Quotation", $(this).attr("data-sq-link"));
+			})
+			.on("click.sq_group", ".sq-sub-cell[data-po-link]", function () {
+				frappe.set_route("Form", "Purchase Order", $(this).attr("data-po-link"));
 			});
 
-		// Supplier column header -> open that supplier's quotation
+		// Column label -> the PO it belongs to, else its quotation
 		$(report.page.wrapper)
 			.off("click.sq_link")
 			.on("click.sq_link", ".dt-cell--header", function (e) {
 				// Ignore clicks on the column dropdown / resize handle
 				if ($(e.target).closest(".dt-dropdown, .dt-cell__resize-handle").length) return;
 				const col_index = parseInt($(this).attr("data-col-index"));
-				// a stacked per-PO table has its own columns; else the report's table
-				const datatable = $(this).closest(".sq-dt-host").data("sq_datatable") || report.datatable;
-				if (isNaN(col_index) || !datatable) return;
-				const col = datatable.datamanager.getColumn(col_index) || {};
-				if (col.sq_link) {
+				if (isNaN(col_index) || !report.datatable) return;
+				const col = report.datatable.datamanager.getColumn(col_index) || {};
+				if (col.po_link) {
+					frappe.set_route("Form", "Purchase Order", col.po_link);
+				} else if (col.sq_link) {
 					frappe.set_route("Form", "Supplier Quotation", col.sq_link);
 				}
 			});
