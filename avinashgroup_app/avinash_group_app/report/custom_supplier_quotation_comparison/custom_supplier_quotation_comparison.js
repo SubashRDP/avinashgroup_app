@@ -464,6 +464,12 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			);
 		};
 
+		// The step-by-step English / Nepali guide the buying forms carry, for this page too
+		frappe.require("/assets/avinashgroup_app/js/buying_guide.js", () => {
+			const guide = window.avinashgroup_app && window.avinashgroup_app.buying_guide;
+			if (guide) report.page.add_inner_button(guide.BUTTON_LABEL, () => guide.open("compare"));
+		});
+
 		// Create a button for setting the default supplier
 		report.page.add_inner_button(
 			__("Select Default Supplier"),

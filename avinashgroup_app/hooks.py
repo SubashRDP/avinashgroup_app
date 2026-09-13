@@ -79,9 +79,12 @@ doctype_js = {
     # another app was aborting the concatenated Sales Invoice form-script on some
     # sites, which stopped these handlers from registering. Global load avoids that.
     "Payment Entry": "public/js/payment_entry.js",
-    "Material Request": "public/js/material_request.js",
-    "Purchase Order": "public/js/purchase_order.js",
-    "Supplier Quotation": "public/js/back_to_material_request.js",
+    # buying_guide.js: the step-by-step English / Nepali "Guide" on every form of the
+    # purchase flow (Material Request -> RFQ -> Supplier Quotation -> Purchase Order)
+    "Material Request": ["public/js/material_request.js", "public/js/buying_guide.js"],
+    "Request for Quotation": "public/js/buying_guide.js",
+    "Purchase Order": ["public/js/purchase_order.js", "public/js/buying_guide.js"],
+    "Supplier Quotation": ["public/js/back_to_material_request.js", "public/js/buying_guide.js"],
     "Purchase Invoice": "public/js/pi.js",
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
