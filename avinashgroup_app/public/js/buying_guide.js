@@ -488,7 +488,8 @@
 		.bg-flowbox { border: 1px solid var(--border-color); border-radius: 14px; padding: 16px 16px 10px; margin-bottom: 20px; background: var(--card-bg, #fff); }
 		.bg-flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; align-items: center; }
 		.bg-node { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 0 4px; }
-		.bg-node:not(:last-child)::after { content: ""; position: absolute; top: 22px; left: calc(50% + 24px); right: calc(-50% + 24px);
+		/* connector to the next stage - not after the 6th, whose next sibling is the bypass line */
+		.bg-node:not(:nth-child(6))::after { content: ""; position: absolute; top: 22px; left: calc(50% + 24px); right: calc(-50% + 24px);
 			height: 2px; background: #cbd5e1; }
 		.bg-dot { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px;
 			background: var(--control-bg, #f1f5f9); border: 2px solid #e2e8f0; z-index: 1; }
