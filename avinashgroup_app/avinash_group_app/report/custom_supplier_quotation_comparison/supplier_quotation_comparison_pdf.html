@@ -7,26 +7,31 @@
 	   itself, the renderer gives the space to whatever cannot wrap - the nowrap
 	   money columns - and squeezes Narration down to one letter per line. */
 	table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-	th, td { border: 1px solid #b0b0b0; padding: 2px 3px; vertical-align: top; font-size: 7.5pt; }
+	th, td { border: 1px solid #c9ced6; padding: 2px 3px; vertical-align: top; font-size: 7.5pt; }
 	th { background: #f2f2f2; }
 	.fixed-head { vertical-align: bottom; text-align: left; }
-	.sup-group, .sub-group { text-align: center; }
-	.sub-group a { color: #000; text-decoration: none; }
-	.starred { color: #c2410c; }
-	.sq-no { font-size: 7.5pt; font-weight: normal; color: #555; }
+	.sup-group { text-align: center; font-weight: bold; }
+	.sub-group { text-align: center; }
+	.sub-group a { color: inherit; text-decoration: none; }
+	.starred { color: #c2410c !important; }
+	.sq-no { font-size: 7pt; font-weight: normal; opacity: 0.75; }
 	/* PO number under a compact "Ordered 1" label - wraps inside its narrow column */
 	.po-note { font-size: 6.5pt; font-weight: normal; color: #555; white-space: normal; word-break: break-all; }
 	.num { text-align: right; white-space: nowrap; }
 	.narr { text-align: left; white-space: normal; word-break: break-word; font-size: 8pt; }
 	.summary-label { font-weight: normal; }
-	.total-row td { font-weight: bold; background: #f2f2f2; }
-	.invoice-row td { font-weight: bold; background: #f2f2f2; border-top: 2px solid #444; }
+	.total-row td { font-weight: bold; }
+	.invoice-row td { font-weight: bold; border-top: 2px solid #444; }
 	.term-row td { background: #fafafa; }
 	.term-val { text-align: left; white-space: pre-line; font-size: 8pt; }
-	/* Left edge of each quotation block, and a lighter one for each PO inside it */
-	.grp-start { border-left: 2px solid #6b7280; }
-	.sub-start { border-left: 1.5px solid #9ca3af; }
 </style>
+
+{#- The quotation's accent opens its block; a softer line opens each sub-group
+    (Quoted / Ordered / a PO) inside it - the same edges as on screen. -#}
+{% macro edge(f, g) -%}
+	{%- if f.edge == "grp-start" %}border-left: 2px solid {{ g.accent }};
+	{%- elif f.edge == "sub-start" %}border-left: 1.5px solid {{ g.soft }};{% endif -%}
+{%- endmacro %}
 
 <div class="company">{{ company }}</div>
 <div class="title">{{ report_title }}</div>
@@ -51,22 +56,23 @@
 		{% endfor %}{% endfor %}
 	</colgroup>
 	<thead>
-		{# Three header rows like the report: quotation / Quoted and each PO /
-		   Qty, Rate, Amount. The fixed columns span all three. #}
+		{# Three header rows like the report: quotation / Quoted and Ordered or each
+		   PO / Qty, Rate, Amount. The fixed columns span all three. #}
 		<tr>
 			<th class="fixed-head" rowspan="3">SN</th>
 			<th class="fixed-head" rowspan="3">Item Name</th>
 			<th class="fixed-head" rowspan="3">MR Qty</th>
 			{% for g in groups %}
-			<th class="sup-group grp-start" colspan="{{ g.span }}" style="background: {{ g.band }};">
-				{{ g.display }}<div class="sq-no">{{ g.sq }}</div>
+			<th class="sup-group" colspan="{{ g.span }}"
+				style="background: {{ g.head }}; color: {{ g.text }}; border-left: 2px solid {{ g.accent }};">
+				{{ g.display }} <span class="sq-no">({{ g.sq }})</span>
 			</th>
 			{% endfor %}
 		</tr>
 		<tr>
 			{% for g in groups %}{% for sub in g.subgroups %}
-			<th class="sub-group {{ sub.fields[0].edge }}{{ ' starred' if sub.label.startswith('★') else '' }}"
-				colspan="{{ sub.span }}" style="background: {{ g.band }};">
+			<th class="sub-group{{ ' starred' if sub.label.startswith('★') else '' }}" colspan="{{ sub.span }}"
+				style="background: {{ sub.fill }}; color: {{ g.text }}; {{ edge(sub.fields[0], g) }}">
 				{%- if sub.po %}<a href="{{ frappe.utils.get_url('/app/purchase-order/' ~ sub.po) }}">{{ sub.label }}</a>
 				{%- else %}{{ sub.label }}{% endif -%}
 			</th>
@@ -74,8 +80,8 @@
 		</tr>
 		<tr>
 			{% for g in groups %}{% for f in g.fields %}
-			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }} {{ f.edge }}"
-				style="background: {{ g.band }};">{{ f.label }}
+			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }}{{ ' starred' if f.label.startswith('★') else '' }}"
+				style="background: {{ f.fill }}; {{ edge(f, g) }}">{{ f.label }}
 				{%- if f.note %}<div class="po-note">{{ f.note }}</div>{% endif -%}
 			</th>
 			{% endfor %}{% endfor %}
@@ -94,14 +100,13 @@
 			{% if f.kind == "qty" %}
 			{# Quoted qty; orange when it differs from what the Material Request asked for #}
 			{% set differs = v is not none and row.qty is not none and (v | float) != (row.qty | float) %}
-			<td class="num {{ f.edge }}"
-				style="background: {{ g.band }};{{ ' color: #c2410c; font-weight: bold;' if differs else '' }}">{{ fmt_qty(v) }}</td>
+			<td class="num" style="background: {{ f.fill }}; {{ edge(f, g) }}{{ ' color: #c2410c; font-weight: bold;' if differs else '' }}">{{ fmt_qty(v) }}</td>
 			{% elif f.kind == "poqty" %}
-			<td class="num {{ f.edge }}" style="background: {{ g.band }};">{{ fmt_qty(v) }}</td>
+			<td class="num" style="background: {{ f.fill }}; {{ edge(f, g) }}">{{ fmt_qty(v) }}</td>
 			{% elif f.kind == "narration" %}
-			<td class="narr {{ f.edge }}" style="background: {{ g.band }};">{{ v or "" }}</td>
+			<td class="narr" style="background: {{ f.fill }}; {{ edge(f, g) }}">{{ v or "" }}</td>
 			{% else %}
-			<td class="num {{ f.edge }}" style="background: {{ g.band }};">{{ fmt(v) }}</td>
+			<td class="num" style="background: {{ f.fill }}; {{ edge(f, g) }}">{{ fmt(v) }}</td>
 			{% endif %}
 			{% endfor %}
 			{% endfor %}
@@ -110,7 +115,7 @@
 		<tr class="term-row">
 			<td class="summary-label" colspan="3">{{ row.qty }}</td>
 			{% for g in groups %}
-			<td class="term-val grp-start" colspan="{{ g.span }}">{{ row.get(g.amount_field) or "" }}</td>
+			<td class="term-val" colspan="{{ g.span }}" style="border-left: 2px solid {{ g.accent }};">{{ row.get(g.amount_field) or "" }}</td>
 			{% endfor %}
 		</tr>
 		{% else %}
@@ -119,9 +124,9 @@
 			{% for g in groups %}
 			{% for f in g.fields %}
 			{% if f.kind in ("amount", "poamt") %}
-			<td class="num {{ f.edge }}">{{ fmt(row.get(f.field)) if row.get(f.field) is not none else "" }}</td>
+			<td class="num" style="background: {{ f.fill }}; {{ edge(f, g) }}">{{ fmt(row.get(f.field)) if row.get(f.field) is not none else "" }}</td>
 			{% else %}
-			<td class="{{ f.edge }}"></td>
+			<td style="background: {{ f.fill }}; {{ edge(f, g) }}"></td>
 			{% endif %}
 			{% endfor %}
 			{% endfor %}

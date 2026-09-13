@@ -779,11 +779,13 @@ def get_columns(
 	starred = set(_as_list((filters or {}).get("purchase_order")))
 	extend = cint((filters or {}).get("extend_purchase_order"))
 
-	for quotation in quotations:
+	for index, quotation in enumerate(quotations):
 		col_fieldname = column_key.get(quotation) or frappe.scrub(quotation).replace("/", "_")
 		block = {
 			"sq_link": quotation,
 			"supplier_group": (quotation_display_name or {}).get(quotation, quotation),
+			# the block's colour family - screen, print and Excel all paint from it
+			"tint": SUPPLIER_PALETTE[index % len(SUPPLIER_PALETTE)],
 		}
 
 		# What the quotation offered. Narration is dropped for a quotation that has
@@ -851,7 +853,22 @@ def get_message():
 
 # The alternating supplier tints the on-screen report paints (kept in step with
 # BAND_COLORS in the report's client script) so print and Excel read the same way.
-SUPPLIER_BAND_COLORS = ["#eef3ff", "#fff8ec", "#eefaf1", "#fdeef4"]
+#
+# One colour family per quotation, cycled in column order: a deeper `head` shade for
+# the quotation heading (with `text` on it), a light `quoted` shade under what was
+# Quoted and a stronger `ordered` shade under what was Ordered - so quote and order
+# read apart at a glance - plus `accent` for the block's left edge and `soft` for the
+# lighter edge between its sub-groups. `*_head` shades the sub-group headings.
+SUPPLIER_PALETTE = [
+	{"head": "#dbe4fb", "text": "#1e3a8a", "quoted_head": "#eaf0fe", "ordered_head": "#d6e1fb",
+	 "quoted": "#f5f8ff", "ordered": "#e8eefd", "accent": "#5b7bd5", "soft": "#b3c3ee"},
+	{"head": "#fbe4bd", "text": "#7c4a03", "quoted_head": "#fdf1dc", "ordered_head": "#f9e0b4",
+	 "quoted": "#fffaf1", "ordered": "#fdf0d8", "accent": "#d69e2e", "soft": "#eed39c"},
+	{"head": "#cdeed8", "text": "#14532d", "quoted_head": "#e4f6ea", "ordered_head": "#c9ecd5",
+	 "quoted": "#f3fbf6", "ordered": "#e2f5e9", "accent": "#38a169", "soft": "#a7d8bb"},
+	{"head": "#f6d3e2", "text": "#831843", "quoted_head": "#fbe7f0", "ordered_head": "#f3cfe0",
+	 "quoted": "#fdf5f9", "ordered": "#f9e6ef", "accent": "#d53f8c", "soft": "#ecaacb"},
+]
 
 # Suffix -> kind, for classifying a quotation block's columns. The PO suffixes are
 # checked first; anything unmatched is the quotation's Amount column, which carries
@@ -883,6 +900,7 @@ def _supplier_groups(columns):
 			groups.append({
 				"display": col.get("supplier_group") or sq,
 				"sq": sq,
+				"tint": col.get("tint") or SUPPLIER_PALETTE[len(groups) % len(SUPPLIER_PALETTE)],
 				"fields": [],
 				"subgroups": [],
 				"qty_field": None,
@@ -913,11 +931,18 @@ def _supplier_groups(columns):
 			group["subgroups"].append({"label": label, "po": col.get("po_link"), "fields": []})
 		group["subgroups"][-1]["fields"].append(field)
 
-	for index, group in enumerate(groups):
+	for group in groups:
+		tint = group["tint"]
 		group["span"] = len(group["fields"])
-		group["band"] = SUPPLIER_BAND_COLORS[index % len(SUPPLIER_BAND_COLORS)]
+		group.update(band=tint["quoted"], head=tint["head"], text=tint["text"],
+					 accent=tint["accent"], soft=tint["soft"])
 		for position, sub in enumerate(group["subgroups"]):
 			sub["span"] = len(sub["fields"])
+			# Quoted in the light shade, what was Ordered in the stronger one
+			ordered = any(f["po"] for f in sub["fields"])
+			sub["fill"] = tint["ordered_head"] if ordered else tint["quoted_head"]
+			for f in sub["fields"]:
+				f["fill"] = tint["ordered"] if ordered else tint["quoted"]
 			sub["fields"][0]["edge"] = "grp-start" if position == 0 else "sub-start"
 			# The compact "Ordered" heading covers one column per PO: it links to no
 			# single PO, and each column names its own PO for print, where nobody
@@ -959,7 +984,7 @@ def export_xlsx(filters):
 	sub_row = [""] * FIXED
 	label_row = [""] * FIXED
 	for g in groups:
-		group_row += [f"{g['display']}\n{g['sq']}"] + [""] * (g["span"] - 1)
+		group_row += [f"{g['display']}\n({g['sq']})"] + [""] * (g["span"] - 1)
 		for sub in g["subgroups"]:
 			sub_row += [sub["label"]] + [""] * (sub["span"] - 1)
 			label_row += [f["label"] + (f"\n{f['note']}" if f["note"] else "") for f in sub["fields"]]
@@ -995,23 +1020,31 @@ def export_xlsx(filters):
 	QTY = "#,##0.##"
 
 	hair = Side(style="thin", color="B0B0B0")
-	thick = Side(style="medium", color="6B7280")  # left edge of a quotation block
-	sub_edge = Side(style="thin", color="6B7280")  # left edge of a PO sub-group
 
-	# Which sheet column each block / sub-group starts at, and what kind each column is.
+	def hex_of(colour):
+		return colour.lstrip("#").upper()
+
+	def solid(colour):
+		return PatternFill("solid", fgColor=hex_of(colour))
+
+	# What kind each sheet column is, and the left edge it opens with: the
+	# quotation's accent where its block starts, a softer line where a sub-group
+	# (Quoted / Ordered / a PO) starts inside it.
 	col_kind = {}  # 1-based sheet column -> qty / rate / amount / narration / poqty / porate / poamt
-	block_starts, sub_starts = set(), set()
+	col_edge = {}  # 1-based sheet column -> Side
 	col = FIXED + 1
 	for g in groups:
-		block_starts.add(col)
-		for sub in g["subgroups"]:
-			sub_starts.add(col)
+		for position, sub in enumerate(g["subgroups"]):
+			col_edge[col] = (
+				Side(style="medium", color=hex_of(g["accent"])) if position == 0
+				else Side(style="thin", color=hex_of(g["soft"]))
+			)
 			for offset, f in enumerate(sub["fields"]):
 				col_kind[col + offset] = f["kind"]
 			col += sub["span"]
 
 	def left_edge(c):
-		return thick if c in block_starts else (sub_edge if c in sub_starts else hair)
+		return col_edge.get(c, hair)
 
 	# --- the three header rows ------------------------------------------------
 	for c in range(1, FIXED + 1):
@@ -1024,7 +1057,7 @@ def export_xlsx(filters):
 	for g in groups:
 		ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + g["span"] - 1)
 		cell = ws.cell(row=1, column=col)
-		cell.font = Font(bold=True)
+		cell.font = Font(bold=True, color=hex_of(g["text"]))
 		cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 		cell.hyperlink = frappe.utils.get_url(f"/app/supplier-quotation/{g['sq']}")
 		for sub in g["subgroups"]:
@@ -1128,14 +1161,19 @@ def export_xlsx(filters):
 			)
 			col += g["span"]
 
-	# Quotation tints last, so they sit under every cell of the block.
+	# Tints last, so they sit under every cell: the quotation's deeper shade on its
+	# heading; under it the light Quoted shade and the stronger Ordered shade, from
+	# the sub-group heading down to the last row.
 	col = FIXED + 1
 	for g in groups:
-		fill = PatternFill("solid", fgColor=g["band"].lstrip("#").upper())
 		for offset in range(g["span"]):
-			for r in range(1, last_row + 1):
-				ws.cell(row=r, column=col + offset).fill = fill
-		col += g["span"]
+			ws.cell(row=1, column=col + offset).fill = solid(g["head"])
+		for sub in g["subgroups"]:
+			for offset, f in enumerate(sub["fields"]):
+				ws.cell(row=2, column=col + offset).fill = solid(sub["fill"])
+				for r in range(HEAD, last_row + 1):
+					ws.cell(row=r, column=col + offset).fill = solid(f["fill"])
+			col += sub["span"]
 
 	# --- column widths -------------------------------------------------------
 	# Sized from the widest value actually in each column (header rows 1-2 are

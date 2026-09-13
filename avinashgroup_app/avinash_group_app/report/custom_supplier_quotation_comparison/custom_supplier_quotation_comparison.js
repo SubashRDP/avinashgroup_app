@@ -296,18 +296,19 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 
 	// Two merged header rows above the datatable's own column labels, like a
 	// hand-made sheet: the Supplier Quotation across its whole block, and under it
-	// "Quoted" and each Purchase Order made from that quotation across their own
-	// columns. Injected on every render; scrolls with the header because the
-	// datatable applies its translateX to the whole .dt-header element.
+	// "Quoted" and what was Ordered from that quotation. Injected on every render;
+	// scrolls with the header because the datatable applies its translateX to the
+	// whole .dt-header element.
+	//
+	// Colour comes from each column's `tint` - the quotation's colour family, sent
+	// by the server so print and Excel match: a deeper shade on the quotation
+	// heading, a light one under what was Quoted and a stronger one under what was
+	// Ordered, and the family's accent as the block's left edge, drawn as one line
+	// from the heading down to the last row.
 	decorate_datatable: (datatable) => {
 		if (!datatable || !datatable.wrapper) return;
-
-		// Alternating tints, one per quotation, so adjacent blocks are visibly
-		// distinct. Applied via each cell's stable "dt-cell--col-N" class, which the
-		// datatable puts on header, filter and body cells alike - one CSS rule per
-		// column tints that block top to bottom.
-		const BAND_COLORS = ["#eef3ff", "#fff8ec", "#eefaf1", "#fdeef4"];
 		const esc = frappe.utils.escape_html;
+		const scope = datatable.style && datatable.style.scopeClass ? `.${datatable.style.scopeClass} ` : "";
 
 		const render_group_header = () => {
 			const $header = $(datatable.wrapper).find(".dt-header");
@@ -325,6 +326,7 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 					group: col.supplier_group || "",
 					sub: col.sub_group || "",
 					po: col.po_link || "",
+					tint: col.tint || {},
 				};
 			});
 			if (!cols.some((c) => c.sq)) return;
@@ -333,76 +335,94 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 				if (cols[n].po) cell.title = cols[n].po;
 			});
 
-			// Widths come from invisible "keeper" divs carrying the datatable's own
-			// .dt-cell__content--col-N classes - its width stylesheet keeps them in
-			// sync with the real columns, including later resizes / fit-columns.
-			const keeper = (idx) => `<div class="dt-cell__content--col-${idx}" style="height:0;"></div>`;
-			const border = "1px solid var(--dt-border-color, #d1d8dd)";
-			const block_edge = "2px solid var(--dt-border-color-dark, #8a94a6)";
-
-			const band = {};
-			let band_rules = "";
-			cols.forEach((c) => {
-				if (!c.sq) return;
-				if (!(c.sq in band)) band[c.sq] = BAND_COLORS[Object.keys(band).length % BAND_COLORS.length];
-				band_rules += `.dt-cell--col-${c.idx}{background-color:${band[c.sq]};}\n`;
+			// Where each quotation block, and each sub-group inside it, begins.
+			cols.forEach((c, n) => {
+				const prev = cols[n - 1];
+				c.edge = !c.sq ? "" : !prev || prev.sq !== c.sq ? "block" : prev.sub !== c.sub ? "sub" : "";
 			});
+			// Drawn as inset shadows, which take no width, so they can never push a
+			// heading out of line with the columns under it.
+			const edge_line = (c) =>
+				c.edge === "block"
+					? `box-shadow: inset 2px 0 0 ${c.tint.accent};`
+					: c.edge === "sub"
+					? `box-shadow: inset 1px 0 0 ${c.tint.soft};`
+					: "";
 
-			const label = (html, weight) =>
-				`<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-					font-weight:${weight};overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 8px;">${html}</div>`;
+			// A run's width is each column's width PLUS the 1px border the datatable
+			// draws after every cell. Counting only the widths left each merged
+			// heading 1px short per column, so the dividers drifted off the columns.
+			const keeper = (idx) =>
+				`<div class="dt-cell__content--col-${idx}" style="height:0;flex:none;"></div><div style="width:1px;flex:none;"></div>`;
+			const keepers = (run) => run.map((x) => keeper(x.idx)).join("");
 
 			// One merged cell per run of consecutive columns sharing key(c).
 			const build_row = (key, cell_html) => {
 				let html = "";
-				let i = 0;
-				while (i < cols.length) {
-					const c = cols[i];
+				for (let i = 0; i < cols.length; ) {
 					let j = i;
-					let keepers = "";
-					while (j < cols.length && key(cols[j]) === key(c)) {
-						keepers += keeper(cols[j].idx);
-						j++;
-					}
-					const block_end = j >= cols.length || cols[j].sq !== c.sq;
-					html += c.sq
-						? cell_html(c, keepers, block_end ? block_edge : border, cols.slice(i, j))
-						: `<div style="display:flex;border-right:1px solid transparent;">${keepers}</div>`;
+					while (j < cols.length && key(cols[j]) === key(cols[i])) j++;
+					const run = cols.slice(i, j);
+					html += cols[i].sq ? cell_html(cols[i], run) : `<div style="display:flex;">${keepers(run)}</div>`;
 					i = j;
 				}
 				return html;
 			};
+			const merged = (c, run, background, attrs, inner, extra_style = "") =>
+				`<div ${attrs} data-last="${run[run.length - 1].idx}"
+					style="position:relative;display:flex;background:${background};${edge_line(c)}${extra_style}">${keepers(run)}
+					<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+						overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 10px;">${inner}</div></div>`;
 
 			const quotation_row = build_row(
 				(c) => c.sq,
-				(c, keepers, edge) =>
-					`<div class="sq-group-cell" data-sq-link="${esc(c.sq)}" title="${__("Open Supplier Quotation")}"
-						style="position:relative;display:flex;cursor:pointer;border-right:${edge};background:${band[c.sq]};">${keepers}
-						${label(`<span>${esc(c.group)} <span style="font-weight:400;color:var(--text-muted);">&middot; ${esc(c.sq)}</span></span>`, 600)}</div>`
+				(c, run) =>
+					merged(
+						c,
+						run,
+						c.tint.head,
+						`class="sq-group-cell" data-sq-link="${esc(c.sq)}" title="${__("Open Supplier Quotation")}"`,
+						`<span style="overflow:hidden;text-overflow:ellipsis;">
+							<span style="font-weight:600;color:${c.tint.text};">${esc(c.group)}</span>
+							<span style="margin-left:4px;font-size:11px;color:${c.tint.text};opacity:.7;">(${esc(c.sq)})</span>
+						</span>`,
+						"cursor:pointer;"
+					)
 			);
 			const sub_row = build_row(
 				(c) => `${c.sq}|${c.sub}`,
-				(c, keepers, edge, run) => {
-					const starred = c.sub.startsWith("★");
+				(c, run) => {
+					const ordered = run.some((x) => x.po);
 					// A heading links to its PO only when it stands for one PO - the compact
 					// "Ordered" heading spans one column per PO, each column links itself.
 					const po = run.every((x) => x.po === c.po) ? c.po : "";
-					const link = po ? ` data-po-link="${esc(po)}" title="${__("Open Purchase Order")}"` : "";
-					return `<div class="sq-sub-cell"${link}
-						style="position:relative;display:flex;border-right:${edge};border-top:${border};background:${band[c.sq]};
-						${po ? "cursor:pointer;" : ""}${starred ? "color:var(--orange-600, #c2410c);" : ""}">${keepers}
-						${label(esc(c.sub), po ? 600 : 500)}</div>`;
+					const colour = c.sub.startsWith("★") ? "var(--orange-600, #c2410c)" : c.tint.text;
+					return merged(
+						c,
+						run,
+						ordered ? c.tint.ordered_head : c.tint.quoted_head,
+						`class="sq-sub-cell"${po ? ` data-po-link="${esc(po)}" title="${__("Open Purchase Order")}"` : ""}`,
+						`<span style="font-weight:${ordered ? 600 : 500};color:${colour};">${esc(c.sub)}</span>`,
+						po ? "cursor:pointer;" : ""
+					);
 				}
 			);
-			const row_style = `display:flex;height:26px;background:var(--dt-header-cell-bg, #f7fafc);`;
-			$header.prepend(`<div class="sq-supplier-group-row" style="${row_style}border-bottom:${border};">${sub_row}</div>`);
-			$header.prepend(`<div class="sq-supplier-group-row" style="${row_style}">${quotation_row}</div>`);
+			const bar = "display:flex;background:var(--dt-header-cell-bg, #f7fafc);border-bottom:1px solid var(--dt-border-color, #d1d8dd);";
+			$header.prepend(`<div class="sq-supplier-group-row" style="${bar}height:24px;">${sub_row}</div>`);
+			$header.prepend(`<div class="sq-supplier-group-row" style="${bar}height:30px;">${quotation_row}</div>`);
 
-			let $band_style = $(datatable.wrapper).find("style.sq-supplier-band-style");
-			if (!$band_style.length) {
-				$band_style = $('<style class="sq-supplier-band-style"></style>').appendTo(datatable.wrapper);
+			// Every cell of a column - label, filter and body - in its shade, with the
+			// block / sub-group edge carried down the whole column.
+			let rules = "";
+			cols.forEach((c) => {
+				if (!c.sq) return;
+				rules += `${scope}.dt-cell--col-${c.idx}{background-color:${c.po ? c.tint.ordered : c.tint.quoted};${edge_line(c)}}\n`;
+			});
+			let $style = $(datatable.wrapper).find("style.sq-supplier-band-style");
+			if (!$style.length) {
+				$style = $('<style class="sq-supplier-band-style"></style>').appendTo(datatable.wrapper);
 			}
-			$band_style.text(band_rules);
+			$style.text(rules);
 		};
 
 		render_group_header();
