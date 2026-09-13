@@ -49,14 +49,17 @@ def _sq_filter_scope(company=None, purchase_order=None, material_request=None,
 		conditions.append("sq.company = %(company)s")
 		values["company"] = company
 
+	# Arrives JSON-encoded from the dropdowns ('["PO-1"]', '[]'), so normalise
+	# before testing it - a bare '[]' string would otherwise read as "PO chosen".
+	purchase_orders = _as_list(purchase_order)
 	material_requests = _as_list(material_request)
-	if purchase_order:
-		material_requests += get_material_requests_from_purchase_order(purchase_order)
+	if purchase_orders:
+		material_requests += get_material_requests_from_purchase_order(purchase_orders)
 	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
 	if material_requests:
 		conditions.append("sqi.material_request IN %(material_requests)s")
 		values["material_requests"] = tuple(material_requests)
-	elif purchase_order:
+	elif purchase_orders:
 		# PO chosen but untraceable to any MR -> no quotation is aligned to it;
 		# offer nothing rather than everything (mirrors get_data).
 		conditions.append("1 = 0")
@@ -95,6 +98,51 @@ def get_filter_suppliers(company=None, purchase_order=None, material_request=Non
 		FROM `tabSupplier Quotation` sq, `tabSupplier Quotation Item` sqi
 		WHERE {" AND ".join(conditions)}
 		ORDER BY sq.supplier_name
+		LIMIT 50
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+@frappe.whitelist()
+def get_filter_purchase_orders(company=None, material_request=None, purchase_order=None, txt=None):
+	"""Purchase Order options: only orders raised from a Material Request that is in
+	the comparison. That set is the Material Request filter plus the MRs of the
+	orders already picked - so opened from one PO, the list is that PO and its
+	siblings (the same MR ordered from other suppliers). With nothing picked yet it
+	is any PO whose MR has a quotation to compare; a PO with no MR can never
+	produce a comparison, so it is never offered."""
+	material_requests = _as_list(material_request)
+	purchase_orders = _as_list(purchase_order)
+	if purchase_orders:
+		material_requests += get_material_requests_from_purchase_order(purchase_orders)
+	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
+
+	conditions = ["poi.parent = po.name", "po.docstatus < 2", "poi.material_request IS NOT NULL"]
+	values = {"txt": f"%{(txt or '').strip()}%"}
+	if company:
+		conditions.append("po.company = %(company)s")
+		values["company"] = company
+	if material_requests:
+		conditions.append("poi.material_request IN %(material_requests)s")
+		values["material_requests"] = tuple(material_requests)
+	else:
+		conditions.append(
+			"""EXISTS (
+				SELECT 1 FROM `tabSupplier Quotation Item` sqi
+				WHERE sqi.material_request = poi.material_request AND sqi.docstatus < 2
+			)"""
+		)
+	conditions.append("(po.name LIKE %(txt)s OR po.supplier_name LIKE %(txt)s)")
+
+	return frappe.db.sql(
+		f"""
+		SELECT po.name AS value, po.supplier_name AS description
+		FROM `tabPurchase Order` po, `tabPurchase Order Item` poi
+		WHERE {" AND ".join(conditions)}
+		GROUP BY po.name
+		ORDER BY po.transaction_date DESC, po.name DESC
 		LIMIT 50
 		""",
 		values,
@@ -255,16 +303,19 @@ def get_data(filters):
 	# Request on its item lines rather than on the quotation, so we resolve the PO
 	# to its Material Request(s) and match on the same column. When both filters are
 	# set we take the union — "show quotations for any of these source documents".
+	# Several Purchase Orders may be chosen; each contributes its own MR(s).
+	purchase_orders = _as_list(filters.get("purchase_order"))
 	material_requests = _as_list(filters.get("material_request"))
-	if filters.get("purchase_order"):
-		material_requests += get_material_requests_from_purchase_order(filters.get("purchase_order"))
+	if purchase_orders:
+		material_requests += get_material_requests_from_purchase_order(purchase_orders)
 	material_requests = [mr for mr in dict.fromkeys(material_requests) if mr]
 	if material_requests:
 		query = query.where(sq_item.material_request.isin(material_requests))
-	elif filters.get("purchase_order"):
-		# A Purchase Order was chosen but its item lines carry no material_request
-		# link (created directly, not from an MR). Nothing is "aligned to this PO",
-		# so show nothing - falling through would list every quotation in the window.
+	elif purchase_orders:
+		# Purchase Orders were chosen but none of their item lines carries a
+		# material_request link (created directly, not from an MR). Nothing is
+		# "aligned to these POs", so show nothing - falling through would list
+		# every quotation in the window.
 		return []
 
 	if filters.get("item_code"):
@@ -442,15 +493,17 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	# records which quotation each PO line came from, so the "Ordered" column
 	# shows, per item, how much was taken from that exact quotation - two
 	# quotations from the same supplier each report their own.
-	# Independent of the Purchase Order filter; scoped to it when one is set.
+	# Independent of the Purchase Order filter; scoped to the chosen orders when
+	# any are set.
 	# ------------------------------------------------------------------
 	ordered_item_quotation = {}  # (item_code, quotation) -> {"qty": total, "pos": [po_name, ...]}
 	if quotations:
 		conditions = ["poi.parent = po.name", "po.docstatus < 2", "poi.supplier_quotation IN %(sqs)s"]
 		values = {"sqs": tuple(quotations)}
-		if filters.get("purchase_order"):
-			conditions.append("po.name = %(po)s")
-			values["po"] = filters.get("purchase_order")
+		purchase_orders = _as_list(filters.get("purchase_order"))
+		if purchase_orders:
+			conditions.append("po.name IN %(pos)s")
+			values["pos"] = tuple(purchase_orders)
 		for pr in frappe.db.sql(
 			f"""
 			SELECT poi.item_code AS item_code, poi.supplier_quotation AS sq, po.name AS po,
@@ -1079,14 +1132,15 @@ def download_pdf(filters, view=None):
 	columns, data = execute(filters)[:2]
 	groups = _supplier_groups(columns)
 
+	purchase_orders = _as_list(filters.get("purchase_order"))
 	report_title = "Supplier Quotation Comparison"
-	if filters.get("purchase_order"):
-		report_title += " — {0}".format(filters.purchase_order)
+	if purchase_orders:
+		report_title += " — {0}".format(", ".join(purchase_orders))
 
 	subline_parts = []
 	material_requests = _as_list(filters.get("material_request"))
-	if filters.get("purchase_order"):
-		material_requests += get_material_requests_from_purchase_order(filters.purchase_order)
+	if purchase_orders:
+		material_requests += get_material_requests_from_purchase_order(purchase_orders)
 	material_requests = list(dict.fromkeys(mr for mr in material_requests if mr))
 	if material_requests:
 		subline_parts.append("Material Request: {0}".format(", ".join(material_requests)))
@@ -1178,18 +1232,24 @@ def set_default_supplier(item_code, supplier, company):
 
 @frappe.whitelist()
 def get_material_requests_from_purchase_order(purchase_order):
-	"""Material Request(s) a Purchase Order was raised from, read off its item lines.
+	"""Material Request(s) one or more Purchase Orders were raised from, read off
+	their item lines.
 
 	The approval workflow runs on the Purchase Order; approvers open the comparison
-	from there. A PO may draw on more than one Material Request, so this returns a
-	list and get_data() matches Supplier Quotation Items against all of them.
+	from there. A PO may draw on more than one Material Request, and the report can
+	compare several POs at once, so this takes a single name or a list (plain or
+	JSON-encoded) and returns the union; get_data() matches Supplier Quotation Items
+	against all of them.
 	"""
+	purchase_orders = _as_list(purchase_order)
+	if not purchase_orders:
+		return []
 	rows = frappe.db.sql(
 		"""
 		SELECT DISTINCT poi.material_request
 		FROM `tabPurchase Order Item` poi
-		WHERE poi.parent = %s AND poi.material_request IS NOT NULL
+		WHERE poi.parent IN %(pos)s AND poi.material_request IS NOT NULL
 		""",
-		purchase_order,
+		{"pos": tuple(purchase_orders)},
 	)
 	return [r[0] for r in rows]

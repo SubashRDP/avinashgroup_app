@@ -109,27 +109,43 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: 1,
 		},
 		{
-			fieldtype: "Link",
+			fieldtype: "MultiSelectList",
 			label: __("Purchase Order"),
 			options: "Purchase Order",
 			fieldname: "purchase_order",
 			default: "",
-			// Resolved to its source Material Request(s) server-side (see get_data).
-			get_query: () => ({ filters: { docstatus: ["<", 2] } }),
-			// The comparison must run against the PO's company (not the user's
-			// default) and show which Material Request the PO was raised from -
+			// Several orders can be compared at once. Resolved to their source
+			// Material Request(s) server-side (see get_data). Only orders raised
+			// from a Material Request in the comparison are offered - opened from a
+			// PO, that is the PO and its siblings (same MR, other suppliers).
+			get_data: function (txt) {
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_filter_purchase_orders",
+						args: {
+							company: frappe.query_report.get_filter_value("company"),
+							material_request: frappe.query_report.get_filter_value("material_request"),
+							purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+							txt: txt,
+						},
+					})
+					.then((r) => r.message || []);
+			},
+			// The comparison must run against the POs' company (not the user's
+			// default) and show which Material Request they were raised from -
 			// both are filled in automatically when a PO is picked.
 			on_change: (report) => {
-				const po = report.get_filter_value("purchase_order");
-				if (!po) {
+				const pos = report.get_filter_value("purchase_order") || [];
+				if (!pos.length) {
 					report.refresh();
 					return;
 				}
 				Promise.all([
-					frappe.db.get_value("Purchase Order", po, "company"),
+					// The dropdown is company-scoped, so every picked PO shares the first one's company.
+					frappe.db.get_value("Purchase Order", pos[0], "company"),
 					frappe.call({
 						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_material_requests_from_purchase_order",
-						args: { purchase_order: po },
+						args: { purchase_order: pos },
 					}),
 				]).then(([company_r, mr_r]) => {
 					const company = company_r.message && company_r.message.company;
@@ -138,8 +154,9 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 					if (company && company !== report.get_filter_value("company")) {
 						values.company = company;
 					}
-					// Only unambiguous with a single MR; the server unions the PO's
-					// MRs regardless, so this display default never narrows results.
+					// Only unambiguous when all the picked POs share a single MR; the
+					// server unions their MRs regardless, so this display default
+					// never narrows results.
 					if (mrs.length === 1 && mrs[0] !== report.get_filter_value("material_request")) {
 						values.material_request = mrs[0];
 					}
