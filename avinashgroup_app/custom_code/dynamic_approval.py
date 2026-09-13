@@ -910,7 +910,15 @@ def _render_comparison_html(doc):
 				colour = "#c2410c" if sub["label"].startswith("★") else "#000"
 				text = f'<a href="{href}" style="color:{colour};">{text}</a>'
 			sub_cells.append(f'<th colspan="{sub["span"]}" style="{cell}text-align:center;">{text}</th>')
-			label_cells += [f'<th style="{cell}text-align:right;">{esc(f["label"])}</th>' for f in sub["fields"]]
+			label_cells += [
+				f'<th style="{cell}text-align:right;">{esc(f["label"])}'
+				+ (
+					f'<div style="font-weight:normal;font-size:11px;color:#6c757d;">{esc(f["note"])}</div>'
+					if f["note"] else ""
+				)
+				+ "</th>"
+				for f in sub["fields"]
+			]
 	header_rows = "".join(
 		f'<tr style="background:#f5f5f5;">{"".join(cells)}</tr>'
 		for cells in (quotation_cells, sub_cells, label_cells)

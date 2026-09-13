@@ -777,6 +777,7 @@ def get_columns(
 	quotations_with_narration = quotations_with_narration or set()
 	po_key = po_key or {}
 	starred = set(_as_list((filters or {}).get("purchase_order")))
+	extend = cint((filters or {}).get("extend_purchase_order"))
 
 	for quotation in quotations:
 		col_fieldname = column_key.get(quotation) or frappe.scrub(quotation).replace("/", "_")
@@ -800,10 +801,23 @@ def get_columns(
 			columns.append({**quoted, "fieldname": col_fieldname + "_narration",
 							"label": _("Narration"), "fieldtype": "Data", "width": 90})
 
-		# What each Purchase Order made from it actually ordered.
-		for po in quotation_pos.get(quotation, []):
+		# What the Purchase Orders made from it ordered. Compact by default: one
+		# "Ordered" qty column per PO ("Ordered 1", "Ordered 2", ... in PO order,
+		# plain "Ordered" when there is just one) under a single Ordered heading.
+		# With Extend Purchase Order ticked, each PO gets its own Qty / Rate /
+		# Amount sub-group instead.
+		pos = quotation_pos.get(quotation, [])
+		for number, po in enumerate(pos, start=1):
 			stem = f"{col_fieldname}__{po_key[po]}"
-			ordered = {**block, "sub_group": ("★ " if po in starred else "") + po, "po_link": po}
+			star = "★ " if po in starred else ""
+			if not extend:
+				label = _("Ordered") if len(pos) == 1 else _("Ordered {0}").format(number)
+				columns.append({
+					**block, "sub_group": _("Ordered"), "po_link": po, "po_compact": 1,
+					"fieldname": stem + "_poqty", "label": star + label, "fieldtype": "Float", "width": 95,
+				})
+				continue
+			ordered = {**block, "sub_group": star + po, "po_link": po}
 			columns += [
 				{**ordered, "fieldname": stem + "_poqty", "label": _("Qty"),
 				 "fieldtype": "Float", "width": 70},
@@ -888,6 +902,7 @@ def _supplier_groups(columns):
 			"label": col.get("label") or "",
 			"po": col.get("po_link"),
 			"edge": "",
+			"note": "",  # the PO number, printed under a compact "Ordered N" label
 		}
 		group["fields"].append(field)
 		if kind in ("qty", "rate", "amount", "narration"):
@@ -904,6 +919,13 @@ def _supplier_groups(columns):
 		for position, sub in enumerate(group["subgroups"]):
 			sub["span"] = len(sub["fields"])
 			sub["fields"][0]["edge"] = "grp-start" if position == 0 else "sub-start"
+			# The compact "Ordered" heading covers one column per PO: it links to no
+			# single PO, and each column names its own PO for print, where nobody
+			# can hover over "Ordered 1" to see which order that is.
+			if any(f["po"] for f in sub["fields"]) and len({f["po"] for f in sub["fields"]}) > 1:
+				sub["po"] = None
+				for f in sub["fields"]:
+					f["note"] = f["po"]
 	return groups
 
 
@@ -940,7 +962,7 @@ def export_xlsx(filters):
 		group_row += [f"{g['display']}\n{g['sq']}"] + [""] * (g["span"] - 1)
 		for sub in g["subgroups"]:
 			sub_row += [sub["label"]] + [""] * (sub["span"] - 1)
-			label_row += [f["label"] for f in sub["fields"]]
+			label_row += [f["label"] + (f"\n{f['note']}" if f["note"] else "") for f in sub["fields"]]
 
 	rows = [group_row, sub_row, label_row]
 	row_kinds = ["header"] * HEAD  # per sheet row, for the styling pass below
@@ -1021,9 +1043,17 @@ def export_xlsx(filters):
 		head = ws.cell(row=HEAD, column=c)
 		head.font = Font(bold=True)
 		head.alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+	# A compact "Ordered N" label carries its PO number underneath - link it there.
+	col = FIXED + 1
+	for g in groups:
+		for f in g["fields"]:
+			if f["note"]:
+				ws.cell(row=HEAD, column=col).hyperlink = frappe.utils.get_url(f"/app/purchase-order/{f['note']}")
+			col += 1
+	has_notes = any(f["note"] for g in groups for f in g["fields"])
 	ws.row_dimensions[1].height = 32
 	ws.row_dimensions[2].height = 18
-	ws.row_dimensions[3].height = 18
+	ws.row_dimensions[3].height = 30 if has_notes else 18
 
 	# --- body ----------------------------------------------------------------
 	for r in range(1, last_row + 1):
@@ -1216,7 +1246,7 @@ def download_pdf(filters, view=None):
 				"rate": "72px",
 				"amount": "88px",
 				"narration": "95px",
-				"poqty": "40px",
+				"poqty": "62px",  # room for a compact "Ordered 1" with its PO number under it
 				"porate": "72px",
 				"poamt": "88px",
 			},

@@ -14,6 +14,8 @@
 	.sub-group a { color: #000; text-decoration: none; }
 	.starred { color: #c2410c; }
 	.sq-no { font-size: 7.5pt; font-weight: normal; color: #555; }
+	/* PO number under a compact "Ordered 1" label - wraps inside its narrow column */
+	.po-note { font-size: 6.5pt; font-weight: normal; color: #555; white-space: normal; word-break: break-all; }
 	.num { text-align: right; white-space: nowrap; }
 	.narr { text-align: left; white-space: normal; word-break: break-word; font-size: 8pt; }
 	.summary-label { font-weight: normal; }
@@ -73,7 +75,9 @@
 		<tr>
 			{% for g in groups %}{% for f in g.fields %}
 			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }} {{ f.edge }}"
-				style="background: {{ g.band }};">{{ f.label }}</th>
+				style="background: {{ g.band }};">{{ f.label }}
+				{%- if f.note %}<div class="po-note">{{ f.note }}</div>{% endif -%}
+			</th>
 			{% endfor %}{% endfor %}
 		</tr>
 	</thead>

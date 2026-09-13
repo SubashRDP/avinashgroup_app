@@ -142,6 +142,14 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: 1,
 		},
 		{
+			// Off: one compact "Ordered" qty column per Purchase Order made from a
+			// quotation. On: a full Qty / Rate / Amount sub-group per Purchase Order.
+			fieldtype: "Check",
+			label: __("Extend Purchase Order"),
+			fieldname: "extend_purchase_order",
+			default: 0,
+		},
+		{
 			fieldtype: "MultiSelectList",
 			label: __("Purchase Order"),
 			options: "Purchase Order",
@@ -241,9 +249,15 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			return "";
 		}
 
-		// A PO's qty: only the decimals it needs (1, 1.5, 1,250), like the others.
+		// A PO's qty: only the decimals it needs (1, 1.5, 1,250), like the others. In
+		// the compact "Ordered N" columns it gets a tick, with the PO number on hover.
 		if (column.fieldname.endsWith("_poqty")) {
-			return value === null || value === undefined || value === "" ? "" : qty_text(value);
+			if (value === null || value === undefined || value === "") return "";
+			if (!column.po_compact) return qty_text(value);
+			const tick =
+				'<span style="display:inline-block;width:15px;height:15px;line-height:15px;border-radius:50%;' +
+				'background:#28a745;color:#fff;font-size:10px;font-weight:bold;text-align:center;vertical-align:middle;">✓</span>&nbsp;';
+			return `<span title="${frappe.utils.escape_html(column.po_link || "")}">${tick}${qty_text(value)}</span>`;
 		}
 
 		// Quoted column: the qty this quotation offers. Flagged orange when it differs
@@ -314,6 +328,10 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 				};
 			});
 			if (!cols.some((c) => c.sq)) return;
+			// "Ordered 1" says which PO it is on hover
+			header_cells.forEach((cell, n) => {
+				if (cols[n].po) cell.title = cols[n].po;
+			});
 
 			// Widths come from invisible "keeper" divs carrying the datatable's own
 			// .dt-cell__content--col-N classes - its width stylesheet keeps them in
@@ -348,7 +366,7 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 					}
 					const block_end = j >= cols.length || cols[j].sq !== c.sq;
 					html += c.sq
-						? cell_html(c, keepers, block_end ? block_edge : border)
+						? cell_html(c, keepers, block_end ? block_edge : border, cols.slice(i, j))
 						: `<div style="display:flex;border-right:1px solid transparent;">${keepers}</div>`;
 					i = j;
 				}
@@ -364,13 +382,16 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			);
 			const sub_row = build_row(
 				(c) => `${c.sq}|${c.sub}`,
-				(c, keepers, edge) => {
+				(c, keepers, edge, run) => {
 					const starred = c.sub.startsWith("★");
-					const link = c.po ? ` data-po-link="${esc(c.po)}" title="${__("Open Purchase Order")}"` : "";
+					// A heading links to its PO only when it stands for one PO - the compact
+					// "Ordered" heading spans one column per PO, each column links itself.
+					const po = run.every((x) => x.po === c.po) ? c.po : "";
+					const link = po ? ` data-po-link="${esc(po)}" title="${__("Open Purchase Order")}"` : "";
 					return `<div class="sq-sub-cell"${link}
 						style="position:relative;display:flex;border-right:${edge};border-top:${border};background:${band[c.sq]};
-						${c.po ? "cursor:pointer;" : ""}${starred ? "color:var(--orange-600, #c2410c);" : ""}">${keepers}
-						${label(esc(c.sub), c.po ? 600 : 500)}</div>`;
+						${po ? "cursor:pointer;" : ""}${starred ? "color:var(--orange-600, #c2410c);" : ""}">${keepers}
+						${label(esc(c.sub), po ? 600 : 500)}</div>`;
 				}
 			);
 			const row_style = `display:flex;height:26px;background:var(--dt-header-cell-bg, #f7fafc);`;
