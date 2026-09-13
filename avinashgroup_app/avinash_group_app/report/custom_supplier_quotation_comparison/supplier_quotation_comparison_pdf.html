@@ -26,6 +26,10 @@
 		font-weight: bold; text-align: center; }
 	/* Left edge of each supplier block, so neighbouring suppliers stay apart */
 	.grp-start { border-left: 2px solid #6b7280; }
+	/* Several Purchase Orders: one table each, stacked under a heading naming the PO */
+	.section + .section { margin-top: 16px; }
+	.po-head { font-size: 9.5pt; font-weight: bold; padding: 3px 0; margin-bottom: 4px;
+		border-bottom: 1.5px solid #444; }
 </style>
 
 <div class="company">{{ company }}</div>
@@ -34,8 +38,13 @@
 <div class="subline">{{ subline_parts | join(" &nbsp;&middot;&nbsp; ") }}</div>
 {% endif %}
 
+{% for section in sections %}
+{% set groups = section.groups %}
+{% set data = section.data %}
+<div class="section">
+{% if section.heading %}<div class="po-head">{{ section.heading }}</div>{% endif %}
 {% if not groups %}
-<p>No supplier quotations found for the selected filters.</p>
+<p>{{ "No supplier quotations found for this Purchase Order." if section.heading else "No supplier quotations found for the selected filters." }}</p>
 {% else %}
 <table>
 	{# The widths have to live here: under table-layout:fixed only the first row
@@ -129,3 +138,5 @@
 	</tbody>
 </table>
 {% endif %}
+</div>
+{% endfor %}

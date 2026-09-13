@@ -5,6 +5,23 @@ frappe.ui.form.on("Material Request", {
 		// button in its own refresh, so remove it after that runs.
 		setTimeout(() => frm.remove_custom_button(__("Purchase Order"), __("Create")), 0);
 
+		// The buying flow starts here (MR → RFQ → Supplier Quotations → PO), so the
+		// quotation comparison opens from the MR too, not only from its Purchase
+		// Orders. Scoped to this MR; any PO left in the report's filter from an
+		// earlier visit is cleared, and so is the date window - the MR is the scope.
+		if (frm.doc.docstatus === 1) {
+			frm.add_custom_button(__("Supplier Quotation Comparison"), function () {
+				frappe.route_options = {
+					company: frm.doc.company,
+					material_request: frm.doc.name,
+					purchase_order: [],
+					from_date: "",
+					to_date: "",
+				};
+				frappe.set_route("query-report", "Custom Supplier Quotation Comparison");
+			});
+		}
+
 		// Override get_item_data to force custom_buying_warehouse after ERPNext sets it
 		const _orig = frm.events.get_item_data;
 		frm.events.get_item_data = async function(frm, item, overwrite_warehouse) {

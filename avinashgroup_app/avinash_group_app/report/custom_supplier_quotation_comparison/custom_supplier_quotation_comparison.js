@@ -7,6 +7,33 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			fieldname: "company",
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
+			// Every other filter is scoped to the company, so a company picked by
+			// hand starts the comparison afresh. A company filled in automatically -
+			// opening from a PO / MR, or a picked PO bringing its own company - leaves
+			// them alone. Frappe raises _no_refresh while it sets filters itself, but
+			// drops it before the last one, hence the remembered _scope_company too.
+			on_change: (report) => {
+				const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
+				const company = report.get_filter_value("company");
+				if (report._no_refresh || (company && company === settings._scope_company)) {
+					settings._scope_company = null;
+					if (!report._no_refresh) report.refresh();
+					return;
+				}
+				const cleared = {};
+				["material_request", "item_code"].forEach((f) => {
+					if (report.get_filter_value(f)) cleared[f] = "";
+				});
+				// Purchase Order last: its on_change is what refreshes once all are cleared.
+				["supplier", "supplier_quotation", "purchase_order"].forEach((f) => {
+					if ((report.get_filter_value(f) || []).length) cleared[f] = [];
+				});
+				if (Object.keys(cleared).length) {
+					report.set_filter_value(cleared);
+				} else {
+					report.refresh();
+				}
+			},
 		},
 		// Not mandatory: a Purchase Order (or Material Request) is an exact scope on
 		// its own and runs with the dates cleared - see the purchase_order filter
@@ -31,12 +58,18 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			options: "Material Request",
 			fieldname: "material_request",
 			default: "",
-			get_query: () => {
-				const company = frappe.query_report.get_filter_value("company");
-				const filters = { docstatus: ["<", 2], material_request_type: "Purchase" };
-				if (company) filters.company = company;
-				return { filters };
-			},
+			// Only Material Requests with a quotation in the current company / PO /
+			// supplier / item scope - with a PO picked, that PO's own MR(s).
+			get_query: () => ({
+				query: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_filter_material_requests",
+				filters: {
+					company: frappe.query_report.get_filter_value("company"),
+					purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+					supplier_quotation: frappe.query_report.get_filter_value("supplier_quotation"),
+					supplier: frappe.query_report.get_filter_value("supplier"),
+					item_code: frappe.query_report.get_filter_value("item_code"),
+				},
+			}),
 		},
 		{
 			default: "",
@@ -153,6 +186,8 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 					const values = {};
 					if (company && company !== report.get_filter_value("company")) {
 						values.company = company;
+						// tells the Company filter this change is automatic - keep the PO
+						frappe.query_reports["Custom Supplier Quotation Comparison"]._scope_company = company;
 					}
 					// Only unambiguous when all the picked POs share a single MR; the
 					// server unions their MRs regardless, so this display default
@@ -251,10 +286,17 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		return value;
 	},
 
+	after_datatable_render: (datatable) => {
+		const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
+		settings.decorate_datatable(datatable);
+		settings.render_stacked(frappe.query_report);
+	},
+
 	// Draw one spanning supplier-name cell above each Rate + Amount column pair.
 	// Injected above the datatable header on every render; scrolls with it because
-	// the datatable applies its translateX to the whole .dt-header element.
-	after_datatable_render: (datatable) => {
+	// the datatable applies its translateX to the whole .dt-header element. Used for
+	// the report's own table and for every stacked per-PO table alike.
+	decorate_datatable: (datatable) => {
 		if (!datatable || !datatable.wrapper) return;
 
 		// Alternating tints, one per supplier, so adjacent suppliers are visibly
@@ -263,6 +305,9 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		// which the datatable puts on header, filter and body cells alike - so
 		// one CSS rule per column tints that supplier's cells top to bottom.
 		const BAND_COLORS = ["#eef3ff", "#fff8ec", "#eefaf1", "#fdeef4"];
+		// Scoped to this table's own instance class: stacked tables lay their
+		// suppliers out differently, and one table's "col-5" must not tint another's.
+		const scope = datatable.style && datatable.style.scopeClass ? `.${datatable.style.scopeClass} ` : "";
 
 		const render_supplier_header = () => {
 			const $header = $(datatable.wrapper).find(".dt-header");
@@ -307,7 +352,7 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 				const band = BAND_COLORS[band_index % BAND_COLORS.length];
 				band_index++;
 				group_indexes.forEach((idx) => {
-					band_rules += `.dt-cell--col-${idx}{background-color:${band};}\n`;
+					band_rules += `${scope}.dt-cell--col-${idx}{background-color:${band};}\n`;
 				});
 				const link_attr = c.sq_link
 					? ` data-sq-link="${frappe.utils.escape_html(c.sq_link)}" title="${__("Open Supplier Quotation")}"`
@@ -345,7 +390,84 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		}
 	},
 
+	// Several Purchase Orders picked: the report's own table (all of them lumped
+	// together) is hidden and one table per PO is drawn instead, stacked one under
+	// another, each headed by its PO. Each is the same report run once per PO on the
+	// server (get_stacked_comparison), drawn with the same formatter and header.
+	render_stacked: (report) => {
+		const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
+		const $main = report.$report;
+		$main.siblings(".sq-stack").remove();
+		const token = (settings._stack_token = (settings._stack_token || 0) + 1);
+		if ((report.get_filter_value("purchase_order") || []).length < 2) {
+			$main.show();
+			return;
+		}
+		$main.hide();
+		const $stack = $('<div class="sq-stack"></div>').insertAfter($main);
+		frappe
+			.call({
+				method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_stacked_comparison",
+				args: { filters: report.get_filter_values(true) },
+			})
+			.then((r) => {
+				if (token !== settings._stack_token) return; // a newer refresh has taken over
+				(r.message || []).forEach((section) => settings.render_section($stack, report, section));
+			});
+	},
+
+	render_section: ($stack, report, section) => {
+		const link = (doctype, name) =>
+			`<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}">${frappe.utils.escape_html(name)}</a>`;
+		const parts = [`${__("Purchase Order")}: ${link("Purchase Order", section.purchase_order)}`];
+		if (section.supplier_name) parts.push(frappe.utils.escape_html(section.supplier_name));
+		if ((section.material_requests || []).length) {
+			parts.push(
+				`${__("Material Request")}: ` +
+					section.material_requests.map((mr) => link("Material Request", mr)).join(", ")
+			);
+		}
+		const $section = $(`<div class="sq-stack-section" style="margin: 0 0 28px;">
+			<div style="font-size: var(--text-lg); font-weight: 600; padding: 10px 2px 6px;
+				margin-bottom: 6px; border-bottom: 2px solid var(--border-color);">
+				${parts.join(" &nbsp;&middot;&nbsp; ")}</div></div>`).appendTo($stack);
+
+		if (!(section.data || []).some((d) => d.is_data_row)) {
+			$section.append(
+				`<div class="text-muted" style="padding: 8px 2px;">${__("No supplier quotations found for this Purchase Order.")}</div>`
+			);
+			return;
+		}
+		const $host = $('<div class="sq-dt-host"></div>').appendTo($section);
+		const datatable = new window.DataTable($host[0], {
+			// Frappe's own column preparation, so the report formatter applies as-is
+			columns: report.prepare_columns(section.columns),
+			data: section.data,
+			layout: "fixed",
+			cellHeight: 33,
+			language: frappe.boot.lang,
+			translations: frappe.utils.datatable.get_translations(),
+			direction: frappe.utils.is_rtl() ? "rtl" : "ltr",
+		});
+		// the header-click handler finds this table's own columns through it
+		$host.data("sq_datatable", datatable);
+		frappe.query_reports["Custom Supplier Quotation Comparison"].decorate_datatable(datatable);
+	},
+
 	onload: (report) => {
+		// A refresh that ends in "nothing to show" never reaches after_datatable_render,
+		// so the previous stack is cleared on the way in rather than left behind.
+		if (!report._sq_refresh_wrapped) {
+			report._sq_refresh_wrapped = true;
+			const refresh = report.refresh.bind(report);
+			report.refresh = function (...args) {
+				const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
+				settings._stack_token = (settings._stack_token || 0) + 1;
+				if (report.$report) report.$report.siblings(".sq-stack").remove();
+				return refresh(...args);
+			};
+		}
+
 		// Menu -> Print / PDF both render the server-side comparison document
 		// (supplier column groups + summary rows) instead of the generic report
 		// printout. Print opens the PDF inline for printing; PDF downloads it.
@@ -397,8 +519,10 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 				// Ignore clicks on the column dropdown / resize handle
 				if ($(e.target).closest(".dt-dropdown, .dt-cell__resize-handle").length) return;
 				const col_index = parseInt($(this).attr("data-col-index"));
-				if (isNaN(col_index) || !report.datatable) return;
-				const col = report.datatable.datamanager.getColumn(col_index) || {};
+				// a stacked per-PO table has its own columns; else the report's table
+				const datatable = $(this).closest(".sq-dt-host").data("sq_datatable") || report.datatable;
+				if (isNaN(col_index) || !datatable) return;
+				const col = datatable.datamanager.getColumn(col_index) || {};
 				if (col.sq_link) {
 					frappe.set_route("Form", "Supplier Quotation", col.sq_link);
 				}
