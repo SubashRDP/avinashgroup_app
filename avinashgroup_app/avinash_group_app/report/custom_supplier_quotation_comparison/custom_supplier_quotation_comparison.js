@@ -183,7 +183,12 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		if (data && data.is_term_row) {
 			if (column.fieldname === "sn" || column.fieldname === "item_name") return "";
 			if (column.fieldname === "qty") return default_formatter(value, row, column, data);
-			if (column.fieldname.endsWith("_rate") || column.fieldname.endsWith("_narration")) return "";
+			if (
+				column.fieldname.endsWith("_rate") ||
+				column.fieldname.endsWith("_qty") ||
+				column.fieldname.endsWith("_narration")
+			)
+				return "";
 			if (value === null || value === undefined || value === "") return "";
 			return frappe.utils.escape_html(String(value)).replace(/\n/g, "<br>");
 		}
@@ -192,9 +197,25 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		if (
 			data &&
 			(data.is_total_row || data.is_summary_row || data.is_invoice_row) &&
-			(column.fieldname.endsWith("_rate") || column.fieldname.endsWith("_narration"))
+			(column.fieldname.endsWith("_rate") ||
+				column.fieldname.endsWith("_qty") ||
+				column.fieldname.endsWith("_narration"))
 		) {
 			return "";
+		}
+
+		// Quoted column: the qty this quotation offers. Flagged orange when it differs
+		// from MR Qty (what the Material Request asked for), with the asked qty on hover,
+		// so a short or over quote stands out without reading every number.
+		if (column.fieldname.endsWith("_qty")) {
+			if (value === null || value === undefined || value === "") return "";
+			const shown = default_formatter(value, row, column, data);
+			const asked = data && data.qty;
+			if (asked !== null && asked !== undefined && asked !== "" && flt(value) !== flt(asked)) {
+				const tip = frappe.utils.escape_html(__("Material Request asked for {0}", [format_number(asked)]));
+				return `<span title="${tip}" style="color: var(--orange-600, #c2410c); font-weight: 600;">${shown}</span>`;
+			}
+			return shown;
 		}
 
 		// Narration column is kept narrow to save space; the full text is still

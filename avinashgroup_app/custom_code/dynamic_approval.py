@@ -849,6 +849,7 @@ def _render_comparison_html(doc):
 	from avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison import (
 		_supplier_groups,
 		execute as run_comparison,
+		fmt_qty,
 	)
 
 	base_date = doc.get("transaction_date") or frappe.utils.nowdate()
@@ -954,7 +955,7 @@ def _render_comparison_html(doc):
 				if not value:
 					cells.append(f'<td style="{cell}"></td>')
 					continue
-				shown = frappe.utils.escape_html(str(value))
+				shown = frappe.utils.escape_html(fmt_qty(value))
 				po = row.get(fieldname + "_po")
 				if po:
 					href = frappe.utils.escape_html(frappe.utils.get_url("/app/purchase-order/" + po))
@@ -968,6 +969,18 @@ def _render_comparison_html(doc):
 					f'<td style="{cell}text-align:right;white-space:nowrap;background:#f4faf4;">'
 					f'{badge} {shown}</td>'
 				)
+			# MR Qty (asked for) and each quotation's Quoted qty: numbers, right-aligned;
+			# a quoted qty that differs from the MR's is flagged orange. On summary rows
+			# the MR Qty cell carries the row label instead, so text falls through.
+			elif (fieldname == "qty" or fieldname.endswith("_qty")) and isinstance(value, (int, float)):
+				asked = row.get("qty")
+				differs = (
+					fieldname != "qty"
+					and isinstance(asked, (int, float))
+					and frappe.utils.flt(value) != frappe.utils.flt(asked)
+				)
+				flag = "color:#c2410c;font-weight:bold;" if differs else ""
+				cells.append(f'<td style="{cell}text-align:right;{flag}">{fmt_qty(value)}</td>')
 			elif c.get("fieldtype") == "Currency":
 				text = frappe.utils.fmt_money(value, currency=currency) if value is not None else ""
 				cells.append(f'<td style="{cell}text-align:right;white-space:nowrap;">{text}</td>')

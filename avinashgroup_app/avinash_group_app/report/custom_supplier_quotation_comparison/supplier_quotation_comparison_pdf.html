@@ -63,7 +63,7 @@
 		<tr>
 			<th style="width: 26px;">SN</th>
 			<th>Item Name</th>
-			<th style="width: 45px;">Qty</th>
+			<th style="width: 45px;">MR Qty</th>
 			{% for g in groups %}
 			{% for f in g.fields %}
 			<th class="{{ 'narr' if f.kind == 'narration' else 'num' }}{{ ' grp-start' if loop.first else '' }}"
@@ -78,7 +78,7 @@
 		<tr>
 			<td class="num">{{ row.sn }}</td>
 			<td>{{ row.item_name or row.item_code or "" }}</td>
-			<td class="num">{{ row.qty }}</td>
+			<td class="num">{{ fmt_qty(row.qty) }}</td>
 			{% for g in groups %}
 			{% for f in g.fields %}
 			{% set v = row.get(f.field) %}
@@ -91,6 +91,11 @@
 					{%- else %}{{ v }}{% endif -%}
 				{%- endif -%}
 			</td>
+			{% elif f.kind == "qty" %}
+			{# Quoted qty; orange when it differs from what the Material Request asked for #}
+			{% set differs = v is not none and row.qty is not none and (v | float) != (row.qty | float) %}
+			<td class="num{{ ' grp-start' if loop.first else '' }}"
+				style="background: {{ g.band }};{{ ' color: #c2410c; font-weight: bold;' if differs else '' }}">{{ fmt_qty(v) }}</td>
 			{% elif f.kind == "narration" %}
 			<td class="narr{{ ' grp-start' if loop.first else '' }}" style="background: {{ g.band }};">{{ v or "" }}</td>
 			{% else %}

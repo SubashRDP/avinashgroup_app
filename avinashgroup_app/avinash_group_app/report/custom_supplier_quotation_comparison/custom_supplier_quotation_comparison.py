@@ -28,6 +28,14 @@ def _as_list(value):
 	return [value]
 
 
+def fmt_qty(value):
+	"""A quantity for print and email: grouped, with only the decimals it needs
+	(1, 1.5, 1,250). The on-screen report formats its own."""
+	if value is None or value == "":
+		return ""
+	return "{:,.3f}".format(flt(value)).rstrip("0").rstrip(".")
+
+
 def _sq_filter_scope(company=None, purchase_order=None, material_request=None,
 					 supplier_quotation=None, supplier=None, item_code=None):
 	"""Shared WHERE fragments (aliases sq / sqi) limiting quotation rows to the
@@ -190,6 +198,7 @@ def get_data(filters):
 			sq_item.item_code,
 			sq_item.item_name,
 			sq_item.custom_narration,
+			sq_item.material_request_item,
 			sq_item.qty,
 			sq.currency,
 			sq_item.stock_qty,
@@ -306,6 +315,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 	all_items = []  # Maintain order
 	item_meta = {}  # Store item metadata
 	seen_items = set()
+	item_mr_lines = defaultdict(set)  # item -> Material Request Item rows its quotation lines answer
 
 	# Process each quotation line
 	for row in supplier_quotation_data:
@@ -330,9 +340,13 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 		if item_code not in item_meta:
 			item_meta[item_code] = {
 				"item_name": row.get("item_name"),
-				"qty": row.get("qty"),
 				"uom": row.get("uom"),
 			}
+
+		# The Material Request line this quotation line answers - its qty is what
+		# was asked for, which the MR Qty column shows (see requested_qty below).
+		if row.get("material_request_item"):
+			item_mr_lines[item_code].add(row.get("material_request_item"))
 
 		# Narration (custom_narration, Small Text) is the quotation's own
 		# free-text note on its line for this item, so it is stored per
@@ -366,6 +380,20 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 				"payment_terms": row.get("custom_payment_terms"),
 				"delivery_period": row.get("custom_delivery_period"),
 			}
+
+	# MR Qty = what the Material Request asked for: the qty of every MR line the
+	# quotations answer, per item (an item can sit on more than one MR line or MR).
+	# Each quotation's own qty is shown in its block as Quoted. Blank for an item
+	# whose quotation lines carry no MR link.
+	mr_lines = {name for names in item_mr_lines.values() for name in names}
+	mr_line_qty = dict(frappe.db.sql(
+		"SELECT name, qty FROM `tabMaterial Request Item` WHERE name IN %(lines)s",
+		{"lines": tuple(mr_lines)},
+	)) if mr_lines else {}
+	requested_qty = {
+		item_code: sum(flt(mr_line_qty.get(name)) for name in names)
+		for item_code, names in item_mr_lines.items()
+	}
 
 	# Column order: suppliers alphabetically, with a supplier's own quotations
 	# adjacent and in name order - which is the order they are numbered in below.
@@ -456,7 +484,7 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			"sn": sn,
 			"item_code": item_code,
 			"item_name": item_meta[item_code]["item_name"],
-			"qty": item_meta[item_code]["qty"],
+			"qty": requested_qty.get(item_code),
 			"is_data_row": 1,  # Mark as data row for styling
 		}
 
@@ -469,11 +497,13 @@ def prepare_pivoted_data(supplier_quotation_data, filters):
 			if quotation in item_quotation_map[item_code]:
 				line = item_quotation_map[item_code][quotation]
 				price = line["price"]
+				row[col_fieldname + "_qty"] = flt(line["qty"])
 				row[col_fieldname + "_rate"] = line["rate"]
 				row[col_fieldname] = price
 				row[col_fieldname + "_narration"] = line.get("narration") or ""
 				quotation_totals[quotation] += price
 			else:
+				row[col_fieldname + "_qty"] = None
 				row[col_fieldname + "_rate"] = None
 				row[col_fieldname] = None
 				row[col_fieldname + "_narration"] = None
@@ -638,7 +668,8 @@ def get_columns(
 		},
 		{
 			"fieldname": "qty",
-			"label": _("Qty"),
+			# What the Material Request asked for; each quotation's own qty is its Quoted column
+			"label": _("MR Qty"),
 			"fieldtype": "Data",  # Data type to allow "Total" text
 			"width": 60,
 		},
@@ -648,7 +679,8 @@ def get_columns(
 	quotations_with_orders = quotations_with_orders or set()
 	quotations_with_narration = quotations_with_narration or set()
 
-	# Dynamic per-quotation columns, in order: Ordered, Rate, Amount, Narration.
+	# Dynamic per-quotation columns, in order: Ordered, Quoted, Rate, Amount, Narration.
+	# Quoted is the qty this quotation offers (MR Qty is what was asked for).
 	# Ordered and Narration are each dropped entirely for a quotation that has
 	# none anywhere in the comparison, rather than showing an always-blank
 	# column. `supplier_group` carries the block's display name - the supplier,
@@ -670,6 +702,14 @@ def get_columns(
 				"sq_link": sq_link,
 				"supplier_group": display,
 			})
+		columns.append({
+			"fieldname": col_fieldname + "_qty",
+			"label": _("Quoted"),
+			"fieldtype": "Float",
+			"width": 70,
+			"sq_link": sq_link,
+			"supplier_group": display,
+		})
 		columns.append({
 			"fieldname": col_fieldname + "_rate",
 			"label": _("Rate"),
@@ -730,6 +770,7 @@ _SUPPLIER_FIELD_KINDS = (
 	("_ordered", "ordered"),
 	("_narration", "narration"),
 	("_rate", "rate"),
+	("_qty", "qty"),
 )
 
 
@@ -762,6 +803,7 @@ def _supplier_groups(columns):
 				"sq": col.get("sq_link"),
 				"fields": [],
 				"ordered_field": None,
+				"qty_field": None,
 				"rate_field": None,
 				"amount_field": None,
 				"narration_field": None,
@@ -802,7 +844,7 @@ def export_xlsx(filters):
 	columns, data = execute(filters)[:2]
 	groups = _supplier_groups(columns)
 
-	fixed_labels = ["SN", "Item Name", "Qty"]
+	fixed_labels = ["SN", "Item Name", "MR Qty"]
 	supplier_row = [""] * len(fixed_labels)
 	label_row = list(fixed_labels)
 	for g in groups:
@@ -906,7 +948,7 @@ def export_xlsx(filters):
 			elif column_kind in ("rate", "amount"):
 				cell.number_format = MONEY
 				cell.alignment = Alignment(horizontal="right", vertical="center")
-			elif column_kind == "ordered":
+			elif column_kind in ("ordered", "qty"):
 				cell.number_format = QTY
 				cell.alignment = Alignment(horizontal="right", vertical="center")
 			elif column_kind == "narration":
@@ -977,7 +1019,7 @@ def export_xlsx(filters):
 	# readable and nobody has to drag a single column border. Capped, because a
 	# long narration or item name would otherwise push the money columns off
 	# screen; those columns wrap instead.
-	CAPS = {"narration": 34, "rate": 15, "amount": 16, "ordered": 11}
+	CAPS = {"narration": 34, "rate": 15, "amount": 16, "ordered": 11, "qty": 11}
 	for c in range(1, last_col + 1):
 		longest = 0
 		for r in range(2, last_row + 1):     # row 1 is merged, it would skew the width
@@ -1069,11 +1111,13 @@ def download_pdf(filters, view=None):
 			"groups": groups,
 			"data": data,
 			"fmt": fmt,
+			"fmt_qty": fmt_qty,
 			# Wide enough for a formatted NPR amount at the table's font size -
 			# "Rs 1,98,750.00" plus cell padding. Too narrow and the money cells,
 			# which must not wrap, spill over the column border into their neighbour.
 			"field_widths": {
 				"ordered": "42px",
+				"qty": "40px",
 				"rate": "72px",
 				"amount": "88px",
 				"narration": "95px",
