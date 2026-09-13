@@ -7,6 +7,33 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			fieldname: "company",
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
+			// Every other filter is scoped to the company, so a company picked by
+			// hand starts the comparison afresh. A company filled in automatically -
+			// opening from a PO / MR, or a picked PO bringing its own company - leaves
+			// them alone. Frappe raises _no_refresh while it sets filters itself, but
+			// drops it before the last one, hence the remembered _scope_company too.
+			on_change: (report) => {
+				const settings = frappe.query_reports["Custom Supplier Quotation Comparison"];
+				const company = report.get_filter_value("company");
+				if (report._no_refresh || (company && company === settings._scope_company)) {
+					settings._scope_company = null;
+					if (!report._no_refresh) report.refresh();
+					return;
+				}
+				const cleared = {};
+				["material_request", "item_code"].forEach((f) => {
+					if (report.get_filter_value(f)) cleared[f] = "";
+				});
+				// Purchase Order last: its on_change is what refreshes once all are cleared.
+				["supplier", "supplier_quotation", "purchase_order"].forEach((f) => {
+					if ((report.get_filter_value(f) || []).length) cleared[f] = [];
+				});
+				if (Object.keys(cleared).length) {
+					report.set_filter_value(cleared);
+				} else {
+					report.refresh();
+				}
+			},
 		},
 		// Not mandatory: a Purchase Order (or Material Request) is an exact scope on
 		// its own and runs with the dates cleared - see the purchase_order filter
@@ -31,12 +58,18 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			options: "Material Request",
 			fieldname: "material_request",
 			default: "",
-			get_query: () => {
-				const company = frappe.query_report.get_filter_value("company");
-				const filters = { docstatus: ["<", 2], material_request_type: "Purchase" };
-				if (company) filters.company = company;
-				return { filters };
-			},
+			// Only Material Requests with a quotation in the current company / PO /
+			// supplier / item scope - with a PO picked, that PO's own MR(s).
+			get_query: () => ({
+				query: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_filter_material_requests",
+				filters: {
+					company: frappe.query_report.get_filter_value("company"),
+					purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+					supplier_quotation: frappe.query_report.get_filter_value("supplier_quotation"),
+					supplier: frappe.query_report.get_filter_value("supplier"),
+					item_code: frappe.query_report.get_filter_value("item_code"),
+				},
+			}),
 		},
 		{
 			default: "",
@@ -109,27 +142,51 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			default: 1,
 		},
 		{
-			fieldtype: "Link",
+			// Off: one compact "Ordered" qty column per Purchase Order made from a
+			// quotation. On: a full Qty / Rate / Amount sub-group per Purchase Order.
+			fieldtype: "Check",
+			label: __("Extend Purchase Order"),
+			fieldname: "extend_purchase_order",
+			default: 0,
+		},
+		{
+			fieldtype: "MultiSelectList",
 			label: __("Purchase Order"),
 			options: "Purchase Order",
 			fieldname: "purchase_order",
 			default: "",
-			// Resolved to its source Material Request(s) server-side (see get_data).
-			get_query: () => ({ filters: { docstatus: ["<", 2] } }),
-			// The comparison must run against the PO's company (not the user's
-			// default) and show which Material Request the PO was raised from -
+			// Several orders can be compared at once. Resolved to their source
+			// Material Request(s) server-side (see get_data). Only orders raised
+			// from a Material Request in the comparison are offered - opened from a
+			// PO, that is the PO and its siblings (same MR, other suppliers).
+			get_data: function (txt) {
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_filter_purchase_orders",
+						args: {
+							company: frappe.query_report.get_filter_value("company"),
+							material_request: frappe.query_report.get_filter_value("material_request"),
+							purchase_order: frappe.query_report.get_filter_value("purchase_order"),
+							txt: txt,
+						},
+					})
+					.then((r) => r.message || []);
+			},
+			// The comparison must run against the POs' company (not the user's
+			// default) and show which Material Request they were raised from -
 			// both are filled in automatically when a PO is picked.
 			on_change: (report) => {
-				const po = report.get_filter_value("purchase_order");
-				if (!po) {
+				const pos = report.get_filter_value("purchase_order") || [];
+				if (!pos.length) {
 					report.refresh();
 					return;
 				}
 				Promise.all([
-					frappe.db.get_value("Purchase Order", po, "company"),
+					// The dropdown is company-scoped, so every picked PO shares the first one's company.
+					frappe.db.get_value("Purchase Order", pos[0], "company"),
 					frappe.call({
 						method: "avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison.get_material_requests_from_purchase_order",
-						args: { purchase_order: po },
+						args: { purchase_order: pos },
 					}),
 				]).then(([company_r, mr_r]) => {
 					const company = company_r.message && company_r.message.company;
@@ -137,9 +194,12 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 					const values = {};
 					if (company && company !== report.get_filter_value("company")) {
 						values.company = company;
+						// tells the Company filter this change is automatic - keep the PO
+						frappe.query_reports["Custom Supplier Quotation Comparison"]._scope_company = company;
 					}
-					// Only unambiguous with a single MR; the server unions the PO's
-					// MRs regardless, so this display default never narrows results.
+					// Only unambiguous when all the picked POs share a single MR; the
+					// server unions their MRs regardless, so this display default
+					// never narrows results.
 					if (mrs.length === 1 && mrs[0] !== report.get_filter_value("material_request")) {
 						values.material_request = mrs[0];
 					}
@@ -162,20 +222,11 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 	],
 
 	formatter: (value, row, column, data, default_formatter) => {
-		// "Ordered" column: qty of this item already placed on a Purchase Order
-		// against this supplier's quotation. Tick + qty, linked to that Purchase
-		// Order (when it's a single PO - ambiguous when split across several);
-		// blank when this item was not ordered from this supplier. Applies to every
-		// row type - summary / term rows never set it, so they stay blank.
-		if (column.fieldname.endsWith("_ordered")) {
-			if (value === null || value === undefined || value === "" || value === 0) return "";
-			const shown = frappe.utils.escape_html(String(value));
-			const tick = '<span style="display:inline-block;width:15px;height:15px;line-height:15px;border-radius:50%;background:#28a745;color:#fff;font-size:10px;font-weight:bold;text-align:center;vertical-align:middle;">\u2713</span>&nbsp;';
-			const po = data && data[column.fieldname + "_po"];
-			return po
-				? `${tick}<a href="/app/purchase-order/${encodeURIComponent(po)}" onclick="event.stopPropagation()">${shown}</a>`
-				: tick + shown;
-		}
+		// Per-unit columns (quoted / PO qty and rate, narration) mean nothing on the
+		// summary and terms rows, which only carry block-level values.
+		const PER_UNIT = ["_qty", "_rate", "_narration", "_poqty", "_porate"];
+		const per_unit = PER_UNIT.some((suffix) => column.fieldname.endsWith(suffix));
+		const qty_text = (v) => format_number(v, null, 3).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 
 		// Commercial-terms rows (Specification / Warranty / Payment Terms /
 		// Delivery Period) carry free text under each supplier's Amount column -
@@ -183,18 +234,44 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		if (data && data.is_term_row) {
 			if (column.fieldname === "sn" || column.fieldname === "item_name") return "";
 			if (column.fieldname === "qty") return default_formatter(value, row, column, data);
-			if (column.fieldname.endsWith("_rate") || column.fieldname.endsWith("_narration")) return "";
+			if (per_unit) return "";
 			if (value === null || value === undefined || value === "") return "";
 			return frappe.utils.escape_html(String(value)).replace(/\n/g, "<br>");
 		}
 
 		// Summary rows are quotation-level values - a per-unit Rate/Narration makes no sense there.
-		if (
-			data &&
-			(data.is_total_row || data.is_summary_row || data.is_invoice_row) &&
-			(column.fieldname.endsWith("_rate") || column.fieldname.endsWith("_narration"))
-		) {
+		if (data && (data.is_total_row || data.is_summary_row || data.is_invoice_row) && per_unit) {
 			return "";
+		}
+		// Discount / VAT / Invoice Amount belong to the quotation; a PO only carries its
+		// own Total, so its Amount stays blank on those rows rather than reading Rs 0.00.
+		if (data && (data.is_summary_row || data.is_invoice_row) && column.fieldname.endsWith("_poamt")) {
+			return "";
+		}
+
+		// A PO's qty: only the decimals it needs (1, 1.5, 1,250), like the others. In
+		// the compact "Ordered N" columns it gets a tick, with the PO number on hover.
+		if (column.fieldname.endsWith("_poqty")) {
+			if (value === null || value === undefined || value === "") return "";
+			if (!column.po_compact) return qty_text(value);
+			const tick =
+				'<span style="display:inline-block;width:15px;height:15px;line-height:15px;border-radius:50%;' +
+				'background:#28a745;color:#fff;font-size:10px;font-weight:bold;text-align:center;vertical-align:middle;">✓</span>&nbsp;';
+			return `<span title="${frappe.utils.escape_html(column.po_link || "")}">${tick}${qty_text(value)}</span>`;
+		}
+
+		// Quoted column: the qty this quotation offers. Flagged orange when it differs
+		// from MR Qty (what the Material Request asked for), with the asked qty on hover,
+		// so a short or over quote stands out without reading every number.
+		if (column.fieldname.endsWith("_qty")) {
+			if (value === null || value === undefined || value === "") return "";
+			const shown = qty_text(value);
+			const asked = data && data.qty;
+			if (asked !== null && asked !== undefined && asked !== "" && flt(value) !== flt(asked)) {
+				const tip = frappe.utils.escape_html(__("Material Request asked for {0}", [format_number(asked)]));
+				return `<span title="${tip}" style="color: var(--orange-600, #c2410c); font-weight: 600;">${shown}</span>`;
+			}
+			return shown;
 		}
 
 		// Narration column is kept narrow to save space; the full text is still
@@ -213,97 +290,151 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		return value;
 	},
 
-	// Draw one spanning supplier-name cell above each Rate + Amount column pair.
-	// Injected above the datatable header on every render; scrolls with it because
-	// the datatable applies its translateX to the whole .dt-header element.
 	after_datatable_render: (datatable) => {
+		frappe.query_reports["Custom Supplier Quotation Comparison"].decorate_datatable(datatable);
+	},
+
+	// Two merged header rows above the datatable's own column labels, like a
+	// hand-made sheet: the Supplier Quotation across its whole block, and under it
+	// "Quoted" and what was Ordered from that quotation. Injected on every render;
+	// scrolls with the header because the datatable applies its translateX to the
+	// whole .dt-header element.
+	//
+	// Colour comes from each column's `tint` - the quotation's colour family, sent
+	// by the server so print and Excel match: a deeper shade on the quotation
+	// heading, a light one under what was Quoted and a stronger one under what was
+	// Ordered, and the family's accent as the block's left edge, drawn as one line
+	// from the heading down to the last row.
+	decorate_datatable: (datatable) => {
 		if (!datatable || !datatable.wrapper) return;
+		const esc = frappe.utils.escape_html;
+		const scope = datatable.style && datatable.style.scopeClass ? `.${datatable.style.scopeClass} ` : "";
 
-		// Alternating tints, one per supplier, so adjacent suppliers are visibly
-		// distinct instead of blending together behind identical thin gray
-		// column borders. Applied via each cell's stable "dt-cell--col-N" class,
-		// which the datatable puts on header, filter and body cells alike - so
-		// one CSS rule per column tints that supplier's cells top to bottom.
-		const BAND_COLORS = ["#eef3ff", "#fff8ec", "#eefaf1", "#fdeef4"];
-
-		const render_supplier_header = () => {
+		const render_group_header = () => {
 			const $header = $(datatable.wrapper).find(".dt-header");
 			$header.find(".sq-supplier-group-row").remove();
 
 			const header_cells = $header.find(".dt-row-header .dt-cell--header").toArray();
 			if (!header_cells.length) return;
 
-			// Merge consecutive rendered header cells that share a supplier_group.
-			// Widths come from invisible "keeper" divs carrying the datatable's own
-			// .dt-cell__content--col-N classes - its width stylesheet keeps them in
-			// sync with the real columns, including later resizes / fit-columns.
 			const cols = header_cells.map((cell) => {
 				const idx = parseInt(cell.getAttribute("data-col-index"));
 				const col = (!isNaN(idx) && datatable.datamanager.getColumn(idx)) || {};
-				return { idx: idx, group: col.supplier_group || "", sq_link: col.sq_link };
+				return {
+					idx: idx,
+					sq: col.sq_link || "",
+					group: col.supplier_group || "",
+					sub: col.sub_group || "",
+					po: col.po_link || "",
+					tint: col.tint || {},
+				};
 			});
-			if (!cols.some((c) => c.group)) return;
+			if (!cols.some((c) => c.sq)) return;
+			// "Ordered 1" says which PO it is on hover
+			header_cells.forEach((cell, n) => {
+				if (cols[n].po) cell.title = cols[n].po;
+			});
 
-			const keeper = (idx) => `<div class="dt-cell__content--col-${idx}" style="height:0;"></div>`;
-			const border = "1px solid var(--dt-border-color, #d1d8dd)";
-			const group_divider = "2px solid var(--dt-border-color-dark, #8a94a6)";
-			let cells_html = "";
-			let band_rules = "";
-			let band_index = 0;
-			let i = 0;
-			while (i < cols.length) {
-				const c = cols[i];
-				if (!c.group) {
-					cells_html += `<div style="display:flex;border-right:1px solid transparent;">${keeper(c.idx)}</div>`;
-					i++;
-					continue;
-				}
-				let keepers = "";
-				let j = i;
-				const group_indexes = [];
-				while (j < cols.length && cols[j].group === c.group) {
-					keepers += keeper(cols[j].idx);
-					group_indexes.push(cols[j].idx);
-					j++;
-				}
-				const band = BAND_COLORS[band_index % BAND_COLORS.length];
-				band_index++;
-				group_indexes.forEach((idx) => {
-					band_rules += `.dt-cell--col-${idx}{background-color:${band};}\n`;
-				});
-				const link_attr = c.sq_link
-					? ` data-sq-link="${frappe.utils.escape_html(c.sq_link)}" title="${__("Open Supplier Quotation")}"`
+			// Where each quotation block, and each sub-group inside it, begins.
+			cols.forEach((c, n) => {
+				const prev = cols[n - 1];
+				c.edge = !c.sq ? "" : !prev || prev.sq !== c.sq ? "block" : prev.sub !== c.sub ? "sub" : "";
+			});
+			// Drawn as inset shadows, which take no width, so they can never push a
+			// heading out of line with the columns under it.
+			const edge_line = (c) =>
+				c.edge === "block"
+					? `box-shadow: inset 2px 0 0 ${c.tint.accent};`
+					: c.edge === "sub"
+					? `box-shadow: inset 1px 0 0 ${c.tint.soft};`
 					: "";
-				cells_html += `<div class="sq-group-cell"${link_attr}
-					style="position:relative;display:flex;border-right:${group_divider};background:${band};${c.sq_link ? "cursor:pointer;" : ""}">${keepers}
-					<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-						font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 8px;">
-						${frappe.utils.escape_html(c.group)}</div></div>`;
-				i = j;
-			}
-			$header.prepend(
-				`<div class="sq-supplier-group-row"
-					style="display:flex;height:26px;background:var(--dt-header-cell-bg, #f7fafc);border-bottom:${border};">${cells_html}</div>`
-			);
 
-			let $band_style = $(datatable.wrapper).find("style.sq-supplier-band-style");
-			if (!$band_style.length) {
-				$band_style = $('<style class="sq-supplier-band-style"></style>').appendTo(datatable.wrapper);
+			// A run's width is each column's width PLUS the 1px border the datatable
+			// draws after every cell. Counting only the widths left each merged
+			// heading 1px short per column, so the dividers drifted off the columns.
+			const keeper = (idx) =>
+				`<div class="dt-cell__content--col-${idx}" style="height:0;flex:none;"></div><div style="width:1px;flex:none;"></div>`;
+			const keepers = (run) => run.map((x) => keeper(x.idx)).join("");
+
+			// One merged cell per run of consecutive columns sharing key(c).
+			const build_row = (key, cell_html) => {
+				let html = "";
+				for (let i = 0; i < cols.length; ) {
+					let j = i;
+					while (j < cols.length && key(cols[j]) === key(cols[i])) j++;
+					const run = cols.slice(i, j);
+					html += cols[i].sq ? cell_html(cols[i], run) : `<div style="display:flex;">${keepers(run)}</div>`;
+					i = j;
+				}
+				return html;
+			};
+			const merged = (c, run, background, attrs, inner, extra_style = "") =>
+				`<div ${attrs} data-last="${run[run.length - 1].idx}"
+					style="position:relative;display:flex;background:${background};${edge_line(c)}${extra_style}">${keepers(run)}
+					<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+						overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 10px;">${inner}</div></div>`;
+
+			const quotation_row = build_row(
+				(c) => c.sq,
+				(c, run) =>
+					merged(
+						c,
+						run,
+						c.tint.head,
+						`class="sq-group-cell" data-sq-link="${esc(c.sq)}" title="${__("Open Supplier Quotation")}"`,
+						`<span style="overflow:hidden;text-overflow:ellipsis;">
+							<span style="font-weight:600;color:${c.tint.text};">${esc(c.group)}</span>
+							<span style="margin-left:4px;font-size:11px;color:${c.tint.text};opacity:.7;">(${esc(c.sq)})</span>
+						</span>`,
+						"cursor:pointer;"
+					)
+			);
+			const sub_row = build_row(
+				(c) => `${c.sq}|${c.sub}`,
+				(c, run) => {
+					const ordered = run.some((x) => x.po);
+					// A heading links to its PO only when it stands for one PO - the compact
+					// "Ordered" heading spans one column per PO, each column links itself.
+					const po = run.every((x) => x.po === c.po) ? c.po : "";
+					const colour = c.sub.startsWith("★") ? "var(--orange-600, #c2410c)" : c.tint.text;
+					return merged(
+						c,
+						run,
+						ordered ? c.tint.ordered_head : c.tint.quoted_head,
+						`class="sq-sub-cell"${po ? ` data-po-link="${esc(po)}" title="${__("Open Purchase Order")}"` : ""}`,
+						`<span style="font-weight:${ordered ? 600 : 500};color:${colour};">${esc(c.sub)}</span>`,
+						po ? "cursor:pointer;" : ""
+					);
+				}
+			);
+			const bar = "display:flex;background:var(--dt-header-cell-bg, #f7fafc);border-bottom:1px solid var(--dt-border-color, #d1d8dd);";
+			$header.prepend(`<div class="sq-supplier-group-row" style="${bar}height:24px;">${sub_row}</div>`);
+			$header.prepend(`<div class="sq-supplier-group-row" style="${bar}height:30px;">${quotation_row}</div>`);
+
+			// Every cell of a column - label, filter and body - in its shade, with the
+			// block / sub-group edge carried down the whole column.
+			let rules = "";
+			cols.forEach((c) => {
+				if (!c.sq) return;
+				rules += `${scope}.dt-cell--col-${c.idx}{background-color:${c.po ? c.tint.ordered : c.tint.quoted};${edge_line(c)}}\n`;
+			});
+			let $style = $(datatable.wrapper).find("style.sq-supplier-band-style");
+			if (!$style.length) {
+				$style = $('<style class="sq-supplier-band-style"></style>').appendTo(datatable.wrapper);
 			}
-			$band_style.text(band_rules);
+			$style.text(rules);
 		};
 
-		render_supplier_header();
+		render_group_header();
 
 		// Dragging a column to reorder it only swaps columns inside the datatable
 		// widget itself - it doesn't go through a report refresh, so this hook
-		// never re-fires and our merged supplier-name row is left describing the
-		// old column order while the real columns underneath have moved. The
-		// datatable library fires its own "onSwitchColumn" event for that case;
-		// hook it once per datatable instance to rebuild the header in sync.
+		// never re-fires and the merged header rows would describe the old column
+		// order. The datatable fires "onSwitchColumn" for that; hook it once per
+		// datatable instance to rebuild the header in sync.
 		if (!datatable._sq_switch_column_hooked) {
 			datatable._sq_switch_column_hooked = true;
-			datatable.on("onSwitchColumn", () => render_supplier_header());
+			datatable.on("onSwitchColumn", () => render_group_header());
 		}
 	},
 
@@ -345,14 +476,17 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 			__("Tools")
 		);
 
-		// Supplier group cell -> open that supplier's quotation
+		// Quotation heading -> its Supplier Quotation; PO heading -> that Purchase Order
 		$(report.page.wrapper)
 			.off("click.sq_group")
 			.on("click.sq_group", ".sq-group-cell[data-sq-link]", function () {
 				frappe.set_route("Form", "Supplier Quotation", $(this).attr("data-sq-link"));
+			})
+			.on("click.sq_group", ".sq-sub-cell[data-po-link]", function () {
+				frappe.set_route("Form", "Purchase Order", $(this).attr("data-po-link"));
 			});
 
-		// Supplier column header -> open that supplier's quotation
+		// Column label -> the PO it belongs to, else its quotation
 		$(report.page.wrapper)
 			.off("click.sq_link")
 			.on("click.sq_link", ".dt-cell--header", function (e) {
@@ -361,7 +495,9 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 				const col_index = parseInt($(this).attr("data-col-index"));
 				if (isNaN(col_index) || !report.datatable) return;
 				const col = report.datatable.datamanager.getColumn(col_index) || {};
-				if (col.sq_link) {
+				if (col.po_link) {
+					frappe.set_route("Form", "Purchase Order", col.po_link);
+				} else if (col.sq_link) {
 					frappe.set_route("Form", "Supplier Quotation", col.sq_link);
 				}
 			});

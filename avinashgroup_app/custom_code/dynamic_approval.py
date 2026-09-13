@@ -849,6 +849,7 @@ def _render_comparison_html(doc):
 	from avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison import (
 		_supplier_groups,
 		execute as run_comparison,
+		fmt_qty,
 	)
 
 	base_date = doc.get("transaction_date") or frappe.utils.nowdate()
@@ -872,7 +873,7 @@ def _render_comparison_html(doc):
 	groups = _supplier_groups(columns)
 
 	currency = frappe.get_cached_value("Company", doc.get("company"), "default_currency")
-	cell = 'border:1px solid #ddd;padding:5px 10px;'
+	base_cell = cell = 'border:1px solid #ddd;padding:5px 10px;'
 
 	# Material Request(s) this PO draws on, shown next to the company
 	from avinashgroup_app.avinash_group_app.report.custom_supplier_quotation_comparison.custom_supplier_quotation_comparison import (
@@ -884,43 +885,65 @@ def _render_comparison_html(doc):
 		f'{_("Material Request")}: <b>{frappe.utils.escape_html(", ".join(mrs))}</b>'
 	) if mrs else ""
 
-	# Two-row header: supplier name spans its Rate + Amount pair (supplier_group),
-	# fixed columns (SN / Item Name / Qty) span both rows.
-	top_cells, sub_cells = [], []
-	i = 0
-	while i < len(columns):
-		c = columns[i]
-		group = c.get("supplier_group")
-		if not group:
-			align = "right" if c.get("fieldtype") == "Currency" else "left"
-			top_cells.append(
-				f'<th rowspan="2" style="{cell}text-align:{align};vertical-align:bottom;">'
-				f'{frappe.utils.escape_html(c.get("label") or "")}</th>'
-			)
-			i += 1
-			continue
-		j = i
-		while j < len(columns) and columns[j].get("supplier_group") == group:
-			sub_cells.append(
-				f'<th style="{cell}text-align:right;">'
-				f'{frappe.utils.escape_html(columns[j].get("label") or "")}</th>'
-			)
-			j += 1
-		# Supplier name with its Supplier Quotation number underneath, so the
-		# approver sees exactly which quotation each column pair came from.
-		sq_name = c.get("sq_link")
-		sq_html = (
-			f'<div style="font-weight:normal;font-size:11px;color:#6c757d;">'
-			f'{frappe.utils.escape_html(sq_name)}</div>'
-		) if sq_name else ""
-		top_cells.append(
-			f'<th colspan="{j - i}" style="{cell}text-align:center;">'
-			f'{frappe.utils.escape_html(group)}{sq_html}</th>'
+	# Three-row header like the report: the quotation (supplier + quotation number)
+	# over "Quoted" and what was Ordered from it, over Qty / Rate / Amount. The fixed
+	# columns (SN / Item Name / MR Qty) span all three rows.
+	#
+	# Same colours as the report, as inline styles (mail clients drop stylesheets):
+	# each quotation's colour family - deeper shade on its heading, light under what
+	# was Quoted, stronger under what was Ordered - its accent on the block's left
+	# edge and a softer line between its sub-groups.
+	esc = frappe.utils.escape_html
+	block_of = {f["field"]: (f, g) for g in groups for f in g["fields"]}
+
+	def tinted(f, g):
+		"""A block cell's shade, plus the edge it opens with."""
+		edge = (
+			f"border-left:3px solid {g['accent']};" if f["edge"] == "grp-start"
+			else f"border-left:2px solid {g['soft']};" if f["edge"] == "sub-start"
+			else ""
 		)
-		i = j
-	header_rows = (
-		f'<tr style="background:#f5f5f5;">{"".join(top_cells)}</tr>'
-		f'<tr style="background:#f5f5f5;">{"".join(sub_cells)}</tr>'
+		return f"background:{f['fill']};{edge}"
+
+	quotation_cells, sub_cells, label_cells = [], [], []
+	for c in columns:
+		if c.get("sq_link"):
+			continue
+		align = "right" if c.get("fieldtype") == "Currency" else "left"
+		quotation_cells.append(
+			f'<th rowspan="3" style="{cell}text-align:{align};vertical-align:bottom;">'
+			f'{esc(c.get("label") or "")}</th>'
+		)
+	for g in groups:
+		quotation_cells.append(
+			f'<th colspan="{g["span"]}" style="{cell}text-align:center;background:{g["head"]};'
+			f'color:{g["text"]};border-left:3px solid {g["accent"]};">{esc(g["display"])}'
+			f' <span style="font-weight:normal;font-size:11px;opacity:.75;">({esc(g["sq"])})</span></th>'
+		)
+		for sub in g["subgroups"]:
+			starred = sub["label"].startswith("★")
+			colour = "#c2410c" if starred else g["text"]
+			text = esc(sub["label"])
+			if sub["po"]:
+				href = esc(frappe.utils.get_url("/app/purchase-order/" + sub["po"]))
+				text = f'<a href="{href}" style="color:{colour};text-decoration:none;">{text}</a>'
+			first = sub["fields"][0]
+			sub_cells.append(
+				f'<th colspan="{sub["span"]}" style="{cell}text-align:center;color:{colour};'
+				f'{tinted(first, g)}background:{sub["fill"]};">{text}</th>'
+			)
+			label_cells += [
+				f'<th style="{cell}text-align:right;color:{g["text"]};{tinted(f, g)}">{esc(f["label"])}'
+				+ (
+					f'<div style="font-weight:normal;font-size:11px;opacity:.75;">{esc(f["note"])}</div>'
+					if f["note"] else ""
+				)
+				+ "</th>"
+				for f in sub["fields"]
+			]
+	header_rows = "".join(
+		f'<tr style="background:#f5f5f5;">{"".join(cells)}</tr>'
+		for cells in (quotation_cells, sub_cells, label_cells)
 	)
 
 	body_rows = []
@@ -934,13 +957,15 @@ def _render_comparison_html(doc):
 		# free-text value under each quotation spans that block's own columns.
 		if row.get("is_term_row"):
 			term_cells = [
-				f'<td colspan="3" style="{cell}">'
+				f'<td colspan="3" style="{base_cell}">'
 				f'{frappe.utils.escape_html(str(row.get("qty") or ""))}</td>'
 			]
 			for g in groups:
 				value = row.get(g["amount_field"])
 				text = frappe.utils.escape_html(str(value)).replace("\n", "<br>") if value else ""
-				term_cells.append(f'<td colspan="{g["span"]}" style="{cell}">{text}</td>')
+				term_cells.append(
+					f'<td colspan="{g["span"]}" style="{base_cell}border-left:3px solid {g["accent"]};">{text}</td>'
+				)
 			body_rows.append(f'<tr style="{row_style}">{"".join(term_cells)}</tr>')
 			continue
 
@@ -948,26 +973,23 @@ def _render_comparison_html(doc):
 		for c in columns:
 			fieldname = c.get("fieldname") or ""
 			value = row.get(fieldname)
-			# "Ordered" column: qty of this item placed on a PO against this
-			# quotation - tick + qty, linked to the Purchase Order it went on.
-			if fieldname.endswith("_ordered"):
-				if not value:
-					cells.append(f'<td style="{cell}"></td>')
-					continue
-				shown = frappe.utils.escape_html(str(value))
-				po = row.get(fieldname + "_po")
-				if po:
-					href = frappe.utils.escape_html(frappe.utils.get_url("/app/purchase-order/" + po))
-					shown = f'<a href="{href}" style="color:#000;">{shown}</a>'
-				badge = (
-					'<span style="display:inline-block;width:14px;height:14px;line-height:14px;'
-					'border-radius:50%;background:#28a745;color:#fff;font-size:10px;font-weight:bold;'
-					'text-align:center;">&#10003;</span>'
+			# A quotation block's cell carries its shade and edge; fixed columns don't.
+			cell = base_cell + (tinted(*block_of[fieldname]) if fieldname in block_of else "")
+			# MR Qty (asked for), each quotation's quoted Qty and each PO's Qty:
+			# numbers, right-aligned; a quoted qty that differs from the MR's is
+			# flagged orange. On summary rows the MR Qty cell carries the row label
+			# instead, so text falls through.
+			if (
+				fieldname == "qty" or fieldname.endswith("_qty") or fieldname.endswith("_poqty")
+			) and isinstance(value, (int, float)):
+				asked = row.get("qty")
+				differs = (
+					fieldname.endswith("_qty")
+					and isinstance(asked, (int, float))
+					and frappe.utils.flt(value) != frappe.utils.flt(asked)
 				)
-				cells.append(
-					f'<td style="{cell}text-align:right;white-space:nowrap;background:#f4faf4;">'
-					f'{badge} {shown}</td>'
-				)
+				flag = "color:#c2410c;font-weight:bold;" if differs else ""
+				cells.append(f'<td style="{cell}text-align:right;{flag}">{fmt_qty(value)}</td>')
 			elif c.get("fieldtype") == "Currency":
 				text = frappe.utils.fmt_money(value, currency=currency) if value is not None else ""
 				cells.append(f'<td style="{cell}text-align:right;white-space:nowrap;">{text}</td>')
