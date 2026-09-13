@@ -322,6 +322,15 @@ has_permission = {
     for _dt in FILTERED_DOCTYPES
 }
 
+# Portal Announcement History: the Customer role grants read in the doctype, and
+# these two narrow it to logins listed in some Customer's Portal Users table.
+_PAH = "avinashgroup_app.avinash_group_app.doctype.portal_announcement.portal_announcement"
+permission_query_conditions["Portal Announcement History"] = f"{_PAH}.history_query_conditions"
+has_permission["Portal Announcement History"] = f"{_PAH}.history_has_permission"
+# ...and keeps it out of the desk search bar for staff who hold the Customer role
+# without being portal users.
+boot_session = f"{_PAH}.hide_history_from_non_portal_users"
+
 # Numbering Configuration engine: rule-driven numbering for EVERY doctype.
 # Wildcard handlers run after the doctype-specific ones, preserving the old
 # order (voucher logic first, engine last). Doctypes without enabled rules

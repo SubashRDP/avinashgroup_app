@@ -122,7 +122,7 @@ defaults.
     (NGI-PList-00001) — price_list_name holds the readable name (Bulk) -#}
 {%- set price_list = (frappe.db.get_value('Price List', doc.selling_price_list, 'price_list_name')
                       if doc.selling_price_list else '') or '' -%}
-{%- set grand_total = doc.rounded_total or doc.grand_total -%}
+{%- set grand_total = doc.grand_total -%}
 {#- doc.in_words is stale on some invoices (prints the total, not the grand
     total), so derive the words from the grand total actually printed -#}
 {%- set amount_words = frappe.utils.money_in_words(grand_total | abs, doc.currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") -%}
