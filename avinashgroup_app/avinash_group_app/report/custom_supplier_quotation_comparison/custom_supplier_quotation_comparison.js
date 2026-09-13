@@ -235,6 +235,11 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 		if (data && (data.is_total_row || data.is_summary_row || data.is_invoice_row) && per_unit) {
 			return "";
 		}
+		// Discount / VAT / Invoice Amount belong to the quotation; a PO only carries its
+		// own Total, so its Amount stays blank on those rows rather than reading Rs 0.00.
+		if (data && (data.is_summary_row || data.is_invoice_row) && column.fieldname.endsWith("_poamt")) {
+			return "";
+		}
 
 		// A PO's qty: only the decimals it needs (1, 1.5, 1,250), like the others.
 		if (column.fieldname.endsWith("_poqty")) {
@@ -355,7 +360,7 @@ frappe.query_reports["Custom Supplier Quotation Comparison"] = {
 				(c, keepers, edge) =>
 					`<div class="sq-group-cell" data-sq-link="${esc(c.sq)}" title="${__("Open Supplier Quotation")}"
 						style="position:relative;display:flex;cursor:pointer;border-right:${edge};background:${band[c.sq]};">${keepers}
-						${label(`${esc(c.group)} <span style="font-weight:400;color:var(--text-muted);">&middot; ${esc(c.sq)}</span>`, 600)}</div>`
+						${label(`<span>${esc(c.group)} <span style="font-weight:400;color:var(--text-muted);">&middot; ${esc(c.sq)}</span></span>`, 600)}</div>`
 			);
 			const sub_row = build_row(
 				(c) => `${c.sq}|${c.sub}`,
