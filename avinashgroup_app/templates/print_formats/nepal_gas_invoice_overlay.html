@@ -25,6 +25,10 @@ defaults.
     continuous fanfold form with wider side padding for the tractor strips. -#}
 {%- set page_w = page_w | default(210.0) -%}
 {%- set page_h = page_h | default(148.0) -%}
+{#- sheet_h is the height of the printed invoice block. It defaults to the page
+    height; a wrapper can set it lower to print on the top part of a taller
+    sheet (A4 paper with the invoice in the top half). -#}
+{%- set sheet_h = sheet_h | default(page_h) -%}
 {%- set pad_x = pad_x | default(10) -%}
 {%- set pad_y = pad_y | default(8) -%}
 {#- shift_x slides the whole printed block left (+mm) without changing the
@@ -132,6 +136,12 @@ defaults.
 {%- set print_stamp = frappe.utils.now_datetime().strftime('%d/%m/%Y %I:%M:%S%p') -%}
 
 {%- set rows_per_page = rows_per_page | default(4) -%}
+{#- A batched item prints its Batch No on a second line, so a sheet holds fewer
+    of them. A wrapper can set rows_per_page_batched for invoices that have any
+    batched item. -#}
+{%- if doc.items | selectattr('batch_no') | list -%}
+  {%- set rows_per_page = rows_per_page_batched | default(rows_per_page) -%}
+{%- endif -%}
 
 {%- macro num(v, p=2) -%}{{ frappe.utils.fmt_money(v | abs, p) if v is not none else '' }}{%- endmacro -%}
 {%- macro qty_fmt(q) -%}{%- set q = q | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
@@ -164,7 +174,7 @@ defaults.
   /* One sheet == one form, guaranteed: fixed height + overflow hidden means a
      sheet can never spill onto a following page (items are already chunked at
      rows_per_page per sheet, so nothing legitimate is ever clipped). */
-  .glm-sheet { position: relative; width: {{ page_w }}mm; height: {{ page_h }}mm;
+  .glm-sheet { position: relative; width: {{ page_w }}mm; height: {{ sheet_h }}mm;
     box-sizing: border-box; overflow: hidden; contain: strict;
     padding: {{ pad_y }}mm {{ pad_right }}mm {{ pad_y }}mm {{ pad_left }}mm;
     page-break-after: always; page-break-inside: avoid; }
@@ -221,6 +231,40 @@ defaults.
   .glm-sign .who { font-weight: bold; font-size: 9pt; white-space: nowrap; }
   .glm-pageno { clear: both; text-align: right; margin-top: 2mm; font-size: 7.5pt; }
 </style>
+
+{#- compact: tighter spacing for a wrapper that prints on a short sheet (the
+    top half of A4). Same layout and fields, less white space, so four item
+    rows and the totals fit inside 148.5mm. -#}
+{%- if compact | default(false) %}
+<style>
+  .glm-head .cname { margin-top: 1mm; }
+  .glm-titlebar { margin: 0.5mm 0 1mm; }
+  .glm-info { margin-bottom: 2mm; }
+  .glm-info td { padding: 0.3mm 0; }
+  table.glm-items td.body { padding: 0 0 2mm; }
+  .cell-stack div { padding: 1.2mm 1.5mm 0; min-height: 6mm; }
+  .glm-sign { margin-top: 5mm; }
+  .glm-pageno { margin-top: 1mm; }
+</style>
+{%- endif %}
+
+{#- items_box_h: fixed height (mm) of the item box. When a wrapper sets it, the
+    box keeps that height whether the sheet has 1 item or rows_per_page items,
+    so the totals and signature below always print at the same spot. Unset,
+    the box hugs its rows as before. -#}
+{%- if items_box_h is defined %}
+<style>
+  table.glm-items td.body { height: {{ items_box_h }}mm; }
+</style>
+{%- endif %}
+
+{#- sign_gap: space (mm) between the item table and the signature line, when a
+    wrapper wants the signatory lower or higher than the default. -#}
+{%- if sign_gap is defined %}
+<style>
+  .glm-sign { margin-top: {{ sign_gap }}mm; }
+</style>
+{%- endif %}
 
 {#- split items into pages -#}
 {%- set item_pages = [] -%}
