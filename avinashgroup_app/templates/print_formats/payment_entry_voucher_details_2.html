@@ -11,10 +11,15 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 <style>
 @page {
   size: A4;
-  /* Confine content to the top ~half of the A4 sheet; caps at ~48.8%. */
-  margin-bottom: 152mm;
+  /* Content band = top half of the A4 sheet: 10mm top + 148mm bottom leaves a
+     139mm band ending at 149mm, the fold. Both margins are stated so the PDF
+     does not fall back to its own defaults. */
+  margin-top: 10mm;
+  margin-bottom: 148mm;
 }
-.print-format { padding-top:30px !important; }
+/* The voucher starts right at the 10mm page margin. No negative margin here:
+   anything pulled above the page margin is clipped off the printed sheet. */
+.print-format { padding-top:0 !important; }
 .npv { color:#000; font-size:8px; }
 .npv * { color:#000 !important; }
 
@@ -22,7 +27,9 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 .npv .pv-title   { text-align:center; font-weight:bold; font-size:15px; margin:0; }
 .npv .pv-company { text-align:center; font-weight:bold; font-size:18px; margin:4px 0 2px; }
 .npv .pv-city    { text-align:center; font-weight:bold; font-size:10px; margin:0 0 8px; }
-.npv .pv-info    { width:100%; border-collapse:collapse; }
+/* 3mm gap above the info block: the title sits 3mm higher (10mm page margin)
+   while the Supplier/Voucher lines and everything below stay where they were. */
+.npv .pv-info    { width:100%; border-collapse:collapse; margin-top:3mm; }
 .npv .pv-info td { vertical-align:top; padding:2px 0; font-size:11px; }
 .npv .pv-info .r { text-align:right; }
 
@@ -51,9 +58,26 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 .npv .pv-sign { width:100%; border-collapse:collapse; }
 .npv .pv-sign td { width:25%; text-align:center; vertical-align:bottom; padding-top:38px; font-size:10px; }
 .npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
+
+/* Page frame: the body sits at the top and in-words/remarks/signatures at the
+   bottom of the frame, with blank space between. 120.8mm puts the footer where
+   it prints on a voucher-reference payment through wkhtmltopdf (the approved
+   position). A voucher too long for the frame grows the table and the footer
+   flows onto the next page instead of overlapping the body. */
+.npv .pv-page { width:100%; height:120.8mm; border-collapse:collapse; }
+.npv .pv-page > tbody > tr > td { padding:0; }
+.npv .pv-page-top    { vertical-align:top; }
+.npv .pv-page-bottom { vertical-align:bottom; }
+/* wkhtmltopdf's WebKit hands the frame's spare height to both rows, so the
+   footer rode up or down with the body (an advance printed ~5mm higher than a
+   voucher list). A 1px bottom row gives all spare height to the body row, so
+   the footer lands at the frame bottom whatever the body holds. */
+.npv .pv-page-bottom-row { height:1px; }
 </style>
 
 <div class="npv">
+<table class="pv-page"><tbody>
+<tr><td class="pv-page-top">
 
   {#- ---------- Header (no "Paid To") ---------- -#}
   <div class="pv-title">{{ doc.custom_p_type or "Payment" }} Voucher</div>
@@ -74,17 +98,34 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
         {%- if doc.custom_paid_to_from %}
         <div><strong>Paid To/Receive From :</strong> {{ doc.custom_paid_to_from }}</div>
         {%- endif %}
+        {#- Line order: party (Customer/Supplier), then Ref, then the bank/account.
+            On Pay the party sits on the Paid To side and the bank on Paid From;
+            on Receive it is the other way round. Internal Transfer has no party,
+            so both accounts print after Ref. -#}
+        {%- set has_party = doc.payment_type in ("Pay", "Receive") and doc.party_type and doc.party_name -%}
+        {%- if has_party %}
+        <div><strong>{{ doc.party_type }} : {{ doc.party_name }}</strong></div>
+        {%- endif %}
+
         {%- set chq = (doc.reference_no or "")|string|trim -%}
         {%- if chq and chq != "1" %}
-        <div><strong>Ref :</strong> {{ chq }}</div>
-        <div><strong>Dt :</strong> {% if doc.custom_chequereference_miti %}{{ (doc.custom_chequereference_miti|string).split(" ")[0] }}{% endif %}{% if doc.reference_date %} ({{ frappe.utils.formatdate(doc.reference_date, "yyyy-MM-dd") }}){% endif %}</div>
+        {#- Reference number with its Nepali (miti) date in brackets; no separate date line. -#}
+        <div><strong>Ref :</strong> {{ chq }}{% if doc.custom_chequereference_miti %} ({{ (doc.custom_chequereference_miti|string).split(" ")[0] }}){% endif %}</div>
         {%- endif %}
-        {#- No "Paid To/From" titles. If a party exists show "Party Type : Party";
-           otherwise show the account name (account_name, falling back to the coded id). -#}
-        {% set pt_party = doc.payment_type == "Pay" and doc.party_type and doc.party_name %}
-        {% set pf_party = doc.payment_type == "Receive" and doc.party_type and doc.party_name %}
-        <div>{% if pt_party %}<strong>{{ doc.party_type }} :</strong> {{ doc.party_name }}{% else %}{{ frappe.db.get_value("Account", doc.paid_to, "account_name") or doc.paid_to or "" }}{% endif %}</div>
-        <div>{% if pf_party %}<strong>{{ doc.party_type }} :</strong> {{ doc.party_name }}{% else %}{{ frappe.db.get_value("Account", doc.paid_from, "account_name") or doc.paid_from or "" }}{% endif %}</div>
+
+        {#- An account line gets a "Bank :" title only when the account's type is Bank;
+            cash and other accounts print their name without a title. -#}
+        {%- macro account_line(acc) -%}
+          {%- set a = frappe.db.get_value("Account", acc, ["account_name", "account_type"], as_dict=1) if acc else None -%}
+          {%- if a and a.account_type == "Bank" %}<strong>Bank :</strong> {% endif -%}
+          {{ (a.account_name if a else "") or acc or "" }}
+        {%- endmacro -%}
+        {%- if not has_party or doc.payment_type == "Receive" %}
+        <div>{{ account_line(doc.paid_to) }}</div>
+        {%- endif %}
+        {%- if not has_party or doc.payment_type == "Pay" %}
+        <div>{{ account_line(doc.paid_from) }}</div>
+        {%- endif %}
       </td>
       <td class="r">
         <div><strong>Voucher :</strong> {{ doc.custom_name or "" }}</div>
@@ -96,11 +137,27 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 
   {#- ---------- Items ---------- -#}
   {% set show_party = doc.payment_type != "Internal Transfer" %}
+  {#- The "Party Invoice Details" column (supplier bill no + miti) appears only
+      when at least one reference is a Purchase Invoice. -#}
+  {#- On Pay, the supplier gets the paid amount less the bank charges
+      (deductions) -- what posts to the party/advance account. On Receive,
+      ERPNext credits the customer paid + charges instead, so the paid amount
+      is kept as it is there. -#}
+  {% set net_paid = (doc.paid_amount or 0) - (doc.deductions | sum(attribute='amount'))
+       if doc.payment_type == "Pay" else (doc.paid_amount or 0) %}
+  {% set show_pinv = doc.payment_type in ("Pay", "Receive")
+       and (doc.references | selectattr("reference_doctype", "equalto", "Purchase Invoice") | list) %}
   <table class="pv-items">
     <thead>
       <tr>
+        {% if show_pinv %}
+        <th style="width:46%;">Document Details</th>
+        <th style="width:30%;">Party Invoice Details</th>
+        <th class="r" style="width:24%;">Payment</th>
+        {% else %}
         <th style="width:66%;">Document Details</th>
-        <th class="r" style="width:34%;">Amount</th>
+        <th class="r" style="width:34%;">Payment</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -130,6 +187,23 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
             {% endif %}
           {% endif %}
         </td>
+        {#- Supplier bill number with its miti (English bill date if no miti), one
+            line per reference so it lines up with its Voucher line; references
+            that are not Purchase Invoices get a blank line. -#}
+        {% if show_pinv %}
+        <td>
+          <div>&nbsp;</div>
+          {% for ref in doc.references %}
+            {% set bill = frappe.db.get_value("Purchase Invoice", ref.reference_name,
+                 ["bill_no", "bill_date", "custom_supplier_invoice_miti"], as_dict=1)
+                 if ref.reference_doctype == "Purchase Invoice" and ref.reference_name else None %}
+            {% set bdate = ((bill.custom_supplier_invoice_miti or "")|string).split(" ")[0]
+                 or (frappe.utils.formatdate(bill.bill_date, "yyyy-MM-dd") if bill.bill_date else "")
+                 if bill else "" %}
+            <div style="font-weight:normal; white-space:nowrap;">{% if bill and bill.bill_no %}{{ bill.bill_no }}{% if bdate %} ({{ bdate }}){% endif %}{% else %}&nbsp;{% endif %}</div>
+          {% endfor %}
+        </td>
+        {% endif %}
         {#- One allocated amount per reference, in the same order as the Voucher lines on
            the left, so each amount lines up with its own "Voucher : ..." row. -#}
         <td class="r">
@@ -142,7 +216,7 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
             {#- Small rule under the amounts, then the total of all voucher allocations. -#}
             <div style="display:inline-block; border-top:1px solid #000; padding-top:2px; margin-top:1px; font-weight:bold; white-space:nowrap;">{{ amt(doc.references | sum(attribute='allocated_amount')) }}</div>
           {% else %}
-            {{ amt(doc.paid_amount) }}
+            {{ amt(net_paid) }}
           {% endif %}
         </td>
       </tr>
@@ -152,9 +226,12 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 
 
   
+</td></tr>
+<tr class="pv-page-bottom-row"><td class="pv-page-bottom">
+
   {#- ---------- In words ---------- -#}
   <div class="pv-words">
-    {{ frappe.utils.money_in_words(doc.paid_amount, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ").replace("only.", "Only").replace(" only", " Only") }}
+    {{ frappe.utils.money_in_words(net_paid, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ").replace("only.", "Only").replace(" only", " Only") }}
   </div>
 
   {#- ---------- Remarks ---------- -#}
@@ -177,5 +254,8 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
     </table>
     <div style="text-align:left; font-size:7px; margin-top:-4px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
   </div>
+
+</td></tr>
+</tbody></table>
 
 </div>
