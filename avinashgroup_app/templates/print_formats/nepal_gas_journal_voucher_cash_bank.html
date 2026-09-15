@@ -1,8 +1,9 @@
 {#- ==========================================================================
-NG Cash Payment(CV) Voucher — Journal Entry voucher (avinashgroup_app).
-Source of truth for the "NG Cash Payment(CV) Voucher" standard Print
-Format (formerly "Nepal Gas Journal Voucher Cash Bank");
-print_format/ng_cash_payment_cv_voucher/ng_cash_payment_cv_voucher.json
+NG CV Payment Voucher Half — Journal Entry voucher (avinashgroup_app).
+Source of truth for the "NG CV Payment Voucher Half" standard Print
+Format (formerly "NG Cash Payment(CV) Voucher", before that "Nepal Gas
+Journal Voucher Cash Bank");
+print_format/ng_cv_payment_voucher_half/ng_cv_payment_voucher_half.json
 only {% include %}s this file.
 
 Created 2026-08-06 from nepal_gas_journal_voucher.html, carrying ONLY that
@@ -20,7 +21,7 @@ for both must be made in both (the same rule that already applies to the A4
 Full Page twin).
 
 This format has its own full-sheet twin, ng_cash_payment_cv_full_page.html
-("NG Cash Payment(CV) Full Page"), which differs only in the @page bottom
+("NG CV Payment Voucher A4"), which differs only in the @page bottom
 margin and the PAGE_PX / TARGET_PX constants. Body changes belong in it too.
 =========================================================================== -#}
 <style>

@@ -6,6 +6,7 @@ avinashgroup_app.patches.rename_vocher_number_settings
 avinashgroup_app.patches.skip_broken_hrms_advance_ledger_patch
 avinashgroup_app.patches.rename_ng_cash_payment_cv_voucher
 avinashgroup_app.patches.rename_nepal_gas_invoice_a5_print_format
+avinashgroup_app.patches.rename_journal_print_formats #2026-09-15 spaced names
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
