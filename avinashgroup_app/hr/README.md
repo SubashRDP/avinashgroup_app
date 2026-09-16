@@ -52,9 +52,9 @@ plus Teej and International Women's Day, set on each female Employee).
 `apply_holiday_change()` adds or removes one date across the lists chosen by
 company and `scope` ("both" / "women" / "common"). The desk entry point is the
 **Holiday Bulk Update** doctype
-(`avinash_group_app/doctype/holiday_bulk_update/`): fill its Holidays table, tick
-`Women Only` where a row belongs in the women's copy alone, choose the companies,
-press Apply.
+(`avinash_group_app/doctype/holiday_bulk_update/`): fill its Holidays table, set
+each row's `Applies To` (All Lists / Common Only / Women Only), choose the
+companies — all of them, or just the two or three that change — press Apply.
 
 It writes Holiday List rows only. Attendance already marked on that date is not
 re-marked — use Attendance Fix for that.

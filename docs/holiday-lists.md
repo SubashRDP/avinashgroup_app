@@ -34,9 +34,11 @@ is Absent on a day the rest of the group had off.
 **Holiday Bulk Update** (Avinash Group App) does the whole set at once:
 
 1. **Action** — Add Holiday or Remove Holiday.
-2. **Companies** — all, or pick them.
-3. **Holidays table** — one row per date: Date, Holiday, and `Women Only` for a
-   row that belongs in the women's copy alone.
+2. **Companies** — all, or pick just the two or three that change.
+3. **Holidays table** — one row per date: Date, Holiday, and `Applies To`:
+   * **All Lists** — both lists of each chosen company (the normal case)
+   * **Common Only** — the list everyone inherits, leaving the women's copy alone
+   * **Women Only** — the women's copy alone (Teej, International Women's Day)
 4. **Apply** — reports, per list, what changed and what was skipped.
 
 Skipped means: the date is outside that list's range, already present when

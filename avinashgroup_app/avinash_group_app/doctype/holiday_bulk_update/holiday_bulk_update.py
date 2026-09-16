@@ -6,9 +6,9 @@ mid-year, into all of them by hand is where a list gets missed; the miss surface
 in payroll, when everyone on that list is marked Absent on a day the rest of the
 group had off.
 
-Fill the Holidays table once, tick "Women Only" on the rows that are (Teej,
-International Women's Day), choose the companies, and press Apply. Remove Holiday
-takes the same rows out again.
+Fill the Holidays table once, set each row's "Applies To" (All Lists, Common Only
+or Women Only — Teej and International Women's Day are Women Only), choose the
+companies, and press Apply. Remove Holiday takes the same rows out again.
 
 The writing itself lives in `avinashgroup_app.hr.holiday_lists`; this controller
 only validates the form and records what the last run did.
@@ -25,6 +25,15 @@ from frappe.utils import now_datetime
 
 from avinashgroup_app.hr.holiday_lists import apply_holiday_change
 
+# Row choice -> the `scope` argument of apply_holiday_change(). "Women Only"
+# keeps a day out of the list everyone inherits (Teej, International Women's
+# Day); "Common Only" is the rare reverse, a day the women's copy must not get.
+SCOPE_BY_APPLIES_TO = {
+	"All Lists": "both",
+	"Common Only": "common",
+	"Women Only": "women",
+}
+
 
 class HolidayBulkUpdate(Document):
 	def validate(self):
@@ -35,7 +44,7 @@ class HolidayBulkUpdate(Document):
 		pass would report itself as already present. Cheaper to refuse it here."""
 		seen = set()
 		for row in self.holidays:
-			key = (row.holiday_date, row.women_only)
+			key = (row.holiday_date, row.applies_to)
 			if key in seen:
 				frappe.throw(_("Row {0}: {1} is listed twice").format(row.idx, row.holiday_date))
 			seen.add(key)
@@ -57,9 +66,7 @@ class HolidayBulkUpdate(Document):
 				holiday_date=row.holiday_date,
 				description=row.description,
 				companies=companies,
-				# A women-only day belongs in the (Women) copy alone; every other
-				# day goes into both, so the women's list stays a superset.
-				scope="women" if row.women_only else "both",
+				scope=SCOPE_BY_APPLIES_TO[row.applies_to],
 			)
 			label = f"{row.holiday_date} {row.description}"
 			changed += [f"{label} → {line}" for line in report["changed"]]

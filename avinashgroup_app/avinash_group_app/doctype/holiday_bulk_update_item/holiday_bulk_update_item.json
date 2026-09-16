@@ -4,11 +4,39 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["holiday_date", "description", "women_only"],
+ "field_order": [
+  "holiday_date",
+  "description",
+  "applies_to"
+ ],
  "fields": [
-  {"fieldname": "holiday_date", "fieldtype": "Date", "in_list_view": 1, "label": "Date", "reqd": 1, "columns": 2},
-  {"fieldname": "description", "fieldtype": "Data", "in_list_view": 1, "label": "Holiday", "reqd": 1, "columns": 6},
-  {"fieldname": "women_only", "fieldtype": "Check", "in_list_view": 1, "label": "Women Only", "columns": 2, "description": "Goes only into the company's (Women) list"}
+  {
+   "fieldname": "holiday_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Holiday",
+   "reqd": 1,
+   "columns": 5
+  },
+  {
+   "fieldname": "applies_to",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Applies To",
+   "options": "All Lists\nCommon Only\nWomen Only",
+   "default": "All Lists",
+   "reqd": 1,
+   "columns": 3,
+   "description": "Which of each company's two lists this date goes into"
+  }
  ],
  "istable": 1,
  "links": [],
