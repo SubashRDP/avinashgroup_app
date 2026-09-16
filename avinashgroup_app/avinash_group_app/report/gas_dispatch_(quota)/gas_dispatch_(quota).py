@@ -121,15 +121,19 @@ def _sales_by_customer_and_date(filters, start_date, end_date):
 	distinct date (<= 366) instead of one per invoice line — NGI alone has over
 	118,000 LP Gas lines.
 	"""
+	item_codes = _lp_gas_item_codes()
+	if not item_codes:
+		return []
+
 	# Sales returns (credit notes) carry negative quantities, so including them
 	# nets the return off the month it was posted in.
 	conditions = [
 		"si.docstatus = 1",
-		"item.item_name = %(item_name)s",
+		"sii.item_code IN %(item_codes)s",
 		"si.posting_date BETWEEN %(start_date)s AND %(end_date)s",
 	]
 	values = {
-		"item_name": LP_GAS_ITEM_NAME,
+		"item_codes": item_codes,
 		"start_date": start_date,
 		"end_date": end_date,
 	}
@@ -146,18 +150,32 @@ def _sales_by_customer_and_date(filters, start_date, end_date):
 		conditions.append("(si.customer IN %(customer)s OR si.customer_name IN %(customer)s)")
 		values["customer"] = tuple(customer)
 
+	# STRAIGHT_JOIN pins the invoice table first. Left to itself MariaDB starts
+	# from the item side -- nearly every invoice line on the site is LP Gas, so
+	# that plan walks ~282,000 lines and looks up each invoice one at a time
+	# (~71s measured). Invoice-first lets the company+posting_date index carry
+	# the year (~27s for the same run, both on mysite1).
 	return frappe.db.sql(
 		"""
 		SELECT si.customer, si.customer_name, si.posting_date, SUM(sii.qty) AS qty
-		FROM `tabSales Invoice Item` sii
-		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-		INNER JOIN `tabItem` item ON item.name = sii.item_code
+		FROM `tabSales Invoice` si
+		STRAIGHT_JOIN `tabSales Invoice Item` sii ON sii.parent = si.name
 		WHERE {where}
 		GROUP BY si.customer, si.customer_name, si.posting_date
 		""".format(where=" AND ".join(conditions)),
 		values,
 		as_dict=True,
 	)
+
+
+def _lp_gas_item_codes():
+	"""Item codes named "LP Gas" -- one per company, resolved in its own query.
+
+	Joining tabItem into the main query costs a scan on the unindexed item_name;
+	this lookup hits five rows and turns the filter into an indexed item_code IN.
+	"""
+	codes = frappe.db.get_all("Item", filters={"item_name": LP_GAS_ITEM_NAME}, pluck="name")
+	return tuple(codes)
 
 
 def _build_rows(filters, start_date, end_date, percentage=0.0):
