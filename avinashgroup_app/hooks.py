@@ -344,6 +344,13 @@ _add_doc_event("*", "validate", "avinashgroup_app.custom_code.Override.naming_se
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
 _add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.naming_series.revert_engine_series_on_delete")
 
+# Employee Group membership decides OT eligibility, and through it who gets paid
+# overtime and who gets replacement leave for holiday work (policy minutes
+# 2026-09-15, 2.2/2.5). Saving a group mirrors it onto Employee.
+_add_doc_event(
+    "Employee Group", "on_update", "avinashgroup_app.hr.employee_groups.sync_ot_eligibility"
+)
+
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")

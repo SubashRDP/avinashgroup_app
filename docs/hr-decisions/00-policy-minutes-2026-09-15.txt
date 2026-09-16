@@ -27,9 +27,14 @@ These are DECISIONS. They overrule the defaults in 01-leave-type.txt and
 2. HOLIDAY
    2.1 Each company may keep a DIFFERENT holiday calendar.
        -> one Holiday List per company, not one shared list.
-   2.2 Admin and Officers get NO replacement leave for working on a holiday.
-       -> comp-off only for the other staff; needs a flag/grade to tell them
-          apart.
+   2.2 CORRECTED 2026-09-16 (the minute as circulated says the opposite):
+       Admin and Officer level DO get replacement leave for working on a
+       holiday. Staff BELOW admin/officer level do NOT — they are the
+       OT-eligible ones and are paid overtime instead.
+       -> one flag decides both: Employee.custom_ot_eligibility.
+            OT eligible = 1 -> paid OT + meals, no comp-off
+            OT eligible = 0 (admin/officer) -> comp-off, no OT
+       -> same split as 2.5, which already reads that way.
    2.3 OT-eligible on a holiday: 1 meal at 6 hours, +1 meal at 8+ hours.
        Max 2/day.
    2.4 Teej is an EXTRA holiday for WOMEN ONLY. No other optional holidays.
@@ -38,9 +43,9 @@ These are DECISIONS. They overrule the defaults in 01-leave-type.txt and
           ("Optional Holidays 83/84": English New Year + the two Eids) and put
           Eid back in the common list if the company gives it.
    2.5 Saturday work comes in TWO kinds:
-         a) compensatory leave (staff who are not OT-eligible)
-         b) OT paid (no compensatory leave)
-       -> the same split as 2.2, driven by OT eligibility.
+         a) compensatory leave (staff who are not OT-eligible = admin/officer)
+         b) OT paid (OT-eligible staff, no compensatory leave)
+       -> the same single flag as 2.2.
 
 3. LEAVE
    3.1 Types: Sick, Casual, Paternity, Maternity.
@@ -94,12 +99,15 @@ WHAT THIS CHANGES IN WHAT WE ALREADY BUILT
 - Leave types become Sick / Casual / Paternity / Maternity. The type now on
   nepalgas is called "Home Leave" (renamed from "ngi  casual leave").
 - A second policy is needed for probation staff, 12 a year (3.6).
-- Employees need an OT-eligible flag and an Admin/Officer flag (2.2, 2.5, 5.1).
+- Employees need ONE flag, OT-eligible (2.2 corrected, 2.5, 5.1). It already
+  exists as Employee.custom_ot_eligibility, and is 0 for all 295 staff, so the
+  client must say who is OT-eligible.
 
 STILL OPEN
 ----------
 - PF or SSF for the 11/20 (6.3).
-- Which staff are Admin/Officer, and who is OT-eligible.
+- Who is OT-eligible (everyone below admin/officer level). Designation is set
+  on only 30 of 295 employees, so it cannot be derived.
 - Encashment: at what rate, and is the whole balance encashed?
 - Sick / Paternity / Maternity: how many days each, and are they inside the
   33 or on top of it?
