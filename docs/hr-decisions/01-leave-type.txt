@@ -1,0 +1,383 @@
+LEAVE TYPE - every button and field
+===================================
+HRMS v15.49.2 (the pinned version). Site: nepalgas (local).
+Checked against the HRMS source code, not only the help text.
+On nepalgas right now: 0 Leave Types (wiped). No Property Setters, no Client
+Scripts and no Server Scripts on Leave Type.
+
+
+WHAT A LEAVE TYPE IS
+--------------------
+- One kind of leave: "Home Leave", "Sick Leave", "Leave Without Pay" and so on.
+- It holds the RULES only. It holds no days and no balances.
+- Where the days come from:
+    Leave Type   -> the rules
+    Leave Policy -> "Home Leave 33 days a year", a list of Leave Types with days
+    Leave Policy Assignment -> gives that policy to an employee for a period
+    Leave Allocation -> the employee's actual balance (created by the
+                        assignment, or typed by hand)
+    Leave Application -> the employee takes leave; balance goes down
+    Leave Ledger Entry -> every + and - as rows (the real balance comes from here)
+- The record NAME is the "Leave Type Name" you type (autoname = field). To
+  change it later, click the title and rename. Every allocation and
+  application follows the rename.
+
+
+BUTTONS AND CONTROLS ON THE FORM
+--------------------------------
+The Leave Type form has NO custom buttons. HRMS's leave_type.js adds none.
+Everything you see comes from the standard Frappe form:
+
+- Save (Ctrl+S)
+    Runs these checks (from leave_type.py):
+      a) "Is Leave Without Pay" cannot be ticked while a Leave Allocation for
+         this type covers today. Error: "Leave application is linked with
+         leave allocations ...".
+      b) "Is Compensatory" and "Is Earned Leave" cannot both be ticked.
+      c) "Is Leave Without Pay" and "Is Partially Paid Leave" cannot both be
+         ticked.
+      d) "Fraction of Daily Salary per Leave" must be between 0 and 1.
+      e) Warning only (does not block): lowering "Maximum Leave Allocation"
+         on an earned leave that already has a running allocation. The
+         scheduler may then credit wrong amounts.
+    Saving also clears the cached leave-type map that the Salary Slip uses
+    to find LWP and partially paid types. A change reaches the next slip
+    without a restart.
+
+- "..." menu (top right), standard items:
+    Duplicate  -> copy this type as a new one (fast way to make a second type)
+    Copy to Clipboard, Reload, Remind Me, Links
+    Rename     -> click the title
+    Delete     -> blocked once any allocation, application, attendance or
+                  encashment points at this type
+    Customize  -> Customize Form (adding fields). Remember the rule: set
+                  custom JSON sync_on_migrate to 0.
+    New Leave Type
+    Print is possible but useless here.
+
+- "Take a tour" (help): a 6-step tour of Maximum Leave Allocation, Maximum
+  Consecutive Leaves, Is Optional Leave, Is Compensatory, Allow Encashment
+  and Is Earned Leave. It only explains; it changes nothing.
+
+- Connections / dashboard (top of the form once saved):
+    Leave Allocation | Leave Application
+    Attendance       | Leave Encashment
+    Each shows a count. Click the name to open the filtered list. Click "+"
+    to create a new record with this Leave Type already filled in.
+
+- Sidebar: Assigned To, Attachments, Tags, Share, and the audit trail.
+  This site also has our app's Audit section: Created By, Created On,
+  Modified By (custom fields custom_created_by, custom_created_on,
+  custom_modified_by).
+
+- Only one piece of JS behaviour exists:
+    Changing "Earned Leave Frequency" to anything other than Monthly removes
+    "Date of Joining" from the "Allocate on Day" options. Only Monthly
+    offers First Day / Date of Joining / Last Day.
+
+
+FIELDS, TOP TO BOTTOM
+---------------------
+Each field shows: what it does, when it actually bites, the trap, and what
+I would set for Avinash (from their Yearly Leave Details FY 2082/083 and the
+Falgun salary sheets).
+
+== MAIN SECTION, LEFT COLUMN ==
+
+1. Leave Type Name   (leave_type_name, Data, MANDATORY)
+   - Becomes the record name. It shows on applications, the balance report
+     and the salary slip leave table.
+   - Avinash: keep names short and plain. The name prints, so no company
+     prefix. One Leave Type serves all 7 companies; Leave Type has no
+     Company field.
+
+2. Maximum Leave Allocation Allowed per Leave Period
+   (max_leaves_allowed, Float, 0 = no limit)
+   - Bites in two places:
+     a) Leave Policy save: throws "Maximum leave allowed in the leave type X
+        is N" if the policy gives more than this.
+     b) Earned leave scheduler: stops topping up once the allocation
+        reaches this number.
+   - It does NOT stop a Leave Application. The balance does that.
+   - Avinash: 24.75 (9 months x 2.75, per their sheet header). Or leave it
+     at 0 and let the Policy hold the number. I prefer 0 here plus the
+     number in the Policy: one place to change.
+
+3. Allow Leave Application After (Working Days)
+   (applicable_after, Int, 0 = from day one)
+   - On Leave Application save: counts days since the Date of Joining,
+     minus leave already taken, minus holidays (unless "Include holidays"
+     is ticked). If the result is below this number, it throws "X
+     applicable after N working days".
+   - Only blocks APPLYING. Allocation still happens.
+   - Avinash: their sheet gives new staff Leave(N) = 1/month instead of
+     2.75, so they reduce the RATE and don't block. Default 0.
+
+4. Maximum Consecutive Leaves Allowed
+   (max_continuous_days_allowed, Int, 0 = no limit)
+   - On Leave Application save: adds up this application plus any directly
+     touching applications of the same type (back-to-back ones count
+     together). Throws "Maximum Consecutive Leaves Exceeded" with links.
+   - Avinash: nothing in their files. Default 0 for home leave. Maybe 3 for
+     a "casual" type if they have one. (HRMS's own seeded "Casual Leave"
+     uses 3.)
+
+== MAIN SECTION, RIGHT COLUMN ==
+
+5. Is Carry Forward   (is_carry_forward, Check)
+   - Lets unused balance move to the next leave period. It happens when the
+     new allocation or Leave Policy Assignment has "Add unused leaves from
+     previous allocations" ticked.
+   - Ticking it shows the Carry Forward section (fields 12 and 18).
+   - Also read by Compensatory Leave Request. On approval it adds the days
+     to the employee's existing allocation of that type. If there is none,
+     it makes a new allocation (up to the end of the active Leave Period)
+     and copies this tick into that allocation's "carry forward" flag.
+     Comp-off therefore needs a Leave Period for the company.
+   - Avinash: their "Leave Remaining" is capped at the entitlement (Bikash
+     24.75 + 12 - 6 still shows 24.75). That looks like a year-end cap,
+     not a carry-forward rule. Unknown. Default: ON, with the maximum set
+     in field 18.
+
+6. Is Leave Without Pay   (is_lwp, Check; hidden while field 22 is ticked)
+   - The day is unpaid. The Salary Slip counts it into "Leave Without Pay",
+     and payment days drop by that much.
+   - An LWP type needs NO allocation. You can apply for any number of days.
+     The "outside allocation" and back-dated checks are skipped.
+   - Cannot be ticked while any allocation of this type covers today.
+   - How the slip counts it depends on Payroll Settings "Payroll Based On":
+       Leave      -> counts from submitted Leave Applications (nepalgas is
+                     set to Leave)
+       Attendance -> counts Attendance rows "On Leave" with this type, plus
+                     Absent days
+   - Avinash: YES, one type called "Leave Without Pay". Their Falgun sheet
+     has an "Unpaid Leave" column (N x days / 30) but only 1 cell is filled.
+     Raju (NGI0015) had 0 attendance and was paid by prorating instead.
+     Decision needed: are overshooting leaves converted to LWP, or cut some
+     other way?
+
+7. Is Optional Leave   (is_optional_leave, Check)
+   - For "floating holidays", where an employee picks N from a list. On
+     application: needs an active Leave Period with an "Optional Holiday
+     List", and EVERY applied date must be in that list. Otherwise it
+     throws.
+   - Avinash: nothing in their files suggests this. Default OFF. If they
+     want festival picks (for example Teej for women only), this is the
+     tool.
+
+8. Allow Negative Balance   (allow_negative, Check)
+   - Leave Application: a low balance shows only a WARNING. The "application
+     period outside allocation" and "across two allocations" checks are
+     skipped.
+   - Leave Allocation: may be set lower than leave already taken (a note
+     instead of an error).
+   - Avinash: 11 staff are already negative on their own sheet (Raju -26.75,
+     Biswash -7.25, Arjun -4.25, Sudeo -4.5 ...). So the practice is
+     "allowed, sort it out at salary". Default ON for home leave. The
+     alternative (OFF) forces a separate LWP application for the overshoot.
+     That is cleaner, but a behaviour change they didn't ask for.
+
+9. Include holidays within leaves as leaves   (include_holiday, Check)
+   - The "sandwich" switch.
+       OFF: a leave from Friday to Sunday, with Saturday a holiday, counts
+            2 days.
+       ON:  counts 3 days.
+   - Also used by:
+     a) the "Allow Leave Application After" day count (field 3)
+     b) the Salary Slip: an LWP day falling on a holiday is only deducted
+        when this is ON
+   - Avinash: unknown. Their sheet uses 0.5 steps, and I found no sandwich
+     pattern. Default OFF (the employee-friendly and more common choice in
+     Nepal). NOTE: HRMS's own seeded types all use ON.
+
+10. Is Compensatory   (is_compensatory, Check)
+   - Marks this as the type that a "Compensatory Leave Request" credits.
+     The employee fills work dates, which must be holidays and must have
+     Present attendance. On approval, days are added to their allocation
+     of this type.
+   - Cannot be ticked together with "Is Earned Leave".
+   - Avinash: their "Work On Holiday" sheet credits holiday work by NON-OT
+     staff into leave (Bikash +12). This is exactly that. But in their
+     sheet it goes into the SAME pool as home leave, and ERPNext can't make
+     one type both earned and compensatory. Options:
+       A) a separate "Compensatory Off" type (cleaner, two balances)
+       B) keep one pool, and credit holiday work by editing the allocation
+          or with a Leave Allocation "new leaves" top-up
+     Default A.
+
+== CARRY FORWARD SECTION (only when field 5 is ticked) ==
+
+11. Expire Carry Forwarded Leaves (Days)
+    (expire_carry_forwarded_leaves_after_days, Int, 0 = never)
+   - The carried-over days are only usable for this many days into the new
+     period. A daily job (process_expired_allocation) writes the expiry
+     entry.
+   - If you save an allocation whose expiry date has already passed, a
+     popup offers to expire them.
+   - Avinash: unknown. Default 0 (never expire).
+
+== ENCASHMENT SECTION ==
+
+12. Allow Encashment   (allow_encashment, Check)
+   - Enables the "Leave Encashment" document for this type: pay out unused
+     days. A daily job (generate_leave_encashment) can create them
+     automatically at period end, if HR Settings "Auto Leave Encashment"
+     is on.
+   - Avinash: no encashment column in the Falgun sheets. Labour Act 2074
+     allows encashing accumulated home leave, typically at exit. Default
+     OFF until they confirm.
+
+13. Earning Component   (earning_component, Link Salary Component; shows
+    with field 12)
+   - Salary component the payout goes to. A submitted Leave Encashment
+     creates an Additional Salary on this component, so it lands on the next
+     slip. Leave empty and the encashment cannot create the payment.
+
+14. Maximum Encashable Leaves   (max_encashable_leaves, Int; shows with 12)
+   - Upper limit of days encashed at once.
+
+15. Non-Encashable Leaves   (non_encashable_leaves, Int; shows with 12)
+   - Days that must stay in the balance. Balance 10, non-encashable 4 ->
+     only 6 can be encashed.
+
+== EARNED LEAVE SECTION ==
+
+16. Is Earned Leave   (is_earned_leave, Check)
+   - The balance is NOT given all at once. A daily scheduler job adds a
+     slice each period (annual allocation / 12 for Monthly), until the
+     Leave Policy's annual number is reached.
+   - Needs a Leave Policy Assignment. A hand-made allocation without a
+     policy is skipped.
+   - Avinash: YES. "2.75 per month" is exactly this.
+   - TRAP 1: HRMS credits on GREGORIAN month ends (Aug 31, Sep 30 ...),
+     14-17 days away from the BS month ends that their payroll uses. Our
+     app has a BS version, avinashgroup_app/hr/utils.py
+     allocate_earned_leaves_bs, but it is NOT in hooks.py yet. Wiring it
+     means: add it to scheduler_events, and stop HRMS's
+     hrms.hr.utils.allocate_earned_leaves job. Both running = double
+     credit.
+   - TRAP 2: the cap check (new total without carry-forward must be <=
+     the annual number) combined with rounding can drop the last month's
+     slice.
+
+17. Earned Leave Frequency   (earned_leave_frequency, Select: Monthly /
+    Quarterly / Half-Yearly / Yearly; shows with 16)
+   - Slice = annual / 12, 4, 2 or 1.
+   - Avinash: Monthly.
+   - WARNING (from reading the code, not tested): for Quarterly, Half-Yearly
+     and Yearly, the date check in hrms/hr/utils.py check_effective_date
+     looks inverted. It fires when months-since-start is NOT a multiple of
+     3/6/12. Use Monthly only. Our BS job also refuses anything but Monthly.
+
+18. Rounding   (rounding, Select: blank / 0.25 / 0.5 / 1.0; shows with 16)
+   - Rounds each monthly slice. 2.75 stays 2.75 at 0.25; becomes 3.0 at
+     0.5; becomes 3 at 1.0.
+   - Avinash: 0.25 (keeps 2.75 exact). Blank does the same for 2.75. But a
+     mid-month joiner gets a prorated odd fraction, and 0.25 keeps that
+     tidy.
+   - This is NOT the 0.5-day application step. Half-day on the Leave
+     Application gives 0.5 steps by itself.
+
+19. Maximum Carry Forwarded Leaves   (maximum_carry_forwarded_leaves,
+    Float; shows with field 5)
+   - Caps how many unused days move into the next period (the excess is
+     lost).
+   - Avinash: this matches their "Leave Remaining capped at 24.75"
+     behaviour most closely. Default 24.75? Needs confirmation. (Labour Act
+     2074 lets home leave accumulate, I believe up to 90 days. Verify
+     before quoting it to the client.)
+
+20. Is Partially Paid Leave   (is_ppl, Check; hidden while field 6 is
+    ticked)
+   - A leave paid at a fraction. The salary slip deducts (1 - fraction)
+     of a day.
+   - Avinash: nothing in their files. Default OFF. (A possible use: sick
+     leave at half pay, if their policy says so.)
+
+21. Fraction of Daily Salary per Leave
+    (fraction_of_daily_salary_per_leave, Float 0-1; shows and is MANDATORY
+    when 20 is ticked)
+   - 0.50 = half pay for each such day.
+
+22. Allow Over Allocation   (allow_over_allocation, Check)
+   - Lets an allocation hold MORE days than there are days in its date
+     range. Without it: "Over Allocation" error.
+   - Only matters for short periods (for example a 20-day allocation
+     window). For a full-year allocation, 24.75 never comes near 365.
+   - Avinash: OFF.
+
+23. Allocate on Day   (allocate_on_day, Select: First Day / Last Day /
+    Date of Joining; default Last Day; shows with 16)
+   - Which day of the month the earned slice lands on.
+       First Day       -> credited at the start (can be used during the month)
+       Last Day        -> credited after the month is worked (HRMS default)
+       Date of Joining -> on the joining-day number each month (Monthly only)
+   - Avinash: the sheet can't tell us. Default Last Day ("earned after
+     working the month"). With our BS job, "Last Day" means the BS month
+     end (for example Shrawan 32 = 2026-08-16).
+
+
+COMBINATIONS THE SYSTEM REFUSES
+-------------------------------
+- Is Compensatory + Is Earned Leave
+- Is Leave Without Pay + Is Partially Paid Leave (the form hides one when
+  the other is ticked)
+- Is Leave Without Pay while an allocation of this type covers today
+- Fraction of daily salary outside 0-1
+
+
+SCHEDULED JOBS THAT READ LEAVE TYPE (HRMS hooks, daily)
+-------------------------------------------------------
+- hrms.hr.utils.allocate_earned_leaves       -> field 16 onward (Gregorian)
+- ...leave_ledger_entry.process_expired_allocation -> field 11 and period end
+- hrms.hr.utils.generate_leave_encashment    -> fields 12-15
+Checked later: on ng-group, attendance/HR scheduled jobs have been stopped
+since July. Check that these run before relying on accrual there.
+
+
+WHAT HRMS SEEDS ON A FRESH INSTALL (for comparison)
+---------------------------------------------------
+- Casual Leave     : carry forward, encashment, max 3 consecutive, include holidays
+- Compensatory Off : compensatory, include holidays
+- Sick Leave       : include holidays
+- Privilege Leave  : include holidays
+- Leave Without Pay: LWP, include holidays
+nepalgas has none of them now (we wiped Leave Type).
+
+
+DRAFT SET FOR AVINASH (defaults if nobody answers)
+--------------------------------------------------
+A) Home Leave (their 2.75/month pool)
+     Is Earned Leave ON, Monthly, Rounding 0.25, Allocate on Day = Last Day
+     Is Carry Forward ON, Maximum Carry Forwarded = 24.75 (to confirm)
+     Allow Negative ON (11 staff already negative)
+     Include holidays OFF, Encashment OFF
+     Policy: 33/year old staff (2.75 x 12) ; 12/year new staff (Leave(N) = 1)
+       (their sheet header "9" = 9 months counted so far -> 24.75)
+B) Compensatory Off (holiday work by non-OT staff)
+     Is Compensatory ON, Carry Forward ON, everything else OFF
+C) Leave Without Pay
+     Is Leave Without Pay ON, everything else OFF, no allocation needed
+D) Statutory, only if they confirm (Labour Act 2074 figures, to verify):
+     Sick Leave 12/yr, Maternity 98, Paternity 15, Mourning 13
+     (no accrual; given in full; not in their sheets today)
+
+
+OPEN QUESTIONS THAT CHANGE THESE FIELDS
+---------------------------------------
+Q1  Is holiday work credited into the SAME pool as home leave, or a
+    separate comp-off balance?            -> field 10, type A vs B
+Q2  When someone goes negative, is the overshoot unpaid (LWP) or just
+    carried as negative?                  -> field 8, type C
+Q3  Year end: does unused leave carry over? Up to how many days? Does it
+    expire?                               -> fields 5, 11, 19
+Q4  Is leave credited at the start or at the end of each month?
+                                          -> field 23
+Q5  Do Saturdays and public holidays inside a leave count as leave?
+                                          -> field 9
+Q6  Is unused leave ever paid out (exit or year end)?
+                                          -> fields 12-15
+Q7  Do new staff get 1/month until when? (after probation? after 1 year?)
+                                          -> Leave Policy, not Leave Type
+Q8  Any limit on consecutive days, or a waiting period after joining?
+                                          -> fields 3, 4

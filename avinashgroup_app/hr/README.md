@@ -42,3 +42,19 @@ replaces a scheduled job or hangs off a hook in `hooks.py`.
 - `docs/leave-management.md` — how leave works, field by field, plus the BS audit
 - `docs/hrms-attendance-handoff.md` — the attendance pipeline and its open blockers
 - `.claude/skills/clean-code/SKILL.md` — house conventions before you add a file here
+
+## holiday_lists.py — bulk holiday maintenance
+
+Seven companies keep two Holiday Lists each per fiscal year: `<ABBR> 83/84` (the
+Company default, inherited by everyone) and `<ABBR> 83/84 (Women)` (the same days
+plus Teej and International Women's Day, set on each female Employee).
+
+`apply_holiday_change()` adds or removes one date across the lists chosen by
+company and `scope` ("both" / "women" / "common"). The desk entry point is the
+**Holiday Bulk Update** doctype
+(`avinash_group_app/doctype/holiday_bulk_update/`): fill its Holidays table, tick
+`Women Only` where a row belongs in the women's copy alone, choose the companies,
+press Apply.
+
+It writes Holiday List rows only. Attendance already marked on that date is not
+re-marked — use Attendance Fix for that.

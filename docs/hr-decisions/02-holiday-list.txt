@@ -1,0 +1,173 @@
+HOLIDAY LIST - and the Teej (women-only) problem
+================================================
+HRMS v15.49.2 / ERPNext 15. Site: nepalgas (local). Checked against the code.
+
+
+1. THE PROBLEM
+--------------
+- Teej (Haritalika Teej) is a public holiday for WOMEN ONLY. Men work that
+  day as normal.
+- International Women's Day (8 March) is the same: the government gives it
+  to women only.
+- ERPNext has no "holiday for women only" row. A Holiday row has just
+  3 fields: date, Weekly Off tick, description. No gender, no employee
+  filter.
+- There is also no "Holiday List Assignment" doctype in HRMS 15.49.2 (it
+  came in later versions). The only ways to give a person a different list:
+  Employee -> Holiday List, or the Shift Type's Holiday List.
+
+
+2. WHAT NEPALGAS HAS TODAY (checked)
+------------------------------------
+- 2 Holiday Lists, both for NGI and both FY 83/84 (2026-07-17 -> 2027-07-16),
+  80 holidays each, weekly off Saturday. They are IDENTICAL:
+    NGI-Holiday-00001 "Nepal Gas Udog 83/84"     -> Company NGI default
+    NGI-Holiday-00002 "Nepal Gas Udyog holiday"  -> set on Shift Type "Morning"
+- Teej is NOT in either list.
+- International Women's Day 2027-03-08 IS in both, so today it is a holiday
+  for men too. Wrong the other way round.
+- Why: the rows came from the "Get Local Holidays" button. It uses the
+  Python "holidays" library (v0.98), which has Women's Day for Nepal but no
+  Teej. Its Eid dates are marked "(estimated)" and must be checked against
+  the government calendar.
+- The other 6 companies (NGG, NGK, NGN, GLMI, GEPL, SGU) have NO default
+  Holiday List. Their salary slips will stop with "Please set a default
+  Holiday List for Employee X or Company Y".
+- Every active employee has Employee -> Holiday List blank (295 people).
+- Women (active): NGI 18, NGG 3, NGN 1 = 22.
+  Also: "Other" 2 (NGG, NGK) and "Prefer not to say" 1 (NGI). HR must
+  decide those 3 by hand.
+
+
+3. WHICH LIST EACH PART OF THE SYSTEM USES (the important part)
+---------------------------------------------------------------
+Order: Employee's own list first, then the Company default.
+  - Salary Slip (payment days, holidays)  -> Employee, then Company
+  - Leave Application (days counted)      -> Employee, then Company
+  - Our allowance engine (worked on holiday, holiday OT)
+                                          -> Employee, then Company
+  - Attendance Fix (our app)              -> Employee, then Company
+  - Monthly Attendance BS report (our app)-> Employee, then Company
+
+EXCEPTION, auto attendance from checkins (Shift Type):
+  - Shift Type Holiday List FIRST, then Employee, then Company
+    (hrms shift_type.py get_holiday_list: self.holiday_list or employee's)
+  - So if Shift Type "Morning" keeps NGI-Holiday-00002, a woman's own list
+    is IGNORED by auto attendance. She would be marked Absent on Teej while
+    her salary slip calls it a holiday. The two disagree.
+  -> RULE: leave the Holiday List on every Shift Type BLANK. Let the
+     employee/company decide.
+
+
+4. THE OPTIONS
+--------------
+
+OPTION A - Two lists per company, women get their own (RECOMMENDED)
+  - "NGI 83/84"        = Saturdays + all common festivals.
+                         NO Teej, NO Women's Day.
+    Set it as Company -> Default Holiday List. Men follow it automatically
+    (their Employee field stays blank).
+  - "NGI 83/84 Women"  = a copy of the above + Teej + International Women's
+                         Day. Set it on each woman's Employee -> Holiday List.
+  - Everything in section 3 then works with NO code change:
+      woman absent on Teej  -> holiday, paid, not absent
+      woman works on Teej   -> "worked on holiday" -> holiday OT / comp credit
+      man on Teej           -> normal working day
+      leave across Teej     -> Teej not counted for her (if the leave type
+                               excludes holidays)
+  - Cost: two lists to keep in step. When a festival date changes, fix it in
+    BOTH. (Quick way: finish the common list, then "Duplicate" it into the
+    women's list and add the 2 women-only days.)
+  - Cost: a new female employee must be given the women's list at joining.
+    Forget it and she simply follows the common list (no crash, just no
+    Teej).
+  - 7 companies x 2 = 14 lists, or fewer if companies share (see Q4).
+
+OPTION B - Optional holiday + "Teej Leave" given only to women
+  - Make a Leave Type "Teej Leave" with Is Optional Leave ticked (see
+    01-leave-type.txt, field 7).
+  - Put Teej in an "Optional Holiday List" set on the company's Leave Period.
+  - Give 1 day of Teej Leave only to women (a women-only Leave Policy).
+  - Each woman must APPLY for leave on Teej. If she doesn't, she shows
+    Absent.
+  - Fits "optional festival" (pick 1 of N) better than a fixed public
+    holiday. 22 applications every year for a day everyone knows. NOT
+    recommended for Teej.
+
+OPTION C - Custom code (pick list by gender automatically)
+  - Not needed. Option A needs zero code, and every engine already reads
+    Employee -> Holiday List. We could later add a small check that warns
+    when a Female employee has no women's list. Optional.
+
+
+5. WHAT I WOULD DO (default if nobody answers)
+----------------------------------------------
+  1. Take International Women's Day out of the common list.
+  2. Create "<ABBR> 83/84 Women" = the common list + Teej + Women's Day.
+  3. Set Company -> Default Holiday List for ALL 7 companies (6 have none).
+  4. Set Employee -> Holiday List = women's list for the 22 women.
+  5. Clear the Holiday List on Shift Type "Morning". Delete the duplicate
+     NGI-Holiday-00002 (identical to 00001).
+  6. Rebuild attendance from the kept checkins AFTER steps 1-5, so Teej is
+     right from the start.
+  Teej 2083 falls around 2026-09-14 (Bhadra 29, 2083). That is my
+  calculation from the lunar dates. Confirm it against the government
+  holiday notice before adding it. It may already be in the past for FY
+  83/84; since attendance was wiped and will be rebuilt, that's fine
+  locally.
+
+
+6. HOLIDAY LIST FORM - fields and buttons
+-----------------------------------------
+Fields:
+  - Holiday List Name (holiday_list_name) : display name. The record name
+    comes from our naming series (custom_naming_series ->
+    "NGI-Holiday-00001").
+  - Company (custom_company, OUR custom field) : which company the list is
+    for. It is only a label. Choosing it does NOT make the list the
+    company's default. That is set on the Company form (Default Holiday
+    List).
+  - From Date / To Date : the list only covers this range. A holiday
+    outside it throws on Save. Use the FY: 2026-07-17 -> 2027-07-16.
+  - Total Holidays : read-only count of rows.
+  - Weekly Off (weekly_off) : pick the day, Saturday for all 7 companies.
+  - Country / Subdivision : for "Get Local Holidays". Nepal has no
+    subdivisions.
+  - Holidays table : date | Weekly Off tick | description. Edit rows by
+    hand for festivals.
+  - Color : colour on the calendar view only.
+  - Audit (our app) : Created By / Created On / Modified By.
+Buttons:
+  - "Add to Holidays" under Weekly Off : adds every chosen weekday in the
+    date range, marked Weekly Off.
+  - "Add to Holidays" under Local Holidays : adds the library's Nepal list
+    (see section 2: no Teej, Women's Day for all, estimated Eid). Always
+    review it after.
+  - "Clear Table" : empties the holidays table. Only takes effect when you
+    Save.
+  - Standard: Save, Duplicate (use it for the women's copy), Rename,
+    Delete, Calendar view (from the list).
+Save refuses:
+  - To Date before From Date
+  - a holiday outside From/To
+  - the same date twice
+
+
+7. QUESTIONS FOR THE COMPANY
+----------------------------
+Q1  Teej: women only, full day? Only Haritalika Teej, or also Rishi
+    Panchami?                                  -> rows in the women's list
+Q2  International Women's Day: women only (like the government), or off for
+    everyone?                                  -> which list it goes in
+Q3  If a woman works on Teej: holiday OT pay, a comp-off day, or nothing?
+                                               -> allowance / comp-off setup
+Q4  Do all 7 companies have the same festival list, or does each branch
+    follow local holidays (Chhath in Terai, Lhosar in the hills ...)?
+                                               -> one list shared, or per
+                                                  company
+Q5  Which of the 28 festival days does the COMPANY actually give? The
+    government list includes days many factories work (Christmas, Eid,
+    Lhochhar ...).                             -> trim the common list
+Q6  Saturday only as weekly off, for every company and every shift?
+                                               -> weekly_off
+Q7  The 3 staff marked "Other" / "Prefer not to say": which list?

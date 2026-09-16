@@ -1,0 +1,37 @@
+HOLIDAY - QUESTION
+==================
+
+Which festival days does the company give off?
+Mark each one:  Y = everyone off   N = working day   W = women only
+
+2026-08-28  Janai Poornima                ___
+2026-09-04  Krishna Janmashtami           ___
+2026-09-14  Haritalika Teej               ___
+2026-10-11  Ghatasthapana                 ___
+2026-10-18  Fulpati                       ___
+2026-10-19  Maha Ashtami / Navami         ___
+2026-10-20  Bijaya Dashami                ___
+2026-10-21  Ekadashi                      ___
+2026-10-22  Duwadashi                     ___
+2026-11-08  Laxmi Pooja                   ___
+2026-11-09  Gai Tihar                     ___
+2026-11-10  Gobardhan / Mha Pooja         ___
+2026-11-11  Bhai Tika                     ___
+2026-11-15  Chhath                        ___
+2026-12-25  Christmas                     ___
+2026-12-30  Tamu Lhochhar                 ___
+2027-01-11  Prithvi Jayanti               ___
+2027-01-15  Maghe Sankranti               ___
+2027-01-29  Martyr's Day                  ___
+2027-02-07  Gyalpo / Sonam Lhosar         ___
+2027-02-19  Democracy Day                 ___
+2027-03-08  Women's Day                   ___
+2027-03-10  Eid al-Fitr                   ___
+2027-03-21  Fagu Poornima                 ___
+2027-03-22  Fagu Poornima (Terai)         ___
+2027-04-14  Nepali New Year               ___
+2027-04-15  Ram Navami                    ___
+2027-05-17  Eid al-Adha                   ___
+2027-05-20  Buddha Jayanti                ___
+
+Any other day off? ______________________

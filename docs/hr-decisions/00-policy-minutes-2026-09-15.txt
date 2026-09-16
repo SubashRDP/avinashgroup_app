@@ -1,0 +1,106 @@
+HRMS & PAYROLL POLICY - CLIENT DECISIONS
+========================================
+Meeting: 15 September 2026, 2:30 PM, at Nepal Gas
+Present: Archana Bajracharya (Nepal Gas); Samita Timilsina, Sijan Acharya (Raindrop)
+Scope: Attendance, Holiday, Leave, Shift, Overtime, Salary Components, Admin
+
+These are DECISIONS. They overrule the defaults in 01-leave-type.txt and
+02-holiday-list.txt. The right-hand notes say where each one is configured.
+
+
+1. ATTENDANCE & TIMING
+   1.1 No grace period. May be kept flexible where the situation demands.
+       -> Shift Type: late_entry_grace_period = 0. Keep the grace field usable
+          so admin can relax it.
+   1.2 More than 2 hours late = half day.
+       -> per-shift rule; stock HRMS has no "late by X = half day", so this is
+          ours to implement (Shift Type has working-hours thresholds only).
+   1.3 Meal-eligible staff: 1 meal for coming 1.5 h early, 1 meal for staying
+       1.5 h late. Admin-verified. Max 2 meals/day.
+       -> allowance engine: Salary Component, Per Day, custom_time_offset_hours
+          = 1.5, cap 2/day.
+   1.4 Tea & conveyance for everyone present in the office.
+       -> Per Day component on Present days. Rate per employee (plant vs office).
+   1.5 Late-hour deduction is OPTIONAL, so it can be adjusted.
+       -> keep the late-fine component switchable; do not hard-wire it.
+
+2. HOLIDAY
+   2.1 Each company may keep a DIFFERENT holiday calendar.
+       -> one Holiday List per company, not one shared list.
+   2.2 Admin and Officers get NO replacement leave for working on a holiday.
+       -> comp-off only for the other staff; needs a flag/grade to tell them
+          apart.
+   2.3 OT-eligible on a holiday: 1 meal at 6 hours, +1 meal at 8+ hours.
+       Max 2/day.
+   2.4 Teej is an EXTRA holiday for WOMEN ONLY. No other optional holidays.
+       -> women's Holiday List = common list + Teej.
+       -> NO optional-leave holiday list. Drop the one made on 2026-09-15
+          ("Optional Holidays 83/84": English New Year + the two Eids) and put
+          Eid back in the common list if the company gives it.
+   2.5 Saturday work comes in TWO kinds:
+         a) compensatory leave (staff who are not OT-eligible)
+         b) OT paid (no compensatory leave)
+       -> the same split as 2.2, driven by OT eligibility.
+
+3. LEAVE
+   3.1 Types: Sick, Casual, Paternity, Maternity.
+   3.2 33 days a year, credited 2.75 a month.
+       -> Leave Type: Is Earned Leave, Monthly, Rounding 0.25.
+          Leave Policy: 33.
+   3.3 Admin may adjust the monthly credit, as long as the year stays within
+       33 days.
+       -> Leave Type max_leaves_allowed = 33 as the ceiling; manual top-ups
+          allowed below it.
+   3.4 Coming to the office while on leave = half day.
+   3.5 SANDWICH: a holiday between two leave days IS counted as leave.
+       -> Leave Type: "Include holidays within leaves as leaves" = ON.
+   3.6 Probation staff: 1 day a month.
+       -> second Leave Policy (12/year), assigned while on probation.
+   3.7 Leave left at the end of the fiscal year is ENCASHED.
+       -> Leave Type: Allow Encashment ON + Earning Component.
+          Carry forward therefore OFF (encash, don't carry).
+
+4. SHIFT
+   4.1 The Sales shift can be changed.
+       -> keep dated Shift Assignments so a change keeps its history.
+
+5. OVERTIME
+   5.1 OT is tracked on a PER-DAY sheet, and that sheet decides eligibility.
+   5.2 Max 2 meals a day for OT-eligible staff.
+
+6. SALARY COMPONENTS
+   6.1 The components themselves will NOT change. Only rates change.
+   6.2 Teej gifts and other gifts do not touch salary components.
+   6.3 Contribution: 11% employee / 20% company.
+       *** OPEN: is this PF or SSF? ***
+       (Their Falgun sheet shows SSF 31% deduction and 20% company addition,
+        which is 11 + 20. NGG's sheet says "20% PF, CIT & SST" and NGK's says
+        "10% PF Cont.", so it may differ per company.)
+
+7. GENERAL & ADMIN
+   7.1 Errors and mistakes are reported by message or email.
+   7.2 Admin must be able to switch system options on and off, encashment
+       included.
+       -> put the switches somewhere admin can reach (settings doctype),
+          not in code.
+
+
+WHAT THIS CHANGES IN WHAT WE ALREADY BUILT
+------------------------------------------
+- DROP the optional holiday list and unlink it from the Leave Period (2.4).
+- Sandwich rule ON; my earlier default was OFF (3.5).
+- Encashment ON, carry forward OFF; my earlier default was the opposite (3.7).
+- One holiday list PER COMPANY, not one shared (2.1).
+- Leave types become Sick / Casual / Paternity / Maternity. The type now on
+  nepalgas is called "Home Leave" (renamed from "ngi  casual leave").
+- A second policy is needed for probation staff, 12 a year (3.6).
+- Employees need an OT-eligible flag and an Admin/Officer flag (2.2, 2.5, 5.1).
+
+STILL OPEN
+----------
+- PF or SSF for the 11/20 (6.3).
+- Which staff are Admin/Officer, and who is OT-eligible.
+- Encashment: at what rate, and is the whole balance encashed?
+- Sick / Paternity / Maternity: how many days each, and are they inside the
+  33 or on top of it?
+- Are the 33 days one pool, or split across Sick and Casual?
