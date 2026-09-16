@@ -56,8 +56,8 @@ holiday date and name sit on the document, and you either leave "All Holiday
 Lists" ticked or pick the lists — the seven (Women) lists for a women-only day,
 one company's two for a branch festival.
 
-For removal the form offers `get_removable_holidays()` — the dated holidays
-already in the chosen lists — so the date is picked, not typed.
+The desk screen only adds; `apply_holiday_change(action="Remove Holiday", ...)`
+stays available for scripts and for whatever replaces the removal UI.
 
 It writes Holiday List rows only. Attendance already marked on that date is not
 re-marked — use Attendance Fix for that.
