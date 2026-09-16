@@ -5,18 +5,84 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["naming_series", "action", "column_break_main", "all_companies", "companies", "holidays_section", "holidays", "result_section", "last_applied_on", "result"],
+ "field_order": [
+  "naming_series",
+  "action",
+  "holiday_date",
+  "description",
+  "column_break_main",
+  "all_holiday_lists",
+  "holiday_lists",
+  "result_section",
+  "last_applied_on",
+  "result"
+ ],
  "fields": [
-  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "HBU-.YYYY.-", "default": "HBU-.YYYY.-", "reqd": 1},
-  {"fieldname": "action", "fieldtype": "Select", "label": "Action", "options": "Add Holiday\nRemove Holiday", "default": "Add Holiday", "reqd": 1},
-  {"fieldname": "column_break_main", "fieldtype": "Column Break"},
-  {"fieldname": "all_companies", "fieldtype": "Check", "label": "All Companies", "default": "1"},
-  {"fieldname": "companies", "fieldtype": "Table MultiSelect", "label": "Companies", "options": "Holiday Bulk Update Company", "depends_on": "eval:!doc.all_companies", "mandatory_depends_on": "eval:!doc.all_companies"},
-  {"fieldname": "holidays_section", "fieldtype": "Section Break", "label": "Holidays"},
-  {"fieldname": "holidays", "fieldtype": "Table", "label": "Holidays", "options": "Holiday Bulk Update Item", "reqd": 1},
-  {"fieldname": "result_section", "fieldtype": "Section Break", "label": "Last Run"},
-  {"fieldname": "last_applied_on", "fieldtype": "Datetime", "label": "Last Applied On", "read_only": 1},
-  {"fieldname": "result", "fieldtype": "Small Text", "label": "Result", "read_only": 1}
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "HBU-.YYYY.-",
+   "default": "HBU-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "label": "Action",
+   "options": "Add Holiday\nRemove Holiday",
+   "default": "Add Holiday",
+   "reqd": 1
+  },
+  {
+   "fieldname": "holiday_date",
+   "fieldtype": "Date",
+   "label": "Holiday Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Holiday",
+   "mandatory_depends_on": "eval:doc.action=='Add Holiday'",
+   "description": "Name shown on the holiday, e.g. Haritalika Teej"
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "all_holiday_lists",
+   "fieldtype": "Check",
+   "label": "All Holiday Lists",
+   "default": "1",
+   "description": "Untick to choose the lists below"
+  },
+  {
+   "fieldname": "holiday_lists",
+   "fieldtype": "Table MultiSelect",
+   "label": "Holiday Lists",
+   "options": "Holiday Bulk Update List",
+   "depends_on": "eval:!doc.all_holiday_lists",
+   "mandatory_depends_on": "eval:!doc.all_holiday_lists"
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Last Run"
+  },
+  {
+   "fieldname": "last_applied_on",
+   "fieldtype": "Datetime",
+   "label": "Last Applied On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Small Text",
+   "label": "Result",
+   "read_only": 1
+  }
  ],
  "links": [],
  "modified": "2026-09-16 10:00:00.000000",
@@ -24,9 +90,30 @@
  "name": "Holiday Bulk Update",
  "owner": "Administrator",
  "permissions": [
-  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "role": "HR Manager", "share": 1, "write": 1},
-  {"create": 1, "delete": 1, "email": 1, "print": 1, "read": 1, "role": "System Manager", "share": 1, "write": 1},
-  {"read": 1, "role": "HR User"}
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR User"
+  }
  ],
  "sort_field": "modified",
  "sort_order": "DESC",

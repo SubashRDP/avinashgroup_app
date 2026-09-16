@@ -5,16 +5,12 @@ frappe.ui.form.on("Holiday Bulk Update", {
 		if (frm.is_new()) return;
 
 		frm.add_custom_button(__("Apply"), () => {
-			const where = frm.doc.all_companies
-				? __("all companies")
-				: __("{0} company(s)", [(frm.doc.companies || []).length]);
+			const where = frm.doc.all_holiday_lists
+				? __("all holiday lists")
+				: __("{0} list(s)", [(frm.doc.holiday_lists || []).length]);
 
 			frappe.confirm(
-				__("{0}: {1} holiday(s) on {2}?", [
-					__(frm.doc.action),
-					(frm.doc.holidays || []).length,
-					where,
-				]),
+				__("{0} {1} on {2}?", [__(frm.doc.action), frm.doc.holiday_date, where]),
 				() => {
 					frm.call({
 						doc: frm.doc,
