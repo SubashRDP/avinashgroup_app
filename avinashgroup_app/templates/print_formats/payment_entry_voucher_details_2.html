@@ -49,13 +49,9 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 
 /* In-words + remarks */
 .npv .pv-words   { border-top:1px solid #000; border-bottom:1px solid #000; padding:2px 4px; font-size:10px; }
-/* Words left, total right, on one line. font-size is restated here because the
-   print stylesheet sizes table cells itself, which blew the words up past the
-   10px the plain .pv-words line used to print at. */
-.npv .pv-words-row { width:100%; border-collapse:collapse; }
-.npv .pv-words-row td { padding:0; vertical-align:top; font-size:10px; }
-/* The total prints 2px larger than the words beside it. */
-.npv .pv-words-row td.r { text-align:right; font-weight:bold; white-space:nowrap; padding-left:8px; font-size:12px; }
+/* The total sits right-aligned just above the rule that opens the in-words band,
+   2px larger than the words below it. */
+.npv .pv-total-above { text-align:right; font-weight:bold; white-space:nowrap; font-size:12px; padding:0 4px 1px; }
 .npv .pv-remarks { border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
 
 /* Signatures */
@@ -240,13 +236,9 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
      the net payment the words spell out. -#}
   {% set total_amt = (doc.references | sum(attribute='allocated_amount'))
        if (doc.payment_type in ("Pay", "Receive") and doc.references) else net_paid %}
+  <div class="pv-total-above">{{ amt(total_amt) }}</div>
   <div class="pv-words">
-    <table class="pv-words-row">
-      <tr>
-        <td>{{ frappe.utils.money_in_words(net_paid, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ").replace("only.", "Only").replace(" only", " Only") }}</td>
-        <td class="r">{{ amt(total_amt) }}</td>
-      </tr>
-    </table>
+    {{ frappe.utils.money_in_words(net_paid, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ").replace("only.", "Only").replace(" only", " Only") }}
   </div>
 
   {#- ---------- Remarks ---------- -#}
