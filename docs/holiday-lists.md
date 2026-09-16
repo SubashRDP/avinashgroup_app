@@ -34,8 +34,10 @@ is Absent on a day the rest of the group had off.
 **Holiday Bulk Update** (Avinash Group App) does the whole set at once:
 
 1. **Action** — Add Holiday or Remove Holiday.
-2. **Holiday Date** and **Holiday** — the date and the name, on the document
-   itself.
+2. **Adding:** type the **Holiday Date** and the **Holiday** name.
+   **Removing:** pick from **Holiday to Remove**, a dropdown of the holidays
+   actually present in the chosen lists (`2026-09-14 — Haritalika Teej`), so a
+   date is never typed wrong. Weekly offs are not offered.
 3. **All Holiday Lists** — ticked, it hits every list. Untick it and the
    **Holiday Lists** picker appears: choose the seven `(Women)` lists for a
    women-only day, or one company's two lists for a branch festival, or any mix.

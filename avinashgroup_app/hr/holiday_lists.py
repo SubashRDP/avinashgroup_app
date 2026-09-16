@@ -26,6 +26,10 @@ import frappe
 from frappe import _
 from frappe.utils import getdate
 
+# Separates the date from the name in a removal option. An em dash, so it cannot
+# collide with the hyphens inside the date itself.
+OPTION_SEPARATOR = "—"
+
 
 def get_all_list_names():
 	"""Every Holiday List, company order — what "All Holiday Lists" means."""
@@ -34,6 +38,42 @@ def get_all_list_names():
 		fields=["name", "holiday_list_name", "custom_company", "from_date", "to_date"],
 		order_by="custom_company asc, holiday_list_name asc",
 	)
+
+
+def get_removable_holidays(holiday_lists=None):
+	"""Dated holidays present in the given lists, newest first, as one option each.
+
+	Removal is picked from this instead of typed: the date alone is easy to get
+	wrong, and a date nobody put in any list produces a run that skips fourteen
+	times and changes nothing. Weekly offs are left out — Saturdays are generated
+	in bulk and are not removed one date at a time.
+
+	Option format is "YYYY-MM-DD — Description"; `holiday_date_from_option()`
+	reads the date back out.
+	"""
+	filters = {"weekly_off": 0}
+	if holiday_lists:
+		filters["parent"] = ["in", holiday_lists]
+
+	rows = frappe.get_all(
+		"Holiday",
+		filters=filters,
+		fields=["holiday_date", "description"],
+		order_by="holiday_date asc",
+	)
+	seen, options = set(), []
+	for row in rows:
+		# The same festival sits in many lists; offer it once.
+		label = f"{row.holiday_date} {OPTION_SEPARATOR} {frappe.utils.strip_html(row.description or '').strip()}"
+		if label not in seen:
+			seen.add(label)
+			options.append(label)
+	return options
+
+
+def holiday_date_from_option(option):
+	"""Date out of an option made by `get_removable_holidays()`."""
+	return getdate((option or "").split(OPTION_SEPARATOR)[0].strip())
 
 
 def apply_holiday_change(action, holiday_date, description=None, holiday_lists=None):

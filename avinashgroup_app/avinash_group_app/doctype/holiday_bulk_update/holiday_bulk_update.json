@@ -10,6 +10,7 @@
   "action",
   "holiday_date",
   "description",
+  "existing_holiday",
   "column_break_main",
   "all_holiday_lists",
   "holiday_lists",
@@ -38,14 +39,25 @@
    "fieldname": "holiday_date",
    "fieldtype": "Date",
    "label": "Holiday Date",
-   "reqd": 1
+   "reqd": 0,
+   "depends_on": "eval:doc.action=='Add Holiday'",
+   "mandatory_depends_on": "eval:doc.action=='Add Holiday'"
   },
   {
    "fieldname": "description",
    "fieldtype": "Data",
    "label": "Holiday",
    "mandatory_depends_on": "eval:doc.action=='Add Holiday'",
-   "description": "Name shown on the holiday, e.g. Haritalika Teej"
+   "description": "Name shown on the holiday, e.g. Haritalika Teej",
+   "depends_on": "eval:doc.action=='Add Holiday'"
+  },
+  {
+   "fieldname": "existing_holiday",
+   "fieldtype": "Select",
+   "label": "Holiday to Remove",
+   "depends_on": "eval:doc.action=='Remove Holiday'",
+   "mandatory_depends_on": "eval:doc.action=='Remove Holiday'",
+   "description": "Holidays found in the chosen lists"
   },
   {
    "fieldname": "column_break_main",
