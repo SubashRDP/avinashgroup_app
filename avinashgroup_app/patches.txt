@@ -66,4 +66,4 @@ avinashgroup_app.patches.merge_attendance_summary_report
 
 avinashgroup_app.patches.setup_employee_category
 
-avinashgroup_app.patches.setup_holiday_duty_sheet
+avinashgroup_app.patches.setup_overtime_sheet

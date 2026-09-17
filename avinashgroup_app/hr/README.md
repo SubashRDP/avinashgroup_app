@@ -69,9 +69,10 @@ Doctypes `Employee Category` and `Employee Category Tool`
 adds `Employee.custom_employee_category` and makes `custom_ot_eligibility` fetch
 from it. Full write-up: `docs/employee-category.md`.
 
-## holiday_duty.py — who the company called in on a holiday
 
-Read side of the `Holiday Duty Sheet` doctype: `get_called_employees(date,
-company)` and `was_called(employee, date)` count submitted sheets only, and
-`get_holiday_for_employee()` answers "is this date a holiday for this person"
-from their own list. Full write-up: `docs/holiday-duty-sheet.md`.
+## overtime.py — the overtime rules
+
+The only place the policy for extra work lives: `evaluate(employee, date, from,
+to)` turns a row into a day type, an entitlement (Overtime / Replacement Leave) and
+hours; `get_authorised(date)` is what settlement reads (submitted Overtime Sheets
+only). Full write-up: `docs/overtime-sheet.md`.
