@@ -8,23 +8,124 @@
  "is_submittable": 1,
  "track_changes": 1,
  "title_field": "day_summary",
- "field_order": ["naming_series", "company", "work_date", "day_summary", "column_break_main", "department", "reason", "employees_section", "employees", "totals_section", "total_employees", "column_break_totals", "total_overtime_hours", "replacement_leave_days", "amended_from"],
+ "field_order": [
+  "naming_series",
+  "company",
+  "work_date",
+  "day_summary",
+  "column_break_main",
+  "department",
+  "reason",
+  "employees_section",
+  "employees",
+  "totals_section",
+  "total_employees",
+  "column_break_totals",
+  "overtime_count",
+  "replacement_leave_days",
+  "amended_from"
+ ],
  "fields": [
-  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "OTS-.YYYY.-", "default": "OTS-.YYYY.-", "reqd": 1},
-  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
-  {"fieldname": "work_date", "fieldtype": "Date", "label": "Date", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1, "description": "A holiday, a Saturday or a working day. Past dates are fine — record work arranged by phone afterwards"},
-  {"fieldname": "day_summary", "fieldtype": "Data", "label": "Day", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "column_break_main", "fieldtype": "Column Break"},
-  {"fieldname": "department", "fieldtype": "Link", "label": "Department", "options": "Department", "in_standard_filter": 1},
-  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Why Extra Work Was Needed", "reqd": 1},
-  {"fieldname": "employees_section", "fieldtype": "Section Break", "label": "Employees", "description": "Day, Earns and OT Hours are worked out for each person from their holiday list, shift and Employee Category"},
-  {"fieldname": "employees", "fieldtype": "Table", "label": "Employees", "options": "Overtime Sheet Employee", "reqd": 1},
-  {"fieldname": "totals_section", "fieldtype": "Section Break", "label": "Totals"},
-  {"fieldname": "total_employees", "fieldtype": "Int", "label": "Employees", "read_only": 1},
-  {"fieldname": "column_break_totals", "fieldtype": "Column Break"},
-  {"fieldname": "total_overtime_hours", "fieldtype": "Float", "label": "Overtime Hours", "precision": "2", "read_only": 1, "in_list_view": 1},
-  {"fieldname": "replacement_leave_days", "fieldtype": "Int", "label": "Replacement Leave Days", "read_only": 1},
-  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Overtime Sheet", "no_copy": 1, "print_hide": 1, "read_only": 1}
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "OTS-.YYYY.-",
+   "default": "OTS-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "work_date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "A holiday, a Saturday or a working day. Past dates are fine \u2014 hours are taken from attendance, not typed here"
+  },
+  {
+   "fieldname": "day_summary",
+   "fieldtype": "Data",
+   "label": "Day",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Why Extra Work Was Needed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "employees_section",
+   "fieldtype": "Section Break",
+   "label": "Employees",
+   "description": "Pick who was asked in. Work Type is chosen from each person's day; Day, Earns and Category are worked out for you"
+  },
+  {
+   "fieldname": "employees",
+   "fieldtype": "Table",
+   "label": "Employees",
+   "options": "Overtime Sheet Employee",
+   "reqd": 1
+  },
+  {
+   "fieldname": "totals_section",
+   "fieldtype": "Section Break",
+   "label": "Totals"
+  },
+  {
+   "fieldname": "total_employees",
+   "fieldtype": "Int",
+   "label": "Employees",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "overtime_count",
+   "fieldtype": "Int",
+   "label": "Overtime",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "replacement_leave_days",
+   "fieldtype": "Int",
+   "label": "Replacement Leave Days",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Overtime Sheet",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1
+  }
  ],
  "links": [],
  "modified": "2026-09-17 14:00:00.000000",
@@ -32,9 +133,45 @@
  "name": "Overtime Sheet",
  "owner": "Administrator",
  "permissions": [
-  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "submit": 1, "write": 1},
-  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1},
-  {"create": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "HR User", "write": 1}
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "amend": 1,
+   "cancel": 1,
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "write": 1
+  }
  ],
  "sort_field": "work_date",
  "sort_order": "DESC",

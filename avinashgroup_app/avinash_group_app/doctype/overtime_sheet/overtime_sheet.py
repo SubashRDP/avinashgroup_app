@@ -1,11 +1,14 @@
 """Overtime Sheet — the company's approved request for extra work on one date.
 
 One form for every kind of extra work: a festival holiday, a Saturday, or staying
-beyond the shift on a normal day. HR only lists who was asked and when. What each
-person earns is not chosen on the form; it is worked out per row by the rules in
-`avinashgroup_app.hr.overtime` from that person's own holiday list, shift and
-Employee Category — so a sheet can mix a holiday for some and a working day for
-others, and nobody can pick the wrong outcome.
+beyond the shift on a normal day. HR lists who was asked in and whether it is Work
+on Holiday or Overtime — no times: hours are measured from attendance at
+settlement, so nothing typed here can disagree with the punches.
+
+The work type is pre-chosen from the person's own day, and what they earn is never
+chosen at all: `avinashgroup_app.hr.overtime` works it out from their holiday list,
+shift and Employee Category, and refuses a work type that does not fit the day. A
+sheet can mix a holiday for some and a working day for others.
 
 Approval runs through Dynamic Approval; a sheet authorises nothing until it is
 submitted. Backdated sheets are allowed on purpose: extra work is often arranged
@@ -58,15 +61,15 @@ class OvertimeSheet(Document):
 		problems = []
 		for row in self.employees:
 			try:
-				result = evaluate(row.employee, self.work_date, row.from_time, row.to_time)
+				result = evaluate(row.employee, self.work_date, row.work_type)
 			except OvertimeRuleError as e:
 				problems.append(_("Row {0}: {1}").format(row.idx, str(e)))
 				continue
+			row.work_type = result["work_type"]
 			row.day_type = result["day_type"]
 			row.entitlement = result["entitlement"]
 			row.employee_category = result["employee_category"]
 			row.shift = result["shift"]
-			row.overtime_hours = result["overtime_hours"]
 			row._day_name = result["day_name"]
 
 		if problems:
@@ -96,9 +99,7 @@ class OvertimeSheet(Document):
 
 	def set_totals(self):
 		self.total_employees = len(self.employees)
-		self.total_overtime_hours = sum(
-			r.overtime_hours or 0 for r in self.employees if r.entitlement == ENTITLEMENT_OVERTIME
-		)
+		self.overtime_count = sum(1 for r in self.employees if r.entitlement == ENTITLEMENT_OVERTIME)
 		self.replacement_leave_days = sum(
 			1 for r in self.employees if r.entitlement == ENTITLEMENT_REPLACEMENT_LEAVE
 		)

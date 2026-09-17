@@ -17,11 +17,16 @@ This module is the only place the rules live. The Overtime Sheet form calls
 `evaluate()` for every row; downstream steps (attendance matching, payroll) call
 `get_authorised()` and never re-derive anything.
 
+The sheet records WHO was asked and FOR WHAT (work on a holiday, or overtime on a
+working day) — never hours. Hours are measured from attendance at settlement, so
+no typed time can ever disagree with the punches; `hours_outside_shift()` is the
+measuring rule settlement uses.
+
 Deliberately narrow:
   * no attendance here. What the company authorised and what the punches show are
     separate facts; matching them is the settlement step's job.
-  * no money here. Hours and an entitlement type go out; rates and amounts belong
-    to salary components.
+  * no money here. An entitlement type goes out; rates and amounts belong to
+    salary components.
 """
 
 from datetime import datetime, timedelta
@@ -35,6 +40,10 @@ from frappe.utils import get_time, getdate
 DAY_HOLIDAY = "Holiday"
 DAY_WEEKLY_OFF = "Weekly Off"
 DAY_WORKING = "Working Day"
+
+# ── Work types — what HR says the person was asked for.
+WORK_ON_HOLIDAY = "Work on Holiday"
+WORK_OVERTIME = "Overtime"
 
 # ── Entitlements — what an authorised, worked row turns into.
 ENTITLEMENT_OVERTIME = "Overtime"
@@ -128,32 +137,48 @@ def get_category_rule(employee):
 	return category, bool(ot_eligible), bool(compensatory_leave)
 
 
-def evaluate(employee, work_date, from_time=None, to_time=None):
+def default_work_type(day_type):
+	"""The work type a day implies: a holiday or Saturday is holiday work, else overtime."""
+	return WORK_ON_HOLIDAY if day_type in (DAY_HOLIDAY, DAY_WEEKLY_OFF) else WORK_OVERTIME
+
+
+def evaluate(employee, work_date, work_type=None):
 	"""Apply the policy to one row. Returns a dict the form writes back; raises
 	OvertimeRuleError for a row the policy refuses.
 
-	    Plant (OT-eligible)        Holiday / Weekly Off -> Overtime, all hours
-	                               Working Day          -> Overtime, hours outside shift
-	    Officer & Admin (leave)    Holiday / Weekly Off -> Replacement Leave
-	                               Working Day          -> refused (not OT-eligible)
+	`work_type` defaults to what the day implies for this employee.
+
+	    Work on Holiday   day must be a Holiday / Weekly Off for this person
+	                        Plant (OT-eligible)      -> Overtime
+	                        Officer & Admin (leave)  -> Replacement Leave
+	    Overtime          day must be a Working Day for this person
+	                        OT-eligible only, and a shift must exist — settlement
+	                        measures hours outside it -> Overtime
 	"""
 	day_type, day_name = get_day_type(employee, work_date)
 	category, ot_eligible, compensatory_leave = get_category_rule(employee)
-	shift, shift_start, shift_end = get_shift_window(employee, work_date)
-	start_dt, end_dt = _window(work_date, from_time, to_time)
+	shift = get_shift_window(employee, work_date)[0]
+	work_type = work_type or default_work_type(day_type)
+	on_holiday = day_type in (DAY_HOLIDAY, DAY_WEEKLY_OFF)
+	date_label = frappe.utils.formatdate(work_date)
 
 	result = {
+		"work_type": work_type,
 		"day_type": day_type,
 		"day_name": day_name,
 		"employee_category": category,
 		"shift": shift,
-		"overtime_hours": 0.0,
 	}
 
-	if day_type in (DAY_HOLIDAY, DAY_WEEKLY_OFF):
+	if work_type == WORK_ON_HOLIDAY:
+		if not on_holiday:
+			raise OvertimeRuleError(
+				_("{0}: {1} is a working day for them — choose Overtime, not Work on Holiday").format(
+					employee_label(employee), date_label
+				)
+			)
 		if ot_eligible:
 			result["entitlement"] = ENTITLEMENT_OVERTIME
-			result["overtime_hours"] = _hours(start_dt, end_dt)
 		elif compensatory_leave:
 			result["entitlement"] = ENTITLEMENT_REPLACEMENT_LEAVE
 		else:
@@ -162,43 +187,38 @@ def evaluate(employee, work_date, from_time=None, to_time=None):
 			)
 		return result
 
-	# Working day — only overtime exists, and only for the OT-eligible.
+	if work_type != WORK_OVERTIME:
+		raise OvertimeRuleError(_("Unknown work type {0}").format(work_type))
+
+	if on_holiday:
+		raise OvertimeRuleError(
+			_("{0}: {1} is {2} for them — choose Work on Holiday, not Overtime").format(
+				employee_label(employee), date_label, (day_name or day_type)
+			)
+		)
 	if not ot_eligible:
 		raise OvertimeRuleError(
 			_("{0} ({1}) is not eligible for overtime on a working day").format(
 				employee_label(employee), category
 			)
 		)
-	if not (start_dt and end_dt):
-		raise OvertimeRuleError(
-			_("{0}: From and To are needed for overtime on a working day").format(employee_label(employee))
-		)
 	if not shift:
 		raise OvertimeRuleError(
-			_("{0} has no shift on {1}, so hours beyond the shift cannot be worked out").format(
-				employee_label(employee), frappe.utils.formatdate(work_date)
-			)
-		)
-
-	hours = _hours_outside(start_dt, end_dt, shift_start, shift_end)
-	if hours <= 0:
-		raise OvertimeRuleError(
-			_("{0}: {1}–{2} is inside the normal {3} shift — there is no overtime").format(
-				employee_label(employee), from_time, to_time, shift
+			_("{0} has no shift on {1}, so overtime beyond it cannot be measured").format(
+				employee_label(employee), date_label
 			)
 		)
 	result["entitlement"] = ENTITLEMENT_OVERTIME
-	result["overtime_hours"] = hours
 	return result
 
 
 @frappe.whitelist()
-def preview(employee, work_date, from_time=None, to_time=None):
+def preview(employee, work_date, work_type=None):
 	"""Form helper: evaluate a row live. Returns {"ok": bool, ...result or "message"}."""
 	if not (employee and work_date):
 		return {"ok": False, "message": ""}
 	try:
-		return {"ok": True, **evaluate(employee, work_date, from_time or None, to_time or None)}
+		return {"ok": True, **evaluate(employee, work_date, work_type or None)}
 	except OvertimeRuleError as e:
 		return {"ok": False, "message": str(e)}
 
@@ -221,12 +241,10 @@ def get_authorised(work_date, company=None):
 		.select(
 			sheet.name.as_("sheet"),
 			row.employee,
+			row.work_type,
 			row.day_type,
 			row.entitlement,
 			row.shift,
-			row.from_time,
-			row.to_time,
-			row.overtime_hours,
 		)
 		.where((sheet.docstatus == 1) & (sheet.work_date == getdate(work_date)))
 	)
@@ -246,30 +264,15 @@ def employee_label(employee):
 	return frappe.db.get_value("Employee", employee, "employee_name") or employee
 
 
-# Shorter than this is treated as "no times given", not a window. Time fields can
-# arrive pre-filled with the current time a few microseconds apart, which would
-# otherwise read as a real (and, if equal, a 24-hour overnight) window.
-MIN_WINDOW_MINUTES = 1
+def hours_outside_shift(in_time, out_time, shift_start, shift_end):
+	"""Hours of [in_time, out_time] before the shift starts or after it ends.
 
-
-def _window(work_date, from_time, to_time):
-	if not (from_time and to_time):
-		return None, None
-	start = datetime.combine(getdate(work_date), get_time(from_time))
-	end = datetime.combine(getdate(work_date), get_time(to_time))
-	if abs((end - start).total_seconds()) < MIN_WINDOW_MINUTES * 60:
-		return None, None
-	if end < start:  # runs past midnight
-		end += timedelta(days=1)
-	return start, end
-
-
-def _hours(start, end):
-	return round((end - start).total_seconds() / 3600, 2) if start and end else 0.0
-
-
-def _hours_outside(start, end, shift_start, shift_end):
-	"""Hours of [start, end] that fall before the shift starts or after it ends."""
-	overlap_start, overlap_end = max(start, shift_start), min(end, shift_end)
-	overlap = max((overlap_end - overlap_start).total_seconds(), 0) / 3600
-	return round(_hours(start, end) - overlap, 2)
+	The overtime measure for a working day, used at settlement with the actual
+	punches. All four are datetimes; a punch window that does not overlap the
+	shift counts in full.
+	"""
+	if not (in_time and out_time) or out_time <= in_time:
+		return 0.0
+	worked = (out_time - in_time).total_seconds()
+	overlap = max((min(out_time, shift_end) - max(in_time, shift_start)).total_seconds(), 0)
+	return round((worked - overlap) / 3600, 2)
