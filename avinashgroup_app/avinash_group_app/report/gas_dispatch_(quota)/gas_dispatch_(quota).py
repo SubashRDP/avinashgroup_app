@@ -1,10 +1,14 @@
 # Copyright (c) 2026, Raindrop and contributors
 # For license information, please see license.txt
 
-"""Gas Dispatch (Quota) — LP Gas sold per customer, per BS month of a fiscal year.
+"""Gas Dispatch (Quota) — LP Gas sold per customer, per BS month, over the last
+twelve complete BS months.
 
-One row per customer, twelve columns Shrawan -> Ashadh, so a year's gas offtake
-per customer reads across a single line. The existing Sales Analysis reports
+One row per customer, twelve month columns oldest -> newest, so a year's gas
+offtake per customer reads across a single line. The window always ends with the
+BS month before today's and moves forward when a month ends: on 2083 Ashwin 1 it
+is Ashwin 2082 -> Bhadra 2083. The month in progress is left out so every column
+(and the quota taken from them) is a full month. The existing Sales Analysis reports
 answer "how much in this date range" and cannot show the month-by-month shape
 the quota conversation needs.
 
@@ -21,30 +25,29 @@ Deliberately narrow:
 """
 
 import json
+from datetime import timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import flt, getdate
+from frappe.utils import flt, getdate, nowdate
 
-from rdp_common_app.utils.bs_boundaries import BS_MONTH_NAMES, ad_to_bs
-
-from avinashgroup_app.utils.fiscal_year_utils import get_default_fiscal_year
+from rdp_common_app.utils.bs_boundaries import BS_MONTH_NAMES, ad_to_bs, bs_to_ad
 
 # The gas item is named "LP Gas" in every company (NGI-ITEM-00167,
 # NGN-ITEM-00150, ...), which is what ties the seven item codes together.
 LP_GAS_ITEM_NAME = "LP Gas"
 
-# A BS fiscal year runs Shrawan (month 4) -> Ashadh (month 3 of the next year).
-FY_MONTH_ORDER = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+# Number of complete BS months the report covers.
+MONTH_COUNT = 12
 
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
-	start_date, end_date, _fy_name = _fiscal_year_window(filters)
+	months, start_date, end_date = _last_complete_bs_months()
 
 	percentage = flt(filters.get("percentage"))
-	columns = get_columns(percentage)
-	data = _build_rows(filters, start_date, end_date, percentage)
+	columns = get_columns(months, percentage)
+	data = _build_rows(filters, months, start_date, end_date, percentage)
 	return columns, data
 
 
@@ -93,29 +96,34 @@ def get_company_customers(company=None, txt=None):
 	return [{"value": customer_name or name, "description": name} for name, customer_name in rows]
 
 
-def _fiscal_year_window(filters):
-	"""(start_date, end_date, name) of the filter's Fiscal Year.
+def _last_complete_bs_months():
+	"""(months, start_date, end_date) for the last MONTH_COUNT complete BS months.
 
-	The dates are resolved here rather than in the filter JS so every caller —
-	desk, API, a scheduled export — gets the same window for a given year.
-	Throws if the year has no row, which is the same failure the naming series
-	raises when a fiscal year has not been created yet.
+	months is a list of (bs_year, bs_month) oldest -> newest. start_date is the
+	1st of the oldest month, end_date the day before the current BS month began.
+	E.g. on 2083 Ashwin 1 (2026-09-17): Ashwin 2082 -> Bhadra 2083, 2025-09-17 ->
+	2026-09-16.
+
+	Resolved here rather than in the filter JS so every caller — desk, API, a
+	scheduled export — gets the same window on the same day.
 	"""
-	fy_name = filters.get("fiscal_year") or get_default_fiscal_year()
-	if not fy_name:
-		frappe.throw(_("Select a Fiscal Year."))
+	today = ad_to_bs(getdate(nowdate()))
 
-	row = frappe.db.get_value(
-		"Fiscal Year", fy_name, ["year_start_date", "year_end_date"], as_dict=True
-	)
-	if not row:
-		frappe.throw(_("Fiscal Year {0} does not exist.").format(fy_name))
+	months = []
+	year, month = today.year, today.month
+	for _i in range(MONTH_COUNT):
+		# Step back one BS month; Baishakh (1) steps back to Chaitra (12).
+		year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+		months.append((year, month))
+	months.reverse()
 
-	return getdate(row.year_start_date), getdate(row.year_end_date), fy_name
+	start_date = bs_to_ad(months[0][0], months[0][1], 1)
+	end_date = bs_to_ad(today.year, today.month, 1) - timedelta(days=1)
+	return months, start_date, end_date
 
 
 def _sales_by_customer_and_date(filters, start_date, end_date):
-	"""LP Gas quantity summed per (customer, posting_date) over the fiscal year.
+	"""LP Gas quantity summed per (customer, posting_date) over the report window.
 
 	Aggregating in SQL keeps the BS conversion below down to one call per
 	distinct date (<= 366) instead of one per invoice line — NGI alone has over
@@ -154,7 +162,7 @@ def _sales_by_customer_and_date(filters, start_date, end_date):
 	# from the item side -- nearly every invoice line on the site is LP Gas, so
 	# that plan walks ~282,000 lines and looks up each invoice one at a time
 	# (~71s measured). Invoice-first lets the company+posting_date index carry
-	# the year (~27s for the same run, both on mysite1).
+	# the date range (~27s for a fiscal year, both on mysite1).
 	return frappe.db.sql(
 		"""
 		SELECT si.customer, si.customer_name, si.posting_date, SUM(sii.qty) AS qty
@@ -178,38 +186,39 @@ def _lp_gas_item_codes():
 	return tuple(codes)
 
 
-def _build_rows(filters, start_date, end_date, percentage=0.0):
-	"""One row per customer: quantity per BS month, in fiscal-year order, then the
+def _build_rows(filters, months, start_date, end_date, percentage=0.0):
+	"""One row per customer: quantity per BS month, oldest -> newest, then the
 	quota (the highest of those twelve months).
 
 	A percentage adds one more cell: the quota raised (+) or lowered (-) by that
 	percentage.
 	"""
-	bs_month_by_date = {}
+	month_fieldname_by_date = {}
 	rows_by_customer = {}
 
 	for row in _sales_by_customer_and_date(filters, start_date, end_date):
 		posting_date = getdate(row.posting_date)
-		if posting_date not in bs_month_by_date:
-			bs_month_by_date[posting_date] = ad_to_bs(posting_date).month
-		month = bs_month_by_date[posting_date]
+		if posting_date not in month_fieldname_by_date:
+			bs = ad_to_bs(posting_date)
+			month_fieldname_by_date[posting_date] = _month_fieldname(bs.year, bs.month)
+		month_fieldname = month_fieldname_by_date[posting_date]
 
 		customer_row = rows_by_customer.setdefault(
 			row.customer,
 			{
 				"customer": row.customer,
 				"customer_name": row.customer_name or "",
-				**{_month_fieldname(m): 0.0 for m in FY_MONTH_ORDER},
+				**{_month_fieldname(y, m): 0.0 for y, m in months},
 			},
 		)
-		customer_row[_month_fieldname(month)] += flt(row.qty)
+		customer_row[month_fieldname] += flt(row.qty)
 
-	# Quota = the customer's best month of the year, the peak the next year's
+	# Quota = the customer's best month of the twelve, the peak the next year's
 	# dispatch has to be able to meet. The percentage column raises or lowers
 	# that quota.
 	for customer_row in rows_by_customer.values():
 		customer_row["quota_qty"] = max(
-			customer_row[_month_fieldname(m)] for m in FY_MONTH_ORDER
+			customer_row[_month_fieldname(y, m)] for y, m in months
 		)
 		if percentage:
 			# Rounded to whole cylinders/kg: the adjusted quota is a dispatch
@@ -221,11 +230,11 @@ def _build_rows(filters, start_date, end_date, percentage=0.0):
 	return sorted(rows_by_customer.values(), key=lambda r: (r["customer_name"] or "").lower())
 
 
-def _month_fieldname(bs_month):
-	return f"month_{bs_month}"
+def _month_fieldname(bs_year, bs_month):
+	return f"month_{bs_year}_{bs_month:02d}"
 
 
-def get_columns(percentage=0.0):
+def get_columns(months, percentage=0.0):
 	columns = [
 		{
 			"label": _("Customer"),
@@ -242,11 +251,12 @@ def get_columns(percentage=0.0):
 		},
 	]
 
-	for bs_month in FY_MONTH_ORDER:
+	# The window crosses two BS years, so each label carries its year.
+	for bs_year, bs_month in months:
 		columns.append(
 			{
-				"label": _(BS_MONTH_NAMES[bs_month]),
-				"fieldname": _month_fieldname(bs_month),
+				"label": f"{_(BS_MONTH_NAMES[bs_month])} {bs_year}",
+				"fieldname": _month_fieldname(bs_year, bs_month),
 				"fieldtype": "Float",
 				"precision": 2,
 				"width": 90,
@@ -270,7 +280,7 @@ def get_columns(percentage=0.0):
 	if percentage:
 		columns.append(
 			{
-				"label": _("Estimated Sales"),
+				"label": _("Quota as per Estimated Supply"),
 				"fieldname": "adjusted_quota",
 				"fieldtype": "Float",
 				"precision": 0,

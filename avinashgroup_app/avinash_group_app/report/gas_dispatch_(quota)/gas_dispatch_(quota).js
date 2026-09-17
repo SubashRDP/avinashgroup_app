@@ -30,15 +30,6 @@ frappe.query_reports["Gas Dispatch (Quota)"] = {
 			},
 		},
 		{
-			fieldname: "fiscal_year",
-			label: __("Fiscal Year"),
-			fieldtype: "Link",
-			options: "Fiscal Year",
-			reqd: 1,
-			default: frappe.defaults.get_user_default("fiscal_year"),
-			description: __("BS fiscal year, e.g. 83/84 covering Shrawan 2083 to Ashadh 2084."),
-		},
-		{
 			fieldname: "percentage",
 			label: __("Percentage"),
 			fieldtype: "Float",
