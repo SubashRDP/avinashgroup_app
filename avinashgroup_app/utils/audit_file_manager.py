@@ -28,6 +28,7 @@ class AuditBase:
     "Employee",
     "Employee Advance",
     "Expense Claim",
+    "Holiday Duty Sheet",
     "Holiday List",
     "Interview",
     "Interview Feedback",

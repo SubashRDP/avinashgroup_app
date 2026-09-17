@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-09-17 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "title_field": "holiday_name",
+ "field_order": ["naming_series", "company", "holiday_date", "holiday_name", "column_break_main", "department", "reason", "employees_section", "employees", "total_employees", "amended_from"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "HDS-.YYYY.-", "default": "HDS-.YYYY.-", "reqd": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "holiday_date", "fieldtype": "Date", "label": "Holiday Date", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1, "description": "Can be a past date — record duty after the fact when it was not written up in time"},
+  {"fieldname": "holiday_name", "fieldtype": "Data", "label": "Holiday", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "column_break_main", "fieldtype": "Column Break"},
+  {"fieldname": "department", "fieldtype": "Link", "label": "Department", "options": "Department", "in_standard_filter": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Why Staff Were Called In", "reqd": 1},
+  {"fieldname": "employees_section", "fieldtype": "Section Break", "label": "Employees Called In"},
+  {"fieldname": "employees", "fieldtype": "Table", "label": "Employees", "options": "Holiday Duty Sheet Employee", "reqd": 1},
+  {"fieldname": "total_employees", "fieldtype": "Int", "label": "Total Employees", "read_only": 1},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Holiday Duty Sheet", "no_copy": 1, "print_hide": 1, "read_only": 1}
+ ],
+ "links": [],
+ "modified": "2026-09-17 12:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Holiday Duty Sheet",
+ "owner": "Administrator",
+ "permissions": [
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "submit": 1, "write": 1},
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1},
+  {"create": 1, "email": 1, "print": 1, "read": 1, "report": 1, "role": "HR User", "write": 1}
+ ],
+ "sort_field": "holiday_date",
+ "sort_order": "DESC",
+ "states": []
+}

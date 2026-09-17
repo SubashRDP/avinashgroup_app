@@ -68,3 +68,10 @@ Doctypes `Employee Category` and `Employee Category Tool`
 (`avinash_group_app/doctype/`), plus the patch `setup_employee_category`, which
 adds `Employee.custom_employee_category` and makes `custom_ot_eligibility` fetch
 from it. Full write-up: `docs/employee-category.md`.
+
+## holiday_duty.py — who the company called in on a holiday
+
+Read side of the `Holiday Duty Sheet` doctype: `get_called_employees(date,
+company)` and `was_called(employee, date)` count submitted sheets only, and
+`get_holiday_for_employee()` answers "is this date a holiday for this person"
+from their own list. Full write-up: `docs/holiday-duty-sheet.md`.
