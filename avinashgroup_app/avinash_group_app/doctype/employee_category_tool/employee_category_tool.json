@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "creation": "2026-09-17 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "hide_toolbar": 1,
+ "issingle": 1,
+ "field_order": ["employee_category", "column_break_top", "company", "only_uncategorised", "quick_filters_section", "branch", "department", "column_break_qf", "designation", "current_category", "advanced_filters_section", "filter_list", "select_rows_section", "employees_html"],
+ "fields": [
+  {"fieldname": "employee_category", "fieldtype": "Link", "label": "Assign Category", "options": "Employee Category", "reqd": 1},
+  {"fieldname": "column_break_top", "fieldtype": "Column Break"},
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
+  {"fieldname": "only_uncategorised", "fieldtype": "Check", "label": "Only Employees Without a Category"},
+  {"collapsible": 1, "fieldname": "quick_filters_section", "fieldtype": "Section Break", "label": "Quick Filters"},
+  {"fieldname": "branch", "fieldtype": "Link", "label": "Branch", "options": "Branch"},
+  {"fieldname": "department", "fieldtype": "Link", "label": "Department", "options": "Department"},
+  {"fieldname": "column_break_qf", "fieldtype": "Column Break"},
+  {"fieldname": "designation", "fieldtype": "Link", "label": "Designation", "options": "Designation"},
+  {"fieldname": "current_category", "fieldtype": "Link", "label": "Current Category", "options": "Employee Category"},
+  {"collapsible": 1, "fieldname": "advanced_filters_section", "fieldtype": "Section Break", "label": "Advanced Filters"},
+  {"fieldname": "filter_list", "fieldtype": "HTML", "label": "Filter List"},
+  {"fieldname": "select_rows_section", "fieldtype": "Section Break", "label": "Select Employees"},
+  {"fieldname": "employees_html", "fieldtype": "HTML", "label": "Employees HTML"}
+ ],
+ "links": [],
+ "modified": "2026-09-17 10:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Employee Category Tool",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "read": 1, "role": "HR Manager", "write": 1},
+  {"create": 1, "read": 1, "role": "System Manager", "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

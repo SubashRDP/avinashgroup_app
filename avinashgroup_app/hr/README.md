@@ -62,21 +62,9 @@ stays available for scripts and for whatever replaces the removal UI.
 It writes Holiday List rows only. Attendance already marked on that date is not
 re-marked — use Attendance Fix for that.
 
-## employee_groups.py — who gets OT, who gets replacement leave
+## Employee Category — who gets OT, who gets replacement leave
 
-Two Employee Groups carry the 2026-09-15 policy split (2.2 corrected 2026-09-16,
-and 2.5):
-
-| Group | Holiday / Saturday worked |
-|---|---|
-| `Plant` | paid OT + meals, no replacement leave |
-| `Officer & Admin` | replacement leave, no OT |
-
-Membership lives inside the Employee Group document, where payroll, leave and our
-allowance engine cannot see it — they read `Employee.custom_ot_eligibility`. The
-`on_update` hook on Employee Group mirrors membership onto that field (Plant → 1,
-Officer & Admin → 0); `sync_all()` does the same as a backfill. An employee in
-both groups is left untouched and logged.
-
-Granting the replacement leave itself is a separate step that reads the same
-field, so leave is never granted as a side effect of saving a group.
+Doctypes `Employee Category` and `Employee Category Tool`
+(`avinash_group_app/doctype/`), plus the patch `setup_employee_category`, which
+adds `Employee.custom_employee_category` and makes `custom_ot_eligibility` fetch
+from it. Full write-up: `docs/employee-category.md`.

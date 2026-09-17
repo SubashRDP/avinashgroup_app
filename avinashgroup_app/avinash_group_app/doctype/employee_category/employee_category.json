@@ -1,0 +1,32 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:category_name",
+ "creation": "2026-09-17 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["category_name", "column_break_rules", "ot_eligible", "compensatory_leave", "section_notes", "description"],
+ "fields": [
+  {"fieldname": "category_name", "fieldtype": "Data", "label": "Category Name", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "column_break_rules", "fieldtype": "Column Break"},
+  {"fieldname": "ot_eligible", "fieldtype": "Check", "label": "Overtime Eligible", "in_list_view": 1, "description": "Worked a holiday or a Saturday: paid overtime and meals"},
+  {"fieldname": "compensatory_leave", "fieldtype": "Check", "label": "Replacement Leave for Holiday Work", "in_list_view": 1, "description": "Worked a holiday or a Saturday: a compensatory leave day instead of overtime"},
+  {"fieldname": "section_notes", "fieldtype": "Section Break"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Who Belongs Here"}
+ ],
+ "links": [],
+ "modified": "2026-09-17 10:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Employee Category",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "write": 1},
+  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
+  {"read": 1, "role": "HR User"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
