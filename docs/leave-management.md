@@ -349,3 +349,52 @@ irregularly.
 - Payroll is the bigger gap: 0 Payroll Periods, 0 Income Tax Slabs, 0 Salary
   Structures, 0 Salary Structure Assignments. Leave Encashment and LWP both need
   a Salary Structure before they do anything.
+
+---
+
+## Monthly credit runs on Bikram Sambat months (2026-09-20)
+
+The leave year is Shrawan → Ashadh, so the credit does not follow Gregorian
+month ends. `avinashgroup_app.hr.utils.allocate_earned_leaves_bs` is registered
+as a `daily_long` scheduler event and credits on the BS month end; the patch
+`setup_bs_leave_accrual` stops the stock `hrms.hr.utils.allocate_earned_leaves`
+so nothing is credited twice.
+
+Credit days for FY 83/84 (`preview_accrual_dates("2026-07-17", "2027-07-16")`):
+
+| BS month end | AD date | | BS month end | AD date |
+|---|---|---|---|---|
+| Shrawan 31 | 2026-08-16 | | Magh 29 | 2027-02-12 |
+| Bhadra 31 | 2026-09-16 | | Falgun 30 | 2027-03-14 |
+| Ashwin 31 | 2026-10-17 | | Chaitra 30 | 2027-04-13 |
+| Kartik 30 | 2026-11-16 | | Baisakh 31 | 2027-05-14 |
+| Mangsir 29 | 2026-12-15 | | Jestha 31 | 2027-06-14 |
+| Poush 30 | 2027-01-14 | | Ashadh 32 | 2027-07-16 |
+
+Two things the stock job got wrong, and this one does not: every instalment
+landed 14–17 days late, and the Ashadh instalment never ran at all (the leave
+year is already expired by 31 July, so HRMS skipped it and everybody lost their
+twelfth credit, every year).
+
+### The instalment is capped, not refused
+
+HRMS credits the whole instalment or nothing, so after admin advances leave with
+the **Allocate Leaves** button the last month is dropped: 21 a year, 20 already
+given, and the final 1.75 instalment is refused rather than paying the 1. This
+job credits `min(instalment, what is left of the year)`, so the year lands
+exactly on the policy figure. Verified on nepalgas: advanced to 20 of 21, the
+Ashwin credit came out at 1.0.
+
+Mid-month joiners are pro-rated against the **BS** month, not the Gregorian one.
+
+### Checking a month before it lands
+
+`allocate_earned_leaves_bs(dry_run=True)` returns what it would credit and
+writes nothing:
+
+    bench --site nepalgas console
+    >>> frappe.flags.current_date = frappe.utils.getdate("2026-10-17")
+    >>> rows = allocate_earned_leaves_bs(dry_run=True)
+
+On 2026-09-20 that returned 590 rows: Casual 1.75 a month (NGK 0.75, being 8 a
+year) and Sick 1.00, for all 295 staff.

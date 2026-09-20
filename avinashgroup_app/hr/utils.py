@@ -58,7 +58,7 @@ and register this one in hooks.py under `scheduler_events` -> `daily_long`:
 """
 
 import frappe
-from frappe.utils import getdate
+from frappe.utils import flt, getdate
 
 from rdp_common_app.utils.bs_boundaries import (
     ad_to_bs,
@@ -78,21 +78,21 @@ SUPPORTED_ALLOCATE_ON_DAY = ("First Day", "Last Day")
 SUPPORTED_FREQUENCY = "Monthly"
 
 
-def allocate_earned_leaves_bs():
+def allocate_earned_leaves_bs(dry_run=False):
     """Credit one BS-monthly instalment to every eligible Leave Allocation.
 
     Registered as a `daily_long` scheduler event. Runs every day and does
     nothing on all but one day of each BS month. Safe to run twice on the same
-    day: HRMS's `update_previous_leave_allocation` is a no-op once the
-    allocation already holds the target total.
+    day: the second run sees the year's credited total already include this
+    instalment and credits nothing.
+
+    `dry_run=True` returns what it WOULD credit, writing nothing — use it to
+    check a month before it lands, or to explain a balance to HR.
     """
-    from hrms.hr.utils import (
-        get_earned_leaves,
-        get_leave_allocations,
-        update_previous_leave_allocation,
-    )
+    from hrms.hr.utils import get_earned_leaves, get_leave_allocations
 
     today = frappe.flags.current_date or getdate()
+    planned = []
 
     for leave_type in get_earned_leaves():
         if not _is_accrual_day(leave_type, today):
@@ -104,8 +104,8 @@ def allocate_earned_leaves_bs():
                 continue
 
             try:
-                update_previous_leave_allocation(
-                    allocation, annual_allocation, leave_type, date_of_joining
+                row = _credit_instalment(
+                    allocation, annual_allocation, leave_type, date_of_joining, today, dry_run
                 )
             except Exception:
                 # One bad allocation must not stop the other 294. The failure is
@@ -117,7 +117,76 @@ def allocate_earned_leaves_bs():
                     f"date={today}\n{frappe.get_traceback()}",
                 )
             else:
-                frappe.db.commit()
+                if row:
+                    planned.append(row)
+                if not dry_run:
+                    frappe.db.commit()
+
+    return planned
+
+
+def _credit_instalment(allocation, annual_allocation, leave_type, date_of_joining, today, dry_run):
+    """Add this BS month's instalment to one allocation. Returns what it credited.
+
+    Credits `min(monthly instalment, what is left of the year)` rather than the
+    whole instalment or nothing. HRMS refuses an instalment that would pass the
+    annual figure, which silently costs an employee their last credit whenever
+    admin has advanced leave with the Allocate Leaves button: 21 a year, 20
+    already given, and the final 1.75 instalment is dropped instead of paying
+    the 1. The annual figure is still never exceeded.
+
+    Pro-rating for a mid-month joiner is measured against the BS month, not the
+    Gregorian one, so someone who joins on Bhadra 20 earns the Bhadra fraction.
+    """
+    from hrms.hr.utils import create_additional_leave_ledger_entry, get_monthly_earned_leave
+
+    allocation = frappe.get_doc("Leave Allocation", allocation.name)
+    instalment = get_monthly_earned_leave(
+        date_of_joining,
+        annual_allocation,
+        leave_type.earned_leave_frequency,
+        leave_type.rounding,
+        period_start_date=get_bs_month_start(today),
+        period_end_date=get_bs_month_end(today),
+    )
+
+    # What the year has already given, ignoring leaves carried in from last year.
+    credited = flt(allocation.get_existing_leave_count())
+    room = flt(annual_allocation) - credited
+    amount = min(flt(instalment), room)
+    if leave_type.max_leaves_allowed:
+        amount = min(amount, flt(leave_type.max_leaves_allowed) - credited)
+    amount = flt(amount, allocation.precision("total_leaves_allocated"))
+    if amount <= 0:
+        return None
+
+    row = {
+        "allocation": allocation.name,
+        "employee": allocation.employee,
+        "leave_type": leave_type.name,
+        "instalment": flt(instalment),
+        "credited": amount,
+        "year_total_after": credited + amount,
+        "annual_allocation": flt(annual_allocation),
+        "date": str(today),
+    }
+    if dry_run:
+        return row
+
+    allocation.db_set(
+        "total_leaves_allocated",
+        flt(allocation.total_leaves_allocated) + amount,
+        update_modified=False,
+    )
+    create_additional_leave_ledger_entry(allocation, amount, today)
+    bs = ad_to_bs(getdate(today))
+    allocation.add_comment(
+        comment_type="Info",
+        text=frappe._("Allocated {0} leave(s) for {1} {2} (BS month end {3})").format(
+            frappe.bold(amount), BS_MONTH_NAMES[bs.month], bs.year, frappe.bold(str(today))
+        ),
+    )
+    return row
 
 
 def _is_accrual_day(leave_type, today) -> bool:

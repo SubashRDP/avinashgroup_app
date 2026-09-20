@@ -379,6 +379,14 @@ scheduler_events = {
     "hourly_long": [
         "avinashgroup_app.biometric.attendance_self_heal.heal_unlinked_checkins",
     ],
+    # Earned leave accrues on Bikram Sambat months, because the leave year runs
+    # Shrawan -> Ashad. REPLACES hrms.hr.utils.allocate_earned_leaves, whose
+    # Scheduled Job Type must be stopped per site or every credit lands twice
+    # (setup_bs_leave_accrual does that). See hr/utils.py for why the stock job
+    # is wrong twice over: 14-17 days late, and the Ashad instalment never runs.
+    "daily_long": [
+        "avinashgroup_app.hr.utils.allocate_earned_leaves_bs",
+    ],
     "cron": {
         # Only the send-side retry is scheduled. CBMS Bills are created solely by the
         # Sales Invoice on_submit hook — never by a background job. Reporting a bill to
