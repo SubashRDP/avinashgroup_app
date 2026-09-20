@@ -193,6 +193,15 @@ assignment overlapping the first, and all three shifts here overlap each other.
 
 Cancelling the request joins the standing assignment back together.
 
+**Temporary or permanent** is decided by the request's To Date:
+
+| Request | Result |
+|---|---|
+| From 05 Oct, To 07 Oct | the new shift covers those three days and the old one resumes on the 8th |
+| From 01 Oct, **To blank** | the old shift ends 30 Sep and the new one runs on — the permanent move |
+
+Cancelling either one puts the old shift back the way it was.
+
 A request for the shift the employee is already on is refused: HRMS only compares
 against the Default Shift, which is empty for all 295 here, so "9-6 instead of
 9-6" would otherwise split the assignment into three pointless pieces.

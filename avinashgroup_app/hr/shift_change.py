@@ -19,6 +19,12 @@ Cancelling the request closes the gap again.
                     6 AM - 2 PM                        Oct 8 ──────▶ open
     cancelled       6 AM - 2 PM  Shrawan 1 ─────────────────────────▶ open
 
+A request with NO end date is the permanent move — "I work evenings from now on".
+The old shift then stops for good and is not resumed:
+
+    approved        6 AM - 2 PM  Shrawan 1 ──▶ Oct 4
+                    12 PM - 8 PM              Oct 5 ─────────────────▶ open
+
 Registered in hooks.py on Shift Request: `before_submit` (make room, before the
 controller inserts its assignment) and `on_cancel` (give the days back).
 
@@ -54,9 +60,12 @@ def make_room_for_request(doc, method=None):
 	if doc.status != "Approved":
 		return
 
-	start, end = getdate(doc.from_date), getdate(doc.to_date or doc.from_date)
+	start = getdate(doc.from_date)
+	# No end date means the move is permanent: the old shift stops for good.
+	permanent = not doc.to_date
+	end = start if permanent else getdate(doc.to_date)
 
-	for row in _overlapping_assignments(doc.employee, start, end):
+	for row in _overlapping_assignments(doc.employee, start, end if not permanent else None):
 		assignment = frappe.get_doc("Shift Assignment", row.name)
 		original_end = assignment.end_date
 		assignment.flags.ignore_permissions = True
@@ -69,13 +78,27 @@ def make_room_for_request(doc, method=None):
 			assignment.cancel()
 			frappe.delete_doc("Shift Assignment", assignment.name, force=1, ignore_permissions=True)
 
+		if permanent:
+			continue
 		if original_end is None or getdate(original_end) > end:
 			_resume(assignment, add_days(end, 1), original_end)
 
 
 def close_gap_after_cancel(doc, method=None):
 	"""Put the standing shift back over the cancelled dates. Hook: on_cancel."""
-	start, end = getdate(doc.from_date), getdate(doc.to_date or doc.from_date)
+	start = getdate(doc.from_date)
+	if not doc.to_date:
+		# A permanent move, undone: let the shift that preceded it run on again.
+		before = frappe.db.get_value(
+			"Shift Assignment",
+			{"employee": doc.employee, "docstatus": 1, "end_date": add_days(start, -1)},
+			"name",
+		)
+		if before:
+			frappe.db.set_value("Shift Assignment", before, "end_date", None)
+		return
+
+	end = getdate(doc.to_date)
 	before = frappe.db.get_value(
 		"Shift Assignment",
 		{"employee": doc.employee, "docstatus": 1, "end_date": add_days(start, -1)},
@@ -102,12 +125,18 @@ def close_gap_after_cancel(doc, method=None):
 		_resume(frappe.get_doc("Shift Assignment", before.name), add_days(end, 1), None)
 
 
-def _overlapping_assignments(employee, start, end):
-	"""Submitted, active assignments covering any of these dates."""
+def _overlapping_assignments(employee, start, end=None):
+	"""Submitted, active assignments covering any of these dates.
+
+	`end=None` means "from `start` onwards", which is what a permanent move asks
+	about: every assignment still running on or after that date.
+	"""
+	conditions = "and (end_date is null or end_date >= %(start)s)"
+	if end is not None:
+		conditions += " and start_date <= %(end)s"
 	return frappe.db.sql(
-		"""select name from `tabShift Assignment`
-		where employee = %(employee)s and docstatus = 1 and status = 'Active'
-		  and start_date <= %(end)s and (end_date is null or end_date >= %(start)s)""",
+		f"""select name from `tabShift Assignment`
+		where employee = %(employee)s and docstatus = 1 and status = 'Active' {conditions}""",
 		{"employee": employee, "start": start, "end": end},
 		as_dict=True,
 	)
