@@ -71,3 +71,5 @@ avinashgroup_app.patches.setup_overtime_sheet
 avinashgroup_app.patches.setup_leave_types
 
 avinashgroup_app.patches.setup_bs_leave_accrual
+
+avinashgroup_app.patches.setup_late_half_day_rule

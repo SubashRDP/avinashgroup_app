@@ -211,3 +211,29 @@ HRMS refuses the approval with "Only Approvers can Approve this Request."
 
 HR can still do the same thing directly in the **Roster** (`/hr/roster`), which
 splits and rejoins assignments the same way.
+
+---
+
+## Two attendance rules from the policy meeting (2026-09-20)
+
+**More than 2 hours late is a half day** (policy 1.2, no grace period).
+`Shift Type → Half Day If Late By (Hours)`, default **2**, counted from that
+shift's own start. On 6 AM - 2 PM: in at 07:59 stays Present, in at 08:01 becomes
+a Half Day with Leave Without Pay against it, whatever the hours add up to. 0
+turns the rule off for a shift.
+
+This replaces having to type an absolute cutoff per shift. The old
+`custom_late_arrival_cutoff_time` still applies where it is set and the earlier
+of the two wins, but two shifts here had been saved with a stray 11:24:33 — on
+12 PM - 8 PM that would have made **every** attendance a half day, since the
+shift starts at 12:00. The patch clears cutoffs that can only be accidents (one
+before its own shift start, or one carrying seconds).
+
+**Coming to the office while on leave is a half day** (policy 3.4). HRMS forces
+the status to On Leave from the approved leave application; if there is also a
+punch, the day becomes a Half Day with `half_day_status = Present`, keeping the
+leave type so payroll still deducts the leave half. No punch, and it stays a full
+day of leave.
+
+Both live in `biometric/attendance_override.py` and run on Attendance validate,
+after HRMS's own checks.

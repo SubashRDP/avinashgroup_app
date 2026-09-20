@@ -205,6 +205,10 @@ attendance_events = {
         "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
         "avinashgroup_app.biometric.attendance_override.set_shift_deviation_fields",
         "avinashgroup_app.biometric.attendance_override.enforce_late_arrival_half_day",
+        # Came to the office while on approved leave: half a day, not a full
+        # day of leave (policy 3.4). Runs after HRMS has set the status to
+        # On Leave from the leave application.
+        "avinashgroup_app.biometric.attendance_override.half_day_when_working_on_leave",
     ],
 }
 
