@@ -170,3 +170,35 @@ Salary Component exists (7).
 ## Build log
 Live page, updated as work lands:
 <https://claude.ai/code/artifact/b3a815c3-4649-4942-b5f7-fdf7080edb2d>
+
+---
+
+## An employee asking for a different shift (2026-09-20)
+
+Everyone holds one **open-ended Shift Assignment** from the start of the fiscal
+year — that is what keeps attendance right when it is marked weeks later. It also
+means a stock **Shift Request** can never be approved: ERPNext refuses a second
+assignment overlapping the first, and all three shifts here overlap each other.
+
+    NGI-EMP-00029 already has an active Shift Assignment HR-SHA-26-09-00108
+    for some/all of these dates.
+
+`avinashgroup_app/hr/shift_change.py` makes room for it, on `before_submit`:
+
+    before      6 AM - 2 PM  Shrawan 1 ─────────────────────────▶ open
+    approved    6 AM - 2 PM  Shrawan 1 ──▶ Oct 4
+                12 PM - 8 PM              Oct 5 ─ Oct 7
+                6 AM - 2 PM                        Oct 8 ──────▶ open
+    cancelled   6 AM - 2 PM  Shrawan 1 ─────────────────────────▶ open
+
+Cancelling the request joins the standing assignment back together.
+
+A request for the shift the employee is already on is refused: HRMS only compares
+against the Default Shift, which is empty for all 295 here, so "9-6 instead of
+9-6" would otherwise split the assignment into three pointless pieces.
+
+**The employee must have a Shift Request Approver** on their Employee record, or
+HRMS refuses the approval with "Only Approvers can Approve this Request."
+
+HR can still do the same thing directly in the **Roster** (`/hr/roster`), which
+splits and rejoins assignments the same way.

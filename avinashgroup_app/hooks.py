@@ -344,6 +344,14 @@ _add_doc_event("*", "validate", "avinashgroup_app.custom_code.Override.naming_se
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
 _add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.naming_series.revert_engine_series_on_delete")
 
+# An employee asking to work a different shift ("12-8 instead of 6-2 on Monday")
+# cannot be approved while their standing open-ended assignment covers the date.
+# Make room before HRMS inserts the requested assignment, and close the gap if
+# the request is cancelled.
+_add_doc_event("Shift Request", "validate", "avinashgroup_app.hr.shift_change.validate_request")
+_add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_change.make_room_for_request")
+_add_doc_event("Shift Request", "on_cancel", "avinashgroup_app.hr.shift_change.close_gap_after_cancel")
+
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.
 for _dt in ("Leave Allocation", "Leave Application"):
