@@ -43,7 +43,7 @@ MONTH_COUNT = 12
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
-	months = _selected_months(filters)
+	months = _last_complete_bs_months()
 	start_date, end_date = _month_window(months)
 
 	percentage = flt(filters.get("percentage"))
@@ -122,31 +122,9 @@ def _month_label(bs_year, bs_month):
 	return f"{BS_MONTH_NAMES[bs_month]} {bs_year}"
 
 
-def _selected_months(filters):
-	"""The months the report covers: the ones ticked in the Months filter, or all
-	MONTH_COUNT when it is left empty.
-
-	The filter holds labels ("Bhadra 2083") because that is what the dropdown
-	shows; a label outside the current twelve is ignored, so a filter saved last
-	month cannot pull in a month the report no longer covers.
-	"""
-	months = _last_complete_bs_months()
-	selected = _as_list(filters.get("months"))
-	if not selected:
-		return months
-
-	chosen = {str(label).strip() for label in selected}
-	picked = [(y, m) for y, m in months if _month_label(y, m) in chosen]
-	if not picked:
-		frappe.throw(_("Select at least one month from the list."))
-
-	return picked
-
-
 def _month_window(months):
 	"""(start_date, end_date) covering the given BS months: the 1st of the first
-	to the last day of the last. Only this range is read from the database, so
-	picking fewer months also means reading fewer invoices."""
+	to the last day of the last."""
 	first_year, first_month = months[0]
 	last_year, last_month = months[-1]
 
@@ -157,22 +135,6 @@ def _month_window(months):
 		else bs_to_ad(last_year, last_month + 1, 1)
 	)
 	return start_date, next_month_start - timedelta(days=1)
-
-
-@frappe.whitelist()
-def get_month_options(txt=None):
-	"""Month options for the Months filter: the twelve complete BS months the
-	report covers, newest first so the recent ones are at the top of the list."""
-	needle = (txt or "").strip().lower()
-	labels = [_month_label(y, m) for y, m in reversed(_last_complete_bs_months())]
-	# The dropdown prints `label` in bold and `description` under it; both have to
-	# be set or the list shows "undefined". The month name and year say it all,
-	# so the second line stays empty.
-	return [
-		{"value": label, "label": label, "description": ""}
-		for label in labels
-		if needle in label.lower()
-	]
 
 
 def _sales_by_customer_and_date(filters, start_date, end_date):
@@ -241,17 +203,13 @@ def _lp_gas_item_codes():
 
 def _build_rows(filters, months, start_date, end_date, percentage=0.0):
 	"""One row per customer: quantity per BS month, oldest -> newest, then the
-	quota (the highest of the months shown).
+	quota (the highest of those twelve months).
 
 	A percentage adds one more cell: the quota raised (+) or lowered (-) by that
 	percentage.
 	"""
 	month_fieldname_by_date = {}
 	rows_by_customer = {}
-	# The date range runs from the first month shown to the last, so months
-	# between two ticked ones are read too. Their sales belong to no column and
-	# are dropped here.
-	shown_fieldnames = {_month_fieldname(y, m) for y, m in months}
 
 	for row in _sales_by_customer_and_date(filters, start_date, end_date):
 		posting_date = getdate(row.posting_date)
@@ -259,8 +217,6 @@ def _build_rows(filters, months, start_date, end_date, percentage=0.0):
 			bs = ad_to_bs(posting_date)
 			month_fieldname_by_date[posting_date] = _month_fieldname(bs.year, bs.month)
 		month_fieldname = month_fieldname_by_date[posting_date]
-		if month_fieldname not in shown_fieldnames:
-			continue
 
 		customer_row = rows_by_customer.setdefault(
 			row.customer,
@@ -272,7 +228,7 @@ def _build_rows(filters, months, start_date, end_date, percentage=0.0):
 		)
 		customer_row[month_fieldname] += flt(row.qty)
 
-	# Quota = the customer's best month of the months shown, the peak the next year's
+	# Quota = the customer's best month of the twelve, the peak the next year's
 	# dispatch has to be able to meet. The percentage column raises or lowers
 	# that quota.
 	for customer_row in rows_by_customer.values():

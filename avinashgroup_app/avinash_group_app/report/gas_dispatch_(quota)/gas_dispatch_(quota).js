@@ -30,21 +30,6 @@ frappe.query_reports["Gas Dispatch (Quota)"] = {
 			},
 		},
 		{
-			fieldname: "months",
-			label: __("Months"),
-			fieldtype: "MultiSelectList",
-			get_data: function (txt) {
-				// The twelve complete BS months the report covers, from the server.
-				return frappe
-					.call({
-						method: "avinashgroup_app.avinash_group_app.report.gas_dispatch_(quota).gas_dispatch_(quota).get_month_options",
-						args: { txt: txt },
-					})
-					.then((r) => r.message || []);
-			},
-			description: __("Leave blank for all twelve months. Quota is the best of the months shown."),
-		},
-		{
 			fieldname: "percentage",
 			label: __("Percentage"),
 			fieldtype: "Float",
