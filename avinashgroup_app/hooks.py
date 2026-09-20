@@ -344,6 +344,11 @@ _add_doc_event("*", "validate", "avinashgroup_app.custom_code.Override.naming_se
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.Override.naming_series.apply_engine_numbering")
 _add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.naming_series.revert_engine_series_on_delete")
 
+# Maternity is for mothers, paternity for fathers — checked when the leave is
+# allocated and again when it is applied for.
+for _dt in ("Leave Allocation", "Leave Application"):
+    _add_doc_event(_dt, "validate", "avinashgroup_app.hr.statutory_leave.validate_gender")
+
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
