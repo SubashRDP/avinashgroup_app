@@ -80,10 +80,11 @@ def create_additional_salaries(payroll_entry) -> dict:
 	for employee in employees:
 		emp_doc = frappe.get_cached_doc("Employee", employee)
 		emp_overrides = _get_employee_overrides(employee)
+		category_rates = _get_category_rates(emp_doc)
 		for sc in components:
 			if _skip_for_ot_eligibility(emp_doc, sc):
 				continue
-			rate = _resolve_rate(emp_overrides, sc)
+			rate = _resolve_rate(emp_overrides, category_rates, sc)
 			if rate is None:
 				continue
 			qty = _qty_for_employee(employee, sc, start_date, end_date)
@@ -324,7 +325,34 @@ def _get_employee_overrides(employee: str) -> dict:
 	return {r.salary_component: r for r in rows}
 
 
-def _resolve_rate(emp_overrides: dict, sc):
+def _get_category_rates(emp_doc) -> dict:
+	"""{salary component: rate} for this employee's Allowance Category.
+
+	The category is how a group is paid: NGI pays tea at 235 a day to one group
+	and 40 to another, and that is decided per employee, not per department.
+	Moving somebody between groups, or changing what a group is paid, is then one
+	edit instead of one per person.
+	"""
+	category = emp_doc.get("custom_allowance_category")
+	if not category:
+		return {}
+	return {
+		row.salary_component: flt(row.rate)
+		for row in frappe.get_all(
+			"Allowance Category Rate",
+			filters={"parent": category, "parenttype": "Allowance Category"},
+			fields=["salary_component", "rate"],
+		)
+	}
+
+
+def _resolve_rate(emp_overrides: dict, category_rates: dict, sc):
+	"""Employee's own row first, then their category, then the component default.
+
+	A category rate of 0 means the group is not paid this component at all — the
+	sheet's "NO" tea category — so it stops here rather than falling through to
+	the default.
+	"""
 	override = emp_overrides.get(sc.name)
 	if override:
 		if not override.get("eligible"):
@@ -332,6 +360,11 @@ def _resolve_rate(emp_overrides: dict, sc):
 		rate = flt(override.get("rate"))
 		if rate:
 			return rate
+
+	if sc.name in category_rates:
+		rate = category_rates[sc.name]
+		return rate if rate else None
+
 	default_rate = flt(getattr(sc, "custom_default_rate", 0))
 	return default_rate if default_rate else None
 
