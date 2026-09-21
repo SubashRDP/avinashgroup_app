@@ -33,7 +33,7 @@ def execute():
 		"Custom Field", {"dt": "Salary Component", "fieldname": "custom_condition_type"}, "name"
 	)
 	if name:
-		frappe.db.set_value("Custom Field", name, "options", "\\n".join(CONDITIONS))
+		frappe.db.set_value("Custom Field", name, "options", "\n".join(CONDITIONS))
 		frappe.clear_cache(doctype="Salary Component")
 
 	if frappe.db.exists("Salary Component", "Meal"):

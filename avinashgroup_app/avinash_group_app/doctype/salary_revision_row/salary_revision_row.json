@@ -1,0 +1,33 @@
+{
+ "actions": [],
+ "creation": "2026-09-21 19:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["employee", "employee_name", "current_base", "increment_percent", "new_base", "current_dearness_allowance", "new_dearness_allowance", "arrears_months", "arrears_amount", "note", "salary_structure", "salary_structure_assignment", "arrears_additional_salary"],
+ "fields": [
+  {"fieldname": "employee", "fieldtype": "Link", "in_list_view": 1, "label": "Employee", "options": "Employee", "reqd": 1, "columns": 2},
+  {"fetch_from": "employee.employee_name", "fieldname": "employee_name", "fieldtype": "Data", "in_list_view": 1, "label": "Name", "read_only": 1, "columns": 2},
+  {"fieldname": "current_base", "fieldtype": "Currency", "in_list_view": 1, "label": "Current Basic", "read_only": 1, "columns": 1},
+  {"fieldname": "increment_percent", "fieldtype": "Percent", "in_list_view": 1, "label": "Hike %", "columns": 1},
+  {"fieldname": "new_base", "fieldtype": "Currency", "in_list_view": 1, "label": "New Basic", "reqd": 1, "columns": 1},
+  {"fieldname": "current_dearness_allowance", "fieldtype": "Currency", "label": "Current Dearness Allowance", "read_only": 1},
+  {"fieldname": "new_dearness_allowance", "fieldtype": "Currency", "in_list_view": 1, "label": "New DA", "columns": 1},
+  {"fieldname": "arrears_months", "fieldtype": "Float", "label": "Arrears Months", "precision": "2", "read_only": 1},
+  {"fieldname": "arrears_amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Arrears", "columns": 1},
+  {"fieldname": "note", "fieldtype": "Data", "label": "Note"},
+  {"fieldname": "salary_structure", "fieldtype": "Link", "label": "Salary Structure", "options": "Salary Structure", "read_only": 1},
+  {"fieldname": "salary_structure_assignment", "fieldtype": "Link", "label": "New Assignment", "options": "Salary Structure Assignment", "read_only": 1, "no_copy": 1},
+  {"fieldname": "arrears_additional_salary", "fieldtype": "Link", "label": "Arrears Additional Salary", "options": "Additional Salary", "read_only": 1, "no_copy": 1}
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-21 19:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Salary Revision Row",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

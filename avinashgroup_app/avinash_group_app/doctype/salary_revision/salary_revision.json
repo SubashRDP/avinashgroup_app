@@ -1,0 +1,43 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-09-21 19:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "field_order": ["naming_series", "company", "effective_date", "column_break_main", "bs_month", "reason", "rule_section", "default_increment_percent", "column_break_rule", "pay_arrears", "arrears_payout_date", "employees_section", "employees", "totals_section", "employee_count", "column_break_totals", "total_increase", "total_arrears", "amended_from"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "SREV-.YYYY.-", "default": "SREV-.YYYY.-", "reqd": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "effective_date", "fieldtype": "Date", "label": "Effective From", "reqd": 1, "in_list_view": 1, "description": "Put the first day of a BS month here — a slip is paid at one rate for the whole month, so a date mid-month only takes effect the month after"},
+  {"fieldname": "column_break_main", "fieldtype": "Column Break"},
+  {"fieldname": "bs_month", "fieldtype": "Data", "label": "BS Month", "read_only": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "description": "Annual increment, promotion, minimum wage revision"},
+  {"fieldname": "rule_section", "fieldtype": "Section Break", "label": "Rule"},
+  {"fieldname": "default_increment_percent", "fieldtype": "Percent", "label": "Hike % for Everyone", "description": "Applied to every row when employees are fetched; any row can then be typed over"},
+  {"fieldname": "column_break_rule", "fieldtype": "Column Break"},
+  {"fieldname": "pay_arrears", "fieldtype": "Check", "label": "Pay Arrears", "description": "For a hike agreed late: pays the difference for the months already paid at the old rate"},
+  {"fieldname": "arrears_payout_date", "fieldtype": "Date", "label": "Arrears Paid In", "depends_on": "pay_arrears", "mandatory_depends_on": "pay_arrears", "description": "A date inside the BS month the arrears ride on"},
+  {"fieldname": "employees_section", "fieldtype": "Section Break", "label": "Employees"},
+  {"fieldname": "employees", "fieldtype": "Table", "label": "Employees", "options": "Salary Revision Row", "reqd": 1},
+  {"fieldname": "totals_section", "fieldtype": "Section Break", "label": "Total"},
+  {"fieldname": "employee_count", "fieldtype": "Int", "label": "Employees", "read_only": 1},
+  {"fieldname": "column_break_totals", "fieldtype": "Column Break"},
+  {"fieldname": "total_increase", "fieldtype": "Currency", "label": "Monthly Increase", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "total_arrears", "fieldtype": "Currency", "label": "Arrears", "read_only": 1},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Salary Revision", "no_copy": 1, "print_hide": 1, "read_only": 1}
+ ],
+ "links": [],
+ "modified": "2026-09-21 19:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Salary Revision",
+ "owner": "Administrator",
+ "permissions": [
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "submit": 1, "write": 1},
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1}
+ ],
+ "sort_field": "effective_date",
+ "sort_order": "DESC",
+ "states": []
+}
