@@ -310,6 +310,14 @@ _add_doc_event(
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
 
+# Income tax: the slab computes it, the slip can override it by hand. Runs after
+# the controller's validate, so the computed figure is already on the row.
+_add_doc_event(
+    "Salary Slip",
+    "validate",
+    "avinashgroup_app.payroll.income_tax.apply_income_tax_override",
+)
+
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)

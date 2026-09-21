@@ -85,3 +85,5 @@ avinashgroup_app.patches.setup_meal_entitlement_rule
 avinashgroup_app.patches.setup_payroll_based_on_attendance
 
 avinashgroup_app.patches.setup_payroll_adjustment
+
+avinashgroup_app.patches.setup_income_tax
