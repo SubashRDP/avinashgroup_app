@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-09-21 16:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "field_order": ["naming_series", "company", "payroll_date", "column_break_main", "bs_month", "reason", "rows_section", "adjustments", "totals_section", "total_earnings", "column_break_totals", "total_deductions", "amended_from"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "PADJ-.YYYY.-", "default": "PADJ-.YYYY.-", "reqd": 1},
+  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "reqd": 1, "in_list_view": 1, "in_standard_filter": 1},
+  {"fieldname": "payroll_date", "fieldtype": "Date", "label": "Payroll Date", "reqd": 1, "in_list_view": 1, "description": "A date inside the BS month being paid — the slip for that month picks these up"},
+  {"fieldname": "column_break_main", "fieldtype": "Column Break"},
+  {"fieldname": "bs_month", "fieldtype": "Data", "label": "BS Month", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason"},
+  {"fieldname": "rows_section", "fieldtype": "Section Break", "label": "Adjustments", "description": "One row per employee and component: SST, income tax, an advance recovery, a bonus"},
+  {"fieldname": "adjustments", "fieldtype": "Table", "label": "Adjustments", "options": "Payroll Adjustment Row", "reqd": 1},
+  {"fieldname": "totals_section", "fieldtype": "Section Break", "label": "Totals"},
+  {"fieldname": "total_earnings", "fieldtype": "Currency", "label": "Earnings", "read_only": 1},
+  {"fieldname": "column_break_totals", "fieldtype": "Column Break"},
+  {"fieldname": "total_deductions", "fieldtype": "Currency", "label": "Deductions", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "amended_from", "fieldtype": "Link", "label": "Amended From", "options": "Payroll Adjustment", "no_copy": 1, "print_hide": 1, "read_only": 1}
+ ],
+ "links": [],
+ "modified": "2026-09-21 16:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Payroll Adjustment",
+ "owner": "Administrator",
+ "permissions": [
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "submit": 1, "write": 1},
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1}
+ ],
+ "sort_field": "payroll_date",
+ "sort_order": "DESC",
+ "states": []
+}

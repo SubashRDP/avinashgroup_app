@@ -133,3 +133,26 @@ Fix exist for.
 * NGG, NGN, NGK still need their own structures: NGN pays HRA at 27% and tea at
   265, NGG and NGK run PF-style columns and keep whole groups (vehicle helpers,
   daily labour) on separate sheets.
+
+## The month's one-off amounts — Payroll Adjustment
+
+SST, income tax, an advance being recovered, a festival bonus: each is one
+person's amount for one month, and ERPNext keeps them as Additional Salary, one
+document each. Fine for two people; miserable for twenty, which is why the sheet
+types them as columns.
+
+**Payroll Adjustment** is that column: company, payroll date (inside the BS month
+being paid), and a row per employee and component. Submitting creates and submits
+each Additional Salary; cancelling takes them all back, so a month is undone in
+one place. Attendance-driven components are kept out of the picker — the
+allowance engine already posts those.
+
+Verified on nepalgas with NGI's Falgun one-offs replayed into Bhadra: income tax
+7,500 and 46,701, advance 6,500, extra SSF 5,000 twice. They reached the slips
+(Bikash Sharma: Income Tax 7,500 and Salary Advance 6,500 as deductions) and
+cancelling the adjustment left no live rows behind.
+
+Still undecided, and the client's call: who pays the 1% SST, whether income tax
+stays typed or is computed from the FY 83/84 slab, whether advances should instead
+be tracked as Employee Advance with a balance, and what the Dashain bonus is based
+on.
