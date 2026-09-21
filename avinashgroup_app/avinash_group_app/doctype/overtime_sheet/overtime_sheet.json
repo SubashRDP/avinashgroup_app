@@ -23,6 +23,7 @@
   "column_break_totals",
   "overtime_count",
   "replacement_leave_days",
+  "total_worked_hours",
   "amended_from"
  ],
  "fields": [
@@ -116,6 +117,14 @@
    "fieldtype": "Int",
    "label": "Replacement Leave Days",
    "read_only": 1
+  },
+  {
+   "fieldname": "total_worked_hours",
+   "fieldtype": "Float",
+   "label": "Worked Hours (measured)",
+   "precision": "2",
+   "read_only": 1,
+   "in_list_view": 1
   },
   {
    "fieldname": "amended_from",

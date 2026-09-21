@@ -13,6 +13,10 @@
   "entitlement",
   "employee_category",
   "shift",
+  "measured_section",
+  "worked_hours",
+  "attendance",
+  "settlement_note",
   "remarks"
  ],
  "fields": [
@@ -80,6 +84,34 @@
    "fieldtype": "Link",
    "label": "Shift",
    "options": "Shift Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "measured_section",
+   "fieldtype": "Section Break",
+   "label": "Measured from Attendance"
+  },
+  {
+   "fieldname": "worked_hours",
+   "fieldtype": "Float",
+   "label": "Worked Hours",
+   "precision": "2",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "Holiday: every hour worked. Working day: the hours outside the shift"
+  },
+  {
+   "fieldname": "attendance",
+   "fieldtype": "Link",
+   "label": "Attendance",
+   "options": "Attendance",
+   "read_only": 1
+  },
+  {
+   "fieldname": "settlement_note",
+   "fieldtype": "Small Text",
+   "label": "Note",
    "read_only": 1
   },
   {

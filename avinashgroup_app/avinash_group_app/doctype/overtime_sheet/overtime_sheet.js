@@ -16,6 +16,31 @@ frappe.ui.form.on("Overtime Sheet", {
 		}
 	},
 
+	refresh(frm) {
+		if (frm.doc.docstatus !== 1) return;
+		// Measuring reads the punches for the sheet's date: useful the moment
+		// attendance for that day exists, and safe to repeat.
+		frm.add_custom_button(__("Measure from Attendance"), () =>
+			frm
+				.call({
+					method: "avinashgroup_app.hr.overtime_settlement.measure",
+					args: { sheet_name: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Reading attendance"),
+				})
+				.then(({ message: rows }) => {
+					frappe.msgprint({
+						title: __("Measured"),
+						indicator: "green",
+						message: (rows || [])
+							.map((r) => `${r.employee_name || r.employee}: <b>${r.hours}</b> h — ${r.note}`)
+							.join("<br>"),
+					});
+					frm.reload_doc();
+				}),
+		);
+	},
+
 	work_date(frm) {
 		(frm.doc.employees || []).forEach((row) => preview_row(frm, row.doctype, row.name));
 	},

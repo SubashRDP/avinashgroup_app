@@ -79,8 +79,30 @@ from desk requests, not scripts.
 | Form | `avinash_group_app/doctype/overtime_sheet`, `overtime_sheet_employee` |
 | Install | patch `setup_overtime_sheet` (also removes the earlier Holiday Duty Sheet) |
 
+## Settlement — measuring the hours
+
+`avinashgroup_app/hr/overtime_settlement.py`. The sheet says the work was asked
+for; attendance says how long it lasted. **Measure from Attendance** on an
+approved sheet (or `measure_sheet(name)`) reads the punches for that date and
+writes each row's **Worked Hours**, the Attendance it came from, and a note:
+
+| Row | Hours |
+|---|---|
+| Work on Holiday | every hour worked that day |
+| Overtime | only the hours outside the rostered shift |
+| Earns Replacement Leave | 0 — nothing to measure |
+| No attendance | 0, "called in but did not come" |
+| One punch only | 0, the hours cannot be measured |
+
+Re-measuring is safe; it rewrites the same fields from the same source. Verified
+on nepalgas: a holiday worked came out at 8.1 h, and staying to 14:15 on a
+6 AM - 2 PM shift at 0.25 h.
+
+`get_measured_hours(from, to, company)` is what payroll reads: hours both
+**authorised and worked**, per employee, for a period.
+
 ## Next
 
-Settlement: match `get_authorised()` against attendance. Authorised and punched →
-Additional Salary for overtime (Plant) or a Compensatory Leave Request (Officer &
-Admin). Punched but not authorised → flagged; fixed by a backdated sheet.
+Paying it: hours × `basic ÷ 30 ÷ 8 × 1.5` as an Additional Salary, and the
+replacement-leave side for Officer & Admin. Punched but never authorised stays
+unpaid by design — fix it with a backdated sheet.
