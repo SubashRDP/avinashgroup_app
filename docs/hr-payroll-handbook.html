@@ -1,0 +1,1928 @@
+<title>Avinash HR & Payroll Handbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{
+  --ground:#F4F6F9; --paper:#FFFFFF; --ink:#18212C; --muted:#56616F; --line:#DDE3EA;
+  --teal:#17607F; --teal-soft:#E3EFF4; --marigold:#C98A0C; --marigold-soft:#FBF1D9;
+  --good:#23724A; --good-soft:#E2F2E8; --bad:#A8322A; --bad-soft:#F8E4E1;
+  --btn:#17607F; --btn-ink:#FFFFFF; --chip:#EEF1F5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#11161C; --paper:#18202A; --ink:#E6ECF2; --muted:#9AA7B5; --line:#2A3542;
+    --teal:#6BB5D6; --teal-soft:#16303C; --marigold:#E9B64A; --marigold-soft:#33290F;
+    --good:#6CCB97; --good-soft:#142C20; --bad:#F08A80; --bad-soft:#3A1916;
+    --btn:#2C7FA3; --btn-ink:#FFFFFF; --chip:#222C38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#11161C; --paper:#18202A; --ink:#E6ECF2; --muted:#9AA7B5; --line:#2A3542;
+  --teal:#6BB5D6; --teal-soft:#16303C; --marigold:#E9B64A; --marigold-soft:#33290F;
+  --good:#6CCB97; --good-soft:#142C20; --bad:#F08A80; --bad-soft:#3A1916;
+  --btn:#2C7FA3; --btn-ink:#FFFFFF; --chip:#222C38; color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Mukta","Noto Sans Devanagari",system-ui,sans-serif;font-size:18px;line-height:1.6;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 80px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px}
+header.top{grid-column:1/-1;padding-block:8px 18px;border-bottom:2px solid var(--line)}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:700}
+h1{font-size:clamp(32px,5vw,46px);line-height:1.1;margin:.2em 0 .25em;font-weight:800;text-wrap:balance}
+.lede{font-size:20px;color:var(--muted);max-width:62ch;margin:0}
+.np{font-size:.92em;color:var(--muted)}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:15.5px}
+nav.toc p{margin:0 0 6px;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+nav.toc ol{list-style:none;padding:0;margin:0 0 18px;display:grid;gap:2px}
+nav.toc a{display:block;padding:5px 10px;border-radius:6px;color:var(--ink);text-decoration:none;line-height:1.3}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--teal-soft);color:var(--teal);outline:none}
+main{min-width:0}
+section{padding-block:26px 10px;border-bottom:1px solid var(--line);scroll-margin-top:16px}
+section:last-child{border-bottom:0}
+h2{font-size:30px;line-height:1.2;margin:0 0 4px;font-weight:800;text-wrap:balance}
+h2 .when{display:inline-block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--teal);background:var(--teal-soft);padding:2px 10px;border-radius:99px;vertical-align:middle;margin-left:8px}
+h3{font-size:21px;margin:22px 0 6px;font-weight:700}
+p,li{max-width:68ch}
+.sub{color:var(--muted);margin:0 0 14px}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:12px 0;display:grid;gap:12px}
+ol.steps>li{counter-increment:s;position:relative;padding-left:48px;min-height:34px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;background:var(--teal);color:var(--paper);display:grid;place-items:center;font-weight:800;font-size:17px}
+ul.plain{padding-left:22px;margin:8px 0}
+ul.plain li{margin:4px 0}
+.btn{display:inline-block;background:var(--btn);color:var(--btn-ink);font-weight:600;font-size:.86em;padding:1px 10px;border-radius:6px;white-space:nowrap}
+.field{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.8em;background:var(--chip);padding:1px 7px;border-radius:5px;white-space:nowrap}
+.screen{font-weight:700;color:var(--teal)}
+.note{border-radius:10px;padding:12px 16px 12px 16px;margin:14px 0;max-width:72ch;border-left:5px solid}
+.note b.t{display:block;font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.tip{background:var(--marigold-soft);border-color:var(--marigold)} .tip b.t{color:var(--marigold)}
+.careful{background:var(--bad-soft);border-color:var(--bad)} .careful b.t{color:var(--bad)}
+.good{background:var(--good-soft);border-color:var(--good)} .good b.t{color:var(--good)}
+.note p{margin:4px 0}
+.tablewrap{overflow-x:auto;margin:12px 0;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:16px;background:var(--paper);border:1px solid var(--line);border-radius:8px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--teal-soft);color:var(--ink);font-weight:700;font-size:14.5px}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.money{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0}
+.money div{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.money h4{margin:0 0 4px;font-size:15px;color:var(--teal);letter-spacing:.04em;text-transform:uppercase}
+.money .f{font-weight:800;font-size:19px;line-height:1.3}
+.money .ex{color:var(--muted);font-size:15px;margin-top:4px;font-variant-numeric:tabular-nums}
+.check{background:var(--paper);border:2px solid var(--teal);border-radius:12px;padding:16px 18px;margin:16px 0;max-width:760px}
+.check h3{margin-top:0}
+.check label{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer}
+.check label:last-of-type{border-bottom:0}
+.check input{width:22px;height:22px;margin-top:4px;accent-color:var(--good);flex:none}
+.check input:checked+span{color:var(--muted);text-decoration:line-through}
+.check .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+button.act{font:inherit;font-size:15px;font-weight:600;border:1px solid var(--line);background:var(--chip);color:var(--ink);padding:6px 14px;border-radius:8px;cursor:pointer}
+button.act:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.qa{display:grid;gap:10px;margin:12px 0}
+details{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 16px}
+details summary{cursor:pointer;font-weight:700;font-size:17.5px}
+details[open] summary{margin-bottom:6px}
+details p{margin:6px 0}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;font-weight:600;font-size:16px}
+.flow span{background:var(--paper);border:1px solid var(--line);padding:5px 12px;border-radius:8px}
+.flow i{font-style:normal;color:var(--muted)}
+.stage{padding-block:18px 8px}
+h3.st{display:flex;align-items:center;gap:12px;font-size:23px;margin:0 0 8px;flex-wrap:wrap}
+h3.st .n{flex:none;width:40px;height:40px;border-radius:10px;background:var(--marigold);color:var(--paper);display:grid;place-items:center;font-weight:800;font-size:19px}
+h3.st .who{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--muted);border:1px solid var(--line);padding:1px 8px;border-radius:99px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:15px;color:var(--muted);margin:10px 0}
+.pill{display:inline-block;font-size:12.5px;font-weight:700;letter-spacing:.04em;padding:2px 10px;border-radius:99px;white-space:nowrap}
+.p-use{background:var(--good-soft);color:var(--good)}
+.p-ready{background:var(--teal-soft);color:var(--teal)}
+.p-no{background:var(--chip);color:var(--muted)}
+.filterbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0;position:sticky;top:env(safe-area-inset-top,0px);background:var(--ground);padding-block:8px;z-index:2}
+.filterbar label{font-weight:700}
+.filterbar input{font:inherit;font-size:16px;flex:1 1 260px;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
+.filterbar input:focus-visible{outline:3px solid var(--teal);outline-offset:1px}
+#scrcount{color:var(--muted);font-size:14px}
+h3.grp{font-size:24px;margin:8px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--teal)}
+.reflist{display:grid;gap:12px}
+.scr{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.scr header{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-bottom:6px}
+.scr h4{margin:0;font-size:19px;color:var(--teal)}
+.scr dl{display:grid;grid-template-columns:170px minmax(0,1fr);gap:4px 14px;margin:0;font-size:16px}
+.scr dt{color:var(--muted);font-weight:600}
+.scr dd{margin:0}
+.scr dd .btn{margin:1px 2px}
+.arrow{color:var(--marigold)}
+.flow.long span{font-size:15px}
+.flowsec p{color:var(--muted)}
+@media (max-width:560px){.scr dl{grid-template-columns:1fr}.scr dt{margin-top:6px}}
+footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid var(--line);padding-top:14px}
+@media (max-width:900px){
+  .wrap{grid-template-columns:1fr;gap:10px}
+  nav.toc{position:static;max-height:none;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px}
+  nav.toc ol{grid-template-columns:1fr 1fr}
+}
+@media (max-width:480px){ body{font-size:17px} nav.toc ol{grid-template-columns:1fr} h2{font-size:25px} }
+@media print{
+  nav.toc,.check .row{display:none} .wrap{display:block} section{break-inside:avoid-page}
+  body{background:#fff;color:#000}
+}
+@media (prefers-reduced-motion:no-preference){ html{scroll-behavior:smooth} }
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Nepal Gas Udhyog group · HR &amp; Payroll · FY 83/84</div>
+  <h1>HR &amp; Payroll Handbook</h1>
+  <p class="lede">Part A sets the system up once, in order. Part B is the everyday and month-end work. Part C explains every HR and payroll screen and its buttons. Part D shows every flow start to finish. One small step at a time. You do not need to know computers well. Just follow the numbers.</p>
+  <p class="np">यो पुस्तिकाले हाजिरी, बिदा, ओभरटाइम, पेस्की र तलब कसरी चलाउने भनेर चरण-चरणमा सिकाउँछ।</p>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <p>Start</p>
+  <ol>
+    <li><a href="#start">How to open any screen</a></li>
+    <li><a href="#words">Words you will see</a></li>
+    <li><a href="#rules">Money rules at a glance</a></li>
+  </ol>
+  <p>Part A · Setup (once, in order)</p>
+  <ol>
+    <li><a href="#setup">Start here — the order</a></li>
+    <li><a href="#s1">1–2 · Year &amp; company</a></li>
+    <li><a href="#s3">3–4 · Holidays &amp; settings</a></li>
+    <li><a href="#s5">5–9 · Shifts &amp; people</a></li>
+    <li><a href="#s10">10–13 · Leave</a></li>
+    <li><a href="#s14">14–18 · Tax &amp; salary</a></li>
+    <li><a href="#s19">19–20 · Check &amp; test run</a></li>
+  </ol>
+  <p>Part B · Every day</p>
+  <ol>
+    <li><a href="#attendance">Attendance</a></li>
+    <li><a href="#shifts">Shifts</a></li>
+    <li><a href="#leave">Leave</a></li>
+    <li><a href="#overtime">Overtime sheet</a></li>
+  </ol>
+  <p>When it happens</p>
+  <ol>
+    <li><a href="#advance">Giving an advance</a></li>
+    <li><a href="#holidays">Adding a holiday</a></li>
+    <li><a href="#category">Who gets overtime</a></li>
+    <li><a href="#newjoin">A new employee joins</a></li>
+  </ol>
+  <p>Every month</p>
+  <ol>
+    <li><a href="#monthend">Month-end salary</a></li>
+    <li><a href="#adjust">One-off amounts</a></li>
+    <li><a href="#tax">Income tax</a></li>
+    <li><a href="#reports">Reading the reports</a></li>
+  </ol>
+  <p>Once a year</p>
+  <ol>
+    <li><a href="#dashain">Dashain bonus</a></li>
+    <li><a href="#raise">Salary increase</a></li>
+  </ol>
+  <p>Part C · Every screen</p>
+  <ol>
+    <li><a href="#partc">All screens (find box)</a></li>
+    <li><a href="#c-organisation-settings">Organisation &amp; settings</a></li>
+    <li><a href="#c-people">People</a></li>
+    <li><a href="#c-attendance-shifts">Attendance &amp; shifts</a></li>
+    <li><a href="#c-leave">Leave</a></li>
+    <li><a href="#c-overtime">Overtime</a></li>
+    <li><a href="#c-salary-setup">Salary setup</a></li>
+    <li><a href="#c-monthly-salary">Monthly salary</a></li>
+    <li><a href="#c-advances-bonus-pay-changes">Advances, bonus, raises</a></li>
+    <li><a href="#c-hiring-joining">Hiring &amp; joining</a></li>
+    <li><a href="#c-leaving">Leaving</a></li>
+    <li><a href="#c-performance-training">Performance &amp; training</a></li>
+    <li><a href="#c-travel-vehicles-other">Travel, vehicles, other</a></li>
+    <li><a href="#c-tax-exemption-india-style-not-used">Tax exemption (not used)</a></li>
+  </ol>
+  <p>Part D · Every flow</p>
+  <ol>
+    <li><a href="#f-join">Joining</a></li>
+    <li><a href="#f-att">Punch → attendance</a></li>
+    <li><a href="#f-shift">Changing a shift</a></li>
+    <li><a href="#f-leave">Leave</a></li>
+    <li><a href="#f-ot">Overtime</a></li>
+    <li><a href="#f-adv">Advance</a></li>
+    <li><a href="#f-month">Month-end salary</a></li>
+    <li><a href="#f-tax">Tax</a></li>
+    <li><a href="#f-year">Once a year</a></li>
+    <li><a href="#f-leave2">Leaving</a></li>
+  </ol>
+  <p>Help</p>
+  <ol>
+    <li><a href="#problems">When something goes wrong</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="start">
+  <h2>How to open any screen</h2>
+  <p class="sub">Every screen in this guide is opened the same way.</p>
+  <ol class="steps">
+    <li>Click the <b>search bar</b> at the very top of the page (it says <i>Search or type a command</i>).</li>
+    <li>Type the screen name written in <span class="screen">blue bold</span> in this guide — for example <span class="screen">Payroll Entry</span>.</li>
+    <li>Press <b>Enter</b>. You will see a list. To make a new one, click <span class="btn">+ Add</span> on the right.</li>
+  </ol>
+  <div class="note tip"><b class="t">Tip</b><p>Buttons look like <span class="btn">this</span> in the guide. Boxes you type into look like <span class="field">this</span>.</p></div>
+  <h3>Save, Submit, Cancel — what they mean</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Button</th><th>What happens</th><th>Can I change it later?</th></tr>
+    <tr><td><span class="btn">Save</span></td><td>Keeps your work as a <b>Draft</b>. Nothing is paid or counted yet.</td><td>Yes, freely.</td></tr>
+    <tr><td><span class="btn">Submit</span></td><td>Makes it <b>final</b>. Now it counts — in salary, leave, reports.</td><td>No. You must Cancel it.</td></tr>
+    <tr><td><span class="btn">Cancel</span></td><td>Takes back a submitted paper. The system undoes what it did.</td><td>Then click <span class="btn">Amend</span> to make a corrected copy.</td></tr>
+  </table></div>
+  <p class="np">Save = राखिराख्ने (ड्राफ्ट) · Submit = पक्का गर्ने · Cancel = रद्द गर्ने</p>
+</section>
+
+<section id="words">
+  <h2>Words you will see</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Word</th><th>Simple meaning</th></tr>
+    <tr><td><b>BS month</b></td><td>The Nepali month — Shrawan, Bhadra, Ashwin… Salary is always for one BS month. The year runs Shrawan to Ashadh.</td></tr>
+    <tr><td><b>Shift</b></td><td>Office time. We have three: <b>6 AM – 2 PM</b>, <b>9 AM – 6 PM</b>, <b>12 PM – 8 PM</b>.</td></tr>
+    <tr><td><b>Attendance</b></td><td>One line per person per day: Present, Half Day, Absent or On Leave. The fingerprint machine makes most of these.</td></tr>
+    <tr><td><b>Employee Category</b></td><td><b>Plant</b> = gets overtime money. <b>Officer &amp; Admin</b> = gets replacement leave instead.</td></tr>
+    <tr><td><b>Allowance Category</b></td><td>The tea group: <b>OLD</b>, <b>NEW</b> or <b>NO</b>. It decides how much tea money a person gets per day.</td></tr>
+    <tr><td><b>Salary Structure</b></td><td>The company's salary formula (Basic, HRA, SSF…). Already set up — you do not touch it.</td></tr>
+    <tr><td><b>Salary Structure Assignment</b></td><td>Joins one person to the formula, with their <b>Basic</b> salary.</td></tr>
+    <tr><td><b>Payroll Entry</b></td><td>The monthly salary run for one company.</td></tr>
+    <tr><td><b>Salary Slip</b></td><td>One person's pay for one month.</td></tr>
+    <tr><td><b>SSF</b></td><td>Social Security Fund. Company adds 20% of Basic, then 31% goes to the fund (20% company + 11% employee).</td></tr>
+    <tr><td><b>SST</b></td><td>Social Security Tax — the first 1% of income tax. Staff in the SSF do not pay it.</td></tr>
+  </table></div>
+</section>
+
+<section id="rules">
+  <h2>Money rules at a glance</h2>
+  <p class="sub">The system does these sums for you. They are here so you can check a slip by hand.</p>
+  <div class="money">
+    <div><h4>Overtime per hour</h4><div class="f">Basic ÷ 30 ÷ 8 × 1.5</div><div class="ex">Basic 19,260 → Rs 120.38 an hour</div></div>
+    <div><h4>Late fine</h4><div class="f">Late minutes × Basic ÷ 30 ÷ 8 ÷ 60</div><div class="ex">38 min on Basic 17,860 → Rs 47.13</div></div>
+    <div><h4>Tea &amp; conveyance</h4><div class="f">Days present × tea rate</div><div class="ex">NGI OLD 235 · NEW 40 · NO 0 · NGN OLD 265 · NEW 40</div></div>
+    <div><h4>Meal</h4><div class="f">1 meal each: 1½ h early, 1½ h late</div><div class="ex">Max 2 a day. Holiday: 6 h → 1, 8 h → 2</div></div>
+    <div><h4>Leave earned</h4><div class="f">2.75 days each month</div><div class="ex">33 a year · probation 1 a month</div></div>
+    <div><h4>Daily wage</h4><div class="f">Days worked × day rate</div><div class="ex">NGK: 9 days × 754 = 6,786</div></div>
+  </div>
+  <h3>Income tax (FY 83/84)</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Yearly taxable income</th><th>Tax</th></tr>
+    <tr><td class="num">Up to 10,00,000</td><td>1% (this is SST — <b>not charged</b> to SSF members)</td></tr>
+    <tr><td class="num">10,00,001 – 15,00,000</td><td>10%</td></tr>
+    <tr><td class="num">15,00,001 – 25,00,000</td><td>20%</td></tr>
+    <tr><td class="num">25,00,001 – 40,00,000</td><td>27%</td></tr>
+    <tr><td class="num">Above 40,00,000</td><td>29%</td></tr>
+  </table></div>
+  <h3>Attendance rules</h3>
+  <ul class="plain">
+    <li>More than <b>2 hours late</b> after your shift starts = <b>Half Day</b>. No grace time.</li>
+    <li>Came to work while on approved leave = <b>Half Day</b>.</li>
+    <li>A half day still gets the <b>full tea</b> for that day.</li>
+    <li>A half day is <b>not fined</b> for being late — the half day is already the penalty.</li>
+  </ul>
+</section>
+
+<section id="setup">
+  <h2>Part A — Setting up the system <span class="when">do once, in order</span></h2>
+  <p class="sub">Do these 20 stages from top to bottom. Each one needs the one before it. Do not jump ahead — a missing stage is the reason most “why is this person not in salary?” problems happen.</p>
+  <p class="np">यी २० चरण माथिदेखि तलसम्म क्रमैसँग गर्नुहोस्। एउटा छुट्यो भने पछि तलबमा समस्या आउँछ।</p>
+  <div class="flow"><span>Year &amp; company</span><i>→</i><span>Holidays</span><i>→</i><span>Settings</span><i>→</i><span>Shifts</span><i>→</i><span>People</span><i>→</i><span>Leave</span><i>→</i><span>Tax</span><i>→</i><span>Salary</span><i>→</i><span>Test run</span></div>
+  <div class="note tip"><b class="t">How to read each stage</b><p><b>Open</b> tells you the screen. The table says which box gets which value. <b>Check</b> tells you how to be sure it worked before you move on.</p></div>
+</section>
+
+<section id="s1" class="stage">
+  <h3 class="st"><span class="n">1</span> Fiscal year</h3>
+  <p><b>Open</b> <span class="screen">Fiscal Year</span> → <b>83/84</b> (or <span class="btn">+ Add</span> for a new year).</p>
+  <div class="tablewrap"><table><tr><th>Box</th><th>Set to</th></tr>
+    <tr><td><span class="field">Year Name</span></td><td>83/84</td></tr>
+    <tr><td><span class="field">Year Start Date</span></td><td>2026-07-17 (Shrawan 1)</td></tr>
+    <tr><td><span class="field">Year End Date</span></td><td>2027-07-16 (Ashadh end)</td></tr>
+    <tr><td><span class="field">Companies</span> table</td><td>All 7 companies, one row each</td></tr>
+  </table></div>
+  <p><b>Check</b>: the Companies table has 7 rows. Without a company row, that company cannot save any document in the new year.</p>
+</section>
+
+<section id="s2" class="stage">
+  <h3 class="st"><span class="n">2</span> Company defaults <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Company</span> → one company → scroll to <b>HR &amp; Payroll</b> and <b>Accounts</b> settings.</p>
+  <div class="tablewrap"><table><tr><th>Box</th><th>Set to (example: NGI)</th></tr>
+    <tr><td><span class="field">Default Holiday List</span></td><td>The company's list, e.g. NGI-Holiday-00004 (made in stage 3)</td></tr>
+    <tr><td><span class="field">Default Payroll Payable Account</span></td><td>347301 - Salary Payable - NGI</td></tr>
+    <tr><td><span class="field">Default Employee Advance Account</span></td><td>148003 - Staff Advance - NGI</td></tr>
+    <tr><td><span class="field">Default Cost Center</span></td><td>Main - NGI</td></tr>
+  </table></div>
+  <div class="note careful"><b class="t">Ask the accountant first</b><p>The Staff Advance account must be of type <b>Receivable</b>, or advances cannot be saved. On four companies it is set to Payable today. Only the accountant should change an account's type.</p></div>
+  <p><b>Check</b>: all four boxes are filled on all 7 companies. Karnali (NGK) was missing its Salary Payable account.</p>
+</section>
+
+<section id="s3" class="stage">
+  <h3 class="st"><span class="n">3</span> Holiday lists <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Holiday List</span> → <span class="btn">+ Add</span>.</p>
+  <div class="tablewrap"><table><tr><th>Box</th><th>Set to</th></tr>
+    <tr><td><span class="field">From Date</span> / <span class="field">To Date</span></td><td>2026-07-17 / 2027-07-16</td></tr>
+    <tr><td><span class="field">Weekly Off</span></td><td>Saturday → click <span class="btn">Add to Holidays</span></td></tr>
+    <tr><td>Festival days</td><td>Add them later all at once with <span class="screen">Holiday Bulk Update</span> (see <a href="#holidays">Adding a holiday</a>)</td></tr>
+  </table></div>
+  <p>Make a <b>second list for women</b> in each company. It is the same list plus Teej. Give it to women employees in stage 8.</p>
+  <p><b>Check</b>: open the list. Every Saturday of the year is there.</p>
+</section>
+
+<section id="s4" class="stage">
+  <h3 class="st"><span class="n">4</span> Three settings pages</h3>
+  <p><b>Open</b> <span class="screen">Payroll Settings</span>:</p>
+  <div class="tablewrap"><table><tr><th>Box</th><th>Set to</th><th>Why</th></tr>
+    <tr><td><span class="field">Calculate Payroll Working Days Based On</span></td><td><b>Attendance</b></td><td>Without this, a half day costs nothing.</td></tr>
+    <tr><td><span class="field">Consider Unmarked Attendance As</span></td><td>Present (current setting)</td><td>A day with no attendance line is paid. Change it to Absent only if the machine is reliable.</td></tr>
+    <tr><td><span class="field">Include holidays in Total no. of Working Days</span></td><td>Unticked</td><td></td></tr>
+    <tr><td><span class="field">Fraction of Daily Salary for Half Day</span></td><td>0.5</td><td>Half day = half pay.</td></tr>
+  </table></div>
+  <p><b>Open</b> <span class="screen">Nepal HRMS Settings</span>: tick <span class="field">Process Payroll in Nepali Month</span>. This makes each salary run cover one BS month.</p>
+  <p><b>Open</b> <span class="screen">HR Settings</span>: leave <span class="field">Allow Multiple Shift Assignments</span> unticked.</p>
+</section>
+
+<section id="s5" class="stage">
+  <h3 class="st"><span class="n">5</span> Shift types</h3>
+  <p><b>Open</b> <span class="screen">Shift Type</span>. You need three: <b>6 AM - 2 PM</b>, <b>9 AM - 6 PM</b>, <b>12 PM - 8 PM</b>. Set each one the same way:</p>
+  <div class="tablewrap"><table><tr><th>Box</th><th>Set to</th></tr>
+    <tr><td><span class="field">Start Time</span> / <span class="field">End Time</span></td><td>e.g. 09:00 / 18:00</td></tr>
+    <tr><td><span class="field">Enable Auto Attendance</span></td><td>Ticked</td></tr>
+    <tr><td><span class="field">Determine Check-in and Check-out</span></td><td>Alternating entries as IN and OUT during the same shift</td></tr>
+    <tr><td><span class="field">Working Hours Calculation Based On</span></td><td>First Check-in and Last Check-out</td></tr>
+    <tr><td><span class="field">Begin check-in before shift start time (in minutes)</span></td><td>120</td></tr>
+    <tr><td><span class="field">Allow check-out after shift end time (in minutes)</span></td><td>120</td></tr>
+    <tr><td><span class="field">Working Hours Threshold for Half Day</span></td><td>5</td></tr>
+    <tr><td><span class="field">Working Hours Threshold for Absent</span></td><td>2</td></tr>
+    <tr><td><span class="field">Enable Late Entry Marking</span> / <span class="field">Late Entry Grace Period</span></td><td>Ticked / 0</td></tr>
+    <tr><td><span class="field">Half Day If Late By (Hours)</span></td><td>2 — more than 2 hours late becomes a half day</td></tr>
+    <tr><td><span class="field">Process Attendance After</span></td><td>The first day attendance should be made from the machine</td></tr>
+  </table></div>
+</section>
+
+<section id="s6" class="stage">
+  <h3 class="st"><span class="n">6</span> Departments and designations <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Department</span> and <span class="screen">Designation</span>. Make the ones each company uses (Accounts, Sales &amp; Marketing, Plant… / Driver, Accountant, Plant Worker…).</p>
+  <div class="note careful"><b class="t">Careful</b><p>Type names with single spaces. “Sales and Marketing  - NGK” with two spaces once stopped 30 leave assignments.</p></div>
+</section>
+
+<section id="s7" class="stage">
+  <h3 class="st"><span class="n">7</span> The two kinds of category</h3>
+  <p><b>Open</b> <span class="screen">Employee Category</span>. It should have exactly two:</p>
+  <div class="tablewrap"><table><tr><th>Category Name</th><th>Overtime Eligible</th><th>Replacement Leave for Holiday Work</th></tr>
+    <tr><td>Plant</td><td>Ticked</td><td>—</td></tr>
+    <tr><td>Officer &amp; Admin</td><td>—</td><td>Ticked</td></tr>
+  </table></div>
+  <p><b>Open</b> <span class="screen">Allowance Category</span>. Each company has its own tea groups:</p>
+  <div class="tablewrap"><table><tr><th>Category</th><th>Company</th><th>Rates table</th></tr>
+    <tr><td>NGI OLD / NGI NEW / NGI NO</td><td>NGI</td><td>Tea &amp; Conveyance 235 / 40 / 0 · Meal 75</td></tr>
+    <tr><td>NGN OLD / NGN NEW / NGN NO</td><td>NGN</td><td>Tea &amp; Conveyance 265 / 40 / 0 · Meal 75</td></tr>
+    <tr><td>NGG STAFF</td><td>NGG</td><td>Meal 100</td></tr>
+  </table></div>
+  <p>To change what a group gets paid, change the rate here once. Everyone in that group follows.</p>
+</section>
+
+<section id="s8" class="stage">
+  <h3 class="st"><span class="n">8</span> Employees <span class="who">each person</span></h3>
+  <p><b>Open</b> <span class="screen">Employee</span>. For every person, fill:</p>
+  <div class="tablewrap"><table><tr><th>Where</th><th>Box</th><th>What to put</th></tr>
+    <tr><td>Overview</td><td><span class="field">Gender</span>, <span class="field">Date of Joining</span>, <span class="field">Company</span>, <span class="field">Status</span></td><td>Gender decides maternity/paternity leave. Status = Active.</td></tr>
+    <tr><td>Attendance</td><td><span class="field">Attendance Device ID</span></td><td>The number on the fingerprint machine — must match exactly.</td></tr>
+    <tr><td>Attendance</td><td><span class="field">Default Shift</span>, <span class="field">Holiday List</span></td><td>Their shift. Holiday list only for women (the Teej list); others use the company's.</td></tr>
+    <tr><td>Nepal HRMS</td><td><span class="field">Employee Category</span></td><td>Plant or Officer &amp; Admin.</td></tr>
+    <tr><td>Nepal HRMS</td><td><span class="field">Allowance Category</span></td><td>Their tea group (OLD / NEW / NO).</td></tr>
+    <tr><td>Payroll Inputs</td><td><span class="field">SSF Applicable</span></td><td>Ticked if in the Social Security Fund.</td></tr>
+    <tr><td>Payroll Inputs</td><td><span class="field">Initial Basic</span>, <span class="field">HRA Eligible</span>, <span class="field">Gas Allowance</span>, <span class="field">Education Allowance</span></td><td>NGI and NGN only, from the salary sheet.</td></tr>
+    <tr><td>Payroll Inputs</td><td><span class="field">Dearness Allowance</span>, <span class="field">Other Allowance</span>, <span class="field">Fixed Allowance</span>, <span class="field">Fuel Allowance</span>, <span class="field">Maintenance Allowance</span></td><td>Monthly amounts from the salary sheet (fixed and maintenance: NGG, NGK).</td></tr>
+    <tr><td>Payroll Inputs</td><td><span class="field">Late Fine Exempt</span></td><td>Only managers (CEO, AGM, managers, assistant managers, company secretary).</td></tr>
+  </table></div>
+  <div class="note tip"><b class="t">Many people at once</b><p>Use <span class="screen">Employee Category Tool</span> to set the category for a whole department in one go. For a whole company's salary sheet, the system team can load it in one step (it matches people by code or name).</p></div>
+</section>
+
+<section id="s9" class="stage">
+  <h3 class="st"><span class="n">9</span> Give everyone a shift</h3>
+  <p><b>Open</b> <span class="screen">Shift Assignment Tool</span>. For each shift: choose Company, Shift Type, Start Date = 2026-07-17, leave End Date empty, tick the people, click <span class="btn">Assign Shift</span>.</p>
+  <p><b>Check</b>: <span class="screen">Shift Assignment</span> list — every active person has one row with status Active.</p>
+</section>
+
+<section id="s10" class="stage">
+  <h3 class="st"><span class="n">10</span> Leave types</h3>
+  <p><b>Open</b> <span class="screen">Leave Type</span>. Keep only these, set like this:</p>
+  <div class="tablewrap"><table><tr><th>Leave Type</th><th>Is Earned Leave</th><th>Frequency / Rounding</th><th>Allow Encashment</th><th>Is Leave Without Pay</th></tr>
+    <tr><td>Casual Leave</td><td>Ticked</td><td>Monthly / 0.25</td><td>Ticked</td><td>—</td></tr>
+    <tr><td>Sick Leave</td><td>Ticked</td><td>Monthly / 0.25</td><td>Ticked</td><td>—</td></tr>
+    <tr><td>Maternity Leave</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>Paternity Leave</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+    <tr><td>Leave Without Pay</td><td>—</td><td>—</td><td>—</td><td>Ticked</td></tr>
+  </table></div>
+  <p>Maternity is blocked for men and Paternity for women automatically — the system reads the employee's Gender.</p>
+</section>
+
+<section id="s11" class="stage">
+  <h3 class="st"><span class="n">11</span> Leave period <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Leave Period</span> → <span class="btn">+ Add</span>: From 2026-07-17, To 2027-07-16, the Company, <span class="field">Is Active</span> ticked.</p>
+</section>
+
+<section id="s12" class="stage">
+  <h3 class="st"><span class="n">12</span> Leave policies <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Leave Policy</span>. Each company needs two, then <span class="btn">Submit</span>:</p>
+  <div class="tablewrap"><table><tr><th>Policy</th><th>Leave allocations</th></tr>
+    <tr><td>Regular (Karnali – NGK)</td><td>Casual Leave 8 · Sick Leave 12</td></tr>
+    <tr><td>Regular (all other companies)</td><td>Casual Leave 21 · Sick Leave 12</td></tr>
+    <tr><td>Probation (every company)</td><td>Casual Leave 12 (1 a month)</td></tr>
+  </table></div>
+</section>
+
+<section id="s13" class="stage">
+  <h3 class="st"><span class="n">13</span> Give everyone their leave policy</h3>
+  <p><b>Open</b> <span class="screen">Leave Control Panel</span>. Choose Company, <span class="field">Dates Based On</span> = Leave Period, the Leave Period, the Leave Policy. Filter to the right people (probation or not), tick them, and click <span class="btn">Allocate Leave</span>.</p>
+  <p>You do <b>not</b> add leave each month. The system adds 2.75 days (or 1 on probation) at the start of every BS month by itself.</p>
+  <p><b>Check</b>: <span class="screen">Yearly Leave Details BS</span> shows a Total Yearly Leave for each person.</p>
+</section>
+
+<section id="s14" class="stage">
+  <h3 class="st"><span class="n">14</span> Payroll period <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Payroll Period</span> → <span class="btn">+ Add</span>. Name it like <b>83/84 - NGI</b>, Company, Start 2026-07-17, End 2027-07-16. Without it, income tax cannot be worked out.</p>
+</section>
+
+<section id="s15" class="stage">
+  <h3 class="st"><span class="n">15</span> Income tax slab <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Income Tax Slab</span> → <span class="btn">+ Add</span>. Name like <b>Nepal 83/84 - NGI</b>. Effective From 2026-07-17. Tick <span class="field">Allow Tax Exemption</span>. Fill the table, then <span class="btn">Submit</span>:</p>
+  <div class="tablewrap"><table><tr><th>From Amount</th><th>To Amount</th><th>Percent</th><th>Condition</th></tr>
+    <tr><td class="num">0</td><td class="num">10,00,000</td><td>1</td><td><span class="field">not custom_ssf_applicable</span></td></tr>
+    <tr><td class="num">10,00,001</td><td class="num">15,00,000</td><td>10</td><td></td></tr>
+    <tr><td class="num">15,00,001</td><td class="num">25,00,000</td><td>20</td><td></td></tr>
+    <tr><td class="num">25,00,001</td><td class="num">40,00,000</td><td>27</td><td></td></tr>
+    <tr><td class="num">40,00,001</td><td class="num">(empty)</td><td>29</td><td></td></tr>
+  </table></div>
+  <p>The condition on the first row is what makes SSF members not pay the 1% SST. Type it exactly. Next year, when the budget changes rates, make a new slab — do not edit this one.</p>
+</section>
+
+<section id="s16" class="stage">
+  <h3 class="st"><span class="n">16</span> Salary components</h3>
+  <p><b>Open</b> <span class="screen">Salary Component</span>. These already exist. Two things to look at:</p>
+  <ul class="plain">
+    <li><b>Income Tax</b> must have <span class="field">Variable Based On Taxable Salary</span> ticked. <b>SSF</b> must have <span class="field">Exempted from Income Tax</span> ticked.</li>
+    <li>Every component needs an <span class="field">Accounts</span> row for each company (which ledger it posts to). <b>This is the accountant's job</b>, and today none are filled — salary slips will not submit until they are.</li>
+  </ul>
+  <p>The ones worked out from attendance (tick <span class="field">Is Attendance Driven</span>) are set like this:</p>
+  <div class="tablewrap"><table><tr><th>Component</th><th>Condition Type</th><th>Unit</th><th>Rate Basis</th></tr>
+    <tr><td>Tea &amp; Conveyance</td><td>Status = Present</td><td>Per Day</td><td>Fixed Rate (from Allowance Category)</td></tr>
+    <tr><td>Meal</td><td>Meal Entitlement (1.5 h)</td><td>Per Day</td><td>Fixed Rate (from Allowance Category)</td></tr>
+    <tr><td>Overtime</td><td>Authorised Overtime</td><td>Per Hour</td><td>Hourly Basic × Multiplier, 1.5</td></tr>
+    <tr><td>Late Fine</td><td>Late Time</td><td>Per Hour</td><td>Hourly Basic × Multiplier, 1</td></tr>
+    <tr><td>Daily Wage</td><td>Status = Present (half day = half)</td><td>Per Day</td><td>Daily Wage</td></tr>
+  </table></div>
+</section>
+
+<section id="s17" class="stage">
+  <h3 class="st"><span class="n">17</span> Salary structure <span class="who">each company</span></h3>
+  <p><b>Open</b> <span class="screen">Salary Structure</span>. These are built from each company's salary sheet and already submitted:</p>
+  <div class="tablewrap"><table><tr><th>Structure</th><th>What it holds</th></tr>
+    <tr><td>NGI Staff 83/84, NGN Staff 83/84</td><td>Basic, Dearness, Other, HRA (25% / 27% of Initial Basic), Gas, Education, SSF Addition 20% · SSF 31%, Income Tax</td></tr>
+    <tr><td>NGG Staff 83/84, NGK Staff 83/84</td><td>Basic (salary scale), Fixed, Dearness, Other, Fuel, (Maintenance at NGK), SSF Addition 20% · SSF 31%, Income Tax</td></tr>
+    <tr><td>NGK Daily Wage 83/84</td><td>Only Income Tax — pay comes from days worked. <span class="field">Daily Wage</span> is ticked.</td></tr>
+  </table></div>
+  <div class="note careful"><b class="t">Do not edit a structure people are on</b><p>Rates changed for next year? Make a new structure (for example <b>NGI Staff 84/85</b>) and assign it from Shrawan 1.</p></div>
+</section>
+
+<section id="s18" class="stage">
+  <h3 class="st"><span class="n">18</span> Salary structure assignment <span class="who">each person</span></h3>
+  <p><b>Open</b> <span class="screen">Salary Structure Assignment</span> → <span class="btn">+ Add</span> (or <span class="btn">Assign to Employees</span> from the structure for many at once).</p>
+  <div class="tablewrap"><table><tr><th>Box</th><th>Set to</th></tr>
+    <tr><td><span class="field">Employee</span></td><td>The person</td></tr>
+    <tr><td><span class="field">Salary Structure</span></td><td>Their company's structure (labourers: Daily Wage)</td></tr>
+    <tr><td><span class="field">From Date</span></td><td>2026-07-17, or the first day of their joining BS month</td></tr>
+    <tr><td><span class="field">Base</span></td><td>Their monthly <b>Basic</b> (NGG/NGK: basic + grade; labourers: the day rate, e.g. 754)</td></tr>
+    <tr><td><span class="field">Income Tax Slab</span></td><td>Nepal 83/84 - (company)</td></tr>
+    <tr><td><span class="field">Payroll Payable Account</span></td><td>347301 - Salary Payable - (company)</td></tr>
+  </table></div>
+  <div class="note careful"><b class="t">Don't skip Payroll Payable Account</b><p>If it is empty, the person is silently left out of every salary run.</p></div>
+</section>
+
+<section id="s19" class="stage">
+  <h3 class="st"><span class="n">19</span> Checks before the first month</h3>
+  <ul class="plain">
+    <li>The fingerprint machine is sending punches: <span class="screen">Employee Checkin</span> shows today's punches.</li>
+    <li><span class="screen">Monthly Attendance BS</span> shows attendance, with Late and Shift filled in.</li>
+    <li>Every person who should be paid has an Employee Category, an Allowance Category (if they get tea) and a submitted Salary Structure Assignment.</li>
+    <li>The accountant has filled the Accounts rows (stage 16) and set Staff Advance to Receivable (stage 2).</li>
+  </ul>
+</section>
+
+<section id="s20" class="stage">
+  <h3 class="st"><span class="n">20</span> A test run</h3>
+  <ol class="steps">
+    <li>Make a <span class="screen">Payroll Entry</span> for last month. Click <span class="btn">Get Employees</span> and <span class="btn">Save</span>. Do not submit.</li>
+    <li>Click <span class="btn">Nepal HRMS</span> → <span class="btn">Prepare Payroll Inputs</span>.</li>
+    <li>Click <span class="btn">Create Salary Slips</span>, then open 5 slips and compare them with the old Excel sheet line by line.</li>
+    <li>If they match, you are ready. If not, cancel the Payroll Entry (the slips go with it) and fix the stage that is wrong.</li>
+  </ol>
+  <div class="note good"><b class="t">Setup done</b><p>From now on, use <b>Part B</b> below — the everyday and month-end work.</p></div>
+</section>
+
+<section id="partb">
+  <h2>Part B — Everyday and monthly work</h2>
+  <p class="sub">Once setup is done, this is all the HR person does.</p>
+</section>
+
+<section id="attendance">
+  <h2>Attendance <span class="when">every day</span></h2>
+  <p class="sub">The fingerprint machine makes attendance by itself. Your job is to check it and fix mistakes.</p>
+  <p class="np">हाजिरी मेसिनले आफैं बनाउँछ। तपाईंले जाँच्ने र गल्ती सच्याउने मात्र हो।</p>
+  <h3>Check yesterday</h3>
+  <ol class="steps">
+    <li>Open <span class="screen">Monthly Attendance BS</span>.</li>
+    <li>Choose your <span class="field">Company</span>, <span class="field">Fiscal Year</span> and <span class="field">BS Month</span>. Leave <span class="field">View</span> on <b>Detail</b>.</li>
+    <li>Look for red flags: <b>Not Marked</b>, <b>Absent</b> for someone you saw at work, or an <b>IN</b> time with no <b>OUT</b> time.</li>
+  </ol>
+  <h3>Someone forgot to punch</h3>
+  <ol class="steps">
+    <li>Open <span class="screen">Attendance</span> and find that person and date.</li>
+    <li>If it is a Draft, change the <span class="field">Status</span> and times, then <span class="btn">Submit</span>. If it is already submitted, click <span class="btn">Cancel</span>, then <span class="btn">Amend</span>, fix it, and <span class="btn">Submit</span>.</li>
+    <li>Write the reason in the remarks — for example “machine down, confirmed by supervisor”.</li>
+  </ol>
+  <div class="note careful"><b class="t">Careful</b><p>Do not mark someone Present to be kind. Tea, meals, overtime and pay all follow this line.</p></div>
+</section>
+
+<section id="shifts">
+  <h2>Shifts <span class="when">when needed</span></h2>
+  <h3>Give someone their normal shift</h3>
+  <ol class="steps">
+    <li>Open <span class="screen">Shift Assignment Tool</span>.</li>
+    <li>Pick the <span class="field">Company</span>, the <span class="field">Shift Type</span> (for example <b>6 AM - 2 PM</b>) and the <span class="field">Start Date</span>. Leave <span class="field">End Date</span> empty.</li>
+    <li>Tick the employees and click <span class="btn">Assign Shift</span>.</li>
+  </ol>
+  <h3>Someone changes shift</h3>
+  <ol class="steps">
+    <li>Open <span class="screen">Shift Request</span> and click <span class="btn">+ Add</span>.</li>
+    <li>Choose the employee, the <b>new</b> <span class="field">Shift Type</span> and the <span class="field">From Date</span>.</li>
+    <li>For <b>one day or a few days</b>, fill <span class="field">To Date</span>. The old shift comes back by itself after that.<br>For a <b>permanent move</b>, leave <span class="field">To Date</span> empty.</li>
+    <li>Set status to <b>Approved</b> and <span class="btn">Submit</span>.</li>
+  </ol>
+  <div class="note good"><b class="t">Why this matters</b><p>Late time, overtime and meals are all measured against the shift of <b>that day</b>. 09:08 is 8 minutes late on the 9 AM shift, but early on the 12 PM shift.</p></div>
+</section>
+
+<section id="leave">
+  <h2>Leave <span class="when">when asked</span></h2>
+  <p class="sub">There are only four kinds of paid leave. Anything else is unpaid.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Leave</th><th>Who</th><th>Note</th></tr>
+    <tr><td>Casual Leave</td><td>Everyone</td><td>Karnali (NGK): 8 a year. Others: 21.</td></tr>
+    <tr><td>Sick Leave</td><td>Everyone</td><td>12 a year.</td></tr>
+    <tr><td>Maternity Leave</td><td>Women only</td><td>When a child is born. Not paid out in cash.</td></tr>
+    <tr><td>Paternity Leave</td><td>Men only</td><td>When a child is born. Not paid out in cash.</td></tr>
+  </table></div>
+  <p>Leave grows by <b>2.75 days every month</b> (1 a month on probation). You do not add it — the system does, at the start of each BS month.</p>
+  <h3>Enter a leave</h3>
+  <ol class="steps">
+    <li>Open <span class="screen">Leave Application</span> → <span class="btn">+ Add</span>.</li>
+    <li>Choose employee, <span class="field">Leave Type</span>, <span class="field">From Date</span>, <span class="field">To Date</span>. Tick <span class="field">Half Day</span> if needed.</li>
+    <li>Set <span class="field">Status</span> to <b>Approved</b> and <span class="btn">Submit</span>.</li>
+  </ol>
+  <div class="note tip"><b class="t">Tip</b><p>To see how much leave someone has left, open the report <span class="screen">Yearly Leave Details BS</span>.</p></div>
+</section>
+
+<section id="overtime">
+  <h2>Overtime sheet <span class="when">on the day</span></h2>
+  <p class="sub">Only hours written on a submitted Overtime Sheet are paid. No sheet, no overtime money.</p>
+  <p class="np">ओभरटाइम सिटमा नभएको घण्टाको पैसा आउँदैन।</p>
+  <ol class="steps">
+    <li>Open <span class="screen">Overtime Sheet</span> → <span class="btn">+ Add</span>.</li>
+    <li>Fill <span class="field">Company</span>, <span class="field">Date</span> and <span class="field">Why Extra Work Was Needed</span> (for example “gas loading backlog”).</li>
+    <li>Add each person in the <b>Employees</b> table. The system shows whether they get <b>Overtime</b> or <b>Replacement Leave</b>.</li>
+    <li><span class="btn">Submit</span> the sheet.</li>
+    <li><b>After the day is over</b>, open the sheet again and click <span class="btn">Measure from Attendance</span>. The system reads the punches and fills <b>Worked Hours (measured)</b>.</li>
+  </ol>
+  <div class="note good"><b class="t">How hours are counted</b><p>Working day: only hours <b>before</b> the shift starts and <b>after</b> it ends. Holiday: every hour worked. Rounded to the nearest half hour — 7:53 becomes 8, 7:34 becomes 7.5.</p></div>
+</section>
+
+<section id="advance">
+  <h2>Giving an advance <span class="when">when asked</span></h2>
+  <p class="sub">Record it once. The system takes the instalment from salary every month until it is paid back.</p>
+  <ol class="steps">
+    <li>Open <span class="screen">Employee Advance</span> → <span class="btn">+ Add</span>.</li>
+    <li>Fill employee, <span class="field">Advance Amount</span> and <span class="field">Purpose</span>.</li>
+    <li>Keep <span class="field">Repay Unclaimed Amount from Salary</span> ticked. Type the <span class="field">Monthly Instalment</span> (for example 2,500). If deduction should start later, fill <span class="field">Recover From</span>.</li>
+    <li><span class="btn">Submit</span>.</li>
+    <li>When the cash is handed over, click <span class="btn">Make</span> → <b>Bank Entry</b> (or Cash), choose the <span class="field">JV Type</span>, and <span class="btn">Submit</span> the voucher.</li>
+  </ol>
+  <p>Example: 10,000 at 2,500 a month → Bhadra 7,500 left → Ashwin 5,000 → … → status becomes <b>Returned</b>.</p>
+  <div class="note careful"><b class="t">Careful</b><p>An advance that was never paid out (step 5) is never deducted. The system only takes back money it knows was given.</p></div>
+</section>
+
+<section id="holidays">
+  <h2>Adding a holiday</h2>
+  <ol class="steps">
+    <li>Open <span class="screen">Holiday Bulk Update</span> → <span class="btn">+ Add</span>.</li>
+    <li>Fill <span class="field">Holiday Date</span> and <span class="field">Holiday</span> (the name, like “Ghatasthapana”).</li>
+    <li>Tick <span class="field">All Holiday Lists</span>, or choose only some lists in <span class="field">Holiday Lists</span>.</li>
+    <li><span class="btn">Save</span>, then click <span class="btn">Apply</span>.</li>
+  </ol>
+  <div class="note tip"><b class="t">Teej</b><p>Teej is a holiday for <b>women only</b>. Add it only to the women's holiday lists, not to all.</p></div>
+</section>
+
+<section id="category">
+  <h2>Who gets overtime</h2>
+  <p class="sub">Each person has an <b>Employee Category</b>. It decides overtime money or replacement leave.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Category</th><th>Works on a holiday →</th><th>Extra hours →</th></tr>
+    <tr><td><b>Plant</b></td><td>Overtime money</td><td>Overtime money + meals</td></tr>
+    <tr><td><b>Officer &amp; Admin</b></td><td>Replacement leave day</td><td>Nothing extra</td></tr>
+  </table></div>
+  <h3>Change many people at once</h3>
+  <ol class="steps">
+    <li>Open <span class="screen">Employee Category Tool</span>.</li>
+    <li>Pick <span class="field">Company</span>, then <span class="field">Assign Category</span>. Use Department or Designation to narrow the list.</li>
+    <li>Tick the people and click <span class="btn">Assign Category</span>.</li>
+  </ol>
+</section>
+
+<section id="newjoin">
+  <h2>A new employee joins</h2>
+  <p class="sub">Do these in order. If one is missed, the person will be missing from salary.</p>
+  <ol class="steps">
+    <li><span class="screen">Employee</span> — name, <span class="field">Gender</span>, <span class="field">Date of Joining</span>, <span class="field">Company</span>, Department, Designation.</li>
+    <li>On the same Employee, in <b>Payroll Inputs</b>: <span class="field">Employee Category</span>, <span class="field">Allowance Category</span> (tea group), <span class="field">SSF Applicable</span>, and their Dearness / Other / Fixed allowance amounts. Tick HRA, Gas or Education if they get it. Tick <span class="field">Late Fine Exempt</span> only for managers.</li>
+    <li><span class="screen">Shift Assignment Tool</span> — give them a shift.</li>
+    <li><span class="screen">Leave Policy Assignment</span> — give them their company's leave policy (probation policy if on probation).</li>
+    <li><span class="screen">Salary Structure Assignment</span> — choose the company structure (for example <b>NGN Staff 83/84</b>), <span class="field">From Date</span> = first day of the BS month, <span class="field">Base</span> = their <b>Basic</b>. Labourers use the <b>Daily Wage</b> structure with Base = day rate. <span class="btn">Submit</span>.</li>
+  </ol>
+</section>
+
+<section id="monthend">
+  <h2>Month-end salary <span class="when">every month</span></h2>
+  <p class="sub">The most important page. Tick each box as you finish — the ticks stay on your computer.</p>
+  <p class="np">महिनाको अन्त्यमा तलब बनाउने तरिका — क्रम नबिगारी गर्नुहोस्।</p>
+  <div class="flow"><span>Attendance</span><i>→</i><span>Overtime sheets</span><i>→</i><span>Extras</span><i>→</i><span>Payroll Entry (save)</span><i>→</i><span>Prepare inputs</span><i>→</i><span>Create slips</span><i>→</i><span>Check</span><i>→</i><span>Submit slips</span></div>
+  <div class="check" id="checklist">
+    <h3>Month-end checklist</h3>
+    <label><input type="checkbox" id="c1"><span><b>Attendance is complete</b> for the whole BS month. No “Not Marked” days in <span class="screen">Monthly Attendance BS</span>.</span></label>
+    <label><input type="checkbox" id="c2"><span><b>Overtime sheets</b> for the month are submitted, and <span class="btn">Measure from Attendance</span> has been clicked on each.</span></label>
+    <label><input type="checkbox" id="c3"><span><b>Extras entered</b>: one-off amounts on <span class="screen">Payroll Adjustment</span>, bonus on <span class="screen">Dashain Bonus</span>, raises on <span class="screen">Salary Revision</span>, new advances paid out.</span></label>
+    <label><input type="checkbox" id="c4"><span><b>New <span class="screen">Payroll Entry</span></b>: choose Company, <span class="field">Payroll Frequency</span> = Monthly, and a <span class="field">Posting Date</span> inside the month. The start and end dates jump to the BS month by themselves. Click <span class="btn">Get Employees</span>, then <span class="btn">Save</span>. <b>Do not submit yet.</b></span></label>
+    <label><input type="checkbox" id="c5"><span>Click <span class="btn">Nepal HRMS</span> → <span class="btn">Prepare Payroll Inputs</span>. This adds tea, meals, overtime, late fines, daily wages and advance instalments. It must be done <b>before</b> the next step.</span></label>
+    <label><input type="checkbox" id="c6"><span>Click <span class="btn">Create Salary Slips</span>. This submits the Payroll Entry and makes one slip per person.</span></label>
+    <label><input type="checkbox" id="c7"><span><b>Check a few slips</b> by hand with the money rules above. Look hard at tax — change it if accounts says so (see <a href="#tax">Income tax</a>).</span></label>
+    <label><input type="checkbox" id="c8"><span>Click <span class="btn">Submit Salary Slip</span>. The accounts voucher is made by itself.</span></label>
+    <div class="row">
+      <button class="act" type="button" id="clearChecks">Start a new month (clear ticks)</button>
+      <button class="act" type="button" id="printPage">Print this handbook</button>
+    </div>
+  </div>
+  <div class="note tip"><b class="t">Changed something after step 5?</b><p>Click <span class="btn">Prepare Payroll Inputs</span> again — it replaces what it made before, it never adds twice. If the slips are already made, open each changed person's slip and click <span class="btn">Save</span> so it picks up the new figures.</p></div>
+</section>
+
+<section id="adjust">
+  <h2>One-off amounts</h2>
+  <p class="sub">For things that happen only this month for some people — an extra deduction, an extra payment.</p>
+  <ol class="steps">
+    <li>Open <span class="screen">Payroll Adjustment</span> → <span class="btn">+ Add</span>.</li>
+    <li>Fill <span class="field">Company</span> and a <span class="field">Payroll Date</span> inside the BS month.</li>
+    <li>Add one row per person: employee, <span class="field">Component</span> (for example Load/Unload Allowance, Additional SSF), <span class="field">Amount</span>, note.</li>
+    <li><span class="btn">Submit</span>. It appears on that month's slips. Cancel it to take everything back.</li>
+  </ol>
+  <div class="note careful"><b class="t">Do not type here</b><p>Tea, meals, overtime and late fine — the system works these out. Typing them here pays them twice.</p></div>
+</section>
+
+<section id="tax">
+  <h2>Income tax</h2>
+  <p class="sub">The system works out tax on every slip. Sometimes accounts knows a better figure — then you change it.</p>
+  <ol class="steps">
+    <li>Open the person's <span class="screen">Salary Slip</span> (while it is still a Draft).</li>
+    <li>Scroll to the <b>Income Tax</b> section. <span class="field">Computed Income Tax</span> shows the system's figure.</li>
+    <li>Tick <span class="field">Override Income Tax</span> and type the correct amount in <span class="field">Income Tax (manual)</span>. Typing 0 means no tax this month.</li>
+    <li><span class="btn">Save</span>. Net pay changes by itself. Untick to go back to the system figure.</li>
+  </ol>
+</section>
+
+<section id="reports">
+  <h2>Reading the reports</h2>
+  <h3><span class="screen">Monthly Attendance BS</span></h3>
+  <p><span class="field">View</span> = <b>Detail</b> shows every day. <b>Summary</b> shows one line per person — like the paper attendance summary.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Column</th><th>Meaning</th></tr>
+    <tr><td>Shift</td><td>The shift that person had on that day.</td></tr>
+    <tr><td>Late (min)</td><td>Minutes after the shift started. Not counted on holidays or half days.</td></tr>
+    <tr><td>Before ofc. Time</td><td>Minutes left before the shift ended.</td></tr>
+    <tr><td>Late Time (summary)</td><td>Late + Before ofc. Time added together, like the paper sheet.</td></tr>
+    <tr><td>O.T. (hrs)</td><td>Hours outside the shift (all hours on a holiday). Plant staff only. Paid only if on an Overtime Sheet.</td></tr>
+    <tr><td>Work In Holiday</td><td>Came to work on a holiday.</td></tr>
+    <tr><td>Meal / Tea</td><td>How many meals and tea-days that day earned.</td></tr>
+  </table></div>
+  <h3><span class="screen">Yearly Leave Details BS</span></h3>
+  <p>Leave taken in each BS month, what the person is entitled to so far, and <b>Leave Remaining</b>. For Officer &amp; Admin staff, holidays they worked are added back to their leave — but never above what they are entitled to.</p>
+  <h3><span class="screen">Work On Holiday BS</span></h3>
+  <p>How many holidays each person worked, month by month, and whether they get overtime.</p>
+</section>
+
+<section id="dashain">
+  <h2>Dashain bonus <span class="when">once a year</span></h2>
+  <p class="sub">One month's pay for a full year worked. Less for people who joined during the year.</p>
+  <ol class="steps">
+    <li>Open <span class="screen">Dashain Bonus</span> → <span class="btn">+ Add</span>.</li>
+    <li>Fill <span class="field">Company</span>, <span class="field">Fiscal Year</span> and <span class="field">Payout Date</span> (a date in the month it will be paid).</li>
+    <li>Not giving a bonus this year? Untick <span class="field">Bonus Given This Year</span>, write the <span class="field">Reason</span>, and <span class="btn">Submit</span>. Done.</li>
+    <li>Giving it: choose <span class="field">One Month Means</span> (usually <b>Basic</b>) and keep <span class="field">Percent of One Month</span> at 100.</li>
+    <li>Click <span class="btn">Get Employees</span>. Check the list — you can change any amount.</li>
+    <li><span class="btn">Submit</span>. It goes on that month's salary.</li>
+  </ol>
+  <p>Example: joined 2.6 months before Dashain, Basic 20,000 → 20,000 × 2.6 ÷ 12 = <b>Rs 4,333</b>.</p>
+</section>
+
+<section id="raise">
+  <h2>Salary increase <span class="when">once a year</span></h2>
+  <p class="sub">Never type a new Basic on the old record. Always use Salary Revision — it keeps the history safe.</p>
+  <ol class="steps">
+    <li>Open <span class="screen">Salary Revision</span> → <span class="btn">+ Add</span>.</li>
+    <li>Fill <span class="field">Company</span> and <span class="field">Effective From</span> — always the <b>first day of a BS month</b>.</li>
+    <li>Type the <span class="field">Hike % for Everyone</span> (for example 10) and click <span class="btn">Get Employees</span>.</li>
+    <li>Change any row: type a <span class="field">Hike %</span> or a <span class="field">New Basic</span> — the other fills itself. Change <span class="field">New DA</span> if dearness allowance also rises.</li>
+    <li>Raise decided late (for example, starts Shrawan but agreed in Mangsir)? Tick <span class="field">Pay Arrears</span> and choose <span class="field">Arrears Paid In</span>. The months already paid at the old rate are paid as arrears.</li>
+    <li><span class="btn">Submit</span>.</li>
+  </ol>
+</section>
+
+<section id="problems">
+  <h2>When something goes wrong</h2>
+  <p class="sub">Click a problem to see why it happens and what to do.</p>
+  <div class="qa">
+    <details><summary>A person is missing from the Payroll Entry</summary>
+      <p><b>Why:</b> they have no submitted <span class="screen">Salary Structure Assignment</span>, or it starts after this month.</p>
+      <p><b>Fix:</b> make one (see <a href="#newjoin">new employee</a>, step 5), then click <span class="btn">Get Employees</span> again.</p></details>
+    <details><summary>Someone's salary slip shows 0 days or very low pay</summary>
+      <p><b>Why:</b> their attendance for the month is missing or marked Absent.</p>
+      <p><b>Fix:</b> fix the attendance, click <span class="btn">Prepare Payroll Inputs</span> again, then open the slip and click <span class="btn">Save</span>.</p></details>
+    <details><summary>Overtime is not on the slip</summary>
+      <p><b>Why:</b> no submitted Overtime Sheet for that day, the sheet was not measured, or the person is Officer &amp; Admin.</p>
+      <p><b>Fix:</b> submit the sheet, click <span class="btn">Measure from Attendance</span>, then <span class="btn">Prepare Payroll Inputs</span> again.</p></details>
+    <details><summary>No tea money for someone</summary>
+      <p><b>Why:</b> their <span class="field">Allowance Category</span> is empty or set to <b>NO</b>.</p>
+      <p><b>Fix:</b> set the right tea group on the Employee, then <span class="btn">Prepare Payroll Inputs</span> again.</p></details>
+    <details><summary>A manager got a late fine</summary>
+      <p><b>Fix:</b> tick <span class="field">Late Fine Exempt</span> on their Employee and run <span class="btn">Prepare Payroll Inputs</span> again.</p></details>
+    <details><summary>The advance was not deducted</summary>
+      <p><b>Why:</b> the cash payout voucher (Bank/Cash Entry) was never submitted, or <span class="field">Recover From</span> is a later month.</p>
+      <p><b>Fix:</b> submit the payout voucher, then <span class="btn">Prepare Payroll Inputs</span> again.</p></details>
+    <details><summary>“Submit Salary Slip” fails with an account error</summary>
+      <p><b>Why:</b> the salary lines are not yet linked to accounts in the books.</p>
+      <p><b>Fix:</b> stop and call the accountant or the system team. Do not try other buttons.</p></details>
+    <details><summary>Late time looks wrong for one day</summary>
+      <p><b>Why:</b> the person was on a different shift that day, but no Shift Request was entered.</p>
+      <p><b>Fix:</b> enter the <span class="screen">Shift Request</span> for that day (see <a href="#shifts">Shifts</a>). Then Cancel and Amend that day's Attendance so it re-measures.</p></details>
+  </div>
+  <div class="note good"><b class="t">Golden rule</b><p>If you are unsure, <b>Save</b> but do not <b>Submit</b>. A draft can always be fixed.</p></div>
+</section>
+
+<section id="partc">
+  <h2>Part C — Every screen, one by one</h2>
+  <p class="sub">All 119 HR and payroll screens in the system, grouped by what they are for. <b>46</b> are in use today; the rest are ready if the company wants them, or are not meant for Nepal.</p>
+  <p class="np">प्रणालीका सबै HR र तलब सम्बन्धी स्क्रिनहरू — प्रत्येक के हो, कहिले चलाउने, कुन बटन थिच्ने।</p>
+  <div class="legend"><span class="pill p-use">In use</span> we use it now <span class="pill p-ready">Ready — not used yet</span> works, switch on when needed <span class="pill p-no">Not for Nepal</span> leave it alone</div>
+  <div class="filterbar"><label for="scrfind">Find a screen</label><input id="scrfind" type="search" placeholder="Type a screen name, e.g. leave, advance, shift" autocomplete="off"><span id="scrcount"></span></div>
+</section>
+<section class="refgroup" id="c-organisation-settings"><h3 class="grp">Organisation &amp; settings</h3><div class="reflist">
+<article class="scr" data-name="company organisation &amp; settings one of the 7 group companies, with its default accounts, holiday list and cost centre.">
+  <header><h4>Company</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One of the 7 group companies, with its default accounts, holiday list and cost centre.</dd>
+    <dt>When to use</dt><dd>Once at setup; again only if an account changes (Part A stage 2).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Cost Centers</span> <span class="btn">Chart of Accounts</span> <span class="btn">Manage › Delete Transactions (never use)</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Everything</dd>
+  </dl>
+</article>
+<article class="scr" data-name="fiscal year organisation &amp; settings the nepali year, e.g. 83/84 = shrawan 1 to ashadh end, with a row for each company.">
+  <header><h4>Fiscal Year</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The Nepali year, e.g. 83/84 = Shrawan 1 to Ashadh end, with a row for each company.</dd>
+    <dt>When to use</dt><dd>Before every new year starts. Without it, nothing can be saved in that year.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Leave Period · Payroll Period · every document</dd>
+  </dl>
+</article>
+<article class="scr" data-name="holiday list organisation &amp; settings saturdays and festivals for one company. a second list per company holds teej for women.">
+  <header><h4>Holiday List</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Saturdays and festivals for one company. A second list per company holds Teej for women.</dd>
+    <dt>When to use</dt><dd>Once a year; add festivals with Holiday Bulk Update.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Add to Holidays (weekly off)</span> <span class="btn">Clear Table</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Fiscal Year <b class="arrow">→</b> Company · Employee · Attendance · Leave</dd>
+  </dl>
+</article>
+<article class="scr" data-name="holiday bulk update organisation &amp; settings adds one festival to many holiday lists in one go.">
+  <header><h4>Holiday Bulk Update</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Adds one festival to many holiday lists in one go.</dd>
+    <dt>When to use</dt><dd>When a new holiday is announced.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Apply</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Holiday List <b class="arrow">→</b> Holiday List</dd>
+  </dl>
+</article>
+<article class="scr" data-name="department organisation &amp; settings accounts, sales &amp; marketing, plant… one set per company.">
+  <header><h4>Department</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Accounts, Sales &amp; Marketing, Plant… one set per company.</dd>
+    <dt>When to use</dt><dd>At setup; when a new section starts.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Company <b class="arrow">→</b> Employee · reports filter</dd>
+  </dl>
+</article>
+<article class="scr" data-name="designation organisation &amp; settings job title — driver, accountant, plant worker…">
+  <header><h4>Designation</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Job title — Driver, Accountant, Plant Worker…</dd>
+    <dt>When to use</dt><dd>At setup; when a new post is created.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Company <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="branch organisation &amp; settings a branch/location. only needed if staff must be split by place.">
+  <header><h4>Branch</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A branch/location. Only needed if staff must be split by place.</dd>
+    <dt>When to use</dt><dd>If a company has several sites to report separately.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Company <b class="arrow">→</b> Employee · report filters</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employment type organisation &amp; settings permanent, probation, contract, daily wage…">
+  <header><h4>Employment Type</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Permanent, Probation, Contract, Daily Wage…</dd>
+    <dt>When to use</dt><dd>When filling the Employee.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee · leave policy choice</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee grade organisation &amp; settings a pay grade with a default salary structure. our grades live in the sheet instead.">
+  <header><h4>Employee Grade</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A pay grade with a default salary structure. Our grades live in the sheet instead.</dd>
+    <dt>When to use</dt><dd>Not needed today.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="identification document type organisation &amp; settings kinds of id (citizenship, passport).">
+  <header><h4>Identification Document Type</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Kinds of ID (citizenship, passport).</dd>
+    <dt>When to use</dt><dd>If you store ID documents.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="hr settings organisation &amp; settings company-wide hr switches: naming of employees, leave and shift options.">
+  <header><h4>HR Settings</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Company-wide HR switches: naming of employees, leave and shift options.</dd>
+    <dt>When to use</dt><dd>Once at setup (Part A stage 4).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> All HR screens</dd>
+  </dl>
+</article>
+<article class="scr" data-name="payroll settings organisation &amp; settings how pay days are counted: based on attendance, half day = 0.5, unmarked days.">
+  <header><h4>Payroll Settings</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>How pay days are counted: based on Attendance, half day = 0.5, unmarked days.</dd>
+    <dt>When to use</dt><dd>Once at setup (Part A stage 4).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Salary Slip</dd>
+  </dl>
+</article>
+<article class="scr" data-name="nepal hrms settings organisation &amp; settings makes every salary run cover one bs month.">
+  <header><h4>Nepal HRMS Settings</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Makes every salary run cover one BS month.</dd>
+    <dt>When to use</dt><dd>Once at setup. Keep Process Payroll in Nepali Month ticked.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Payroll Entry · Salary Slip</dd>
+  </dl>
+</article>
+<article class="scr" data-name="nepal bs period organisation &amp; settings hand-typed bs month dates for a company, if the automatic calendar ever needs overriding.">
+  <header><h4>Nepal BS Period</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Hand-typed BS month dates for a company, if the automatic calendar ever needs overriding.</dd>
+    <dt>When to use</dt><dd>Almost never. The automatic BS calendar is used.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Auto-fill Months</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Payroll Entry dates</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-people"><h3 class="grp">People</h3><div class="reflist">
+<article class="scr" data-name="employee people one person: company, gender, joining date, shift, device id, categories and pay inputs.">
+  <header><h4>Employee</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One person: company, gender, joining date, shift, device ID, categories and pay inputs.</dd>
+    <dt>When to use</dt><dd>When someone joins, changes, or leaves (Part A stage 8).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › User</span> <span class="btn">Salary Structure Assignment and more under Connections</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Job Offer (optional) <b class="arrow">→</b> Attendance · Leave · Salary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee category people plant (paid overtime) or officer &amp; admin (replacement leave).">
+  <header><h4>Employee Category</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Plant (paid overtime) or Officer &amp; Admin (replacement leave).</dd>
+    <dt>When to use</dt><dd>At setup; the two categories rarely change.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee · Overtime Sheet · reports</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee category tool people sets the employee category for many people at once.">
+  <header><h4>Employee Category Tool</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Sets the Employee Category for many people at once.</dd>
+    <dt>When to use</dt><dd>When a department&#x27;s rule changes, or at setup.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Assign Category</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee Category <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="allowance category people a tea group per company (old / new / no) with its tea and meal rates.">
+  <header><h4>Allowance Category</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A tea group per company (OLD / NEW / NO) with its tea and meal rates.</dd>
+    <dt>When to use</dt><dd>At setup; when tea or meal rates change.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Company <b class="arrow">→</b> Employee · Prepare Payroll Inputs</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee promotion people records a promotion (new designation, date).">
+  <header><h4>Employee Promotion</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Records a promotion (new designation, date).</dd>
+    <dt>When to use</dt><dd>When someone is promoted. Pay rises go on Salary Revision.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Employee (designation)</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee transfer people moves a person to another company or department.">
+  <header><h4>Employee Transfer</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Moves a person to another company or department.</dd>
+    <dt>When to use</dt><dd>When someone moves company. They need a new salary assignment in the new company.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee grievance people a complaint raised by or about an employee.">
+  <header><h4>Employee Grievance</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A complaint raised by or about an employee.</dd>
+    <dt>When to use</dt><dd>If the company wants complaints on record.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Grievance Type <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="grievance type people kinds of complaint.">
+  <header><h4>Grievance Type</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Kinds of complaint.</dd>
+    <dt>When to use</dt><dd>Before using Employee Grievance.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee Grievance</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee skill map people which skills a person has, and their level.">
+  <header><h4>Employee Skill Map</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Which skills a person has, and their level.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Skill <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="skill people a skill name (forklift, welding…).">
+  <header><h4>Skill</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A skill name (forklift, welding…).</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee Skill Map</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee health insurance people health insurance provider names.">
+  <header><h4>Employee Health Insurance</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Health insurance provider names.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-attendance-shifts"><h3 class="grp">Attendance &amp; shifts</h3><div class="reflist">
+<article class="scr" data-name="biometric device attendance &amp; shifts one fingerprint machine: its company, serial, last contact, alert emails, visitors from other companies.">
+  <header><h4>Biometric Device</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One fingerprint machine: its company, serial, last contact, alert emails, visitors from other companies.</dd>
+    <dt>When to use</dt><dd>When a machine is installed or moved.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Force Bridge Sync</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee Checkin</dd>
+  </dl>
+</article>
+<article class="scr" data-name="biometric device command attendance &amp; shifts a message queued for a machine (resync, clear…). made by the system.">
+  <header><h4>Biometric Device Command</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A message queued for a machine (resync, clear…). Made by the system.</dd>
+    <dt>When to use</dt><dd>You only read it, to see if a command ran.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>Biometric Device <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee checkin attendance &amp; shifts one fingerprint punch. thousands arrive by themselves.">
+  <header><h4>Employee Checkin</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One fingerprint punch. Thousands arrive by themselves.</dd>
+    <dt>When to use</dt><dd>You only read it — to check someone really punched.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Fetch Shift</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Biometric Device <b class="arrow">→</b> Attendance</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift type attendance &amp; shifts a working time: 6 am–2 pm, 9 am–6 pm, 12 pm–8 pm, with late and half-day rules.">
+  <header><h4>Shift Type</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A working time: 6 AM–2 PM, 9 AM–6 PM, 12 PM–8 PM, with late and half-day rules.</dd>
+    <dt>When to use</dt><dd>At setup (Part A stage 5).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Mark Attendance (makes attendance from punches now)</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Shift Assignment · Attendance</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift assignment attendance &amp; shifts puts one person on one shift from a date.">
+  <header><h4>Shift Assignment</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Puts one person on one shift from a date.</dd>
+    <dt>When to use</dt><dd>Made by the tool or by a Shift Request; rarely by hand.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span> <span class="btn">Cancel</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Shift Type · Shift Request <b class="arrow">→</b> Attendance · reports</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift assignment tool attendance &amp; shifts gives a shift to many people at once; also approves shift requests in bulk.">
+  <header><h4>Shift Assignment Tool</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Gives a shift to many people at once; also approves shift requests in bulk.</dd>
+    <dt>When to use</dt><dd>At setup; when a group changes shift.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Assign Shift</span> <span class="btn">Assign Shift Schedule</span> <span class="btn">Approve</span> <span class="btn">Reject</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Shift Type <b class="arrow">→</b> Shift Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift request attendance &amp; shifts a shift change — for some days (with to date) or for good (no to date).">
+  <header><h4>Shift Request</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A shift change — for some days (with To Date) or for good (no To Date).</dd>
+    <dt>When to use</dt><dd>Whenever someone changes shift.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit (after Approved)</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Shift Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift schedule attendance &amp; shifts a rotating pattern (e.g. week a morning, week b evening).">
+  <header><h4>Shift Schedule</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A rotating pattern (e.g. week A morning, week B evening).</dd>
+    <dt>When to use</dt><dd>If shifts start rotating.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Shift Type <b class="arrow">→</b> Shift Schedule Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift schedule assignment attendance &amp; shifts puts a person on a rotating schedule.">
+  <header><h4>Shift Schedule Assignment</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Puts a person on a rotating schedule.</dd>
+    <dt>When to use</dt><dd>If shifts start rotating.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Shift Schedule <b class="arrow">→</b> Shift Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="shift location attendance &amp; shifts a place where mobile check-in is allowed.">
+  <header><h4>Shift Location</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A place where mobile check-in is allowed.</dd>
+    <dt>When to use</dt><dd>Only with the mobile app check-in.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Shift Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="attendance attendance &amp; shifts one day for one person: present, half day, absent, on leave — with in/out times and late minutes.">
+  <header><h4>Attendance</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One day for one person: Present, Half Day, Absent, On Leave — with in/out times and late minutes.</dd>
+    <dt>When to use</dt><dd>Check daily; fix wrong days (Cancel → Amend).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Repair from Check-ins</span> <span class="btn">Submit</span> <span class="btn">Cancel</span> <span class="btn">Amend</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee Checkin · Shift Type <b class="arrow">→</b> Salary Slip · reports · allowances</dd>
+  </dl>
+</article>
+<article class="scr" data-name="attendance fix attendance &amp; shifts repairs many days at once after the machine was offline: builds attendance from punches, marks true absences.">
+  <header><h4>Attendance Fix</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Repairs many days at once after the machine was offline: builds attendance from punches, marks true absences.</dd>
+    <dt>When to use</dt><dd>After a machine was down or punches arrived late.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Add Everyone on This Shift</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee Checkin <b class="arrow">→</b> Attendance</dd>
+  </dl>
+</article>
+<article class="scr" data-name="attendance request attendance &amp; shifts an employee asks to be marked present (on duty outside, forgot card).">
+  <header><h4>Attendance Request</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>An employee asks to be marked present (on duty outside, forgot card).</dd>
+    <dt>When to use</dt><dd>If requests should be approved instead of fixed by HR.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Attendance</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee attendance tool attendance &amp; shifts marks attendance for many people by hand for one day.">
+  <header><h4>Employee Attendance Tool</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Marks attendance for many people by hand for one day.</dd>
+    <dt>When to use</dt><dd>Only when the machine is completely unusable.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Mark Attendance</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Attendance</dd>
+  </dl>
+</article>
+<article class="scr" data-name="upload attendance attendance &amp; shifts loads attendance from a spreadsheet.">
+  <header><h4>Upload Attendance</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Loads attendance from a spreadsheet.</dd>
+    <dt>When to use</dt><dd>Only for old months or a machine failure.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Get Template</span> <span class="btn">Upload</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Attendance</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-leave"><h3 class="grp">Leave</h3><div class="reflist">
+<article class="scr" data-name="leave type leave casual, sick, maternity, paternity, leave without pay — and how each behaves.">
+  <header><h4>Leave Type</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Casual, Sick, Maternity, Paternity, Leave Without Pay — and how each behaves.</dd>
+    <dt>When to use</dt><dd>At setup (Part A stage 10).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Leave Policy · Leave Application</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave period leave the leave year for one company (shrawan 1 to ashadh end).">
+  <header><h4>Leave Period</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The leave year for one company (Shrawan 1 to Ashadh end).</dd>
+    <dt>When to use</dt><dd>Once a year per company.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Fiscal Year <b class="arrow">→</b> Leave Policy Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave policy leave how much of each leave a year: regular (21+12, ngk 8+12) or probation (12).">
+  <header><h4>Leave Policy</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>How much of each leave a year: Regular (21+12, NGK 8+12) or Probation (12).</dd>
+    <dt>When to use</dt><dd>At setup; when leave rules change.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Type <b class="arrow">→</b> Leave Policy Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave control panel leave gives a leave policy to many people at once.">
+  <header><h4>Leave Control Panel</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Gives a leave policy to many people at once.</dd>
+    <dt>When to use</dt><dd>At the start of the year; for a batch of new joiners.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Allocate Leave</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Policy · Leave Period <b class="arrow">→</b> Leave Policy Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave policy assignment leave links one person to their leave policy for the year.">
+  <header><h4>Leave Policy Assignment</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Links one person to their leave policy for the year.</dd>
+    <dt>When to use</dt><dd>Made by the Leave Control Panel; by hand for one new joiner.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Policy <b class="arrow">→</b> Leave Allocation</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave allocation leave how much leave a person has for the year. grows by 2.75 days each bs month by itself.">
+  <header><h4>Leave Allocation</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>How much leave a person has for the year. Grows by 2.75 days each BS month by itself.</dd>
+    <dt>When to use</dt><dd>You only read it; fix by hand only with the system team.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Allocate Leaves</span> <span class="btn">Expire Allocation</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Policy Assignment <b class="arrow">→</b> Leave Application · Leave Ledger Entry</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave application leave a request for leave on certain days.">
+  <header><h4>Leave Application</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A request for leave on certain days.</dd>
+    <dt>When to use</dt><dd>Every time someone takes leave.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit (after Approved)</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Allocation <b class="arrow">→</b> Attendance (On Leave) · Leave Ledger Entry</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave ledger entry leave the running account of leave added and used. written by the system.">
+  <header><h4>Leave Ledger Entry</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The running account of leave added and used. Written by the system.</dd>
+    <dt>When to use</dt><dd>You only read it, to see why a balance is what it is.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Allocation · Application <b class="arrow">→</b> Balances · reports</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave block list leave days when leave is not allowed (e.g. audit week).">
+  <header><h4>Leave Block List</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Days when leave is not allowed (e.g. audit week).</dd>
+    <dt>When to use</dt><dd>If the company wants blackout days.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Leave Application</dd>
+  </dl>
+</article>
+<article class="scr" data-name="compensatory leave request leave standard way to give a replacement leave day for holiday work.">
+  <header><h4>Compensatory Leave Request</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Standard way to give a replacement leave day for holiday work.</dd>
+    <dt>When to use</dt><dd>We credit holiday work in Yearly Leave Details instead; use this only if asked.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Attendance <b class="arrow">→</b> Leave Allocation</dd>
+  </dl>
+</article>
+<article class="scr" data-name="leave encashment leave pays unused casual/sick leave in cash.">
+  <header><h4>Leave Encashment</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Pays unused Casual/Sick leave in cash.</dd>
+    <dt>When to use</dt><dd>At fiscal-year end (policy: encash at year end).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › Payment</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Leave Allocation <b class="arrow">→</b> Additional Salary · Salary Slip</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-overtime"><h3 class="grp">Overtime</h3><div class="reflist">
+<article class="scr" data-name="overtime sheet overtime the day&#x27;s approved extra work: who, why. after the day, measures hours from punches.">
+  <header><h4>Overtime Sheet</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The day&#x27;s approved extra work: who, why. After the day, measures hours from punches.</dd>
+    <dt>When to use</dt><dd>On or before the day of extra work.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Measure from Attendance</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee Category <b class="arrow">→</b> Prepare Payroll Inputs → Overtime on the slip</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-salary-setup"><h3 class="grp">Salary setup</h3><div class="reflist">
+<article class="scr" data-name="salary component salary setup one salary line — basic, hra, tea, overtime, ssf, income tax — with its rules and ledger accounts.">
+  <header><h4>Salary Component</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One salary line — Basic, HRA, Tea, Overtime, SSF, Income Tax — with its rules and ledger accounts.</dd>
+    <dt>When to use</dt><dd>At setup; the accountant fills Accounts (Part A stage 16).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › Salary Structure</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Salary Structure · Additional Salary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="salary structure salary setup a company&#x27;s salary formula (e.g. ngn staff 83/84).">
+  <header><h4>Salary Structure</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A company&#x27;s salary formula (e.g. NGN Staff 83/84).</dd>
+    <dt>When to use</dt><dd>At setup; a new one each year if rates change. Never edit one in use.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Single Assignment</span> <span class="btn">Bulk Assignments</span> <span class="btn">Income Tax Slab</span> <span class="btn">Actions › Preview Salary Slip</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Component <b class="arrow">→</b> Salary Structure Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="salary structure assignment salary setup puts one person on a structure from a date, with their basic.">
+  <header><h4>Salary Structure Assignment</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Puts one person on a structure from a date, with their Basic.</dd>
+    <dt>When to use</dt><dd>When someone joins; each time pay changes (via Salary Revision).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Payroll Entry</span> <span class="btn">Actions › Preview Salary Slip</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Structure · Income Tax Slab <b class="arrow">→</b> Payroll Entry · Salary Slip</dd>
+  </dl>
+</article>
+<article class="scr" data-name="bulk salary structure assignment salary setup assigns a structure to many people at once.">
+  <header><h4>Bulk Salary Structure Assignment</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Assigns a structure to many people at once.</dd>
+    <dt>When to use</dt><dd>At setup; start of a new year&#x27;s structure.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Assign Structure</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Structure <b class="arrow">→</b> Salary Structure Assignment</dd>
+  </dl>
+</article>
+<article class="scr" data-name="payroll period salary setup the tax year for one company, e.g. 83/84 - ngi.">
+  <header><h4>Payroll Period</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The tax year for one company, e.g. 83/84 - NGI.</dd>
+    <dt>When to use</dt><dd>Once a year per company.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Fiscal Year <b class="arrow">→</b> Income tax on slips</dd>
+  </dl>
+</article>
+<article class="scr" data-name="income tax slab salary setup the tax table (1% to 29%) with the ssf waiver on the 1% row.">
+  <header><h4>Income Tax Slab</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The tax table (1% to 29%) with the SSF waiver on the 1% row.</dd>
+    <dt>When to use</dt><dd>Once a year per company, after the budget.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Salary Structure Assignment</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Payroll Period <b class="arrow">→</b> Salary Structure Assignment · Salary Slip</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-monthly-salary"><h3 class="grp">Monthly salary</h3><div class="reflist">
+<article class="scr" data-name="payroll entry monthly salary one month&#x27;s salary run for one company.">
+  <header><h4>Payroll Entry</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One month&#x27;s salary run for one company.</dd>
+    <dt>When to use</dt><dd>Every month-end (see the month-end checklist).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Get Employees</span> <span class="btn">Nepal HRMS › Prepare Payroll Inputs</span> <span class="btn">Create Salary Slips</span> <span class="btn">Submit Salary Slip</span> <span class="btn">Make Bank Entry</span> <span class="btn">Release Withheld Salaries</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Structure Assignment · attendance <b class="arrow">→</b> Salary Slip · accounts voucher</dd>
+  </dl>
+</article>
+<article class="scr" data-name="salary slip monthly salary one person&#x27;s pay for one month, line by line, with the tax override box.">
+  <header><h4>Salary Slip</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One person&#x27;s pay for one month, line by line, with the tax override box.</dd>
+    <dt>When to use</dt><dd>Check drafts before submitting; print/email after.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span> <span class="btn">Submit</span> <span class="btn">Print</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Payroll Entry <b class="arrow">→</b> Accounts voucher · reports</dd>
+  </dl>
+</article>
+<article class="scr" data-name="additional salary monthly salary a one-off amount on one month&#x27;s slip. made by the system for tea, meals, ot, fines, advances, bonus, arrears.">
+  <header><h4>Additional Salary</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A one-off amount on one month&#x27;s slip. Made by the system for tea, meals, OT, fines, advances, bonus, arrears.</dd>
+    <dt>When to use</dt><dd>You rarely make one by hand — use Payroll Adjustment instead.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span> <span class="btn">Cancel</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Prepare Payroll Inputs · Payroll Adjustment · Dashain Bonus · Salary Revision <b class="arrow">→</b> Salary Slip</dd>
+  </dl>
+</article>
+<article class="scr" data-name="payroll adjustment monthly salary many people&#x27;s one-off amounts for one month on one screen.">
+  <header><h4>Payroll Adjustment</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Many people&#x27;s one-off amounts for one month on one screen.</dd>
+    <dt>When to use</dt><dd>Whenever there is an extra payment or deduction this month.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span> <span class="btn">Cancel</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Additional Salary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="salary withholding monthly salary holds back someone&#x27;s salary (e.g. during an inquiry) and releases it later.">
+  <header><h4>Salary Withholding</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Holds back someone&#x27;s salary (e.g. during an inquiry) and releases it later.</dd>
+    <dt>When to use</dt><dd>Only on management instruction.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span> <span class="btn">then Release Withheld Salaries on Payroll Entry</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Salary Slip</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-advances-bonus-pay-changes"><h3 class="grp">Advances, bonus &amp; pay changes</h3><div class="reflist">
+<article class="scr" data-name="employee advance advances, bonus &amp; pay changes money given ahead, with a monthly instalment taken back from salary.">
+  <header><h4>Employee Advance</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Money given ahead, with a monthly instalment taken back from salary.</dd>
+    <dt>When to use</dt><dd>When an advance is approved.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › Payment</span> <span class="btn">Create › Deduction from Salary</span> <span class="btn">Create › Return</span> <span class="btn">Create › Expense Claim</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Payment voucher · Salary Advance on slips</dd>
+  </dl>
+</article>
+<article class="scr" data-name="dashain bonus advances, bonus &amp; pay changes the year&#x27;s festival bonus: given or not, basis, and each person&#x27;s prorated amount.">
+  <header><h4>Dashain Bonus</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The year&#x27;s festival bonus: given or not, basis, and each person&#x27;s prorated amount.</dd>
+    <dt>When to use</dt><dd>Once a year before Dashain.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Get Employees</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Structure Assignment <b class="arrow">→</b> Additional Salary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="salary revision advances, bonus &amp; pay changes a pay rise from a bs month start, with arrears if agreed late.">
+  <header><h4>Salary Revision</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A pay rise from a BS month start, with arrears if agreed late.</dd>
+    <dt>When to use</dt><dd>Once a year, or for a promotion.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Get Employees</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Structure Assignment <b class="arrow">→</b> New Salary Structure Assignment · arrears</dd>
+  </dl>
+</article>
+<article class="scr" data-name="expense claim advances, bonus &amp; pay changes staff claim back money spent for work (travel, fuel).">
+  <header><h4>Expense Claim</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Staff claim back money spent for work (travel, fuel).</dd>
+    <dt>When to use</dt><dd>If claims move out of the accounts desk.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › Payment</span> <span class="btn">Accounting Ledger</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Expense Claim Type · Employee Advance <b class="arrow">→</b> Payment voucher</dd>
+  </dl>
+</article>
+<article class="scr" data-name="expense claim type advances, bonus &amp; pay changes kinds of expense (travel, fuel) with their account.">
+  <header><h4>Expense Claim Type</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Kinds of expense (Travel, Fuel) with their account.</dd>
+    <dt>When to use</dt><dd>Before using Expense Claim.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Expense Claim</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee incentive advances, bonus &amp; pay changes a one-off incentive for a person.">
+  <header><h4>Employee Incentive</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A one-off incentive for a person.</dd>
+    <dt>When to use</dt><dd>Payroll Adjustment does the same job more simply.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Additional Salary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="retention bonus advances, bonus &amp; pay changes a bonus paid on a set date to keep someone.">
+  <header><h4>Retention Bonus</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A bonus paid on a set date to keep someone.</dd>
+    <dt>When to use</dt><dd>If management offers one.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Additional Salary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="gratuity advances, bonus &amp; pay changes end-of-service payment worked out by a rule.">
+  <header><h4>Gratuity</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>End-of-service payment worked out by a rule.</dd>
+    <dt>When to use</dt><dd>When someone leaves, if gratuity applies outside the SSF.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Payment Entry</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Gratuity Rule <b class="arrow">→</b> Payment voucher</dd>
+  </dl>
+</article>
+<article class="scr" data-name="gratuity rule advances, bonus &amp; pay changes the gratuity formula.">
+  <header><h4>Gratuity Rule</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The gratuity formula.</dd>
+    <dt>When to use</dt><dd>Before using Gratuity.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Gratuity</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee benefit application advances, bonus &amp; pay changes flexible-benefit plan (india-style).">
+  <header><h4>Employee Benefit Application</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Flexible-benefit plan (India-style).</dd>
+    <dt>When to use</dt><dd>Not used in Nepal payroll.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee benefit claim advances, bonus &amp; pay changes claim against a flexible benefit.">
+  <header><h4>Employee Benefit Claim</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Claim against a flexible benefit.</dd>
+    <dt>When to use</dt><dd>Not used.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee other income advances, bonus &amp; pay changes income from a previous employer, for tax.">
+  <header><h4>Employee Other Income</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Income from a previous employer, for tax.</dd>
+    <dt>When to use</dt><dd>Not used — change tax with the slip&#x27;s override instead.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-tax-exemption-india-style-not-used"><h3 class="grp">Tax exemption (India-style — not used)</h3><div class="reflist">
+<article class="scr" data-name="employee tax exemption category tax exemption (india-style — not used) indian tax-saving heads.">
+  <header><h4>Employee Tax Exemption Category</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Indian tax-saving heads.</dd>
+    <dt>When to use</dt><dd>Not used. Nepal&#x27;s SSF exemption is built into the slab.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee tax exemption sub category tax exemption (india-style — not used) indian tax-saving sub-heads.">
+  <header><h4>Employee Tax Exemption Sub Category</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Indian tax-saving sub-heads.</dd>
+    <dt>When to use</dt><dd>Not used.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee tax exemption declaration tax exemption (india-style — not used) declaring tax-saving investments.">
+  <header><h4>Employee Tax Exemption Declaration</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Declaring tax-saving investments.</dd>
+    <dt>When to use</dt><dd>Not used.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit Proof</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee tax exemption proof submission tax exemption (india-style — not used) proof of tax-saving investments.">
+  <header><h4>Employee Tax Exemption Proof Submission</h4><span class="pill p-no">Not for Nepal</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Proof of tax-saving investments.</dd>
+    <dt>When to use</dt><dd>Not used.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Get Details From Declaration</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-hiring-joining"><h3 class="grp">Hiring &amp; joining</h3><div class="reflist">
+<article class="scr" data-name="job requisition hiring &amp; joining a manager&#x27;s request for a new post.">
+  <header><h4>Job Requisition</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A manager&#x27;s request for a new post.</dd>
+    <dt>When to use</dt><dd>If hiring should be approved in the system.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Job Opening</span> <span class="btn">Associate Job Opening</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Designation <b class="arrow">→</b> Job Opening</dd>
+  </dl>
+</article>
+<article class="scr" data-name="staffing plan hiring &amp; joining how many posts each department may fill this year.">
+  <header><h4>Staffing Plan</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>How many posts each department may fill this year.</dd>
+    <dt>When to use</dt><dd>Optional, for head-count control.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Department <b class="arrow">→</b> Job Opening</dd>
+  </dl>
+</article>
+<article class="scr" data-name="job opening hiring &amp; joining a vacancy that people can apply for.">
+  <header><h4>Job Opening</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A vacancy that people can apply for.</dd>
+    <dt>When to use</dt><dd>When a post is advertised.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Job Requisition <b class="arrow">→</b> Job Applicant</dd>
+  </dl>
+</article>
+<article class="scr" data-name="job applicant hiring &amp; joining a person who applied.">
+  <header><h4>Job Applicant</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A person who applied.</dd>
+    <dt>When to use</dt><dd>When CVs come in.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › Interview</span> <span class="btn">Job Offer</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Job Opening · Job Applicant Source <b class="arrow">→</b> Interview · Job Offer</dd>
+  </dl>
+</article>
+<article class="scr" data-name="job applicant source hiring &amp; joining where applicants come from (newspaper, referral…).">
+  <header><h4>Job Applicant Source</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Where applicants come from (newspaper, referral…).</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Job Applicant</dd>
+  </dl>
+</article>
+<article class="scr" data-name="interview type hiring &amp; joining kinds of interview.">
+  <header><h4>Interview Type</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Kinds of interview.</dd>
+    <dt>When to use</dt><dd>Before scheduling interviews.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Interview Round</dd>
+  </dl>
+</article>
+<article class="scr" data-name="interview round hiring &amp; joining an interview stage with its panel and skills to judge.">
+  <header><h4>Interview Round</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>An interview stage with its panel and skills to judge.</dd>
+    <dt>When to use</dt><dd>Before scheduling interviews.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Interview</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Interview Type <b class="arrow">→</b> Interview</dd>
+  </dl>
+</article>
+<article class="scr" data-name="interview hiring &amp; joining one scheduled interview.">
+  <header><h4>Interview</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One scheduled interview.</dd>
+    <dt>When to use</dt><dd>When interviewing.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Actions › Reschedule Interview</span> <span class="btn">Submit Feedback</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Job Applicant <b class="arrow">→</b> Interview Feedback</dd>
+  </dl>
+</article>
+<article class="scr" data-name="interview feedback hiring &amp; joining one interviewer&#x27;s marks.">
+  <header><h4>Interview Feedback</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One interviewer&#x27;s marks.</dd>
+    <dt>When to use</dt><dd>After an interview.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Interview <b class="arrow">→</b> Job Offer decision</dd>
+  </dl>
+</article>
+<article class="scr" data-name="job offer hiring &amp; joining the offer letter to a chosen applicant.">
+  <header><h4>Job Offer</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The offer letter to a chosen applicant.</dd>
+    <dt>When to use</dt><dd>When offering a job.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Employee</span> <span class="btn">Show Employee</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Job Applicant <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="job offer term template hiring &amp; joining a ready set of offer terms.">
+  <header><h4>Job Offer Term Template</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A ready set of offer terms.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Offer Term <b class="arrow">→</b> Job Offer</dd>
+  </dl>
+</article>
+<article class="scr" data-name="offer term hiring &amp; joining one term of an offer (probation, notice…).">
+  <header><h4>Offer Term</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One term of an offer (probation, notice…).</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Job Offer</dd>
+  </dl>
+</article>
+<article class="scr" data-name="appointment letter hiring &amp; joining the appointment letter for a new employee.">
+  <header><h4>Appointment Letter</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The appointment letter for a new employee.</dd>
+    <dt>When to use</dt><dd>Optional, after the offer is accepted.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Print</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Appointment Letter Template <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="appointment letter template hiring &amp; joining the wording of appointment letters.">
+  <header><h4>Appointment Letter Template</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The wording of appointment letters.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Appointment Letter</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee referral hiring &amp; joining a staff member recommends someone.">
+  <header><h4>Employee Referral</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A staff member recommends someone.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Job Applicant</span> <span class="btn">Create Additional Salary</span> <span class="btn">Reject Employee Referral</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> Job Applicant</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee onboarding hiring &amp; joining the joining checklist (id card, uniform, training) as tasks.">
+  <header><h4>Employee Onboarding</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The joining checklist (ID card, uniform, training) as tasks.</dd>
+    <dt>When to use</dt><dd>If joining tasks should be tracked.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Employee</span> <span class="btn">Mark as Completed</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Job Offer · Onboarding Template <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee onboarding template hiring &amp; joining the standard joining checklist.">
+  <header><h4>Employee Onboarding Template</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The standard joining checklist.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee Onboarding</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-leaving"><h3 class="grp">Leaving</h3><div class="reflist">
+<article class="scr" data-name="employee separation leaving the leaving checklist (return uniform, clearances) as tasks.">
+  <header><h4>Employee Separation</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The leaving checklist (return uniform, clearances) as tasks.</dd>
+    <dt>When to use</dt><dd>When someone resigns.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Employee</span> <span class="btn">Project</span> <span class="btn">Task</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee · Separation Template <b class="arrow">→</b> Exit Interview · Full and Final Statement</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee separation template leaving the standard leaving checklist.">
+  <header><h4>Employee Separation Template</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The standard leaving checklist.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee Separation</dd>
+  </dl>
+</article>
+<article class="scr" data-name="exit interview leaving why the person is leaving.">
+  <header><h4>Exit Interview</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Why the person is leaving.</dd>
+    <dt>When to use</dt><dd>Before the last day.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Send Exit Questionnaire</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Employee <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="full and final statement leaving everything owed either way when someone leaves: last salary, leave encashment, advance still owed, gratuity.">
+  <header><h4>Full and Final Statement</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Everything owed either way when someone leaves: last salary, leave encashment, advance still owed, gratuity.</dd>
+    <dt>When to use</dt><dd>After the last salary slip.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Journal Entry</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Salary Slip · Employee Advance · Leave <b class="arrow">→</b> Accounts voucher</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-performance-training"><h3 class="grp">Performance &amp; training</h3><div class="reflist">
+<article class="scr" data-name="appraisal cycle performance &amp; training a review season (e.g. yearly review 83/84).">
+  <header><h4>Appraisal Cycle</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A review season (e.g. yearly review 83/84).</dd>
+    <dt>When to use</dt><dd>If yearly reviews move into the system.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create Appraisals</span> <span class="btn">Start</span> <span class="btn">Mark as Completed</span> <span class="btn">View Goals</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Appraisal Template <b class="arrow">→</b> Appraisal</dd>
+  </dl>
+</article>
+<article class="scr" data-name="appraisal template performance &amp; training what is judged in a review.">
+  <header><h4>Appraisal Template</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>What is judged in a review.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>KRA <b class="arrow">→</b> Appraisal Cycle</dd>
+  </dl>
+</article>
+<article class="scr" data-name="kra performance &amp; training a key result area (e.g. on-time delivery).">
+  <header><h4>KRA</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A key result area (e.g. on-time delivery).</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Appraisal Template · Goal</dd>
+  </dl>
+</article>
+<article class="scr" data-name="goal performance &amp; training a person&#x27;s target.">
+  <header><h4>Goal</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A person&#x27;s target.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Close</span> <span class="btn">Archive</span> <span class="btn">Reopen</span></dd>
+    <dt>Comes from → Leads to</dt><dd>KRA <b class="arrow">→</b> Appraisal</dd>
+  </dl>
+</article>
+<article class="scr" data-name="appraisal performance &amp; training one person&#x27;s review.">
+  <header><h4>Appraisal</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One person&#x27;s review.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">View Goals</span> <span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Appraisal Cycle <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee feedback criteria performance &amp; training points colleagues rate each other on.">
+  <header><h4>Employee Feedback Criteria</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Points colleagues rate each other on.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee Performance Feedback</dd>
+  </dl>
+</article>
+<article class="scr" data-name="employee performance feedback performance &amp; training one reviewer&#x27;s feedback on a person.">
+  <header><h4>Employee Performance Feedback</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One reviewer&#x27;s feedback on a person.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Appraisal <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="training program performance &amp; training a training course.">
+  <header><h4>Training Program</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A training course.</dd>
+    <dt>When to use</dt><dd>If training records are kept.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Training Event</dd>
+  </dl>
+</article>
+<article class="scr" data-name="training event performance &amp; training one session of a course, with who attended.">
+  <header><h4>Training Event</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>One session of a course, with who attended.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Training Result</span> <span class="btn">Training Feedback</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Training Program <b class="arrow">→</b> Training Result · Feedback</dd>
+  </dl>
+</article>
+<article class="scr" data-name="training feedback performance &amp; training what an attendee thought.">
+  <header><h4>Training Feedback</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>What an attendee thought.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Training Event <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="training result performance &amp; training pass/fail and marks.">
+  <header><h4>Training Result</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Pass/fail and marks.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Training Event <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+</div></section>
+<section class="refgroup" id="c-travel-vehicles-other"><h3 class="grp">Travel, vehicles &amp; other</h3><div class="reflist">
+<article class="scr" data-name="travel request travel, vehicles &amp; other approval to travel for work.">
+  <header><h4>Travel Request</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Approval to travel for work.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Submit</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Purpose of Travel <b class="arrow">→</b> Employee Advance · Expense Claim</dd>
+  </dl>
+</article>
+<article class="scr" data-name="purpose of travel travel, vehicles &amp; other reasons for travel.">
+  <header><h4>Purpose of Travel</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Reasons for travel.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Travel Request</dd>
+  </dl>
+</article>
+<article class="scr" data-name="vehicle log travel, vehicles &amp; other a vehicle&#x27;s trip: odometer, fuel.">
+  <header><h4>Vehicle Log</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A vehicle&#x27;s trip: odometer, fuel.</dd>
+    <dt>When to use</dt><dd>Optional (fleet is kept elsewhere).</dd>
+    <dt>Buttons</dt><dd><span class="btn">Create › Expense Claim</span></dd>
+    <dt>Comes from → Leads to</dt><dd>Vehicle Service Item <b class="arrow">→</b> Expense Claim</dd>
+  </dl>
+</article>
+<article class="scr" data-name="vehicle service item travel, vehicles &amp; other kinds of vehicle service.">
+  <header><h4>Vehicle Service Item</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Kinds of vehicle service.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Vehicle Log</dd>
+  </dl>
+</article>
+<article class="scr" data-name="daily work summary group travel, vehicles &amp; other a group asked by email what they did today.">
+  <header><h4>Daily Work Summary Group</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>A group asked by email what they did today.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Daily Work Summary</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Daily Work Summary</dd>
+  </dl>
+</article>
+<article class="scr" data-name="daily work summary travel, vehicles &amp; other the collected replies.">
+  <header><h4>Daily Work Summary</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>The collected replies.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>Daily Work Summary Group <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+<article class="scr" data-name="interest travel, vehicles &amp; other an interest/hobby list for employee profiles.">
+  <header><h4>Interest</h4><span class="pill p-ready">Ready — not used yet</span></header>
+  <dl>
+    <dt>What it is</dt><dd>An interest/hobby list for employee profiles.</dd>
+    <dt>When to use</dt><dd>Optional.</dd>
+    <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee</dd>
+  </dl>
+</article>
+<article class="scr" data-name="pwa notification travel, vehicles &amp; other notices shown in the hr mobile app. made by the system.">
+  <header><h4>PWA Notification</h4><span class="pill p-use">In use</span></header>
+  <dl>
+    <dt>What it is</dt><dd>Notices shown in the HR mobile app. Made by the system.</dd>
+    <dt>When to use</dt><dd>Nothing to do.</dd>
+    <dt>Buttons</dt><dd>—</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> —</dd>
+  </dl>
+</article>
+</div></section>
+<section id="partd">
+  <h2>Part D — Every flow, start to finish</h2>
+  <p class="sub">Each flow shows the screens in the order the work moves through them. Read left to right, top to bottom.</p>
+</section>
+<section class="flowsec" id="f-join"><h3>Joining a new person</h3><div class="flow long"><span>Job Requisition</span><i>→</i><span>Job Opening</span><i>→</i><span>Job Applicant</span><i>→</i><span>Interview</span><i>→</i><span>Job Offer</span><i>→</i><span>Employee</span><i>→</i><span>Shift Assignment</span><i>→</i><span>Leave Policy Assignment</span><i>→</i><span>Salary Structure Assignment</span></div><p>Hiring screens (first five) are optional — most companies start at <b>Employee</b>. The last four are required, in that order, or the person is missing from attendance, leave or salary.</p></section>
+<section class="flowsec" id="f-att"><h3>From finger punch to attendance</h3><div class="flow long"><span>Biometric Device</span><i>→</i><span>Employee Checkin</span><i>→</i><span>Shift Type (every hour)</span><i>→</i><span>Attendance</span><i>→</i><span>Attendance Fix / Repair from Check-ins</span><i>→</i><span>Monthly Attendance BS</span></div><p>The machine sends punches; each hour the shift turns punches into attendance, measuring late and early minutes against that day's shift. More than 2 hours late becomes a Half Day. If the machine was offline, <b>Attendance Fix</b> rebuilds the days.</p></section>
+<section class="flowsec" id="f-shift"><h3>Changing a shift</h3><div class="flow long"><span>Shift Request</span><i>→</i><span>Approved + Submit</span><i>→</i><span>Shift Assignment (split)</span><i>→</i><span>Attendance measured on new shift</span><i>→</i><span>Old shift returns after To Date</span></div><p>With no To Date the move is permanent and the old shift does not come back.</p></section>
+<section class="flowsec" id="f-leave"><h3>Leave, from policy to payslip</h3><div class="flow long"><span>Leave Type</span><i>→</i><span>Leave Period</span><i>→</i><span>Leave Policy</span><i>→</i><span>Leave Control Panel</span><i>→</i><span>Leave Policy Assignment</span><i>→</i><span>Leave Allocation (+2.75 each BS month)</span><i>→</i><span>Leave Application</span><i>→</i><span>Leave Ledger Entry</span><i>→</i><span>Attendance: On Leave</span><i>→</i><span>Leave Encashment (year end)</span></div><p>Unpaid leave (Leave Without Pay) cuts that day's pay on the slip. Working while on leave turns the day into a Half Day.</p></section>
+<section class="flowsec" id="f-ot"><h3>Overtime and replacement leave</h3><div class="flow long"><span>Overtime Sheet (on the day)</span><i>→</i><span>Measure from Attendance</span><i>→</i><span>Prepare Payroll Inputs</span><i>→</i><span>Additional Salary: Overtime</span><i>→</i><span>Salary Slip</span></div><p>Only for <b>Plant</b> staff. <b>Officer &amp; Admin</b> staff who work a holiday get it back as leave — it shows in Yearly Leave Details BS.</p></section>
+<section class="flowsec" id="f-adv"><h3>An advance, from cash to paid back</h3><div class="flow long"><span>Employee Advance</span><i>→</i><span>Create › Payment (Bank/Cash voucher)</span><i>→</i><span>Prepare Payroll Inputs each month</span><i>→</i><span>Additional Salary: Salary Advance</span><i>→</i><span>Salary Slip</span><i>→</i><span>Advance status: Returned</span></div><p>Each month takes the instalment or what is left, whichever is smaller.</p></section>
+<section class="flowsec" id="f-month"><h3>Month-end salary</h3><div class="flow long"><span>Attendance complete</span><i>→</i><span>Overtime Sheets measured</span><i>→</i><span>Payroll Adjustment / Dashain Bonus / Salary Revision</span><i>→</i><span>Payroll Entry (Get Employees, Save)</span><i>→</i><span>Prepare Payroll Inputs</span><i>→</i><span>Create Salary Slips</span><i>→</i><span>Check slips, override tax</span><i>→</i><span>Submit Salary Slip</span><i>→</i><span>Accounts voucher</span><i>→</i><span>Make Bank Entry</span></div><p>Prepare Payroll Inputs must come before Create Salary Slips — creating slips submits the Payroll Entry.</p></section>
+<section class="flowsec" id="f-tax"><h3>How tax lands on a slip</h3><div class="flow long"><span>Payroll Period</span><i>→</i><span>Income Tax Slab</span><i>→</i><span>Salary Structure Assignment</span><i>→</i><span>Salary Slip: Computed Income Tax</span><i>→</i><span>Override Income Tax (if needed)</span></div><p>SSF members skip the first 1% (SST). Extra pay each month is taxed in that same month.</p></section>
+<section class="flowsec" id="f-year"><h3>Once a year</h3><div class="flow long"><span>New Fiscal Year (7 companies)</span><i>→</i><span>Holiday Lists + festivals</span><i>→</i><span>Leave Period</span><i>→</i><span>Leave Control Panel</span><i>→</i><span>Payroll Period</span><i>→</i><span>Income Tax Slab (new budget)</span><i>→</i><span>New Salary Structure if rates change</span><i>→</i><span>Salary Revision (raises)</span><i>→</i><span>Dashain Bonus</span><i>→</i><span>Leave Encashment</span></div><p>Do these before Shrawan 1, or documents in the new year cannot be saved.</p></section>
+<section class="flowsec" id="f-leave2"><h3>A person leaves</h3><div class="flow long"><span>Employee Separation</span><i>→</i><span>Exit Interview</span><i>→</i><span>Employee: Relieving Date + Status Left</span><i>→</i><span>Last Payroll Entry</span><i>→</i><span>Full and Final Statement</span><i>→</i><span>Create Journal Entry</span></div><p>The Full and Final Statement collects the last salary, unused leave, any advance still owed, and gratuity if it applies.</p></section>
+</main>
+
+<footer>Avinash Group · Nepal Gas Udhyog companies · HR &amp; Payroll handbook for FY 83/84 · Screens as on the system in Ashwin 2083.</footer>
+</div>
+
+<script>
+(function(){
+  var KEY = "avinash-monthend-checklist";
+  var boxes = document.querySelectorAll("#checklist input[type=checkbox]");
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { saved = {}; }
+  boxes.forEach(function(b){
+    if (saved[b.id]) b.checked = true;
+    b.addEventListener("change", function(){
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (e) {}
+    });
+  });
+  document.getElementById("clearChecks").addEventListener("click", function(){
+    boxes.forEach(function(b){ b.checked = false; });
+    saved = {};
+    try { localStorage.removeItem(KEY); } catch (e) {}
+  });
+  var find = document.getElementById("scrfind"), cnt = document.getElementById("scrcount");
+  var cards = document.querySelectorAll(".scr"), groups = document.querySelectorAll(".refgroup");
+  function filt(){
+    var q = (find.value || "").trim().toLowerCase(), shown = 0;
+    cards.forEach(function(c){ var ok = !q || c.getAttribute("data-name").indexOf(q) !== -1; c.hidden = !ok; if (ok) shown++; });
+    groups.forEach(function(g){ g.hidden = !g.querySelector(".scr:not([hidden])"); });
+    cnt.textContent = q ? shown + " of " + cards.length + " screens" : cards.length + " screens";
+  }
+  find.addEventListener("input", filt); filt();
+  document.getElementById("printPage").addEventListener("click", function(){ window.print(); });
+})();
+</script>
