@@ -93,9 +93,16 @@ Two things this run taught:
   Salary as drafts; a draft is invisible to the slip, so tea only appeared after
   submitting the 80 drafts and rebuilding.
 * **Meal cannot be "one per present day."** Configured that way it paid 132,525
-  against the sheet's 52,275. Meals are earned by coming 1.5 h early or staying
-  1.5 h late (max 2 a day), and on a holiday at 6 h and 8 h — so the component is
-  switched off in the engine until that rule exists.
+  against the sheet's 52,275. It is now its own condition, **Meal Entitlement**:
+  one meal for arriving 1.5 h early, one for staying 1.5 h late, never more than
+  two in a day; on a holiday one at 6 hours worked and two at 8. Every case in
+  the policy is covered by a check (1.4 h early earns nothing, 1.5 h earns one,
+  early + late earns two, holiday 5/6/8/11 h earns 0/1/2/2, absent earns nothing,
+  a half day still earns).
+
+Both fixes went into the engine, so the run needs no manual step: allowances are
+created submitted and appear on the slips, and a re-run cancels and replaces what
+it made last time while leaving anything HR typed alone.
 
 ## Known gaps
 

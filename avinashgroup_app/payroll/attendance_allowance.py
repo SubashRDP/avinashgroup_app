@@ -192,6 +192,9 @@ def evaluate_rule(row, sc, employee: str) -> float:
 			return 0.0
 		return _per_unit(unit, day=1.0, hours=working_hours)
 
+	if condition == "Meal Entitlement":
+		return _meals_for_day(row, sc, present_statuses)
+
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
 		offset_seconds = flt(sc.custom_time_offset_hours) * 3600.0
 		if condition == "Early Entry Before":
@@ -205,6 +208,39 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		return _per_unit(unit, day=1.0, hours=seconds / 3600.0)
 
 	return 0.0
+
+
+# Policy 1.3 and 2.3 (client meeting 2026-09-15): a meal for coming 1.5 hours
+# early and one for staying 1.5 hours late, never more than two in a day; on a
+# holiday one meal at 6 hours worked and two at 8.
+DEFAULT_MEAL_OFFSET_HOURS = 1.5
+HOLIDAY_MEAL_HOURS = ((8.0, 2), (6.0, 1))
+MAX_MEALS_PER_DAY = 2
+
+
+def _meals_for_day(row, sc, present_statuses) -> float:
+	"""How many meals one attendance row earns.
+
+	A meal is earned by the extra time worked, not by turning up — counting one
+	per present day paid 132,525 against the sheet's 52,275 for Falgun 2082.
+	"""
+	if row.status not in present_statuses and row.status != "Half Day":
+		return 0.0
+
+	if row.custom_worked_on_holiday:
+		worked = flt(row.working_hours)
+		for hours, meals in HOLIDAY_MEAL_HOURS:
+			if worked >= hours:
+				return float(meals)
+		return 0.0
+
+	offset = (flt(sc.custom_time_offset_hours) or DEFAULT_MEAL_OFFSET_HOURS) * 3600.0
+	meals = 0
+	if flt(row.custom_early_entry) >= offset:
+		meals += 1
+	if flt(row.custom_late_exit) >= offset:
+		meals += 1
+	return float(min(meals, MAX_MEALS_PER_DAY))
 
 
 def _per_unit(unit: str, day: float, hours: float) -> float:
@@ -394,19 +430,30 @@ def _employees_in_payroll_entry(pe) -> list:
 
 
 def _delete_existing_draft(employee: str, salary_component: str, payroll_date) -> None:
+	"""Clear a previous run's row for this employee, component and month.
+
+	Submitted ones are cancelled first: the calculator submits what it creates, so
+	a re-run would otherwise leave the old amount standing beside the new one.
+	Only rows this calculator made are touched — anything HR typed by hand keeps
+	its own tag and is left alone.
+	"""
 	existing = frappe.get_all(
 		"Additional Salary",
 		filters={
 			"employee": employee,
 			"salary_component": salary_component,
 			"payroll_date": payroll_date,
-			"docstatus": 0,
+			"docstatus": ["<", 2],
 			"custom_source": SOURCE_TAG,
 		},
-		pluck="name",
+		fields=["name", "docstatus"],
 	)
-	for name in existing:
-		frappe.delete_doc("Additional Salary", name, force=True, ignore_permissions=True)
+	for row in existing:
+		if row.docstatus == 1:
+			doc = frappe.get_doc("Additional Salary", row.name)
+			doc.flags.ignore_permissions = True
+			doc.cancel()
+		frappe.delete_doc("Additional Salary", row.name, force=True, ignore_permissions=True)
 
 
 def _make_additional_salary(
@@ -435,4 +482,8 @@ def _make_additional_salary(
 	)
 	doc.flags.ignore_permissions = True
 	doc.insert()
+	# Submitted, not left as a draft: a draft Additional Salary is invisible to
+	# the salary slip, so the first full payroll run produced slips with no tea
+	# on them at all. Re-running replaces these, cancelling as it goes.
+	doc.submit()
 	return doc

@@ -79,3 +79,5 @@ avinashgroup_app.patches.setup_allowance_category
 avinashgroup_app.patches.setup_payroll_employee_fields
 
 avinashgroup_app.patches.setup_half_day_allowance_rule
+
+avinashgroup_app.patches.setup_meal_entitlement_rule
