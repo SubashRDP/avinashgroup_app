@@ -289,6 +289,14 @@ for _event, _handler in rfq_events.items():
 for _event, _handler in journal_entry_events.items():
     _add_doc_event("Journal Entry", _event, _handler)
 
+# Journals HRMS writes itself (payroll accrual, advance payout) get a JV Type
+# before the numbering reads it — first in the chain, ahead of the naming hooks.
+_je = doc_events.setdefault("Journal Entry", {})
+_existing = _je.get("before_insert")
+_je["before_insert"] = ["avinashgroup_app.payroll.hr_journal.default_jv_type"] + (
+    list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
+)
+
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
 
