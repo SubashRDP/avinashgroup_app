@@ -341,7 +341,9 @@ duplicate check still applies) — `payroll/hr_journal.py`.
 1. Attendance is complete for the BS month (reports: Monthly Attendance BS).
 2. Overtime Sheets for the month are submitted and measured.
 3. One-offs on **Payroll Adjustment**; bonus on **Dashain Bonus**; rises on **Salary Revision**.
-4. New **Payroll Entry** — the posting date picks the BS month's dates.
-5. **Prepare Payroll Inputs**, then Create Salary Slips.
-6. Check tax on the slips; tick *Override Income Tax* where accounts knows better.
-7. Submit Salary Slips (needs the GL mapping above).
+4. New **Payroll Entry** — the posting date picks the BS month's dates. Get
+   Employees and **Save only**: submitting the entry creates the slips at once.
+5. **Prepare Payroll Inputs** while the entry is still a draft.
+6. **Create Salary Slips** (this submits the entry and makes the slips).
+7. Check tax on the slips; tick *Override Income Tax* where accounts knows better.
+8. Submit Salary Slip (needs the GL mapping above).
