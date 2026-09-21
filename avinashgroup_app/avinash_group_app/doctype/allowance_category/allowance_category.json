@@ -5,12 +5,49 @@
  "creation": "2026-09-21 10:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["category_name", "description", "rates_section", "rates"],
+ "field_order": [
+  "category_name",
+  "company",
+  "description",
+  "rates_section",
+  "rates"
+ ],
  "fields": [
-  {"fieldname": "category_name", "fieldtype": "Data", "label": "Category Name", "reqd": 1, "unique": 1, "in_list_view": 1},
-  {"fieldname": "description", "fieldtype": "Small Text", "label": "Who Belongs Here"},
-  {"fieldname": "rates_section", "fieldtype": "Section Break", "label": "Rates", "description": "What an employee in this category is paid for each attendance-driven component"},
-  {"fieldname": "rates", "fieldtype": "Table", "label": "Rates", "options": "Allowance Category Rate", "reqd": 1}
+  {
+   "fieldname": "category_name",
+   "fieldtype": "Data",
+   "label": "Category Name",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Rates differ per company: NGI pays tea at 235, NGN at 265. Leave blank for a group that spans the whole organisation"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Who Belongs Here"
+  },
+  {
+   "fieldname": "rates_section",
+   "fieldtype": "Section Break",
+   "label": "Rates",
+   "description": "What an employee in this category is paid for each attendance-driven component"
+  },
+  {
+   "fieldname": "rates",
+   "fieldtype": "Table",
+   "label": "Rates",
+   "options": "Allowance Category Rate",
+   "reqd": 1
+  }
  ],
  "links": [],
  "modified": "2026-09-21 10:00:00.000000",
@@ -19,9 +56,34 @@
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
-  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "write": 1},
-  {"create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1},
-  {"read": 1, "role": "HR User"}
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR User"
+  }
  ],
  "sort_field": "modified",
  "sort_order": "DESC",

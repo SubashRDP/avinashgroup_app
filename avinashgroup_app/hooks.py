@@ -356,6 +356,13 @@ _add_doc_event("Shift Request", "validate", "avinashgroup_app.hr.shift_change.va
 _add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_change.make_room_for_request")
 _add_doc_event("Shift Request", "on_cancel", "avinashgroup_app.hr.shift_change.close_gap_after_cancel")
 
+# Tea and meal rates differ per company, so an employee may only be put in a
+# category belonging to their own company.
+_add_doc_event(
+    "Employee", "validate",
+    "avinashgroup_app.avinash_group_app.doctype.allowance_category.allowance_category.validate_employee_category",
+)
+
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.
 for _dt in ("Leave Allocation", "Leave Application"):

@@ -29,3 +29,19 @@ class AllowanceCategory(Document):
 			if row.salary_component in seen:
 				frappe.throw(_("{0} is listed twice").format(row.salary_component))
 			seen.add(row.salary_component)
+
+
+def validate_employee_category(doc, method=None):
+	"""An employee may only be put in a category of their own company.
+
+	Hook: doc_events -> Employee -> validate. NGI pays tea at 235 a day and NGN at
+	265; picking the wrong company's category would quietly pay the wrong rate.
+	"""
+	category = doc.get("custom_allowance_category")
+	if not category:
+		return
+	company = frappe.db.get_value("Allowance Category", category, "company")
+	if company and company != doc.company:
+		frappe.throw(
+			_("Allowance Category {0} belongs to {1}, not {2}").format(category, company, doc.company)
+		)
