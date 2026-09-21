@@ -207,10 +207,8 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
   </div>
 
   {#- ---------- Footer: signatories + printed-on ----------
-     Vendor Payment gets a 5th "Checked by" column; everything else keeps 4. -#}
-  {%- set signatories = ["Received by", "Prepared by", "Checked by", "Verified by", "Approved by"]
-        if doc.custom_p_type == "Vendor Payment"
-        else ["Received by", "Prepared by", "Verified by", "Approved by"] -%}
+     Five signature columns on every payment type. -#}
+  {%- set signatories = ["Received by", "Prepared by", "Checked by", "Verified by", "Approved by"] -%}
   <div class="pv-footer">
     <table class="pv-sign">
       <tr>
