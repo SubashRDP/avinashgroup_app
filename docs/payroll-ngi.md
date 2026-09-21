@@ -248,3 +248,100 @@ The dearness allowance is the one part of NGI's pay that is not dated — the
 structure reads it off the Employee — so the old value is written onto the row
 before it is overwritten. That makes the revision document its history, and lets
 a cancel put it back.
+
+## Attendance reports measure against the day's shift (2026-09-21)
+
+Monthly Attendance BS (Detail and Summary), Yearly Leave Details BS and Work On
+Holiday BS now reproduce the Chaitra 2082 attendance workbook's rules. One module,
+`hr/shift_day.py`, decides what counts, and overtime pay uses the same code, so
+the report and the slip cannot disagree about a day.
+
+| Column | Rule |
+|---|---|
+| Shift | The shift rostered on **that date** — a mid-month shift change shows on the day it happened |
+| Late | Minutes after that shift starts, on a working day worked in full. No grace: 09:08 on the 9 AM shift is 8 |
+| Before ofc. Time | Minutes before the shift ends, same days |
+| Late Time (summary) | Late + Before ofc. Time, as the sheet's card adds them |
+| O.T. | Hours outside the shift; every hour on a holiday; nearest half hour (7:53 → 8, 7:34 → 7.5); OT-eligible staff only |
+| Leave Remaining | `min(Entitled, Entitled − Taken + Holidays Worked)` — holiday work credited back only for staff **not** paid OT |
+
+Before this, Late read **0 for everyone** (it waited for an HRMS flag nothing sets),
+O.T. was every minute anyone stayed late, and "before office" counted on absent days.
+
+**Data finding:** 63 of 80 NGI staff had the opposite OT category from the
+workbook's Work On Holiday tab — nearly a clean inversion. Fixed on nepalgas from
+the client's sheet; **check the same on ng-group before the first live run.**
+
+## What the monthly run pays, and how
+
+Press **Prepare Payroll Inputs** on the Payroll Entry. It posts, per person:
+
+| Line | Counted by | Priced at |
+|---|---|---|
+| Tea & Conveyance | days present (a half day earns the full day) | Allowance Category rate (OLD/NEW/NO) |
+| Meal | 1.5 h early / 1.5 h late, max 2; holiday 6 h → 1, 8 h → 2 | Allowance Category rate |
+| Overtime | hours on a submitted **Overtime Sheet**, backed by punches (policy 5.1) | Basic ÷ 30 ÷ 8 × 1.5 |
+| Late Fine | Late Time minutes; not on a half day; not for **Late Fine Exempt** staff | Basic ÷ 30 ÷ 8 per hour |
+| Daily Wage | days present, half day = half | the day's rate (assignment base) |
+| Salary Advance | min(instalment, outstanding) per open Employee Advance | — |
+
+Every earning is taxed **in the month it is paid** (without this a labourer's
+7,068.75 month drew 6 of tax instead of 70.69).
+
+**Advances** are a balance now: record the Employee Advance when the cash is
+handed over (monthly instalment, start month), pay it with Make Bank Entry, and
+each run takes the instalment; the advance moves to *Returned* when cleared.
+HRMS requires the staff advance account to be **Receivable** — NGI's 148003 was
+changed on nepalgas only; four companies have it typed *Payable*. Accountant's call.
+
+## The other companies — onboarding from their own sheets
+
+`payroll/onboarding.py`: `onboard(key, path)` builds the company's structure and
+imports its sheet (NGN, NGG, NGK; NGI's profile is there to replay).
+
+| Company | Model | Parity (full month vs sheet, per component) |
+|---|---|---|
+| NGN | initial-basic (HRA 27%, gas 1,690.27, edu 1,250, tea 265/40) | 66/66 |
+| NGG | grade scale (basic + increments + grade) | 27/28 — the one is a mid-month joiner |
+| NGK | grade scale + maintenance; labour at 754/day | 19/19 staff, 6 labourers |
+
+Not on the site, so not imported: NGN — Dipak Chaudhary; NGK — Arun Kumar Tharu,
+Pal Bahadur Lohar (joined Magh/Falgun), labourer Kis Mohan Tharu. Five NGN rows
+have no basic on the sheet and were left unassigned. NGG's vehicle-helper sheet
+has broken `#REF!` formulas and was not used. GLMI, GEPL and SGU sent no sheet.
+
+## Posting to the books — needs the accountant
+
+Salary slips submit, but the payroll journal needs every component mapped to a
+GL account, and **none are**. `onboarding.map_component_accounts(company)` applies
+a proposal from the existing chart (same codes on every company):
+
+| Line | Account |
+|---|---|
+| All earnings | 547101 Salary Expenses - O/O |
+| SSF | 347302 SSF Payable |
+| Income Tax | 348102 TDS-Remuneration |
+| Salary Advance | 148003 Staff Advance |
+| Late Fine | 547101 (reduces salary cost; no fines-income account exists) |
+
+Proven in a rolled-back transaction: 87 NGI slips submitted and the journal
+balanced, crediting Salary Payable with exactly the net pay (24,24,689.55).
+
+**Open:** the chart splits salary expense three ways (O/O office, S/D sales &
+distribution, F/P filling plant) but has no matching cost centres, and a
+component maps to one account. Either create those cost centres per company and
+set each employee's payroll cost centre, or accept one expense account.
+
+Journals HRMS writes itself get a JV Type, and for the hand-numbered Journal
+Entry / Cash Entry series the next number in that series (marked manual, so the
+duplicate check still applies) — `payroll/hr_journal.py`.
+
+## Month-end, in order
+
+1. Attendance is complete for the BS month (reports: Monthly Attendance BS).
+2. Overtime Sheets for the month are submitted and measured.
+3. One-offs on **Payroll Adjustment**; bonus on **Dashain Bonus**; rises on **Salary Revision**.
+4. New **Payroll Entry** — the posting date picks the BS month's dates.
+5. **Prepare Payroll Inputs**, then Create Salary Slips.
+6. Check tax on the slips; tick *Override Income Tax* where accounts knows better.
+7. Submit Salary Slips (needs the GL mapping above).
