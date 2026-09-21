@@ -18,8 +18,10 @@ Columns:
   • IN / OUT (from Attendance.in_time / out_time)
   • Hours — Attendance.working_hours (decimal) rendered as HH:MM
   • Status
-  • Late (min): max(0, in_time - shift.start_time) when Attendance.late_entry=1
-  • Before Office (min): max(0, shift.end_time - out_time)  — *early exit*, not early arrival
+  • Shift — the shift rostered on THAT date (hr.shift_day.ShiftRoster), so a
+    mid-month shift change shows on the day it happened
+  • Late (min), Before ofc. Time, O.T. — measured against that shift by
+    hr.shift_day.measure_day, the same code overtime pay uses
   • Leave (1/blank)
   • Work In Holiday (1/blank)
   • One dynamic column per attendance-driven Salary Component, with the qty
@@ -31,6 +33,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
+from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day, overtime_eligibility
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
@@ -77,7 +80,7 @@ def execute(filters=None):
 	components = get_attendance_driven_components()
 
 	if not employees:
-		return _columns(components), [], _note_html(note), None, _summary(0, 0, 0, 0, 0, bs_label)
+		return _columns(components), [], _note_html(note), None, _summary(0, 0, 0, 0, 0, 0, bs_label)
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
@@ -86,14 +89,15 @@ def execute(filters=None):
 	holiday_list_of = resolve_holiday_lists(employees)
 	holiday_map = _fetch_holidays(holiday_list_of, ad_start, ad_end)
 	leave_map = _fetch_leaves(employees, ad_start, ad_end, company)
-	shift_cache = {}
 	# Attendance carries its own shift, but days with no Attendance row have
 	# none — so fall back to the roster rather than leaving the column blank on
-	# exactly the days someone is asking about.
-	roster = _shift_roster(employees, ad_start, ad_end)
+	# exactly the days someone is asking about. Per day, not per month: a shift
+	# change splits the assignment, and a month can hold two shifts.
+	roster = ShiftRoster(employees, ad_start, ad_end)
+	ot_eligible = overtime_eligibility(employees)
 
 	data = []
-	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0}
+	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0, "ot_hours": 0.0}
 
 	# Per-date values (BS label + weekday) are identical for every employee, and
 	# ad_to_bs is expensive, so compute them once per distinct date up front.
@@ -117,7 +121,7 @@ def execute(filters=None):
 			day_label, weekday = date_info[ad_date]
 			row = _build_row(
 				emp, ad_date, day_label, weekday, att_map, emp_holidays, leave_map,
-				components, shift_cache, roster,
+				components, roster, ot_eligible.get(emp.name),
 			)
 			data.append(row)
 			_accumulate(totals, row)
@@ -133,6 +137,7 @@ def execute(filters=None):
 			totals["office"] + totals["holiday"],
 			totals["leave"],
 			totals["late_min"],
+			totals["ot_hours"],
 			bs_label,
 		),
 	)
@@ -371,28 +376,6 @@ def _get_employees(filters, ad_start, ad_end):
 # Bulk fetches
 # ---------------------------------------------------------------------------
 
-def _shift_roster(employees, ad_start, ad_end):
-	"""{employee: shift} from Shift Assignment, for days with no Attendance."""
-	emp_names = [e.name for e in employees]
-	if not emp_names:
-		return {}
-	roster = {}
-	for row in frappe.get_all(
-		"Shift Assignment",
-		filters={
-			"employee": ["in", emp_names],
-			"docstatus": 1,
-			"start_date": ["<=", ad_end],
-		},
-		or_filters=[["end_date", "is", "not set"], ["end_date", ">=", ad_start]],
-		fields=["employee", "shift_type"],
-		order_by="start_date asc",
-		limit_page_length=0,
-	):
-		roster[row.employee] = row.shift_type
-	return roster
-
-
 def _employees_on_shift(shift, ad_start, ad_end):
 	"""Employees assigned to `shift` at any point in the period.
 
@@ -502,35 +485,7 @@ def _fetch_leaves(employees, ad_start, ad_end, company=None):
 	return out
 
 
-def _shift_window(shift_name, cache):
-	"""Return (start_seconds, end_seconds) for shift, or (None, None)."""
-	if not shift_name:
-		return (None, None)
-	if shift_name in cache:
-		return cache[shift_name]
-	row = frappe.db.get_value(
-		"Shift Type", shift_name, ["start_time", "end_time"], as_dict=True
-	)
-	if not row:
-		cache[shift_name] = (None, None)
-		return (None, None)
-	out = (_to_seconds(row.start_time), _to_seconds(row.end_time))
-	cache[shift_name] = out
-	return out
-
-
-def _to_seconds(val):
-	if val is None:
-		return None
-	if hasattr(val, "total_seconds"):
-		return int(val.total_seconds())
-	parts = str(val).split(":")
-	return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(float(parts[2]) if len(parts) > 2 else 0)
-
-
-
-
-def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, shift_cache, roster=None):
+def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, roster, ot_eligible=False):
 	holiday = emp_holidays.get(ad_date)
 	leave_type = leave_map.get((emp.name, ad_date))
 	att = att_map.get((emp.name, ad_date))
@@ -539,8 +494,7 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 	out_time_str = ""
 	working_hours = ""
 	status = ""
-	late_min = 0
-	early_exit_min = 0
+	measured = measure_day(None)
 	work_in_holiday = 0
 	leave_flag = 0
 	remarks = ""
@@ -576,15 +530,9 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 			work_in_holiday = 1
 		if att.custom_worked_on_holiday and status in ("Present", "Half Day"):
 			work_in_holiday = 1
-		shift_start, shift_end = _shift_window(att.shift, shift_cache)
-		if att.in_time and shift_start is not None:
-			diff = _time_of_day_seconds(att.in_time) - shift_start
-			if att.late_entry and diff > 0:
-				late_min = diff // 60
-		if att.out_time and shift_end is not None:
-			diff_end = shift_end - _time_of_day_seconds(att.out_time)
-			if diff_end > 0:
-				early_exit_min = diff_end // 60
+		# Against the shift of the day. This used to need HRMS's `late_entry`
+		# flag, which nothing on this site sets — so Late read 0 for everyone.
+		measured = measure_day(att, is_holiday=bool(holiday), ot_eligible=ot_eligible)
 		# Holiday-aware status: tag holiday name on both worked and absent rows
 		if holiday:
 			if status in ("Present", "Half Day"):
@@ -615,14 +563,15 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 		"day": weekday,
 		"employee": emp.name,
 		"employee_name": emp.employee_name,
-		"shift": (att.shift if att else None) or (roster or {}).get(emp.name) or emp.default_shift,
+		"shift": (att.shift if att else None) or roster.shift_on(emp.name, ad_date),
 		"department": emp.department,
 		"in_time": in_time_str,
 		"out_time": out_time_str,
 		"working_hours": working_hours,
 		"status": status,
-		"late_minutes": int(late_min),
-		"before_office_minutes": int(early_exit_min),
+		"late_minutes": measured.late_minutes,
+		"before_office_minutes": measured.early_exit_minutes,
+		"ot_hours": measured.ot_hours,
 		"leave_count": leave_flag,
 		"work_in_holiday": work_in_holiday,
 		"remarks": remarks,
@@ -633,7 +582,8 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 
 
 def _accumulate(totals, row):
-	totals["late_min"] += row["late_minutes"]
+	totals["late_min"] += row["late_minutes"] + row["before_office_minutes"]
+	totals["ot_hours"] += row["ot_hours"]
 	status = row["status"]
 	if row["work_in_holiday"]:
 		totals["holiday"] += 1
@@ -667,15 +617,6 @@ def _fmt_hours(hours):
 	if total_minutes < 0:
 		total_minutes = 0
 	return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
-
-
-def _time_of_day_seconds(dt):
-	if hasattr(dt, "hour"):
-		return dt.hour * 3600 + dt.minute * 60 + dt.second
-	s = str(dt)
-	t = s.split(" ")[-1] if " " in s else s
-	parts = t.split(":")
-	return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(float(parts[2]) if len(parts) > 2 else 0)
 
 
 def _component_fieldname(component_name):
@@ -712,6 +653,7 @@ def _columns(components):
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 95},
 		{"label": _("Late (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
 		{"label": _("Before ofc. Time"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 110},
+		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 1},
 		{"label": _("Leave"), "fieldname": "leave_count", "fieldtype": "Check", "width": 65},
 		{"label": _("Work In Holiday"), "fieldname": "work_in_holiday", "fieldtype": "Check", "width": 110},
 	]
@@ -730,7 +672,9 @@ def _columns(components):
 	return base
 
 
-def _summary(office_days, holiday_days, total_worked, leave_days, late_min, bs_label):
+def _summary(office_days, holiday_days, total_worked, leave_days, late_min, ot_hours, bs_label):
+	# "Late Time" is late arrival plus leaving early, as on the sheet's card
+	# (Late Time = Late + Before ofc. Time).
 	return [
 		{"value": bs_label, "label": _("BS Period"), "datatype": "Data"},
 		{"value": total_worked, "label": _("Total Days Worked"), "datatype": "Int"},
@@ -738,6 +682,7 @@ def _summary(office_days, holiday_days, total_worked, leave_days, late_min, bs_l
 		{"value": holiday_days, "label": _("Worked on Holiday"), "datatype": "Int"},
 		{"value": leave_days, "label": _("Leave Days"), "datatype": "Int"},
 		{"value": late_min, "label": _("Late Time (min)"), "datatype": "Int"},
+		{"value": ot_hours, "label": _("O.T. (hrs)"), "datatype": "Float"},
 	]
 
 

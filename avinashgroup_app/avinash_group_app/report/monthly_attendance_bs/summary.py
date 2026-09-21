@@ -13,8 +13,11 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
   • Meal              = sum(Food qty + Late Food qty)
   • Tea & Conveyance  = sum(Tea qty + Commute qty)
   • Tihar             = sum(Tihar component qty, when component exists)
-  • O.T. (hrs)        = sum(custom_late_exit seconds) / 3600
-  • Late Time (min)   = sum of per-day late minutes (in_time vs shift.start_time)
+  • O.T. (hrs)        = hr.shift_day.measure_day, summed: hours outside the day's
+                        shift (all hours on a holiday), to the half hour,
+                        overtime-eligible staff only — the figure overtime pay uses
+  • Late Time (min)   = late arrival + leaving early, against the day's shift,
+                        as the sheet's card adds them (Late + Before ofc. Time)
   • Present Days      = count(Present + WFH) + 0.5 × count(Half Day)
   • Worked on Holiday = count(custom_worked_on_holiday=1 AND status in Present/Half Day)
   • Leave Current     = approved Leave Application days within the BS month
@@ -36,6 +39,7 @@ from rdp_common_app.utils.bs_boundaries import (
 	get_bs_month_range,
 	get_bs_month_name,
 )
+from avinashgroup_app.hr.shift_day import measure_day, overtime_eligibility
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
@@ -49,8 +53,6 @@ from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_att
 	_fetch_attendance,
 	_fetch_holidays,
 	_fetch_leaves,
-	_shift_window,
-	_time_of_day_seconds,
 )
 
 
@@ -141,14 +143,14 @@ def execute_summary(filters):
 		"upto":     (upto_leave_dates,  fy_start, ad_end),
 	}
 
-	shift_cache = {}
+	ot_eligible = overtime_eligibility(employees)
 
 	data = []
 	for idx, emp in enumerate(employees, start=1):
 		row = _build_summary_row(
 			idx, emp, ad_start, ad_end,
 			att_map, holiday_map, holiday_list_of, leave_windows,
-			components, groups, standalone_components, shift_cache,
+			components, groups, standalone_components, ot_eligible.get(emp.name),
 		)
 		data.append(row)
 
@@ -162,7 +164,7 @@ def execute_summary(filters):
 def _build_summary_row(
 	idx, emp, ad_start, ad_end,
 	att_map, holiday_map, holiday_list_of, leave_windows,
-	components, groups, standalone_components, shift_cache,
+	components, groups, standalone_components, ot_eligible=False,
 ):
 	emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
 
@@ -170,7 +172,7 @@ def _build_summary_row(
 	component_totals = {sc.name: 0.0 for sc in components}
 
 	late_min_total = 0
-	ot_seconds_total = 0
+	ot_hours_total = 0.0
 	present_days = 0.0
 	worked_on_holiday = 0
 
@@ -194,15 +196,12 @@ def _build_summary_row(
 		if att.custom_worked_on_holiday and status in present_statuses + ("Half Day",):
 			worked_on_holiday += 1
 
-		# Late minutes (only when late_entry flag is set, mirrors per-day grid)
-		shift_start, _shift_end = _shift_window(att.shift, shift_cache)
-		if att.in_time and shift_start is not None and att.late_entry:
-			diff = _time_of_day_seconds(att.in_time) - shift_start
-			if diff > 0:
-				late_min_total += diff // 60
-
-		# OT hours from custom_late_exit (seconds past shift end)
-		ot_seconds_total += flt(att.custom_late_exit or 0)
+		# Against the day's shift, by the same measure as the per-day grid and
+		# overtime pay. This used to need HRMS's `late_entry` flag, which nothing
+		# here sets, and counted every minute anyone stayed late as overtime.
+		measured = measure_day(att, is_holiday=ad_date in emp_holidays, ot_eligible=ot_eligible)
+		late_min_total += measured.late_minutes + measured.early_exit_minutes
+		ot_hours_total += measured.ot_hours
 
 		# Sum each attendance-driven component's per-day qty
 		for sc in components:
@@ -238,7 +237,7 @@ def _build_summary_row(
 		"employee_number": emp.employee_number or "",
 		"employee_name": emp.employee_name,
 		"department": emp.department or "",
-		"ot_hours": flt(ot_seconds_total / 3600.0, 2),
+		"ot_hours": flt(ot_hours_total, 1),
 		"late_minutes": int(late_min_total),
 		"present_days": flt(present_days, 1),
 		"worked_on_holiday": worked_on_holiday,

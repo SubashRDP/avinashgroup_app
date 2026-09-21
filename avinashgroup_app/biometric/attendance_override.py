@@ -28,6 +28,15 @@ def set_shift_deviation_fields(doc, method):
     doc.custom_early_exit = 0
     doc.custom_late_exit = 0
 
+    if not doc.shift and doc.employee and doc.attendance_date:
+        # Attendance marked by hand, or by anything but HRMS's auto-attendance,
+        # arrives with no shift — and with no shift every deviation stays 0, so
+        # late time, meals and the half-day rule all silently read nothing.
+        # Take the shift rostered for that date, as HRMS would have.
+        from avinashgroup_app.hr.overtime import get_shift_window
+
+        doc.shift = get_shift_window(doc.employee, doc.attendance_date)[0]
+
     if not doc.shift:
         return
 

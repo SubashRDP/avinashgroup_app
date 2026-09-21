@@ -63,11 +63,18 @@ def execute(filters=None):
 			row[_month_field(bs_month)] = days
 			total_taken += days
 		yearly_alloc = flt(allocation_map.get(emp.name, 0))
-		worked_holiday = holiday_work_map.get(emp.name, 0)
+		# Only staff who are not paid overtime earn leave back for working a
+		# holiday — the sheet's Work On Holiday tab is "by OT Eligibility NO
+		# staff". Overtime-eligible staff are paid for it instead, so it is not
+		# counted twice.
+		worked_holiday = 0 if emp.custom_ot_eligibility else holiday_work_map.get(emp.name, 0)
 		row["total_leave_days"] = flt(total_taken, 2)
 		row["total_yearly_leave"] = flt(yearly_alloc, 2)
 		row["total_worked_on_holiday"] = worked_holiday
-		row["leave_remaining"] = flt(yearly_alloc - total_taken, 2)
+		# As the sheet: holiday work offsets leave taken, but never lifts the
+		# balance above the year's entitlement —
+		#   IF(R-Q+S < R, R-Q+S, R)
+		row["leave_remaining"] = flt(min(yearly_alloc, yearly_alloc - total_taken + worked_holiday), 2)
 		row["remarks"] = ""
 		data.append(row)
 
@@ -124,7 +131,7 @@ def _get_employees(filters):
 	return frappe.get_list(
 		"Employee",
 		filters=emp_filters,
-		fields=["name", "employee_name", "employee_number", "department", "company"],
+		fields=["name", "employee_name", "employee_number", "department", "company", "custom_ot_eligibility"],
 		order_by="employee_name asc",
 		limit_page_length=0,
 	)

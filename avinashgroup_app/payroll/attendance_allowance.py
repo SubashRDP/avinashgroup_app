@@ -196,6 +196,11 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		return _meals_for_day(row, sc, present_statuses)
 
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
+		if condition == "Late Arrival After" and status == "Half Day":
+			# Arriving more than two hours late already costs half the day's pay
+			# (policy 1.2). Fining the same minutes again would charge the one
+			# lateness twice; the fine is for lateness short of that line.
+			return 0.0
 		offset_seconds = flt(sc.custom_time_offset_hours) * 3600.0
 		if condition == "Early Entry Before":
 			seconds = flt(row.custom_early_entry)
