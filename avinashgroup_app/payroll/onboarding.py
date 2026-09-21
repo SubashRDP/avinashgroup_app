@@ -102,12 +102,34 @@ PROFILES = {
 	},
 }
 
+#: The per-person pay inputs a structure formula reads. `setup_payroll_employee_fields`
+#: created the first batch; these four were only ever made by hand on the working
+#: site, so a fresh site had no column for them and every import failed.
 EMPLOYEE_FIELDS = [
+	{
+		"fieldname": "custom_dearness_allowance",
+		"label": "Dearness Allowance",
+		"fieldtype": "Currency",
+		"insert_after": "custom_ssf_applicable",
+		"description": "From the Grade sheet; differs per person",
+	},
+	{
+		"fieldname": "custom_other_allowance",
+		"label": "Other Allowance",
+		"fieldtype": "Currency",
+		"insert_after": "custom_dearness_allowance",
+	},
+	{
+		"fieldname": "custom_fuel_allowance",
+		"label": "Fuel Allowance",
+		"fieldtype": "Currency",
+		"insert_after": "custom_other_allowance",
+	},
 	{
 		"fieldname": "custom_fixed_allowance",
 		"label": "Fixed Allowance",
 		"fieldtype": "Currency",
-		"insert_after": "custom_other_allowance",
+		"insert_after": "custom_fuel_allowance",
 		"description": "Grade-scale companies (NGG, NGK): the monthly fixed allowance",
 	},
 	{
@@ -118,22 +140,58 @@ EMPLOYEE_FIELDS = [
 	},
 ]
 
-#: (component, abbr, type) — everything a structure below can hold.
+#: The payroll component catalogue: everything a structure or the attendance
+#: engine can put on a slip.
+#:
+#: `payment_days` matters more than it looks. It is a fetch-from field on the
+#: structure row, so a row that sets it to 0 is silently refilled from the
+#: component — which is why the two SSF components must carry 0 themselves.
+#: Their formulas already read Basic, which is prorated, and HRMS refuses a row
+#: that would prorate the same amount twice.
+#:
+#: (name, abbr, type, payment_days, flags)
 COMPONENTS = (
-	("Basic", "B", "Earning"),
-	("Dearness Allowance", "DA", "Earning"),
-	("Other Allowance", "OA", "Earning"),
-	("Fixed Allowance", "FA", "Earning"),
-	("Fuel Allowance", "FUEL", "Earning"),
-	("Maintenance Allowance", "MNT", "Earning"),
-	("House Rent Allowance", "HRA", "Earning"),
-	("Gas Allowance", "GAS", "Earning"),
-	("Education Allowance", "EDU", "Earning"),
-	("SSF Addition", "SSFA", "Earning"),
+	("Basic", "B", "Earning", 1, {}),
+	("Dearness Allowance", "DA", "Earning", 1, {}),
+	("Other Allowance", "OA", "Earning", 1, {}),
+	("Fixed Allowance", "FA", "Earning", 1, {}),
+	("Fuel Allowance", "FUEL", "Earning", 1, {}),
+	("Maintenance Allowance", "MNT", "Earning", 1, {}),
+	("House Rent Allowance", "HRA", "Earning", 1, {}),
+	("Gas Allowance", "GAS", "Earning", 1, {}),
+	("Education Allowance", "EDU", "Earning", 1, {}),
+	("SSF Addition", "SSFA", "Earning", 0, {}),
 	# Paid month by month on Payroll Adjustment when there was loading work.
-	("Load/Unload Allowance", "LU", "Earning"),
-	("SSF", "SSF", "Deduction"),
-	("Income Tax", "TAX", "Deduction"),
+	("Load/Unload Allowance", "LU", "Earning", 1, {}),
+	("Dashain Bonus", "DB", "Earning", 0, {}),
+	("Salary Arrears", "ARR", "Earning", 0, {}),
+	# Worked out from attendance each month by `payroll.attendance_allowance`.
+	("Tea & Conveyance", "TEA", "Earning", 0, {
+		"custom_is_attendance_driven": 1, "custom_condition_type": "Status = Present",
+		"custom_unit": "Per Day", "custom_summary_group": "Tea", "custom_half_day_counts": "Full Day",
+	}),
+	("Meal", "MEAL", "Earning", 0, {
+		"custom_is_attendance_driven": 1, "custom_condition_type": "Meal Entitlement",
+		"custom_unit": "Per Day", "custom_time_offset_hours": 1.5, "custom_summary_group": "Meal",
+	}),
+	("Overtime", "OT", "Earning", 0, {
+		"custom_is_attendance_driven": 1, "custom_condition_type": "Authorised Overtime",
+		"custom_unit": "Per Hour", "custom_rate_basis": "Hourly Basic × Multiplier",
+		"custom_rate_multiplier": 1.5, "custom_summary_group": "Overtime",
+	}),
+	("Daily Wage", "DW", "Earning", 0, {
+		"custom_is_attendance_driven": 1, "custom_condition_type": "Status = Present",
+		"custom_unit": "Per Day", "custom_half_day_counts": "Half Day",
+		"custom_rate_basis": "Daily Wage", "custom_summary_group": "Daily Wage",
+	}),
+	("SSF", "SSF", "Deduction", 0, {"exempted_from_income_tax": 1}),
+	("Income Tax", "TAX", "Deduction", 0, {"variable_based_on_taxable_salary": 1}),
+	("Late Fine", "LF", "Deduction", 0, {
+		"custom_is_attendance_driven": 1, "custom_condition_type": "Late Time",
+		"custom_unit": "Per Hour", "custom_rate_basis": "Hourly Basic × Multiplier",
+		"custom_rate_multiplier": 1, "custom_summary_group": "Late Fine",
+	}),
+	("Salary Advance", "ADV", "Deduction", 0, {}),
 )
 
 
@@ -296,19 +354,32 @@ def _row(component, formula, prorate):
 
 
 def ensure_components():
-	for name, abbr, kind in COMPONENTS:
-		if not frappe.db.exists("Salary Component", name):
-			frappe.get_doc(
-				{
-					"doctype": "Salary Component",
-					"salary_component": name,
-					"salary_component_abbr": abbr,
-					"type": kind,
-					"is_tax_applicable": 1 if kind == "Earning" else 0,
-					"exempted_from_income_tax": 1 if name == "SSF" else 0,
-					"round_to_the_nearest_integer": 0,
-				}
-			).insert(ignore_permissions=True)
+	"""Create any missing component, and keep the payment-days flag true.
+
+	Only `depends_on_payment_days` is corrected on a component that already
+	exists — everything else a company may have tuned by hand is left alone.
+	"""
+	for name, abbr, kind, payment_days, flags in COMPONENTS:
+		if frappe.db.exists("Salary Component", name):
+			if frappe.db.get_value("Salary Component", name, "depends_on_payment_days") != payment_days:
+				frappe.db.set_value("Salary Component", name, "depends_on_payment_days", payment_days)
+			continue
+
+		doc = frappe.get_doc(
+			{
+				"doctype": "Salary Component",
+				"salary_component": name,
+				"salary_component_abbr": abbr,
+				"type": kind,
+				"depends_on_payment_days": payment_days,
+				"is_tax_applicable": 1 if kind == "Earning" else 0,
+				"round_to_the_nearest_integer": 0,
+			}
+		)
+		doc.update(flags)
+		doc.flags.ignore_permissions = True
+		doc.insert()
+	frappe.clear_cache(doctype="Salary Component")
 
 
 def ensure_allowance_categories(key, profile):
