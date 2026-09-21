@@ -169,7 +169,14 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		if status in present_statuses:
 			return _per_unit(unit, day=1.0, hours=working_hours)
 		if status == "Half Day":
-			return _per_unit(unit, day=0.5, hours=working_hours)
+			# Tea and conveyance are earned by turning up, not by the hours: the
+			# client's rule is that someone who comes gets the day (policy call,
+			# 2026-09-21). A component that should pay half, or nothing, says so
+			# on itself.
+			counts = sc.get("custom_half_day_counts") or "Full Day"
+			if counts == "Not At All":
+				return 0.0
+			return _per_unit(unit, day=0.5 if counts == "Half Day" else 1.0, hours=working_hours)
 		return 0.0
 
 	if condition == "Status = Half Day":
