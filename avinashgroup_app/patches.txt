@@ -97,3 +97,5 @@ avinashgroup_app.patches.setup_overtime_and_late_fine
 avinashgroup_app.patches.setup_advance_recovery
 
 avinashgroup_app.patches.setup_daily_wage
+
+avinashgroup_app.patches.remove_merged_attendance_summary_report
