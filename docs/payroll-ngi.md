@@ -53,6 +53,25 @@ every structure component:
 | SSF | 4,112.54 | 18,049.70 | 4,523.78 |
 | **Regular salary** | **30,812.00** | **126,254.80** | **32,528.90** |
 
+## Company-wide parity (2026-09-21)
+
+Slips built for all 87 assigned employees against the sheet's Regular Salary:
+
+| | Result |
+|---|---|
+| Match to the paisa | **84 of 87** |
+| Differ | 3, all of them rows the sheet types by hand |
+
+The three: **Raju Maharjan** (the sheet pays 6/30 of the month), **Kishor Lal
+Shrestha** (the sheet pays nothing), and **Shreechandra Bhatta**, the CEO row that
+is typed throughout and contradicts itself (Basic 34,270.83, Net Basic 137,700).
+Each is a data decision for HR, not a formula.
+
+**Fuel Allowance** is paid to one employee (6,123) as a **recurring Additional
+Salary**, not a structure row: it is one person's fixed monthly amount, and the
+structure cannot be edited once assignments point at it. That took Abhishek
+Khadka from 23,416.80 to the sheet's 29,539.80 exactly.
+
 ## Known gaps
 
 * 5 of the 92 have no Basic in the sheet, so they have no assignment.
