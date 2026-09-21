@@ -94,7 +94,10 @@ def create_additional_salaries(payroll_entry) -> dict:
 			if amount <= 0:
 				continue
 
-			savepoint = f"naa_{employee}_{sc.name}".replace("-", "_").replace(" ", "_")[:60]
+			# A savepoint is a SQL identifier, so anything but letters, digits and
+			# underscores has to go: "Tea & Conveyance" made MariaDB reject the
+			# whole statement and no allowance was ever written.
+			savepoint = _savepoint_name(employee, sc.name)
 			frappe.db.savepoint(savepoint)
 			try:
 				_delete_existing_draft(employee, sc.name, payroll_date)
@@ -321,6 +324,12 @@ def _attendance_rows(employee: str, start_date, end_date) -> list:
 			"custom_late_exit",
 		],
 	)
+
+
+def _savepoint_name(employee: str, component: str) -> str:
+	"""A SQL-safe savepoint name for one employee/component attempt."""
+	raw = f"naa_{employee}_{component}"
+	return "".join(ch if ch.isalnum() else "_" for ch in raw)[:60]
 
 
 def _get_employee_overrides(employee: str) -> dict:

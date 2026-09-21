@@ -72,6 +72,31 @@ Salary**, not a structure row: it is one person's fixed monthly amount, and the
 structure cannot be edited once assignments point at it. That took Abhishek
 Khadka from 23,416.80 to the sheet's 29,539.80 exactly.
 
+## First full run — Bhadra 2083 (2026-09-21)
+
+Payroll Entry `NGI-PAYR-83/84-00001`, 87 employees, 87 slips saved.
+
+| Component | Slips | Sheet (Falgun) |
+|---|---|---|
+| Basic | 1,518,037.57 | 1,518,037.54 |
+| Dearness | 829,086.00 | 829,086.00 |
+| Tea & Conveyance | 276,555 | 273,980 |
+| SSF | 451,003.44 | 478,537.73 |
+| **Gross** | **3,405,477.03** | 3,731,812.16 |
+
+The gap is entirely explained: **OT (198,871) and meals (52,275) are not built
+yet**, and the sheet's three hand-typed rows account for the remaining 77,764.
+
+Two things this run taught:
+
+* **Attendance allowances must be submitted.** The engine creates Additional
+  Salary as drafts; a draft is invisible to the slip, so tea only appeared after
+  submitting the 80 drafts and rebuilding.
+* **Meal cannot be "one per present day."** Configured that way it paid 132,525
+  against the sheet's 52,275. Meals are earned by coming 1.5 h early or staying
+  1.5 h late (max 2 a day), and on a holiday at 6 h and 8 h — so the component is
+  switched off in the engine until that rule exists.
+
 ## Known gaps
 
 * 5 of the 92 have no Basic in the sheet, so they have no assignment.
