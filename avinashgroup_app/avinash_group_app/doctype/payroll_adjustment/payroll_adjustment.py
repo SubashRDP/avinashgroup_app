@@ -78,6 +78,10 @@ class PayrollAdjustment(Document):
 					"payroll_date": self.payroll_date,
 					"currency": frappe.db.get_value("Company", self.company, "default_currency"),
 					"overwrite_salary_structure_amount": 0,
+					# A one-off earning is taxed in its own month.
+					"deduct_full_tax_on_selected_payroll_date": 1
+					if frappe.db.get_value("Salary Component", row.salary_component, "type") == "Earning"
+					else 0,
 					"notes": row.note or _("From {0}").format(self.name),
 				}
 			)

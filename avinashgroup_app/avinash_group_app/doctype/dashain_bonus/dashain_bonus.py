@@ -85,6 +85,8 @@ class DashainBonus(Document):
 					"payroll_date": self.payout_date,
 					"currency": frappe.db.get_value("Company", self.company, "default_currency"),
 					"overwrite_salary_structure_amount": 0,
+					# TDS on the bonus in the month it is paid, not spread thin.
+					"deduct_full_tax_on_selected_payroll_date": 1,
 					"notes": row.note or _("Festival bonus {0}, {1}").format(self.fiscal_year, self.name),
 				}
 			)

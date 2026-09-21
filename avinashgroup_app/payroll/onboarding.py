@@ -97,6 +97,8 @@ PROFILES = {
 			"maintenance": "U", "ssf": "Y",
 		},
 		"rates": {},
+		# Labour paid by the day: 754 a day for the days worked.
+		"wages": {"sheet": "Wages", "first_row": 3, "match": "name", "cols": {"name": "B", "rate": "F"}},
 	},
 }
 
@@ -153,6 +155,10 @@ def structure_name(key):
 	return f"{key} Staff {FISCAL_YEAR}"
 
 
+def wage_structure_name(key):
+	return f"{key} Daily Wage {FISCAL_YEAR}"
+
+
 def structure_rows(profile):
 	"""(component, formula, depends_on_payment_days) for the company's model.
 
@@ -195,6 +201,9 @@ def setup_company(key):
 	ensure_payable_account(company)
 	ensure_components()
 	ensure_allowance_categories(key, profile)
+
+	if profile.get("wages"):
+		ensure_wage_structure(key, company)
 
 	name = structure_name(key)
 	if frappe.db.exists("Salary Structure", {"name": name, "docstatus": 1}):
@@ -240,6 +249,35 @@ def ensure_payable_account(company):
 	account = f"347301 - Salary Payable - {abbr}"
 	if frappe.db.exists("Account", account):
 		frappe.db.set_value("Company", company, "default_payroll_payable_account", account)
+
+
+def ensure_wage_structure(key, company):
+	"""Daily-wage labour: nothing fixed in the structure. The base is one day's
+	pay; the `Daily Wage` component pays it per day present, overtime reads the
+	flag, and the tax slab withholds the 1%."""
+	name = wage_structure_name(key)
+	if frappe.db.exists("Salary Structure", {"name": name, "docstatus": 1}):
+		return name
+	doc = frappe.new_doc("Salary Structure")
+	doc.name = name
+	doc.update(
+		{
+			"company": company,
+			"currency": "NPR",
+			"payroll_frequency": "Monthly",
+			"is_active": "Yes",
+			"custom_daily_wage": 1,
+			"payment_account": frappe.db.get_value("Company", company, "default_payroll_payable_account"),
+		}
+	)
+	doc.append(
+		"deductions",
+		{"salary_component": "Income Tax", "variable_based_on_taxable_salary": 1, "depends_on_payment_days": 0},
+	)
+	doc.flags.ignore_permissions = True
+	doc.save()
+	doc.submit()
+	return doc.name
 
 
 def _row(component, formula, prorate):
@@ -328,7 +366,23 @@ def import_sheet(key, path):
 		if base and assign(employee, key, company, base):
 			assigned.append(employee)
 
+	wages = profile.get("wages")
+	wage_assigned, wage_unmatched = [], []
+	if wages:
+		wage_sheet = openpyxl.load_workbook(path, data_only=True)[wages["sheet"]]
+		for row in _sheet_rows(wage_sheet, wages):
+			employee = matcher.find(row)
+			rate = flt(row.get("rate")) if isinstance(row.get("rate"), (int, float)) else 0
+			if not employee or not rate:
+				wage_unmatched.append(row["name"])
+				continue
+			frappe.db.set_value("Employee", employee, "custom_ssf_applicable", 0, update_modified=False)
+			if assign(employee, key, company, rate, structure=wage_structure_name(key)):
+				wage_assigned.append(employee)
+
 	return {
+		"daily_wage_assigned": len(wage_assigned),
+		"daily_wage_unmatched": wage_unmatched,
 		"company": company,
 		"structure": structure_name(key),
 		"employees_updated": len(updated),
@@ -428,7 +482,7 @@ def tea_category(key, profile, tea, attendance):
 	return None
 
 
-def assign(employee, key, company, base):
+def assign(employee, key, company, base, structure=None):
 	"""Assign the company structure from the fiscal year's first day, once."""
 	fy_start = frappe.db.get_value("Fiscal Year", FISCAL_YEAR, "year_start_date")
 	if frappe.db.exists(
@@ -441,12 +495,17 @@ def assign(employee, key, company, base):
 	doc.update(
 		{
 			"employee": employee,
-			"salary_structure": structure_name(key),
+			"salary_structure": structure or structure_name(key),
 			"from_date": fy_start,
 			"company": company,
 			"currency": "NPR",
 			"base": base,
 			"variable": 0,
+			# The Payroll Entry finds its employees by this account, so an
+			# assignment written without it is silently left out of every run.
+			"payroll_payable_account": frappe.db.get_value(
+				"Company", company, "default_payroll_payable_account"
+			),
 			"income_tax_slab": frappe.db.get_value(
 				"Income Tax Slab", {"company": company, "docstatus": 1, "disabled": 0}, "name",
 				order_by="effective_from desc",

@@ -171,6 +171,7 @@ class SalaryRevision(Document):
 				"payroll_date": self.arrears_payout_date,
 				"currency": frappe.db.get_value("Company", self.company, "default_currency"),
 				"overwrite_salary_structure_amount": 0,
+				"deduct_full_tax_on_selected_payroll_date": 1,
 				"notes": row.note
 				or _("Arrears of the revision effective {0} ({1})").format(self.effective_date, self.name),
 			}

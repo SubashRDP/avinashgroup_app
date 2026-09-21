@@ -95,3 +95,5 @@ avinashgroup_app.patches.setup_salary_revision
 avinashgroup_app.patches.setup_overtime_and_late_fine
 
 avinashgroup_app.patches.setup_advance_recovery
+
+avinashgroup_app.patches.setup_daily_wage
