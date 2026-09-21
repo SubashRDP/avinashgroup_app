@@ -4,7 +4,8 @@ Per Payroll Entry:
 1. List Salary Components where `custom_is_attendance_driven = 1` and not disabled.
 2. For each (employee, component), evaluate the component's condition against the
    employee's submitted Attendance rows in the period and sum the qty.
-3. Multiply qty × rate (employee override row → component default fallback).
+3. Multiply qty × rate (employee row → Allowance Category → the component's
+   rate basis: a flat default, or Hourly Basic × Multiplier for OT and late fine).
 4. Create an Additional Salary draft per (employee, component, payroll_date),
    tagged with `custom_source = "Nepal HRMS Attendance Allowance"`. Idempotent —
    prior drafts with the same tag are deleted before recreating.
@@ -13,6 +14,9 @@ Per Payroll Entry:
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate
+
+from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
+from avinashgroup_app.hr.shift_day import measure_day
 
 SOURCE_TAG = "Nepal HRMS Attendance Allowance"
 
@@ -49,12 +53,21 @@ def trigger_for_payroll_entry(payroll_entry: str) -> dict:
 	if pe.docstatus == 2:
 		frappe.throw(_("Cannot calculate allowances for a cancelled Payroll Entry."))
 	result = create_additional_salaries(pe)
+
+	# The month's advance instalments go in with the allowances: one button
+	# prepares everything the slips will read.
+	from avinashgroup_app.payroll.advance_recovery import post_recoveries
+
+	recoveries = post_recoveries(pe)
+	frappe.db.commit()
 	return {
 		"payroll_entry": pe.name,
 		"created": len(result["created"]),
 		"skipped": len(result["skipped"]),
 		"records": result["created"],
 		"skipped_records": result["skipped"],
+		"advance_recoveries": len(recoveries),
+		"recovery_records": recoveries,
 	}
 
 
@@ -84,7 +97,7 @@ def create_additional_salaries(payroll_entry) -> dict:
 		for sc in components:
 			if _skip_for_ot_eligibility(emp_doc, sc):
 				continue
-			rate = _resolve_rate(emp_overrides, category_rates, sc)
+			rate = _resolve_rate(emp_overrides, category_rates, sc, employee, end_date)
 			if rate is None:
 				continue
 			qty = _qty_for_employee(employee, sc, start_date, end_date)
@@ -195,6 +208,19 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	if condition == "Meal Entitlement":
 		return _meals_for_day(row, sc, present_statuses)
 
+	if condition == "Authorised Overtime":
+		# Policy 5.1: the per-day Overtime Sheet decides who is paid overtime and
+		# for which day; the punches decide how many hours. Hours already rounded
+		# to the half hour by settlement.
+		return _authorised_overtime_hours(employee, row.attendance_date)
+
+	if condition == "Late Time":
+		# Late arrival plus leaving early, against the day's shift — the sheet's
+		# "Late Time", and exactly the minutes the attendance report shows.
+		measured = measure_day(row, is_holiday=bool(row.custom_worked_on_holiday))
+		minutes = measured.late_minutes + measured.early_exit_minutes
+		return _per_unit(unit, day=1.0 if minutes else 0.0, hours=minutes / 60)
+
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
 		if condition == "Late Arrival After" and status == "Half Day":
 			# Arriving more than two hours late already costs half the day's pay
@@ -246,6 +272,45 @@ def _meals_for_day(row, sc, present_statuses) -> float:
 	if flt(row.custom_late_exit) >= offset:
 		meals += 1
 	return float(min(meals, MAX_MEALS_PER_DAY))
+
+
+def _authorised_overtime_hours(employee: str, work_date) -> float:
+	"""Hours authorised on a submitted Overtime Sheet and backed by the punches.
+
+	Cached per request: the report asks once per employee per day.
+	"""
+	cache = getattr(frappe.local, "_agp_authorised_ot", None)
+	if cache is None:
+		cache = frappe.local._agp_authorised_ot = {}
+	key = (employee, getdate(work_date))
+	if key not in cache:
+		cache[key] = flt(
+			frappe.db.sql(
+				"""select sum(r.worked_hours)
+				from `tabOvertime Sheet Employee` r
+				join `tabOvertime Sheet` s on s.name = r.parent
+				where s.docstatus = 1 and r.employee = %s and s.work_date = %s
+				  and r.entitlement = %s""",
+				(employee, key[1], ENTITLEMENT_OVERTIME),
+			)[0][0]
+		)
+	return cache[key]
+
+
+#: The Labour Act's hourly wage: a month's basic over 30 days of 8 hours. The
+#: sheet prices overtime at 1.5 times this, and a late minute at 1/60th of it.
+RATE_DAYS_PER_MONTH = 30
+RATE_HOURS_PER_DAY = 8
+
+
+def _hourly_basic(employee: str, on_date) -> float:
+	base = frappe.db.get_value(
+		"Salary Structure Assignment",
+		{"employee": employee, "docstatus": 1, "from_date": ["<=", getdate(on_date)]},
+		"base",
+		order_by="from_date desc",
+	)
+	return flt(base) / RATE_DAYS_PER_MONTH / RATE_HOURS_PER_DAY
 
 
 def _per_unit(unit: str, day: float, hours: float) -> float:
@@ -331,8 +396,13 @@ def recompute_holiday_flags(start_date=None, end_date=None) -> dict:
 
 
 def _skip_for_ot_eligibility(emp_doc, sc) -> bool:
-	if sc.custom_condition_type in ("Late Stay After", "Early Entry Before"):
+	if sc.custom_condition_type in ("Late Stay After", "Early Entry Before", "Authorised Overtime"):
 		return not bool(getattr(emp_doc, "custom_ot_eligibility", 0))
+	if sc.custom_condition_type in ("Late Time", "Late Arrival After"):
+		# NGI's sheet types the late rate as 0 for its managers — CEO, AGM,
+		# managers, assistant managers, the company secretary. That is a person-
+		# level decision, so it is a tick on the Employee.
+		return bool(getattr(emp_doc, "custom_late_fine_exempt", 0))
 	return False
 
 
@@ -363,6 +433,8 @@ def _attendance_rows(employee: str, start_date, end_date) -> list:
 			"custom_early_entry",
 			"custom_early_exit",
 			"custom_late_exit",
+			"in_time",
+			"out_time",
 		],
 	)
 
@@ -403,8 +475,12 @@ def _get_category_rates(emp_doc) -> dict:
 	}
 
 
-def _resolve_rate(emp_overrides: dict, category_rates: dict, sc):
-	"""Employee's own row first, then their category, then the component default.
+def _resolve_rate(emp_overrides: dict, category_rates: dict, sc, employee=None, on_date=None):
+	"""Employee's own row first, then their category, then the component's basis.
+
+	Most components pay a flat rate (tea at 235 a day). Overtime and the late
+	fine are priced off each person's own basic instead — `Hourly Basic ×
+	Multiplier` — so they follow a pay rise without anyone retyping a rate.
 
 	A category rate of 0 means the group is not paid this component at all — the
 	sheet's "NO" tea category — so it stops here rather than falling through to
@@ -420,6 +496,12 @@ def _resolve_rate(emp_overrides: dict, category_rates: dict, sc):
 
 	if sc.name in category_rates:
 		rate = category_rates[sc.name]
+		return rate if rate else None
+
+	if sc.get("custom_rate_basis") == "Hourly Basic × Multiplier" and employee:
+		# Unrounded: the sheet multiplies the full-precision rate by the hours,
+		# and rounding the rate first drifts the amount by a paisa.
+		rate = _hourly_basic(employee, on_date) * flt(sc.get("custom_rate_multiplier") or 1)
 		return rate if rate else None
 
 	default_rate = flt(getattr(sc, "custom_default_rate", 0))

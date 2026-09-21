@@ -3,14 +3,14 @@ frappe.ui.form.on("Payroll Entry", {
 		if (frm.doc.docstatus === 2) return;
 
 		frm.add_custom_button(
-			__("Calculate Attendance Allowances"),
+			__("Prepare Payroll Inputs"),
 			() => {
 				frappe.confirm(
 					__(
-						"Re-create Additional Salary drafts for all attendance-driven Salary Components on this Payroll Entry? Existing drafts tagged by this calculator will be replaced."
+						"Work out this month's tea, meals, overtime and late fines from attendance, and take this month's advance instalments? Anything this button posted before for the month is replaced."
 					),
 					() => {
-						frappe.dom.freeze(__("Computing attendance allowances..."));
+						frappe.dom.freeze(__("Preparing payroll inputs..."));
 						frappe
 							.call({
 								method: "avinashgroup_app.payroll.attendance_allowance.trigger_for_payroll_entry",
@@ -21,7 +21,8 @@ frappe.ui.form.on("Payroll Entry", {
 								if (!r || !r.message) return;
 								const created = r.message.created || 0;
 								const skipped = r.message.skipped || 0;
-								let msg = __("{0} Additional Salary records created.", [created]);
+								const recovered = r.message.advance_recoveries || 0;
+								let msg = __("{0} allowance and fine records, {1} advance instalments.", [created, recovered]);
 								if (skipped) {
 									msg += " " + __("{0} skipped — see Error Log.", [skipped]);
 								}
