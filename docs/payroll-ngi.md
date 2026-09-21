@@ -156,3 +156,95 @@ Still undecided, and the client's call: who pays the 1% SST, whether income tax
 stays typed or is computed from the FY 83/84 slab, whether advances should instead
 be tracked as Employee Advance with a balance, and what the Dashain bonus is based
 on.
+
+## Income tax and SST (2026-09-21)
+
+Nothing taxed anyone before this date. The site had no Payroll Period, no Income
+Tax Slab and no component flagged `variable_based_on_taxable_salary`, so every
+slip deducted SSF and stopped.
+
+**SST is not a second deduction.** It is the first band of the tax table — the
+1% social security tax — and Nepal waives it for anyone contributing to the
+Social Security Fund. That is exactly what the Falgun sheet shows: 1% of gross
+on the four NGI staff outside the fund, zero on the 83 inside it. So the slab's
+first row carries the condition `not custom_ssf_applicable`; HRMS skips a slab
+row whose condition is false, and the employee's own fields are in scope there.
+
+The table is the Finance Act 2083 one, effective Shrawan 1, 2083. One schedule
+for everybody now — the separate couple column is gone:
+
+| Annual taxable income | Rate |
+|---|---|
+| up to 10,00,000 | 1% (skipped for SSF members) |
+| 10,00,001 – 15,00,000 | 10% |
+| 15,00,001 – 25,00,000 | 20% |
+| 25,00,001 – 40,00,000 | 27% |
+| above 40,00,000 | 29% |
+
+Taxable income is earnings less the SSF contribution. The exemption is copied
+onto each salary structure row the day that row is written and read from the
+row, not the component, at slip time — so ticking `Exempted from Income Tax` on
+the SSF component does nothing to a structure built earlier. The patch syncs the
+existing rows; without it Bhatta's projection stood at 1,400,000 instead of
+1,337,799.
+
+Next year's Finance Act is a data edit: a new Income Tax Slab with a later
+`effective_from`, and the assignments pointed at it.
+
+### Changing it by hand
+
+The computed figure is a projection of a year that has not finished — it assumes
+the remaining months look like this one. Accounts often knows better. Every slip
+carries:
+
+- **Computed Income Tax** — what the slab worked out, kept for comparison
+- **Override Income Tax** + **Income Tax (manual)** — tick and type, and that is
+  deducted instead. Zero is a valid override, meaning "nothing this month".
+
+Bhadra 2083 on nepalgas: 87 slips, 6 taxed — the two above ten lakh, and the
+four at 1%.
+
+## Dashain bonus
+
+The festival allowance is compulsory under the Labour Act: one month's pay for a
+full year served, that fraction of a month for anyone who joined part-way
+through. `Dashain Bonus` holds the year's decision for one company.
+
+- **Bonus Given This Year** — untick and the year is recorded with its reason,
+  which is the honest answer when a company skips it.
+- **One Month Means** — Basic, Basic + Dearness Allowance, or last slip's gross.
+- **Get Employees** counts each person's months of service to the payout date,
+  caps them at twelve, and prorates. The months are shown on the row so the
+  arithmetic can be checked; every amount stays editable.
+- Submitting writes one submitted Additional Salary per line, dated in the
+  payout month, so the bonus rides that month's slip and is taxed with it.
+  Cancelling takes them all back.
+- Staff with no salary structure assigned are left out rather than listed at
+  zero, and named in a message.
+
+NGI at Bhadra end: 87 of 107 staff, 15,18,037.57 on basic, 23,47,123.57 on basic
+with the dearness allowance.
+
+## Mid-year pay rises — Salary Revision
+
+A salary is a dated fact. Never edit someone's basic in place: assign the
+structure again from the date the new pay starts, and the old assignment stays
+as the record of what was paid before, so old slips keep reconciling with old
+journal entries. `Salary Revision` does that for a company at a time — one hike
+percent for everyone, any row typed over as a percent or an amount, one new
+Salary Structure Assignment per person on submit.
+
+Two things to know:
+
+- **A slip is paid at one rate for its whole month.** An effective date in the
+  middle of a BS month cannot half-pay that month — it takes effect the month
+  after. Put the effective date on the first day of a BS month.
+- **Increments are agreed late.** When the rise runs from Shrawan but the
+  meeting was in Mangsir, the months already paid at the old rate are arrears:
+  tick **Pay Arrears** and name the month they ride on, and the difference goes
+  out as a `Salary Arrears` earning. Submitted slips are never edited.
+
+The dearness allowance is the one part of NGI's pay that is not dated — the
+structure reads it off the Employee — so the old value is written onto the row
+before it is overwritten. That makes the revision document its history, and lets
+a cancel put it back.
