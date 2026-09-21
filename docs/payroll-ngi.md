@@ -104,6 +104,25 @@ Both fixes went into the engine, so the run needs no manual step: allowances are
 created submitted and appear on the slips, and a re-run cancels and replaces what
 it made last time while leaving anything HR typed alone.
 
+## Pay follows attendance (2026-09-21)
+
+Payroll Settings was on **Leave**, so slips only lost pay for an approved leave
+application and attendance was never read. The 2-hours-late half day and plain
+absences therefore cost nothing: on a 9 AM - 6 PM shift, walking in at 11:30 every
+day was paid in full.
+
+Switched to **Attendance** (patch `setup_payroll_based_on_attendance`). For Bhadra
+that took gross from 3,408,027.03 to **2,821,371.93** and payment days from "31
+for everyone" to a spread of 16.5 to 31. One employee with 22 half days and 2
+absences is now paid 18 days of 31 — and still earns the full 40 a day of tea for
+every day he turned up.
+
+Approved leave is unaffected: HRMS marks those days On Leave, not Absent.
+
+The trade: attendance is now the source of truth for pay, so a missing punch is a
+pay cut until it is repaired. That is what the hourly self-heal job and Attendance
+Fix exist for.
+
 ## Known gaps
 
 * 5 of the 92 have no Basic in the sheet, so they have no assignment.
