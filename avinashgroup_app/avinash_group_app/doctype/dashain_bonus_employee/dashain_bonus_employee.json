@@ -1,0 +1,28 @@
+{
+ "actions": [],
+ "creation": "2026-09-21 18:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["employee", "employee_name", "date_of_joining", "months_served", "monthly_amount", "amount", "note", "additional_salary"],
+ "fields": [
+  {"fieldname": "employee", "fieldtype": "Link", "in_list_view": 1, "label": "Employee", "options": "Employee", "reqd": 1, "columns": 2},
+  {"fetch_from": "employee.employee_name", "fieldname": "employee_name", "fieldtype": "Data", "in_list_view": 1, "label": "Name", "read_only": 1, "columns": 2},
+  {"fetch_from": "employee.date_of_joining", "fieldname": "date_of_joining", "fieldtype": "Date", "in_list_view": 1, "label": "Joined", "read_only": 1, "columns": 1},
+  {"fieldname": "months_served", "fieldtype": "Float", "in_list_view": 1, "label": "Months", "precision": "2", "read_only": 1, "columns": 1, "description": "Months of service counted to the payout date, capped at twelve"},
+  {"fieldname": "monthly_amount", "fieldtype": "Currency", "in_list_view": 1, "label": "One Month", "read_only": 1, "columns": 2},
+  {"fieldname": "amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Bonus", "reqd": 1, "columns": 2},
+  {"fieldname": "note", "fieldtype": "Data", "label": "Note"},
+  {"fieldname": "additional_salary", "fieldtype": "Link", "label": "Additional Salary", "options": "Additional Salary", "read_only": 1, "no_copy": 1}
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-09-21 18:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Dashain Bonus Employee",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
