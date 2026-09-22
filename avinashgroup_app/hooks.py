@@ -384,6 +384,10 @@ _add_doc_event(
 for _dt in ("Leave Allocation", "Leave Application"):
     _add_doc_event(_dt, "validate", "avinashgroup_app.hr.statutory_leave.validate_gender")
 
+# The month's credit may be any size, but a year cannot grant more days than the
+# employee's own Leave Policy allows — 21 + 12, or 8 + 12 at Karnali.
+_add_doc_event("Leave Allocation", "validate", "avinashgroup_app.hr.leave_ceiling.validate_within_policy")
+
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")
 _add_doc_event("*", "on_update", "avinashgroup_app.custom_code.dynamic_approval.on_update")
