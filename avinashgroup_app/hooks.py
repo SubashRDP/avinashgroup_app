@@ -91,6 +91,7 @@ doctype_js = {
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
     "Payroll Entry": "public/js/payroll_entry.js",
+    "Employee": "public/js/employee.js",
     "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
     "Supplier": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
     "Item": "public/js/item_default_account.js",
@@ -317,6 +318,10 @@ _add_doc_event(
     "validate",
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
+
+# The tea/meal rates are per company, so an employee's allowance group must be
+# one of their own company's.
+_add_doc_event("Employee", "validate", "avinashgroup_app.hr.employee_tags.validate_allowance_category")
 
 # Income tax: the slab computes it, the slip can override it by hand. Runs after
 # the controller's validate, so the computed figure is already on the row.

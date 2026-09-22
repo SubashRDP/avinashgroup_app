@@ -82,7 +82,12 @@ def enforce_late_arrival_half_day(doc, method=None):
         if late_by_hours and shift.start_time is not None:
             cutoffs.append(midnight + shift.start_time + timedelta(hours=float(late_by_hours)))
         absolute = shift.get("custom_late_arrival_cutoff_time")
-        if absolute:
+        # A cutoff at or before the shift starts cannot mean "late": it would
+        # make a half day of everybody who turned up on time. Saving a Shift
+        # Type leaves this field holding the clock time of the save unless it
+        # is cleared, and that quietly cost 2,423 of 2,808 days a half day on
+        # the first run of test attendance.
+        if absolute and shift.start_time is not None and absolute > shift.start_time:
             cutoffs.append(midnight + absolute)
         if not cutoffs:
             return

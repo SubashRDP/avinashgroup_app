@@ -27,12 +27,13 @@ import frappe
 from frappe import _
 from frappe.utils import getdate
 
-#: The three shifts the group works, with the rules that make a day a half day.
-SHIFTS = (
-	("6 AM - 2 PM", "06:00:00", "14:00:00"),
-	("9 AM - 6 PM", "09:00:00", "18:00:00"),
-	("12 PM - 8 PM", "12:00:00", "20:00:00"),
-)
+#: The shifts each company works, named with the company so one company's hours
+#: can change without touching another's (client, 2026-09-22). A company not
+#: listed here gets the group default, a nine to five.
+SHIFTS_BY_COMPANY = {
+	"NGN": (("7 AM - 3 PM", "07:00:00", "15:00:00"), ("9 AM - 5 PM", "09:00:00", "17:00:00")),
+}
+DEFAULT_SHIFTS = (("9 AM - 5 PM", "09:00:00", "17:00:00"),)
 
 #: Policy 1.2 (client meeting 2026-09-15): more than two hours late is a half
 #: day, and there is no grace period.
@@ -96,7 +97,6 @@ def setup_year(fiscal_year, companies=None, assign_leave=True):
 	# The app names a Shift Type and a Holiday List per company, so both carry
 	# `custom_company`. Shifts themselves are shared across the group — one set
 	# of three, tagged to the first company, as on the working site.
-	ensure_shift_types(companies[0] if companies else default_company())
 	ensure_employee_categories()
 	ensure_leave_types()
 
@@ -104,6 +104,7 @@ def setup_year(fiscal_year, companies=None, assign_leave=True):
 	for company in companies or frappe.get_all("Company", pluck="name"):
 		abbr = frappe.db.get_value("Company", company, "abbr")
 		done = {}
+		done["shifts"] = ensure_shift_types(company, abbr)
 		done["holiday_list"] = ensure_holiday_list(company, abbr, fiscal_year, year)
 		done["womens_holiday_list"] = ensure_holiday_list(company, abbr, fiscal_year, year, womens=True)
 		done["company_defaults"] = ensure_company_defaults(company, abbr, done["holiday_list"])
@@ -139,16 +140,26 @@ def default_company():
 	)[0]
 
 
-def ensure_shift_types(company):
-	for name, start, end in SHIFTS:
+def ensure_shift_types(company, abbr):
+	"""This company's shifts, with the rules that make a day late or half.
+
+	Named `NGN 9 AM - 5 PM`, not `9 AM - 5 PM`: the companies keep different
+	hours, and the app names a Shift Type per company anyway.
+	"""
+	made = []
+	for title, start, end in SHIFTS_BY_COMPANY.get(abbr, DEFAULT_SHIFTS):
+		name = f"{abbr} {title}"
 		if frappe.db.exists("Shift Type", name):
+			made.append(name)
 			continue
-		frappe.get_doc(
+		doc = frappe.get_doc(
 			{
 				"doctype": "Shift Type",
 				"__newname": name,
 				"start_time": start,
 				"end_time": end,
+				"company": company if frappe.get_meta("Shift Type").has_field("company") else None,
+				"custom_company": company,
 				"enable_auto_attendance": 1,
 				"determine_check_in_and_check_out": "Alternating entries as IN and OUT during the same shift",
 				"working_hours_calculation_based_on": "First Check-in and Last Check-out",
@@ -159,56 +170,16 @@ def ensure_shift_types(company):
 				"enable_late_entry_marking": 1,
 				"late_entry_grace_period": 0,
 				"custom_half_day_if_late_by_hours": HALF_DAY_IF_LATE_BY_HOURS,
-				"custom_company": company,
 			}
-		).insert(ignore_permissions=True)
-
-
-def ensure_cost_centres(company):
-	"""Office / Sales & Distribution / Filling Plant under the company root."""
-	# The root's parent is NULL, which a filter dict cannot match.
-	root = frappe.db.sql(
-		"""select name from `tabCost Center`
-		where company = %s and is_group = 1 and ifnull(parent_cost_center, '') = ''
-		limit 1""",
-		company,
-	)
-	root = root[0][0] if root else None
-	if not root:
-		return {}
-
-	out = {}
-	for title, code in COST_CENTRES:
-		abbr = frappe.db.get_value("Company", company, "abbr")
-		name = f"{title} - {abbr}"
-		if not frappe.db.exists("Cost Center", name):
-			doc = frappe.get_doc(
-				{
-					"doctype": "Cost Center",
-					"cost_center_name": title,
-					"parent_cost_center": root,
-					"company": company,
-					"is_group": 0,
-				}
-			)
-			doc.flags.ignore_permissions = True
-			doc.insert()
-			name = doc.name
-		out[code] = name
-	return out
-
-
-def ensure_leave_types():
-	"""The four leave types the group uses, plus the unpaid catch-all.
-
-	How each behaves is settled in one place — `patches.setup_leave_types`, which
-	is written to be re-runnable. Calling it here means a site whose leave types
-	were deleted gets them back, instead of the year setup quietly building
-	policies that point at nothing.
-	"""
-	from avinashgroup_app.patches.setup_leave_types import execute as build_leave_types
-
-	build_leave_types()
+		)
+		doc.flags.ignore_permissions = True
+		doc.insert()
+		# Saving a Shift Type fills this empty Time field with the clock time,
+		# which the half-day rule would then read as a cutoff. Blank means "no
+		# absolute cutoff", so make it blank.
+		doc.db_set("custom_late_arrival_cutoff_time", None, update_modified=False)
+		made.append(doc.name)
+	return made
 
 
 def ensure_employee_categories():
