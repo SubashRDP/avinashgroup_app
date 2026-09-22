@@ -1,0 +1,2281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avinash Payroll Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{
+  --ground:#FFFFFF; --rail:#F6F8FA; --paper:#FFFFFF; --ink:#1A2129; --muted:#5A6672; --line:#DFE5EB;
+  --teal:#136A8A; --teal-soft:#E5F0F5; --marigold:#B8820B; --marigold-soft:#FBF2DC;
+  --good:#1F6B47; --good-soft:#E3F1E9; --bad:#A3302A; --bad-soft:#F9E6E4;
+  --chip:#EEF2F6; --btn:#136A8A; --btn-ink:#FFFFFF; color-scheme: light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --ground:#12171D; --rail:#161C23; --paper:#1A212A; --ink:#E7EDF3; --muted:#9DAAB7; --line:#28323D;
+  --teal:#6FB9D8; --teal-soft:#14303C; --marigold:#E4B457; --marigold-soft:#33290F;
+  --good:#6FCB99; --good-soft:#132C20; --bad:#F09189; --bad-soft:#3A1917;
+  --chip:#222B35; --btn:#2A7FA2; --btn-ink:#FFFFFF; color-scheme: dark;}}
+:root[data-theme="dark"]{
+  --ground:#12171D; --rail:#161C23; --paper:#1A212A; --ink:#E7EDF3; --muted:#9DAAB7; --line:#28323D;
+  --teal:#6FB9D8; --teal-soft:#14303C; --marigold:#E4B457; --marigold-soft:#33290F;
+  --good:#6FCB99; --good-soft:#132C20; --bad:#F09189; --bad-soft:#3A1917;
+  --chip:#222B35; --btn:#2A7FA2; --btn-ink:#FFFFFF; color-scheme: dark;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"Mukta","Noto Sans Devanagari",system-ui,sans-serif;font-size:17px;line-height:1.62}
+a{color:var(--teal)}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--paper);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.bar .brand{font-weight:800;font-size:16px;letter-spacing:.01em}
+.bar .brand span{color:var(--teal)}
+.bar .ver{font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:1px 9px}
+.bar .find{margin-left:auto;display:flex;gap:8px;align-items:center}
+.bar input{font:inherit;font-size:15px;padding:6px 11px;border:1px solid var(--line);border-radius:7px;background:var(--ground);color:var(--ink);width:230px;max-width:46vw}
+.bar input:focus-visible{outline:2px solid var(--teal);outline-offset:1px}
+.shell{display:grid;grid-template-columns:288px minmax(0,1fr);gap:0;align-items:start}
+aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 54px);height:calc(100vh - 54px);overflow:auto;background:var(--rail);border-right:1px solid var(--line);padding:18px 14px 60px}
+aside .grp{font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);font-weight:700;margin:16px 10px 6px}
+aside a{display:block;padding:6px 10px;border-radius:6px;text-decoration:none;color:var(--ink);font-size:15.5px;line-height:1.35}
+aside a:hover{background:var(--teal-soft)}
+aside a.on{background:var(--teal-soft);color:var(--teal);font-weight:700;box-shadow:inset 3px 0 0 var(--teal)}
+aside a.hide{display:none}
+main{padding:26px 34px 90px;max-width:940px}
+.crumb{font-size:14px;color:var(--muted);margin-bottom:6px}
+h1{font-size:34px;line-height:1.15;margin:.1em 0 .2em;font-weight:800;text-wrap:balance}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 20px}
+.meta span{font-size:12.5px;background:var(--chip);color:var(--muted);border-radius:99px;padding:2px 10px}
+h2{font-size:24px;margin:30px 0 8px;font-weight:700;padding-bottom:5px;border-bottom:1px solid var(--line);text-wrap:balance}
+h3{font-size:19px;margin:22px 0 6px;font-weight:700}
+p,li{max-width:74ch}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:12px 0;display:grid;gap:11px}
+ol.steps>li{counter-increment:s;position:relative;padding-left:44px;min-height:30px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:1px;width:30px;height:30px;border-radius:50%;background:var(--teal);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px}
+ul.plain{padding-left:22px}ul.plain li{margin:4px 0}
+.btn{display:inline-block;background:var(--btn);color:var(--btn-ink);font-weight:600;font-size:.84em;padding:1px 9px;border-radius:5px;white-space:nowrap}
+kbd{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:.78em;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;background:var(--paper)}
+.field{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.79em;background:var(--chip);padding:1px 6px;border-radius:4px;white-space:nowrap}
+.screen{font-weight:700;color:var(--teal)}
+.tablewrap{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:15.5px;border:1px solid var(--line)}
+th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--teal-soft);font-weight:700;font-size:14px}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{border-left:4px solid;border-radius:0 8px 8px 0;padding:10px 15px;margin:14px 0;max-width:76ch;background:var(--chip)}
+.note b.t{display:block;font-size:12px;letter-spacing:.09em;text-transform:uppercase;margin-bottom:2px}
+.note p{margin:3px 0}
+.tip{background:var(--marigold-soft);border-color:var(--marigold)}.tip b.t{color:var(--marigold)}
+.imp{background:var(--bad-soft);border-color:var(--bad)}.imp b.t{color:var(--bad)}
+.good{background:var(--good-soft);border-color:var(--good)}.good b.t{color:var(--good)}
+.info{background:var(--teal-soft);border-color:var(--teal)}.info b.t{color:var(--teal)}
+.applies{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:0 0 18px;font-size:15px;background:var(--rail)}
+.applies b{color:var(--muted);font-weight:700;font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:2px}
+.seealso{border-top:1px solid var(--line);margin-top:30px;padding-top:14px;font-size:15.5px}
+.seealso b{display:block;font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.seealso a{margin-right:14px;white-space:nowrap}
+.pager{display:flex;justify-content:space-between;gap:14px;margin-top:26px;border-top:1px solid var(--line);padding-top:14px;font-size:15.5px}
+.pager a{text-decoration:none;font-weight:600}
+article{display:none}article.on{display:block}
+.flow{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:14px 0;font-weight:600;font-size:15px}
+.flow span{background:var(--paper);border:1px solid var(--line);padding:4px 10px;border-radius:7px}
+.flow i{font-style:normal;color:var(--muted)}
+details{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px 14px;margin:8px 0}
+details summary{cursor:pointer;font-weight:600}
+.case{border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:0 8px 8px 0;padding:10px 15px;margin:10px 0;background:var(--paper)}
+.case h4{margin:0 0 5px;font-size:17px;color:var(--teal)}
+.case p{margin:4px 0}
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr}
+  aside{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);max-height:290px}
+  main{padding:20px 18px 70px}
+  h1{font-size:28px}
+}
+@media print{aside,.bar{display:none}article{display:block!important}main{max-width:none;padding:0}}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+</head>
+<body>
+<div class="bar"><span class="brand">Avinash <span>Payroll</span></span><span class="ver">FY 83/84 &middot; ERPNext 15 &middot; updated 2026-09-22</span><span class="find"><input id="q" type="search" placeholder="Filter articles" aria-label="Filter articles" autocomplete="off"></span></div>
+<div class="shell">
+<aside><nav id="nav" aria-label="Documentation">
+<div class="grp" data-grp="Get started">Get started</div>
+<a href="#overview" data-id="overview" data-grp="Get started">What the payroll system does</a>
+<a href="#concepts" data-id="concepts" data-grp="Get started">Key concepts</a>
+<a href="#companies" data-id="companies" data-grp="Get started">Companies and pay models</a>
+<a href="#glossary" data-id="glossary" data-grp="Get started">Glossary and record types</a>
+<div class="grp" data-grp="Plan and set up">Plan and set up</div>
+<a href="#setup-checklist" data-id="setup-checklist" data-grp="Plan and set up">Setup checklist</a>
+<a href="#setup-fiscal-year" data-id="setup-fiscal-year" data-grp="Plan and set up">Create the year&#x27;s periods</a>
+<a href="#setup-holidays" data-id="setup-holidays" data-grp="Plan and set up">Build the holiday lists</a>
+<a href="#setup-shifts" data-id="setup-shifts" data-grp="Plan and set up">Define shift types</a>
+<a href="#setup-cost-centres" data-id="setup-cost-centres" data-grp="Plan and set up">Cost centres and company defaults</a>
+<a href="#setup-categories" data-id="setup-categories" data-grp="Plan and set up">Employee and allowance categories</a>
+<a href="#setup-leave" data-id="setup-leave" data-grp="Plan and set up">Configure leave</a>
+<a href="#setup-components" data-id="setup-components" data-grp="Plan and set up">Salary components</a>
+<a href="#setup-structure" data-id="setup-structure" data-grp="Plan and set up">Salary structures</a>
+<a href="#setup-assignment" data-id="setup-assignment" data-grp="Plan and set up">Assign salaries to people</a>
+<a href="#setup-tax" data-id="setup-tax" data-grp="Plan and set up">Set up the income tax slab</a>
+<a href="#setup-accounts" data-id="setup-accounts" data-grp="Plan and set up">Map components to accounts</a>
+<a href="#setup-employee" data-id="setup-employee" data-grp="Plan and set up">The Employee record</a>
+<div class="grp" data-grp="Daily operations">Daily operations</div>
+<a href="#ops-attendance" data-id="ops-attendance" data-grp="Daily operations">Manage attendance</a>
+<a href="#ops-shift-change" data-id="ops-shift-change" data-grp="Daily operations">Change someone&#x27;s shift</a>
+<a href="#ops-leave" data-id="ops-leave" data-grp="Daily operations">Leave applications and balances</a>
+<a href="#ops-overtime" data-id="ops-overtime" data-grp="Daily operations">Overtime</a>
+<a href="#ops-advance" data-id="ops-advance" data-grp="Daily operations">Employee advances</a>
+<a href="#ops-adjustments" data-id="ops-adjustments" data-grp="Daily operations">One-off amounts</a>
+<a href="#ops-bonus" data-id="ops-bonus" data-grp="Daily operations">Dashain bonus</a>
+<a href="#ops-revision" data-id="ops-revision" data-grp="Daily operations">Salary revision and arrears</a>
+<a href="#ops-lifecycle" data-id="ops-lifecycle" data-grp="Daily operations">Joiners and leavers</a>
+<div class="grp" data-grp="Run payroll">Run payroll</div>
+<a href="#run-monthly" data-id="run-monthly" data-grp="Run payroll">Monthly payroll run</a>
+<a href="#run-tax" data-id="run-tax" data-grp="Run payroll">How income tax is computed</a>
+<a href="#run-posting" data-id="run-posting" data-grp="Run payroll">Post to the books and pay</a>
+<div class="grp" data-grp="Reports">Reports</div>
+<a href="#reports" data-id="reports" data-grp="Reports">Report reference</a>
+<div class="grp" data-grp="Year end">Year end</div>
+<a href="#admin-year-end" data-id="admin-year-end" data-grp="Year end">Year end and the next year</a>
+<div class="grp" data-grp="Reference">Reference</div>
+<a href="#ref-calculations" data-id="ref-calculations" data-grp="Reference">Calculation reference</a>
+<a href="#ref-errors" data-id="ref-errors" data-grp="Reference">Messages and troubleshooting</a>
+<a href="#ref-limits" data-id="ref-limits" data-grp="Reference">Known limits and open items</a>
+<div class="grp" data-grp="Testing">Testing</div>
+<a href="#test-plan" data-id="test-plan" data-grp="Testing">Acceptance test cases</a>
+<a href="#test-refusals" data-id="test-refusals" data-grp="Testing">Things the system must refuse</a>
+</nav></aside>
+<main id="main">
+<article id="overview" class="on">
+<div class="crumb">Avinash Payroll &rsaquo; Get started</div>
+<h1>What the payroll system does</h1>
+<div class="meta"><span>Applies to: Avinash Group · FY 83/84 · NGI, NGN, NGG, NGK</span><span>Audience: Everyone</span></div>
+<div class="applies"><b>In this article</b>The chain from a fingerprint on the door to a journal entry in the books, and the three things it produces.</div>
+<p>This system pays the staff of the Avinash Group companies. It replaces the Excel salary sheet that each
+company kept — not by copying it, but by building the same figures from records the system already holds:
+who came to work, what they are paid, what they are owed, what must be taken off.</p>
+
+<h2>The chain</h2>
+<p>Every rupee on a payslip can be traced back along one chain. If a figure is wrong, the fault is at one of
+these links, and this documentation is organised in the same order.</p>
+<div class="flow">
+<span>Punch on the device</span><i>&rarr;</i><span>Employee Checkin</span><i>&rarr;</i><span>Attendance</span>
+<i>&rarr;</i><span>Payroll Adjustment</span><i>&rarr;</i><span>Salary Slip</span><i>&rarr;</i><span>Journal Entry</span>
+<i>&rarr;</i><span>Bank payment</span>
+</div>
+<div class="tablewrap"><table>
+<tr><th>Link</th><th>What it holds</th><th>Who touches it</th></tr>
+<tr><td>Employee Checkin</td><td>One row per punch: person, time, device, IN or OUT.</td><td>Nobody — the device writes it. HR corrects only what is missing.</td></tr>
+<tr><td>Attendance</td><td>One row per person per day: Present, Absent, Half Day, On Leave, Holiday; the shift; the hours worked.</td><td>Built nightly by the system. HR fixes exceptions.</td></tr>
+<tr><td>Payroll Adjustment</td><td>What attendance is worth in money: tea, meals, overtime, late fines, for one company and one month.</td><td>HR, once a month, before slips.</td></tr>
+<tr><td>Salary Slip</td><td>One person, one month: every earning, every deduction, the tax, the net.</td><td>Created by the Payroll Entry, checked by HR, approved by accounts.</td></tr>
+<tr><td>Journal Entry</td><td>The month's cost in the books, split by section, with SSF and TDS as liabilities.</td><td>Posted when the slips are submitted.</td></tr>
+</table></div>
+
+<h2>What it produces</h2>
+<ol class="steps">
+<li><b>A payslip for each employee</b> — the same figures the Excel sheet produced, to the paisa, but derived rather than typed.</li>
+<li><b>An entry in the accounts</b> — salary cost against the right section, SSF and income tax held as payable, net pay held as Salary Payable until the bank pays it.</li>
+<li><b>A record that survives an audit</b> — every figure has a document behind it: an attendance row, an approved overtime sheet, a signed advance.</li>
+</ol>
+
+<div class="note info"><b class="t">What this system does not do</b>
+<p>It does not decide policy. Whether someone gets 21 days of casual leave, whether the plant staff are paid
+overtime, what a meal is worth — those are the client's decisions, already made, and this system only carries
+them out. Every one of them is a setting, and this documentation says where the setting is.</p></div>
+
+<h2>How to read this documentation</h2>
+<div class="tablewrap"><table>
+<tr><th>If you are…</th><th>Read</th></tr>
+<tr><td>Setting the system up for the first time</td><td><b>Plan and set up</b>, in order, top to bottom. The order matters.</td></tr>
+<tr><td>Running payroll each month</td><td><b>Run payroll</b> &rsaquo; Monthly payroll run, and keep it open while you work.</td></tr>
+<tr><td>Handling a day-to-day event (leave, a shift change, an advance)</td><td><b>Daily operations</b>.</td></tr>
+<tr><td>Testing the system before it goes live</td><td><b>Testing</b>, both articles, and tick every case.</td></tr>
+<tr><td>Chasing a number that looks wrong</td><td><b>Reference</b> &rsaquo; Calculation reference, then Messages.</td></tr>
+</table></div>
+<div class="seealso"><b>See also</b><a href="#concepts" data-go="concepts">Key concepts</a><a href="#companies" data-go="companies">Companies and pay models</a><a href="#setup-checklist" data-go="setup-checklist">Setup checklist</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a></div>
+<div class="pager"><span></span><a href="#concepts" data-go="concepts">Key concepts &rarr;</a></div>
+</article>
+<article id="concepts">
+<div class="crumb">Avinash Payroll &rsaquo; Get started</div>
+<h1>Key concepts</h1>
+<div class="meta"><span>Applies to: All companies</span><span>Audience: Everyone</span></div>
+<div class="applies"><b>In this article</b>The Nepali calendar, the record types payroll is built from, and the difference between a setting, a record and a result.</div>
+<h2>The payroll month is a Nepali month</h2>
+<p>The books, the salary sheets and the staff all work in Bikram Sambat. A payroll month is a BS month, which
+never lines up with an English one.</p>
+<div class="tablewrap"><table>
+<tr><th>BS month</th><th>Starts (AD)</th><th>Ends (AD)</th><th>Days</th></tr>
+<tr><td>Shrawan 2083</td><td class="num">2026-07-17</td><td class="num">2026-08-16</td><td class="num">31</td></tr>
+<tr><td>Bhadra 2083</td><td class="num">2026-08-17</td><td class="num">2026-09-16</td><td class="num">31</td></tr>
+<tr><td>Ashwin 2083</td><td class="num">2026-09-17</td><td class="num">2026-10-17</td><td class="num">31</td></tr>
+<tr><td>Kartik 2083</td><td class="num">2026-10-18</td><td class="num">2026-11-16</td><td class="num">30</td></tr>
+</table></div>
+<p>A BS month is 29, 30, 31 or 32 days long. Proration therefore divides by <b>the days in that month</b>, never
+by a fixed 30. The one exception is the hourly rate behind overtime and late fines, where the Labour Act
+itself says to divide the monthly basic by 30 — see <a data-go="ref-calculations">Calculation reference</a>.</p>
+<div class="note imp"><b class="t">Important</b><p>Fiscal year 83/84 runs <b>2026-07-17 to 2027-07-16</b>. Every
+period record in the system — Fiscal Year, Payroll Period, Leave Period, Holiday List — must use exactly
+those two dates. A one-day difference produces leave balances and tax projections that are almost right,
+which is far worse than obviously wrong.</p></div>
+
+<h2>Settings, records and results</h2>
+<p>Three kinds of thing live in the system, and knowing which is which tells you whether you may edit it.</p>
+<div class="tablewrap"><table>
+<tr><th>Kind</th><th>Examples</th><th>Rule</th></tr>
+<tr><td><b>Setting</b> — decided once, changed rarely</td><td>Shift Type, Salary Component, Salary Structure, Leave Policy, Income Tax Slab, Holiday List</td><td>Change it deliberately, in a change window, and know that it affects every future run. Most do not affect the past.</td></tr>
+<tr><td><b>Record</b> — a fact about a person or a day</td><td>Employee, Attendance, Leave Application, Overtime Sheet, Employee Advance, Salary Structure Assignment</td><td>Enter and correct freely while it is a draft. A submitted record is cancelled and replaced, never edited.</td></tr>
+<tr><td><b>Result</b> — worked out from the two above</td><td>Payroll Adjustment rows, Salary Slip, Journal Entry</td><td><b>Never type over a result.</b> If a result is wrong, the setting or the record behind it is wrong. Fix that and rebuild.</td></tr>
+</table></div>
+<div class="note tip"><b class="t">Tip</b><p>The single most common support call in a payroll system is someone
+who edited a result. A slip amount typed by hand looks right for one month and then never reconciles again:
+the journal, the tax projection and next month's figures all still come from the record behind it.</p></div>
+
+<h2>Draft, submitted, cancelled</h2>
+<p>Most payroll documents are <i>submittable</i>. They move through three states and the buttons change with them.</p>
+<div class="tablewrap"><table>
+<tr><th>State</th><th>Shown as</th><th>What you can do</th></tr>
+<tr><td>Draft</td><td>Red <b>Not Saved</b> or grey <b>Draft</b></td><td>Edit anything, delete it. It has no effect on anything else yet.</td></tr>
+<tr><td>Submitted</td><td>Blue <b>Submitted</b></td><td>It now counts — a submitted slip is payable, a submitted allocation is a balance. Only a few fields stay editable.</td></tr>
+<tr><td>Cancelled</td><td>Red <b>Cancelled</b></td><td>It counts for nothing. It stays visible as history. To redo it, use <span class="btn">Amend</span>, which makes a new draft copy.</td></tr>
+</table></div>
+
+<h2>Who does what</h2>
+<div class="tablewrap"><table>
+<tr><th>Role</th><th>Responsible for</th></tr>
+<tr><td>HR User</td><td>Employees, attendance corrections, leave, shifts, overtime sheets, advances. Creates the payroll run.</td></tr>
+<tr><td>HR Manager</td><td>Everything above, plus salary structures, assignments and approving the run.</td></tr>
+<tr><td>Accounts User / Manager</td><td>The chart of accounts, component mapping, checking the journal, the bank payment.</td></tr>
+<tr><td>System Manager</td><td>Settings that affect the whole site. Should not be the person running payroll day to day.</td></tr>
+</table></div>
+<div class="seealso"><b>See also</b><a href="#overview" data-go="overview">What the payroll system does</a><a href="#glossary" data-go="glossary">Glossary and record types</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#overview" data-go="overview">&larr; What the payroll system does</a><a href="#companies" data-go="companies">Companies and pay models &rarr;</a></div>
+</article>
+<article id="companies">
+<div class="crumb">Avinash Payroll &rsaquo; Get started</div>
+<h1>Companies and pay models</h1>
+<div class="meta"><span>Applies to: NGI, NGN, NGG, NGK live · GLMI, GEPL, SGU not yet on payroll</span><span>Audience: HR Manager, Implementer</span></div>
+<div class="applies"><b>In this article</b>Seven companies, two ways of computing pay, and the differences you must respect when you set them up.</div>
+<p>The group has seven companies. Four are on payroll today; three have no salary sheet yet and so have no
+salary structure. Everything else — attendance, leave, holidays — applies to all seven.</p>
+<div class="tablewrap"><table>
+<tr><th>Company</th><th>Abbr</th><th>Pay model</th><th>On payroll</th></tr>
+<tr><td>Nepal Gas Udhyog Pvt. Ltd.</td><td>NGI</td><td>Initial-basic</td><td>Yes — 87 staff</td></tr>
+<tr><td>Nepal Gas Udhyog (Narayani) Pvt. Ltd.</td><td>NGN</td><td>Initial-basic</td><td>Yes — 66 staff</td></tr>
+<tr><td>Nepal Gas Udhyog (Gandaki) Pvt. Ltd.</td><td>NGG</td><td>Grade-scale</td><td>Yes — 28 staff</td></tr>
+<tr><td>Nepal Gas Udhyog (Karnali) Pvt. Ltd.</td><td>NGK</td><td>Grade-scale + daily wage</td><td>Yes — 19 staff</td></tr>
+<tr><td>Grihalaxmi Metal Industries Pvt. Ltd</td><td>GLMI</td><td>—</td><td>No sheet supplied</td></tr>
+<tr><td>Grishma Enterprises Pvt. Ltd.</td><td>GEPL</td><td>—</td><td>No sheet supplied</td></tr>
+<tr><td>Sambriddhi Gas Udhyog Pvt. Ltd.</td><td>SGU</td><td>—</td><td>No sheet supplied</td></tr>
+</table></div>
+
+<h2>Initial-basic (NGI, NGN)</h2>
+<p>Pay is built from a <b>Basic Salary</b>, with house rent taken as a share of a second figure called the
+<b>Initial Basic</b> — the salary the person started on. Gas and education allowances are flat amounts for
+those flagged for them.</p>
+<div class="tablewrap"><table>
+<tr><th>Element</th><th>NGI</th><th>NGN</th></tr>
+<tr><td>House Rent Allowance</td><td class="num">25% of Initial Basic</td><td class="num">27% of Initial Basic</td></tr>
+<tr><td>Gas Allowance (if flagged)</td><td class="num">1,690.00</td><td class="num">1,690.27</td></tr>
+<tr><td>Education Allowance (if flagged)</td><td class="num">2,780.00</td><td class="num">1,250.00</td></tr>
+<tr><td>Tea &amp; Conveyance — OLD rate</td><td class="num">235.00 / day</td><td class="num">265.00 / day</td></tr>
+<tr><td>Tea &amp; Conveyance — NEW rate</td><td class="num">40.00 / day</td><td class="num">40.00 / day</td></tr>
+<tr><td>Meal</td><td class="num">75.00</td><td class="num">75.00</td></tr>
+</table></div>
+
+<h2>Grade-scale (NGG, NGK)</h2>
+<p>Pay follows the government scale: a basic, plus increments, plus a grade, together making the salary scale
+that SSF is computed on. There is no HRA, gas or education allowance. Karnali adds a maintenance allowance,
+and pays its labourers by the day rather than by the month.</p>
+<div class="note info"><b class="t">Note</b><p>The two grade-scale sheets carry no employee codes — only
+names — which is why those two companies were matched to Employee records by name and must be spot-checked
+after any bulk import.</p></div>
+
+<h2>Differences you must not flatten</h2>
+<div class="tablewrap"><table>
+<tr><th>Thing</th><th>Differs how</th><th>Where it is set</th></tr>
+<tr><td>Casual leave</td><td>21 days everywhere, <b>8 at Karnali</b></td><td>Leave Policy per company</td></tr>
+<tr><td>Shifts</td><td>NGI has three (6–2, 9–6, 12–8); NGN has two (7–3, 9–5); everyone else 9–5</td><td>Shift Type, named with the company</td></tr>
+<tr><td>Tea rate</td><td>235 at NGI, 265 at NGN</td><td>Allowance Category per company</td></tr>
+<tr><td>Daily wage</td><td>Karnali labourers only — 754.00 a day</td><td>A separate Daily Wage salary structure</td></tr>
+<tr><td>Holidays</td><td>Teej is a women-only list; the rest are common</td><td>Two Holiday Lists per company</td></tr>
+</table></div>
+<div class="seealso"><b>See also</b><a href="#setup-checklist" data-go="setup-checklist">Setup checklist</a><a href="#setup-shifts" data-go="setup-shifts">Define shift types</a><a href="#setup-leave" data-go="setup-leave">Configure leave</a><a href="#setup-structure" data-go="setup-structure">Salary structures</a></div>
+<div class="pager"><a href="#concepts" data-go="concepts">&larr; Key concepts</a><a href="#glossary" data-go="glossary">Glossary and record types &rarr;</a></div>
+</article>
+<article id="glossary">
+<div class="crumb">Avinash Payroll &rsaquo; Get started</div>
+<h1>Glossary and record types</h1>
+<div class="meta"><span>Applies to: All companies</span><span>Audience: Everyone</span></div>
+<div class="applies"><b>In this article</b>Every document type payroll touches, what it is for, and where it lives in the menu.</div>
+<p>Each row is a document type. Type its name into the search bar at the top of the desk (the <kbd>Ctrl</kbd>+<kbd>G</kbd>
+bar) to open its list.</p>
+<h2>People and time</h2>
+<div class="tablewrap"><table>
+<tr><th>Document</th><th>What it is</th><th>One per…</th></tr>
+<tr><td>Employee</td><td>The person: joining date, company, shift, category, pay inputs, SSF flag.</td><td>person</td></tr>
+<tr><td>Employee Checkin</td><td>A single punch, with its time and device.</td><td>punch</td></tr>
+<tr><td>Attendance</td><td>The verdict on one day: status, shift, hours, late minutes.</td><td>person per day</td></tr>
+<tr><td>Shift Type</td><td>Working hours and the rules that turn punches into attendance.</td><td>set of hours, per company</td></tr>
+<tr><td>Shift Assignment</td><td>Which shift a person works, from a date.</td><td>person per period</td></tr>
+<tr><td>Shift Request</td><td>A dated request to work a different shift; on approval it writes the assignment.</td><td>change</td></tr>
+<tr><td>Holiday List</td><td>The Saturdays and festivals a company closes for.</td><td>company (plus a women's list)</td></tr>
+</table></div>
+<h2>Leave</h2>
+<div class="tablewrap"><table>
+<tr><th>Document</th><th>What it is</th></tr>
+<tr><td>Leave Type</td><td>Casual, Sick, Leave Without Pay, Compensatory Off — and how each behaves.</td></tr>
+<tr><td>Leave Period</td><td>The leave year. For 83/84: 2026-07-17 to 2027-07-16.</td></tr>
+<tr><td>Leave Policy</td><td>The days a year each type gives: 21 casual + 12 sick (8 + 12 at Karnali).</td></tr>
+<tr><td>Leave Policy Assignment</td><td>Gives one person a policy for one period; creates their allocations.</td></tr>
+<tr><td>Leave Allocation</td><td>The balance itself: days granted for a period.</td></tr>
+<tr><td>Leave Application</td><td>A request for days off, which becomes Attendance rows when approved.</td></tr>
+</table></div>
+<h2>Pay</h2>
+<div class="tablewrap"><table>
+<tr><th>Document</th><th>What it is</th></tr>
+<tr><td>Salary Component</td><td>One line that can appear on a payslip: Basic, HRA, SSF, Income Tax, Late Fine.</td></tr>
+<tr><td>Salary Structure</td><td>The template: which components, and the formula for each. One per company (plus Daily Wage at NGK).</td></tr>
+<tr><td>Salary Structure Assignment</td><td>Puts one person on a structure from a date, with their base figure and tax slab. <b>This is the pay record.</b></td></tr>
+<tr><td>Employee Category</td><td>Plant or Officer &amp; Admin — decides whether holiday work is paid or earns leave.</td></tr>
+<tr><td>Allowance Category</td><td>The tea group (OLD / NEW / NO) and the rate it carries, per company.</td></tr>
+<tr><td>Overtime Sheet</td><td>Authorised overtime hours for a month, approved before they can be paid.</td></tr>
+<tr><td>Payroll Adjustment</td><td>The month's attendance-driven amounts, computed and reviewable before slips.</td></tr>
+<tr><td>Employee Advance</td><td>Money lent, with a monthly instalment recovered on the payslip.</td></tr>
+<tr><td>Additional Salary</td><td>A one-off amount on one month's slip — a bonus, arrears, an ad-hoc allowance.</td></tr>
+<tr><td>Dashain Bonus</td><td>The festival bonus run: who gets it, at what proportion of a month.</td></tr>
+<tr><td>Salary Revision</td><td>A dated pay rise for many people at once, with arrears.</td></tr>
+<tr><td>Payroll Entry</td><td>The monthly run: picks the employees, makes and submits their slips.</td></tr>
+<tr><td>Salary Slip</td><td>One payslip.</td></tr>
+<tr><td>Income Tax Slab</td><td>The year's tax bands.</td></tr>
+<tr><td>Payroll Period</td><td>The tax year the slabs and projections work over.</td></tr>
+</table></div>
+<h2>Terms</h2>
+<div class="tablewrap"><table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>SSF</td><td>Social Security Fund. The employer adds 20% of basic and the employee has 31% deducted; both go to the fund. The addition appears as an earning so the payslip shows the true cost.</td></tr>
+<tr><td>SST</td><td>Social Security Tax — the 1% first band of income tax. Waived for anyone contributing to the SSF.</td></tr>
+<tr><td>TDS</td><td>Tax Deducted at Source: the income tax taken off the payslip and paid to the IRD.</td></tr>
+<tr><td>Payment days</td><td>The days of the month a person is paid for. Drives proration.</td></tr>
+<tr><td>Base</td><td>The one figure on the assignment that the structure's formulas start from — normally the basic salary.</td></tr>
+<tr><td>O/O, S/D, F/P</td><td>Office, Sales &amp; Distribution, Filling Plant — the three sections salary cost is split between.</td></tr>
+</table></div>
+<div class="seealso"><b>See also</b><a href="#concepts" data-go="concepts">Key concepts</a><a href="#setup-employee" data-go="setup-employee">The Employee record</a></div>
+<div class="pager"><a href="#companies" data-go="companies">&larr; Companies and pay models</a><a href="#setup-checklist" data-go="setup-checklist">Setup checklist &rarr;</a></div>
+</article>
+<article id="setup-checklist">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Setup checklist</h1>
+<div class="meta"><span>Applies to: Per company · Once a fiscal year</span><span>Audience: Implementer, HR Manager</span></div>
+<div class="applies"><b>In this article</b>The order the year must be built in, why each step depends on the one before, and how to confirm each is done.</div>
+<p>Payroll fails late. A missing holiday list does not complain when you create it — it complains six weeks
+later, as a person who silently produced no attendance and so no payslip. The remedy is to build the year in
+dependency order and confirm each step before moving on.</p>
+<div class="note imp"><b class="t">Important</b><p>Do not skip ahead. Steps 1–6 must be finished for a company
+<b>before</b> anyone's attendance for the new year is processed, and steps 7–11 before the first payroll run.</p></div>
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Step</th><th>Depends on</th><th>Done when</th><th>Article</th></tr>
+<tr><td class="num">1</td><td>Fiscal Year, Payroll Period, Leave Period</td><td>—</td><td>All three exist with identical dates</td><td><a data-go="setup-fiscal-year">Periods</a></td></tr>
+<tr><td class="num">2</td><td>Holiday Lists (common + women's)</td><td>1</td><td>Each has ~52 Saturdays + festivals</td><td><a data-go="setup-holidays">Holidays</a></td></tr>
+<tr><td class="num">3</td><td>Shift Types</td><td>2</td><td>Each shift has a holiday list and auto-attendance on</td><td><a data-go="setup-shifts">Shifts</a></td></tr>
+<tr><td class="num">4</td><td>Cost Centres and company defaults</td><td>—</td><td>O/O, S/D, F/P exist under each company</td><td><a data-go="setup-cost-centres">Cost centres</a></td></tr>
+<tr><td class="num">5</td><td>Employee Category, Allowance Category</td><td>—</td><td>2 categories; 1 allowance category per tea rate per company</td><td><a data-go="setup-categories">Categories</a></td></tr>
+<tr><td class="num">6</td><td>Leave Types, Policies, Assignments</td><td>1</td><td>Every active employee has an allocation</td><td><a data-go="setup-leave">Leave</a></td></tr>
+<tr><td class="num">7</td><td>Salary Components</td><td>—</td><td>21 components exist with the right flags</td><td><a data-go="setup-components">Components</a></td></tr>
+<tr><td class="num">8</td><td>Income Tax Slab</td><td>1</td><td>One slab per company for the payroll period</td><td><a data-go="setup-tax">Tax slab</a></td></tr>
+<tr><td class="num">9</td><td>Salary Structure</td><td>7, 8</td><td>One submitted structure per company</td><td><a data-go="setup-structure">Structures</a></td></tr>
+<tr><td class="num">10</td><td>Salary Structure Assignments</td><td>9</td><td>Every paid employee has one from the year start</td><td><a data-go="setup-assignment">Assignments</a></td></tr>
+<tr><td class="num">11</td><td>Component &rarr; GL account mapping</td><td>7</td><td>Every component has an account for every company</td><td><a data-go="setup-accounts">Accounts</a></td></tr>
+<tr><td class="num">12</td><td>Employee records completed</td><td>5, 10</td><td>Device ID, shift, categories, pay inputs all filled</td><td><a data-go="setup-employee">Employee</a></td></tr>
+</table></div>
+
+<h2>Verify the whole year in one pass</h2>
+<p>After step 12, open each of these lists, filter by company, and confirm the count matches your headcount.</p>
+<ul class="plain">
+<li><b>Employee</b> (Status = Active) — your headcount, call it <i>N</i>.</li>
+<li><b>Leave Allocation</b> for the period — should be <i>2N</i> (casual + sick).</li>
+<li><b>Salary Structure Assignment</b> from the year start — should be <i>N</i>, less anyone genuinely unpaid.</li>
+<li><b>Employee</b> with <span class="field">Attendance Device ID</span> empty — should be zero.</li>
+<li><b>Employee</b> with <span class="field">Employee Category</span> empty — should be zero.</li>
+</ul>
+<div class="note tip"><b class="t">Tip</b><p>On any list, use <span class="btn">Filter</span> &rsaquo; the field &rsaquo;
+<b>is</b> &rsaquo; <b>not set</b> to find the blanks. That single filter finds most of what a setup misses.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-fiscal-year" data-go="setup-fiscal-year">Create the year&#x27;s periods</a><a href="#setup-employee" data-go="setup-employee">The Employee record</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a></div>
+<div class="pager"><a href="#glossary" data-go="glossary">&larr; Glossary and record types</a><a href="#setup-fiscal-year" data-go="setup-fiscal-year">Create the year&#x27;s periods &rarr;</a></div>
+</article>
+<article id="setup-fiscal-year">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Create the year&#x27;s periods</h1>
+<div class="meta"><span>Applies to: All companies · Once a year</span><span>Audience: Implementer</span></div>
+<div class="applies"><b>In this article</b>Fiscal Year, Payroll Period and Leave Period — three records that must agree to the day.</div>
+<p>Three separate records describe the same year to three different parts of the system. Accounting reads the
+Fiscal Year, tax reads the Payroll Period, and leave balances read the Leave Period. They must carry identical
+dates or the three will quietly disagree.</p>
+
+<h3>Before you begin</h3>
+<ul class="plain">
+<li>Know the year's exact AD dates. For <b>83/84</b> that is <b>2026-07-17</b> to <b>2027-07-16</b>.</li>
+<li>You need the HR Manager and Accounts Manager roles.</li>
+</ul>
+
+<h2>Create the Fiscal Year</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Fiscal Year</span> and choose <span class="btn">+ Add Fiscal Year</span>.</li>
+<li><span class="field">Year Name</span>: <b>83/84</b>. Use the same form every year — a stray "2083/84" makes a second, competing year.</li>
+<li><span class="field">Year Start Date</span>: <b>2026-07-17</b>. <span class="field">Year End Date</span>: <b>2027-07-16</b>.</li>
+<li>In the <span class="screen">Companies</span> table, add a row for <b>every</b> one of the seven companies.</li>
+<li><span class="btn">Save</span>.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>All seven companies, even those not on payroll. Document numbering
+looks up a Fiscal Year row that spans the posting date and refuses to number an invoice if the row is missing —
+so an incomplete fiscal year stops sales, not just payroll.</p></div>
+
+<h2>Create the Payroll Period</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Payroll Period</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Company</span>: one company. This record is per company, so you will repeat it.</li>
+<li><span class="field">Start Date</span> / <span class="field">End Date</span>: the same two dates as the fiscal year.</li>
+<li><span class="btn">Save</span>, then repeat for each company on payroll.</li>
+</ol>
+<p><b>Why it matters:</b> income tax is an annual figure spread over the year. The payroll period is the window
+the system projects across — how many months are left, how much tax has already been deducted. A period that
+starts on the wrong day changes everyone's monthly tax.</p>
+
+<h2>Create the Leave Period</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Leave Period</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">From Date</span> / <span class="field">To Date</span>: the same two dates again.</li>
+<li><span class="field">Company</span>: the company.</li>
+<li>Leave <span class="field">Is Active</span> ticked.</li>
+<li><span class="btn">Save</span>.</li>
+</ol>
+
+<h3>Result</h3>
+<p>Three records per company, all reading 2026-07-17 to 2027-07-16. Confirm by opening each list and
+comparing the dates side by side.</p>
+<div class="note info"><b class="t">Note</b><p>Everything here can be created for all companies at once by the
+year-setup routine the implementer runs; these steps are the manual equivalent, and the way to repair one
+company that was missed.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-holidays" data-go="setup-holidays">Build the holiday lists</a><a href="#setup-tax" data-go="setup-tax">Set up the income tax slab</a><a href="#setup-leave" data-go="setup-leave">Configure leave</a></div>
+<div class="pager"><a href="#setup-checklist" data-go="setup-checklist">&larr; Setup checklist</a><a href="#setup-holidays" data-go="setup-holidays">Build the holiday lists &rarr;</a></div>
+</article>
+<article id="setup-holidays">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Build the holiday lists</h1>
+<div class="meta"><span>Applies to: Per company · Once a year</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>Two lists per company — the common one and the women&#x27;s one — the Saturdays, and the eleven festivals of 83/84.</div>
+<p>A holiday list does three jobs at once, which is why an error here shows up in three places. It tells
+attendance which days are not working days, it tells the overtime rules which work is holiday work, and it tells
+leave how many days a leave application actually consumes.</p>
+<div class="note imp"><b class="t">Important</b><p>Teej is a holiday for women only. A single list cannot express
+that, so each company has <b>two</b>: a common list and a women's list that is identical plus Teej. The women's
+list is attached to the women's Employee records; everyone else gets the common one.</p></div>
+
+<h3>Before you begin</h3>
+<ul class="plain">
+<li>The fiscal year must exist (step 1).</li>
+<li>Have the festival dates confirmed by the client. Four of the five festivals move with the moon and cannot be calculated — they are typed from the Nepali calendar each year.</li>
+</ul>
+
+<h2>Create the common list</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Holiday List</span> &rsaquo; <span class="btn">+ Add Holiday List</span>.</li>
+<li><span class="field">Holiday List Name</span>: <b>NGI 83/84</b> — company abbreviation, then the year.</li>
+<li><span class="field">From Date</span> / <span class="field">To Date</span>: the fiscal year's dates.</li>
+<li><span class="field">Company</span>: the company. (On this system the field is <span class="field">Company</span> on the Holiday List; it is required, and a list saved without it cannot be attached to a shift.)</li>
+<li>Under <span class="screen">Add Weekly Holidays</span>, set <span class="field">Weekly Off</span> to <b>Saturday</b> and press <span class="btn">Add to Holidays</span>. Around 52 rows appear.</li>
+<li>Add each festival as a row in the <span class="screen">Holidays</span> table: the date and a description.</li>
+<li><span class="btn">Save</span>.</li>
+</ol>
+
+<h2>Festivals for 83/84</h2>
+<div class="tablewrap"><table>
+<tr><th>AD date</th><th>Holiday</th><th>Which list</th></tr>
+<tr><td class="num">2026-08-28</td><td>Janai Purnima</td><td>Both</td></tr>
+<tr><td class="num">2026-09-14</td><td>Haritalika Teej</td><td><b>Women's list only</b></td></tr>
+<tr><td class="num">2026-10-18</td><td>Fulpati</td><td>Both</td></tr>
+<tr><td class="num">2026-10-19</td><td>Maha Ashtami</td><td>Both</td></tr>
+<tr><td class="num">2026-10-20</td><td>Maha Nawami</td><td>Both</td></tr>
+<tr><td class="num">2026-10-21</td><td>Vijaya Dashami</td><td>Both</td></tr>
+<tr><td class="num">2026-10-22</td><td>Ekadashi</td><td>Both</td></tr>
+<tr><td class="num">2026-11-09</td><td>Laxmi Puja</td><td>Both</td></tr>
+<tr><td class="num">2026-11-10</td><td>Gobardhan Puja</td><td>Both</td></tr>
+<tr><td class="num">2026-11-11</td><td>Bhai Tika</td><td>Both</td></tr>
+<tr><td class="num">2027-01-15</td><td>Maghe Sankranti</td><td>Both</td></tr>
+</table></div>
+<p>Dashain is five days and Tihar three, as confirmed with the client on 2026-09-22.</p>
+
+<h2>Create the women's list</h2>
+<ol class="steps">
+<li>Open the common list and use <span class="btn">&hellip;</span> &rsaquo; <span class="btn">Duplicate</span>.</li>
+<li>Name it <b>NGI 83/84 (Women)</b>.</li>
+<li>Add one row: <b>2026-09-14 — Haritalika Teej</b>.</li>
+<li><span class="btn">Save</span>.</li>
+<li>On each woman's <span class="screen">Employee</span> record, set <span class="field">Holiday List</span> to the women's list.</li>
+</ol>
+
+<h3>Result</h3>
+<p>14 holiday lists on the site — two per company. Each common list has 52 Saturdays plus 10 festivals; each
+women's list has one more.</p>
+<div class="note tip"><b class="t">Tip</b><p>If a holiday is declared mid-year, add the row to the list and then
+re-run attendance for that day. Attendance already written stays as it was: the list is read when the day is
+processed, not afterwards.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-shifts" data-go="setup-shifts">Define shift types</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#setup-employee" data-go="setup-employee">The Employee record</a></div>
+<div class="pager"><a href="#setup-fiscal-year" data-go="setup-fiscal-year">&larr; Create the year&#x27;s periods</a><a href="#setup-shifts" data-go="setup-shifts">Define shift types &rarr;</a></div>
+</article>
+<article id="setup-shifts">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Define shift types</h1>
+<div class="meta"><span>Applies to: Per company · Rarely changes</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>Working hours per company, the punch-capture window, and the two-hour half-day rule.</div>
+<p>A Shift Type is not only a pair of clock times. It is the rule book that turns raw punches into an
+attendance verdict: how long before the start a punch counts, how late is late, when a late arrival becomes a
+half day, and whether attendance is written automatically at all.</p>
+
+<h3>Before you begin</h3>
+<ul class="plain">
+<li>The company's holiday lists must exist (step 2) — a shift points at one.</li>
+<li>Know each company's actual hours. They differ.</li>
+</ul>
+
+<h2>The shifts in use</h2>
+<div class="tablewrap"><table>
+<tr><th>Company</th><th>Shift name</th><th>Start</th><th>End</th></tr>
+<tr><td rowspan="3">NGI</td><td>NGI 6 AM - 2 PM</td><td class="num">06:00</td><td class="num">14:00</td></tr>
+<tr><td>NGI 9 AM - 6 PM</td><td class="num">09:00</td><td class="num">18:00</td></tr>
+<tr><td>NGI 12 PM - 8 PM</td><td class="num">12:00</td><td class="num">20:00</td></tr>
+<tr><td rowspan="2">NGN</td><td>NGN 7 AM - 3 PM</td><td class="num">07:00</td><td class="num">15:00</td></tr>
+<tr><td>NGN 9 AM - 5 PM</td><td class="num">09:00</td><td class="num">17:00</td></tr>
+<tr><td>NGG, NGK, GLMI, GEPL, SGU</td><td>&lt;ABBR&gt; 9 AM - 5 PM</td><td class="num">09:00</td><td class="num">17:00</td></tr>
+</table></div>
+<p>Shifts are named with the company deliberately. Two companies that both work nine to five still get two
+records, so that one company's hours can change without touching the other's.</p>
+
+<h2>Create a shift</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Shift Type</span> &rsaquo; <span class="btn">+ Add Shift Type</span>.</li>
+<li>Fill the fields in the table below.</li>
+<li><span class="btn">Save</span>.</li>
+<li>Reopen the record and confirm <span class="field">Late Entry Grace Period</span> is <b>0</b> and
+<span class="field">Late Arrival Cutoff Time</span> is <b>empty</b>. See the warning below.</li>
+</ol>
+
+<h2>Field reference</h2>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Value</th><th>What it does</th><th>If it is wrong</th></tr>
+<tr><td><span class="field">Shift Type</span></td><td>NGI 6 AM - 2 PM</td><td>The name, used everywhere.</td><td>Confusion only.</td></tr>
+<tr><td><span class="field">Start Time</span> / <span class="field">End Time</span></td><td>06:00:00 / 14:00:00</td><td>The working day. Late minutes and overtime are measured from these.</td><td>Everyone is late, or nobody is.</td></tr>
+<tr><td><span class="field">Holiday List</span></td><td>The company's list</td><td>Which days produce no attendance.</td><td>Saturdays become absences.</td></tr>
+<tr><td><span class="field">Enable Auto Attendance</span></td><td>Ticked</td><td>Attendance is written from punches nightly.</td><td>No attendance at all; every day must be typed.</td></tr>
+<tr><td><span class="field">Determine Check-in and Check-out</span></td><td>Alternating entries…</td><td>How punches are paired into in/out.</td><td>Hours worked come out nonsense.</td></tr>
+<tr><td><span class="field">Working Hours Calculation</span></td><td>First Check-in and Last Check-out</td><td>The span that counts as worked.</td><td>Lunch breaks eat the day.</td></tr>
+<tr><td><span class="field">Begin check-in before shift start time</span></td><td>60 (minutes)</td><td>How early a punch still belongs to this shift.</td><td>Early arrivals are ignored and the person shows absent.</td></tr>
+<tr><td><span class="field">Allow check-out after shift end time</span></td><td>180 (minutes)</td><td>How long after the end a punch still counts — this is the window overtime lives in.</td><td>Overtime punches are dropped.</td></tr>
+<tr><td><span class="field">Working Hours Threshold for Half Day</span></td><td>4</td><td>Fewer hours than this is a half day.</td><td>Short days are paid in full, or full days are halved.</td></tr>
+<tr><td><span class="field">Working Hours Threshold for Absent</span></td><td>1</td><td>Below this, the day is absent.</td><td>A single stray punch counts as a day worked.</td></tr>
+<tr><td><span class="field">Late Entry Grace Period</span></td><td><b>0</b></td><td>Minutes of lateness forgiven. Client policy: none.</td><td>Late fines silently under-charge.</td></tr>
+<tr><td><span class="field">Half Day If Late By (Hours)</span></td><td><b>2</b></td><td>More than two hours late is a half day (policy 1.2).</td><td>Chronic lateness costs nothing.</td></tr>
+<tr><td><span class="field">Late Arrival Cutoff Time</span></td><td><b>Empty</b></td><td>An absolute clock time after which arrival is late. Not used here — lateness is measured against the shift start.</td><td>See below.</td></tr>
+</table></div>
+
+<div class="note imp"><b class="t">Important — the cutoff-time trap</b>
+<p>During testing this field filled itself with a clock time, and because that time sat after the shift start,
+<b>2,423 of 2,808 days turned into Half Day</b>. The rule now ignores any cutoff at or before the shift start,
+and the field is cleared when a shift is created — but after you save a shift, check it. An unexplained wave of
+half days across a whole company is this field, every time.</p></div>
+
+<h3>Result</h3>
+<p>Seven shift types on the site. Confirm each has a holiday list and auto-attendance ticked. Then assign people
+to them — see <a data-go="ops-shift-change">Change someone's shift</a>.</p>
+<div class="seealso"><b>See also</b><a href="#ops-shift-change" data-go="ops-shift-change">Change someone&#x27;s shift</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#setup-holidays" data-go="setup-holidays">Build the holiday lists</a></div>
+<div class="pager"><a href="#setup-holidays" data-go="setup-holidays">&larr; Build the holiday lists</a><a href="#setup-cost-centres" data-go="setup-cost-centres">Cost centres and company defaults &rarr;</a></div>
+</article>
+<article id="setup-cost-centres">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Cost centres and company defaults</h1>
+<div class="meta"><span>Applies to: Per company · Once</span><span>Audience: Accounts Manager</span></div>
+<div class="applies"><b>In this article</b>The three-way split of salary cost, and the four company settings payroll cannot run without.</div>
+<p>The group's chart of accounts splits salary cost three ways — <b>547101 O/O</b> (office), <b>547102 S/D</b>
+(sales and distribution), <b>547103 F/P</b> (filling plant). But a salary component maps to <i>one</i> account
+per company, so the account alone can never tell office pay from plant pay.</p>
+<p>Cost centres can. Three cost centres per company reproduce the split, and each employee's own cost centre
+decides where their pay lands. The journal then routes the salary expense to the matching account.</p>
+
+<h2>Create the cost centres</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Cost Center</span> &rsaquo; <span class="btn">+ Add Cost Center</span>.</li>
+<li><span class="field">Cost Center Name</span>: <b>Office</b>. <span class="field">Company</span>: the company.</li>
+<li><span class="field">Parent Cost Center</span>: the company's root, e.g. <b>Nepal Gas Udhyog Pvt. Ltd. - NGI</b>.</li>
+<li>Leave <span class="field">Is Group</span> unticked. <span class="btn">Save</span>.</li>
+<li>Repeat for <b>Sales &amp; Distribution</b> and <b>Filling Plant</b>.</li>
+</ol>
+<div class="tablewrap"><table>
+<tr><th>Cost centre</th><th>Section</th><th>Salary expense account</th></tr>
+<tr><td>Office</td><td>O/O</td><td class="num">547101</td></tr>
+<tr><td>Sales &amp; Distribution</td><td>S/D</td><td class="num">547102</td></tr>
+<tr><td>Filling Plant</td><td>F/P</td><td class="num">547103</td></tr>
+</table></div>
+
+<h2>Set the company defaults</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Company</span> and open the company.</li>
+<li>Go to the <span class="screen">Accounts</span> tab, then the <span class="screen">Payroll</span> section.</li>
+<li>Fill the four fields below and <span class="btn">Save</span>.</li>
+</ol>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Set to</th><th>Why</th></tr>
+<tr><td><span class="field">Default Payroll Payable Account</span></td><td>Salary Payable</td><td>Where net pay sits between the payslip and the bank transfer.</td></tr>
+<tr><td><span class="field">Default Employee Advance Account</span></td><td>Staff Advance</td><td>Where an advance is held until recovered from pay.</td></tr>
+<tr><td><span class="field">Default Cost Center</span></td><td>Office</td><td>The fallback for anyone whose own cost centre is blank.</td></tr>
+<tr><td><span class="field">Exchange Gain / Loss Account</span></td><td>As accounts decides</td><td>Only used if a slip is ever raised in another currency.</td></tr>
+</table></div>
+
+<div class="note imp"><b class="t">Two account traps</b>
+<p><b>1. The payroll payable account must have no Account Type.</b> HRMS refuses an account typed "Payable" for
+this field. On six companies the type had to be cleared. If the field will not accept your account, open the
+account and blank its <span class="field">Account Type</span>.</p>
+<p><b>2. Staff Advance must be a Receivable.</b> An advance is money owed <i>to</i> the company. On several
+companies it is typed Payable, and recovery then posts the wrong way. Accounts must confirm and change it.</p></div>
+
+<h2>Give each employee a cost centre</h2>
+<ol class="steps">
+<li>Open the <span class="screen">Employee</span> list and switch to <span class="btn">Report</span> view.</li>
+<li>Add the <span class="field">Payroll Cost Center</span> column.</li>
+<li>Fill it for everyone: plant staff &rarr; Filling Plant, drivers and sales &rarr; Sales &amp; Distribution, the rest &rarr; Office.</li>
+</ol>
+<p>Someone who genuinely splits across sections can instead be given a percentage split in the
+<span class="screen">Distribute Salary Cost</span> table on their Employee record.</p>
+
+<h3>Result</h3>
+<p>Once the month is posted, the journal shows three separate salary-expense lines. For the Bhadra NGI test run
+they were F/P 1,729,975.70, O/O 998,139.46 and S/D 468,053.33 — adding to the gross.</p>
+<div class="note info"><b class="t">Open item</b><p>The account named "547101 O/O" is ambiguous to read on a
+report. Accounts may wish to rename it to "Salary — Office". That is a naming decision, not a system one.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-accounts" data-go="setup-accounts">Map components to accounts</a><a href="#run-posting" data-go="run-posting">Post to the books and pay</a></div>
+<div class="pager"><a href="#setup-shifts" data-go="setup-shifts">&larr; Define shift types</a><a href="#setup-categories" data-go="setup-categories">Employee and allowance categories &rarr;</a></div>
+</article>
+<article id="setup-categories">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Employee and allowance categories</h1>
+<div class="meta"><span>Applies to: Per company</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>Two tags on the Employee record that decide whether holiday work is paid, and what a day&#x27;s tea is worth.</div>
+<p>Two small records carry two large policy decisions. Neither is optional: an employee missing either one
+quietly loses money on the payslip.</p>
+
+<h2>Employee Category — paid overtime, or leave instead</h2>
+<p>The client's rule is that plant staff are paid for extra hours, and office staff are not — they earn a day
+off instead. That single distinction is the Employee Category.</p>
+<div class="tablewrap"><table>
+<tr><th>Category</th><th>Overtime eligible</th><th>Compensatory leave</th><th>Who</th></tr>
+<tr><td><b>Plant</b></td><td>Yes — extra hours and holiday work are paid</td><td>No</td><td>Filling plant, labour, drivers, helpers</td></tr>
+<tr><td><b>Officer &amp; Admin</b></td><td>No</td><td>Yes — a holiday worked becomes a day of leave</td><td>Managers, accounts, admin, sales officers</td></tr>
+</table></div>
+<ol class="steps">
+<li>Search for <span class="screen">Employee Category</span>. Confirm the two records exist, with
+<span class="field">Overtime Eligible</span> ticked on Plant only and <span class="field">Compensatory Leave</span>
+ticked on Officer &amp; Admin only.</li>
+<li>Open the <span class="screen">Employee</span> list &rsaquo; <span class="btn">Report</span> view.</li>
+<li>Add the <span class="field">Employee Category</span> column, sort by designation, and fill it for everyone.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>When this data was first imported at NGI, <b>63 of 80</b> people
+carried the opposite category to the client's own workbook. It was corrected from the sheet. Before the first
+live run at any company, print the list and have the manager sign it.</p></div>
+
+<h2>Allowance Category — the tea rate</h2>
+<p>Tea &amp; Conveyance is paid per day present, but not at one rate. Staff are in an <b>OLD</b> group, a
+<b>NEW</b> group, or get none at all, and the rates differ by company. The Allowance Category is the record
+that holds a company's rate for a group.</p>
+<div class="tablewrap"><table>
+<tr><th>Company</th><th>Category</th><th>Rate per day present</th></tr>
+<tr><td rowspan="2">NGI</td><td>NGI Tea OLD</td><td class="num">235.00</td></tr>
+<tr><td>NGI Tea NEW</td><td class="num">40.00</td></tr>
+<tr><td rowspan="2">NGN</td><td>NGN Tea OLD</td><td class="num">265.00</td></tr>
+<tr><td>NGN Tea NEW</td><td class="num">40.00</td></tr>
+<tr><td>Anyone with no tea</td><td colspan="2">Leave <span class="field">Allowance Category</span> empty — no rows are produced.</td></tr>
+</table></div>
+
+<h3>How a rate is resolved</h3>
+<p>When the month's allowances are computed, the rate for one person and one component is looked up in this
+order, and the first answer wins:</p>
+<ol class="steps">
+<li>An override on the <b>Employee</b> record itself, if one is set.</li>
+<li>The rate on the employee's <b>Allowance Category</b>, for this component.</li>
+<li>The default rate on the <b>Salary Component</b>.</li>
+</ol>
+<p>A rate of <b>0</b> is an answer, not a blank: it stops the lookup and pays nothing. That is how "this person
+gets no tea" is expressed without removing them from a category.</p>
+
+<h2>Create an allowance category</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Allowance Category</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Title</span>: <b>NGI Tea OLD</b>. <span class="field">Company</span>: the company.</li>
+<li>In the <span class="screen">Rates</span> table add a row: <span class="field">Salary Component</span> =
+<b>Tea &amp; Conveyance</b>, <span class="field">Rate</span> = <b>235</b>.</li>
+<li><span class="btn">Save</span>, then set it on the relevant Employee records.</li>
+</ol>
+<div class="note info"><b class="t">Note</b><p>A category belongs to one company, and the Employee form only
+offers categories of that employee's company. Changing an employee's company clears the field — deliberately,
+because an NGI rate has no meaning at NGN. If more than one category could apply to a person, the one on their
+Employee record is the only one that counts; there is no stacking.</p></div>
+
+<h3>Result</h3>
+<p>Seven allowance categories across the group. Verify with a report-view filter for
+<span class="field">Allowance Category</span> <b>is not set</b> — every result is someone who will be paid no
+tea this month, so each must be deliberate.</p>
+<div class="seealso"><b>See also</b><a href="#setup-components" data-go="setup-components">Salary components</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#setup-employee" data-go="setup-employee">The Employee record</a></div>
+<div class="pager"><a href="#setup-cost-centres" data-go="setup-cost-centres">&larr; Cost centres and company defaults</a><a href="#setup-leave" data-go="setup-leave">Configure leave &rarr;</a></div>
+</article>
+<article id="setup-leave">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Configure leave</h1>
+<div class="meta"><span>Applies to: Per company · Once a year</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>Leave types, the 21-and-12 policy, monthly accrual, the annual ceiling, and how to give everyone their balance.</div>
+<p>Leave is set up in four layers: the <b>types</b> of leave that exist, the <b>policy</b> that says how many
+days a year each gives, the <b>assignment</b> that puts a person on a policy, and the <b>allocation</b> that
+is their actual balance.</p>
+
+<h2>Leave types</h2>
+<div class="tablewrap"><table>
+<tr><th>Leave Type</th><th>Days a year</th><th>Accrues monthly</th><th>Notes</th></tr>
+<tr><td>Casual Leave</td><td class="num">21 (8 at NGK)</td><td>Yes — 1.75/month (0.67 at NGK)</td><td>Paid. The everyday leave.</td></tr>
+<tr><td>Sick Leave</td><td class="num">12</td><td>Yes — 1.00/month</td><td>Paid.</td></tr>
+<tr><td>Leave Without Pay</td><td>—</td><td>No</td><td>Reduces payment days, so it reduces pay.</td></tr>
+<tr><td>Compensatory Off</td><td>Earned</td><td>No</td><td>Granted when an Officer &amp; Admin employee works a holiday.</td></tr>
+</table></div>
+<p>Set these on each Leave Type record:</p>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Value</th><th>Why</th></tr>
+<tr><td><span class="field">Max Leaves Allowed</span></td><td><b>0</b></td><td>A number here would be one figure for the whole group, and Karnali's 8 would be wrong. The real ceiling lives on the policy.</td></tr>
+<tr><td><span class="field">Applicable After (Working Days)</span></td><td><b>0</b></td><td>No waiting period.</td></tr>
+<tr><td><span class="field">Maximum Consecutive Leaves Allowed</span></td><td><b>0</b></td><td>No cap on a single stretch.</td></tr>
+<tr><td><span class="field">Is Earned Leave</span></td><td>Ticked on Casual and Sick</td><td>Turns on monthly accrual.</td></tr>
+<tr><td><span class="field">Earned Leave Frequency</span></td><td>Monthly</td><td>Credited month by month rather than all at once.</td></tr>
+<tr><td><span class="field">Allow Over Allocation</span></td><td>Ticked</td><td>Permits a month to credit more than its even share — see below.</td></tr>
+<tr><td><span class="field">Include Holidays Within Leaves as Leaves</span></td><td>Unticked</td><td>A Saturday inside a leave stretch is not a leave day.</td></tr>
+</table></div>
+
+<div class="note info"><b class="t">The monthly credit is a convenience; the year's figure is the policy</b>
+<p>The client's rule (2026-09-22): the shape of the year is flexible — three days one month, four the next — but
+the year's total may never exceed the figure the company grants. So over-allocation is allowed at the month
+level and blocked at the year level. A hand-made allocation that would take someone past 21 casual days is
+refused with a message naming the person, the ceiling and the total it would have made. Leave carried in from
+last year is excluded: it was earned under last year's ceiling.</p></div>
+
+<h2>Leave policies</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Leave Policy</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Title</span>: <b>NGI Regular 83/84</b>.</li>
+<li>In <span class="screen">Leave Policy Details</span>, add: Casual Leave <b>21</b>, Sick Leave <b>12</b>.</li>
+<li><span class="btn">Save</span>. Repeat per company; at NGK use <b>8</b> and <b>12</b>.</li>
+<li>Create a second policy per company, <b>&lt;ABBR&gt; Probation 83/84</b>, with Casual Leave <b>12</b> only.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>A Leave Policy has no company field. The company distinction comes
+from the policy's title and from whom it is assigned to — so name policies with the abbreviation or they become
+impossible to tell apart.</p></div>
+
+<h2>Give everyone their allocation</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Leave Policy Assignment</span>.</li>
+<li>Use <span class="btn">Bulk Leave Policy Assignment</span> (the button on the list).</li>
+<li><span class="field">Company</span>, <span class="field">Leave Policy</span>, <span class="field">Assignment based on</span> = <b>Leave Period</b>, and the period <b>83/84</b>.</li>
+<li>Choose the employees — all of them, or filter to the probationers for the probation policy.</li>
+<li><span class="btn">Assign</span>. Each assignment submits and creates two Leave Allocations.</li>
+</ol>
+
+<h3>Result</h3>
+<p>On avinas1 this produced <b>292 assignments and 584 allocations</b>. Verify: the Leave Allocation list,
+filtered to the period, should hold exactly twice your active headcount.</p>
+<div class="note imp"><b class="t">Important</b><p>An employee with no allocation cannot apply for leave, and
+their absences become unpaid. This is the single most common omission when a new joiner is added mid-year — see
+<a data-go="ops-lifecycle">Joiners and leavers</a>.</p></div>
+<div class="seealso"><b>See also</b><a href="#ops-leave" data-go="ops-leave">Leave applications and balances</a><a href="#ops-lifecycle" data-go="ops-lifecycle">Joiners and leavers</a><a href="#setup-fiscal-year" data-go="setup-fiscal-year">Create the year&#x27;s periods</a></div>
+<div class="pager"><a href="#setup-categories" data-go="setup-categories">&larr; Employee and allowance categories</a><a href="#setup-components" data-go="setup-components">Salary components &rarr;</a></div>
+</article>
+<article id="setup-components">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Salary components</h1>
+<div class="meta"><span>Applies to: Group-wide · Once</span><span>Audience: HR Manager, Implementer</span></div>
+<div class="applies"><b>In this article</b>The twenty-one lines that can appear on a payslip, what each does, and the flags that must be right.</div>
+<p>A Salary Component is one possible line on a payslip. The structure decides which components a company uses
+and how much each is worth; the component itself carries the behaviour — whether it is taxed, whether it is
+prorated, whether attendance computes it.</p>
+
+<h2>The catalogue</h2>
+<div class="tablewrap"><table>
+<tr><th>Component</th><th>Abbr</th><th>Type</th><th>Prorated by payment days</th><th>How the amount arises</th></tr>
+<tr><td>Basic</td><td>B</td><td>Earning</td><td>Yes</td><td>The assignment's base</td></tr>
+<tr><td>Dearness Allowance</td><td>DA</td><td>Earning</td><td>Yes</td><td>Employee field</td></tr>
+<tr><td>Other Allowance</td><td>OA</td><td>Earning</td><td>Yes</td><td>Employee field</td></tr>
+<tr><td>Fixed Allowance</td><td>FA</td><td>Earning</td><td>Yes</td><td>Employee field (grade-scale companies)</td></tr>
+<tr><td>Fuel Allowance</td><td>FUEL</td><td>Earning</td><td>Yes</td><td>Employee field</td></tr>
+<tr><td>Maintenance Allowance</td><td>MNT</td><td>Earning</td><td>Yes</td><td>Employee field (NGK)</td></tr>
+<tr><td>House Rent Allowance</td><td>HRA</td><td>Earning</td><td>Yes</td><td>Formula: % of Initial Basic</td></tr>
+<tr><td>Gas Allowance</td><td>GAS</td><td>Earning</td><td>Yes</td><td>Flat, if the employee is flagged</td></tr>
+<tr><td>Education Allowance</td><td>EDU</td><td>Earning</td><td>Yes</td><td>Flat, if the employee is flagged</td></tr>
+<tr><td>SSF Addition</td><td>SSFA</td><td>Earning</td><td><b>No</b></td><td>Formula: 20% of Basic</td></tr>
+<tr><td>Load/Unload Allowance</td><td>LU</td><td>Earning</td><td>Yes</td><td>Entered monthly when there was loading work</td></tr>
+<tr><td>Dashain Bonus</td><td>DB</td><td>Earning</td><td>No</td><td>Dashain Bonus run</td></tr>
+<tr><td>Salary Arrears</td><td>ARR</td><td>Earning</td><td>No</td><td>Salary Revision</td></tr>
+<tr><td>Tea &amp; Conveyance</td><td>TEA</td><td>Earning</td><td>No</td><td><b>Attendance</b> — days present × category rate</td></tr>
+<tr><td>Meal</td><td>MEAL</td><td>Earning</td><td>No</td><td><b>Attendance</b> — days qualifying by extra hours</td></tr>
+<tr><td>Overtime</td><td>OT</td><td>Earning</td><td>No</td><td><b>Attendance</b> — approved hours × hourly basic × 1.5</td></tr>
+<tr><td>Daily Wage</td><td>DW</td><td>Earning</td><td>No</td><td><b>Attendance</b> — days worked × daily rate</td></tr>
+<tr><td>SSF</td><td>SSF</td><td>Deduction</td><td><b>No</b></td><td>Formula: 31% of Basic. Tax-exempt.</td></tr>
+<tr><td>Income Tax</td><td>TAX</td><td>Deduction</td><td>No</td><td>Computed from the slab</td></tr>
+<tr><td>Late Fine</td><td>LF</td><td>Deduction</td><td>No</td><td><b>Attendance</b> — late minutes × hourly basic</td></tr>
+<tr><td>Salary Advance</td><td>ADV</td><td>Deduction</td><td>No</td><td>Employee Advance instalment</td></tr>
+</table></div>
+
+<h2>The flags that matter</h2>
+<div class="tablewrap"><table>
+<tr><th>Flag</th><th>Meaning</th><th>Set on</th></tr>
+<tr><td><span class="field">Depends on Payment Days</span></td><td>The amount is scaled by days paid ÷ days in month.</td><td>The fixed monthly earnings only.</td></tr>
+<tr><td><span class="field">Is Tax Applicable</span></td><td>Counts toward taxable income.</td><td>All earnings.</td></tr>
+<tr><td><span class="field">Exempted from Income Tax</span></td><td>Reduces taxable income.</td><td>SSF deduction.</td></tr>
+<tr><td><span class="field">Variable Based on Taxable Salary</span></td><td>The system computes it from the slab.</td><td>Income Tax only.</td></tr>
+<tr><td><span class="field">Is Attendance Driven</span></td><td>The monthly adjustment run computes this line.</td><td>Tea, Meal, Overtime, Daily Wage, Late Fine.</td></tr>
+<tr><td><span class="field">Round to the Nearest Integer</span></td><td>Rounds the line to whole rupees.</td><td>As the sheet does.</td></tr>
+</table></div>
+
+<div class="note imp"><b class="t">Important — why SSF must not depend on payment days</b>
+<p>Both SSF components are computed from Basic, and Basic is <i>already</i> prorated. Ticking
+<span class="field">Depends on Payment Days</span> would prorate the same amount twice, and the system refuses
+such a row outright. Both SSF components therefore carry the flag as <b>off</b>.</p>
+<p>And the flag must be off <b>on the component</b>, not just on the structure row. The structure row fetches
+its value from the component when it is written, so a row set to 0 by hand is silently refilled.</p></div>
+
+<h2>Check a component</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Salary Component</span> and open one.</li>
+<li>Confirm <span class="field">Type</span>, the flags above, and the <span class="screen">Accounts</span> table
+at the bottom — it must have one row per company with a GL account (see <a data-go="setup-accounts">Map components to accounts</a>).</li>
+<li>For an attendance-driven component, check <span class="field">Condition Type</span>,
+<span class="field">Unit</span> and <span class="field">Rate Basis</span> match the table in
+<a data-go="ref-calculations">Calculation reference</a>.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>Never delete a component that has ever appeared on a submitted slip.
+To retire one, remove it from the structure — the history stays readable.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-structure" data-go="setup-structure">Salary structures</a><a href="#setup-accounts" data-go="setup-accounts">Map components to accounts</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#setup-leave" data-go="setup-leave">&larr; Configure leave</a><a href="#setup-structure" data-go="setup-structure">Salary structures &rarr;</a></div>
+</article>
+<article id="setup-structure">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Salary structures</h1>
+<div class="meta"><span>Applies to: Per company</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>One template per company: the components it uses, the formulas behind them, and how to change one safely.</div>
+<p>A Salary Structure is the template a company's payslips are built from. It lists the components in order and
+carries a formula for each. What varies <i>per person</i> is not in the structure — it is on the Employee record
+or the assignment, and the formula reads it. That is what makes one structure serve a whole company.</p>
+
+<h2>The structures in use</h2>
+<div class="tablewrap"><table>
+<tr><th>Structure</th><th>Company</th><th>Model</th><th>People</th></tr>
+<tr><td>NGI Staff 83/84</td><td>NGI</td><td>Initial-basic</td><td class="num">87</td></tr>
+<tr><td>NGN Staff 83/84</td><td>NGN</td><td>Initial-basic</td><td class="num">66</td></tr>
+<tr><td>NGG Staff 83/84</td><td>NGG</td><td>Grade-scale</td><td class="num">28</td></tr>
+<tr><td>NGK Staff 83/84</td><td>NGK</td><td>Grade-scale</td><td class="num">13</td></tr>
+<tr><td>NGK Daily Wage 83/84</td><td>NGK</td><td>Paid by the day</td><td class="num">6</td></tr>
+</table></div>
+
+<h2>Typical formulas (NGI)</h2>
+<div class="tablewrap"><table>
+<tr><th>Component</th><th>Amount from</th><th>Reads</th></tr>
+<tr><td>Basic</td><td><span class="field">base</span></td><td>The assignment</td></tr>
+<tr><td>House Rent Allowance</td><td><span class="field">custom_initial_basic * 0.25</span></td><td>Employee</td></tr>
+<tr><td>Dearness Allowance</td><td><span class="field">custom_dearness_allowance</span></td><td>Employee</td></tr>
+<tr><td>Other Allowance</td><td><span class="field">custom_other_allowance</span></td><td>Employee</td></tr>
+<tr><td>Gas Allowance</td><td><span class="field">1690 if custom_gas_allowance else 0</span></td><td>Employee flag</td></tr>
+<tr><td>Education Allowance</td><td><span class="field">2780 if custom_education_allowance else 0</span></td><td>Employee flag</td></tr>
+<tr><td>SSF Addition</td><td><span class="field">B * 0.20 if custom_ssf_applicable else 0</span></td><td>Basic + flag</td></tr>
+<tr><td>SSF (deduction)</td><td><span class="field">B * 0.31 if custom_ssf_applicable else 0</span></td><td>Basic + flag</td></tr>
+</table></div>
+<p>Attendance-driven components (tea, meal, overtime, late fine, daily wage) appear in the structure with no
+formula: their amounts arrive from the month's Payroll Adjustment.</p>
+
+<h2>Create or amend a structure</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Salary Structure</span> and open the company's structure, or
+<span class="btn">+ Add</span> for a new one.</li>
+<li>A submitted structure cannot be edited. Use <span class="btn">&hellip;</span> &rsaquo; <span class="btn">Cancel</span>,
+then <span class="btn">Amend</span> — this makes a new draft.</li>
+<li>Edit the <span class="screen">Earnings</span> and <span class="screen">Deductions</span> tables.</li>
+<li>Check <span class="field">Payroll Frequency</span> = <b>Monthly</b>, <span class="field">Company</span>, and
+<span class="field">Salary Slip Based on Timesheet</span> = <b>unticked</b>.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>.</li>
+<li>Reassign the affected employees — an amended structure has a new name, and old assignments still point at the old one.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>Changing a structure does not change anyone's pay by itself. Pay
+flows through the <b>assignment</b>. After amending, either reassign everyone or accept that they stay on the
+previous version. This is the most common cause of "I changed it and nothing happened".</p></div>
+
+<h2>Preview before you trust it</h2>
+<ol class="steps">
+<li>On the submitted structure, press <span class="btn">Preview Salary Slip</span>.</li>
+<li>Pick an employee whose figures you know from the Excel sheet.</li>
+<li>Compare line by line. Investigate any difference before running a month.</li>
+</ol>
+<div class="note good"><b class="t">Proven</b><p>Run against the Falgun sheet, NGI matched <b>85 of 87</b> people to
+the paisa. The two exceptions were hand-typed sheet rows — one inconsistent SSF and one part-month worker whose
+allowances had been prorated by hand. NGN matched 66/66, NGK 19/19, NGG 27/28.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people</a><a href="#setup-components" data-go="setup-components">Salary components</a><a href="#test-plan" data-go="test-plan">Acceptance test cases</a></div>
+<div class="pager"><a href="#setup-components" data-go="setup-components">&larr; Salary components</a><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people &rarr;</a></div>
+</article>
+<article id="setup-assignment">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Assign salaries to people</h1>
+<div class="meta"><span>Applies to: Per employee · On joining and on every pay change</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>The Salary Structure Assignment is the pay record. What it holds, how to create many at once, and the field that silently drops people from a run.</div>
+<p>A structure is a template; an assignment is a fact. It says: <i>this person, on this structure, from this
+date, at this base figure</i>. Every payslip finds the assignment in force for the month it covers, which is why
+a pay rise is a new assignment and never an edit to an old one.</p>
+
+<h3>Before you begin</h3>
+<ul class="plain">
+<li>The structure must be submitted (step 9).</li>
+<li>The income tax slab must exist (step 8).</li>
+<li>The company's payroll payable account must be set (step 4).</li>
+</ul>
+
+<h2>Field reference</h2>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Value</th><th>What depends on it</th></tr>
+<tr><td><span class="field">Employee</span></td><td>The person</td><td>—</td></tr>
+<tr><td><span class="field">Salary Structure</span></td><td>e.g. NGI Staff 83/84</td><td>Which components appear</td></tr>
+<tr><td><span class="field">From Date</span></td><td>The first day of a BS month — for the year start, <b>2026-07-17</b></td><td>Which months this pay applies to</td></tr>
+<tr><td><span class="field">Base</span></td><td>The monthly basic salary</td><td>Basic, SSF, HRA, the hourly rate for OT and fines — nearly everything</td></tr>
+<tr><td><span class="field">Variable</span></td><td>Usually 0</td><td>Only structures that reference it</td></tr>
+<tr><td><span class="field">Income Tax Slab</span></td><td>The company's 83/84 slab</td><td>Income tax. Blank means no tax is computed.</td></tr>
+<tr><td><span class="field">Payroll Payable Account</span></td><td>The company's Salary Payable</td><td><b>See the warning.</b></td></tr>
+</table></div>
+<div class="note imp"><b class="t">Important</b><p>If <span class="field">Payroll Payable Account</span> is blank,
+HRMS <b>drops the employee from the payroll run</b> — no error, no slip, just a smaller list than expected. If
+your run produces fewer slips than you have staff, check this field first.</p></div>
+
+<h2>Assign one person</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Salary Structure Assignment</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li>Fill the fields above.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>. It has no effect until submitted.</li>
+</ol>
+
+<h2>Assign many at once</h2>
+<ol class="steps">
+<li>Open the submitted <span class="screen">Salary Structure</span>.</li>
+<li>Press <span class="btn">Assign Salary Structure</span> &rsaquo; <span class="btn">Bulk Assign</span> (on the structure's dashboard the action reads <b>Assign to Employees</b>).</li>
+<li>Set <span class="field">From Date</span>, filter by company, branch or designation, and choose the people.</li>
+<li>Press <span class="btn">Assign</span>. Each assignment is created and submitted; each still needs its own <b>base</b>.</li>
+<li>Open the assignment list in <span class="btn">Report</span> view, add the <span class="field">Base</span> column, and type each person's basic — or import them from the sheet.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>The bulk tool sets everyone to the same base, which is almost never
+right. For an initial load, the sheet import is the safer path: it reads each person's basic and per-person
+allowances from the company's own salary workbook. For a handful of new joiners, do it one by one.</p></div>
+
+<h2>Change someone's pay</h2>
+<p>Do <b>not</b> edit the base on an existing assignment. Create a new assignment from the first day of the BS
+month the new pay starts. The old one stays as the record of what was paid before, and last year's payslips keep
+reconciling with last year's journals. For a group rise with back-pay, use
+<a data-go="ops-revision">Salary Revision</a>.</p>
+
+<h3>Result</h3>
+<p>205 assignments exist on avinas1 for 83/84. Verify: filter the assignment list to
+<span class="field">From Date</span> = 2026-07-17 and compare the count against your active headcount.</p>
+<div class="seealso"><b>See also</b><a href="#setup-structure" data-go="setup-structure">Salary structures</a><a href="#ops-revision" data-go="ops-revision">Salary revision and arrears</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a></div>
+<div class="pager"><a href="#setup-structure" data-go="setup-structure">&larr; Salary structures</a><a href="#setup-tax" data-go="setup-tax">Set up the income tax slab &rarr;</a></div>
+</article>
+<article id="setup-tax">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Set up the income tax slab</h1>
+<div class="meta"><span>Applies to: Per company · Once a year</span><span>Audience: HR Manager, Accounts</span></div>
+<div class="applies"><b>In this article</b>The FY 2083/84 bands, the SSF waiver on the first 1%, and how to enter them.</div>
+<p>Nepal taxes salary on one annual schedule. The system holds it as an <b>Income Tax Slab</b> tied to a payroll
+period, and every salary assignment points at one. No slab on the assignment means no tax on the payslip.</p>
+
+<h2>The FY 2083/84 schedule</h2>
+<div class="tablewrap"><table>
+<tr><th>Annual taxable income</th><th>Rate</th><th>Notes</th></tr>
+<tr><td>Up to 10,00,000</td><td class="num">1%</td><td><b>Social Security Tax.</b> Waived for anyone contributing to the SSF.</td></tr>
+<tr><td>Next band</td><td class="num">10%</td><td></td></tr>
+<tr><td>Next band</td><td class="num">20%</td><td></td></tr>
+<tr><td>Next band</td><td class="num">27%</td><td></td></tr>
+<tr><td>Above</td><td class="num">29%</td><td>Top band.</td></tr>
+</table></div>
+<div class="note info"><b class="t">Why the 1% is special</b><p>The first band is not ordinary income tax — it is
+the Social Security Tax, a contribution toward the same state scheme as the SSF. Someone already paying into
+the SSF is not asked to pay it twice, so for them the first band is nil and tax starts at the 10% band. The
+waiver is written as a <b>condition</b> on the slab row, not as a separate slab, so one slab serves everyone.</p></div>
+
+<h2>Create the slab</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Income Tax Slab</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Name</span>: <b>NGI 83/84</b>. <span class="field">Company</span>, <span class="field">Currency</span> = NPR.</li>
+<li><span class="field">Effective from</span>: <b>2026-07-17</b>.</li>
+<li>Add one row in <span class="screen">Taxable Salary Slabs</span> per band: from amount, to amount, percent.</li>
+<li>On the 1% row, set <span class="field">Condition</span> to <span class="field">not custom_ssf_applicable</span>.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>. Repeat per company.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>A slab row's condition is evaluated with the employee's own fields in
+scope, which is why <span class="field">custom_ssf_applicable</span> can be named directly. Any Employee field
+can be used the same way if a future rule needs it.</p></div>
+
+<h2>Point every assignment at it</h2>
+<p>A slab only applies through <span class="field">Income Tax Slab</span> on the Salary Structure Assignment.
+After creating the slab, check the assignment list in report view for blanks in that column and fill them.</p>
+
+<h2>Overriding one person's tax</h2>
+<p>Tax is <b>computed but changeable</b>. When the IRD issues a ruling for an individual, or an accountant has a
+figure the schedule cannot produce, the slip carries an override:</p>
+<ol class="steps">
+<li>Open the draft <span class="screen">Salary Slip</span>.</li>
+<li>Tick <span class="field">Override Income Tax</span>.</li>
+<li>Type the monthly amount in <span class="field">Income Tax Override</span> and a reason in the note field.</li>
+<li><span class="btn">Save</span>. The Income Tax line and the net pay both change.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>An override applies to <b>that month's slip only</b>. It does
+not change the annual projection, so the following months revert to the computed figure. For a change that
+should last the year, the accountant must repeat it each month, or the slab itself must change.</p></div>
+
+<h3>Result</h3>
+<p>Seven payroll periods and seven slabs on avinas1. Verify by previewing a slip for an SSF member and a
+non-member of similar pay: the non-member should carry roughly 1% of the first 10,00,000 more.</p>
+<div class="seealso"><b>See also</b><a href="#run-tax" data-go="run-tax">How income tax is computed</a><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#setup-assignment" data-go="setup-assignment">&larr; Assign salaries to people</a><a href="#setup-accounts" data-go="setup-accounts">Map components to accounts &rarr;</a></div>
+</article>
+<article id="setup-accounts">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>Map components to accounts</h1>
+<div class="meta"><span>Applies to: Per company · Once</span><span>Audience: Accounts Manager</span></div>
+<div class="applies"><b>In this article</b>Every salary component needs a GL account for every company, or the month cannot post.</div>
+<p>A payslip is a payroll document until it is submitted; then it becomes an accounting one. Submitting the
+month's slips creates a Journal Entry, and the journal needs an account for every line. A component with no
+account for that company stops the whole posting.</p>
+<div class="note imp"><b class="t">Important</b><p>Before this mapping was done, <b>no</b> salary component had a
+GL account and submitting slips failed at the journal every time. The proposed mapping below was generated from
+the chart of accounts and <b>still needs the accountant's sign-off</b> before the first live run.</p></div>
+
+<h2>Proposed mapping</h2>
+<div class="tablewrap"><table>
+<tr><th>Component</th><th>Account</th><th>Kind</th><th>Reasoning</th></tr>
+<tr><td>Basic, DA, OA, FA, HRA, Gas, Education, Fuel, Maintenance, Load/Unload, Tea, Meal, Overtime, Daily Wage, Arrears, Dashain Bonus</td><td>547101 / 547102 / 547103 by cost centre</td><td>Expense</td><td>The cost of employing people, split by section.</td></tr>
+<tr><td>SSF Addition</td><td>Same salary expense</td><td>Expense</td><td>The employer's 20% is a cost of employment.</td></tr>
+<tr><td>SSF (deduction)</td><td>SSF Payable</td><td>Liability</td><td>Held until paid to the fund.</td></tr>
+<tr><td>Income Tax</td><td>TDS Payable</td><td>Liability</td><td>Held until paid to the IRD.</td></tr>
+<tr><td>Late Fine</td><td>A recovery income account, or a credit to salary expense</td><td>Accounts' call</td><td>It reduces cost rather than earning revenue.</td></tr>
+<tr><td>Salary Advance</td><td>Staff Advance</td><td>Receivable</td><td>Clears the loan as it is recovered.</td></tr>
+<tr><td>(net pay)</td><td>Salary Payable</td><td>Liability</td><td>The company's debt to staff until the bank pays.</td></tr>
+</table></div>
+
+<h2>Map a component</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Salary Component</span> and open one.</li>
+<li>Scroll to the <span class="screen">Accounts</span> table at the bottom.</li>
+<li>Add one row per company: <span class="field">Company</span> and <span class="field">Default Account</span>.</li>
+<li><span class="btn">Save</span>. Repeat for all 21 components.</li>
+</ol>
+<p>On avinas1 this produced <b>146 component-to-account rows</b> across the group.</p>
+
+<h3>Verify before the first run</h3>
+<ol class="steps">
+<li>Create one draft slip for the company and <span class="btn">Submit</span> it alone.</li>
+<li>Open the Journal Entry it produced. Confirm every line has an account and the entry balances.</li>
+<li>If it fails, the message names the component and company that has no account.</li>
+</ol>
+<div class="note info"><b class="t">Note on HR journals</b><p>Journals raised from HR carry two custom fields the
+group requires — a JV Type and a hand-drawn Document No. The payroll journal fills both automatically. If you
+raise a salary journal by hand, you must fill them yourself or the entry will not save.</p></div>
+<div class="seealso"><b>See also</b><a href="#run-posting" data-go="run-posting">Post to the books and pay</a><a href="#setup-cost-centres" data-go="setup-cost-centres">Cost centres and company defaults</a><a href="#setup-components" data-go="setup-components">Salary components</a></div>
+<div class="pager"><a href="#setup-tax" data-go="setup-tax">&larr; Set up the income tax slab</a><a href="#setup-employee" data-go="setup-employee">The Employee record &rarr;</a></div>
+</article>
+<article id="setup-employee">
+<div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
+<h1>The Employee record</h1>
+<div class="meta"><span>Applies to: Per employee</span><span>Audience: HR User</span></div>
+<div class="applies"><b>In this article</b>Every field on an employee that payroll, attendance or leave reads — and what breaks when it is blank.</div>
+<p>The Employee record is where per-person facts live. The salary structure holds no numbers for individuals;
+it reads them from here. A blank field is therefore not neutral — it is a zero.</p>
+
+<h2>Identity and employment</h2>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Why payroll cares</th><th>If blank</th></tr>
+<tr><td><span class="field">Employee Name</span></td><td>Appears on the payslip and every report.</td><td>Cannot save.</td></tr>
+<tr><td><span class="field">Company</span></td><td>Decides the structure, holiday list, shifts and categories offered.</td><td>Cannot save.</td></tr>
+<tr><td><span class="field">Date of Joining</span></td><td>Payment days in the joining month; leave proration.</td><td>Cannot save. A wrong date overpays or underpays the first month.</td></tr>
+<tr><td><span class="field">Status</span></td><td>Only <b>Active</b> employees are picked up by a payroll run.</td><td>—</td></tr>
+<tr><td><span class="field">Relieving Date</span></td><td>Payment days in the final month.</td><td>A leaver keeps being paid.</td></tr>
+<tr><td><span class="field">Gender</span></td><td>Decides who gets the women's holiday list.</td><td>Teej may be missed.</td></tr>
+</table></div>
+
+<h2>Attendance and time</h2>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Why payroll cares</th><th>If blank</th></tr>
+<tr><td><span class="field">Attendance Device ID</span></td><td>Matches the punch on the device to the person.</td><td><b>No punches, no attendance, no tea, no overtime.</b></td></tr>
+<tr><td><span class="field">Default Shift</span></td><td>The shift used when no dated assignment covers the day.</td><td>Punches cannot be judged late or early.</td></tr>
+<tr><td><span class="field">Holiday List</span></td><td>Which days are holidays for this person.</td><td>Falls back to the company's; women lose Teej.</td></tr>
+<tr><td><span class="field">Employee Category</span></td><td>Paid overtime, or compensatory leave.</td><td>No overtime is ever paid to them.</td></tr>
+<tr><td><span class="field">Allowance Category</span></td><td>The tea rate.</td><td>No tea is paid.</td></tr>
+<tr><td><span class="field">Late Fine Exempt</span></td><td>Managers exempted from the fine (7 people at NGI).</td><td>They are fined like everyone else.</td></tr>
+</table></div>
+<div class="note imp"><b class="t">Important</b><p>On avinas1, <b>0 of 292</b> employees have an Attendance Device
+ID. Until they are filled, no punch can reach a person. This is the largest single gap in the setup.</p></div>
+
+<h2>Pay inputs</h2>
+<p>These feed the structure's formulas. Which apply depends on the company's pay model.</p>
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Used by</th><th>Meaning</th></tr>
+<tr><td><span class="field">Initial Basic</span></td><td>NGI, NGN</td><td>The starting salary HRA is a percentage of.</td></tr>
+<tr><td><span class="field">Dearness Allowance</span></td><td>All</td><td>A flat monthly amount, per person.</td></tr>
+<tr><td><span class="field">Other Allowance</span></td><td>All</td><td>A flat monthly amount, per person.</td></tr>
+<tr><td><span class="field">Fixed Allowance</span></td><td>NGG, NGK</td><td>The grade sheet's fixed allowance.</td></tr>
+<tr><td><span class="field">Fuel Allowance</span></td><td>NGN, NGG, NGK</td><td>A flat monthly amount.</td></tr>
+<tr><td><span class="field">Maintenance Allowance</span></td><td>NGK</td><td>A flat monthly amount.</td></tr>
+<tr><td><span class="field">Gas Allowance</span> (tick)</td><td>NGI, NGN</td><td>Ticked means the company's flat gas amount is paid.</td></tr>
+<tr><td><span class="field">Education Allowance</span> (tick)</td><td>NGI, NGN</td><td>Ticked means the company's flat education amount is paid.</td></tr>
+<tr><td><span class="field">SSF Applicable</span> (tick)</td><td>All</td><td>Turns on 20% added and 31% deducted — and waives the 1% tax band.</td></tr>
+<tr><td><span class="field">Daily Wage Rate</span></td><td>NGK labour</td><td>The rate per day worked, e.g. 754.00.</td></tr>
+<tr><td><span class="field">Payroll Cost Center</span></td><td>All</td><td>Office, Sales &amp; Distribution or Filling Plant — routes the expense.</td></tr>
+</table></div>
+<div class="note tip"><b class="t">Tip</b><p>The base salary is <b>not</b> on this record. It lives on the Salary
+Structure Assignment, because it is a dated fact — see <a data-go="setup-assignment">Assign salaries</a>.</p></div>
+
+<h2>Check an employee in one minute</h2>
+<ol class="steps">
+<li>Open the Employee and read the three groups above top to bottom.</li>
+<li>Open the connections panel and confirm a submitted <b>Salary Structure Assignment</b>.</li>
+<li>Confirm two <b>Leave Allocations</b> for the period.</li>
+<li>Press <span class="btn">Preview Salary Slip</span> from their structure and check the figures.</li>
+</ol>
+<div class="seealso"><b>See also</b><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people</a><a href="#setup-categories" data-go="setup-categories">Employee and allowance categories</a><a href="#ops-lifecycle" data-go="ops-lifecycle">Joiners and leavers</a></div>
+<div class="pager"><a href="#setup-accounts" data-go="setup-accounts">&larr; Map components to accounts</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance &rarr;</a></div>
+</article>
+<article id="ops-attendance">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Manage attendance</h1>
+<div class="meta"><span>Applies to: Daily · All companies</span><span>Audience: HR User</span></div>
+<div class="applies"><b>In this article</b>How a punch becomes a day, what each status means, and how to correct a day without breaking the chain.</div>
+<p>Attendance is where most payroll errors are born, because it is the only link fed by hardware. A device that
+lost power, a finger that did not read, a person on site who never punched — each produces an absence nobody
+intended, and the absence becomes money.</p>
+
+<h2>How a day is decided</h2>
+<ol class="steps">
+<li>The device writes an <b>Employee Checkin</b> per punch, matched to a person by <span class="field">Attendance Device ID</span>.</li>
+<li>Overnight, each shift's auto-attendance reads the punches inside its window.</li>
+<li>The first punch in and the last punch out give the hours worked.</li>
+<li>The hours are compared with the shift's thresholds to give a status.</li>
+<li>Lateness is measured against the shift's start, with no grace.</li>
+<li>An <b>Attendance</b> record is written for the person and the day.</li>
+</ol>
+
+<h2>The statuses</h2>
+<div class="tablewrap"><table>
+<tr><th>Status</th><th>Means</th><th>Effect on pay</th></tr>
+<tr><td><b>Present</b></td><td>Worked the day.</td><td>Full payment day. Earns tea.</td></tr>
+<tr><td><b>Absent</b></td><td>No punches, or below the absent threshold.</td><td>Not a payment day — pay is reduced.</td></tr>
+<tr><td><b>Half Day</b></td><td>Under the half-day hours, or more than 2 hours late.</td><td>Half a payment day. Tea is still paid in full.</td></tr>
+<tr><td><b>On Leave</b></td><td>An approved leave application covers the day.</td><td>Paid leave counts as a payment day; leave without pay does not.</td></tr>
+<tr><td><b>Work From Home</b></td><td>Approved remote work.</td><td>As Present.</td></tr>
+<tr><td><i>(no record)</i></td><td>A holiday or weekly off.</td><td>Paid. Not a working day.</td></tr>
+</table></div>
+
+<h2>Correct one day</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Attendance</span>, filter to the employee and the date.</li>
+<li>If a record exists and is submitted: <span class="btn">Cancel</span>, then <span class="btn">Amend</span>, set the right status, <span class="btn">Submit</span>.</li>
+<li>If none exists: <span class="btn">+ Add Attendance</span> — employee, date, status, shift, company — then <span class="btn">Submit</span>.</li>
+<li>Write the reason in the comment box. A corrected day should never be a mystery six months later.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>Correct attendance <b>before</b> the month's Payroll Adjustment
+is computed. Afterwards the amounts are already worked out, and you must recompute — see
+<a data-go="run-monthly">Monthly payroll run</a>, step 4.</p></div>
+
+<h2>Correct many days</h2>
+<ol class="steps">
+<li>Open the <span class="screen">Attendance</span> list and filter to the company and date range.</li>
+<li>Tick the rows and use <span class="btn">Actions</span> &rsaquo; <span class="btn">Cancel</span>.</li>
+<li>Use the <span class="screen">Attendance Fix</span> tool to rebuild those days from the punches.</li>
+</ol>
+<div class="note info"><b class="t">Note — holidays are skipped by auto-attendance</b>
+<p>Auto-attendance does not process a day that is on the holiday list, so 48 Saturday punches at NGI produced
+nothing at all. Holiday work must be built with the repair tool, which does not skip holidays. This matters: at
+Plant grade, holiday work is paid overtime.</p></div>
+
+<h2>What to check every morning</h2>
+<ul class="plain">
+<li>Yesterday's <b>Absent</b> list — is each one real?</li>
+<li>Anyone with punches but no attendance row — usually a shift or device-ID problem.</li>
+<li>Anyone with a single punch — they forgot to punch out; hours will be wrong.</li>
+<li>A sudden wave of Half Days — check the shift's <span class="field">Late Arrival Cutoff Time</span>.</li>
+</ul>
+<div class="seealso"><b>See also</b><a href="#ops-shift-change" data-go="ops-shift-change">Change someone&#x27;s shift</a><a href="#ops-leave" data-go="ops-leave">Leave applications and balances</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#reports" data-go="reports">Report reference</a></div>
+<div class="pager"><a href="#setup-employee" data-go="setup-employee">&larr; The Employee record</a><a href="#ops-shift-change" data-go="ops-shift-change">Change someone&#x27;s shift &rarr;</a></div>
+</article>
+<article id="ops-shift-change">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Change someone&#x27;s shift</h1>
+<div class="meta"><span>Applies to: As required</span><span>Audience: HR User</span></div>
+<div class="applies"><b>In this article</b>Default shift, dated assignments and shift requests — and which to use when.</div>
+<p>Which shift a person worked on a given day decides whether they were late, how many hours were overtime, and
+whether a punch counted at all. Three records can answer the question, and they are consulted in this order.</p>
+<div class="tablewrap"><table>
+<tr><th>Order</th><th>Record</th><th>Use it for</th></tr>
+<tr><td class="num">1</td><td><b>Shift Assignment</b> — dated, per person</td><td>A rotation, a temporary move, a permanent change from a date.</td></tr>
+<tr><td class="num">2</td><td><b>Employee &rsaquo; Default Shift</b></td><td>The shift someone normally works, when nothing else says otherwise.</td></tr>
+<tr><td class="num">3</td><td><i>nothing</i></td><td>Punches cannot be judged. Avoid: every employee should have at least a default shift.</td></tr>
+</table></div>
+<p>The system resolves this per day, not per month, so a person may be on the 6 AM shift on Sunday and the 12 PM
+shift on Monday and both days are measured correctly.</p>
+
+<h2>Change the normal shift</h2>
+<ol class="steps">
+<li>Open the <span class="screen">Employee</span>.</li>
+<li>Set <span class="field">Default Shift</span> to the new shift. <span class="btn">Save</span>.</li>
+</ol>
+<p>This applies from now on and does not rewrite days already processed.</p>
+
+<h2>Put someone on a different shift for a period</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Shift Assignment</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Employee</span>, <span class="field">Shift Type</span>, <span class="field">Company</span>.</li>
+<li><span class="field">Start Date</span> and, for a temporary move, <span class="field">End Date</span>.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>Leave <span class="field">End Date</span> blank for a standing
+assignment. When a later change is approved, the standing assignment is split at the new date rather than
+overlapping it, so there is never a day with two answers.</p></div>
+
+<h2>Let the employee request it</h2>
+<ol class="steps">
+<li>The employee creates a <span class="screen">Shift Request</span> with the shift and the dates.</li>
+<li>The approver opens it and presses <span class="btn">Approve</span>.</li>
+<li>A Shift Assignment is written automatically on approval.</li>
+</ol>
+
+<h2>Assign a whole team</h2>
+<ol class="steps">
+<li>Open the <span class="screen">Shift Assignment</span> list.</li>
+<li>Use <span class="btn">Bulk Shift Assignment</span> (the button at the top of the list).</li>
+<li>Choose the shift, the start date and the employees. Press <span class="btn">Assign</span>.</li>
+</ol>
+
+<h3>Verify</h3>
+<p>Open <span class="screen">Monthly Attendance BS</span> for the company. Each person's row shows the shift
+each day came from. If a day shows the wrong shift, the assignment covering that date is wrong.</p>
+<div class="note info"><b class="t">Open item</b><p>At NGN the sales team is meant to split between the 7 AM – 3 PM
+and 9 AM – 5 PM shifts, but only the billing desk could be identified from the data. Until the manager names the
+rest, NGN staff have no shift assignments and fall back to their default.</p></div>
+<div class="seealso"><b>See also</b><a href="#setup-shifts" data-go="setup-shifts">Define shift types</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#reports" data-go="reports">Report reference</a></div>
+<div class="pager"><a href="#ops-attendance" data-go="ops-attendance">&larr; Manage attendance</a><a href="#ops-leave" data-go="ops-leave">Leave applications and balances &rarr;</a></div>
+</article>
+<article id="ops-leave">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Leave applications and balances</h1>
+<div class="meta"><span>Applies to: Daily</span><span>Audience: HR User, Approvers</span></div>
+<div class="applies"><b>In this article</b>Applying, approving, what a leave day does to pay, and how to fix a balance.</div>
+<p>An approved leave application writes Attendance rows with the status <b>On Leave</b>. That is the whole
+mechanism: leave affects pay only through attendance, and through whether the leave type is paid.</p>
+
+<h2>Apply for leave</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Leave Application</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Employee</span>, <span class="field">Leave Type</span>, <span class="field">From Date</span>, <span class="field">To Date</span>.</li>
+<li>Check <span class="field">Total Leave Days</span>. Holidays inside the range are excluded automatically.</li>
+<li>Check the balance shown beside the leave type. If it is short, the application will be refused.</li>
+<li><span class="btn">Save</span> — this is a request. It does nothing until it is approved.</li>
+<li>The approver opens it, sets <span class="field">Status</span> to <b>Approved</b> and presses <span class="btn">Submit</span>.</li>
+</ol>
+
+<h2>What each type does to pay</h2>
+<div class="tablewrap"><table>
+<tr><th>Leave Type</th><th>Counts as a payment day</th><th>Earns tea</th></tr>
+<tr><td>Casual Leave</td><td>Yes — paid</td><td>No — tea needs a day present</td></tr>
+<tr><td>Sick Leave</td><td>Yes — paid</td><td>No</td></tr>
+<tr><td>Leave Without Pay</td><td><b>No</b> — pay is reduced</td><td>No</td></tr>
+<tr><td>Compensatory Off</td><td>Yes — already earned</td><td>No</td></tr>
+</table></div>
+
+<h2>A balance that looks wrong</h2>
+<ol class="steps">
+<li>Open <span class="screen">Leave Balance</span> (the report) and find the person.</li>
+<li>Compare with their <span class="screen">Leave Allocation</span> records for the period.</li>
+<li>No allocation at all &rarr; they were never given the policy. Create a <span class="screen">Leave Policy Assignment</span>.</li>
+<li>Allocation too small &rarr; monthly accrual has only credited the months so far. This is correct behaviour.</li>
+<li>Allocation too large &rarr; someone allocated by hand on top of the accrual. Cancel the extra allocation.</li>
+</ol>
+<div class="note imp"><b class="t">The annual ceiling</b><p>An allocation that would take the year past the
+policy's figure is refused, naming the person, the ceiling and the total it would have made. The month's amount
+can be anything; the year's total cannot pass 21 casual and 12 sick (8 and 12 at Karnali). Leave carried in from
+last year is not counted against this year's ceiling.</p></div>
+
+<h2>Compensatory leave for holiday work</h2>
+<p>An <b>Officer &amp; Admin</b> employee who works a holiday is not paid overtime — they earn a day off. Record
+it as a <span class="screen">Compensatory Leave Request</span>, which on approval creates a Compensatory Off
+allocation. A <b>Plant</b> employee in the same position is paid instead; see
+<a data-go="ops-overtime">Overtime</a>.</p>
+
+<h3>Verify</h3>
+<p>Run <span class="screen">Yearly Leave Details BS</span> at year end. For non-overtime staff it shows leave
+remaining as the smaller of the allocation and <i>allocation − taken + holidays worked</i>, which is the figure
+the encashment is based on.</p>
+<div class="seealso"><b>See also</b><a href="#setup-leave" data-go="setup-leave">Configure leave</a><a href="#ops-overtime" data-go="ops-overtime">Overtime</a><a href="#admin-year-end" data-go="admin-year-end">Year end and the next year</a></div>
+<div class="pager"><a href="#ops-shift-change" data-go="ops-shift-change">&larr; Change someone&#x27;s shift</a><a href="#ops-overtime" data-go="ops-overtime">Overtime &rarr;</a></div>
+</article>
+<article id="ops-overtime">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Overtime</h1>
+<div class="meta"><span>Applies to: Monthly · Plant staff only</span><span>Audience: Supervisor, HR User</span></div>
+<div class="applies"><b>In this article</b>Why extra hours must be authorised on a sheet before they are paid, and how the hours become money.</div>
+<p>Working late is not overtime. Overtime is <b>authorised</b> extra time, and the authorisation is a document:
+the <span class="screen">Overtime Sheet</span>. Hours that are not on an approved sheet are never paid, however
+clearly the punches show them.</p>
+<div class="note info"><b class="t">Why</b><p>Client policy 5.1. Without it, anyone who lingered after their shift
+would generate a claim on the company. The punches remain the evidence; the sheet is the decision.</p></div>
+
+<h2>Who is eligible</h2>
+<div class="tablewrap"><table>
+<tr><th>Employee Category</th><th>Extra hours</th><th>Holiday work</th></tr>
+<tr><td>Plant</td><td>Paid at 1.5× the hourly basic</td><td>Paid</td></tr>
+<tr><td>Officer &amp; Admin</td><td>Not paid</td><td>Earns compensatory leave</td></tr>
+</table></div>
+
+<h2>Raise the month's sheet</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Overtime Sheet</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Company</span> and the month (the BS month the hours belong to).</li>
+<li>Press <span class="btn">Get Employees</span> — eligible staff with measured extra hours are listed with the hours the punches support.</li>
+<li>The supervisor reviews each line and edits the hours down where the time was not authorised. <b>Do not edit them up</b> beyond what the punches show.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>. Submitting is the authorisation.</li>
+</ol>
+
+<h2>How the hours become money</h2>
+<p>Hours are rounded to the nearest half hour, then:</p>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">
+hourly basic = Basic &divide; 30 &divide; 8<br>
+overtime pay = hours &times; hourly basic &times; 1.5</p></div>
+<p>Worked example — basic 19,260, three hours:</p>
+<div class="tablewrap"><table>
+<tr><th>Step</th><th>Figure</th></tr>
+<tr><td>19,260 &divide; 30</td><td class="num">642.00 a day</td></tr>
+<tr><td>642 &divide; 8</td><td class="num">80.25 an hour</td></tr>
+<tr><td>&times; 1.5</td><td class="num">120.38 an overtime hour</td></tr>
+<tr><td>&times; 3 hours</td><td class="num">361.14</td></tr>
+</table></div>
+<p>The divisor is 30, not the days in the BS month: that is what the Labour Act specifies, and it is deliberately
+different from how monthly pay is prorated.</p>
+
+<h3>Result</h3>
+<p>When the month's Payroll Adjustment is computed, each approved sheet line becomes an Overtime row. Nothing
+appears for an unsubmitted sheet.</p>
+<div class="note imp"><b class="t">Important</b><p>The sheet must be submitted <b>before</b> the Payroll Adjustment
+is computed. If a sheet is approved late, recompute the adjustment for that company and month.</p></div>
+<div class="seealso"><b>See also</b><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#ops-leave" data-go="ops-leave">&larr; Leave applications and balances</a><a href="#ops-advance" data-go="ops-advance">Employee advances &rarr;</a></div>
+</article>
+<article id="ops-advance">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Employee advances</h1>
+<div class="meta"><span>Applies to: As required</span><span>Audience: HR User, Accounts</span></div>
+<div class="applies"><b>In this article</b>Lending money and recovering it from pay, in instalments, without letting the balance drift.</div>
+<p>An advance is a loan: the company pays money now and takes it back from later payslips. Two things must stay
+true — the payslip deduction must stop when the loan is repaid, and the outstanding balance must be visible at
+any moment.</p>
+
+<h2>Record an advance</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Employee Advance</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Employee</span>, <span class="field">Company</span>, <span class="field">Purpose</span>.</li>
+<li><span class="field">Advance Amount</span> — the total lent.</li>
+<li><span class="field">Monthly Instalment</span> — how much to recover each month.</li>
+<li><span class="field">Advance Account</span> — the company's Staff Advance account.</li>
+<li><span class="btn">Save</span>, <span class="btn">Submit</span>, then have it approved and paid.</li>
+</ol>
+
+<h2>How recovery works</h2>
+<ol class="steps">
+<li>When the month's adjustments are computed, every submitted advance with an outstanding balance is examined.</li>
+<li>The amount recovered is the <b>smaller</b> of the monthly instalment and what is still outstanding.</li>
+<li>A <b>Salary Advance</b> deduction row is written, carrying a reference to the advance it belongs to.</li>
+<li>When the slip is submitted, the advance's outstanding balance falls by that amount.</li>
+<li>When the balance reaches zero, no further deduction is produced.</li>
+</ol>
+<div class="note good"><b class="t">Why the smaller of the two</b><p>A final instalment of 1,200 against an
+outstanding 800 would otherwise deduct 1,200 and leave the company owing 400 — a negative loan that nobody
+notices until the employee leaves.</p></div>
+
+<h2>Change or stop a recovery</h2>
+<div class="tablewrap"><table>
+<tr><th>You want to…</th><th>Do this</th></tr>
+<tr><td>Change the instalment</td><td>Edit <span class="field">Monthly Instalment</span> on the advance. It takes effect from the next computation.</td></tr>
+<tr><td>Pause recovery for a month</td><td>Set the instalment to 0, recompute the adjustment, then set it back afterwards.</td></tr>
+<tr><td>Write the advance off</td><td>Accounts' decision. Journal it out; do not delete the advance.</td></tr>
+<tr><td>Recover a different amount once</td><td>Edit the amount on the Payroll Adjustment row before slips are created.</td></tr>
+</table></div>
+
+<div class="note imp"><b class="t">Account type</b><p>The Staff Advance account must be typed <b>Receivable</b>.
+On six companies it is typed Payable, which posts recovery the wrong way round. Accounts must change this before
+the first live advance.</p></div>
+
+<h3>Verify</h3>
+<p>Open the Employee Advance and read <span class="field">Paid Amount</span> and the outstanding balance after a
+slip is submitted. They should move by exactly the deduction on that payslip.</p>
+<div class="seealso"><b>See also</b><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#setup-cost-centres" data-go="setup-cost-centres">Cost centres and company defaults</a></div>
+<div class="pager"><a href="#ops-overtime" data-go="ops-overtime">&larr; Overtime</a><a href="#ops-adjustments" data-go="ops-adjustments">One-off amounts &rarr;</a></div>
+</article>
+<article id="ops-adjustments">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>One-off amounts</h1>
+<div class="meta"><span>Applies to: As required</span><span>Audience: HR User</span></div>
+<div class="applies"><b>In this article</b>Paying or deducting something this month only, with Additional Salary.</div>
+<p>Some amounts belong to one month and no other: a loading allowance for a month when there was loading work,
+a reimbursement, a one-off deduction. These are <b>Additional Salary</b> records — they attach to one payroll
+date and disappear afterwards.</p>
+
+<h2>Add a one-off amount</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Additional Salary</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Employee</span>, <span class="field">Company</span>.</li>
+<li><span class="field">Salary Component</span> — e.g. Load/Unload Allowance.</li>
+<li><span class="field">Amount</span>.</li>
+<li><span class="field">Payroll Date</span> — a date inside the BS month it should be paid in.</li>
+<li>Leave <span class="field">Overwrite Salary Structure Amount</span> <b>unticked</b> unless you mean to replace the structure's figure rather than add to it.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>.</li>
+</ol>
+
+<div class="note imp"><b class="t">Important — tax on one-off amounts</b>
+<p>Tick <span class="field">Deduct Full Tax on Selected Payroll Date</span> on every one-off earning. Without it,
+the tax on the extra amount is spread across the remaining months of the year, so a 70.69 tax charge shows up as
+6 this month. The system sets this automatically on the amounts it generates; you must set it on the ones you
+type.</p></div>
+
+<h2>Recurring for a few months</h2>
+<p>Tick <span class="field">Is Recurring</span> and give a <span class="field">From Date</span> and
+<span class="field">To Date</span>. The amount then appears on every slip in that range — useful for a temporary
+allowance, and safer than remembering to type it each month.</p>
+
+<h2>When not to use this</h2>
+<div class="tablewrap"><table>
+<tr><th>Situation</th><th>Use instead</th></tr>
+<tr><td>A pay rise</td><td><a data-go="ops-revision">Salary Revision</a> — pay must stay a dated fact.</td></tr>
+<tr><td>Festival bonus</td><td><a data-go="ops-bonus">Dashain Bonus</a> — it prorates and records who was paid.</td></tr>
+<tr><td>Recovering a loan</td><td><a data-go="ops-advance">Employee Advance</a> — it keeps a balance.</td></tr>
+<tr><td>Overtime</td><td><a data-go="ops-overtime">Overtime Sheet</a> — it needs authorisation.</td></tr>
+<tr><td>A wrong attendance figure</td><td>Fix the attendance and recompute. Never paper over it with a one-off.</td></tr>
+</table></div>
+<div class="seealso"><b>See also</b><a href="#ops-bonus" data-go="ops-bonus">Dashain bonus</a><a href="#ops-revision" data-go="ops-revision">Salary revision and arrears</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a></div>
+<div class="pager"><a href="#ops-advance" data-go="ops-advance">&larr; Employee advances</a><a href="#ops-bonus" data-go="ops-bonus">Dashain bonus &rarr;</a></div>
+</article>
+<article id="ops-bonus">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Dashain bonus</h1>
+<div class="meta"><span>Applies to: Once a year · Before Dashain</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>One month&#x27;s pay at Dashain, prorated for anyone who has not served the full year.</div>
+<p>The Dashain bonus is a festival payment of <b>one month's salary</b>. Someone who has served the whole year
+gets 100% of a month; someone who joined part-way through gets the same proportion of it as the part of the year
+they served. Whether it is given at all is a decision the company makes each year, so the run carries a flag
+rather than assuming it.</p>
+
+<h2>Run the bonus</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Dashain Bonus</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Company</span> and <span class="field">Fiscal Year</span> = <b>83/84</b>.</li>
+<li>Tick <span class="field">Bonus Given</span>. Left unticked, the run records the decision not to pay and produces nothing.</li>
+<li><span class="field">Payout Date</span> — a date inside the BS month the bonus is paid in.</li>
+<li>Press <span class="btn">Get Employees</span>. Everyone active on a salary is listed with their months served and their computed bonus.</li>
+<li>Review the lines. Adjust an individual amount if the management has decided differently for that person, and write why in the note.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>.</li>
+</ol>
+<p>Submitting creates one Additional Salary per person, on the Dashain Bonus component, for the payout date.
+They appear on that month's payslips.</p>
+
+<h2>How the proration works</h2>
+<div class="tablewrap"><table>
+<tr><th>Joined</th><th>Served</th><th>Bonus</th></tr>
+<tr><td>Before the year started</td><td>12 months</td><td class="num">100% of one month</td></tr>
+<tr><td>At the start of Kartik (month 4)</td><td>9 months</td><td class="num">9 &divide; 12 = 75%</td></tr>
+<tr><td>Mid-Poush</td><td>~5.5 months</td><td class="num">~46%</td></tr>
+</table></div>
+<p>"One month's salary" means the monthly figure the person is on at the time of the run — the same base the
+payslip uses, not the previous month's net.</p>
+
+<h2>Tax</h2>
+<p>The bonus is taxable, and the tax is taken in the month it is paid rather than spread over the rest of the
+year. That is why the generated Additional Salary carries
+<span class="field">Deduct Full Tax on Selected Payroll Date</span>. Expect the Dashain payslip to show a
+noticeably larger income-tax line than other months; this is correct.</p>
+
+<h3>Verify</h3>
+<ol class="steps">
+<li>Open one slip from the payout month and confirm a <b>Dashain Bonus</b> earning line.</li>
+<li>Compare a full-year employee's bonus with their gross — it should be one month's pay.</li>
+<li>Check a mid-year joiner's proportion against their joining date.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>Cancelling the Dashain Bonus record cancels the Additional Salary
+records it created, provided the slips have not yet been submitted. After slips are submitted, the slips must be
+cancelled first.</p></div>
+<div class="seealso"><b>See also</b><a href="#ops-adjustments" data-go="ops-adjustments">One-off amounts</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#run-tax" data-go="run-tax">How income tax is computed</a></div>
+<div class="pager"><a href="#ops-adjustments" data-go="ops-adjustments">&larr; One-off amounts</a><a href="#ops-revision" data-go="ops-revision">Salary revision and arrears &rarr;</a></div>
+</article>
+<article id="ops-revision">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Salary revision and arrears</h1>
+<div class="meta"><span>Applies to: As decided</span><span>Audience: HR Manager</span></div>
+<div class="applies"><b>In this article</b>A dated pay rise for many people at once, with back-pay for the months already paid at the old rate.</div>
+<p>Pay rises arrive late. The rise runs from Shrawan, the meeting happens in Mangsir, and four months have
+already been paid at the old rate. Two rules follow, and both are built into this document.</p>
+<ol class="steps">
+<li><b>A rise is a new dated assignment, never an edit.</b> The old assignment stays behind as the record of what
+was paid before, so last year's payslips keep reconciling with last year's journals.</li>
+<li><b>Back-pay is arrears, paid in the month it is settled.</b> Submitted slips are never rewritten.</li>
+</ol>
+
+<h3>Before you begin</h3>
+<div class="note imp"><b class="t">Important</b><p>The effective date must be the <b>first day of a BS month</b>.
+A slip is paid at one rate for its whole month; a date inside a month silently takes effect the month after.</p></div>
+
+<h2>Run a revision</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Salary Revision</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Company</span> and <span class="field">Effective Date</span> — the first day of the BS month the new pay runs from.</li>
+<li><span class="field">Default Increment Percent</span> — e.g. 10. Used to fill the table; each line can be edited afterwards.</li>
+<li>Tick <span class="field">Pay Arrears</span> if the back-pay is to be settled, and set <span class="field">Arrears Payout Date</span> to a date in the month it will be paid.</li>
+<li>Press <span class="btn">Get Employees</span>. Everyone on a salary is listed with their current basic, the proposed new basic, the months already paid at the old rate, and the arrears that follow.</li>
+<li>Edit <span class="field">New Base</span> per person as the management decided. Adjust the dearness allowance in the same row if it changes.</li>
+<li>Check <span class="field">Total Increase</span> and <span class="field">Total Arrears</span> at the bottom.</li>
+<li><span class="btn">Save</span>, then <span class="btn">Submit</span>.</li>
+</ol>
+
+<h2>What submitting does</h2>
+<div class="tablewrap"><table>
+<tr><th>For each person</th><th>Action</th></tr>
+<tr><td>New pay</td><td>A new Salary Structure Assignment from the effective date, carrying the same structure, tax slab and payable account.</td></tr>
+<tr><td>Dearness allowance</td><td>The Employee field is updated; the old value is kept on the revision row as the history.</td></tr>
+<tr><td>Arrears</td><td>An Additional Salary on the Salary Arrears component, for the payout date, with full tax deducted that month.</td></tr>
+</table></div>
+
+<h2>Cancelling</h2>
+<p>Cancelling the revision cancels the assignments and the arrears it created and puts the dearness allowance
+back to its previous value. That is why the old value is stored on the row: the Employee field has no history of
+its own.</p>
+
+<h3>Guards</h3>
+<ul class="plain">
+<li>A person listed twice is refused.</li>
+<li>A person from another company is refused.</li>
+<li>A new basic of zero or less is refused.</li>
+<li>A person with no current assignment is refused — there is nothing to revise.</li>
+<li>A person who already has an assignment starting on that exact date is refused, so a revision cannot be run twice.</li>
+</ul>
+<div class="seealso"><b>See also</b><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people</a><a href="#ops-adjustments" data-go="ops-adjustments">One-off amounts</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a></div>
+<div class="pager"><a href="#ops-bonus" data-go="ops-bonus">&larr; Dashain bonus</a><a href="#ops-lifecycle" data-go="ops-lifecycle">Joiners and leavers &rarr;</a></div>
+</article>
+<article id="ops-lifecycle">
+<div class="crumb">Avinash Payroll &rsaquo; Daily operations</div>
+<h1>Joiners and leavers</h1>
+<div class="meta"><span>Applies to: As required</span><span>Audience: HR User</span></div>
+<div class="applies"><b>In this article</b>Everything a new employee needs before their first payslip, and everything a leaver needs before their last.</div>
+<h2>A new joiner — the checklist</h2>
+<p>Do these in order. Miss one and the first payslip is wrong in a way that is hard to see.</p>
+<ol class="steps">
+<li>Create the <span class="screen">Employee</span>: name, company, <b>date of joining</b>, gender, status Active.</li>
+<li>Set <span class="field">Attendance Device ID</span> and enrol the finger on the device.</li>
+<li>Set <span class="field">Default Shift</span> and <span class="field">Holiday List</span> (the women's list where it applies).</li>
+<li>Set <span class="field">Employee Category</span> — Plant or Officer &amp; Admin.</li>
+<li>Set <span class="field">Allowance Category</span> if they get tea.</li>
+<li>Set <span class="field">Payroll Cost Center</span>.</li>
+<li>Fill the pay inputs: initial basic, dearness, other, fuel, the gas and education ticks, the SSF tick.</li>
+<li>Create and submit a <span class="screen">Salary Structure Assignment</span> from their joining date, with their base, the tax slab and the payable account.</li>
+<li>Create a <span class="screen">Leave Policy Assignment</span> for the current leave period.</li>
+<li>Preview a payslip and check it against the offer letter.</li>
+</ol>
+<div class="note info"><b class="t">The first month is prorated</b><p>Someone joining on the 10th of a 31-day BS
+month is paid 22 &divide; 31 of every component marked <i>depends on payment days</i>. Tea is not prorated — it is
+paid per day actually present, which handles itself.</p></div>
+
+<h2>A leaver</h2>
+<ol class="steps">
+<li>Set <span class="field">Relieving Date</span> on the Employee — this is what stops the pay.</li>
+<li>Run the final month's payroll as normal. The last slip prorates to the relieving date.</li>
+<li>Check for an outstanding <span class="screen">Employee Advance</span>. Anything unrecovered must be settled before the final payment.</li>
+<li>Run <span class="screen">Yearly Leave Details BS</span> and settle any leave encashment due.</li>
+<li>After the final slip is submitted and paid, set <span class="field">Status</span> to <b>Left</b>.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>Set the status to Left only <b>after</b> the final payslip. An
+inactive employee is skipped by the payroll run, so changing the status first means the final month is never
+paid — and the fix is fiddly.</p></div>
+
+<h2>A transfer between companies</h2>
+<p>Treat it as a leaver and a joiner. The companies keep separate books, separate holiday lists and separate
+structures, so one Employee record cannot span both without corrupting the history of each.</p>
+
+<h3>Verify a new joiner before their first run</h3>
+<ul class="plain">
+<li>Employee list, filtered to them: no blanks in the fields above.</li>
+<li>One submitted salary assignment, dated from their joining date.</li>
+<li>Two leave allocations.</li>
+<li>Attendance rows appearing since their first day.</li>
+</ul>
+<div class="seealso"><b>See also</b><a href="#setup-employee" data-go="setup-employee">The Employee record</a><a href="#setup-leave" data-go="setup-leave">Configure leave</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a></div>
+<div class="pager"><a href="#ops-revision" data-go="ops-revision">&larr; Salary revision and arrears</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run &rarr;</a></div>
+</article>
+<article id="run-monthly">
+<div class="crumb">Avinash Payroll &rsaquo; Run payroll</div>
+<h1>Monthly payroll run</h1>
+<div class="meta"><span>Applies to: Monthly · Per company</span><span>Audience: HR Manager, Accounts</span></div>
+<div class="applies"><b>In this article</b>The nine steps of a payroll month, in order, with what to check at each one.</div>
+<p>This is the article to keep open while you run payroll. The steps are in dependency order: each one is only
+correct if the one before it was finished. Running a company takes about half an hour once the data is clean.</p>
+<div class="flow">
+<span>1 Close attendance</span><i>&rarr;</i><span>2 Approve overtime</span><i>&rarr;</i><span>3 One-offs</span>
+<i>&rarr;</i><span>4 Compute adjustments</span><i>&rarr;</i><span>5 Review</span><i>&rarr;</i><span>6 Payroll Entry</span>
+<i>&rarr;</i><span>7 Check slips</span><i>&rarr;</i><span>8 Submit</span><i>&rarr;</i><span>9 Pay</span>
+</div>
+
+<h2>Step 1 — Close the month's attendance</h2>
+<ol class="steps">
+<li>Open <span class="screen">Monthly Attendance BS</span> for the company and the month.</li>
+<li>Look for blank days, unexplained absences and anyone with no rows at all.</li>
+<li>Fix each one — see <a data-go="ops-attendance">Manage attendance</a>.</li>
+<li>Only move on when every working day of every employee has a status.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>Everything downstream is built from attendance. A day fixed
+after step 4 does not reach the payslip unless you recompute.</p></div>
+
+<h2>Step 2 — Approve the overtime sheet</h2>
+<ol class="steps">
+<li>Open <span class="screen">Overtime Sheet</span> for the company and month, or create it.</li>
+<li>Press <span class="btn">Get Employees</span>, review every line with the supervisor, and <span class="btn">Submit</span>.</li>
+</ol>
+<p>Unsubmitted hours are not paid. See <a data-go="ops-overtime">Overtime</a>.</p>
+
+<h2>Step 3 — Enter the month's one-offs</h2>
+<ul class="plain">
+<li><span class="screen">Additional Salary</span> for loading allowance, reimbursements, ad-hoc amounts.</li>
+<li><span class="screen">Employee Advance</span> for any new loan, so it starts being recovered.</li>
+<li><span class="screen">Dashain Bonus</span> or <span class="screen">Salary Revision</span> if this is the month.</li>
+</ul>
+
+<h2>Step 4 — Compute the payroll adjustments</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Payroll Adjustment</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Company</span> and the <b>BS month</b>.</li>
+<li>Press <span class="btn">Compute</span>. The system reads attendance, the overtime sheet and the advances, and writes one row per person per component.</li>
+<li><span class="btn">Save</span>.</li>
+</ol>
+<p>What it produces:</p>
+<div class="tablewrap"><table>
+<tr><th>Component</th><th>From</th></tr>
+<tr><td>Tea &amp; Conveyance</td><td>Days present × the employee's category rate</td></tr>
+<tr><td>Meal</td><td>Days where the extra time worked qualified</td></tr>
+<tr><td>Overtime</td><td>Approved sheet hours × hourly basic × 1.5</td></tr>
+<tr><td>Daily Wage</td><td>Days worked × the daily rate (NGK labour)</td></tr>
+<tr><td>Late Fine</td><td>Late minutes × the per-minute basic, except for exempt staff</td></tr>
+<tr><td>Salary Advance</td><td>The smaller of the instalment and the outstanding balance</td></tr>
+</table></div>
+
+<h2>Step 5 — Review the adjustments</h2>
+<ol class="steps">
+<li>Sort by amount, largest first. A figure that looks unusual usually is.</li>
+<li>Spot-check three people against the attendance report.</li>
+<li>Correct an individual amount here if there is a genuine reason, and note why.</li>
+<li>If attendance was wrong, fix the attendance and press <span class="btn">Compute</span> again — it replaces the month's rows rather than adding to them.</li>
+</ol>
+<div class="note good"><b class="t">Reference figure</b><p>The Bhadra test run at NGI produced <b>228 adjustment
+rows</b> for 87 staff. A count far from that for a similar company is worth investigating before you continue.</p></div>
+
+<h2>Step 6 — Create the payroll entry</h2>
+<ol class="steps">
+<li>Search for <span class="screen">Payroll Entry</span> &rsaquo; <span class="btn">+ Add</span>.</li>
+<li><span class="field">Company</span>, <span class="field">Posting Date</span>, and <span class="field">Payroll Frequency</span> = Monthly.</li>
+<li><span class="field">Start Date</span> and <span class="field">End Date</span> — the BS month's exact AD dates. For Bhadra 2083 that is <b>2026-08-17</b> to <b>2026-09-16</b>.</li>
+<li>Check <span class="field">Payroll Payable Account</span> and <span class="field">Cost Center</span>.</li>
+<li>Press <span class="btn">Get Employees</span>. Compare the count with your headcount — a shortfall means someone's assignment is missing or has no payable account.</li>
+<li><span class="btn">Save</span>.</li>
+<li>Press <span class="btn">Create Salary Slips</span>.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>With more than 30 employees the slips are created in the background.
+The list will look empty for a minute or two. Wait and refresh rather than pressing the button again.</p></div>
+
+<h2>Step 7 — Check the draft slips</h2>
+<ol class="steps">
+<li>Open the <span class="screen">Salary Slip</span> list, filtered to the month and company, and switch to <span class="btn">Report</span> view.</li>
+<li>Add the columns: gross pay, total deduction, net pay, payment days.</li>
+<li>Check the totals at the bottom against last month. A change of more than a few percent needs a reason.</li>
+<li>Sort by net pay. Look at the largest, the smallest, and anything negative.</li>
+<li>Open three slips in full and read them line by line.</li>
+</ol>
+<div class="tablewrap"><table>
+<tr><th>Symptom</th><th>Usual cause</th></tr>
+<tr><td>Fewer slips than employees</td><td>Missing salary assignment, or a blank payroll payable account on it.</td></tr>
+<tr><td>Someone's pay much lower</td><td>Absences, or leave without pay, reducing payment days.</td></tr>
+<tr><td>No tea for someone who was present</td><td>No allowance category on their Employee record.</td></tr>
+<tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or their category is Officer &amp; Admin.</td></tr>
+<tr><td>Tax much higher for one person</td><td>A bonus or arrears taxed in full this month — correct.</td></tr>
+<tr><td>Everyone's tax higher than last month</td><td>Check the slab and the payroll period dates.</td></tr>
+</table></div>
+
+<h2>Step 8 — Submit</h2>
+<ol class="steps">
+<li>Get the approval on record — the payroll register signed, or the approval noted on the entry.</li>
+<li>Open the <span class="screen">Payroll Entry</span> and press <span class="btn">Submit Salary Slip</span>.</li>
+<li>Wait for it to finish, then confirm every slip shows <b>Submitted</b>.</li>
+<li>Open the Journal Entry it created and check that it balances.</li>
+</ol>
+
+<h2>Step 9 — Pay</h2>
+<ol class="steps">
+<li>On the Payroll Entry press <span class="btn">Make Bank Entry</span>.</li>
+<li>Set the bank account and the payment date; check the total against the net pay total.</li>
+<li><span class="btn">Submit</span>. Salary Payable clears and the bank account is reduced.</li>
+</ol>
+<div class="note good"><b class="t">A proven month</b><p>NGI Bhadra 2083, 87 slips: gross <b>3,196,168.49</b>,
+deductions <b>449,886.46</b>, net <b>2,746,282.03</b>. The journal balanced with F/P 1,729,975.70, O/O 998,139.46,
+S/D 468,053.33, SSF Payable 415,278.61, TDS 5,926.29 and Salary Payable 2,746,282.03.</p></div>
+<div class="seealso"><b>See also</b><a href="#run-tax" data-go="run-tax">How income tax is computed</a><a href="#run-posting" data-go="run-posting">Post to the books and pay</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#ref-errors" data-go="ref-errors">Messages and troubleshooting</a></div>
+<div class="pager"><a href="#ops-lifecycle" data-go="ops-lifecycle">&larr; Joiners and leavers</a><a href="#run-tax" data-go="run-tax">How income tax is computed &rarr;</a></div>
+</article>
+<article id="run-tax">
+<div class="crumb">Avinash Payroll &rsaquo; Run payroll</div>
+<h1>How income tax is computed</h1>
+<div class="meta"><span>Applies to: Monthly · Automatic</span><span>Audience: Accounts, HR Manager</span></div>
+<div class="applies"><b>In this article</b>From the month&#x27;s pay to an annual projection, through the slab, back to a monthly deduction.</div>
+<p>Income tax in Nepal is an annual liability paid monthly. The system therefore never taxes a month on its own:
+it projects the year, applies the slab, and takes what is still owed, spread over the months that remain.</p>
+
+<h2>The calculation, step by step</h2>
+<ol class="steps">
+<li><b>Taxable earnings this month</b> — every earning marked <i>is tax applicable</i>.</li>
+<li><b>Less the exemptions</b> — the SSF deduction is exempt, so it reduces taxable income.</li>
+<li><b>Project the year</b> — what has already been paid this payroll period, plus this month, plus the same again for each month remaining.</li>
+<li><b>Apply the slab</b> to the projected annual figure, band by band. If the employee contributes to the SSF, the 1% band is skipped.</li>
+<li><b>Subtract the tax already deducted</b> in earlier months of the period.</li>
+<li><b>Divide by the months remaining</b>, including this one. That is this month's Income Tax line.</li>
+</ol>
+<div class="note info"><b class="t">Why a mid-year rise raises tax more than you expect</b><p>The projection
+assumes the new, higher pay for every remaining month, and it also recalculates what the year as a whole should
+have been. So the first payslip after a rise carries both the higher rate and the catch-up on the months already
+paid. It is correct, and it settles by the following month.</p></div>
+
+<h2>One-off amounts are taxed in full, that month</h2>
+<p>A bonus or arrears would otherwise be spread across the remaining months, so the Dashain payslip would show
+6 rupees of tax where 70.69 was due. Every generated one-off carries
+<span class="field">Deduct Full Tax on Selected Payroll Date</span>, and you must tick it on any you type.</p>
+
+<h2>The SSF waiver in practice</h2>
+<div class="tablewrap"><table>
+<tr><th></th><th>SSF member</th><th>Not an SSF member</th></tr>
+<tr><td>First 10,00,000</td><td>Nil — waived</td><td class="num">1% (SST)</td></tr>
+<tr><td>Above that</td><td colspan="2">Identical: 10%, 20%, 27%, 29% by band</td></tr>
+</table></div>
+<p>The waiver is a condition on the slab row reading the employee's <span class="field">SSF Applicable</span>
+tick. Change that tick and the tax changes from the next slip.</p>
+
+<h2>Overriding a person's tax</h2>
+<p>Tax is computed but changeable. On a draft slip, tick <span class="field">Override Income Tax</span>, type the
+amount, and record the reason. The override applies to that month only; the annual projection is untouched, so
+the next month reverts to the computed figure.</p>
+<div class="note imp"><b class="t">Important</b><p>An override is an accounting decision with an audit trail
+attached. Do not use it to make a slip "look right" when the real fault is a wrong base, a missing exemption or
+bad attendance.</p></div>
+
+<h3>Verify</h3>
+<ol class="steps">
+<li>Pick an SSF member and a non-member on similar pay.</li>
+<li>The non-member should carry roughly 1% of the first 10,00,000 more over the year.</li>
+<li>Add up one person's Income Tax across all twelve slips; it should match the slab applied to their annual taxable pay.</li>
+</ol>
+<div class="seealso"><b>See also</b><a href="#setup-tax" data-go="setup-tax">Set up the income tax slab</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#run-monthly" data-go="run-monthly">&larr; Monthly payroll run</a><a href="#run-posting" data-go="run-posting">Post to the books and pay &rarr;</a></div>
+</article>
+<article id="run-posting">
+<div class="crumb">Avinash Payroll &rsaquo; Run payroll</div>
+<h1>Post to the books and pay</h1>
+<div class="meta"><span>Applies to: Monthly · Per company</span><span>Audience: Accounts</span></div>
+<div class="applies"><b>In this article</b>What the payroll journal contains, how the section split is produced, and how the bank entry clears it.</div>
+<p>Submitting the month's slips turns payroll into accounting. One Journal Entry carries the whole month.</p>
+
+<h2>What the journal contains</h2>
+<div class="tablewrap"><table>
+<tr><th>Line</th><th>Dr / Cr</th><th>Account</th><th>Why</th></tr>
+<tr><td>Salary expense — Office</td><td>Debit</td><td class="num">547101</td><td>The cost of office staff.</td></tr>
+<tr><td>Salary expense — Sales &amp; Distribution</td><td>Debit</td><td class="num">547102</td><td>The cost of the sales section.</td></tr>
+<tr><td>Salary expense — Filling Plant</td><td>Debit</td><td class="num">547103</td><td>The cost of the plant.</td></tr>
+<tr><td>SSF Payable</td><td>Credit</td><td>Liability</td><td>Both halves of the SSF, held until paid to the fund.</td></tr>
+<tr><td>TDS Payable</td><td>Credit</td><td>Liability</td><td>Income tax withheld, held until paid to the IRD.</td></tr>
+<tr><td>Staff Advance</td><td>Credit</td><td>Receivable</td><td>Loans recovered this month.</td></tr>
+<tr><td>Salary Payable</td><td>Credit</td><td>Liability</td><td>Net pay owed to staff.</td></tr>
+</table></div>
+<p>The three expense lines are produced by the employees' cost centres, not by the accounts: a component maps to
+one account per company, so only the cost centre can tell office pay from plant pay. See
+<a data-go="setup-cost-centres">Cost centres</a>.</p>
+
+<h2>Check the journal</h2>
+<ol class="steps">
+<li>Open the Journal Entry from the Payroll Entry's connections panel.</li>
+<li>Confirm debits equal credits.</li>
+<li>Confirm the three expense lines add to the month's gross pay.</li>
+<li>Confirm Salary Payable equals the net pay total from the slip list.</li>
+<li>Confirm the JV Type and Document No are filled — group requirements on every HR journal.</li>
+</ol>
+
+<h2>Pay the staff</h2>
+<ol class="steps">
+<li>On the <span class="screen">Payroll Entry</span>, press <span class="btn">Make Bank Entry</span>.</li>
+<li>Choose the bank account and the payment date.</li>
+<li>Check the total against net pay, then <span class="btn">Submit</span>.</li>
+</ol>
+<p>Salary Payable is debited and the bank credited. After this, Salary Payable for the month should be nil.</p>
+
+<h2>Pay the liabilities</h2>
+<div class="tablewrap"><table>
+<tr><th>Liability</th><th>Paid to</th><th>When</th></tr>
+<tr><td>SSF Payable</td><td>Social Security Fund</td><td>By the statutory deadline for the month.</td></tr>
+<tr><td>TDS Payable</td><td>Inland Revenue Department</td><td>By the statutory deadline for the month.</td></tr>
+</table></div>
+<p>Each is an ordinary payment entry against the liability account. If either balance grows month on month,
+something is being withheld and not remitted.</p>
+
+<h2>Reversing a month</h2>
+<ol class="steps">
+<li>Cancel the bank entry, if it was made.</li>
+<li>Cancel the Journal Entry.</li>
+<li>Cancel the salary slips.</li>
+<li>Cancel the Payroll Entry.</li>
+<li>Fix the cause, then run the month again from step 4 of <a data-go="run-monthly">the monthly run</a>.</li>
+</ol>
+<div class="note imp"><b class="t">Important</b><p>Reverse in that order — the reverse of how they were created.
+Cancelling a slip whose journal is still live leaves the books holding a cost with no payslip behind it.</p></div>
+<div class="seealso"><b>See also</b><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#setup-accounts" data-go="setup-accounts">Map components to accounts</a><a href="#setup-cost-centres" data-go="setup-cost-centres">Cost centres and company defaults</a></div>
+<div class="pager"><a href="#run-tax" data-go="run-tax">&larr; How income tax is computed</a><a href="#reports" data-go="reports">Report reference &rarr;</a></div>
+</article>
+<article id="reports">
+<div class="crumb">Avinash Payroll &rsaquo; Reports</div>
+<h1>Report reference</h1>
+<div class="meta"><span>Applies to: All companies</span><span>Audience: HR, Accounts, Management</span></div>
+<div class="applies"><b>In this article</b>Which report answers which question, what each column means, and what to do when one disagrees with a payslip.</div>
+<div class="tablewrap"><table>
+<tr><th>Report</th><th>Answers</th><th>Run it</th></tr>
+<tr><td><b>Monthly Attendance BS</b></td><td>Who was present, absent, late or on leave, day by day, for a BS month.</td><td>Before every payroll run, and whenever a slip looks wrong.</td></tr>
+<tr><td><b>Yearly Leave Details BS</b></td><td>Leave allocated, taken and remaining for the year, per person.</td><td>At year end, and before any encashment.</td></tr>
+<tr><td><b>Salary Register</b></td><td>Every slip in a month as one grid — the payroll sheet.</td><td>For approval, and for the file.</td></tr>
+<tr><td><b>Leave Balance</b></td><td>Current balance per leave type.</td><td>Before approving leave.</td></tr>
+<tr><td><b>Employee Advance Summary</b></td><td>Who owes what, and how much has been recovered.</td><td>Monthly, and before anyone leaves.</td></tr>
+</table></div>
+
+<h2>Monthly Attendance BS</h2>
+<p>The attendance report, built against the shift each person actually worked that day rather than against a
+single assumed shift.</p>
+<div class="tablewrap"><table>
+<tr><th>Column</th><th>Meaning</th></tr>
+<tr><td>Day columns</td><td>P present, A absent, H half day, L on leave, blank for a holiday or weekly off.</td></tr>
+<tr><td>Shift</td><td>The shift resolved for that person on that day.</td></tr>
+<tr><td>Late</td><td>Minutes after the shift start, with no grace period.</td></tr>
+<tr><td>O.T.</td><td>Extra hours measured against the shift, rounded to the nearest half hour. Shown for eligible staff only.</td></tr>
+<tr><td>Totals</td><td>Days present, absent, half day and on leave for the month.</td></tr>
+</table></div>
+<div class="note info"><b class="t">Note</b><p>Late used to read zero for everybody, because it waited on a flag
+the import never set — it was set on 0 of 2,586 rows. Lateness is now measured directly from the punch against
+the shift start, which is why the report and the late fine always agree.</p></div>
+
+<h2>Yearly Leave Details BS</h2>
+<p>For staff who are not paid overtime, leave remaining is the smaller of the allocation and
+<i>allocation − taken + holidays worked</i>. Holidays worked are added because an Officer &amp; Admin employee who
+works a holiday earns a day off rather than being paid — but the total can never exceed the year's allocation.</p>
+
+<h2>When a report and a payslip disagree</h2>
+<ol class="steps">
+<li>Confirm they cover the same period. A BS month is not an English month, and this is the usual cause.</li>
+<li>Check whether the slip was created before the attendance was corrected. The slip holds the figures as they were when it was made.</li>
+<li>Check whether an amount was edited on the Payroll Adjustment after it was computed.</li>
+<li>If the report is right and the slip is not, cancel the slip, recompute the adjustment and create it again.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>Both reports and the payslip's overtime figure come from one shared
+measurement of the working day, so they cannot drift apart on their own. A disagreement is always a timing
+difference or a hand edit.</p></div>
+<div class="seealso"><b>See also</b><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#run-posting" data-go="run-posting">&larr; Post to the books and pay</a><a href="#admin-year-end" data-go="admin-year-end">Year end and the next year &rarr;</a></div>
+</article>
+<article id="admin-year-end">
+<div class="crumb">Avinash Payroll &rsaquo; Year end</div>
+<h1>Year end and the next year</h1>
+<div class="meta"><span>Applies to: Once a year · Before mid-July</span><span>Audience: HR Manager, Accounts</span></div>
+<div class="applies"><b>In this article</b>Closing 83/84 and opening 84/85 without a gap.</div>
+<div class="note imp"><b class="t">Do this before the year rolls over</b><p>Document numbering looks up a Fiscal
+Year row spanning the posting date and refuses to number a document if none exists. A missing new year does not
+merely stop payroll — it stops invoicing. Create the new year, with all seven company rows, before the old one
+ends.</p></div>
+
+<h2>Closing the year</h2>
+<ol class="steps">
+<li>Run the final month of 83/84 in full, through to the bank entry.</li>
+<li>Run <span class="screen">Yearly Leave Details BS</span> for every company.</li>
+<li>Settle leave encashment. Client policy: unused leave is encashed at the end of the fiscal year.</li>
+<li>Confirm SSF Payable and TDS Payable are clear for every month of the year.</li>
+<li>File the twelve Salary Registers.</li>
+</ol>
+
+<h2>Opening the next year</h2>
+<p>Repeat the setup path for 84/85. In order:</p>
+<ol class="steps">
+<li>Fiscal Year <b>84/85</b>, with all seven company rows.</li>
+<li>Payroll Period and Leave Period per company, with matching dates.</li>
+<li>New Holiday Lists — the Saturdays are calculable, the festivals are typed from the new Nepali calendar.</li>
+<li>Check the shifts; carry them over unless hours changed.</li>
+<li>New Leave Policies and a new bulk Leave Policy Assignment for the new period.</li>
+<li>New Income Tax Slab if the budget changed the bands, effective from the year's first day.</li>
+<li>New Salary Structures if the components changed; otherwise keep them.</li>
+<li>New Salary Structure Assignments if pay changed — otherwise the existing ones continue.</li>
+</ol>
+<div class="note tip"><b class="t">Tip</b><p>Only the Saturdays can be generated in advance. Four of the five
+festivals move with the moon; only Maghe Sankranti is fixed. Get the new year's dates confirmed by the client in
+writing before building the lists.</p></div>
+
+<h3>Verify</h3>
+<p>Work through <a data-go="setup-checklist">the setup checklist</a> against the new year. Every count it lists
+should match your headcount before the first run of 84/85.</p>
+<div class="seealso"><b>See also</b><a href="#setup-checklist" data-go="setup-checklist">Setup checklist</a><a href="#setup-leave" data-go="setup-leave">Configure leave</a><a href="#setup-tax" data-go="setup-tax">Set up the income tax slab</a></div>
+<div class="pager"><a href="#reports" data-go="reports">&larr; Report reference</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference &rarr;</a></div>
+</article>
+<article id="ref-calculations">
+<div class="crumb">Avinash Payroll &rsaquo; Reference</div>
+<h1>Calculation reference</h1>
+<div class="meta"><span>Applies to: All companies · FY 83/84</span><span>Audience: Anyone verifying a figure</span></div>
+<div class="applies"><b>In this article</b>Every formula the system uses, with worked arithmetic you can check by hand.</div>
+<p>Each rule below is stated, then worked through with real numbers. If a payslip disagrees with the arithmetic
+here, the payslip is built from different inputs — find the input, not the formula.</p>
+
+<h2>Proration by payment days</h2>
+<p>A component marked <i>depends on payment days</i> is scaled by the days paid over the days in the BS month.</p>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">amount = monthly figure &times; payment days &divide; days in month</p></div>
+<p>A monthly allowance of 20,000, 28.5 payment days in a 31-day month:</p>
+<div class="tablewrap"><table>
+<tr><th>Step</th><th>Figure</th></tr>
+<tr><td>20,000 &times; 28.5</td><td class="num">570,000</td></tr>
+<tr><td>&divide; 31</td><td class="num">18,387.10</td></tr>
+</table></div>
+<p>The divisor is the days in <b>that</b> BS month — 29, 30, 31 or 32 — never a flat 30. Half days contribute 0.5.</p>
+
+<h2>Tea &amp; Conveyance</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">tea = days present &times; category rate</p></div>
+<p>22 days present at NGI on the OLD rate: 22 &times; 235 = <b>5,170.00</b>.</p>
+<p>A half day still earns a full day's tea: the person travelled to work. Leave, absence and holidays earn none.</p>
+
+<h2>Overtime</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">
+hourly basic = Basic &divide; 30 &divide; 8<br>
+overtime = approved hours &times; hourly basic &times; 1.5</p></div>
+<p>Basic 19,260: 19,260 &divide; 30 = 642.00 a day; &divide; 8 = 80.25 an hour; &times; 1.5 = <b>120.38</b> an overtime hour.</p>
+<p>Hours are rounded to the nearest half hour before the multiplication. The divisor of 30 comes from the Labour
+Act and is deliberately not the BS month length.</p>
+
+<h2>Late fine</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">
+per-minute rate = Basic &divide; 30 &divide; 8 &divide; 60<br>
+fine = late minutes &times; per-minute rate</p></div>
+<p>Basic 19,260, 38 minutes late across the month: the per-minute rate is 1.2402 and the fine is
+38 &times; 1.2402 = <b>47.13</b>.</p>
+<div class="note info"><b class="t">Note</b><p>The rate is used unrounded. Rounding it to four decimals first
+shifted the fine by a paisa — small, but it made the payslip disagree with the report.</p></div>
+<p>There is no grace period, and more than two hours late is a half day as well as a fine. Seven NGI managers
+are marked <span class="field">Late Fine Exempt</span> and are never fined.</p>
+
+<h2>SSF</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">
+SSF Addition (earning) = Basic &times; 20%<br>
+SSF (deduction) = Basic &times; 31%</p></div>
+<p>Both only for employees with <span class="field">SSF Applicable</span> ticked. Neither is prorated by payment
+days, because Basic already is. The addition appears as an earning so the payslip shows the true cost of
+employment; the deduction is exempt from income tax.</p>
+
+<h2>House Rent Allowance</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">HRA = Initial Basic &times; company rate</p></div>
+<p>25% at NGI, 27% at NGN. The base is the <b>Initial Basic</b> — the salary the person started on — not their
+current basic. Grade-scale companies pay no HRA.</p>
+
+<h2>Daily wage</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">wage = days worked &times; daily rate</p></div>
+<p>NGK labour at 754.00 a day. A half day counts as half. There is no monthly figure to prorate.</p>
+
+<h2>Income tax</h2>
+<p>See <a data-go="run-tax">How income tax is computed</a>. In short: project the year, apply the bands, subtract
+what has already been deducted, divide by the months remaining.</p>
+
+<h2>Net pay</h2>
+<div class="note"><p style="font-family:'IBM Plex Mono',monospace;font-size:15px">
+gross = every earning, including SSF Addition<br>
+deductions = SSF + Income Tax + Late Fine + Salary Advance<br>
+net = gross &minus; deductions</p></div>
+<p>The SSF addition raises gross and the SSF deduction lowers net by more, which is why gross moves further than
+take-home when basic changes.</p>
+<div class="seealso"><b>See also</b><a href="#run-tax" data-go="run-tax">How income tax is computed</a><a href="#ref-errors" data-go="ref-errors">Messages and troubleshooting</a><a href="#setup-components" data-go="setup-components">Salary components</a></div>
+<div class="pager"><a href="#admin-year-end" data-go="admin-year-end">&larr; Year end and the next year</a><a href="#ref-errors" data-go="ref-errors">Messages and troubleshooting &rarr;</a></div>
+</article>
+<article id="ref-errors">
+<div class="crumb">Avinash Payroll &rsaquo; Reference</div>
+<h1>Messages and troubleshooting</h1>
+<div class="meta"><span>Applies to: All companies</span><span>Audience: HR, Accounts, Support</span></div>
+<div class="applies"><b>In this article</b>What the system refuses to do, why, and what to do about it.</div>
+<h2>Messages you may see</h2>
+<div class="tablewrap"><table>
+<tr><th>Message</th><th>Means</th><th>Do this</th></tr>
+<tr><td>"X is allowed 21 days of Casual Leave this year, and this would make 24"</td><td>The allocation would break the annual ceiling.</td><td>Reduce it, or cancel the competing allocation. The ceiling is policy, not a bug.</td></tr>
+<tr><td>"Company abbreviation is required"</td><td>A Holiday List or Shift Type was saved without its company.</td><td>Set the company field and save again.</td></tr>
+<tr><td>"Fiscal Year … does not exist"</td><td>The year was never created, or its name differs.</td><td>Create it with all seven company rows.</td></tr>
+<tr><td>"Row N: X already has a salary assigned from …"</td><td>A revision is being run twice for the same date.</td><td>Check whether the first run succeeded before re-running.</td></tr>
+<tr><td>"Row N: X has no salary structure assigned"</td><td>A revision includes someone with no current pay record.</td><td>Assign them a structure first, or remove the row.</td></tr>
+<tr><td>"Grand Total must be &gt;= 0"</td><td>Deductions exceed earnings — usually an advance instalment larger than the pay.</td><td>Reduce the instalment for that month.</td></tr>
+<tr><td>A journal that will not save, complaining about a type or document number</td><td>An HR journal is missing its JV Type or Document No.</td><td>Fill both. The payroll journal fills them itself; hand-made ones do not.</td></tr>
+</table></div>
+
+<h2>Symptoms with no message</h2>
+<p>These are the dangerous ones — nothing fails, the figures are simply wrong.</p>
+<div class="tablewrap"><table>
+<tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
+<tr><td>The run produces fewer slips than you have staff</td><td>A blank <span class="field">Payroll Payable Account</span> on the assignment — the employee is dropped silently.</td><td>Fill it on every assignment.</td></tr>
+<tr><td>A whole company turns Half Day</td><td><span class="field">Late Arrival Cutoff Time</span> filled with a clock time. It once turned 2,423 of 2,808 days into half days.</td><td>Blank the field on the shift, then rebuild those attendance days.</td></tr>
+<tr><td>Saturday work produces nothing</td><td>Auto-attendance skips holidays.</td><td>Build those days with the attendance repair tool, which does not skip them.</td></tr>
+<tr><td>No tea for someone who was present</td><td>No allowance category, or a rate of 0.</td><td>Set the category on the Employee.</td></tr>
+<tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or their Employee Category is wrong.</td><td>Submit the sheet; check the category against the manager's list.</td></tr>
+<tr><td>Late reads zero for everybody</td><td>An old report read a flag the import never set.</td><td>Use Monthly Attendance BS, which measures from the punch.</td></tr>
+<tr><td>Tax on a bonus month looks far too small</td><td><span class="field">Deduct Full Tax on Selected Payroll Date</span> was not ticked, so the tax is spread.</td><td>Tick it, cancel and recreate the slip.</td></tr>
+<tr><td>A structure change had no effect</td><td>Pay flows through the assignment, which still points at the old structure.</td><td>Reassign the employees.</td></tr>
+<tr><td>A figure is right on the report and wrong on the slip</td><td>The slip was made before the correction.</td><td>Recompute the adjustment and recreate the slip.</td></tr>
+</table></div>
+
+<h2>How to diagnose anything</h2>
+<ol class="steps">
+<li>Name the wrong figure exactly: person, month, component, amount expected and amount shown.</li>
+<li>Walk the chain backwards — slip, adjustment row, attendance, punches — and stop at the first link that is already wrong.</li>
+<li>Fix that link, not the one after it.</li>
+<li>Recompute forward from there.</li>
+<li>Write down what it was. The same fault visits the next company.</li>
+</ol>
+<div class="seealso"><b>See also</b><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#ref-limits" data-go="ref-limits">Known limits and open items</a></div>
+<div class="pager"><a href="#ref-calculations" data-go="ref-calculations">&larr; Calculation reference</a><a href="#ref-limits" data-go="ref-limits">Known limits and open items &rarr;</a></div>
+</article>
+<article id="ref-limits">
+<div class="crumb">Avinash Payroll &rsaquo; Reference</div>
+<h1>Known limits and open items</h1>
+<div class="meta"><span>Applies to: As at 2026-09-22</span><span>Audience: Implementer, Management</span></div>
+<div class="applies"><b>In this article</b>What is deliberately not built, what is still outstanding, and what needs a decision before going live.</div>
+<div class="note info"><b class="t">Status</b><p>The full chain is proven on the test site <b>avinas1</b> for
+Bhadra 2083 at NGI: punches, attendance, allowances, 87 slips and a balanced journal. Nothing is deployed to the
+live site yet.</p></div>
+
+<h2>Data still missing</h2>
+<div class="tablewrap"><table>
+<tr><th>Gap</th><th>Effect</th><th>Owner</th></tr>
+<tr><td><b>0 of 292 employees have an Attendance Device ID</b></td><td>No punch can reach a person. Nothing downstream works.</td><td>HR</td></tr>
+<tr><td>179 employees have no Employee Category</td><td>No overtime is ever paid to them.</td><td>HR with the managers</td></tr>
+<tr><td>21 NGI/NGN employees have no Allowance Category</td><td>No tea is paid.</td><td>HR</td></tr>
+<tr><td>87 active staff have no salary assignment</td><td>They will not appear in a payroll run.</td><td>HR Manager</td></tr>
+<tr><td>Cost centres unset at NGN, NGG, GLMI, GEPL</td><td>The journal cannot split the cost by section.</td><td>Accounts</td></tr>
+<tr><td>The NGN sales split between 7–3 and 9–5 is unknown</td><td>Lateness measured against the wrong shift.</td><td>NGN manager</td></tr>
+<tr><td>GLMI, GEPL and SGU have no salary structure</td><td>They cannot run payroll. No sheet has been supplied.</td><td>Management</td></tr>
+</table></div>
+
+<h2>Decisions the accountant must make</h2>
+<ul class="plain">
+<li>Sign off the component-to-account mapping, including which account a late fine credits.</li>
+<li>Confirm the payroll payable accounts whose Account Type had to be cleared.</li>
+<li>Change Staff Advance to <b>Receivable</b> on the six companies where it is typed Payable.</li>
+<li>Decide whether to rename account 547101 "O/O" to something readable on a report.</li>
+</ul>
+
+<h2>Deliberate limits</h2>
+<div class="tablewrap"><table>
+<tr><th>Limit</th><th>Why</th></tr>
+<tr><td>A pay rise takes effect from the first day of a BS month only.</td><td>A slip is paid at one rate for its whole month; a mid-month date would have to half-pay the month.</td></tr>
+<tr><td>Income tax overrides last one month.</td><td>The annual projection is deliberately untouched, so a typo cannot silently distort the year.</td></tr>
+<tr><td>Overtime must be authorised on a sheet before it is paid.</td><td>Client policy 5.1. Punches are evidence, not authorisation.</td></tr>
+<tr><td>An allowance category belongs to one company.</td><td>An NGI tea rate has no meaning at NGN, so the field clears if the company changes.</td></tr>
+<tr><td>There is no stacking of allowance categories.</td><td>One rate per person per component, resolved in a fixed order.</td></tr>
+<tr><td>Leave carried forward is not counted against this year's ceiling.</td><td>It was earned under last year's, and counting it would quietly shrink this year's.</td></tr>
+</table></div>
+
+<h2>Things to do before go-live</h2>
+<ol class="steps">
+<li>Fill every gap in the table above.</li>
+<li>Have the managers sign the Employee Category list — 63 of 80 were wrong at NGI on the first import.</li>
+<li>Check the overtime categories on the live site; they were inverted on one site and had to be rebuilt from the workbook.</li>
+<li>Clear the test data from the test site: the tagged test punches, the Bhadra attendance, the submitted slips and the journal.</li>
+<li>Run the acceptance tests — see <a data-go="test-plan">Test cases</a> — and record the result of each.</li>
+<li>Deploy the code, migrate and restart.</li>
+</ol>
+<div class="seealso"><b>See also</b><a href="#test-plan" data-go="test-plan">Acceptance test cases</a><a href="#setup-checklist" data-go="setup-checklist">Setup checklist</a><a href="#ref-errors" data-go="ref-errors">Messages and troubleshooting</a></div>
+<div class="pager"><a href="#ref-errors" data-go="ref-errors">&larr; Messages and troubleshooting</a><a href="#test-plan" data-go="test-plan">Acceptance test cases &rarr;</a></div>
+</article>
+<article id="test-plan">
+<div class="crumb">Avinash Payroll &rsaquo; Testing</div>
+<h1>Acceptance test cases</h1>
+<div class="meta"><span>Applies to: Test site only</span><span>Audience: QA</span></div>
+<div class="applies"><b>In this article</b>Fifty-two checks a tester can run without knowing the system, each with the exact expected result.</div>
+<p>Run these in order: each section depends on the one before. Record pass or fail and the actual figure. A
+failure means stop and report — do not work around it.</p>
+<div class="note imp"><b class="t">Before you start</b><p>Work on the <b>test site</b>, never on live. Use NGI and
+a BS month with complete attendance. Have the company's Excel salary sheet beside you for the comparisons.</p></div>
+
+<h2>A · Setup (1–10)</h2>
+<div class="case"><h4>A1 · Fiscal year exists</h4><p>Open Fiscal Year 83/84. <b>Expect:</b> 2026-07-17 to 2027-07-16, seven company rows.</p></div>
+<div class="case"><h4>A2 · Periods agree</h4><p>Compare the Payroll Period and Leave Period with the fiscal year. <b>Expect:</b> identical dates.</p></div>
+<div class="case"><h4>A3 · Holiday list complete</h4><p>Open NGI 83/84. <b>Expect:</b> ~52 Saturdays plus 10 festivals.</p></div>
+<div class="case"><h4>A4 · Teej is women-only</h4><p>Compare both lists. <b>Expect:</b> 2026-09-14 on the women's list alone.</p></div>
+<div class="case"><h4>A5 · Shifts exist</h4><p>Open Shift Type. <b>Expect:</b> three NGI shifts, two NGN, one each elsewhere; every one has a holiday list and auto-attendance ticked.</p></div>
+<div class="case"><h4>A6 · Cutoff is blank</h4><p>Open each shift. <b>Expect:</b> Late Arrival Cutoff Time empty, grace 0, half day if late by 2 hours.</p></div>
+<div class="case"><h4>A7 · Cost centres</h4><p>Filter Cost Center by company. <b>Expect:</b> Office, Sales &amp; Distribution, Filling Plant.</p></div>
+<div class="case"><h4>A8 · Employee categories</h4><p><b>Expect:</b> Plant with overtime ticked; Officer &amp; Admin with compensatory leave ticked.</p></div>
+<div class="case"><h4>A9 · Allowance categories</h4><p><b>Expect:</b> NGI Tea OLD 235, NGI Tea NEW 40, NGN Tea OLD 265, NGN Tea NEW 40.</p></div>
+<div class="case"><h4>A10 · Components</h4><p><b>Expect:</b> 21 components; SSF and SSF Addition both with <i>depends on payment days</i> off.</p></div>
+
+<h2>B · Employees (11–17)</h2>
+<div class="case"><h4>B11 · No missing device IDs</h4><p>Filter Employee &rsaquo; Attendance Device ID &rsaquo; not set. <b>Expect:</b> zero rows.</p></div>
+<div class="case"><h4>B12 · No missing categories</h4><p>Same filter on Employee Category. <b>Expect:</b> zero rows.</p></div>
+<div class="case"><h4>B13 · Everyone has a shift</h4><p>Filter on Default Shift not set. <b>Expect:</b> zero rows.</p></div>
+<div class="case"><h4>B14 · Everyone has an assignment</h4><p>Count submitted assignments from 2026-07-17. <b>Expect:</b> the active headcount.</p></div>
+<div class="case"><h4>B15 · Payable account filled</h4><p>Assignment report view, Payroll Payable Account column. <b>Expect:</b> no blanks.</p></div>
+<div class="case"><h4>B16 · Tax slab on every assignment</h4><p><b>Expect:</b> no blanks in Income Tax Slab.</p></div>
+<div class="case"><h4>B17 · Leave allocated</h4><p>Count Leave Allocations for the period. <b>Expect:</b> twice the headcount.</p></div>
+
+<h2>C · Attendance (18–26)</h2>
+<div class="case"><h4>C18 · A punch becomes a day</h4><p>Add a checkin at 08:55 and one at 17:05 for a 9–5 employee, then process. <b>Expect:</b> Present, no late minutes.</p></div>
+<div class="case"><h4>C19 · Late is measured</h4><p>Punch in at 09:20. <b>Expect:</b> Present with 20 late minutes.</p></div>
+<div class="case"><h4>C20 · Two hours late is a half day</h4><p>Punch in at 11:15. <b>Expect:</b> Half Day.</p></div>
+<div class="case"><h4>C21 · Short day is a half day</h4><p>09:00 to 12:00. <b>Expect:</b> Half Day (under the 4-hour threshold).</p></div>
+<div class="case"><h4>C22 · One punch is not a day</h4><p>A single punch and nothing else. <b>Expect:</b> Absent or no record — not a full day.</p></div>
+<div class="case"><h4>C23 · Saturdays produce nothing</h4><p>Check a Saturday with no work. <b>Expect:</b> no attendance row, and no effect on pay.</p></div>
+<div class="case"><h4>C24 · Holiday work is captured</h4><p>Punches on a festival day for a Plant employee, built with the repair tool. <b>Expect:</b> an attendance row and overtime hours offered on the sheet.</p></div>
+<div class="case"><h4>C25 · Approved leave shows</h4><p>Approve a two-day casual leave. <b>Expect:</b> two attendance rows, status On Leave, balance down by 2.</p></div>
+<div class="case"><h4>C26 · The report agrees</h4><p>Open Monthly Attendance BS. <b>Expect:</b> the statuses and late minutes from C18–C25, and the right shift on each day.</p></div>
+
+<h2>D · Allowances (27–35)</h2>
+<div class="case"><h4>D27 · Compute runs</h4><p>Payroll Adjustment for NGI and the month &rsaquo; Compute. <b>Expect:</b> rows for tea, meal, overtime, late fine, advances.</p></div>
+<div class="case"><h4>D28 · Tea arithmetic</h4><p>Pick someone with 22 days present on the OLD rate. <b>Expect:</b> 22 &times; 235 = 5,170.00.</p></div>
+<div class="case"><h4>D29 · Half day earns full tea</h4><p>Someone with a half day. <b>Expect:</b> that day counted in full for tea.</p></div>
+<div class="case"><h4>D30 · No category, no tea</h4><p>Someone with no allowance category. <b>Expect:</b> no tea row.</p></div>
+<div class="case"><h4>D31 · Overtime arithmetic</h4><p>Basic 19,260, 3 approved hours. <b>Expect:</b> 361.14 (120.38 an hour).</p></div>
+<div class="case"><h4>D32 · Unapproved overtime is not paid</h4><p>Leave the sheet in draft and recompute. <b>Expect:</b> no overtime rows.</p></div>
+<div class="case"><h4>D33 · Officers get no overtime</h4><p>An Officer &amp; Admin employee with extra hours. <b>Expect:</b> no overtime row.</p></div>
+<div class="case"><h4>D34 · Late fine arithmetic</h4><p>Basic 19,260, 38 late minutes. <b>Expect:</b> 47.13.</p></div>
+<div class="case"><h4>D35 · Exempt staff are not fined</h4><p>A late-fine-exempt manager who was late. <b>Expect:</b> no fine row.</p></div>
+
+<h2>E · Payslips (36–46)</h2>
+<div class="case"><h4>E36 · Everyone is picked up</h4><p>Payroll Entry &rsaquo; Get Employees. <b>Expect:</b> the full headcount.</p></div>
+<div class="case"><h4>E37 · Slips are created</h4><p>Create Salary Slips. <b>Expect:</b> one draft per employee. Over 30 people it runs in the background.</p></div>
+<div class="case"><h4>E38 · A slip matches the sheet</h4><p>Compare one full-month employee with the Excel sheet. <b>Expect:</b> every line equal to the paisa.</p></div>
+<div class="case"><h4>E39 · Proration</h4><p>Someone with 28.5 payment days in a 31-day month, on 20,000. <b>Expect:</b> 18,387.10.</p></div>
+<div class="case"><h4>E40 · SSF</h4><p>An SSF member. <b>Expect:</b> addition 20% of basic, deduction 31%, neither prorated twice.</p></div>
+<div class="case"><h4>E41 · Non-member has no SSF</h4><p><b>Expect:</b> no SSF lines at all.</p></div>
+<div class="case"><h4>E42 · HRA</h4><p>An NGI employee. <b>Expect:</b> 25% of their Initial Basic, not of basic.</p></div>
+<div class="case"><h4>E43 · Tax bands</h4><p>Compare an SSF member with a non-member on similar pay. <b>Expect:</b> the non-member pays roughly 1% of the first 10,00,000 more.</p></div>
+<div class="case"><h4>E44 · Tax override</h4><p>Tick Override Income Tax, type an amount, save. <b>Expect:</b> the tax line and the net change to match.</p></div>
+<div class="case"><h4>E45 · Advance recovery</h4><p>An advance with an instalment larger than the outstanding balance. <b>Expect:</b> the smaller amount is deducted.</p></div>
+<div class="case"><h4>E46 · Register totals</h4><p>Salary Register for the month. <b>Expect:</b> gross &minus; deductions = net, and the totals match the slip list.</p></div>
+
+<h2>F · Posting (47–52)</h2>
+<div class="case"><h4>F47 · Submitting works</h4><p>Submit Salary Slip from the Payroll Entry. <b>Expect:</b> every slip Submitted, one Journal Entry created.</p></div>
+<div class="case"><h4>F48 · The journal balances</h4><p><b>Expect:</b> debits equal credits.</p></div>
+<div class="case"><h4>F49 · The section split</h4><p><b>Expect:</b> three expense lines — O/O, S/D, F/P — adding to gross pay.</p></div>
+<div class="case"><h4>F50 · Liabilities held</h4><p><b>Expect:</b> SSF Payable and TDS Payable credited with the month's totals.</p></div>
+<div class="case"><h4>F51 · Bank entry clears</h4><p>Make Bank Entry and submit. <b>Expect:</b> Salary Payable for the month falls to nil.</p></div>
+<div class="case"><h4>F52 · A month can be reversed</h4><p>Cancel bank entry, journal, slips, entry — in that order. <b>Expect:</b> no residue in the books.</p></div>
+<div class="seealso"><b>See also</b><a href="#test-refusals" data-go="test-refusals">Things the system must refuse</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#ref-calculations" data-go="ref-calculations">Calculation reference</a></div>
+<div class="pager"><a href="#ref-limits" data-go="ref-limits">&larr; Known limits and open items</a><a href="#test-refusals" data-go="test-refusals">Things the system must refuse &rarr;</a></div>
+</article>
+<article id="test-refusals">
+<div class="crumb">Avinash Payroll &rsaquo; Testing</div>
+<h1>Things the system must refuse</h1>
+<div class="meta"><span>Applies to: Test site only</span><span>Audience: QA</span></div>
+<div class="applies"><b>In this article</b>Eight attempts that must fail. A test that succeeds here is a defect.</div>
+<p>These are as important as the tests that pass. Each guard exists because the mistake it blocks is one a real
+user makes, and one that is expensive to discover months later.</p>
+
+<div class="case"><h4>R1 · Over-allocating leave</h4>
+<p><b>Try:</b> allocate 5 more casual days to someone who already has 21.</p>
+<p><b>Must:</b> be refused, naming the person, the ceiling of 21 and the total of 26.</p>
+<p><b>Why:</b> the monthly credit is flexible; the year's total is policy.</p></div>
+
+<div class="case"><h4>R2 · A mid-month pay rise</h4>
+<p><b>Try:</b> a Salary Revision effective on the 10th of a BS month.</p>
+<p><b>Must:</b> be refused or clearly warned. A slip is paid at one rate for its whole month.</p></div>
+
+<div class="case"><h4>R3 · Running a revision twice</h4>
+<p><b>Try:</b> submit the same revision, same date, again.</p>
+<p><b>Must:</b> be refused — "already has a salary assigned from …".</p></div>
+
+<div class="case"><h4>R4 · Someone else's employee</h4>
+<p><b>Try:</b> put an NGN employee on an NGI revision.</p>
+<p><b>Must:</b> be refused, naming the company they belong to.</p></div>
+
+<div class="case"><h4>R5 · A negative payslip</h4>
+<p><b>Try:</b> an advance instalment larger than the person's net pay.</p>
+<p><b>Must:</b> be refused — "Grand Total must be &gt;= 0".</p></div>
+
+<div class="case"><h4>R6 · Double proration of SSF</h4>
+<p><b>Try:</b> tick <i>depends on payment days</i> on the SSF component and preview a part-month slip.</p>
+<p><b>Must:</b> be refused, because Basic is already prorated.</p>
+<p><b>Then:</b> untick it again before continuing.</p></div>
+
+<div class="case"><h4>R7 · An allowance category from another company</h4>
+<p><b>Try:</b> set an NGN tea category on an NGI employee.</p>
+<p><b>Must:</b> not be offered in the list, and be refused if forced.</p></div>
+
+<div class="case"><h4>R8 · A salary journal without its identifiers</h4>
+<p><b>Try:</b> save an HR journal with no JV Type or Document No.</p>
+<p><b>Must:</b> be refused. Both are group requirements on every HR journal.</p></div>
+
+<div class="note imp"><b class="t">Report a success as a defect</b><p>If any of these eight goes through, stop and
+report it with the exact steps. A guard that is not guarding is worse than no guard, because everyone downstream
+believes it is holding.</p></div>
+<div class="seealso"><b>See also</b><a href="#test-plan" data-go="test-plan">Acceptance test cases</a><a href="#ref-limits" data-go="ref-limits">Known limits and open items</a></div>
+<div class="pager"><a href="#test-plan" data-go="test-plan">&larr; Acceptance test cases</a><span></span></div>
+</article>
+</main>
+</div>
+<script>
+(function(){
+  var nav = document.getElementById('nav');
+  var main = document.getElementById('main');
+  var first = document.querySelector('article').id;
+
+  function show(id, push){
+    var el = document.getElementById(id);
+    if(!el || el.tagName !== 'ARTICLE') return;
+    document.querySelectorAll('article.on').forEach(function(a){ a.classList.remove('on'); });
+    el.classList.add('on');
+    document.querySelectorAll('#nav a').forEach(function(a){
+      a.classList.toggle('on', a.dataset.id === id);
+    });
+    if(push && location.hash !== '#' + id){ history.pushState(null, '', '#' + id); }
+    if(window.innerWidth > 900){ window.scrollTo(0,0); } else { main.scrollIntoView({block:'start'}); }
+    document.title = el.querySelector('h1').textContent + ' \u2014 Avinash Payroll';
+  }
+
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('a[href^="#"], a[data-go]');
+    if(!a) return;
+    var id = a.dataset.go || a.dataset.id || a.getAttribute('href').slice(1);
+    if(!document.getElementById(id)) return;
+    e.preventDefault();
+    show(id, true);
+  });
+
+  window.addEventListener('popstate', function(){
+    show(location.hash.slice(1) || first, false);
+  });
+
+  var q = document.getElementById('q');
+  q.addEventListener('input', function(){
+    var t = q.value.trim().toLowerCase();
+    var seen = {};
+    document.querySelectorAll('#nav a').forEach(function(a){
+      var hit = !t || a.textContent.toLowerCase().indexOf(t) > -1 || a.dataset.grp.toLowerCase().indexOf(t) > -1;
+      a.classList.toggle('hide', !hit);
+      if(hit){ seen[a.dataset.grp] = 1; }
+    });
+    document.querySelectorAll('#nav .grp').forEach(function(g){
+      g.style.display = seen[g.dataset.grp] ? '' : 'none';
+    });
+  });
+
+  show(location.hash.slice(1) || first, false);
+})();
+</script>
+</body>
+</html>
