@@ -50,6 +50,18 @@ LEAVE_PROBATION = {"Casual Leave": 12}
 
 WEEKLY_OFF = "Saturday"
 
+#: The group's chart splits salary cost three ways in the ACCOUNT NAMES —
+#: 547101 O/O, 547102 S/D, 547103 F/P — but a salary component maps to one
+#: account per company, so an account can never tell office pay from plant pay.
+#: Cost centres can. These three per company reproduce that split on the payroll
+#: journal, and the employee's own cost centre decides which one their pay lands
+#: on (`Employee.payroll_cost_center`, or a percentage split on the employee).
+COST_CENTRES = (
+	("Office", "O/O"),
+	("Sales & Distribution", "S/D"),
+	("Filling Plant", "F/P"),
+)
+
 #: The festivals the group closes for, per fiscal year: (AD date, name, who).
 #: Four of the five move with the moon, so they are typed from the Nepali
 #: calendar each year and cannot be calculated — only Maghe Sankranti is fixed
@@ -150,6 +162,40 @@ def ensure_shift_types(company):
 				"custom_company": company,
 			}
 		).insert(ignore_permissions=True)
+
+
+def ensure_cost_centres(company):
+	"""Office / Sales & Distribution / Filling Plant under the company root."""
+	# The root's parent is NULL, which a filter dict cannot match.
+	root = frappe.db.sql(
+		"""select name from `tabCost Center`
+		where company = %s and is_group = 1 and ifnull(parent_cost_center, '') = ''
+		limit 1""",
+		company,
+	)
+	root = root[0][0] if root else None
+	if not root:
+		return {}
+
+	out = {}
+	for title, code in COST_CENTRES:
+		abbr = frappe.db.get_value("Company", company, "abbr")
+		name = f"{title} - {abbr}"
+		if not frappe.db.exists("Cost Center", name):
+			doc = frappe.get_doc(
+				{
+					"doctype": "Cost Center",
+					"cost_center_name": title,
+					"parent_cost_center": root,
+					"company": company,
+					"is_group": 0,
+				}
+			)
+			doc.flags.ignore_permissions = True
+			doc.insert()
+			name = doc.name
+		out[code] = name
+	return out
 
 
 def ensure_leave_types():
