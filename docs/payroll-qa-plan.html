@@ -1,0 +1,543 @@
+<title>Payroll Test Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mukta:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{
+  --ground:#F4F6F9; --paper:#FFFFFF; --ink:#18212C; --muted:#56616F; --line:#DDE3EA;
+  --teal:#17607F; --teal-soft:#E3EFF4; --marigold:#C98A0C; --marigold-soft:#FBF1D9;
+  --good:#23724A; --good-soft:#E2F2E8; --bad:#A8322A; --bad-soft:#F8E4E1;
+  --btn:#17607F; --btn-ink:#FFFFFF; --chip:#EEF1F5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#11161C; --paper:#18202A; --ink:#E6ECF2; --muted:#9AA7B5; --line:#2A3542;
+    --teal:#6BB5D6; --teal-soft:#16303C; --marigold:#E9B64A; --marigold-soft:#33290F;
+    --good:#6CCB97; --good-soft:#142C20; --bad:#F08A80; --bad-soft:#3A1916;
+    --btn:#2C7FA3; --btn-ink:#FFFFFF; --chip:#222C38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#11161C; --paper:#18202A; --ink:#E6ECF2; --muted:#9AA7B5; --line:#2A3542;
+  --teal:#6BB5D6; --teal-soft:#16303C; --marigold:#E9B64A; --marigold-soft:#33290F;
+  --good:#6CCB97; --good-soft:#142C20; --bad:#F08A80; --bad-soft:#3A1916;
+  --btn:#2C7FA3; --btn-ink:#FFFFFF; --chip:#222C38; color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:"Mukta","Noto Sans Devanagari",system-ui,sans-serif;font-size:18px;line-height:1.6;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 80px;display:grid;grid-template-columns:250px minmax(0,1fr);gap:40px}
+header.top{grid-column:1/-1;padding-block:8px 18px;border-bottom:2px solid var(--line)}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal);font-weight:700}
+h1{font-size:clamp(32px,5vw,46px);line-height:1.1;margin:.2em 0 .25em;font-weight:800;text-wrap:balance}
+.lede{font-size:20px;color:var(--muted);max-width:62ch;margin:0}
+.np{font-size:.92em;color:var(--muted)}
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:15.5px}
+nav.toc p{margin:0 0 6px;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+nav.toc ol{list-style:none;padding:0;margin:0 0 18px;display:grid;gap:2px}
+nav.toc a{display:block;padding:5px 10px;border-radius:6px;color:var(--ink);text-decoration:none;line-height:1.3}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--teal-soft);color:var(--teal);outline:none}
+main{min-width:0}
+section{padding-block:26px 10px;border-bottom:1px solid var(--line);scroll-margin-top:16px}
+section:last-child{border-bottom:0}
+h2{font-size:30px;line-height:1.2;margin:0 0 4px;font-weight:800;text-wrap:balance}
+h2 .when{display:inline-block;font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--teal);background:var(--teal-soft);padding:2px 10px;border-radius:99px;vertical-align:middle;margin-left:8px}
+h3{font-size:21px;margin:22px 0 6px;font-weight:700}
+p,li{max-width:68ch}
+.sub{color:var(--muted);margin:0 0 14px}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:12px 0;display:grid;gap:12px}
+ol.steps>li{counter-increment:s;position:relative;padding-left:48px;min-height:34px}
+ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;background:var(--teal);color:var(--paper);display:grid;place-items:center;font-weight:800;font-size:17px}
+ul.plain{padding-left:22px;margin:8px 0}
+ul.plain li{margin:4px 0}
+.btn{display:inline-block;background:var(--btn);color:var(--btn-ink);font-weight:600;font-size:.86em;padding:1px 10px;border-radius:6px;white-space:nowrap}
+.field{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.8em;background:var(--chip);padding:1px 7px;border-radius:5px;white-space:nowrap}
+.screen{font-weight:700;color:var(--teal)}
+.note{border-radius:10px;padding:12px 16px 12px 16px;margin:14px 0;max-width:72ch;border-left:5px solid}
+.note b.t{display:block;font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+.tip{background:var(--marigold-soft);border-color:var(--marigold)} .tip b.t{color:var(--marigold)}
+.careful{background:var(--bad-soft);border-color:var(--bad)} .careful b.t{color:var(--bad)}
+.good{background:var(--good-soft);border-color:var(--good)} .good b.t{color:var(--good)}
+.note p{margin:4px 0}
+.tablewrap{overflow-x:auto;margin:12px 0;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:16px;background:var(--paper);border:1px solid var(--line);border-radius:8px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--teal-soft);color:var(--ink);font-weight:700;font-size:14.5px}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.money{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0}
+.money div{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.money h4{margin:0 0 4px;font-size:15px;color:var(--teal);letter-spacing:.04em;text-transform:uppercase}
+.money .f{font-weight:800;font-size:19px;line-height:1.3}
+.money .ex{color:var(--muted);font-size:15px;margin-top:4px;font-variant-numeric:tabular-nums}
+.check{background:var(--paper);border:2px solid var(--teal);border-radius:12px;padding:16px 18px;margin:16px 0;max-width:760px}
+.check h3{margin-top:0}
+.check label{display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px dashed var(--line);cursor:pointer}
+.check label:last-of-type{border-bottom:0}
+.check input{width:22px;height:22px;margin-top:4px;accent-color:var(--good);flex:none}
+.check input:checked+span{color:var(--muted);text-decoration:line-through}
+.check .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+button.act{font:inherit;font-size:15px;font-weight:600;border:1px solid var(--line);background:var(--chip);color:var(--ink);padding:6px 14px;border-radius:8px;cursor:pointer}
+button.act:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.qa{display:grid;gap:10px;margin:12px 0}
+details{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 16px}
+details summary{cursor:pointer;font-weight:700;font-size:17.5px}
+details[open] summary{margin-bottom:6px}
+details p{margin:6px 0}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0;font-weight:600;font-size:16px}
+.flow span{background:var(--paper);border:1px solid var(--line);padding:5px 12px;border-radius:8px}
+.flow i{font-style:normal;color:var(--muted)}
+.stage{padding-block:18px 8px}
+h3.st{display:flex;align-items:center;gap:12px;font-size:23px;margin:0 0 8px;flex-wrap:wrap}
+h3.st .n{flex:none;width:40px;height:40px;border-radius:10px;background:var(--marigold);color:var(--paper);display:grid;place-items:center;font-weight:800;font-size:19px}
+h3.st .who{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--muted);border:1px solid var(--line);padding:1px 8px;border-radius:99px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:15px;color:var(--muted);margin:10px 0}
+.pill{display:inline-block;font-size:12.5px;font-weight:700;letter-spacing:.04em;padding:2px 10px;border-radius:99px;white-space:nowrap}
+.p-use{background:var(--good-soft);color:var(--good)}
+.p-ready{background:var(--teal-soft);color:var(--teal)}
+.p-no{background:var(--chip);color:var(--muted)}
+.filterbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0;position:sticky;top:env(safe-area-inset-top,0px);background:var(--ground);padding-block:8px;z-index:2}
+.filterbar label{font-weight:700}
+.filterbar input{font:inherit;font-size:16px;flex:1 1 260px;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
+.filterbar input:focus-visible{outline:3px solid var(--teal);outline-offset:1px}
+#scrcount{color:var(--muted);font-size:14px}
+h3.grp{font-size:24px;margin:8px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--teal)}
+.reflist{display:grid;gap:12px}
+.scr{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.scr header{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;margin-bottom:6px}
+.scr h4{margin:0;font-size:19px;color:var(--teal)}
+.scr dl{display:grid;grid-template-columns:170px minmax(0,1fr);gap:4px 14px;margin:0;font-size:16px}
+.scr dt{color:var(--muted);font-weight:600}
+.scr dd{margin:0}
+.scr dd .btn{margin:1px 2px}
+.arrow{color:var(--marigold)}
+.flow.long span{font-size:15px}
+.flowsec p{color:var(--muted)}
+@media (max-width:560px){.scr dl{grid-template-columns:1fr}.scr dt{margin-top:6px}}
+footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid var(--line);padding-top:14px}
+@media (max-width:900px){
+  .wrap{grid-template-columns:1fr;gap:10px}
+  nav.toc{position:static;max-height:none;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px}
+  nav.toc ol{grid-template-columns:1fr 1fr}
+}
+@media (max-width:480px){ body{font-size:17px} nav.toc ol{grid-template-columns:1fr} h2{font-size:25px} }
+@media print{
+  nav.toc,.check .row{display:none} .wrap{display:block} section{break-inside:avoid-page}
+  body{background:#fff;color:#000}
+}
+@media (prefers-reduced-motion:no-preference){ html{scroll-behavior:smooth} }
+</style><style>
+.case{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:10px;padding:12px 16px;margin:12px 0}
+.case header h4{margin:0 0 6px;font-size:18px;color:var(--teal)}
+.case p{margin:5px 0}
+.case .note{margin:10px 0 2px}
+</style>
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Nepal Gas Udhyog group · HR &amp; Payroll · FY 83/84</div>
+  <h1>Payroll Test Plan</h1>
+  <p class="lede">Every rule in the system, written as a test: which screen, which field, what value, and exactly what must change as a result. If a step's <b>Expect</b> does not happen, that is a defect — write down the case number.</p>
+  <p class="np">प्रत्येक नियमको जाँच: कुन स्क्रिन, कुन फिल्ड, के हाल्ने, र के हुनुपर्छ।</p>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <p>Before you start</p>
+  <ol>
+    <li><a href="#how">How to run this plan</a></li>
+    <li><a href="#env">Test site and data</a></li>
+    <li><a href="#setup">A · Setup is correct</a></li>
+  </ol>
+  <p>The rules</p>
+  <ol>
+    <li><a href="#shift">B · Shifts &amp; shift change</a></li>
+    <li><a href="#att">C · Attendance rules</a></li>
+    <li><a href="#leave">D · Leave</a></li>
+    <li><a href="#ot">E · Overtime</a></li>
+    <li><a href="#allow">F · Tea, meals, late fine</a></li>
+    <li><a href="#adv">G · Advances</a></li>
+  </ol>
+  <p>Money</p>
+  <ol>
+    <li><a href="#run">H · The monthly run</a></li>
+    <li><a href="#tax">I · Income tax</a></li>
+    <li><a href="#post">J · Posting to the books</a></li>
+    <li><a href="#oneoff">K · One-offs, bonus, raises</a></li>
+    <li><a href="#rep">L · Reports</a></li>
+  </ol>
+  <p>Must fail</p>
+  <ol>
+    <li><a href="#neg">M · Things that must be refused</a></li>
+    <li><a href="#known">Known limits</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="how">
+  <h2>How to run this plan</h2>
+  <ol class="steps">
+    <li>Work top to bottom. Section A proves the setup; everything after it assumes A passed.</li>
+    <li>For each case: follow <b>Do</b>, then check <b>Expect</b>, then look where <b>Verify</b> says.</li>
+    <li>A case passes only if <b>every</b> line under Expect is true. Partly right is a fail.</li>
+    <li>Record: case number, what you saw, a screenshot, and the record name (e.g. <span class="field">NGI-SAL-83/84-00012</span>).</li>
+  </ol>
+  <div class="note tip"><b class="t">Reading the marks</b><p><span class="btn">Button</span> is a button. <span class="field">Field</span> is a box you type in. <span class="screen">Screen Name</span> is what you type in the search bar at the top.</p></div>
+  <div class="note careful"><b class="t">Money rules, for checking by hand</b>
+    <p>Overtime per hour = <b>Basic ÷ 30 ÷ 8 × 1.5</b> · Late fine = <b>late minutes × Basic ÷ 30 ÷ 8 ÷ 60</b> · Tea = <b>days present × the group's rate</b> · Meal = <b>meals × the group's rate</b> · SSF = <b>31% of Basic</b>, with <b>20%</b> added as pay.</p></div>
+</section>
+
+<section id="env">
+  <h2>Test site and data</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Item</th><th>Value</th></tr>
+    <tr><td>Site</td><td>as given to you — never the live site</td></tr>
+    <tr><td>Fiscal year</td><td>83/84 — 2026-07-17 to 2027-07-16 (Shrawan 1 to Ashadh 32)</td></tr>
+    <tr><td>Test month</td><td>Bhadra 2083 — 2026-08-17 to 2026-09-16</td></tr>
+    <tr><td>Companies with pay set up</td><td>NGI, NGN, NGG, NGK</td></tr>
+    <tr><td>Tea rates</td><td>NGI 235 (OLD) / 40 (NEW) / 0 (NO) · NGN 265 / 40 / 0 · meal NGI &amp; NGN 75, NGG 100</td></tr>
+    <tr><td>Leave a year</td><td>21 casual + 12 sick — except Karnali, 8 + 12</td></tr>
+  </table></div>
+  <div class="note careful"><b class="t">Before you begin</b><p>Ask for a <b>backup</b> of the test site. Several cases submit salary and post to the accounts; you will want to go back.</p></div>
+</section>
+
+<section id="setup">
+  <h2>A · Setup is correct</h2>
+  <p class="sub">Read-only checks. If one fails, stop and report it — later sections will fail for the wrong reason.</p>
+
+  <article class="case"><header><h4>A1 · Fiscal year and periods</h4></header>
+    <p><b>Do:</b> open <span class="screen">Fiscal Year</span> → 83/84. Then <span class="screen">Payroll Period</span> and <span class="screen">Leave Period</span>.</p>
+    <p><b>Expect:</b> fiscal year 2026-07-17 → 2027-07-16 with a row for all 7 companies · one payroll period and one leave period per company, same dates.</p>
+    <p><b>Why it matters:</b> no payroll period means income tax cannot be worked out at all.</p></article>
+
+  <article class="case"><header><h4>A2 · Holiday lists</h4></header>
+    <p><b>Do:</b> open <span class="screen">Holiday List</span>. Open each company's normal list and its Women list.</p>
+    <p><b>Expect:</b> 52 Saturdays + 10 festivals (Janai Purnima, Fulpati, Maha Ashtami, Maha Nawami, Vijaya Dashami, Ekadashi, Laxmi Puja, Gobardhan Puja, Bhai Tika, Maghe Sankranti) · the Women list has <b>11</b> — the same plus <b>Haritalika Teej, 2026-09-14</b> · no day appears twice.</p>
+    <p><b>Verify:</b> a woman's <span class="screen">Employee</span> → Attendance &amp; Leaves → <span class="field">Holiday List</span> is the Women list; a man's is blank (he inherits the company's).</p></article>
+
+  <article class="case"><header><h4>A3 · Shifts</h4></header>
+    <p><b>Do:</b> open <span class="screen">Shift Type</span>, then any one of them.</p>
+    <p><b>Expect, on every shift:</b> <span class="field">Enable Auto Attendance</span> ticked · <span class="field">Determine Check-in and Check-out</span> = Alternating entries · <span class="field">Working Hours Calculation</span> = First Check-in and Last Check-out · begin check-in before <b>120</b> · allow check-out after <b>120</b> · half day under <b>5</b> h · absent under <b>2</b> h · <span class="field">Late Entry Grace Period</span> = <b>0</b> · <span class="field">Half Day If Late By (Hours)</span> = <b>2</b> · <span class="field">Late Arrival Cutoff</span> <b>empty</b>.</p>
+    <div class="note careful"><b class="t">Watch this one</b><p>If <span class="field">Late Arrival Cutoff</span> holds a time nobody typed, <b>fail A3</b>. It once filled itself with the time the shift was saved and turned 2,423 of 2,808 days into half days.</p></div></article>
+
+  <article class="case"><header><h4>A4 · Payroll settings</h4></header>
+    <p><b>Do:</b> open <span class="screen">Payroll Settings</span> and <span class="screen">Nepal HRMS Settings</span>.</p>
+    <p><b>Expect:</b> <span class="field">Calculate Payroll Working Days Based On</span> = <b>Attendance</b> · <span class="field">Fraction of Daily Salary for Half Day</span> = <b>0.5</b> · <span class="field">Process Payroll in Nepali Month</span> ticked.</p>
+    <p><b>Note:</b> <span class="field">Consider Unmarked Attendance As</span> is <b>Present</b> today — a day with no attendance is paid. Confirm the client wants that.</p></article>
+
+  <article class="case"><header><h4>A5 · Salary components</h4></header>
+    <p><b>Do:</b> open <span class="screen">Salary Component</span>.</p>
+    <p><b>Expect:</b> 21 components · <b>Income Tax</b> has <span class="field">Variable Based On Taxable Salary</span> ticked · <b>SSF</b> has <span class="field">Exempted from Income Tax</span> ticked · <b>SSF</b> and <b>SSF Addition</b> both have <span class="field">Depends on Payment Days</span> <b>unticked</b> · each component has an <span class="field">Accounts</span> row for every company.</p>
+    <p><b>Why:</b> if SSF had payment days ticked its amount would be cut twice for absence. With no Accounts row, slips cannot be submitted.</p></article>
+
+  <article class="case"><header><h4>A6 · Structures and assignments</h4></header>
+    <p><b>Do:</b> open <span class="screen">Salary Structure</span> → NGI Staff 83/84, then <span class="screen">Salary Structure Assignment</span> for any NGI employee.</p>
+    <p><b>Expect:</b> structure is submitted · HRA reads <span class="field">custom_initial_basic * 0.25 if custom_hra_eligible else 0</span> · assignment has <span class="field">From Date</span> 2026-07-17, a <span class="field">Base</span>, an <span class="field">Income Tax Slab</span> and a <span class="field">Payroll Payable Account</span>.</p>
+    <p><b>Why:</b> an assignment with no payable account is silently left out of every payroll run.</p></article>
+
+  <article class="case"><header><h4>A7 · Tax slab</h4></header>
+    <p><b>Do:</b> open <span class="screen">Income Tax Slab</span> → Nepal 83/84 - NGI.</p>
+    <p><b>Expect:</b> submitted, effective 2026-07-17, <span class="field">Allow Tax Exemption</span> ticked, and five rows — <b>0–10,00,000 at 1% with condition <span class="field">not custom_ssf_applicable</span></b>, then 10%, 20%, 27%, 29%.</p>
+    <p><b>Why:</b> that condition is the SST waiver for SSF members. Without it every SSF member pays 1% they should not.</p></article>
+</section>
+
+<section id="shift">
+  <h2>B · Shifts and shift change</h2>
+
+  <article class="case"><header><h4>B1 · A temporary shift change</h4></header>
+    <p><b>Do:</b> pick an employee on the 6 AM shift. <span class="screen">Shift Request</span> → <span class="btn">+ Add</span> → employee, <span class="field">Shift Type</span> = the 12 PM shift, <span class="field">From Date</span> = a Monday, <span class="field">To Date</span> = that Wednesday, <span class="field">Status</span> = Approved → <span class="btn">Submit</span>.</p>
+    <p><b>Expect:</b> it submits without the error "already has an active Shift Assignment" · in <span class="screen">Shift Assignment</span> that person now has <b>three</b> rows — old shift ending the Sunday, the new shift Mon–Wed, the old shift again from Thursday, open-ended.</p>
+    <p><b>Verify:</b> <span class="screen">Monthly Attendance BS</span> for that month — the Shift column shows the new shift on exactly those three days.</p></article>
+
+  <article class="case"><header><h4>B2 · Cancelling gives the days back</h4></header>
+    <p><b>Do:</b> <span class="btn">Cancel</span> the request from B1.</p>
+    <p><b>Expect:</b> the three rows collapse back to <b>one</b> open-ended assignment on the original shift.</p></article>
+
+  <article class="case"><header><h4>B3 · A permanent move</h4></header>
+    <p><b>Do:</b> same as B1 but leave <span class="field">To Date</span> <b>empty</b>.</p>
+    <p><b>Expect:</b> the old assignment ends the day before and is <b>not</b> resumed. Two rows only.</p></article>
+
+  <article class="case"><header><h4>B4 · Same shift is refused</h4></header>
+    <p><b>Do:</b> raise a request for the shift the person is already on.</p>
+    <p><b>Expect:</b> refused with a message saying they are already on it.</p></article>
+
+  <article class="case"><header><h4>B5 · Late time follows the new shift</h4></header>
+    <p><b>Do:</b> after B3, add a punch at 09:08 on a day inside the new 12 PM shift (<span class="screen">Employee Checkin</span>), then rebuild that day's attendance.</p>
+    <p><b>Expect:</b> late = <b>0</b> — 09:08 is early for a 12 PM shift. Under the old 9 AM shift the same punch was 8 minutes late.</p></article>
+</section>
+
+<section id="att">
+  <h2>C · Attendance rules</h2>
+  <p class="sub">For each case add punches in <span class="screen">Employee Checkin</span> (log type IN then OUT), then let the shift build attendance — <span class="screen">Shift Type</span> → <span class="btn">Mark Attendance</span> — or use <span class="screen">Attendance Fix</span>.</p>
+
+  <article class="case"><header><h4>C1 · A normal day</h4></header>
+    <p><b>Do:</b> 9 AM shift, IN 08:58, OUT 17:05.</p>
+    <p><b>Expect:</b> status <b>Present</b> · late <b>0</b> · <span class="field">Late Time</span> on the report 0.</p></article>
+
+  <article class="case"><header><h4>C2 · A little late</h4></header>
+    <p><b>Do:</b> 9 AM shift, IN 09:40, OUT 17:30.</p>
+    <p><b>Expect:</b> status <b>Present</b> (not half day — under two hours) · late <b>40 minutes</b>, stored on the attendance row and shown in the report.</p></article>
+
+  <article class="case"><header><h4>C3 · More than two hours late</h4></header>
+    <p><b>Do:</b> 9 AM shift, IN 11:15, OUT 18:00.</p>
+    <p><b>Expect:</b> status <b>Half Day</b>, whatever the hours add up to · leave type on the row = Leave Without Pay · <b>no late fine</b> for that day (the half day is the penalty).</p>
+    <p><b>Verify on the slip:</b> that day counts 0.5 in payment days.</p></article>
+
+  <article class="case"><header><h4>C4 · Too few hours</h4></header>
+    <p><b>Do:</b> IN 09:00, OUT 12:30 (3.5 hours).</p>
+    <p><b>Expect:</b> <b>Half Day</b> (under 5 hours). Under 2 hours it would be <b>Absent</b>.</p></article>
+
+  <article class="case"><header><h4>C5 · No punch at all</h4></header>
+    <p><b>Do:</b> leave a working day with no punches, then run the shift's Mark Attendance.</p>
+    <p><b>Expect:</b> <b>Absent</b> · that day is not paid · it appears as Absent in Monthly Attendance BS.</p></article>
+
+  <article class="case"><header><h4>C6 · Came in while on leave</h4></header>
+    <p><b>Do:</b> approve a leave for a day, then add punches on that day.</p>
+    <p><b>Expect:</b> status becomes <b>Half Day</b> with the leave type kept — half worked, half leave.</p></article>
+
+  <article class="case"><header><h4>C7 · Worked on a holiday</h4></header>
+    <p><b>Do:</b> add punches on a Saturday or a festival day, then run <span class="screen">Attendance Fix</span> for that date.</p>
+    <p><b>Expect:</b> attendance is created with <span class="field">Worked on Holiday</span> ticked.</p>
+    <div class="note careful"><b class="t">Known behaviour</b><p>The automatic run <b>skips holidays</b>, so holiday work only appears after Attendance Fix. If it appeared by itself, note it — the behaviour changed.</p></div></article>
+
+  <article class="case"><header><h4>C8 · Machine was offline</h4></header>
+    <p><b>Do:</b> <span class="screen">Attendance Fix</span> → shift, company, a date range with missing days → <span class="btn">Submit</span>.</p>
+    <p><b>Expect:</b> days with punches become Present/Half Day · days with none become Absent · holidays are skipped · attendance already entered by hand is left alone · the Per-Day Log lists what it did.</p></article>
+</section>
+
+<section id="leave">
+  <h2>D · Leave</h2>
+
+  <article class="case"><header><h4>D1 · Leave grows each BS month</h4></header>
+    <p><b>Do:</b> open <span class="screen">Leave Allocation</span> for one NGI and one NGK employee.</p>
+    <p><b>Expect:</b> NGI casual grows <b>1.75</b> a month and sick <b>1.0</b> (21 and 12 a year) · NGK casual <b>0.67</b>, sick 1.0 (8 and 12) · credited on the <b>last day of each BS month</b>, not the 1st of an English month.</p></article>
+
+  <article class="case"><header><h4>D2 · Taking leave</h4></header>
+    <p><b>Do:</b> <span class="screen">Leave Application</span> → employee, Casual Leave, two days inside the test month, Status Approved → Submit.</p>
+    <p><b>Expect:</b> balance falls by 2 · those days show <b>On Leave</b> in Monthly Attendance BS · a <span class="screen">Leave Ledger Entry</span> exists.</p></article>
+
+  <article class="case"><header><h4>D3 · Unpaid leave costs pay</h4></header>
+    <p><b>Do:</b> apply <b>Leave Without Pay</b> for 2 days, then rebuild that person's slip.</p>
+    <p><b>Expect:</b> payment days fall by 2 · Basic and the allowances fall in proportion · SSF, being 31% of Basic, falls with it.</p></article>
+
+  <article class="case"><header><h4>D4 · The year's ceiling</h4></header>
+    <p><b>Do:</b> open a casual allocation → <span class="btn">Allocate Leaves</span> → add 4 days. Then try adding 25.</p>
+    <p><b>Expect:</b> 4 is accepted (the month's amount is free) · 25 is <b>refused</b>: "cannot exceed annual allocation of 21".</p></article>
+
+  <article class="case"><header><h4>D5 · Maternity and paternity</h4></header>
+    <p><b>Do:</b> apply Maternity Leave for a male employee, and Paternity Leave for a female one.</p>
+    <p><b>Expect:</b> both <b>refused</b> — the system reads the employee's Gender.</p></article>
+</section>
+
+<section id="ot">
+  <h2>E · Overtime</h2>
+
+  <article class="case"><header><h4>E1 · Overtime needs a sheet</h4></header>
+    <p><b>Do:</b> give a <b>Plant / Operation</b> employee punches two hours past their shift end, build attendance, run the month's <span class="btn">Prepare Payroll Inputs</span> — but create <b>no</b> Overtime Sheet.</p>
+    <p><b>Expect:</b> <b>no overtime is paid</b>. The hours show in the report's O.T. column, but nothing reaches the slip.</p></article>
+
+  <article class="case"><header><h4>E2 · An authorised sheet pays</h4></header>
+    <p><b>Do:</b> <span class="screen">Overtime Sheet</span> → company, that date, a reason, add the employee → Submit → <span class="btn">Measure from Attendance</span>. Then Prepare Payroll Inputs again.</p>
+    <p><b>Expect:</b> <span class="field">Worked Hours (measured)</span> ≈ 2, rounded to the nearest half hour · an <span class="screen">Additional Salary</span> for Overtime appears · amount = <b>hours × Basic ÷ 30 ÷ 8 × 1.5</b>. Check it by hand.</p></article>
+
+  <article class="case"><header><h4>E3 · Officers earn leave, not overtime</h4></header>
+    <p><b>Do:</b> put an <b>Admin &amp; Officer</b> employee on an Overtime Sheet for a holiday they worked.</p>
+    <p><b>Expect:</b> the row says <b>Replacement Leave</b>, not Overtime · no overtime money on the slip · the day counts in <span class="screen">Work On Holiday BS</span> and is credited back in <span class="screen">Yearly Leave Details BS</span>.</p></article>
+
+  <article class="case"><header><h4>E4 · Holiday hours count in full</h4></header>
+    <p><b>Do:</b> an Operation employee works 7 h 53 m on a holiday; sheet it and measure.</p>
+    <p><b>Expect:</b> <b>8.0</b> hours — every hour counts on a holiday, rounded to the nearest half hour. On a working day only the hours outside the shift count.</p></article>
+</section>
+
+<section id="allow">
+  <h2>F · Tea, meals and the late fine</h2>
+
+  <article class="case"><header><h4>F1 · Tea follows the group</h4></header>
+    <p><b>Do:</b> take one NGI OLD and one NGI NEW employee with the same days present. Run Prepare Payroll Inputs.</p>
+    <p><b>Expect:</b> OLD = days × <b>235</b> · NEW = days × <b>40</b> · someone in <b>NO</b> gets nothing · someone with <b>no group</b> gets nothing.</p></article>
+
+  <article class="case"><header><h4>F2 · A half day still earns full tea</h4></header>
+    <p><b>Do:</b> find a person with a Half Day in the month.</p>
+    <p><b>Expect:</b> that day counts as a <b>whole</b> day of tea — turning up earns it.</p></article>
+
+  <article class="case"><header><h4>F3 · Meals</h4></header>
+    <p><b>Do:</b> one day IN 1½ h before the shift and OUT 1½ h after; another day only 1 h early.</p>
+    <p><b>Expect:</b> first day <b>2</b> meals · second day <b>0</b> · never more than 2 a day · on a holiday, 6 hours worked = 1 meal, 8 hours = 2.</p></article>
+
+  <article class="case"><header><h4>F4 · Late fine</h4></header>
+    <p><b>Do:</b> a person 38 minutes late on a Basic of 17,860.</p>
+    <p><b>Expect:</b> fine = 38 × 17,860 ÷ 30 ÷ 8 ÷ 60 = <b>47.13</b> · it appears as a deduction on the slip.</p></article>
+
+  <article class="case"><header><h4>F5 · Managers are exempt</h4></header>
+    <p><b>Do:</b> tick <span class="field">Late Fine Exempt</span> on an Employee, run Prepare Payroll Inputs again.</p>
+    <p><b>Expect:</b> no Late Fine for that person, however late they were. Late minutes still show in the report.</p></article>
+
+  <article class="case"><header><h4>F6 · Re-running does not double up</h4></header>
+    <p><b>Do:</b> press <span class="btn">Prepare Payroll Inputs</span> three times.</p>
+    <p><b>Expect:</b> amounts are the same each time — the old rows are replaced, not added to.</p></article>
+</section>
+
+<section id="adv">
+  <h2>G · Advances</h2>
+
+  <article class="case"><header><h4>G1 · Give an advance</h4></header>
+    <p><b>Do:</b> <span class="screen">Employee Advance</span> → employee, <span class="field">Advance Amount</span> 10,000, purpose, <span class="field">Repay Unclaimed Amount from Salary</span> ticked, <span class="field">Monthly Instalment</span> 2,500 → Submit → <span class="btn">Make</span> → Bank Entry → choose a JV Type → Submit.</p>
+    <p><b>Expect:</b> advance status <b>Paid</b> · the voucher debits Staff Advance.</p></article>
+
+  <article class="case"><header><h4>G2 · It comes back monthly</h4></header>
+    <p><b>Do:</b> run Prepare Payroll Inputs for the month.</p>
+    <p><b>Expect:</b> a <b>Salary Advance</b> deduction of <b>2,500</b> on the slip · the advance shows 7,500 still owed.</p></article>
+
+  <article class="case"><header><h4>G3 · The last instalment</h4></header>
+    <p><b>Do:</b> on an advance with 1,000 left and an instalment of 2,500, run the month.</p>
+    <p><b>Expect:</b> it deducts <b>1,000</b>, not 2,500 · status becomes <b>Returned</b>.</p></article>
+
+  <article class="case"><header><h4>G4 · Never paid out, never deducted</h4></header>
+    <p><b>Do:</b> submit an advance but skip the Bank Entry. Run the month.</p>
+    <p><b>Expect:</b> <b>nothing</b> is deducted — the system only takes back money it knows was handed over.</p></article>
+</section>
+
+<section id="run">
+  <h2>H · The monthly run</h2>
+
+  <article class="case"><header><h4>H1 · BS dates fill themselves</h4></header>
+    <p><b>Do:</b> <span class="screen">Payroll Entry</span> → company, <span class="field">Payroll Frequency</span> Monthly, <span class="field">Posting Date</span> any day inside a BS month.</p>
+    <p><b>Expect:</b> start and end dates jump to that <b>BS month</b> (e.g. 2026-08-17 → 2026-09-16), not the English month.</p></article>
+
+  <article class="case"><header><h4>H2 · Order matters</h4></header>
+    <p><b>Do:</b> <span class="btn">Get Employees</span> → <span class="btn">Save</span> → <span class="btn">Nepal HRMS</span> → <span class="btn">Prepare Payroll Inputs</span> → <span class="btn">Create Salary Slips</span>.</p>
+    <p><b>Expect:</b> the inputs message reports rows created · slips carry tea, meal, overtime and fines.</p>
+    <div class="note careful"><b class="t">Try it the wrong way too</b><p>Create Salary Slips <b>before</b> Prepare Payroll Inputs: the slips will have no tea or meals. Fix = run the inputs, then open each slip and Save. Confirm that works.</p></div></article>
+
+  <article class="case"><header><h4>H3 · Days paid</h4></header>
+    <p><b>Do:</b> open a slip for someone with 2 absences and 1 half day in a 31-day BS month.</p>
+    <p><b>Expect:</b> total working days <b>31</b> · payment days <b>28.5</b> · Basic and allowances prorated to that.</p></article>
+
+  <article class="case"><header><h4>H4 · Against the client's sheet</h4></header>
+    <p><b>Do:</b> take five NGI employees and compare their slip line by line with the client's Falgun sheet (full month, nobody absent).</p>
+    <p><b>Expect:</b> Basic, HRA, gas, education, dearness, other, SSF Addition and SSF match <b>to the paisa</b>.</p></article>
+
+  <article class="case"><header><h4>H5 · Nobody is missing</h4></header>
+    <p><b>Do:</b> compare the count on the Payroll Entry with active employees who have a salary assignment.</p>
+    <p><b>Expect:</b> the same number. Anyone missing has no assignment, or an assignment with no Payroll Payable Account.</p></article>
+</section>
+
+<section id="tax">
+  <h2>I · Income tax</h2>
+
+  <article class="case"><header><h4>I1 · SSF members skip the 1%</h4></header>
+    <p><b>Do:</b> compare a person <b>in</b> the SSF earning under ten lakh a year with one <b>outside</b> it.</p>
+    <p><b>Expect:</b> the SSF member pays <b>0</b> · the non-member pays <b>1%</b> of their pay (that 1% is the SST).</p></article>
+
+  <article class="case"><header><h4>I2 · A higher earner</h4></header>
+    <p><b>Do:</b> open the slip of someone whose yearly pay passes ten lakh.</p>
+    <p><b>Expect:</b> tax appears · the yearly figure is <b>after</b> SSF is deducted (SSF reduces taxable pay).</p></article>
+
+  <article class="case"><header><h4>I3 · Overriding tax</h4></header>
+    <p><b>Do:</b> on a draft slip, tick <span class="field">Override Income Tax</span>, type <b>7,500</b>, Save. Then type <b>0</b> and Save. Then untick and Save.</p>
+    <p><b>Expect:</b> deduction becomes 7,500, then 0, then back to the computed figure · net pay and the amount in words follow each time · <span class="field">Computed Income Tax</span> keeps showing the system's own number throughout.</p></article>
+
+  <article class="case"><header><h4>I4 · Extra pay is taxed in its month</h4></header>
+    <p><b>Do:</b> add a one-off earning (say a 20,000 bonus) and rebuild the slip.</p>
+    <p><b>Expect:</b> tax rises <b>in that month</b>, not spread thinly over the rest of the year.</p></article>
+</section>
+
+<section id="post">
+  <h2>J · Posting to the books</h2>
+
+  <article class="case"><header><h4>J1 · Submitting writes one journal</h4></header>
+    <p><b>Do:</b> on the Payroll Entry, <span class="btn">Submit Salary Slip</span>.</p>
+    <p><b>Expect:</b> every slip is submitted · one <span class="screen">Journal Entry</span> exists · <b>debit equals credit</b> · it carries a JV Type and a Document No without anyone typing them.</p></article>
+
+  <article class="case"><header><h4>J2 · Each section to its own account</h4></header>
+    <p><b>Do:</b> open that journal.</p>
+    <p><b>Expect:</b> office pay on <b>547101 O/O</b>, sales on <b>547102 S/D</b>, plant on <b>547103 F/P</b>, each with its own cost centre · SSF on 347302 · tax on 348102 · Salary Payable credited with <b>exactly the month's net pay</b>.</p></article>
+
+  <article class="case"><header><h4>J3 · Paying out</h4></header>
+    <p><b>Do:</b> <span class="btn">Make Bank Entry</span> on the Payroll Entry.</p>
+    <p><b>Expect:</b> a voucher clearing Salary Payable against the bank, for the net amount.</p></article>
+
+  <article class="case"><header><h4>J4 · Undoing a month</h4></header>
+    <p><b>Do:</b> cancel the journal, then the slips.</p>
+    <p><b>Expect:</b> it can be done in that order, and the accounts return to where they were. Report anything that blocks it.</p></article>
+</section>
+
+<section id="oneoff">
+  <h2>K · One-offs, bonus and raises</h2>
+
+  <article class="case"><header><h4>K1 · Payroll Adjustment</h4></header>
+    <p><b>Do:</b> <span class="screen">Payroll Adjustment</span> → company, a payroll date inside the month, rows for two people (one earning, one deduction) → Submit. Rebuild their slips.</p>
+    <p><b>Expect:</b> both amounts appear on the right slips · cancelling the adjustment removes them.</p></article>
+
+  <article class="case"><header><h4>K2 · Dashain bonus, full year</h4></header>
+    <p><b>Do:</b> <span class="screen">Dashain Bonus</span> → company, fiscal year, payout date, <span class="field">One Month Means</span> = Basic, 100% → <span class="btn">Get Employees</span>.</p>
+    <p><b>Expect:</b> anyone with a year or more shows <b>12.00</b> months and a bonus equal to one month's Basic.</p></article>
+
+  <article class="case"><header><h4>K3 · Dashain bonus, mid-year joiner</h4></header>
+    <p><b>Do:</b> look at someone who joined part-way through.</p>
+    <p><b>Expect:</b> months served under 12 and the bonus prorated — e.g. 2.6 months on 20,000 = <b>4,333</b> · every amount stays editable · Submit puts it on that month's slip.</p></article>
+
+  <article class="case"><header><h4>K4 · Bonus not given</h4></header>
+    <p><b>Do:</b> untick <span class="field">Bonus Given This Year</span>, write a reason, Submit.</p>
+    <p><b>Expect:</b> it saves as a record of the decision · nobody is paid.</p></article>
+
+  <article class="case"><header><h4>K5 · A pay rise</h4></header>
+    <p><b>Do:</b> <span class="screen">Salary Revision</span> → company, <span class="field">Effective From</span> = the first day of a BS month, <span class="field">Hike % for Everyone</span> = 10 → <span class="btn">Get Employees</span> → Submit.</p>
+    <p><b>Expect:</b> each person gets a <b>new</b> Salary Structure Assignment from that date · the old one is untouched · next month's slip uses the new Basic, last month's is unchanged.</p></article>
+
+  <article class="case"><header><h4>K6 · Arrears for a late rise</h4></header>
+    <p><b>Do:</b> repeat K5 with <span class="field">Effective From</span> in a month already paid, tick <span class="field">Pay Arrears</span>, choose the month to pay them in.</p>
+    <p><b>Expect:</b> arrears = the monthly difference × months already paid · they appear as a <b>Salary Arrears</b> earning in the chosen month · <b>submitted slips are never edited</b>.</p></article>
+</section>
+
+<section id="rep">
+  <h2>L · Reports</h2>
+
+  <article class="case"><header><h4>L1 · Monthly Attendance BS — Detail</h4></header>
+    <p><b>Expect:</b> one row per person per day · the <b>Shift of that day</b> · Late minutes counted from that shift's start, with <b>no grace</b> · Before ofc. Time for leaving early · O.T. hours for Operation staff only · Meal and Tea quantities · holidays named in Remarks.</p>
+    <p><b>Cross-check:</b> Late on a day matches the punch (09:08 on a 9 AM shift = 8).</p></article>
+
+  <article class="case"><header><h4>L2 · Monthly Attendance BS — Summary</h4></header>
+    <p><b>Expect:</b> one row per person · <b>Late Time = late + left early</b> · Present Days counting a half day as 0.5 · Leave this month, last month and to date · these totals equal the Detail view's for the same person.</p></article>
+
+  <article class="case"><header><h4>L3 · Yearly Leave Details BS</h4></header>
+    <p><b>Expect:</b> leave taken by BS month · entitlement so far · Leave Remaining · for <b>Admin &amp; Officer</b> staff, holidays worked are credited back, but never above the year's entitlement.</p></article>
+
+  <article class="case"><header><h4>L4 · Work On Holiday BS</h4></header>
+    <p><b>Expect:</b> holidays worked per person per BS month, with their OT eligibility · matches the Worked on Holiday flags in Detail.</p></article>
+
+  <article class="case"><header><h4>L5 · Salary Register</h4></header>
+    <p><b>Expect:</b> every slip and line for the month · the totals equal the Payroll Entry's and the journal's.</p></article>
+</section>
+
+<section id="neg">
+  <h2>M · Things that must be refused</h2>
+  <p class="sub">These are as important as the rest. If any of them is <b>allowed</b>, it is a defect.</p>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>Try this</th><th>Must happen</th></tr>
+    <tr><td>M1</td><td>Put an NGI allowance category on a Karnali employee</td><td>Refused — "belongs to Nepal Gas Udhyog Pvt. Ltd."</td></tr>
+    <tr><td>M2</td><td>Allocate more leave than the year allows (25 on top of 21)</td><td>Refused, naming the annual figure</td></tr>
+    <tr><td>M3</td><td>Maternity leave for a man / paternity for a woman</td><td>Refused</td></tr>
+    <tr><td>M4</td><td>A shift request onto the shift the person already has</td><td>Refused</td></tr>
+    <tr><td>M5</td><td>Submit a slip for a component with no GL account</td><td>Refused with the account error — nothing half-posted</td></tr>
+    <tr><td>M6</td><td>Two salary assignments for one person from the same date</td><td>Refused</td></tr>
+    <tr><td>M7</td><td>Pay overtime with no Overtime Sheet</td><td>Nothing is paid</td></tr>
+    <tr><td>M8</td><td>Type tea or meal by hand on Payroll Adjustment as well</td><td>Allowed by the system — but it <b>doubles</b> the pay. Confirm the guide warns against it</td></tr>
+  </table></div>
+</section>
+
+<section id="known">
+  <h2>Known limits — not defects</h2>
+  <ul class="plain">
+    <li><b>Auto attendance skips holidays.</b> Holiday work appears only after Attendance Fix.</li>
+    <li><b>A slip is paid at one rate for the whole month.</b> A pay rise dated mid-month takes effect the following month.</li>
+    <li><b>Unmarked days are treated as Present</b> under the current Payroll Settings — a missing punch is paid.</li>
+    <li><b>Submitting a Payroll Entry with more than 30 employees</b> queues slip creation to a background worker; if the queue is down, the entry sits at "Queued" and no slips appear.</li>
+    <li><b>Tea, meal and overtime are not in the salary structure.</b> They arrive as Additional Salary each month, so they are absent from a slip built before Prepare Payroll Inputs was run.</li>
+    <li><b>Employee fields are current, not historical.</b> Changing someone's allowance group today does not alter a submitted slip, but it does change what the next run pays.</li>
+  </ul>
+  <div class="note good"><b class="t">Reporting a defect</b><p>Give the case number, the record name, what you expected, what you saw, and the exact figures. A slip or journal name is enough for anyone to reproduce it.</p></div>
+</section>
+
+</main>
+<footer>Avinash Group · payroll test plan for FY 83/84 · written against the build of Ashwin 2083.</footer>
+</div>
