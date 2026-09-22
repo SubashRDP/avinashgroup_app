@@ -50,6 +50,27 @@ LEAVE_PROBATION = {"Casual Leave": 12}
 
 WEEKLY_OFF = "Saturday"
 
+#: The festivals the group closes for, per fiscal year: (AD date, name, who).
+#: Four of the five move with the moon, so they are typed from the Nepali
+#: calendar each year and cannot be calculated — only Maghe Sankranti is fixed
+#: (Magh 1). `women` marks a day that goes on the women's list alone.
+#: Confirmed with the client for 83/84 on 2026-09-22: Dashain 5 days, Tihar 3.
+FESTIVALS = {
+	"83/84": (
+		("2026-08-28", "Janai Purnima", "all"),
+		("2026-09-14", "Haritalika Teej", "women"),
+		("2026-10-18", "Fulpati", "all"),
+		("2026-10-19", "Maha Ashtami", "all"),
+		("2026-10-20", "Maha Nawami", "all"),
+		("2026-10-21", "Vijaya Dashami", "all"),
+		("2026-10-22", "Ekadashi", "all"),
+		("2026-11-09", "Laxmi Puja", "all"),
+		("2026-11-10", "Gobardhan Puja", "all"),
+		("2026-11-11", "Bhai Tika", "all"),
+		("2027-01-15", "Maghe Sankranti", "all"),
+	),
+}
+
 
 def setup_year(fiscal_year, companies=None, assign_leave=True):
 	"""Put one fiscal year in place for every company. Safe to run twice."""
@@ -184,9 +205,27 @@ def ensure_holiday_list(company, abbr, fiscal_year, year, womens=False):
 		}
 	)
 	doc.get_weekly_off_dates()
+	add_festivals(doc, fiscal_year, womens)
 	doc.flags.ignore_permissions = True
 	doc.insert()
 	return doc.name
+
+
+def add_festivals(doc, fiscal_year, womens):
+	"""Put the year's festivals on the list, without doubling a Saturday.
+
+	A festival that lands on the weekly off is already a holiday; adding it again
+	would show the day twice and count it twice in any report.
+	"""
+	taken = {getdate(h.holiday_date) for h in doc.holidays}
+	for date_str, name, audience in FESTIVALS.get(fiscal_year, ()):
+		if audience == "women" and not womens:
+			continue
+		day = getdate(date_str)
+		if day < getdate(doc.from_date) or day > getdate(doc.to_date) or day in taken:
+			continue
+		doc.append("holidays", {"holiday_date": day, "description": name})
+		taken.add(day)
 
 
 def ensure_company_defaults(company, abbr, holiday_list):
