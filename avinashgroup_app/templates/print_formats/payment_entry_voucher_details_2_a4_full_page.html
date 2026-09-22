@@ -1,9 +1,11 @@
 {#- ==========================================================================
-Nepal Gas Payment Voucher — Payment Entry voucher (avinashgroup_app).
-Source of truth for the "Nepal Gas Payment Voucher" standard Print Format;
-print_format/nepal_gas_payment_voucher/nepal_gas_payment_voucher.json only
-{% include %}s this file. Code-backed, built fresh (not copied from any existing).
-Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
+NG Voucher Payment A4 (avinashgroup_app).
+
+FULL-SHEET TWIN of payment_entry_voucher_details_2.html ("NG Vendor Payment Half"):
+identical markup; the only
+differences are the @page bottom margin and the .pv-page frame height, so the voucher
+fills the whole A4 sheet (footer at the foot) instead of the top half.
+Any change to the voucher body belongs in BOTH files.
 =========================================================================== -#}
 {% set company = frappe.get_doc("Company", doc.company) %}
 {#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
@@ -11,11 +13,11 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 <style>
 @page {
   size: A4;
-  /* Content band = top half of the A4 sheet: 10mm top + 148mm bottom leaves a
-     139mm band ending at 149mm, the fold. Both margins are stated so the PDF
-     does not fall back to its own defaults. */
+  /* Content band = the whole A4 sheet: 10mm top + 6mm bottom leaves a 281mm
+     band (the half-page twin reserves the bottom 148mm instead). Both margins
+     are stated so the PDF does not fall back to its own defaults. */
   margin-top: 10mm;
-  margin-bottom: 148mm;
+  margin-bottom: 6mm;
 }
 /* The voucher starts right at the 10mm page margin. No negative margin here:
    anything pulled above the page margin is clipped off the printed sheet. */
@@ -63,11 +65,11 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 .npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
 
 /* Page frame: the body sits at the top and in-words/remarks/signatures at the
-   bottom of the frame, with blank space between. 120.8mm puts the footer where
-   it prints on a voucher-reference payment through wkhtmltopdf (the approved
-   position). A voucher too long for the frame grows the table and the footer
+   bottom of the frame, with blank space between. 272.8mm puts the footer's last
+   line ~281mm down the sheet, leaving an 8.2mm cushion under the frame in the
+   281mm band. A voucher too long for the frame grows the table and the footer
    flows onto the next page instead of overlapping the body. */
-.npv .pv-page { width:100%; height:120.8mm; border-collapse:collapse; }
+.npv .pv-page { width:100%; height:272.8mm; border-collapse:collapse; }
 .npv .pv-page > tbody > tr > td { padding:0; }
 .npv .pv-page-top    { vertical-align:top; }
 .npv .pv-page-bottom { vertical-align:bottom; }
