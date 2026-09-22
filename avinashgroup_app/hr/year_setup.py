@@ -65,6 +65,7 @@ def setup_year(fiscal_year, companies=None, assign_leave=True):
 	# of three, tagged to the first company, as on the working site.
 	ensure_shift_types(companies[0] if companies else default_company())
 	ensure_employee_categories()
+	ensure_leave_types()
 
 	report = {"fiscal_year": fiscal_year, "companies": {}}
 	for company in companies or frappe.get_all("Company", pluck="name"):
@@ -128,6 +129,19 @@ def ensure_shift_types(company):
 				"custom_company": company,
 			}
 		).insert(ignore_permissions=True)
+
+
+def ensure_leave_types():
+	"""The four leave types the group uses, plus the unpaid catch-all.
+
+	How each behaves is settled in one place — `patches.setup_leave_types`, which
+	is written to be re-runnable. Calling it here means a site whose leave types
+	were deleted gets them back, instead of the year setup quietly building
+	policies that point at nothing.
+	"""
+	from avinashgroup_app.patches.setup_leave_types import execute as build_leave_types
+
+	build_leave_types()
 
 
 def ensure_employee_categories():
