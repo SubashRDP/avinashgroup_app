@@ -294,7 +294,11 @@ for _event, _handler in journal_entry_events.items():
 # before the numbering reads it — first in the chain, ahead of the naming hooks.
 _je = doc_events.setdefault("Journal Entry", {})
 _existing = _je.get("before_insert")
-_je["before_insert"] = ["avinashgroup_app.payroll.hr_journal.default_jv_type"] + (
+_je["before_insert"] = [
+    "avinashgroup_app.payroll.hr_journal.default_jv_type",
+    # Office pay to the O/O account, plant pay to F/P, sales pay to S/D.
+    "avinashgroup_app.payroll.hr_journal.route_salary_expense_by_cost_centre",
+] + (
     list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
 )
 
@@ -318,10 +322,6 @@ _add_doc_event(
     "validate",
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
-
-# The tea/meal rates are per company, so an employee's allowance group must be
-# one of their own company's.
-_add_doc_event("Employee", "validate", "avinashgroup_app.hr.employee_tags.validate_allowance_category")
 
 # Income tax: the slab computes it, the slip can override it by hand. Runs after
 # the controller's validate, so the computed figure is already on the row.

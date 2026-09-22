@@ -31,6 +31,11 @@ from frappe.utils import getdate
 #: can change without touching another's (client, 2026-09-22). A company not
 #: listed here gets the group default, a nine to five.
 SHIFTS_BY_COMPANY = {
+	"NGI": (
+		("6 AM - 2 PM", "06:00:00", "14:00:00"),
+		("9 AM - 6 PM", "09:00:00", "18:00:00"),
+		("12 PM - 8 PM", "12:00:00", "20:00:00"),
+	),
 	"NGN": (("7 AM - 3 PM", "07:00:00", "15:00:00"), ("9 AM - 5 PM", "09:00:00", "17:00:00")),
 }
 DEFAULT_SHIFTS = (("9 AM - 5 PM", "09:00:00", "17:00:00"),)
