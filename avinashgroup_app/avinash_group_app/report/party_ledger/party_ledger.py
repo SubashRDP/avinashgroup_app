@@ -11,6 +11,12 @@ from markupsafe import Markup
 import json
 
 
+# Prefix of the GL Entry remark written for a cheque bounce reversal — see
+# avinashgroup_app/custom_code/payment_entry/cheque_bounce.py, which posts
+# "Cheque Bounce - <Payment Entry name>" on the reversed entries.
+BOUNCE_REMARK_PREFIX = "Cheque Bounce"
+
+
 def _fmt_inr(v):
 	"""Format number in Indian style (e.g. 1,50,000.00). Returns empty string for zero/None."""
 	if v is None or v == '':
@@ -432,6 +438,7 @@ def get_data(filters):
 		"from_date":  from_date,
 		"to_date":    to_date,
 		"party_type": party_type,
+		"bounce_remark_prefix": f"{BOUNCE_REMARK_PREFIX}%",
 	}
 
 	if parties:
@@ -532,11 +539,21 @@ def get_data(filters):
 			gle.against,
 			gle.debit,
 			gle.credit,
+			-- Cheque bounce reversals reuse the original Payment Entry's voucher_no; the
+			-- remark written by custom_code/payment_entry/cheque_bounce.py is the only
+			-- thing that tells them apart. Flag them so they stay a separate ledger row.
+			CASE
+				WHEN gle.voucher_type = 'Payment Entry'
+					AND gle.remarks LIKE %(bounce_remark_prefix)s THEN 1
+				ELSE 0
+			END AS is_bounce,
 			CASE
 				WHEN gle.voucher_type = 'Sales Invoice'    AND si.is_return = 1 THEN 'Sales Return'
 				WHEN gle.voucher_type = 'Sales Invoice'                         THEN 'Sales Invoice'
 				WHEN gle.voucher_type = 'Purchase Invoice' AND pi.is_return = 1 THEN 'Purchase Return'
 				WHEN gle.voucher_type = 'Purchase Invoice'                      THEN 'Purchase Invoice'
+				WHEN gle.voucher_type = 'Payment Entry'
+					AND gle.remarks LIKE %(bounce_remark_prefix)s THEN 'Cheque Bounce'
 				WHEN gle.voucher_type = 'Payment Entry'
 					THEN COALESCE(NULLIF(gle.against, ''), 'Payment')
 				ELSE gle.voucher_type
@@ -637,6 +654,7 @@ def _build_section_rows(entries, opening_debit, opening_credit, detail_data,
 			"party":        entry.get("party") or "",
 			"description":  entry.get("description") or "",
 			"remarks":      "",
+			"is_bounce":    entry.get("is_bounce") or 0,
 			"against":      entry.get("against") or "",
 			# Show blank cell instead of 0 for one side of a transaction
 			"debit":        round(debit,  2) if debit  else None,
@@ -646,8 +664,10 @@ def _build_section_rows(entries, opening_debit, opening_credit, detail_data,
 			"is_summary":   0,
 		})
 
-		# Inject indented sub-rows + separator for detailed_mapping mode
-		if detailed_mapping:
+		# Inject indented sub-rows + separator for detailed_mapping mode.
+		# A bounce reversal is skipped: its sub-rows would be the original receipt's
+		# invoice allocations all over again, which reads as if they were paid twice.
+		if detailed_mapping and not entry.get("is_bounce"):
 			sub_rows = _build_detail_rows(
 				entry.get("voucher_type"),
 				entry.get("voucher_no"),
@@ -1038,7 +1058,10 @@ def _merge_entries(entries):
 			# From Customer posting, the Debtors postings, and allocations that landed
 			# on a later date — so the row shows the single net amount, not the gross
 			# of both party accounts. Row keeps the earliest (first-seen) date.
-			key = (e.get("party"), vt, e.get("voucher_no"))
+			# is_bounce keeps a cheque bounce reversal out of that bucket: it reuses the
+			# original voucher_no, so without it the two would net to zero and the
+			# receipt and its bounce would both vanish from the ledger.
+			key = (e.get("party"), vt, e.get("voucher_no"), e.get("is_bounce") or 0)
 		else:
 			key = (e.get("party"), e.get("date"), vt, e.get("voucher_no"))
 		if key not in grouped:
@@ -1048,6 +1071,7 @@ def _merge_entries(entries):
 				"voucher_type": vt,
 				"voucher_no": e.get("voucher_no"),
 				"account": e.get("account"),
+				"is_bounce": e.get("is_bounce") or 0,
 				"debit": 0.0,
 				"credit": 0.0,
 				"_descriptions": [],
@@ -1094,6 +1118,7 @@ def _merge_entries(entries):
 			"date": g.get("date"),
 			"voucher_type": vt,
 			"voucher_no": g.get("voucher_no"),
+			"is_bounce": g.get("is_bounce") or 0,
 			"description": description,
 			"remarks": "",
 			"debit": debit,
@@ -1110,7 +1135,10 @@ def _merge_entries_detailed(entries):
 	grouped = {}
 	order = []
 	for e in entries:
-		key = (e.get("party"), e.get("date"), e.get("voucher_type"), e.get("voucher_no"), (e.get("against") or "").strip())
+		# is_bounce is part of the key so a cheque bounced on the same day it was
+		# received stays its own row instead of netting against the receipt.
+		key = (e.get("party"), e.get("date"), e.get("voucher_type"), e.get("voucher_no"),
+			   (e.get("against") or "").strip(), e.get("is_bounce") or 0)
 		if key not in grouped:
 			grouped[key] = {
 				"party": e.get("party"),
@@ -1118,6 +1146,7 @@ def _merge_entries_detailed(entries):
 				"voucher_type": e.get("voucher_type"),
 				"voucher_no": e.get("voucher_no"),
 				"against": (e.get("against") or "").strip(),
+				"is_bounce": e.get("is_bounce") or 0,
 				"debit": 0.0,
 				"credit": 0.0,
 				"description": (e.get("description") or "").strip(),
@@ -1137,6 +1166,7 @@ def _merge_entries_detailed(entries):
 			"voucher_type": g.get("voucher_type"),
 			"voucher_no": g.get("voucher_no"),
 			"against": g.get("against"),
+			"is_bounce": g.get("is_bounce") or 0,
 			"description": g.get("description"),
 			"remarks": "",
 			"debit": round(g.get("debit") or 0, 2),
@@ -1219,6 +1249,20 @@ def _apply_party_names(data, party_type):
 			row["party_name"] = name_map.get(pid) or pid
 
 
+def _ad_to_bs(gregorian_date):
+	"""Format a Gregorian date as a Bikram Sambat date string, e.g. '2083-06-07'."""
+	if not gregorian_date:
+		return ""
+	try:
+		import nepali_datetime
+		from frappe.utils import getdate
+
+		bs = nepali_datetime.date.from_datetime_date(getdate(gregorian_date))
+		return "{0:04d}-{1:02d}-{2:02d}".format(bs.year, bs.month, bs.day)
+	except Exception:
+		return ""
+
+
 def _apply_bs_miti(rows):
 	"""Populate BS (miti) date based on source voucher doctype/custom fields."""
 	if not rows:
@@ -1267,6 +1311,13 @@ def _apply_bs_miti(rows):
 		vt = r.get("voucher_type")
 		vn = r.get("voucher_no")
 		if not vt or not vn:
+			continue
+
+		# A cheque bounce reversal shares the receipt's voucher_no, so custom_posting_miti
+		# holds the *receipt's* BS date. Convert the reversal's own posting date instead,
+		# otherwise the row shows the bounce date in AD and the receipt date in BS.
+		if r.get("is_bounce"):
+			r["miti"] = _ad_to_bs(r.get("date"))
 			continue
 
 		if vt == "Sales Invoice":
@@ -1323,6 +1374,12 @@ def _apply_voucher_remarks(rows):
 		vt = r.get("voucher_type")
 		vn = r.get("voucher_no")
 		if not vt or not vn:
+			continue
+
+		# The reversal shares the receipt's voucher_no, so Payment Entry.remarks would
+		# label it with the original "Amount NPR ... received from ..." narration.
+		if r.get("is_bounce"):
+			r["remarks"] = _("Cheque bounced against {0}").format(vn)
 			continue
 
 		if vt == "Sales Invoice":

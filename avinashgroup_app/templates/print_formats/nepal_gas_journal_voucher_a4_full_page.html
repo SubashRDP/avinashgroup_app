@@ -678,6 +678,9 @@ padding:0px 30px;
 {% set PAGE_PX = 1062 %}
 {% set HEAD_PX = 117 %}
 {% set LINE_PX = 13 %}
+{#- One line of a Party Journal block. Its lines are inner-table <tr>s, which
+   `.main-table tr` pins to 20px, so they cost far more than a LINE_PX text line. -#}
+{% set BLOCK_PX = 26 %}
 {% set PAD_PX = 11 %}
 {% set FOOT_PX = 100 %}
 {% set TARGET_PX = 1010 %}
@@ -699,10 +702,17 @@ padding:0px 30px;
 {% if is_party_journal %}
   {#- Party Journal rows are a 4-line key-value block (Code / Name / gap / Amount /
      Document Class) rather than a single line, and end with In Words + Remarks. -#}
+  {#- A block's lines are <tr>s of an inner table, and `.main-table tr` forces every
+     one of them to 20px (only .voucher-meta's inner table is exempted). So a line
+     here costs BLOCK_PX, not LINE_PX — billing it at LINE_PX made the block barely
+     half its printed height, and since the spacer is computed as the leftover, the
+     shortfall became extra spacer that pushed the signatures off the page.
+     BLOCK_PX is measured off a rendered voucher (a 5-line block spans 36.3mm) and
+     rounded up so it also covers the debit/credit separator row. -#}
   {% for row in doc.accounts %}
     {#- A row carrying a Narration prints one more line inside the same block. -#}
     {% set nlines = ([1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max) if (row.user_remark and row.user_remark|trim) else 0 %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * (5 + nlines)) %}
+    {% set _add = G.items.append(PAD_PX + BLOCK_PX * (5 + nlines)) %}
   {% endfor %}
   {% set G.data_count = G.items|length %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
