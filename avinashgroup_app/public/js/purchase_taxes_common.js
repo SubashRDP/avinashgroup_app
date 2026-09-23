@@ -661,7 +661,7 @@ function calculate_item_vat_amount(frm, cdt, cdn) {
 
     const vat_apply_on = row.custom_vat_apply_on || 'VAT 13%';
     // Always compute fresh — never trust row.custom_total (may be stale from last save)
-    const custom_total = flt(row.base_net_amount) + flt(row.custom_excise_value);
+    const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 2);
 
     if (vat_apply_on === 'VAT 13%') {
         // Paisa-round per line, mirroring the server
