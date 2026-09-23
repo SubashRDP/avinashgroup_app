@@ -1,0 +1,56 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("My Announcements") }}{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+.ag-ann-list { display: flex; flex-direction: column; gap: 10px; padding-block: 8px 32px; }
+.ag-ann-row {
+	display: flex; gap: 14px; align-items: flex-start;
+	border: 1px solid var(--border-color, #e2e6ee); border-radius: 10px;
+	padding: 12px 14px; background: #fff; text-decoration: none; color: inherit;
+}
+.ag-ann-row:hover { border-color: #b9c2d0; background: #fbfcfe; text-decoration: none; color: inherit; }
+/* Fixed box so rows line up whether or not an announcement carries an image. */
+.ag-ann-thumb { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 6px; object-fit: cover; background: #f1f3f7; }
+.ag-ann-main { min-width: 0; }
+.ag-ann-title { font-size: 1rem; font-weight: 600; margin: 0 0 2px; }
+.ag-ann-date { font-size: .78rem; color: #6b7280; margin-bottom: 6px; }
+.ag-ann-snippet { font-size: .88rem; color: #4b5563; overflow-wrap: anywhere; }
+.ag-ann-empty { padding: 24px 0; color: #6b7280; }
+
+/* Unread: a dot in the left gutter plus a heavier title, the way a mail list
+   marks one. The gutter is reserved on every row so titles stay aligned whether
+   or not the row is unread. */
+.ag-ann-dot { width: 8px; flex: 0 0 8px; align-self: center; }
+.ag-ann-row.is-unread { background: #f8fbff; border-color: #cfe0f5; }
+.ag-ann-row.is-unread .ag-ann-dot {
+	height: 8px; border-radius: 50%; background: #2563eb;
+}
+.ag-ann-row.is-unread .ag-ann-title { font-weight: 700; }
+.ag-ann-row.is-unread .ag-ann-snippet { color: #374151; }
+.ag-ann-unread-count { font-size: .85rem; color: #6b7280; font-weight: 400; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<h3>{{ _("My Announcements") }}
+	{% if unread_count %}<span class="ag-ann-unread-count">({{ unread_count }} {{ _("unread") }})</span>{% endif %}
+</h3>
+<div class="ag-ann-list">
+	{% for a in announcements %}
+	<a class="ag-ann-row {{ 'is-unread' if a.unread else '' }}" href="{{ a.route }}">
+		<span class="ag-ann-dot"></span>
+		{% if a.image %}<img class="ag-ann-thumb" src="{{ a.image | e }}" alt="">{% endif %}
+		<div class="ag-ann-main">
+			<p class="ag-ann-title">{{ a.title | e }}</p>
+			<div class="ag-ann-date">{{ frappe.format(a.sent_on, {"fieldtype": "Datetime"}) }}</div>
+			{% if a.snippet %}<div class="ag-ann-snippet">{{ a.snippet | e }}</div>{% endif %}
+		</div>
+	</a>
+	{% else %}
+	<div class="ag-ann-empty">{{ _("No announcements yet.") }}</div>
+	{% endfor %}
+</div>
+{% endblock %}

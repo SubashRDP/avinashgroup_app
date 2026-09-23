@@ -53,6 +53,20 @@ def _is_customer_portal_user(user):
 	)
 
 
+def require_customer_portal_user():
+	"""Gate a portal web page to the logins the announcements are sent to.
+
+	Raises frappe.PermissionError for Guest and for any login that is not in some
+	Customer's Portal Users table. Both /portal_announcement_history pages call
+	this before reading anything, so the two can never drift apart on who may look.
+	"""
+	user = frappe.session.user
+	if user == "Guest":
+		frappe.throw(_("You need to be logged in to access this page"), frappe.PermissionError)
+	if not _is_customer_portal_user(user):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+
 def history_query_conditions(user=None):
 	"""List filter for Portal Announcement History: all rows for a customer portal
 	user, none for anyone else."""

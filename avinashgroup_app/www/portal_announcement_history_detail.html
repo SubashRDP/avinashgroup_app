@@ -1,0 +1,33 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ announcement.title or announcement.name }}{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+.ag-ann-back { display: inline-block; margin-bottom: 14px; font-size: .88rem; }
+.ag-ann-detail { border: 1px solid var(--border-color, #e2e6ee); border-radius: 10px; overflow: hidden; background: #fff; }
+.ag-ann-detail-img { display: block; width: 100%; height: auto; }
+.ag-ann-detail-body { padding: 18px 20px 24px; }
+.ag-ann-detail-title { font-size: 1.25rem; font-weight: 600; margin: 0 0 4px; }
+.ag-ann-detail-date { font-size: .82rem; color: #6b7280; margin-bottom: 14px; }
+/* Announcement bodies are authored elsewhere and can carry wide tables or long
+   unbroken strings — keep them inside the card instead of scrolling the page. */
+.ag-ann-detail-msg { overflow-wrap: anywhere; }
+.ag-ann-detail-msg img { max-width: 100%; height: auto; }
+.ag-ann-detail-msg table { max-width: 100%; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<a class="ag-ann-back" href="/portal_announcement_history">&larr; {{ _("All announcements") }}</a>
+
+<article class="ag-ann-detail">
+	{% if image %}<img class="ag-ann-detail-img" src="{{ image | e }}" alt="">{% endif %}
+	<div class="ag-ann-detail-body">
+		<h1 class="ag-ann-detail-title">{{ announcement.title | e }}</h1>
+		<div class="ag-ann-detail-date">{{ frappe.format(announcement.sent_on, {"fieldtype": "Datetime"}) }}</div>
+		{% if body_html %}<div class="ag-ann-detail-msg">{{ body_html }}</div>{% endif %}
+	</div>
+</article>
+{% endblock %}
