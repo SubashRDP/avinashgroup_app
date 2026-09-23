@@ -377,7 +377,7 @@ dependency order and confirm each step before moving on.</p>
 <tr><th>#</th><th>Step</th><th>Depends on</th><th>Done when</th><th>Article</th></tr>
 <tr><td class="num">1</td><td>Fiscal Year, Payroll Period, Leave Period</td><td>—</td><td>All three exist with identical dates</td><td><a data-go="setup-fiscal-year">Periods</a></td></tr>
 <tr><td class="num">2</td><td>Holiday Lists (common + women's)</td><td>1</td><td>Each has ~52 Saturdays + festivals</td><td><a data-go="setup-holidays">Holidays</a></td></tr>
-<tr><td class="num">3</td><td>Shift Types</td><td>2</td><td>Each shift has a holiday list and auto-attendance on</td><td><a data-go="setup-shifts">Shifts</a></td></tr>
+<tr><td class="num">3</td><td>Shift Types</td><td>2</td><td>Auto-attendance on, <b>Holiday List left blank</b></td><td><a data-go="setup-shifts">Shifts</a></td></tr>
 <tr><td class="num">4</td><td>Cost Centres and company defaults</td><td>—</td><td>O/O, S/D, F/P exist under each company</td><td><a data-go="setup-cost-centres">Cost centres</a></td></tr>
 <tr><td class="num">5</td><td>Employee Category, Allowance Category</td><td>—</td><td>2 categories; 1 allowance category per tea rate per company</td><td><a data-go="setup-categories">Categories</a></td></tr>
 <tr><td class="num">6</td><td>Leave Types, Policies, Assignments</td><td>1</td><td>Every active employee has an allocation</td><td><a data-go="setup-leave">Leave</a></td></tr>
@@ -514,6 +514,16 @@ list is attached to the women's Employee records; everyone else gets the common 
 <li>On each woman's <span class="screen">Employee</span> record, set <span class="field">Holiday List</span> to the women's list.</li>
 </ol>
 
+<h2>Which list applies to a person</h2>
+<p>Three places can name a holiday list, and the first one that has a value wins:</p>
+<ol class="steps">
+<li>The <b>Shift Type</b> — which is why ours are deliberately blank.</li>
+<li>The <b>Employee</b> — where the women's list is set.</li>
+<li>The <b>Company</b> default — the common list, which is what everyone else falls through to.</li>
+</ol>
+<p>So a man needs no holiday list on his Employee record at all: leaving it blank is how he inherits the
+company's. Only the women's records name a list.</p>
+
 <h3>Result</h3>
 <p>14 holiday lists on the site — two per company. Each common list has 52 Saturdays plus 10 festivals; each
 women's list has one more.</p>
@@ -534,7 +544,7 @@ half day, and whether attendance is written automatically at all.</p>
 
 <h3>Before you begin</h3>
 <ul class="plain">
-<li>The company's holiday lists must exist (step 2) — a shift points at one.</li>
+<li>The company's holiday lists must exist (step 2). A shift does <b>not</b> point at one — see the warning below.</li>
 <li>Know each company's actual hours. They differ.</li>
 </ul>
 
@@ -565,7 +575,8 @@ records, so that one company's hours can change without touching the other's.</p
 <tr><th>Field</th><th>Value</th><th>What it does</th><th>If it is wrong</th></tr>
 <tr><td><span class="field">Shift Type</span></td><td>NGI 6 AM - 2 PM</td><td>The name, used everywhere.</td><td>Confusion only.</td></tr>
 <tr><td><span class="field">Start Time</span> / <span class="field">End Time</span></td><td>06:00:00 / 14:00:00</td><td>The working day. Late minutes and overtime are measured from these.</td><td>Everyone is late, or nobody is.</td></tr>
-<tr><td><span class="field">Holiday List</span></td><td>The company's list</td><td>Which days produce no attendance.</td><td>Saturdays become absences.</td></tr>
+<tr><td><span class="field">Holiday List</span></td><td><b>Leave blank</b></td><td>Blank means each employee's own list is used. A list set here <b>overrides</b> everybody's.</td><td>Filling it takes Teej away from every woman on that shift.</td></tr>
+<tr><td><span class="field">Mark Auto Attendance on Holidays</span></td><td>Unticked — but see the note</td><td>Ticked, punches on a holiday produce a Present row by themselves.</td><td>Unticked, holiday work must be built with the repair tool or it is lost.</td></tr>
 <tr><td><span class="field">Enable Auto Attendance</span></td><td>Ticked</td><td>Attendance is written from punches nightly.</td><td>No attendance at all; every day must be typed.</td></tr>
 <tr><td><span class="field">Determine Check-in and Check-out</span></td><td>Alternating entries…</td><td>How punches are paired into in/out.</td><td>Hours worked come out nonsense.</td></tr>
 <tr><td><span class="field">Working Hours Calculation</span></td><td>First Check-in and Last Check-out</td><td>The span that counts as worked.</td><td>Lunch breaks eat the day.</td></tr>
@@ -578,6 +589,20 @@ records, so that one company's hours can change without touching the other's.</p
 <tr><td><span class="field">Late Arrival Cutoff Time</span></td><td><b>Empty</b></td><td>An absolute clock time after which arrival is late. Not used here — lateness is measured against the shift start.</td><td>See below.</td></tr>
 </table></div>
 
+<div class="note imp"><b class="t">Important — leave Holiday List blank</b>
+<p>A shift resolves the holiday list as <i>the shift's own list, or failing that the employee's, or failing that
+the company's default</i>. Because the shift's list wins, filling it here silently overrides every woman's
+holiday list — and Teej, which exists on that list alone, disappears for all of them.</p>
+<p>All ten shifts are correctly blank today. Leave them blank: the company default supplies the Saturdays and the
+festivals, and each woman's own list adds Teej on top of them.</p></div>
+
+<div class="note info"><b class="t">Holiday work: a decision to make</b>
+<p>Auto-attendance skips any day that is a holiday, so punches on a Saturday or a festival produce nothing at
+all — 48 Saturday punches at NGI produced no attendance, and for Plant staff that is paid overtime lost.</p>
+<p>Ticking <span class="field">Mark Auto Attendance on Holidays</span> makes those punches produce a Present row
+by themselves. The trade-off: a Present row on a holiday also earns a day of Tea &amp; Conveyance, which the Excel
+sheet never paid. Decide it with the client per company, rather than leaving it to whoever runs the month.</p></div>
+
 <div class="note imp"><b class="t">Important — the cutoff-time trap</b>
 <p>During testing this field filled itself with a clock time, and because that time sat after the shift start,
 <b>2,423 of 2,808 days turned into Half Day</b>. The rule now ignores any cutoff at or before the shift start,
@@ -585,7 +610,7 @@ and the field is cleared when a shift is created — but after you save a shift,
 half days across a whole company is this field, every time.</p></div>
 
 <h3>Result</h3>
-<p>Seven shift types on the site. Confirm each has a holiday list and auto-attendance ticked. Then assign people
+<p>Ten shift types on the site. Confirm each has auto-attendance ticked and Holiday List blank. Then assign people
 to them — see <a data-go="ops-shift-change">Change someone's shift</a>.</p>
 <div class="seealso"><b>See also</b><a href="#ops-shift-change" data-go="ops-shift-change">Change someone&#x27;s shift</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance</a><a href="#setup-holidays" data-go="setup-holidays">Build the holiday lists</a></div>
 <div class="pager"><a href="#setup-holidays" data-go="setup-holidays">&larr; Build the holiday lists</a><a href="#setup-cost-centres" data-go="setup-cost-centres">Cost centres and company defaults &rarr;</a></div>
@@ -2116,8 +2141,8 @@ a BS month with complete attendance. Have the company's Excel salary sheet besid
 <div class="case"><h4>A1 · Fiscal year exists</h4><p>Open Fiscal Year 83/84. <b>Expect:</b> 2026-07-17 to 2027-07-16, seven company rows.</p></div>
 <div class="case"><h4>A2 · Periods agree</h4><p>Compare the Payroll Period and Leave Period with the fiscal year. <b>Expect:</b> identical dates.</p></div>
 <div class="case"><h4>A3 · Holiday list complete</h4><p>Open NGI 83/84. <b>Expect:</b> ~52 Saturdays plus 10 festivals.</p></div>
-<div class="case"><h4>A4 · Teej is women-only</h4><p>Compare both lists. <b>Expect:</b> 2026-09-14 on the women's list alone.</p></div>
-<div class="case"><h4>A5 · Shifts exist</h4><p>Open Shift Type. <b>Expect:</b> three NGI shifts, two NGN, one each elsewhere; every one has a holiday list and auto-attendance ticked.</p></div>
+<div class="case"><h4>A4 · Teej is women-only</h4><p>Compare both lists. <b>Expect:</b> 2026-09-14 on the women's list alone, and every female employee's Employee record pointing at it.</p></div>
+<div class="case"><h4>A5 · Shifts exist</h4><p>Open Shift Type. <b>Expect:</b> three NGI shifts, two NGN, one each elsewhere; auto-attendance ticked and <b>Holiday List blank</b> on every one.</p></div>
 <div class="case"><h4>A6 · Cutoff is blank</h4><p>Open each shift. <b>Expect:</b> Late Arrival Cutoff Time empty, grace 0, half day if late by 2 hours.</p></div>
 <div class="case"><h4>A7 · Cost centres</h4><p>Filter Cost Center by company. <b>Expect:</b> Office, Sales &amp; Distribution, Filling Plant.</p></div>
 <div class="case"><h4>A8 · Employee categories</h4><p><b>Expect:</b> Plant with overtime ticked; Officer &amp; Admin with compensatory leave ticked.</p></div>
