@@ -34,10 +34,10 @@ app_include_js = [
     # Shared cell renderers for the HR/payroll reports (stacked employee cell).
     "/assets/avinashgroup_app/js/hr_report_common.js?v=1.0",
     "/assets/avinashgroup_app/js/approval_workflow_common.js?v=1.0",
-    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=2.9",
+    "/assets/avinashgroup_app/js/purchase_taxes_common.js?v=3.0",
     # Buying item amounts cut (not rounded) to 2 dp in the form preview; the
     # server half is custom_code/common/purchase_amount_truncation.py.
-    "/assets/avinashgroup_app/js/purchase_amount_truncation.js?v=1.0",
+    "/assets/avinashgroup_app/js/purchase_amount_truncation.js?v=1.1",
     "/assets/avinashgroup_app/js/selling_taxes_common.js?v=1.2",
     "/assets/avinashgroup_app/js/sales_warehouse_common.js?v=1.3",
     # Loaded globally (not doctype_js) so it survives even when another app's

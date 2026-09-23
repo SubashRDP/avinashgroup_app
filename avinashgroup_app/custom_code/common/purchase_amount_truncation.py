@@ -13,10 +13,15 @@ the one place ERPNext derives them (calculate_taxes_and_totals ->
 calculate_item_values). Totals, VAT (purchase_taxes_handler) and the GL all
 follow from those fields, so nothing downstream needs changing.
 
+Also cut, same rule:
+- A HEADER discount's per-row share (apply_discount_amount below). The rows
+  still foot exactly to the discounted net total, so the last row carries
+  the paisa the cuts leave over.
+- Line VAT at 13% (purchase_taxes_handler.calculate_item_vat_amounts).
+
 Deliberately NOT touched:
 - Selling. Sales Invoice keeps ERPNext's normal rounding.
-- net_amount after a HEADER discount (apply_discount_amount spreads the
-  discount across rows with ERPNext's own rounding; it runs after this).
+- Excise and TDS percentage lines — still rounded to paisa.
 - Tax rows and grand total — they are sums of already-cut 2 dp amounts.
 
 The browser preview is kept in step by public/js/purchase_amount_truncation.js;
@@ -65,6 +70,54 @@ class TruncatingTaxesAndTotals(calculate_taxes_and_totals):
 			base_amount = truncate(amount * conversion_rate, item.precision("base_amount"))
 			item.amount = item.net_amount = amount
 			item.base_amount = item.base_net_amount = base_amount
+
+	def apply_discount_amount(self):
+		"""Spread a header discount with every row's net_amount CUT, not rounded.
+
+		ERPNext rounds each row's share and pushes the leftover paisa onto rows so
+		they foot exactly to (total - discount). Cutting every row leaves the sum
+		a few paisa short, so the LAST row takes that remainder — the rows must
+		still foot to the net total ERPNext settled on. Then totals and taxes are
+		recomputed from the re-spread rows."""
+		spread = self._discount_spread_inputs()
+		super().apply_discount_amount()
+		if not spread or not self.discount_amount_applied:
+			return
+
+		discount, total_for_discount, rows = spread
+		target = sum(flt(item.net_amount) for item, _ in rows)
+		cut = [
+			truncate(before - discount * before / total_for_discount, item.precision("net_amount"))
+			for item, before in rows
+		]
+		last_item = rows[-1][0]
+		cut[-1] = flt(target - sum(cut[:-1]), last_item.precision("net_amount"))
+		if all(flt(item.net_amount) == value for (item, _), value in zip(rows, cut)):
+			return
+
+		conversion_rate = flt(self.doc.conversion_rate) or 1
+		for (item, before), net_amount in zip(rows, cut):
+			item.net_amount = net_amount
+			item.distributed_discount_amount = flt(
+				before - net_amount, item.precision("distributed_discount_amount")
+			)
+			item.net_rate = flt(net_amount / item.qty, item.precision("net_rate")) if item.qty else 0
+			item.base_net_amount = truncate(net_amount * conversion_rate, item.precision("base_net_amount"))
+			self._set_in_company_currency(item, ["net_rate"])
+		self._calculate()
+
+	def _discount_spread_inputs(self):
+		"""(discount, total_for_discount, [(item, net_amount before discount)]) when
+		ERPNext is about to spread a header discount across rows, else None."""
+		doc = self.doc
+		if not flt(doc.discount_amount) or not self._items:
+			return None
+		if doc.apply_discount_on == "Grand Total" and doc.get("is_cash_or_non_trade_discount"):
+			return None
+		total_for_discount = self.get_total_for_discount_amount()
+		if not total_for_discount:
+			return None
+		return flt(doc.discount_amount), total_for_discount, [(i, flt(i.net_amount)) for i in self._items]
 
 
 class TruncateItemAmounts:
