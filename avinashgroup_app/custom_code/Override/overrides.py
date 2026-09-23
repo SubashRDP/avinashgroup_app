@@ -9,6 +9,8 @@ from erpnext.buying.doctype.supplier_quotation.supplier_quotation import Supplie
 from erpnext.stock.doctype.material_request.material_request import MaterialRequest as ERPNextMaterialRequest
 from erpnext.buying.doctype.purchase_order.purchase_order import PurchaseOrder as ERPNextPurchaseOrder
 
+from avinashgroup_app.custom_code.common.purchase_amount_truncation import TruncateItemAmounts
+
 
 def _lenient_warehouse_check(doc, validate):
 	"""Drafts may be saved without a warehouse (it gets filled from the source
@@ -135,7 +137,7 @@ class RequestforQuotation(ERPNextRequestforQuotation):
 				raise
 
 
-class SupplierQuotation(ERPNextSupplierQuotation):
+class SupplierQuotation(TruncateItemAmounts, ERPNextSupplierQuotation):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
@@ -152,7 +154,7 @@ class SupplierQuotation(ERPNextSupplierQuotation):
 				raise
 
 
-class PurchaseOrder(ERPNextPurchaseOrder):
+class PurchaseOrder(TruncateItemAmounts, ERPNextPurchaseOrder):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
@@ -178,7 +180,7 @@ class PurchaseOrder(ERPNextPurchaseOrder):
 				raise
 
 
-class PurchaseReceipt(ERPNextPurchaseReceipt):
+class PurchaseReceipt(TruncateItemAmounts, ERPNextPurchaseReceipt):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
@@ -189,7 +191,7 @@ class PurchaseReceipt(ERPNextPurchaseReceipt):
 		_lenient_warehouse_check(self, super().validate_warehouse)
 
 
-class PurchaseInvoice(ERPNextPurchaseInvoice):
+class PurchaseInvoice(TruncateItemAmounts, ERPNextPurchaseInvoice):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
