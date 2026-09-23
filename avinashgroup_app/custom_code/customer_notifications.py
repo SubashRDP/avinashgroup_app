@@ -36,11 +36,11 @@ NOTICES = {
 }
 
 
-# Whoever sells for a company is told about that company's documents only. A
-# role cannot express this — roles have no company — so the company a user is
-# allowed to work in is read from User Permission, which is where this site
-# already records it.
-SELLING_ROLES = ("Sales User", "Sales Manager", "Accounts User", "Accounts Manager")
+# The desk side is told through the company's Sales Persons, and only about
+# that company's documents. A role cannot express this — roles have no
+# company — so the company a user is allowed to work in is read from User
+# Permission, which is where this site already records it.
+SELLING_ROLES = ("Sales Person",)
 
 STAFF_NOTICES = {
 	"Sales Order": ("New order", "{customer} placed order {name} for {total}, wanted {date}."),
@@ -50,7 +50,7 @@ STAFF_NOTICES = {
 
 
 def _company_staff(company):
-	"""Enabled users holding a selling role who are permitted to this company.
+	"""Enabled users holding the Sales Person role who are permitted to this company.
 
 	A user with no Company permission at all is unrestricted in Frappe and would
 	be notified for every company — which is the behaviour being fixed — so only
