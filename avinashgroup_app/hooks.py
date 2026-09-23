@@ -19,6 +19,9 @@ web_include_js = [
     # login popup for customer portal users — see doctype "Portal Announcement".
     # Same file is in app_include_js so it also fires on the desk.
     "/assets/avinashgroup_app/js/portal_announcement.js?v=14",
+    # "(n) unread" badge on the portal sidebar's Announcements link. Website only —
+    # the link lives in Portal Settings, so there is nothing to decorate on the desk.
+    "/assets/avinashgroup_app/js/portal_announcement_badge.js?v=1",
 ]
 
 app_include_js = [
@@ -360,6 +363,16 @@ has_permission["Portal Announcement History"] = f"{_PAH}.history_has_permission"
 # ...and keeps it out of the desk search bar for staff who hold the Customer role
 # without being portal users.
 boot_session = f"{_PAH}.hide_history_from_non_portal_users"
+
+# Detail page of the /portal_announcement_history portal list. A Portal
+# Announcement is named after its title ("Happy Teej"), so the name carries spaces
+# and only a <path:> rule delivers it intact; the page unquotes it.
+website_route_rules = [
+    {
+        "from_route": "/portal_announcement_history/<path:name>",
+        "to_route": "portal_announcement_history_detail",
+    },
+]
 
 # Numbering Configuration engine: rule-driven numbering for EVERY doctype.
 # Wildcard handlers run after the doctype-specific ones, preserving the old
