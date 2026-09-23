@@ -3,7 +3,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-from avinashgroup_app.custom_code.common.purchase_amount_truncation import truncate
+from avinashgroup_app.custom_code.common.purchase_paisa_truncation import truncate
 
 """
 Common TDS, Excise, and VAT calculation handler for Purchase documents.
@@ -117,7 +117,8 @@ def calculate_item_excise_values(doc):
         excise_apply_on = getattr(item, 'custom_excise_apply_on', None)
         if excise_apply_on == 'Percentage (%)':
             rate = flt(getattr(item, 'custom_excise_duty_rate', 0)) or 0
-            item.custom_excise_value = flt(flt(item.base_net_amount) * rate / 100, 2)
+            # Cut, not rounded -- see purchase_paisa_truncation.
+            item.custom_excise_value = truncate(flt(item.base_net_amount) * rate / 100, 2)
         elif excise_apply_on == 'Amount':
             # rate belongs to Percentage mode only (mirrors TDS Amount mode)
             item.custom_excise_duty_rate = 0
@@ -159,8 +160,8 @@ def calculate_item_vat_amounts(doc):
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
             custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-            # CUT each line's VAT to paisa (buying amounts are cut, not rounded --
-            # see purchase_amount_truncation). The header VAT and the taxes-table
+            # CUT each line's VAT to paisa (taxes on a buying line are cut, not rounded --
+            # see purchase_paisa_truncation). The header VAT and the taxes-table
             # row are built by summing these lines, so it must happen HERE, once
             # per line. At precision 5 the header summed the unrounded
             # values while ERPNext's round_floats_in stored each row at 2 dp, so
@@ -237,11 +238,12 @@ def calculate_item_tds_amounts(doc):
 
             if custom_tds_rate > 0:
                 custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-                # Paisa per line, same rule as VAT: custom_total_tds_amount is
-                # the sum of these, and the deduction posted to the GL must equal
-                # what the item rows show. Trade-off: the total withheld can land
-                # a paisa under custom_total x rate.
-                item.custom_tds_amount = flt((custom_total * custom_tds_rate) / 100, 2)
+                # Paisa per line, same rule as VAT (CUT, not rounded -- see
+                # purchase_paisa_truncation): custom_total_tds_amount is the sum
+                # of these, and the deduction posted to the GL must equal what the
+                # item rows show. Trade-off: the total withheld can land a paisa
+                # under custom_total x rate.
+                item.custom_tds_amount = truncate((custom_total * custom_tds_rate) / 100, 2)
             else:
                 item.custom_tds_amount = 0
 
