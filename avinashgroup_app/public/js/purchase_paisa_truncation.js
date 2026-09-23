@@ -1,15 +1,18 @@
 /**
- * Buying-side item amounts are CUT to 2 decimals, never rounded — browser half.
+ * Buying-side money derived FROM the line amount is CUT to 2 decimals — browser half.
  *
- * The server does the real work (custom_code/common/purchase_amount_truncation.py,
- * see its docstring for the rule and its boundary). ERPNext's form recomputes
- * item amounts client-side with a normal round, so without this the form
- * previews 120.15700 x 1 as 120.16 and the saved doc then shows 120.15.
+ * The rule and its boundary live in the server module's docstring
+ * (custom_code/common/purchase_paisa_truncation.py). In short: the line amount
+ * rounds like Sales Invoice; VAT / TDS / Excise and header-discount shares are
+ * cut, never rounded.
  *
- * erpnext.taxes_and_totals is the base class of every transaction form
- * controller, so both wrappers (item amounts, header-discount spread) are
- * scoped to the four buying doctypes and are a no-op everywhere else (Sales
- * Invoice keeps the normal round).
+ * This file provides:
+ * - avinashgroup.purchase.truncate, used by purchase_taxes_common.js for the
+ *   VAT and excise previews;
+ * - a wrapper on erpnext.taxes_and_totals.apply_discount_amount so the form
+ *   previews the same cut discount shares the server saves. The class is the
+ *   base of every transaction form controller, so the wrapper is scoped to the
+ *   four buying doctypes and is a no-op everywhere else.
  */
 (function () {
     const BUYING_DOCTYPES = new Set([
@@ -26,7 +29,6 @@
         return flt(Math.trunc(flt(cleaned * factor, FLOAT_NOISE_PRECISION - precision)) / factor, precision);
     }
 
-    // Shared with purchase_taxes_common.js (line VAT preview).
     frappe.provide("avinashgroup.purchase");
     avinashgroup.purchase.truncate = truncate;
 
@@ -70,26 +72,6 @@
     function patch() {
         const proto = erpnext.taxes_and_totals && erpnext.taxes_and_totals.prototype;
         if (!proto || proto._purchase_truncation_patched) return;
-        const original = proto.calculate_item_values;
-
-        proto.calculate_item_values = function () {
-            original.apply(this, arguments);
-            const doc = this.frm && this.frm.doc;
-            if (!doc || !BUYING_DOCTYPES.has(doc.doctype) || this.discount_amount_applied) return;
-
-            const conversion_rate = flt(doc.conversion_rate) || 1;
-            for (const item of doc.items || []) {
-                let qty = flt(item.qty);
-                // Mirrors ERPNext's zero-qty credit/debit note cases.
-                if (!qty && doc.is_return && doc.doctype !== "Purchase Receipt") qty = -1;
-                else if (!qty && doc.is_debit_note) qty = 1;
-
-                const amount = truncate(flt(item.rate) * qty, precision("amount", item));
-                const base_amount = truncate(amount * conversion_rate, precision("base_amount", item));
-                item.amount = item.net_amount = amount;
-                item.base_amount = item.base_net_amount = base_amount;
-            }
-        };
 
         const original_discount = proto.apply_discount_amount;
         proto.apply_discount_amount = function () {

@@ -434,7 +434,7 @@ function calculate_item_excise_value(frm, cdt, cdn) {
     if (!row || row.custom_excise_apply_on !== 'Percentage (%)') return;
 
     const base = flt(row.base_net_amount) || flt(row.net_amount) || flt(row.amount);
-    const excise = flt(base * flt(row.custom_excise_duty_rate) / 100, 2);
+    const excise = avinashgroup.purchase.truncate(base * flt(row.custom_excise_duty_rate) / 100, 2);
     frappe.model.set_value(cdt, cdn, 'custom_excise_value', excise);
 }
 
@@ -634,7 +634,7 @@ function calculate_item_custom_total(frm, cdt, cdn) {
     // from base_net_amount on save either way.
     if (row.custom_excise_apply_on === 'Percentage (%)') {
         const base = flt(row.base_net_amount) || flt(row.net_amount) || flt(row.amount);
-        const excise = flt(base * flt(row.custom_excise_duty_rate) / 100, 2);
+        const excise = avinashgroup.purchase.truncate(base * flt(row.custom_excise_duty_rate) / 100, 2);
         if (flt(row.custom_excise_value) !== excise) {
             frappe.model.set_value(cdt, cdn, 'custom_excise_value', excise);
             return; // the custom_excise_value handler re-enters here with the fresh value
@@ -664,7 +664,7 @@ function calculate_item_vat_amount(frm, cdt, cdn) {
     const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 2);
 
     if (vat_apply_on === 'VAT 13%') {
-        // Paisa-CUT per line (buying amounts are cut, not rounded), mirroring the server
+        // Paisa-CUT per line (taxes on a buying line are cut, not rounded), mirroring the server
         // (purchase_taxes_handler.calculate_item_vat_amounts). The header VAT is
         // the sum of these rows, so the preview and the saved value only agree
         // if both round here.

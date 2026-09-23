@@ -1,34 +1,28 @@
-"""Buying-side item amounts are CUT to 2 decimals, never rounded.
+"""Buying-side money derived FROM the line amount is CUT to 2 decimals, never rounded.
 
-Rates on the buying item tables carry 5 decimals (patch
-purchase_rate_fields_precision_5). Stock ERPNext then prices each line as
-``flt(rate * qty, 2)`` — a normal round — so 120.15700 x 1 lands as 120.16.
-The purchase team's rule is that the paisa beyond the second decimal is
-dropped: 120.15700 x 1 = 120.15. Truncation is toward zero, so a return line
-(-120.157) becomes -120.15, the mirror of the bill it reverses.
+The purchase team's rule, stated 2026-09-23:
+- The line amount (rate x qty) rounds exactly as Sales Invoice does — stock
+  ERPNext, flt(rate * qty, 2). 120.15700 x 1 = 120.16.
+- Everything computed from it after that drops the paisa beyond the second
+  decimal: VAT 13%, TDS %, Excise %, and each row's share of a header
+  discount. 120.16 x 13% = 15.6208 -> 15.62; 88.50 x 13% = 11.505 -> 11.50
+  (not the 11.51 a half-up round gives).
+- Sums need nothing: they add values that are already 2 dp.
 
-What this touches: amount, net_amount and their base_ twins on each item of
-Purchase Invoice / Purchase Order / Purchase Receipt / Supplier Quotation, at
-the one place ERPNext derives them (calculate_taxes_and_totals ->
-calculate_item_values). Totals, VAT (purchase_taxes_handler) and the GL all
-follow from those fields, so nothing downstream needs changing.
+Truncation is toward zero, so a return line (-11.505) becomes -11.50, the
+mirror of the bill it reverses.
 
-Also cut, same rule:
-- A HEADER discount's per-row share (apply_discount_amount below). The rows
-  still foot exactly to the discounted net total, so the last row carries
-  the paisa the cuts leave over.
-- Line VAT at 13% (purchase_taxes_handler.calculate_item_vat_amounts).
+Where each cut lives:
+- VAT / TDS / Excise lines: purchase_taxes_handler (server) and
+  purchase_taxes_common.js (form preview), both via `truncate` below.
+- Header-discount shares: TruncatingTaxesAndTotals.apply_discount_amount here,
+  wired into Purchase Invoice / Order / Receipt and Supplier Quotation through
+  the classes in custom_code/Override/overrides.py; the form preview is
+  public/js/purchase_paisa_truncation.js.
 
 Deliberately NOT touched:
-- Selling. Sales Invoice keeps ERPNext's normal rounding.
-- Excise and TDS percentage lines — still rounded to paisa.
-- Tax rows and grand total — they are sums of already-cut 2 dp amounts.
-
-The browser preview is kept in step by public/js/purchase_amount_truncation.js;
-without it the form shows 120.16 until save and 120.15 after.
-
-Wired in through the Purchase* / SupplierQuotation classes in
-custom_code/Override/overrides.py (override_doctype_class in hooks.py).
+- The line amount itself (see above) and anything on the selling side.
+- ERPNext's own base-currency conversions.
 """
 
 from decimal import ROUND_DOWN, Decimal
@@ -37,40 +31,19 @@ from frappe.utils import flt
 
 from erpnext.controllers.taxes_and_totals import calculate_taxes_and_totals
 
-# rate (5 dp) x qty (up to 9 dp) is exact well inside 9 dp; rounding the float
+# A percentage of a 2 dp amount is exact well inside 9 dp; rounding the float
 # product there first strips binary noise such as 0.29 * 100 = 28.999999999999996,
 # which a bare truncation would wrongly cut to 28.99.
 FLOAT_NOISE_PRECISION = 9
 
 
 def truncate(value, precision):
-	"""Cut `value` to `precision` decimals toward zero (120.157 -> 120.15, -120.157 -> -120.15)."""
+	"""Cut `value` to `precision` decimals toward zero (11.505 -> 11.5, -11.505 -> -11.5)."""
 	cleaned = Decimal(str(flt(value, FLOAT_NOISE_PRECISION)))
 	return float(cleaned.quantize(Decimal(1).scaleb(-int(precision)), rounding=ROUND_DOWN))
 
 
 class TruncatingTaxesAndTotals(calculate_taxes_and_totals):
-	def calculate_item_values(self):
-		super().calculate_item_values()
-		# Same guards as the parent: consolidated docs and the second pass after a
-		# header discount leave item amounts alone.
-		if self.doc.get("is_consolidated") or self.discount_amount_applied:
-			return
-
-		conversion_rate = flt(self.doc.conversion_rate) or 1
-		for item in self.doc.items:
-			qty = flt(item.qty)
-			# Mirrors the parent's zero-qty credit/debit note cases.
-			if not qty and self.doc.get("is_return") and self.doc.doctype != "Purchase Receipt":
-				qty = -1
-			elif not qty and self.doc.get("is_debit_note"):
-				qty = 1
-
-			amount = truncate(flt(item.rate) * qty, item.precision("amount"))
-			base_amount = truncate(amount * conversion_rate, item.precision("base_amount"))
-			item.amount = item.net_amount = amount
-			item.base_amount = item.base_net_amount = base_amount
-
 	def apply_discount_amount(self):
 		"""Spread a header discount with every row's net_amount CUT, not rounded.
 
@@ -120,7 +93,7 @@ class TruncatingTaxesAndTotals(calculate_taxes_and_totals):
 		return flt(doc.discount_amount), total_for_discount, [(i, flt(i.net_amount)) for i in self._items]
 
 
-class TruncateItemAmounts:
+class CutDiscountShares:
 	"""Mixin for the buying controllers in Override/overrides.py.
 
 	Replaces AccountsController.calculate_taxes_and_totals, whose only other
