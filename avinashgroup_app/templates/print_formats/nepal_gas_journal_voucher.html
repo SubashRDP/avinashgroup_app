@@ -316,6 +316,16 @@ padding: 3px !important;
    .main-table tr.jv-narration { height:auto !important; }
    .main-table tr.jv-narration td { padding-top:0 !important; padding-bottom:0 !important; line-height:1.1 !important; }
 
+   /* Party Journal block. Its lines are rows of an inner table, so `.main-table tr`
+      was padding each one out to 20px-plus-cell-padding. On the half sheet a
+      two-party voucher then needed ~147mm of the 139mm band and the signatures were
+      forced onto a second page. The lines size to their own text here; the A4 twin
+      has room to spare and is left at the roomier spacing. */
+   .main-table table.jv-pjblock tr { height:auto !important; }
+   .main-table table.jv-pjblock td {
+       padding-top:1px !important; padding-bottom:1px !important; line-height:1.15 !important;
+   }
+
   
   .bottom-table td
   {
@@ -694,6 +704,11 @@ padding:0px 30px;
 {% set CONTENT_PX = 718 %}
 {% set PAGE_PX = 525 %}
 {% set LINE_PX = (FONT_PX * 1.35)|round(0, 'ceil')|int %}
+{#- One line of a Party Journal block. Its lines are inner-table <tr>s, which
+   `.main-table tr` pins to 20px, so they cost far more than a LINE_PX text line.
+   Measured off a rendered half-page voucher with the .jv-pjblock spacing above:
+   a 5-line block plus the debit/credit separator row spans 24.9mm (94px). -#}
+{% set BLOCK_PX = 17 %}
 {% set PAD_PX = 11 %}
 {#- Fixed parts (rules, paddings, the 20px/15px company headings) plus the lines of
    body text each block holds, so both track the font size. At FONT_PX 12 these come
@@ -722,10 +737,16 @@ padding:0px 30px;
 {% if is_party_journal %}
   {#- Party Journal rows are a 4-line key-value block (Code / Name / gap / Amount /
      Document Class) rather than a single line, and end with In Words + Remarks. -#}
+  {#- A block's lines are <tr>s of an inner table, and `.main-table tr` forces every
+     one of them to 20px (only .voucher-meta's inner table is exempted). So a line
+     here costs BLOCK_PX, not LINE_PX — billing it at LINE_PX made the block barely
+     half its printed height, and since the spacer is computed as the leftover, the
+     shortfall became extra spacer that pushed the signatures off the page.
+     BLOCK_PX is rounded up so it also covers the debit/credit separator row. -#}
   {% for row in doc.accounts %}
     {#- A row carrying a Narration prints one more line inside the same block. -#}
     {% set nlines = ([1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max) if (row.user_remark and row.user_remark|trim) else 0 %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * (5 + nlines)) %}
+    {% set _add = G.items.append(PAD_PX + BLOCK_PX * (5 + nlines)) %}
   {% endfor %}
   {% set G.data_count = G.items|length %}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
@@ -1102,7 +1123,7 @@ padding:0px 30px;
       {% set cr = row.credit_in_account_currency or 0 %}
       {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if R.i in S.breaks %}jv-break{% endif %}">
         <td colspan="{{ ncols }}" style="padding:8px 0 0 0;">
-          <table style="width:100%; border:none; border-collapse:collapse;">
+          <table class="jv-pjblock" style="width:100%; border:none; border-collapse:collapse;">
             <tr>
               <td style="border:none; width:20%; vertical-align:top;">{{ ptype }} Code</td>
               <td style="border:none; vertical-align:top;">: {{ row.party or "" }}</td>
