@@ -67,6 +67,9 @@ app_include_js = [
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=2.0",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
+    # HR dashboard at the top of the stock HR workspace; loads the dashboard
+    # itself (hr_dashboard.js/.css) only when HR is opened.
+    "/assets/avinashgroup_app/js/hr_workspace.js?v=1",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -582,10 +585,6 @@ fixtures = [
             ]
         },
     },
-    # The dashboard block on the HR Home workspace (avinash_group_app/workspace/
-    # hr_home). A Custom HTML Block has no module, so it cannot ship as a
-    # standard file like the workspace does. Scoped by name: only this one block.
-    {"dt": "Custom HTML Block", "filters": {"name": ["in", ["HR Home"]]}},
 ]
 
 # Custom masters/config that must survive ERPNext's Transaction Deletion

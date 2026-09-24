@@ -1,9 +1,11 @@
 // HR Dashboard — one BS month of HR at a glance, with the HR menu.
 //
 // One implementation, mounted in two places:
-//   * the "HR Home" workspace (sidebar, next to HR), inside a Custom HTML Block's
-//     shadow root — menu as a top bar, since the desk sidebar is already there;
+//   * the top of the stock HR workspace (public/js/hr_workspace.js) — menu as a
+//     top bar, since the desk sidebar is already there;
 //   * the full-width page /app/hr-dashboard — menu down the left side.
+// It also works inside a shadow root (theme mirrored, /app links routed here),
+// should it ever be mounted from a Custom HTML Block.
 // Data: avinashgroup_app.hr.hr_dashboard.get_dashboard / get_menu.
 //
 // Usage: avinash_hr_dashboard.mount(element_or_shadow_root, { menu: "top" | "side" })

@@ -416,3 +416,8 @@
 .hrd-away { color: var(--hrd-muted); }
 .hrd-away-now { color: var(--hrd-accent); }
 .sw.st-off { background: var(--hrd-soft); border: 1px solid var(--border-color); }
+
+/* ------------------------------------------------------------ on the stock HR workspace */
+.hr-workspace-dashboard { margin-bottom: 8px; }
+/* The dashboard replaces HRMS's setup checklist on the HR page only. */
+.hr-workspace-has-dashboard .ce-block:has(.onboarding-widget-box) { display: none; }
