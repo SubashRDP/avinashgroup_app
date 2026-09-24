@@ -164,6 +164,10 @@ every delete — a blanket DELETE once cost 357k rows on another site.
 | **Amending a salary structure** | Changes nothing until employees are reassigned — pay flows through the assignment. | — |
 | **One-off earnings** | Need `deduct_full_tax_on_selected_payroll_date`, or the tax spreads over the year (6 instead of 70.69). | — |
 | **HR journals** | Need `custom_p_type` (JV Type) and `custom_document_no` or they will not save. | `payroll/hr_journal.py` |
+| **Tax slab lives on the assignment** | HRMS reads the income tax slab from each Salary Structure Assignment, not from the year. Without a rollover, every 84/85 slip is taxed at 83/84 rates — the old slab passes HRMS's only check. `setup_year` now gives everyone a new assignment from the year's first day on the new slab. | `salary_slip.py` `get_income_tax_slabs`; `payroll/year_rollover.py` |
+| **One holiday list per person, not per year** | Company default and each woman's list point at `… 83/84`, which ends 31 Ashadh. From 1 Shrawan nobody has any holiday. A daily job repoints them on the new year's first day — it cannot be done earlier. | `hr/holiday_year_switch.py` |
+| **Posting date picks the slip's month** | Pay Bhadra on 2 Ashwin and every slip becomes an Ashwin slip. A Payroll Entry posted outside the month it pays is now refused; post it on the month's last day. | `payroll/bs_period_guard.py` |
+| **Scripts create no Leave Allocation** | Outside a request the audit hook stamps no `custom_created_on`, and the numbering rule refuses the allocation. `setup_year` sets `frappe.flags.audit_user`; anything else creating allocations from bench must too. | `utils/audit_file_manager.py` |
 
 ---
 
@@ -218,6 +222,28 @@ may want a readable name.
    before submitting anything.
 7. Rollback if the first run is wrong: cancel in reverse order — bank entry,
    journal, slips, payroll entry.
+
+### Year rollover (every year, before 1 Shrawan)
+
+Proven on avinas1 on 2026-09-24 inside a rolled-back transaction: 14 holiday
+lists, 7 leave periods, 14 leave policies, 7 payroll periods, 7 tax slabs, 205
+salary assignments on the new slab, 292 leave policy assignments; a Shrawan 2084
+slip taxed on the 84/85 slab, an Ashadh 2084 slip still on 83/84; on 1 Shrawan
+the 7 companies and 22 women moved to the new lists.
+
+1. **Fiscal Year** with all seven companies (84/85 exists on avinas1 since 2026-09-24).
+2. **Tax rates** from the Finance Act (budget speech, 15 Jestha): add the year to
+   `TAX_SLABS_BY_YEAR` in `payroll/income_tax.py`, or submit an Income Tax Slab
+   per company effective the year's first day. `setup_year` refuses without one.
+3. **Festivals** for the year in `FESTIVALS` (`hr/year_setup.py`), from the
+   published calendar — Teej as `women`. Without them the lists get Saturdays
+   only and `setup_year` returns a warning.
+4. `bench --site <site> execute avinashgroup_app.hr.year_setup.setup_year --kwargs "{'fiscal_year': '84/85'}"`
+   — builds the year, rolls pay onto the new slab, assigns leave policies. Safe to re-run.
+5. **Before 31 Ashadh:** encash the closing year's casual leave (policy: encashed
+   at year end) — the allocation expires the day after.
+6. **On 1 Shrawan:** nothing by hand. `hr.holiday_year_switch` (daily) repoints
+   holiday lists; check its Error Log entry if a list was missing.
 
 ---
 

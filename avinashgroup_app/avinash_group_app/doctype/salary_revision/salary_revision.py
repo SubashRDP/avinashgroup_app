@@ -9,14 +9,17 @@ reconciling with last year's journal entries.
 
 Two things follow from that, and both are why this document exists:
 
-  A slip is paid at one rate for its whole month. An increment effective
-  mid-month cannot half-pay the month, so the effective date belongs on the
-  first day of a BS month. Anything else silently takes effect the month after.
+  A slip is paid at one rate for its whole month. HRMS picks the latest
+  assignment dated on or before the slip's END date (`check_sal_struct`), so a
+  rise dated the 15th pays the new rate for the whole month — the first
+  fourteen days included — with no trace of the split. The effective date must
+  therefore be day 1 of a BS month, and validate refuses any other day.
 
   Increments are agreed late. The rise runs from Shrawan, the meeting happens
   in Mangsir, and four months have already been paid at the old rate. That
   difference is arrears — a one-off amount in the month it is finally paid,
-  never a backdated edit to submitted slips.
+  never a backdated edit to submitted slips. Each month's share follows the
+  days that month actually paid, so a month with unpaid leave owes less.
 
 The dearness allowance is the one part of NGI's pay that is not dated: the
 structure reads it off the Employee, so raising it changes the field. The old
@@ -29,12 +32,15 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, getdate
 
+from avinashgroup_app.payroll.year_rollover import tax_slab_for
+
 ARREARS_COMPONENT = "Salary Arrears"
 
 
 class SalaryRevision(Document):
 	def validate(self):
 		self.set_bs_month()
+		self.validate_effective_date()
 		self.validate_rows()
 		self.set_totals()
 
@@ -75,6 +81,24 @@ class SalaryRevision(Document):
 						row.idx, row.employee_name or row.employee, self.effective_date
 					)
 				)
+
+	def validate_effective_date(self):
+		"""A rise starts on day 1 of a BS month — see the module notes for why."""
+		from rdp_common_app.utils.bs_boundaries import BS_MONTH_NAMES, ad_to_bs, bs_to_ad
+
+		bs = ad_to_bs(getdate(self.effective_date))
+		if bs.day != 1:
+			first = bs_to_ad(bs.year, bs.month, 1)
+			frappe.throw(
+				_(
+					"A salary revision must start on the first day of a BS month. {0} is {1} {2} {3}; "
+					"use {4} (1 {2}) or the first of the next month."
+				).format(
+					frappe.utils.formatdate(self.effective_date), bs.day, BS_MONTH_NAMES[bs.month], bs.year,
+					frappe.utils.formatdate(first),
+				),
+				title=_("Effective date is mid-month"),
+			)
 
 	def set_bs_month(self):
 		try:
@@ -140,7 +164,10 @@ class SalaryRevision(Document):
 				"company": self.company,
 				"currency": (current and current.currency)
 				or frappe.db.get_value("Company", self.company, "default_currency"),
-				"income_tax_slab": current.income_tax_slab if current else None,
+				# The slab of the year the rise falls in — not the old assignment's,
+				# which may be last year's (see payroll/year_rollover.py).
+				"income_tax_slab": tax_slab_for(self.company, self.effective_date)
+				or (current.income_tax_slab if current else None),
 				"payroll_payable_account": current.payroll_payable_account if current else None,
 			}
 		)
@@ -242,7 +269,20 @@ def months_already_paid(employee, effective_date):
 
 
 def arrears_for(employee, effective_date, monthly_difference):
-	return flt(months_already_paid(employee, effective_date) * flt(monthly_difference), 2)
+	"""The rise owed on slips already paid: each month's share by the days it paid.
+
+	A full month (31 of 31 days) owes the whole difference; a month with 5 days
+	unpaid leave owes 26/31 of it — what the slip would have paid at the new rate.
+	"""
+	owed = 0.0
+	for slip in frappe.get_all(
+		"Salary Slip",
+		filters={"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)]},
+		fields=["payment_days", "total_working_days"],
+	):
+		share = flt(slip.payment_days) / flt(slip.total_working_days) if flt(slip.total_working_days) else 1
+		owed += flt(monthly_difference) * share
+	return flt(owed, 2)
 
 
 def ensure_arrears_component():
