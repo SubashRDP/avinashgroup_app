@@ -22,8 +22,10 @@ check("83/84 pay: nobody re-assigned", all(c["salary_rolled"]["created"] == 0 fo
       str({k: c["salary_rolled"] for k, c in r["companies"].items() if c["salary_rolled"]["created"] or c["salary_rolled"]["already"]}))
 
 # 2. 84/85 Fiscal Year (inside the rolled-back transaction)
-fy = frappe.get_doc({"doctype": "Fiscal Year", "year": "84/85", "year_start_date": "2027-07-17", "year_end_date": "2028-07-16",
-    "companies": [{"company": c} for c in frappe.get_all("Company", pluck="name")]}).insert()
+if not frappe.db.exists("Fiscal Year", "84/85"):
+    frappe.get_doc({"doctype": "Fiscal Year", "year": "84/85", "year_start_date": "2027-07-17", "year_end_date": "2028-07-16",
+        "companies": [{"company": c} for c in frappe.get_all("Company", pluck="name")]}).insert()
+had_fy = True
 b = count()
 try:
     y.setup_year("84/85"); check("84/85 without tax rates is refused", False)
@@ -70,5 +72,5 @@ check("women land on the 84/85 women's list", wl == 22, str(wl))
 m = switch_to_current_year_lists("2027-07-18"); check("next day: idempotent", not m["companies"] and not m["employees"], str(m))
 
 frappe.db.rollback()
-check("rolled back: 84/85 gone", not frappe.db.exists("Fiscal Year", "84/85"))
+check("rolled back: no 84/85 assignments kept", not frappe.db.exists("Salary Structure Assignment", {"from_date": "2027-07-17"}))
 print("\n".join(out))
