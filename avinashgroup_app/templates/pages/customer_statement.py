@@ -105,6 +105,18 @@ def get_context(context):
 	else:
 		context.default_company = context.company_list[0] if context.company_list else ""
 
+	# Opened from a Sales Order's Actions menu (/customer_statement?order=SO-…,
+	# see public/js/portal_order_statement_link.js): start on that order's company
+	# and customer. Only when the customer is one of this user's own, so the link
+	# can't be used to open someone else's statement.
+	context.preselect_customer = ""
+	order = frappe.form_dict.get("order")
+	if order and portal_customers:
+		so = frappe.db.get_value("Sales Order", order, ["customer", "company"], as_dict=True)
+		if so and so.customer in portal_customers and so.company in context.company_list:
+			context.default_company = so.company
+			context.preselect_customer = so.customer
+
 	context.today = nowdate()
 	# Default period = the current BS month to date: From Miti opens on the 1st
 	# of the Nepali month (the books run on BS), not on the 1st of the AD month.

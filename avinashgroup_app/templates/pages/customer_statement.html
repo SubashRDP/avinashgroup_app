@@ -11,6 +11,7 @@ window.customer_statement_ctx = {
 	customer_list: {{ customer_list | tojson }},
 	company_list: {{ company_list | tojson }},
 	default_company: {{ default_company | tojson }},
+	preselect_customer: {{ preselect_customer | tojson }},
 	from_date: {{ from_date | tojson }},
 	to_date: {{ to_date | tojson }},
 	today: {{ today | tojson }}
@@ -29,6 +30,7 @@ class CustomerStatement {
 		this.bind_customer_ms();
 		this.bind_print();
 		this.filter_customers_by_company();
+		this.apply_preselect();
 
 		// The AD dates are Frappe's own Date control, the same calendar as the
 		// desk. Website pages don't load the form controls by default, so fetch
@@ -77,6 +79,17 @@ class CustomerStatement {
 			$(this).closest("label").toggle(match);
 			// Only company-matching customers stay selected.
 			$(this).prop("checked", match);
+		});
+		this.update_customer_label();
+	}
+
+	// Came from a Sales Order: tick only that order's customer (the server has
+	// already checked it is this user's and picked its company).
+	apply_preselect() {
+		const want = this.ctx.preselect_customer;
+		if (!want) return;
+		$(".cs-customer-cb").each(function () {
+			if ($(this).prop("checked")) $(this).prop("checked", this.value === want);
 		});
 		this.update_customer_label();
 	}
