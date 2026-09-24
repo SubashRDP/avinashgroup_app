@@ -2,7 +2,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import get_first_day, nowdate, formatdate, cint
+from frappe.utils import add_days, nowdate, formatdate, cint
 
 # Reuse the report's row builder + number formatters (no query duplication).
 from avinashgroup_app.avinash_group_app.report.sales_analysis_product_wise_invoice_details.sales_analysis_product_wise_invoice_details import (
@@ -67,8 +67,11 @@ def get_context(context):
 	else:
 		context.default_company = context.company_list[0] if context.company_list else ""
 
-	context.from_date = str(get_first_day(nowdate()))
+	# Opens on the last 7 days, the same range as the page's "7 Days" quick button.
+	context.from_date = add_days(nowdate(), -7)
 	context.to_date = nowdate()
+	# The quick date-range buttons count back from the server's date, not the viewer's clock.
+	context.today = nowdate()
 
 
 def _shape(r):

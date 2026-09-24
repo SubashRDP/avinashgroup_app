@@ -6,6 +6,7 @@
 <!-- Nepali (BS) date picker — reuse rdp_common_app's library + NepaliFunctions converter -->
 <link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
 <script src="/assets/rdp_common_app/js/nepali.datepicker.v5.0.4.min.js"></script>
+<script src="/assets/avinashgroup_app/js/portal_quick_dates.js?v=1"></script>
 <script>
 window.soa_ctx = {
 	customer_list: {{ customer_list | tojson }},
@@ -33,6 +34,7 @@ class SalesOrderAnalysis {
 		this.setup_bs_dates();
 		this.bind_dates();
 		this.bind_print();
+		this.mount_quick_dates();
 
 		this.apply_period_mode();
 		this.on_company_change();
@@ -223,6 +225,32 @@ class SalesOrderAnalysis {
 		this.schedule_reload();
 	}
 
+	// 7 Days / 15 Days / 1 Month after the Customer filter (public/js/portal_quick_dates.js).
+	// They stay visible while Period is Fiscal Year, when the dates are hidden — a click
+	// switches Period to Date-wise first. Values are set without firing "change", so the
+	// Sales Order list and the report load once each.
+	mount_quick_dates() {
+		var me = this;
+		this.quick_dates = window.ag_portal_quick_dates.mount({
+			$parent: $("#soa-quick-dates"),
+			today: this.ctx.today,
+			get_range: function () {
+				if (me.period_type() !== "date_wise") return null;
+				return { from: $("#soa-from-date").val(), to: $("#soa-to-date").val() };
+			},
+			apply: function (from, to) {
+				$("#soa-period-type").val("date_wise");
+				me.apply_period_mode();
+				$("#soa-from-date").val(from);
+				$("#soa-to-date").val(to);
+				me.ad_to_bs("from", from);
+				me.ad_to_bs("to", to);
+				me.reload_sales_orders();
+				me.schedule_reload();
+			}
+		});
+	}
+
 	bind_dates() {
 		var me = this;
 		$("#soa-from-date").on("change", function () {
@@ -236,6 +264,8 @@ class SalesOrderAnalysis {
 	// ── Load + render ───────────────────────────────────────────────────
 	schedule_reload() {
 		var me = this;
+		// Every date or Period change passes through here, so the quick-range highlight follows it.
+		if (this.quick_dates) this.quick_dates.refresh();
 		clearTimeout(this._reload_timer);
 		this._reload_timer = setTimeout(function () { me.load_report(); }, 350);
 	}
@@ -491,10 +521,15 @@ class SalesOrderAnalysis {
 		</div>
 	</div>
 	<div class="col-sm-3 mb-3">
+		{# empty label keeps the buttons level with the Customer box beside them #}
+		<div class="soa-section-label">&nbsp;</div>
+		<div id="soa-quick-dates"></div>
+	</div>
+	<div class="col-sm-3 mb-3">
 		<div class="soa-section-label">Period <span class="text-danger">*</span></div>
 		<select class="form-control" id="soa-period-type">
-			<option value="fiscal_year" selected>Fiscal Year</option>
-			<option value="date_wise">Date-wise</option>
+			<option value="fiscal_year">Fiscal Year</option>
+			<option value="date_wise" selected>Date-wise</option>
 		</select>
 	</div>
 	<div class="col-sm-3 mb-3 soa-fy-col">

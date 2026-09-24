@@ -2,8 +2,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import getdate, nowdate, formatdate
-from rdp_common_app.utils.bs_boundaries import get_bs_month_start
+from frappe.utils import add_days, nowdate, formatdate
 
 from avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger import (
 	execute as party_ledger_execute,
@@ -118,10 +117,29 @@ def get_context(context):
 			context.preselect_customer = so.customer
 
 	context.today = nowdate()
-	# Default period = the current BS month to date: From Miti opens on the 1st
-	# of the Nepali month (the books run on BS), not on the 1st of the AD month.
-	context.from_date = str(get_bs_month_start(getdate(nowdate())))
-	context.to_date = nowdate()
+	context.from_date, context.to_date = _default_period(context.default_company)
+
+
+def _default_period(company):
+	"""Opening From/To dates: the whole current fiscal year of `company`.
+
+	Resolved here, not in the page's JS, because the books run on the Bikram Sambat
+	fiscal year (e.g. 83/84, from mid-July) and only the Fiscal Year records know its
+	boundaries. If today falls in no fiscal year for that company, the page still has
+	to open, so it falls back to the last 7 days and logs why.
+	"""
+	from erpnext.accounts.utils import FiscalYearError, get_fiscal_year
+
+	try:
+		fy = get_fiscal_year(nowdate(), company=company or None, as_dict=True)
+		return str(fy.year_start_date), str(fy.year_end_date)
+	except FiscalYearError:
+		frappe.log_error(
+			title="Customer Statement: no current fiscal year",
+			message=f"No Fiscal Year covers {nowdate()} for company {company!r}; "
+			"the statement opened on the last 7 days instead.",
+		)
+		return add_days(nowdate(), -7), nowdate()
 
 
 @frappe.whitelist()
