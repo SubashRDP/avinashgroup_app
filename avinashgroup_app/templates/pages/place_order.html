@@ -233,7 +233,7 @@ body { background: var(--po-paper); }
 	box-shadow: 0 0 0 3px rgba(67, 92, 168, .16);
 }
 .po .form-control[readonly] { color: var(--po-muted); cursor: default; }
-.po input[type="date"].form-control { font-variant-numeric: tabular-nums; }
+#po-date .form-control, #po-delivery-date .form-control { font-variant-numeric: tabular-nums; }
 
 /* Autocomplete menus (built in JS, styled here) */
 .po-dd {
@@ -829,6 +829,38 @@ class PlaceOrder {
 		this.brand();
 		this.apply_item_availability();
 		this.preselect_only_customer();
+		this.make_date_controls();
+	}
+
+	// ── Order / delivery dates: Frappe Date controls ───────────────────
+	// Same calendar as the desk. Website pages don't carry the form controls,
+	// so they are fetched first; until they arrive the dates read as the
+	// server's defaults (today / default_delivery_date).
+	make_date_controls() {
+		var me = this;
+		this.date_ctl = {};
+		frappe.require("controls.bundle.js", function () {
+			[
+				["order", "po-date", me.ctx.today],
+				["delivery", "po-delivery-date", me.ctx.default_delivery_date]
+			].forEach(function ([key, id, value]) {
+				const ctl = frappe.ui.form.make_control({
+					parent: $("#" + id),
+					df: { fieldtype: "Date", fieldname: id.replace(/-/g, "_"), reqd: 1 },
+					only_input: true,
+					render_input: true
+				});
+				ctl.set_value(value || "");
+				me.date_ctl[key] = ctl;
+			});
+		});
+	}
+
+	// Always YYYY-MM-DD, whatever display format the site uses.
+	get_date(key) {
+		const ctl = this.date_ctl && this.date_ctl[key];
+		if (ctl) return ctl.get_value() || "";
+		return (key === "order" ? this.ctx.today : this.ctx.default_delivery_date) || "";
 	}
 
 	// ── The company decides the item ──────────────────────────────────
@@ -1458,7 +1490,7 @@ class PlaceOrder {
 			return;
 		}
 
-		const delivery_date = $("#po-delivery-date").val();
+		const delivery_date = me.get_date("delivery");
 		if (!delivery_date) {
 			frappe.msgprint({ title: "Missing Date", message: "Please set the Expected Delivery Date.", indicator: "red" });
 			return;
@@ -1507,7 +1539,7 @@ class PlaceOrder {
 			args: {
 				customer: customer,
 				company: company,
-				transaction_date: $("#po-date").val() || me.ctx.today,
+				transaction_date: me.get_date("order") || me.ctx.today,
 				delivery_date: delivery_date,
 				items: JSON.stringify(payload)
 			},
@@ -1590,12 +1622,12 @@ class PlaceOrder {
 
 					<div class="po-field">
 						<label class="po-label" for="po-date">Order Date <i>*</i></label>
-						<input type="date" class="form-control" id="po-date" value="{{ today }}">
+						<div id="po-date"></div>
 					</div>
 
 					<div class="po-field">
 						<label class="po-label" for="po-delivery-date">Expected Delivery <i>*</i></label>
-						<input type="date" class="form-control" id="po-delivery-date" value="{{ default_delivery_date }}">
+						<div id="po-delivery-date"></div>
 					</div>
 
 					<input type="hidden" id="po-currency" value="{{ currency }}">
