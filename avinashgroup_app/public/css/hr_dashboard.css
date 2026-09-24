@@ -1,5 +1,8 @@
-/* HR Dashboard. Built on Frappe's own theme variables so light and dark desk
-   themes both work; only the status and tone colours are fixed here. */
+/* HR Dashboard (public/js/hr_dashboard.js). Built on Frappe's own theme
+   variables so light and dark desk themes both work; only the status and tone
+   colours are fixed here. Loaded into the HR Home workspace's shadow root as
+   well as the /app/hr-dashboard page, so theme rules key off .hrd[data-theme],
+   which the script mirrors from <html> — a shadow root cannot see <html>. */
 
 .hrd {
 	--hrd-good: #0ca30c;
@@ -16,8 +19,13 @@
 	align-items: start;
 	padding: 4px 0 40px;
 	color: var(--text-color);
+	font-family: var(--font-stack, system-ui, -apple-system, "Segoe UI", sans-serif);
+	font-size: 13px;
+	container: hrd / inline-size;
 }
-[data-theme="dark"] .hrd { --hrd-leave: #3987e5; --hrd-accent: #3987e5; }
+.hrd a { text-decoration: none; }
+.hrd-menu-top { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.hrd[data-theme="dark"] { --hrd-leave: #3987e5; --hrd-accent: #3987e5; }
 
 .hrd-icon { width: 18px; height: 18px; flex: none; }
 
@@ -176,17 +184,17 @@
 .tone-amber { --tone: #c47a00; }
 .tone-violet { --tone: #6d5bd0; }
 .tone-rose { --tone: #d0455e; }
-[data-theme="dark"] .tone-blue { --tone: #6da7ec; }
-[data-theme="dark"] .tone-green { --tone: #3fc47d; }
-[data-theme="dark"] .tone-amber { --tone: #f0b53d; }
-[data-theme="dark"] .tone-violet { --tone: #9e91ee; }
-[data-theme="dark"] .tone-rose { --tone: #ef7d91; }
+.hrd[data-theme="dark"] .tone-blue { --tone: #6da7ec; }
+.hrd[data-theme="dark"] .tone-green { --tone: #3fc47d; }
+.hrd[data-theme="dark"] .tone-amber { --tone: #f0b53d; }
+.hrd[data-theme="dark"] .tone-violet { --tone: #9e91ee; }
+.hrd[data-theme="dark"] .tone-rose { --tone: #ef7d91; }
 .hrd-kpi-icon, .hrd-actions a {
 	color: var(--tone);
 	background: color-mix(in srgb, var(--tone) 13%, transparent);
 }
 
-.hrd-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+.hrd-grid { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 18px; align-items: start; }
 .hrd-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
 
 /* ------------------------------------------------------------ attendance chart */
@@ -297,7 +305,7 @@
 .state-ok { color: #0a7a0a; background: color-mix(in srgb, var(--hrd-good) 14%, transparent); }
 .state-bad { color: var(--hrd-critical); background: color-mix(in srgb, var(--hrd-critical) 12%, transparent); }
 .state-off { color: var(--hrd-muted); background: var(--hrd-soft); }
-[data-theme="dark"] .state-ok { color: var(--hrd-good); }
+.hrd[data-theme="dark"] .state-ok { color: var(--hrd-good); }
 .hrd-more { margin: 10px 0 0; font-size: 12px; color: var(--hrd-muted); }
 .hrd-all-clear { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; color: var(--hrd-good); font-size: 13px; }
 
@@ -306,8 +314,15 @@
 .hrd-empty p { margin: 0; font-size: 13px; }
 
 /* ------------------------------------------------------------ narrow screens */
-@media (max-width: 1200px) {
+@container hrd (max-width: 900px) {
 	.hrd-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@container hrd (max-width: 640px) {
+	.hrd-money { grid-template-columns: 1fr; }
+	.hrd-controls, .hrd-company { width: 100%; max-width: none; }
+	.hrd-month { flex: 1; justify-content: space-between; }
+	.hrd-kpis { grid-template-columns: 1fr 1fr; }
+	.hrd-bars li { grid-template-columns: 90px 1fr auto; }
 }
 @media (max-width: 900px) {
 	.hrd { grid-template-columns: minmax(0, 1fr); gap: 14px; }
@@ -320,7 +335,84 @@
 	}
 	.hrd-nav-body { display: none; padding-top: 8px; }
 	.hrd-nav.is-shown .hrd-nav-body { display: block; }
-	.hrd-money { grid-template-columns: 1fr; }
-	.hrd-controls, .hrd-company { width: 100%; max-width: none; }
-	.hrd-month { flex: 1; justify-content: space-between; }
 }
+
+/* ------------------------------------------------------------ top menu (workspace) */
+.hrd-menu-top .hrd-nav {
+	position: relative; top: auto; max-height: none; overflow: visible;
+	padding: 6px;
+	z-index: 5;
+}
+.hrd-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.hrd-top-group { position: relative; }
+.hrd-top-btn {
+	display: flex; align-items: center; gap: 7px;
+	height: 38px; padding: 0 10px;
+	border: 0; border-radius: 9px; background: none;
+	font-size: 13.5px; font-weight: 500; color: var(--text-color);
+	cursor: pointer;
+}
+.hrd-top-btn .hrd-icon:first-child { color: var(--hrd-muted); }
+.hrd-top-btn:hover, .hrd-top-group.is-open .hrd-top-btn { background: var(--hrd-soft); }
+.hrd-caret { width: 14px; height: 14px; color: var(--hrd-muted); transition: transform .15s; }
+.hrd-top-group.is-open .hrd-caret { transform: rotate(180deg); }
+.hrd-drop {
+	display: none;
+	position: absolute; top: calc(100% + 6px); left: 0;
+	min-width: 230px; max-height: 60vh; overflow-y: auto;
+	list-style: none; margin: 0; padding: 6px;
+	background: var(--card-bg);
+	border: 1px solid var(--border-color); border-radius: 12px;
+	box-shadow: 0 12px 32px rgba(16, 24, 40, .16);
+	z-index: 20;
+}
+.hrd-top-group.is-open .hrd-drop, .hrd-results.is-shown { display: block; }
+.hrd-drop a {
+	display: flex; align-items: center; gap: 6px;
+	padding: 8px 10px; border-radius: 8px;
+	font-size: 13px; color: var(--text-color);
+}
+.hrd-drop a:hover { background: var(--hrd-soft); }
+.hrd-drop small { margin-left: auto; padding-left: 12px; color: var(--hrd-muted); font-size: 11.5px; }
+.hrd-no-hit { padding: 8px 10px; color: var(--hrd-muted); }
+.hrd-top-search { position: relative; margin: 0 0 0 auto; flex: 1 1 140px; min-width: 140px; max-width: 240px; }
+.hrd-top-search .hrd-drop { left: auto; right: 0; width: 300px; }
+
+/* ------------------------------------------------------------ month close */
+.hrd-table-wrap { overflow-x: auto; margin: 0 -4px; }
+.hrd-close { width: 100%; border-collapse: separate; border-spacing: 4px; font-size: 12.5px; }
+.hrd-close thead th { font-weight: 600; font-size: 11.5px; color: var(--hrd-muted); text-align: left; padding: 0 6px 4px; white-space: nowrap; }
+.hrd-close tbody th { text-align: left; padding: 0 8px 0 2px; white-space: nowrap; }
+.hrd-close tbody th strong { display: block; font-size: 13px; }
+.hrd-close tbody th small { color: var(--hrd-muted); font-size: 11px; }
+.step {
+	display: flex; align-items: center; gap: 5px;
+	min-width: 84px; height: 30px; padding: 0 9px;
+	border-radius: 8px;
+	font-size: 12px; white-space: nowrap;
+	background: var(--hrd-soft); color: var(--hrd-muted);
+}
+.step .hrd-icon { width: 14px; height: 14px; }
+.step b { font-weight: 600; }
+.step-done { background: color-mix(in srgb, var(--hrd-good) 13%, transparent); color: #0a7a0a; }
+.step-draft { background: color-mix(in srgb, var(--hrd-warning) 20%, transparent); color: #8a5a00; }
+.step-none { opacity: .55; }
+.hrd[data-theme="dark"] .step-done { color: #3fc47d; }
+.hrd[data-theme="dark"] .step-draft { color: #f0b53d; }
+
+/* ------------------------------------------------------------ due soon */
+.hrd-due { border-color: color-mix(in srgb, var(--hrd-warning) 45%, var(--border-color)); }
+.hrd-due .hrd-events { margin-top: 12px; }
+.hrd-due .hrd-events li > span { flex: 1; min-width: 0; }
+.hrd-due .hrd-events li > .hrd-icon { color: var(--hrd-accent); }
+.due { font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; background: var(--hrd-soft); color: var(--text-color); }
+.due-soon { background: color-mix(in srgb, var(--hrd-warning) 22%, transparent); color: #8a5a00; }
+.due-late { background: color-mix(in srgb, var(--hrd-critical) 14%, transparent); color: var(--hrd-critical); }
+.due-ok { background: color-mix(in srgb, var(--hrd-good) 14%, transparent); color: #0a7a0a; }
+.hrd[data-theme="dark"] .due-soon { color: #f0b53d; }
+.hrd[data-theme="dark"] .due-ok { color: var(--hrd-good); }
+.hrd-card-link { display: inline-block; margin-top: 14px; font-size: 12.5px; color: var(--hrd-accent); }
+.hrd-decision { color: #6d5bd0; }
+.hrd-away { color: var(--hrd-muted); }
+.hrd-away-now { color: var(--hrd-accent); }
+.sw.st-off { background: var(--hrd-soft); border: 1px solid var(--border-color); }

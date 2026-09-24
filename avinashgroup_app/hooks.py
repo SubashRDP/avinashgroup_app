@@ -582,6 +582,10 @@ fixtures = [
             ]
         },
     },
+    # The dashboard block on the HR Home workspace (avinash_group_app/workspace/
+    # hr_home). A Custom HTML Block has no module, so it cannot ship as a
+    # standard file like the workspace does. Scoped by name: only this one block.
+    {"dt": "Custom HTML Block", "filters": {"name": ["in", ["HR Home"]]}},
 ]
 
 # Custom masters/config that must survive ERPNext's Transaction Deletion

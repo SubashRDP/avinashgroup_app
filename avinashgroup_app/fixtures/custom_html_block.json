@@ -1,0 +1,12 @@
+[
+ {
+  "doctype": "Custom HTML Block",
+  "name": "HR Home",
+  "html": "<div class=\"hr-home\"></div>",
+  "script": "// The HR Home workspace's dashboard. Everything lives in public/js/hr_dashboard.js,\n// shared with /app/hr-dashboard; this block only mounts it in its shadow root.\nfrappe.require(\"/assets/avinashgroup_app/js/hr_dashboard.js\", () => {\n\tavinash_hr_dashboard.mount(root_element, { menu: \"top\" });\n});\n",
+  "style": ":host { display: block; }\n.hr-home { display: none; }\n",
+  "private": 0,
+  "roles": [],
+  "modified": "2026-09-24 14:00:00.000000"
+ }
+]

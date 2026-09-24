@@ -27,6 +27,7 @@ from frappe.utils import flt, getdate, today
 
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
+	bs_to_ad,
 	get_bs_month_name,
 	get_bs_month_range,
 )
@@ -40,6 +41,28 @@ FALLBACK_MONTHS = 3
 
 # Upcoming birthdays, anniversaries and holidays: the next month or so.
 UPCOMING_DAYS = 30
+
+# Statutory deposits on a month's salary, as (label, salary component, BS day of
+# the following month by which it must be deposited).
+#   TDS — Income Tax Act 2058 s.90: tax withheld is deposited within 25 days of
+#         the month's end.
+#   SSF — Social Security Act 2075: contributions within 15 days of the month's
+#         end. The SSF deduction already holds the full 31% (the employer's 20%
+#         is added to gross as "SSF Addition" and deducted with the 11%).
+STATUTORY_DEPOSITS = (
+	("TDS on salary", "Income Tax", 25),
+	("SSF contribution", "SSF", 15),
+)
+
+# Labour Act 2074: the festival allowance is paid before the main festival.
+# Dashain's first holiday on our lists is Fulpati; warn this many days ahead.
+DASHAIN_FIRST_HOLIDAY = "Fulpati"
+DASHAIN_WARN_DAYS = 45
+
+# How far ahead "decisions due" looks, per kind of decision.
+PROBATION_DAYS = 60
+CONTRACT_DAYS = 60
+RETIREMENT_DAYS = 180
 
 
 @frappe.whitelist()
@@ -70,6 +93,10 @@ def get_dashboard(company=None, bs_year=None, bs_month=None):
 		# Pay is the one block more sensitive than the page itself: show it only
 		# to someone who could open the slips anyway.
 		"payroll": _payroll(companies, start) if frappe.has_permission("Salary Slip", "read") else None,
+		"month_close": _month_close(companies, start, end) if frappe.has_permission("Salary Slip", "read") else None,
+		"statutory": _statutory(companies, year, month, start) if frappe.has_permission("Salary Slip", "read") else None,
+		"decisions": _decisions(companies),
+		"away": _away(companies),
 		"pending": _pending(companies),
 		"gaps": _setup_gaps(companies),
 		"upcoming": _upcoming(companies),
@@ -271,19 +298,214 @@ def _pending(companies):
 		if count:
 			out.append({"doctype": doctype, "label": label, "count": count, "filters": filters})
 
-	recent = []
-	if frappe.has_permission("Leave Application", "read"):
-		recent = frappe.get_list(
-			"Leave Application",
-			filters={"company": ["in", companies], "docstatus": ["<", 2]},
-			fields=["name", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days", "status"],
-			order_by="modified desc",
-			limit=5,
+	return {"queues": out}
+
+
+def _month_close(companies, start, end):
+	"""Where each paying company is in closing this month's payroll.
+
+	The steps HR walks every month, in order: attendance marked, overtime
+	sheets submitted, payroll entry, slips submitted, salary journal, bank
+	payment. Only companies with at least one salary assignment are listed —
+	GLMI, GEPL and SGU have no payroll yet and a row of blanks would read as
+	a failure.
+	"""
+	paying = frappe.db.sql_list(
+		"""select distinct company from `tabSalary Structure Assignment`
+		where docstatus=1 and company in %(c)s and from_date<=%(e)s""",
+		{"c": companies, "e": end},
+	)
+	if not paying:
+		return []
+	abbr = dict(frappe.get_all("Company", fields=["name", "abbr"], as_list=True))
+	args = {"c": paying, "s": start, "e": end}
+
+	def per_company(sql):
+		return {r[0]: r[1:] for r in frappe.db.sql(sql, args)}
+
+	attendance = per_company(
+		"""select company, count(*) from tabAttendance where docstatus=1 and company in %(c)s
+		and attendance_date between %(s)s and %(e)s group by company"""
+	)
+	overtime = per_company(
+		"""select company, sum(docstatus=1), sum(docstatus=0) from `tabOvertime Sheet`
+		where docstatus<2 and company in %(c)s and work_date between %(s)s and %(e)s group by company"""
+	)
+	entries = per_company(
+		"""select company, max(docstatus), count(*) from `tabPayroll Entry`
+		where docstatus<2 and company in %(c)s and start_date=%(s)s group by company"""
+	)
+	slips = per_company(
+		"""select company, sum(docstatus=1), sum(docstatus=0) from `tabSalary Slip`
+		where docstatus<2 and company in %(c)s and start_date=%(s)s group by company"""
+	)
+	journals = per_company(
+		"""select pe.company, sum(je.voucher_type<>'Bank Entry'), sum(je.voucher_type='Bank Entry')
+		from `tabPayroll Entry` pe
+		join `tabJournal Entry` je on je.docstatus=1 and exists (
+			select 1 from `tabJournal Entry Account` a
+			where a.parent=je.name and a.reference_type='Payroll Entry' and a.reference_name=pe.name)
+		where pe.docstatus=1 and pe.company in %(c)s and pe.start_date=%(s)s group by pe.company"""
+	)
+
+	rows = []
+	for company in paying:
+		ot_done, ot_draft = overtime.get(company, (0, 0))
+		pe_status, _count = entries.get(company, (None, 0))
+		slip_done, slip_draft = slips.get(company, (0, 0))
+		je_count, bank_count = journals.get(company, (0, 0))
+		steps = [
+			_step("attendance", _("Attendance"), "done" if attendance.get(company) else "todo",
+				_("{0} days").format(int(attendance[company][0])) if attendance.get(company) else ""),
+			_step("overtime", _("Overtime"), "draft" if flt(ot_draft) else ("done" if flt(ot_done) else "none"),
+				_("{0} draft").format(int(ot_draft)) if flt(ot_draft) else ""),
+			_step("payroll_entry", _("Payroll entry"),
+				{1: "done", 0: "draft"}.get(pe_status, "todo") if pe_status is not None else "todo", ""),
+			_step("slips", _("Slips"), "draft" if flt(slip_draft) else ("done" if flt(slip_done) else "todo"),
+				str(int(flt(slip_done))) if flt(slip_done) else ""),
+			_step("journal", _("Journal"), "done" if flt(je_count) else "todo", ""),
+			_step("bank", _("Paid"), "done" if flt(bank_count) else "todo", ""),
+		]
+		rows.append({"company": company, "abbr": abbr.get(company, company), "steps": steps})
+	return rows
+
+
+def _step(key, label, state, note):
+	# state: done | draft | todo | none (step not needed this month)
+	return {"key": key, "label": label, "state": state, "note": note}
+
+
+def _statutory(companies, year, month, start):
+	"""Deposits owed on this month's salary, and the Dashain allowance deadline."""
+	next_y, next_m = _step_month(year, month, 1)
+	amounts = dict(
+		frappe.db.sql(
+			"""select sd.salary_component, sum(sd.amount) from `tabSalary Detail` sd
+			join `tabSalary Slip` s on s.name=sd.parent
+			where s.docstatus=1 and s.company in %(c)s and s.start_date=%(s)s
+				and sd.parentfield='deductions' and sd.salary_component in %(comp)s
+			group by sd.salary_component""",
+			{"c": companies, "s": start, "comp": [c for _l, c, _d in STATUTORY_DEPOSITS]},
 		)
-		for r in recent:
-			r["bs_from"] = _bs_short(r.from_date)
-			r["bs_to"] = _bs_short(r.to_date)
-	return {"queues": out, "recent_leave": recent}
+	)
+	date_today = getdate(today())
+	items = []
+	for label, component, bs_day in STATUTORY_DEPOSITS:
+		amount = flt(amounts.get(component))
+		if not amount:
+			continue
+		due = bs_to_ad(next_y, next_m, bs_day)
+		items.append(
+			{
+				"label": _(label),
+				"amount": amount,
+				"due": str(due),
+				"due_bs": f"{bs_day} {get_bs_month_name(next_m)}",
+				"days_left": (due - date_today).days,
+				"for_month": f"{get_bs_month_name(month)} {year}",
+			}
+		)
+
+	dashain = _dashain_deadline(companies, date_today)
+	return {"deposits": items, "dashain": dashain}
+
+
+def _dashain_deadline(companies, date_today):
+	holiday_lists = [
+		h for h in frappe.get_all("Company", filters={"name": ["in", companies]}, pluck="default_holiday_list") if h
+	]
+	if not holiday_lists:
+		return None
+	fulpati = frappe.db.sql(
+		"""select min(holiday_date) from tabHoliday where parent in %(h)s
+		and description like %(d)s and holiday_date >= %(t)s""",
+		{"h": holiday_lists, "d": f"%{DASHAIN_FIRST_HOLIDAY}%", "t": date_today},
+	)[0][0]
+	if not fulpati or (fulpati - date_today).days > DASHAIN_WARN_DAYS:
+		return None
+	fiscal_year = frappe.db.get_value(
+		"Fiscal Year", {"year_start_date": ["<=", fulpati], "year_end_date": [">=", fulpati]}, "name"
+	)
+	paid = []
+	if frappe.db.exists("DocType", "Dashain Bonus"):
+		paid = frappe.get_all(
+			"Dashain Bonus",
+			filters={"docstatus": 1, "company": ["in", companies], "fiscal_year": fiscal_year},
+			pluck="company",
+		)
+	abbr = dict(frappe.get_all("Company", fields=["name", "abbr"], as_list=True))
+	paying = frappe.db.sql_list(
+		"select distinct company from `tabSalary Structure Assignment` where docstatus=1 and company in %(c)s",
+		{"c": companies},
+	)
+	return {
+		"deadline": str(fulpati),
+		"deadline_bs": _bs_short(fulpati),
+		"days_left": (fulpati - date_today).days,
+		"fiscal_year": fiscal_year,
+		"pending": [abbr.get(c, c) for c in paying if c not in paid],
+		"paid": [abbr.get(c, c) for c in paid],
+	}
+
+
+def _decisions(companies):
+	"""People whose status HR has to decide on soon, each with a date."""
+	date_today = getdate(today())
+	checks = (
+		("probation", _("Probation ends"), "final_confirmation_date", PROBATION_DAYS),
+		("contract", _("Contract ends"), "contract_end_date", CONTRACT_DAYS),
+		("retirement", _("Retires"), "date_of_retirement", RETIREMENT_DAYS),
+	)
+	out = []
+	for kind, label, field, days in checks:
+		for r in frappe.get_all(
+			"Employee",
+			filters={
+				"status": "Active",
+				"company": ["in", companies],
+				field: ["between", [date_today, date_today + datetime.timedelta(days=days)]],
+			},
+			fields=["name", "employee_name", field + " as due_on"],
+			order_by=field,
+		):
+			out.append(
+				{
+					"kind": kind,
+					"label": label,
+					"employee": r.name,
+					"employee_name": r.employee_name,
+					"date": str(r.due_on),
+					"bs": _bs_short(r.due_on),
+					"in_days": (getdate(r.due_on) - date_today).days,
+				}
+			)
+	out.sort(key=lambda x: x["in_days"])
+	return out
+
+
+def _away(companies):
+	"""Approved leave overlapping the next seven days."""
+	if not frappe.has_permission("Leave Application", "read"):
+		return []
+	date_today = getdate(today())
+	rows = frappe.get_list(
+		"Leave Application",
+		filters={
+			"company": ["in", companies],
+			"docstatus": 1,
+			"status": "Approved",
+			"from_date": ["<=", date_today + datetime.timedelta(days=6)],
+			"to_date": [">=", date_today],
+		},
+		fields=["name", "employee", "employee_name", "leave_type", "from_date", "to_date", "total_leave_days"],
+		order_by="from_date",
+		limit=20,
+	)
+	for r in rows:
+		r["bs_from"] = _bs_short(r.from_date)
+		r["bs_to"] = _bs_short(r.to_date)
+		r["now"] = getdate(r.from_date) <= date_today
+	return rows
 
 
 # (label, SQL condition on tabEmployee e, what happens while it stays blank)
