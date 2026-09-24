@@ -2,7 +2,8 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import get_first_day, nowdate, formatdate
+from frappe.utils import getdate, nowdate, formatdate
+from rdp_common_app.utils.bs_boundaries import get_bs_month_start
 
 from avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger import (
 	execute as party_ledger_execute,
@@ -105,7 +106,9 @@ def get_context(context):
 		context.default_company = context.company_list[0] if context.company_list else ""
 
 	context.today = nowdate()
-	context.from_date = str(get_first_day(nowdate()))
+	# Default period = the current BS month to date: From Miti opens on the 1st
+	# of the Nepali month (the books run on BS), not on the 1st of the AD month.
+	context.from_date = str(get_bs_month_start(getdate(nowdate())))
 	context.to_date = nowdate()
 
 
