@@ -33,6 +33,16 @@ class PortalAnnouncement(Document):
 				},
 			)
 
+	def on_trash(self):
+		# Deleting an announcement withdraws it from the portal list as well.
+		# Disabling it does not: that only stops the popup, and the history stays.
+		# Read receipts link to the history record, so they go first — otherwise
+		# Frappe's link check refuses to delete the history.
+		if not frappe.db.exists(HISTORY, self.name):
+			return
+		frappe.db.delete("Portal Announcement Read", {"announcement": self.name})
+		frappe.delete_doc(HISTORY, self.name, ignore_permissions=True)
+
 	def after_rename(self, old, new, merge=False):
 		if frappe.db.exists(HISTORY, old):
 			frappe.rename_doc(HISTORY, old, new, force=True)
