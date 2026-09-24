@@ -106,7 +106,7 @@ def get_context(context):
 		context.default_company = context.company_list[0] if context.company_list else ""
 
 	# Opened from a Sales Order's Actions menu (/customer_statement?order=SO-…,
-	# see public/js/portal_order_statement_link.js): start on that order's company
+	# see public/js/portal_orders_buttons.js): start on that order's company
 	# and customer. Only when the customer is one of this user's own, so the link
 	# can't be used to open someone else's statement.
 	context.preselect_customer = ""

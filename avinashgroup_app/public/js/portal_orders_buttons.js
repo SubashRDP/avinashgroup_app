@@ -2,11 +2,12 @@
 // For license information, please see license.txt
 
 /**
- * "Customer Statement" on the customer portal's Orders pages.
+ * Buttons on the customer portal's Orders pages.
  *
- *   /orders          (the list)      a button in the page header
- *   /orders/<name>   (one order)     an item in the page's Actions dropdown,
- *                                    next to Print
+ *   /orders          (the list)      "Place Order" (primary, → /place_order)
+ *                                    and "Customer Statement" in the page header
+ *   /orders/<name>   (one order)     "Customer Statement" in the page's Actions
+ *                                    dropdown, next to Print
  *
  * The order's link is /customer_statement?order=<name>: the statement opens on
  * that order's company and customer. customer_statement.py resolves the order
@@ -27,7 +28,11 @@ frappe.ready(function () {
 		// list.html only renders the actions block when there is a "New" button.
 		let $block = $wrap.find(".page-header-actions-block");
 		if (!$block.length) $block = $('<div class="page-header-actions-block"></div>').appendTo($wrap);
-		$('<a class="btn btn-secondary btn-sm ag-cs-link">')
+		$('<a class="btn btn-primary btn-sm ag-po-link">')
+			.attr("href", "/place_order")
+			.text(__("Place Order"))
+			.appendTo($block);
+		$('<a class="btn btn-secondary btn-sm ag-cs-link ml-2">')
 			.attr("href", "/customer_statement")
 			.text(label)
 			.appendTo($block);

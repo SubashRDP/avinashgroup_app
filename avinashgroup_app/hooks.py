@@ -22,8 +22,9 @@ web_include_js = [
     # "(n) unread" badge on the portal sidebar's Announcements link. Website only —
     # the link lives in Portal Settings, so there is nothing to decorate on the desk.
     "/assets/avinashgroup_app/js/portal_announcement_badge.js?v=1",
-    # "Customer Statement" button on /orders and in a Sales Order's Actions menu.
-    "/assets/avinashgroup_app/js/portal_order_statement_link.js?v=1",
+    # "Place Order" + "Customer Statement" buttons on /orders, and "Customer
+    # Statement" in a Sales Order's Actions menu.
+    "/assets/avinashgroup_app/js/portal_orders_buttons.js?v=1",
 ]
 
 app_include_js = [
