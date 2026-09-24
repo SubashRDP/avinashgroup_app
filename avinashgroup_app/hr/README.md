@@ -23,6 +23,7 @@ the map, not a mess waiting to be tidied.
 
 | File | What it owns | Entry point |
 |---|---|---|
+| `hr_dashboard.py` | Data for the **HR Dashboard** page (`/app/hr-dashboard`, `avinash_group_app/page/hr_dashboard/`): one BS month of headcount, attendance, payroll, pending approvals, missing employee data and the next 30 days; plus the page's grouped side menu, filtered by permission. Read-only. | `get_dashboard`, `get_menu` (whitelisted) |
 | `utils.py` | HR overrides — currently: monthly earned-leave accrual on **Bikram Sambat** months | `scheduler_events` → `daily_long` (not yet wired — see its docstring) |
 
 ## Why this package exists
