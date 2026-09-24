@@ -67,6 +67,8 @@ app_include_js = [
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=2.0",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
+    # "+ Add" on a filtered list opens a blank form instead of copying the filters in.
+    "/assets/avinashgroup_app/js/list_new_no_prefill.js?v=1.0",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
