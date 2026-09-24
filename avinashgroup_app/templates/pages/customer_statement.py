@@ -118,49 +118,10 @@ def get_context(context):
 			context.preselect_customer = so.customer
 
 	context.today = nowdate()
-	# Two ways to pick the period. "Fiscal Year" (the default) covers a whole
-	# Fiscal Year record, start to end — the traditional statement. "Date Range"
-	# shows the AD/BS date boxes; they open on the current BS month to date.
-	context.fiscal_years = _fiscal_years()
-	current = _current_fiscal_year(context.fiscal_years, context.default_company)
-	context.default_fiscal_year = current["name"] if current else ""
+	# Default period = the current BS month to date: From Miti opens on the 1st
+	# of the Nepali month (the books run on BS), not on the 1st of the AD month.
 	context.from_date = str(get_bs_month_start(getdate(nowdate())))
 	context.to_date = nowdate()
-
-
-def _fiscal_years():
-	"""Every enabled Fiscal Year, newest first, with the companies it covers
-	(Fiscal Year Company rows; an empty list means every company, as in ERPNext)."""
-	rows = frappe.db.sql(
-		"""
-		SELECT fy.name, fy.year_start_date, fy.year_end_date,
-			GROUP_CONCAT(fyc.company SEPARATOR '\n') AS companies
-		FROM `tabFiscal Year` fy
-		LEFT JOIN `tabFiscal Year Company` fyc ON fyc.parent = fy.name
-		WHERE fy.disabled = 0
-		GROUP BY fy.name, fy.year_start_date, fy.year_end_date
-		ORDER BY fy.year_start_date DESC
-		""",
-		as_dict=True,
-	)
-	return [
-		{
-			"name": r.name,
-			"from_date": str(r.year_start_date),
-			"to_date": str(r.year_end_date),
-			"companies": [c for c in (r.companies or "").split("\n") if c],
-		}
-		for r in rows
-	]
-
-
-def _current_fiscal_year(fiscal_years, company):
-	"""The fiscal year that contains today for this company, or None."""
-	today = nowdate()
-	for fy in fiscal_years:
-		if fy["from_date"] <= today <= fy["to_date"] and (not fy["companies"] or company in fy["companies"]):
-			return fy
-	return None
 
 
 @frappe.whitelist()
