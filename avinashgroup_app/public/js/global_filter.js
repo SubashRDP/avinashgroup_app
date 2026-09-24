@@ -8,7 +8,8 @@
  * All link-field dropdown filtering is handled by company_filter.js
  * (config-driven via Company Filter Config DocType).
  *
- * Also: "+ Add" on a filtered list opens a blank form (see bottom of file).
+ * Also, list views (bottom of file): "+ Add" on a filtered list opens a blank
+ * form, and a Company filter narrows every other Link filter's dropdown.
  */
 
 $(document).on("app_ready", function () {
@@ -102,5 +103,67 @@ frappe.provide("frappe.views");
 if (frappe.views.ListView) {
     frappe.views.ListView.prototype.make_new_doc = function () {
         frappe.new_doc(this.doctype);
+    };
+}
+
+
+// ── List filters follow the Company filter ────────────────────────────────────
+// On a list filtered to Company = X (whichever Link-to-Company field the list
+// has, company or custom_company), every other Link filter's dropdown —
+// Customer, Item, Warehouse… in the filter bar and in the Filter popover —
+// only offers X's records. Same company-field resolution as the form filters
+// (avinash.filter_engine._resolve_filter_key in company_filter.js), so it
+// needs no Company Filter Config rows: a linked doctype with a company or
+// custom_company field is narrowed, anything else (UOM, Territory…) is left
+// alone. Dropdown only — it never changes which rows the list shows.
+function _list_company(list_view) {
+    if (!list_view || !list_view.filter_area) return null;
+    const hit = list_view.filter_area.get().find(function (f) {
+        if (f[2] !== "=" || !f[3] || typeof f[3] !== "string") return false;
+        const df = frappe.meta.get_docfield(f[0], f[1]);
+        return df && df.fieldtype === "Link" && df.options === "Company";
+    });
+    return hit ? hit[3] : null;
+}
+
+function _company_scoped_query(list_view, linked_doctype) {
+    if (!linked_doctype || linked_doctype === "Company") return null;
+    // _resolve_filter_key reads the linked doctype's meta synchronously; load
+    // it now so it is there by the time the user types in the filter.
+    frappe.model.with_doctype(linked_doctype);
+    return function () {
+        const company = _list_company(list_view);
+        if (!company) return {};
+        const key = avinash.filter_engine._resolve_filter_key(linked_doctype);
+        return key ? { filters: { [key]: company } } : {};
+    };
+}
+
+// Filter bar: the standard filters are page fields built by FilterArea.
+if (frappe.views.BaseList) {
+    const _setup_filter_area = frappe.views.BaseList.prototype.setup_filter_area;
+    frappe.views.BaseList.prototype.setup_filter_area = function () {
+        const out = _setup_filter_area.apply(this, arguments);
+        const list_view = this;
+        $.each((this.page && this.page.fields_dict) || {}, function (_, control) {
+            if (control.df.fieldtype !== "Link") return;
+            const query = _company_scoped_query(list_view, control.df.options);
+            if (query) control.get_query = query;
+        });
+        return out;
+    };
+}
+
+// Filter popover: each row builds its value control in Filter.make_field from
+// a copy of the docfield. filter_list is the ListView when the popover is on a
+// list; on dashboards and query reports it is the FilterGroup, and nothing changes.
+if (frappe.ui.Filter) {
+    const _make_field = frappe.ui.Filter.prototype.make_field;
+    frappe.ui.Filter.prototype.make_field = function (df) {
+        if (df && df.fieldtype === "Link" && this.filter_list instanceof frappe.views.BaseList) {
+            const query = _company_scoped_query(this.filter_list, df.options);
+            if (query) df.get_query = query;
+        }
+        return _make_field.apply(this, arguments);
     };
 }
