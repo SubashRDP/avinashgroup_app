@@ -249,7 +249,9 @@ class ProductWiseInvoiceDetails {
 	.pw-meta { display: flex; justify-content: space-between; font-size: 12px; color: #000; margin-top: 2px; }
 	.pw-table { width: 100%; border-collapse: collapse; font-size: 12px; color: #000; }
 	.pw-table td { color: #000; }
-	.pw-table th { background: #6c757d; color: #fff; padding: 6px 8px; text-align: left; }
+	/* Column titles stay pinned to the top of the window while long results scroll under them. */
+	.pw-table th { background: #6c757d; color: #fff; padding: 6px 8px; text-align: left;
+		position: sticky; top: 0; z-index: 2; }
 	.pw-table td { padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
 	.pw-table th.r, .pw-table td.r { text-align: right; }
 	.pw-table th.l, .pw-table td.l { width: 150px; white-space: nowrap; }
