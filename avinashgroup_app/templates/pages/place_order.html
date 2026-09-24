@@ -840,13 +840,15 @@ class PlaceOrder {
 		var me = this;
 		this.date_ctl = {};
 		frappe.require("controls.bundle.js", function () {
+			// Order Date is read-only: an order is always placed today (the
+			// server ignores the browser's value and uses today regardless).
 			[
-				["order", "po-date", me.ctx.today],
-				["delivery", "po-delivery-date", me.ctx.default_delivery_date]
-			].forEach(function ([key, id, value]) {
+				["order", "po-date", me.ctx.today, 1],
+				["delivery", "po-delivery-date", me.ctx.default_delivery_date, 0]
+			].forEach(function ([key, id, value, read_only]) {
 				const ctl = frappe.ui.form.make_control({
 					parent: $("#" + id),
-					df: { fieldtype: "Date", fieldname: id.replace(/-/g, "_"), reqd: 1 },
+					df: { fieldtype: "Date", fieldname: id.replace(/-/g, "_"), reqd: 1, read_only: read_only },
 					only_input: true,
 					render_input: true
 				});

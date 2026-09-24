@@ -517,9 +517,14 @@ def create_sales_order(customer, company, transaction_date, delivery_date, items
 		or frappe.db.get_single_value("Global Defaults", "default_currency")
 	)
 
+	# The order date is always today. The page shows it read-only; the browser's
+	# value is ignored so an order can't be back- or forward-dated by editing the
+	# request. The argument stays for callers that still send it.
+	transaction_date = nowdate()
+
 	if not delivery_date:
 		frappe.throw(_("Expected Delivery Date is required."))
-	if transaction_date and getdate(delivery_date) < getdate(transaction_date):
+	if getdate(delivery_date) < getdate(transaction_date):
 		frappe.throw(_("Expected Delivery Date cannot be before the Transaction Date."))
 
 	if isinstance(items, str):
