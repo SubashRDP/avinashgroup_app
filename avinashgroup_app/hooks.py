@@ -49,7 +49,7 @@ app_include_js = [
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
-    "/assets/avinashgroup_app/js/global_filter.js?v=1.7",
+    "/assets/avinashgroup_app/js/global_filter.js?v=1.8",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",

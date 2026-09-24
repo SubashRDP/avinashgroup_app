@@ -10,7 +10,8 @@
  *
  * Also, list views (bottom of file): "+ Add" on a filtered list opens a blank
  * form; a Company filter narrows every other Link filter's dropdown and drops
- * filters that point at another company's record.
+ * filters that point at another company's record; filter dropdowns also offer
+ * disabled / inactive records so their old transactions can be found.
  */
 
 $(document).on("app_ready", function () {
@@ -117,6 +118,8 @@ if (frappe.views.ListView) {
 // needs no Company Filter Config rows: a linked doctype with a company or
 // custom_company field is narrowed, anything else (UOM, Territory…) is left
 // alone. Dropdown only — it never changes which rows the list shows.
+// The same dropdowns also offer inactive records (disabled Customer/Supplier,
+// Left Employee), tagged and listed after the active ones; see _can_go_inactive.
 function _list_company(list_view) {
     if (!list_view || !list_view.filter_area) return null;
     const hit = list_view.filter_area.get().find(function (f) {
@@ -127,16 +130,34 @@ function _list_company(list_view) {
     return hit ? hit[3] : null;
 }
 
+// Doctypes whose records can go inactive: a disabled/enabled check, or
+// Employee's status. Stock search hides inactive records, but a list filter
+// must still find them (old bills of a disabled customer), so these go
+// through search_link_for_list_filter in globalfilter.py.
+function _can_go_inactive(linked_doctype) {
+    if (linked_doctype === "Employee") return true;
+    const meta = frappe.get_meta(linked_doctype);
+    return !!(meta && meta.fields.some(function (df) {
+        return df.fieldtype === "Check" && (df.fieldname === "disabled" || df.fieldname === "enabled");
+    }));
+}
+
 function _company_scoped_query(list_view, linked_doctype) {
     if (!linked_doctype || linked_doctype === "Company") return null;
-    // _resolve_filter_key reads the linked doctype's meta synchronously; load
-    // it now so it is there by the time the user types in the filter.
+    // _resolve_filter_key and _can_go_inactive read the linked doctype's meta
+    // synchronously; load it now so it is there by the time the user types.
     frappe.model.with_doctype(linked_doctype);
     return function () {
         const company = _list_company(list_view);
-        if (!company) return {};
-        const key = avinash.filter_engine._resolve_filter_key(linked_doctype);
-        return key ? { filters: { [key]: company } } : {};
+        const key = company && avinash.filter_engine._resolve_filter_key(linked_doctype);
+        const filters = key ? { [key]: company } : {};
+        if (_can_go_inactive(linked_doctype)) {
+            return {
+                query: "avinashgroup_app.custom_code.globalfilter.globalfilter.search_link_for_list_filter",
+                filters: filters
+            };
+        }
+        return { filters: filters };
     };
 }
 

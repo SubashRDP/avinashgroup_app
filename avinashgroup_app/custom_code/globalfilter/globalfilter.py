@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.desk.search import get_std_fields_list
 from frappe.utils.caching import request_cache
 from collections import defaultdict
 # ─────────────────────────────────────────────────────────────
@@ -777,3 +778,73 @@ def search_link_by_company(doctype, txt, searchfield, start, page_len, filters):
     if title_field:
         return [[r.name, getattr(r, title_field, None)] for r in records]
     return [[r.name] for r in records]
+
+# Link-field types frappe.desk.search.search_widget matches txt against.
+_SEARCHABLE_FIELDTYPES = {
+    "Data", "Text", "Small Text", "Long Text", "Link", "Select", "Read Only", "Text Editor",
+}
+
+
+def _inactive_rule(meta):
+    """(fieldname, order_by, is_inactive) for doctypes whose records can go
+    inactive, or None. Employee has no disabled flag; its status does the job."""
+    if meta.name == "Employee":
+        return "status", "status asc", lambda v: v not in (None, "", "Active")
+    if meta.get_field("disabled"):
+        return "disabled", "disabled asc", lambda v: bool(v)
+    if meta.get_field("enabled"):
+        return "enabled", "enabled desc", lambda v: not v
+    return None
+
+
+@frappe.whitelist()
+def search_link_for_list_filter(doctype, txt, searchfield, start, page_len, filters, **kwargs):
+    """Link search for LIST-VIEW filter dropdowns that keeps inactive records.
+
+    Stock search (frappe.desk.search.search_widget) always adds `disabled != 1`
+    / `enabled = 1`, so a disabled Customer or Supplier could not be picked as
+    a filter on the Sales Invoice list even though its old bills are still
+    there. Here inactive records are offered too, sorted after the active ones
+    and tagged "Disabled" (or the Employee's status: Left, Inactive…).
+
+    Called only from global_filter.js, for list filters. Forms keep the stock
+    search: picking a disabled party on a new document must stay impossible.
+    `filters` is the company scope built by the same file ({custom_company: X}).
+    """
+    filters = frappe.parse_json(filters) if isinstance(filters, str) else (filters or {})
+    meta = frappe.get_meta(doctype)
+    rule = _inactive_rule(meta)
+
+    fields = get_std_fields_list(meta, searchfield or "name")
+
+    or_filters = []
+    if txt:
+        for f in fields:
+            df = meta.get_field(f)
+            if f == "name" or (df and df.fieldtype in _SEARCHABLE_FIELDTYPES):
+                or_filters.append([doctype, f, "like", f"%{txt}%"])
+
+    order_by = "name asc"
+    query_fields = list(fields)
+    if rule:
+        order_by = f"{rule[1]}, name asc"
+        if rule[0] not in query_fields:
+            query_fields.append(rule[0])
+
+    rows = frappe.get_list(
+        doctype,
+        filters=filters,
+        or_filters=or_filters or None,
+        fields=query_fields,
+        start=start,
+        page_length=page_len,
+        order_by=order_by,
+    )
+
+    results = []
+    for r in rows:
+        row = [r.get(f) for f in fields]
+        if rule and rule[2](r.get(rule[0])):
+            row.append(_(r.get(rule[0])) if rule[0] == "status" else _("Disabled"))
+        results.append(row)
+    return results
