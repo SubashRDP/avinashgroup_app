@@ -217,7 +217,7 @@ def execute(filters=None):
 	_attach_customer_addresses(data)
 
 	if data:
-		total = {"miti": None, "invoice_number": _("Total"), "customer": None, "vehicle_number": None,
+		total = {"miti": None, "invoice_number": _("Total"), "customer": None, "customer_tax_id": None, "vehicle_number": None,
 			"price_list": None, "branch": None, "customer_address": None, "customer_phone": None, "bold": 1}
 		for col in columns:
 			if col.get("fieldtype") in ("Currency", "Float"):
@@ -231,6 +231,7 @@ def get_columns():
 		{"fieldname": "miti",              "label": _("Miti"),                   "fieldtype": "Data",     "width": 110},
 		{"fieldname": "invoice_number",     "label": _("Invoice Number"),         "fieldtype": "Data",     "width": 150},
 		{"fieldname": "customer",           "label": _("Customer"),               "fieldtype": "Data",     "width": 170},
+		{"fieldname": "customer_tax_id",    "label": _("Customer Tax"),           "fieldtype": "Data",     "width": 120},
 		{"fieldname": "branch",             "label": _("Branch"),                 "fieldtype": "Data",     "width": 130},
 		{"fieldname": "total_qty",          "label": _("Total Quantity"),         "fieldtype": "Float",    "width": 110},
 		{"fieldname": "amount_before_vat",  "label": _("Amount before VAT"),      "fieldtype": "Currency", "width": 140},
@@ -274,6 +275,7 @@ def get_data(filters):
 			si.name                                           AS invoice_name,
 			si.customer                                       AS customer_id,
 			si.customer_name                                  AS customer,
+			c.tax_id                                           AS customer_tax_id,
 			br.branch                                          AS branch,
 			SUM(sii.qty)                                       AS total_qty,
 			si.custom_total_amount_including_excise           AS amount_before_vat,

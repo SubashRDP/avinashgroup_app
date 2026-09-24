@@ -1,3 +1,6 @@
+import frappe
+
+
 def apply_patch():
 	"""Keep a manually chosen party account on Payment Entry instead of forcing the advance account.
 
@@ -11,7 +14,8 @@ def apply_patch():
 	receivable/payable account nor its advance account, put the user's account back and
 	untick the flag, so the entry posts as a normal payment against that account.
 	Leaving the field on the normal receivable/payable account keeps core behaviour
-	(switched to the advance account).
+	(switched to the advance account), but without core's "Paid From account changed"
+	alert.
 
 	Patched on the base PaymentEntry class so it also covers HRMS's
 	EmployeePaymentEntry subclass, which owns the override_doctype_class hook.
@@ -24,7 +28,12 @@ def apply_patch():
 	def set_liability_account(self):
 		chosen_account = self.get(self.party_account_field) if self.party_account_field else None
 
+		messages_before = len(frappe.local.message_log)
 		core_set_liability_account(self)
+		# Drop core's "Paid From account changed from X to Y" alert so users don't see it
+		frappe.local.message_log = frappe.local.message_log[:messages_before] + [
+			msg for msg in frappe.local.message_log[messages_before:] if not msg.get("alert")
+		]
 
 		if not self.book_advance_payments_in_separate_party_account or not chosen_account:
 			return
