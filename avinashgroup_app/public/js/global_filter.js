@@ -11,7 +11,8 @@
  * Also, list views (bottom of file): "+ Add" on a filtered list opens a blank
  * form; a Company filter narrows every other Link filter's dropdown and drops
  * filters that point at another company's record; filter dropdowns also offer
- * disabled / inactive records so their old transactions can be found.
+ * disabled / inactive records so their old transactions can be found; and
+ * Employee / Item / User lists no longer open hiding inactive records.
  */
 
 $(document).on("app_ready", function () {
@@ -231,4 +232,37 @@ function _drop_other_company_filters(list_view) {
             });
         });
     });
+}
+
+// ── Lists open with inactive records visible ──────────────────────────────────
+// Stock list settings open some lists pre-filtered to active records only —
+// Employee (status = Active), Item (disabled = 0), User (enabled = 1) — and
+// Frappe then saves that filter into each user's list settings, so it comes
+// back on every visit. People need the inactive ones too (a left employee's
+// history, a disabled item's old stock), so such a filter is dropped when the
+// list opens, whether it came from listview_settings or the saved settings.
+// Only these "hide inactive" filters are touched; Project/Task/Issue's
+// status = Open and any other filter are kept, and a user can still add
+// Status = Active by hand for the session. A link that opens the list with
+// explicit route options (the HR dashboard's "Active employees") still wins,
+// because route options are applied later, in before_refresh.
+function _hides_inactive(doctype, f) {
+    if (f[0] !== doctype) return false;
+    const field = f[1], cond = f[2], value = String(f[3]);
+    if (field === "disabled") return (cond === "=" && value === "0") || (cond === "!=" && value === "1");
+    if (field === "enabled") return (cond === "=" && value === "1") || (cond === "!=" && value === "0");
+    if (field === "status" && doctype === "Employee") return cond === "=" && value === "Active";
+    return false;
+}
+
+if (frappe.views.ListView) {
+    const _setup_defaults = frappe.views.ListView.prototype.setup_defaults;
+    frappe.views.ListView.prototype.setup_defaults = function () {
+        const out = _setup_defaults.apply(this, arguments);
+        const doctype = this.doctype;
+        if (Array.isArray(this.filters)) {
+            this.filters = this.filters.filter(function (f) { return !_hides_inactive(doctype, f); });
+        }
+        return out;
+    };
 }
