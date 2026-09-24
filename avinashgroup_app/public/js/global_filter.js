@@ -7,6 +7,8 @@
  *
  * All link-field dropdown filtering is handled by company_filter.js
  * (config-driven via Company Filter Config DocType).
+ *
+ * Also: "+ Add" on a filtered list opens a blank form (see bottom of file).
  */
 
 $(document).on("app_ready", function () {
@@ -83,4 +85,22 @@ function _validate_row_company(frm, cdt, cdn, fieldname, linked_doctype) {
             }
         });
     });
+}
+
+
+// ── "+ Add" on a filtered list opens a blank form ─────────────────────────────
+// Stock Frappe (list_view.js, ListView.make_new_doc) copies every "=" list
+// filter into the new document: filter Sales Invoice by Customer = ABC, press
+// + Add, and the new invoice already says ABC. Clerks filter to LOOK UP a
+// document, not to add to that group, so the next bill was pre-filled with
+// the previous customer. Applies to every doctype (Report view, Kanban and
+// Ctrl+B go through the same method); the user's default Company and field
+// defaults still apply, frappe.new_doc sets those itself.
+// Patched on the prototype, not listview_settings: ERPNext list scripts
+// replace the whole settings object, so a settings hook would be clobbered.
+frappe.provide("frappe.views");
+if (frappe.views.ListView) {
+    frappe.views.ListView.prototype.make_new_doc = function () {
+        frappe.new_doc(this.doctype);
+    };
 }

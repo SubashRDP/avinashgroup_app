@@ -49,7 +49,7 @@ app_include_js = [
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
-    "/assets/avinashgroup_app/js/global_filter.js?v=1.4",
+    "/assets/avinashgroup_app/js/global_filter.js?v=1.5",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
     "/assets/avinashgroup_app/js/approval_workflow_auto.js?v=1.0",
@@ -67,8 +67,6 @@ app_include_js = [
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=2.0",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
-    # "+ Add" on a filtered list opens a blank form instead of copying the filters in.
-    "/assets/avinashgroup_app/js/list_new_no_prefill.js?v=1.0",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
