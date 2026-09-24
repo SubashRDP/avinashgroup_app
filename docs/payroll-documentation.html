@@ -692,16 +692,24 @@ quietly loses money on the payslip.</p>
 off instead. That single distinction is the Employee Category.</p>
 <div class="tablewrap"><table>
 <tr><th>Category</th><th>Overtime eligible</th><th>Compensatory leave</th><th>Who</th></tr>
-<tr><td><b>Plant</b></td><td>Yes — extra hours and holiday work are paid</td><td>No</td><td>Filling plant, labour, drivers, helpers</td></tr>
-<tr><td><b>Officer &amp; Admin</b></td><td>No</td><td>Yes — a holiday worked becomes a day of leave</td><td>Managers, accounts, admin, sales officers</td></tr>
+<tr><td><b>Operation</b> (called <b>Plant</b> on some sites)</td><td>Yes — extra hours and holiday work are paid</td><td>No</td><td>Filling plant, labour, drivers, helpers</td></tr>
+<tr><td><b>Admin &amp; Officer</b> (called <b>Officer &amp; Admin</b> on some sites)</td><td>No</td><td>Yes — a holiday worked becomes a day of leave</td><td>Managers, accounts, admin, sales officers</td></tr>
 </table></div>
 <ol class="steps">
-<li>Search for <span class="screen">Employee Category</span>. Confirm the two records exist, with
-<span class="field">Overtime Eligible</span> ticked on Plant only and <span class="field">Compensatory Leave</span>
-ticked on Officer &amp; Admin only.</li>
+<li>Search for <span class="screen">Employee Category</span>. Confirm <b>exactly two</b> records exist, one with
+<span class="field">Overtime Eligible</span> ticked and one with <span class="field">Compensatory Leave</span> ticked.
+Read the ticks, not the names — see the note below.</li>
 <li>Open the <span class="screen">Employee</span> list &rsaquo; <span class="btn">Report</span> view.</li>
 <li>Add the <span class="field">Employee Category</span> column, sort by designation, and fill it for everyone.</li>
 </ol>
+<div class="note imp"><b class="t">Important — two names for the same two things</b>
+<p>The categories are named differently on different sites: <b>Operation</b> and <b>Admin &amp; Officer</b> on avinas1,
+<b>Plant</b> and <b>Officer &amp; Admin</b> on nepalgas. They mean the same two things, and what decides pay is the
+<i>ticks</i> on the record, not the name.</p>
+<p>The group has not yet chosen which vocabulary to keep. Until it does, do not "tidy up" by creating the other
+pair: a second record with the same ticks splits the staff across two categories, and the ones left on the old
+record silently stop being found.</p></div>
+
 <div class="note imp"><b class="t">Important</b><p>When this data was first imported at NGI, <b>63 of 80</b> people
 carried the opposite category to the client's own workbook. It was corrected from the sheet. Before the first
 live run at any company, print the list and have the manager sign it.</p></div>
@@ -2146,7 +2154,7 @@ a BS month with complete attendance. Have the company's Excel salary sheet besid
 <div class="case"><h4>A5 · Shifts exist</h4><p>Open Shift Type. <b>Expect:</b> three NGI shifts, two NGN, one each elsewhere; auto-attendance ticked and <b>Holiday List blank</b> on every one.</p></div>
 <div class="case"><h4>A6 · Cutoff is blank</h4><p>Open each shift. <b>Expect:</b> Late Arrival Cutoff Time empty, grace 0, half day if late by 2 hours.</p></div>
 <div class="case"><h4>A7 · Cost centres</h4><p>Filter Cost Center by company. <b>Expect:</b> Office, Sales &amp; Distribution, Filling Plant.</p></div>
-<div class="case"><h4>A8 · Employee categories</h4><p><b>Expect:</b> Plant with overtime ticked; Officer &amp; Admin with compensatory leave ticked.</p></div>
+<div class="case"><h4>A8 · Employee categories</h4><p><b>Expect:</b> exactly two records — one with Overtime Eligible ticked (Operation, or Plant), one with Compensatory Leave ticked (Admin &amp; Officer, or Officer &amp; Admin). Two records with the same ticks is a failure.</p></div>
 <div class="case"><h4>A9 · Allowance categories</h4><p><b>Expect:</b> NGI Tea OLD 235, NGI Tea NEW 40, NGN Tea OLD 265, NGN Tea NEW 40.</p></div>
 <div class="case"><h4>A10 · Components</h4><p><b>Expect:</b> 21 components; SSF and SSF Addition both with <i>depends on payment days</i> off.</p></div>
 

@@ -143,6 +143,10 @@ every delete — a blanket DELETE once cost 357k rows on another site.
   **blank** — see §7. Caught only by reading the HRMS source.
 - I reported ~45 unpushed commits from memory; it was 3, and now 0. **Check
   `git log origin/develop..develop`, don't recall it.**
+- `70baa36` deleted `ensure_leave_types` but left the call, so `setup_year` raised NameError on every site for
+  two days and nobody noticed — nothing calls it in a test. Restored 2026-09-24 and proven idempotent on
+  avinas1 (runs, creates nothing). **A rollback-wrapped experiment does not protect you here:** the setup path
+  commits internally, so two stray Employee Categories survived the rollback and had to be deleted by hand.
 - Build sources left in `/tmp` were wiped between sessions. Anything worth
   keeping goes in the repo or the scratchpad, and gets committed the same turn.
 
@@ -182,6 +186,11 @@ payable accounts whose Account Type was cleared need confirming; 547101 "O/O"
 may want a readable name.
 
 **Client decisions:**
+
+- **Which employee-category vocabulary to keep.** avinas1 uses *Operation* (78 staff, overtime) and
+  *Admin & Officer* (35, compensatory leave); nepalgas uses *Plant* (238) and *Officer & Admin* (57) for the
+  same two things. The flags are right on both. Renaming touches live Employee records, so it was not done —
+  `ensure_employee_categories` now matches on the flags rather than the name so it stops creating a second pair.
 
 - Tick `mark_auto_attendance_on_holidays` on the shifts? It makes holiday punches
   produce Present automatically (proven in `test_shift_type.py:356`) — but a

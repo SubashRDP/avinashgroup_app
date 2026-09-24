@@ -188,8 +188,26 @@ def ensure_shift_types(company, abbr):
 
 
 def ensure_employee_categories():
+	"""The two categories, unless the site already names them something else.
+
+	A category is really one bit of policy — is this person paid for extra hours,
+	or given a day off instead — and a site only needs one record per answer.
+	avinas1 calls them Operation and Admin & Officer; nepalgas calls the same two
+	Plant and Officer & Admin. Matching on the name alone created a second pair on
+	avinas1 and left 113 employees pointing at the older one, so the check is on
+	the policy the record carries, not on what it is called.
+
+	Which vocabulary the group settles on is theirs to decide; renaming touches
+	live Employee records and is not done here.
+	"""
 	for name, ot, comp, description in EMPLOYEE_CATEGORIES:
 		if frappe.db.exists("Employee Category", name):
+			continue
+
+		existing = frappe.db.get_value(
+			"Employee Category", {"ot_eligible": ot, "compensatory_leave": comp}, "name"
+		)
+		if existing:
 			continue
 		frappe.get_doc(
 			{
@@ -200,6 +218,22 @@ def ensure_employee_categories():
 				"description": description,
 			}
 		).insert(ignore_permissions=True)
+
+
+def ensure_leave_types():
+	"""The four leave types the group uses, plus the unpaid catch-all.
+
+	How each behaves is settled in one place — `patches.setup_leave_types`, which
+	is written to be re-runnable. Calling it here means a site whose leave types
+	were deleted gets them back, instead of the year setup quietly building
+	policies that point at nothing.
+
+	Restored after 70baa36 removed the function but left the call: `setup_year`
+	has raised NameError on every site since, before creating anything at all.
+	"""
+	from avinashgroup_app.patches.setup_leave_types import execute as build_leave_types
+
+	build_leave_types()
 
 
 # ────────────────────────────────────────────────────────── per company ──
