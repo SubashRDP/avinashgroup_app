@@ -5,6 +5,7 @@
 {% block script %}
 <link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
 <script src="/assets/rdp_common_app/js/nepali.datepicker.v5.0.4.min.js"></script>
+<script src="/assets/avinashgroup_app/js/portal_quick_dates.js?v=1"></script>
 <script>
 window.pwid_ctx = {
 	company_list: {{ company_list | tojson }},
@@ -12,6 +13,7 @@ window.pwid_ctx = {
 	default_company: {{ default_company | tojson }},
 	from_date: {{ from_date | tojson }},
 	to_date: {{ to_date | tojson }},
+	today: {{ today | tojson }},
 };
 
 $(document).ready(function () {
@@ -28,6 +30,7 @@ class ProductWiseInvoiceDetails {
 		this.filter_customers_by_company();
 		this.setup_bs_dates();
 		this.bind_dates();
+		this.mount_quick_dates();
 		$("#pw-include-return").on("change", () => this.schedule_reload());
 		this.load();
 	}
@@ -110,9 +113,24 @@ class ProductWiseInvoiceDetails {
 		$("#pw-from-date").on("change", function () { me.ad_to_bs("from", this.value); me.schedule_reload(); });
 		$("#pw-to-date").on("change", function () { me.ad_to_bs("to", this.value); me.schedule_reload(); });
 	}
+	// 7 Days / 15 Days / 1 Month after the Customer filter (public/js/portal_quick_dates.js).
+	// Firing "change" runs the handlers above: BS mirror + one debounced reload.
+	mount_quick_dates() {
+		this.quick_dates = window.ag_portal_quick_dates.mount({
+			$parent: $("#pw-quick-dates"),
+			today: this.ctx.today,
+			get_range: () => ({ from: $("#pw-from-date").val(), to: $("#pw-to-date").val() }),
+			apply: (from, to) => {
+				$("#pw-from-date").val(from).trigger("change");
+				$("#pw-to-date").val(to).trigger("change");
+			}
+		});
+	}
 
 	// ── Load + render ─────────────────────────────────────────────────────
 	schedule_reload() {
+		// Every date change passes through here, so the quick-range highlight follows it.
+		if (this.quick_dates) this.quick_dates.refresh();
 		clearTimeout(this._reload_timer);
 		this._reload_timer = setTimeout(() => this.load(), 350);
 	}
@@ -289,6 +307,11 @@ class ProductWiseInvoiceDetails {
 				{% endfor %}
 			</div>
 		</div>
+	</div>
+	<div class="pw-field">
+		{# empty label keeps the buttons level with the Customer box beside them #}
+		<label>&nbsp;</label>
+		<div id="pw-quick-dates"></div>
 	</div>
 	<div class="pw-field">
 		<label for="pw-from-date">From Date (AD) *</label>

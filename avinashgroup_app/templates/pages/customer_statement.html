@@ -6,6 +6,7 @@
 <!-- Nepali (BS) date picker — reuse rdp_common_app's library + NepaliFunctions converter -->
 <link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
 <script src="/assets/rdp_common_app/js/nepali.datepicker.v5.0.4.min.js"></script>
+<script src="/assets/avinashgroup_app/js/portal_quick_dates.js?v=1"></script>
 <script>
 window.customer_statement_ctx = {
 	customer_list: {{ customer_list | tojson }},
@@ -39,6 +40,7 @@ class CustomerStatement {
 		frappe.require("controls.bundle.js", function () {
 			me.make_date_controls();
 			me.setup_bs_dates();
+			me.mount_quick_dates();
 			me.load_statement();
 		});
 	}
@@ -139,6 +141,26 @@ class CustomerStatement {
 		});
 	}
 
+	// 7 Days / 15 Days / 1 Month after the Customer filter (public/js/portal_quick_dates.js).
+	// set_date() is quiet, so the BS mirror and the reload are done here by hand.
+	mount_quick_dates() {
+		var me = this;
+		this.quick_dates = window.ag_portal_quick_dates.mount({
+			$parent: $("#cs-quick-dates"),
+			today: this.ctx.today,
+			get_range: function () {
+				return { from: me.get_date("from"), to: me.get_date("to") };
+			},
+			apply: function (from, to) {
+				Promise.all([me.set_date("from", from), me.set_date("to", to)]).then(function () {
+					me.ad_to_bs("from", from);
+					me.ad_to_bs("to", to);
+					me.schedule_reload();
+				});
+			}
+		});
+	}
+
 	// Always YYYY-MM-DD, whatever display format the site uses.
 	get_date(which) {
 		const ctl = this.date_ctl && this.date_ctl[which];
@@ -202,6 +224,8 @@ class CustomerStatement {
 	// ── Load + render (report look) ─────────────────────────────────────
 	schedule_reload() {
 		var me = this;
+		// Every date change passes through here, so the quick-range highlight follows it.
+		if (this.quick_dates) this.quick_dates.refresh();
 		clearTimeout(this._reload_timer);
 		this._reload_timer = setTimeout(function () { me.load_statement(); }, 350);
 	}
@@ -440,6 +464,10 @@ class CustomerStatement {
 .pl-meta-bar { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-bottom: 8px; }
 .pl-divider { border: none; border-top: 1.5px solid #ccc; margin: 6px 0 8px; }
 .pl table { width: 100%; border-collapse: collapse; }
+/* Frappe's Date control appends its fieldname in a .tooltip-content span, which the
+   desk stylesheet hides. Website pages don't load that stylesheet, so it printed
+   "cs_from_date" / "cs_to_date" under the date boxes. */
+#cs-from-date .tooltip-content, #cs-to-date .tooltip-content { display: none; }
 /* Column titles stay pinned to the top of the window while long statements scroll
    under them. A collapsed table's borders don't travel with a stuck cell, so the
    top/bottom rules are repeated as inset shadows. */
@@ -487,6 +515,13 @@ class CustomerStatement {
 		</div>
 	</div>
 	<div class="col-sm-3 mb-3">
+		{# empty label keeps the buttons level with the Customer box beside them #}
+		<div class="cs-section-label">&nbsp;</div>
+		<div id="cs-quick-dates"></div>
+	</div>
+</div>
+<div class="row mb-3">
+	<div class="col-sm-3 mb-3">
 		<div class="cs-section-label">From Date (AD) <span class="text-danger">*</span></div>
 		<div id="cs-from-date"></div>
 	</div>
@@ -494,8 +529,6 @@ class CustomerStatement {
 		<div class="cs-section-label">From Miti (BS)</div>
 		<input type="text" class="form-control cs-bs-field" id="cs-from-miti" placeholder="YYYY-MM-DD" autocomplete="off">
 	</div>
-</div>
-<div class="row mb-3">
 	<div class="col-sm-3 mb-3">
 		<div class="cs-section-label">To Date (AD) <span class="text-danger">*</span></div>
 		<div id="cs-to-date"></div>

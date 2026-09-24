@@ -20,7 +20,7 @@ import os
 
 import frappe
 from frappe import _
-from frappe.utils import flt, formatdate, get_first_day, get_last_day, getdate, nowdate
+from frappe.utils import add_days, flt, formatdate, getdate, nowdate
 
 # The Status column and filter report the Sales Order's *billing* status, not
 # its workflow status — this is a billing-oriented report, so "Partly Billed"
@@ -283,8 +283,9 @@ def get_context(context):
 		context.fiscal_year_list[0] if context.fiscal_year_list else ""
 	)
 	# Date-wise mode opens on the current month.
-	context.from_date = str(get_first_day(nowdate()))
-	context.to_date = str(get_last_day(nowdate()))
+	# Opens Date-wise on the last 7 days, the same range as the page's "7 Days" quick button.
+	context.from_date = add_days(nowdate(), -7)
+	context.to_date = nowdate()
 	context.today = nowdate()
 
 
