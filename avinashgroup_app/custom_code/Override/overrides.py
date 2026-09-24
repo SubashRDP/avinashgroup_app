@@ -48,6 +48,38 @@ class SalesOrder(ERPNextSalesOrder):
 	def validate_warehouse(self):
 		_lenient_warehouse_check(self, super().validate_warehouse)
 
+	# Portal pill by billing progress (billing_status, which ERPNext keeps in step
+	# with submitted Sales Invoices) → (label, indicator colour).
+	PORTAL_BILLING_STATUS = {
+		"Not Billed": ("Not Billed", "orange"),
+		"Partly Billed": ("Partly Billed", "yellow"),
+		"Fully Billed": ("Billed", "green"),
+	}
+
+	def set_indicator(self):
+		"""Customer portal status: Not Billed / Partly Billed / Billed.
+
+		Stock shows the order's workflow status ("To Deliver and Bill", "To
+		Bill"…), written from our side; customers asked how much of the order
+		has been invoiced. On Hold and Closed keep the stock pill: they are a
+		decision about the order, not billing progress.
+
+		Called only from the portal (erpnext website_list_for_contact.post_process
+		for /orders, templates/pages/order.py for /orders/<name>) on a doc that
+		is rendered and never saved. The list row's template prints doc.status,
+		not indicator_title, so status is overridden here too, in memory only.
+		"""
+		super().set_indicator()
+		if self.status in ("On Hold", "Closed") or self.docstatus != 1:
+			return
+		pill = self.PORTAL_BILLING_STATUS.get(self.billing_status)
+		if not pill:
+			return
+		label, colour = pill
+		self.status = label
+		self.indicator_title = frappe._(label)
+		self.indicator_color = colour
+
 
 class DeliveryNote(ERPNextDeliveryNote):
 	@frappe.whitelist()
