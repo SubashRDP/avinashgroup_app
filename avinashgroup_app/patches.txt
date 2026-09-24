@@ -105,3 +105,4 @@ avinashgroup_app.patches.setup_daily_wage
 avinashgroup_app.patches.remove_merged_attendance_summary_report
 
 avinashgroup_app.patches.setup_pay_input_fields
+avinashgroup_app.patches.order_delivery_days_setting

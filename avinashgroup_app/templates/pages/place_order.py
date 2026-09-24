@@ -2,7 +2,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, getdate, nowdate, flt
+from frappe.utils import add_days, cint, getdate, nowdate, flt
 
 
 # Place Order sells one product, LP Gas, and the item is per company (custom_company).
@@ -120,7 +120,7 @@ def get_context(context):
 
 	context.number_format = frappe.db.get_default("number_format") or "#,###.##"
 	context.today = nowdate()
-	context.default_delivery_date = add_days(nowdate(), 7)
+	context.default_delivery_date = add_days(nowdate(), _delivery_days())
 
 	# The item is fixed on the form (no item picker) but resolved per company.
 	default_item = _get_lp_gas_item(company)
@@ -486,6 +486,24 @@ def get_item_price(item_code, price_list, uom=None):
 		rate = flt(ip) if ip is not None else 0.0
 
 	return {"item_name": item.item_name, "uom": resolved_uom, "stock_uom": item.stock_uom, "rate": rate}
+
+
+# Used until the Selling Settings field exists (patch not yet run on a site).
+DEFAULT_DELIVERY_DAYS = 7
+
+
+def _delivery_days():
+	"""Days from today to pre-fill Expected Delivery with: Selling Settings >
+	Default Delivery Days (custom_order_delivery_days, added by
+	patches/order_delivery_days_setting.py). 7 while nothing is stored, read
+	raw because get_single_value turns a missing Int into 0 (same day)."""
+	row = frappe.db.sql(
+		"""SELECT value FROM `tabSingles`
+		WHERE doctype = 'Selling Settings' AND field = 'custom_order_delivery_days'"""
+	)
+	if not row or row[0][0] in (None, ""):
+		return DEFAULT_DELIVERY_DAYS
+	return max(cint(row[0][0]), 0)
 
 
 @frappe.whitelist()

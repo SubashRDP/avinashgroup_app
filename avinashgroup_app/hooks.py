@@ -591,6 +591,9 @@ fixtures = [
                     # but not Sales Invoice). Read by
                     # salesinvoice_taxes.allow_zero_qty_rows.
                     "Selling Settings-custom_allow_zero_qty_in_sales_invoice",
+                    # Days added to today for Expected Delivery on the portal's
+                    # Place Order page. Read by place_order.get_context.
+                    "Selling Settings-custom_order_delivery_days",
                     # Customer's own Mobile Number, independent of
                     # mobile_no (which only fills in via a Primary Contact).
                     # Read by the Nepal Gas Invoice Overlay print format.
