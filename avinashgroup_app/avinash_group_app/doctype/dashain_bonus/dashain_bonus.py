@@ -21,7 +21,7 @@ Cancelling takes them all back.
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_months, cint, date_diff, flt, getdate
+from frappe.utils import cint, date_diff, flt, getdate
 
 COMPONENT = "Dashain Bonus"
 MONTHS_IN_YEAR = 12
@@ -162,28 +162,40 @@ def fetch_eligible_employees(company, payout_date):
 
 
 def months_of_service(date_of_joining, payout_date):
-	"""Months served to the payout date, capped at a full year.
+	"""Months served to the payout date, capped at a full year — in BS months.
 
-	Counted as whole months plus the part month left over, so someone who joined
-	on Shrawan 16 is credited half of Shrawan — the same arithmetic an HR
-	officer does by hand, and visible on the row so it can be checked.
+	Counted as whole BS months plus the part month left over, so someone who
+	joined on Shrawan 16 is credited half of Shrawan — the same arithmetic an HR
+	officer does by hand with the Nepali calendar, and visible on the row so it
+	can be checked. (AD months would move the boundary: Shrawan 16 is 1 August,
+	and an AD month from there ends on Bhadra 15 or 16 depending on the year.)
 	"""
 	start, end = getdate(date_of_joining), getdate(payout_date)
 	if start >= end:
 		return 0.0
 
 	whole = 0
-	while add_months(start, whole + 1) <= end:
+	while add_bs_months(start, whole + 1) <= end:
 		whole += 1
 		if whole >= MONTHS_IN_YEAR:
 			return float(MONTHS_IN_YEAR)
 
-	anniversary = add_months(start, whole)
-	next_anniversary = add_months(start, whole + 1)
+	anniversary = add_bs_months(start, whole)
+	next_anniversary = add_bs_months(start, whole + 1)
 	span = date_diff(next_anniversary, anniversary) or 1
 	part = date_diff(end, anniversary) / span
 
 	return min(MONTHS_IN_YEAR, round(whole + part, 2))
+
+
+def add_bs_months(ad_date, months):
+	"""The same BS day `months` BS months later (the month's last day if shorter)."""
+	from rdp_common_app.utils.bs_boundaries import ad_to_bs, bs_to_ad, get_bs_month_days
+
+	bs = ad_to_bs(getdate(ad_date))
+	year, month0 = divmod(bs.year * 12 + (bs.month - 1) + months, 12)
+	month = month0 + 1
+	return bs_to_ad(year, month, min(bs.day, get_bs_month_days(year, month)))
 
 
 def monthly_amount(employee, basis, payout_date):

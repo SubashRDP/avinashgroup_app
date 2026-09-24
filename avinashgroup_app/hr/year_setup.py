@@ -13,19 +13,38 @@ again: everything is created only if it is not already there.
     bench --site <site> execute avinashgroup_app.hr.year_setup.setup_year \\
         --kwargs "{'fiscal_year': '83/84'}"
 
+For a year after the first it also carries everyone's pay across
+(`payroll.year_rollover`): a new salary assignment from the year's first day
+pointing at the new year's tax slab, because HRMS reads the slab from the
+assignment and would otherwise tax the new year at last year's rates.
+
+Two things must exist first, and the call refuses to start without them:
+
+  * the Fiscal Year record itself;
+  * the year's tax table — an Income Tax Slab already entered in the desk, or
+    the year in `payroll.income_tax.TAX_SLABS_BY_YEAR`. Last year's rates are
+    never copied.
+
+Festivals come from FESTIVALS below: four of the five move with the moon, so a
+new year's dates are typed from the published calendar. A year missing there
+still gets its Saturdays, and the returned report carries a warning to add the
+festivals (Holiday Bulk Update) before the first one falls. Teej goes on the
+women's list alone.
+
 What it deliberately does NOT do:
 
-  * Salary structures and each person's pay — those come from the company's own
-    salary sheet, through `payroll.onboarding`.
-  * Festival holidays — only the weekly Saturdays are known in advance. Add the
-    festivals with Holiday Bulk Update once the dates are published.
-  * Teej — the women's holiday list is created empty of festivals beside the
-    common one; Teej goes on it, and on it alone.
+  * Build a first salary structure or anyone's first pay — that comes from the
+    company's own salary sheet, through `payroll.onboarding`.
+  * Change anyone's pay — a rise is a Salary Revision.
+  * Switch people onto the new year's holiday lists. That has to happen on the
+    year's first day, not before: `hr.holiday_year_switch` does it daily.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import getdate
+
+from avinashgroup_app.payroll.year_rollover import roll_salary_assignments
 
 #: The shifts each company works, named with the company so one company's hours
 #: can change without touching another's (client, 2026-09-22). A company not
@@ -90,13 +109,37 @@ FESTIVALS = {
 }
 
 
-def setup_year(fiscal_year, companies=None, assign_leave=True):
-	"""Put one fiscal year in place for every company. Safe to run twice."""
+def setup_year(fiscal_year, companies=None, assign_leave=True, roll_pay=True):
+	"""Put one fiscal year in place for every company. Safe to run twice.
+
+	Raises before creating anything if the Fiscal Year or the year's tax table
+	is missing. Returns a per-company report plus `warnings`.
+	"""
 	year = frappe.db.get_value(
 		"Fiscal Year", fiscal_year, ["year_start_date", "year_end_date"], as_dict=True
 	)
 	if not year:
 		frappe.throw(_("Fiscal Year {0} does not exist — create it first.").format(fiscal_year))
+
+	companies = companies or frappe.get_all("Company", pluck="name")
+	require_tax_table(fiscal_year, year, companies)
+
+	# Run from bench there is no request, so the audit hook stamps no
+	# custom_created_on — and Leave Allocation has no other date for the
+	# numbering rule, which then refuses every one. Every employee would be
+	# left without next year's leave. audit_user is the hook's own switch for
+	# work done outside a request (utils/audit_file_manager.py).
+	frappe.flags.audit_user = frappe.flags.audit_user or frappe.session.user
+
+	warnings = []
+	if fiscal_year not in FESTIVALS:
+		warnings.append(
+			_(
+				"No festival dates for {0}: its holiday lists have Saturdays only — no Dashain, "
+				"Tihar or Teej. Add them to FESTIVALS (year_setup.py) and re-run, or enter them "
+				"with Holiday Bulk Update, before the first festival."
+			).format(fiscal_year)
+		)
 
 	ensure_nepali_payroll()
 	# The app names a Shift Type and a Holiday List per company, so both carry
@@ -105,8 +148,8 @@ def setup_year(fiscal_year, companies=None, assign_leave=True):
 	ensure_employee_categories()
 	ensure_leave_types()
 
-	report = {"fiscal_year": fiscal_year, "companies": {}}
-	for company in companies or frappe.get_all("Company", pluck="name"):
+	report = {"fiscal_year": fiscal_year, "companies": {}, "warnings": warnings}
+	for company in companies:
 		abbr = frappe.db.get_value("Company", company, "abbr")
 		done = {}
 		done["shifts"] = ensure_shift_types(company, abbr)
@@ -117,14 +160,42 @@ def setup_year(fiscal_year, companies=None, assign_leave=True):
 		done["leave_policies"] = ensure_leave_policies(company, abbr, fiscal_year)
 		done["payroll_period"] = ensure_payroll_period(company, abbr, fiscal_year, year)
 		done["income_tax_slab"] = ensure_income_tax_slab(company, abbr, fiscal_year, year)
+		if roll_pay:
+			done["salary_rolled"] = roll_salary_assignments(company, year.year_start_date)
 		if assign_leave:
 			done["leave_assigned"] = assign_leave_policies(
 				company, done["leave_period"], done["leave_policies"]
 			)
 		report["companies"][abbr] = done
 
+	for w in warnings:
+		print("WARNING:", w)
 	frappe.db.commit()
 	return report
+
+
+def require_tax_table(fiscal_year, year, companies):
+	"""Refuse to start a year whose tax rates nobody has entered."""
+	from avinashgroup_app.payroll.income_tax import TAX_SLABS_BY_YEAR
+
+	if fiscal_year in TAX_SLABS_BY_YEAR:
+		return
+	missing = [
+		c
+		for c in companies
+		if not frappe.db.exists(
+			"Income Tax Slab",
+			{"company": c, "effective_from": year.year_start_date, "docstatus": 1, "disabled": 0},
+		)
+	]
+	if missing:
+		frappe.throw(
+			_(
+				"No income tax rates for {0}. Enter them first — add \"{0}\" to TAX_SLABS_BY_YEAR "
+				"in payroll/income_tax.py from the Finance Act, or submit an Income Tax Slab "
+				"effective {1} for: {2}. Last year's rates are never copied."
+			).format(fiscal_year, year.year_start_date, ", ".join(missing))
+		)
 
 
 # ─────────────────────────────────────────────────────────── group-wide ──
@@ -188,8 +259,26 @@ def ensure_shift_types(company, abbr):
 
 
 def ensure_employee_categories():
+	"""The two categories, unless the site already names them something else.
+
+	A category is really one bit of policy — is this person paid for extra hours,
+	or given a day off instead — and a site only needs one record per answer.
+	avinas1 calls them Operation and Admin & Officer; nepalgas calls the same two
+	Plant and Officer & Admin. Matching on the name alone created a second pair on
+	avinas1 and left 113 employees pointing at the older one, so the check is on
+	the policy the record carries, not on what it is called.
+
+	Which vocabulary the group settles on is theirs to decide; renaming touches
+	live Employee records and is not done here.
+	"""
 	for name, ot, comp, description in EMPLOYEE_CATEGORIES:
 		if frappe.db.exists("Employee Category", name):
+			continue
+
+		existing = frappe.db.get_value(
+			"Employee Category", {"ot_eligible": ot, "compensatory_leave": comp}, "name"
+		)
+		if existing:
 			continue
 		frappe.get_doc(
 			{
@@ -200,6 +289,22 @@ def ensure_employee_categories():
 				"description": description,
 			}
 		).insert(ignore_permissions=True)
+
+
+def ensure_leave_types():
+	"""The four leave types the group uses, plus the unpaid catch-all.
+
+	How each behaves is settled in one place — `patches.setup_leave_types`, which
+	is written to be re-runnable. Calling it here means a site whose leave types
+	were deleted gets them back, instead of the year setup quietly building
+	policies that point at nothing.
+
+	Restored after 70baa36 removed the function but left the call: `setup_year`
+	has raised NameError on every site since, before creating anything at all.
+	"""
+	from avinashgroup_app.patches.setup_leave_types import execute as build_leave_types
+
+	build_leave_types()
 
 
 # ────────────────────────────────────────────────────────── per company ──
@@ -352,8 +457,12 @@ def ensure_payroll_period(company, abbr, fiscal_year, year):
 
 
 def ensure_income_tax_slab(company, abbr, fiscal_year, year):
-	"""This year's tax table. Next year's rates are a new slab, never an edit."""
-	from avinashgroup_app.payroll.income_tax import FY_8384_SLABS
+	"""This year's tax table. Next year's rates are a new slab, never an edit.
+
+	An Income Tax Slab already entered for the year wins; otherwise it is built
+	from TAX_SLABS_BY_YEAR (require_tax_table has made sure one of the two exists).
+	"""
+	from avinashgroup_app.payroll.income_tax import TAX_SLABS_BY_YEAR
 
 	existing = frappe.db.get_value(
 		"Income Tax Slab",
@@ -379,7 +488,7 @@ def ensure_income_tax_slab(company, abbr, fiscal_year, year):
 					"percent_deduction": percent,
 					"condition": condition,
 				}
-				for from_amount, to_amount, percent, condition in FY_8384_SLABS
+				for from_amount, to_amount, percent, condition in TAX_SLABS_BY_YEAR[fiscal_year]
 			],
 		}
 	)

@@ -67,6 +67,9 @@ app_include_js = [
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=2.0",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
+    # HR dashboard at the top of the stock HR workspace; loads the dashboard
+    # itself (hr_dashboard.js/.css) only when HR is opened.
+    "/assets/avinashgroup_app/js/hr_workspace.js?v=1",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
@@ -337,6 +340,12 @@ _add_doc_event(
     "avinashgroup_app.payroll.income_tax.apply_income_tax_override",
 )
 
+# A payroll run pays the BS month its posting date is in (the BS slip derives its
+# period from the posting date). Refuse an entry posted in another month, and a
+# slip whose month differs from its entry's. See payroll/bs_period_guard.py.
+_add_doc_event("Payroll Entry", "validate", "avinashgroup_app.payroll.bs_period_guard.validate_payroll_entry")
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.bs_period_guard.validate_salary_slip")
+
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):
     _add_doc_event(_dt, "on_update", _clear_filter_cache)
@@ -431,6 +440,9 @@ override_doctype_class = {
     "Purchase Receipt": "avinashgroup_app.custom_code.Override.overrides.PurchaseReceipt",
     "Supplier Quotation": "avinashgroup_app.custom_code.Override.overrides.SupplierQuotation",
     "Request for Quotation": "avinashgroup_app.custom_code.Override.overrides.RequestforQuotation",
+    # Mid-year policy assignments back-fill earned leave in BS months, matching
+    # the BS accrual job (hr/leave_policy_assignment_bs.py).
+    "Leave Policy Assignment": "avinashgroup_app.hr.leave_policy_assignment_bs.BSLeavePolicyAssignment",
 }
 
 scheduler_events = {
@@ -451,6 +463,9 @@ scheduler_events = {
     # is wrong twice over: 14-17 days late, and the Ashad instalment never runs.
     "daily_long": [
         "avinashgroup_app.hr.utils.allocate_earned_leaves_bs",
+        # On a fiscal year's first day, move companies and employees onto that
+        # year's holiday lists (HRMS keeps one list per person, not per year).
+        "avinashgroup_app.hr.holiday_year_switch.switch_to_current_year_lists",
     ],
     "cron": {
         # Only the send-side retry is scheduled. CBMS Bills are created solely by the

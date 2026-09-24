@@ -37,6 +37,15 @@ FY_8384_SLABS = (
 	(4_000_001, 0, 29, ""),
 )
 
+#: The tables by fiscal year, as the Finance Act sets them. `year_setup` builds a
+#: year's Income Tax Slab from here, and refuses a year that is missing rather
+#: than copy the last one — reused rates are the failure nobody notices. Add
+#: "84/85" once the Finance Act 2084 is published (budget speech, 15 Jestha), or
+#: create the 84/85 slab in the desk by hand; either is enough.
+TAX_SLABS_BY_YEAR = {
+	"83/84": FY_8384_SLABS,
+}
+
 TAX_COMPONENT = "Income Tax"
 
 
