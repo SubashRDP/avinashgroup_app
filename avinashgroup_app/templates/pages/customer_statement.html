@@ -27,12 +27,18 @@ class CustomerStatement {
 
 		this.bind_company();
 		this.bind_customer_ms();
-		this.setup_bs_dates();
-		this.bind_dates();
 		this.bind_print();
-
 		this.filter_customers_by_company();
-		this.load_statement();
+
+		// The AD dates are Frappe's own Date control, the same calendar as the
+		// desk. Website pages don't load the form controls by default, so fetch
+		// them first; everything that reads a date waits for them.
+		var me = this;
+		frappe.require("controls.bundle.js", function () {
+			me.make_date_controls();
+			me.setup_bs_dates();
+			me.load_statement();
+		});
 	}
 
 	// ── Company (single select) ────────────────────────────────────────
@@ -94,6 +100,45 @@ class CustomerStatement {
 		}
 	}
 
+	// ── AD dates: Frappe Date controls ─────────────────────────────────
+	make_date_controls() {
+		var me = this;
+		this.date_ctl = {};
+		this._quiet = {};
+		["from", "to"].forEach(function (which) {
+			me.date_ctl[which] = frappe.ui.form.make_control({
+				parent: $(`#cs-${which}-date`),
+				df: {
+					fieldtype: "Date",
+					fieldname: `cs_${which}_date`,
+					reqd: 1,
+					onchange: function () {
+						// set_value() fires onchange too; only a user's pick converts + reloads.
+						if (me._quiet[which]) return;
+						me.ad_to_bs(which, me.get_date(which));
+						me.schedule_reload();
+					}
+				},
+				only_input: true,
+				render_input: true
+			});
+			me.set_date(which, me.ctx[`${which}_date`]);
+		});
+	}
+
+	// Always YYYY-MM-DD, whatever display format the site uses.
+	get_date(which) {
+		const ctl = this.date_ctl && this.date_ctl[which];
+		return (ctl && ctl.get_value()) || "";
+	}
+
+	set_date(which, value) {
+		var me = this;
+		this._quiet[which] = true;
+		return Promise.resolve(this.date_ctl[which].set_value(value))
+			.finally(function () { me._quiet[which] = false; });
+	}
+
 	// ── Dual AD + BS date filter (same converter as the reports) ───────
 	nepali_ready() {
 		const el = document.getElementById("cs-from-miti");
@@ -120,8 +165,8 @@ class CustomerStatement {
 		});
 		// After the picker settles, sync BS from the (correct) AD dates and enable user edits.
 		setTimeout(function () {
-			me.ad_to_bs("from", $("#cs-from-date").val());
-			me.ad_to_bs("to", $("#cs-to-date").val());
+			me.ad_to_bs("from", me.get_date("from"));
+			me.ad_to_bs("to", me.get_date("to"));
 			me._bs_ready = true;
 		}, 300);
 	}
@@ -135,16 +180,10 @@ class CustomerStatement {
 
 	bs_to_ad(which, bsStr) {
 		if (!bsStr || !this.nepali_ready() || this._syncing) return;
-		try { this._syncing = true; $(`#cs-${which}-date`).val(window.NepaliFunctions.BS2AD(bsStr, "YYYY-MM-DD")); }
+		try { this._syncing = true; this.set_date(which, window.NepaliFunctions.BS2AD(bsStr, "YYYY-MM-DD")); }
 		catch (e) { console.error("BS->AD conversion failed:", e); }
 		finally { this._syncing = false; }
 		this.schedule_reload();
-	}
-
-	bind_dates() {
-		var me = this;
-		$("#cs-from-date").on("change", function () { me.ad_to_bs("from", this.value); me.schedule_reload(); });
-		$("#cs-to-date").on("change", function () { me.ad_to_bs("to", this.value); me.schedule_reload(); });
 	}
 
 	// ── Load + render (report look) ─────────────────────────────────────
@@ -157,8 +196,8 @@ class CustomerStatement {
 	load_statement() {
 		var me = this;
 		const company = this.selected_company();
-		const from_date = $("#cs-from-date").val();
-		const to_date = $("#cs-to-date").val();
+		const from_date = this.get_date("from");
+		const to_date = this.get_date("to");
 		if (!company || !from_date || !to_date) return;
 
 		$("#cs-loading").show();
@@ -201,8 +240,8 @@ class CustomerStatement {
 
 	download_pdf() {
 		const company = this.selected_company();
-		const from_date = $("#cs-from-date").val();
-		const to_date = $("#cs-to-date").val();
+		const from_date = this.get_date("from");
+		const to_date = this.get_date("to");
 		if (!company || !from_date || !to_date) {
 			frappe.msgprint("Please select Company, From Date and To Date.");
 			return;
@@ -430,7 +469,7 @@ class CustomerStatement {
 	</div>
 	<div class="col-sm-3 mb-3">
 		<div class="cs-section-label">From Date (AD) <span class="text-danger">*</span></div>
-		<input type="date" class="form-control" id="cs-from-date" value="{{ from_date }}" autocomplete="off">
+		<div id="cs-from-date"></div>
 	</div>
 	<div class="col-sm-3 mb-3 cs-bs-col">
 		<div class="cs-section-label">From Miti (BS)</div>
@@ -440,7 +479,7 @@ class CustomerStatement {
 <div class="row mb-3">
 	<div class="col-sm-3 mb-3">
 		<div class="cs-section-label">To Date (AD) <span class="text-danger">*</span></div>
-		<input type="date" class="form-control" id="cs-to-date" value="{{ to_date }}" autocomplete="off">
+		<div id="cs-to-date"></div>
 	</div>
 	<div class="col-sm-3 mb-3 cs-bs-col">
 		<div class="cs-section-label">To Miti (BS)</div>
