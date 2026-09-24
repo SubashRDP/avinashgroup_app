@@ -9,7 +9,8 @@
  * (config-driven via Company Filter Config DocType).
  *
  * Also, list views (bottom of file): "+ Add" on a filtered list opens a blank
- * form, and a Company filter narrows every other Link filter's dropdown.
+ * form; a Company filter narrows every other Link filter's dropdown and drops
+ * filters that point at another company's record.
  */
 
 $(document).on("app_ready", function () {
@@ -166,4 +167,47 @@ if (frappe.ui.Filter) {
         }
         return _make_field.apply(this, arguments);
     };
+}
+
+// Company filter changed: drop the other Link filters that point at another
+// company's record (Customer = a GLMI customer after switching to NGI), same
+// rule as validate_and_clear on the forms. A record with no company set, or a
+// doctype with no company field, is kept. on_filter_change is BaseList's
+// empty "filters were added or removed" hook; Kanban overrides it, so Kanban
+// boards are not covered.
+if (frappe.views.BaseList) {
+    const _on_filter_change = frappe.views.BaseList.prototype.on_filter_change;
+    frappe.views.BaseList.prototype.on_filter_change = function () {
+        const out = _on_filter_change.apply(this, arguments);
+        _drop_other_company_filters(this);
+        return out;
+    };
+}
+
+function _drop_other_company_filters(list_view) {
+    const company = _list_company(list_view);
+    if (company === list_view._avinash_filter_company) return;
+    list_view._avinash_filter_company = company;
+    if (!company) return;
+
+    list_view.filter_area.get().forEach(function (f) {
+        const fieldname = f[1], value = f[3];
+        if (f[2] !== "=" || !value || typeof value !== "string") return;
+        const df = frappe.meta.get_docfield(f[0], fieldname);
+        if (!df || df.fieldtype !== "Link" || df.options === "Company") return;
+
+        frappe.model.with_doctype(df.options, function () {
+            const key = avinash.filter_engine._resolve_filter_key(df.options);
+            if (!key) return;
+            frappe.db.get_value(df.options, value, key, function (r) {
+                if (!r || !r[key] || r[key] === company) return;
+                list_view.filter_area.remove(fieldname);
+                frappe.show_alert({
+                    message: __("{0} filter '{1}' removed: it belongs to {2}, not {3}.",
+                        [__(df.label || fieldname), value, r[key], company]),
+                    indicator: "orange"
+                }, 6);
+            });
+        });
+    });
 }
