@@ -28,3 +28,12 @@ try:
 except Exception:
 	import frappe
 	frappe.log_error(frappe.get_traceback(), "Payment Entry blank paid-amount patch failed to load")
+
+# Keep a manually chosen Paid From / Paid To account on Payment Entry instead of
+# core forcing the advance account (see advance_account_patch for details).
+try:
+	from avinashgroup_app.custom_code.payment_entry.advance_account_patch import apply_patch as apply_advance_account_patch
+	apply_advance_account_patch()
+except Exception:
+	import frappe
+	frappe.log_error(frappe.get_traceback(), "Payment Entry advance-account patch failed to load")
