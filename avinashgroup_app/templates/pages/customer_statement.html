@@ -12,6 +12,8 @@ window.customer_statement_ctx = {
 	company_list: {{ company_list | tojson }},
 	default_company: {{ default_company | tojson }},
 	preselect_customer: {{ preselect_customer | tojson }},
+	fiscal_years: {{ (fiscal_years or []) | tojson }},
+	default_fiscal_year: {{ (default_fiscal_year or "") | tojson }},
 	from_date: {{ from_date | tojson }},
 	to_date: {{ to_date | tojson }},
 	today: {{ today | tojson }}
@@ -31,6 +33,7 @@ class CustomerStatement {
 		this.bind_print();
 		this.filter_customers_by_company();
 		this.apply_preselect();
+		this.bind_period();
 
 		// The AD dates are Frappe's own Date control, the same calendar as the
 		// desk. Website pages don't load the form controls by default, so fetch
@@ -48,6 +51,7 @@ class CustomerStatement {
 		var me = this;
 		$("#cs-company").on("change", function () {
 			me.filter_customers_by_company();
+			me.fill_fiscal_years();
 			me.schedule_reload();
 		});
 	}
@@ -111,6 +115,63 @@ class CustomerStatement {
 		} else {
 			$btn.text(`${sel.length} customers selected`);
 		}
+	}
+
+	// ── Period: Fiscal Year (default) or Date Range ────────────────────
+	// Fiscal Year covers one whole Fiscal Year record, start to end, and hides
+	// the date boxes. Date Range shows them and hides the fiscal year.
+	bind_period() {
+		var me = this;
+		this.period_mode = "fy";
+		$("#cs-period").on("click", "button", function () {
+			me.set_period_mode($(this).data("mode"));
+			me.schedule_reload();
+		});
+		$("#cs-fiscal-year").on("change", function () { me.schedule_reload(); });
+		this.fill_fiscal_years();
+		// No fiscal year covers this company at all: dates are the only way.
+		this.set_period_mode($("#cs-fiscal-year option").length ? "fy" : "dates");
+	}
+
+	set_period_mode(mode) {
+		this.period_mode = mode;
+		$("#cs-period button").each(function () {
+			const on = $(this).data("mode") === mode;
+			$(this).toggleClass("btn-primary", on).toggleClass("btn-default", !on).attr("aria-pressed", on);
+		});
+		$("#cs-fy-col").toggle(mode === "fy");
+		$("#cs-date-row").toggle(mode === "dates");
+	}
+
+	// Fiscal years that cover the selected company (none listed = all companies),
+	// newest first. Keeps the current pick if it still applies, else the year
+	// containing today, else the newest.
+	fill_fiscal_years() {
+		const company = this.selected_company();
+		const today = this.ctx.today;
+		const $sel = $("#cs-fiscal-year");
+		const keep = $sel.val() || this.ctx.default_fiscal_year;
+		const years = (this.ctx.fiscal_years || []).filter(function (fy) {
+			return !fy.companies.length || fy.companies.includes(company);
+		});
+		$sel.empty();
+		years.forEach(function (fy) {
+			$("<option>").val(fy.name).text(fy.name).appendTo($sel);
+		});
+		const pick = years.find((fy) => fy.name === keep)
+			|| years.find((fy) => fy.from_date <= today && today <= fy.to_date)
+			|| years[0];
+		if (pick) $sel.val(pick.name);
+	}
+
+	// { from_date, to_date } for the chosen mode, as YYYY-MM-DD.
+	get_period() {
+		if (this.period_mode === "fy") {
+			const name = $("#cs-fiscal-year").val();
+			const fy = (this.ctx.fiscal_years || []).find((f) => f.name === name);
+			return fy ? { from_date: fy.from_date, to_date: fy.to_date } : { from_date: "", to_date: "" };
+		}
+		return { from_date: this.get_date("from"), to_date: this.get_date("to") };
 	}
 
 	// ── AD dates: Frappe Date controls ─────────────────────────────────
@@ -209,8 +270,7 @@ class CustomerStatement {
 	load_statement() {
 		var me = this;
 		const company = this.selected_company();
-		const from_date = this.get_date("from");
-		const to_date = this.get_date("to");
+		const { from_date, to_date } = this.get_period();
 		if (!company || !from_date || !to_date) return;
 
 		$("#cs-loading").show();
@@ -253,10 +313,9 @@ class CustomerStatement {
 
 	download_pdf() {
 		const company = this.selected_company();
-		const from_date = this.get_date("from");
-		const to_date = this.get_date("to");
+		const { from_date, to_date } = this.get_period();
 		if (!company || !from_date || !to_date) {
-			frappe.msgprint("Please select Company, From Date and To Date.");
+			frappe.msgprint("Please select Company and a Fiscal Year or From / To Date.");
 			return;
 		}
 		// Same filters the table uses. Server re-validates ownership and builds the PDF
@@ -387,6 +446,10 @@ class CustomerStatement {
 /* a label and its required mark belong on one line */
 .cs-section-label { white-space: nowrap; }
 
+/* Period toggle: two halves filling the column, same height as the inputs */
+.cs-period { display: flex; width: 100%; }
+.cs-period .btn { flex: 1 1 50%; height: calc(1.5em + .75rem + 2px); white-space: nowrap; }
+
 /* Bootstrap holds four col-sm-3 filters across from 576px up, giving each 146px
    on a tablet — too narrow for a long customer name.
    Two per row until there is genuinely room for four. */
@@ -481,6 +544,19 @@ class CustomerStatement {
 		</div>
 	</div>
 	<div class="col-sm-3 mb-3">
+		<div class="cs-section-label">Period</div>
+		<div class="btn-group cs-period" id="cs-period" role="group" aria-label="Period">
+			<button type="button" class="btn btn-sm btn-primary" data-mode="fy" aria-pressed="true">Fiscal Year</button>
+			<button type="button" class="btn btn-sm btn-default" data-mode="dates" aria-pressed="false">Date Range</button>
+		</div>
+	</div>
+	<div class="col-sm-3 mb-3" id="cs-fy-col">
+		<div class="cs-section-label">Fiscal Year <span class="text-danger">*</span></div>
+		<select class="form-control" id="cs-fiscal-year"></select>
+	</div>
+</div>
+<div class="row mb-2" id="cs-date-row" style="display:none;">
+	<div class="col-sm-3 mb-3">
 		<div class="cs-section-label">From Date (AD) <span class="text-danger">*</span></div>
 		<div id="cs-from-date"></div>
 	</div>
@@ -488,8 +564,6 @@ class CustomerStatement {
 		<div class="cs-section-label">From Miti (BS)</div>
 		<input type="text" class="form-control cs-bs-field" id="cs-from-miti" placeholder="YYYY-MM-DD" autocomplete="off">
 	</div>
-</div>
-<div class="row mb-3">
 	<div class="col-sm-3 mb-3">
 		<div class="cs-section-label">To Date (AD) <span class="text-danger">*</span></div>
 		<div id="cs-to-date"></div>
