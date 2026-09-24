@@ -4,6 +4,8 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, getdate, nowdate, flt
 
+from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+
 
 # Place Order sells one product, LP Gas, and the item is per company (custom_company).
 # A company that has no LP Gas item does not sell gas at all — Grihalaxmi Metal Industries
@@ -488,6 +490,27 @@ def get_item_price(item_code, price_list, uom=None):
 	return {"item_name": item.item_name, "uom": resolved_uom, "stock_uom": item.stock_uom, "rate": rate}
 
 
+def _set_order_miti(so):
+	"""Fill Sales Order.custom_miti (the BS order date) from transaction_date.
+
+	On the desk custom_miti is filled on the Sales Order form; an order placed
+	from this page never opens that form, so its miti stayed blank (the Sales
+	Order Analysis reports then had to convert on the fly). custom_miti exists
+	on some sites only (ng-group, not avinas1), hence the meta check. Never
+	blocks the order:
+	a miti is a mirror, so a failed conversion is logged and the order goes in.
+	"""
+	if not so.meta.has_field("custom_miti") or not so.transaction_date:
+		return
+	try:
+		so.custom_miti = bs_date_str(so.transaction_date)
+	except Exception:
+		frappe.log_error(
+			title="Place Order: BS miti conversion failed",
+			message=f"{so.customer} transaction_date={so.transaction_date}\n{frappe.get_traceback()}",
+		)
+
+
 # Used until the Selling Settings field exists (patch not yet run on a site).
 DEFAULT_DELIVERY_DAYS = 7
 
@@ -590,6 +613,7 @@ def create_sales_order(customer, company, transaction_date, delivery_date, items
 	so.company = company
 	so.transaction_date = transaction_date
 	so.delivery_date = delivery_date
+	_set_order_miti(so)
 	so.selling_price_list = selling_price_list
 	so.currency = currency
 	so.order_type = "Sales"
