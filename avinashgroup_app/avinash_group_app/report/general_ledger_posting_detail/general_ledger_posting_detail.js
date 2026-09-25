@@ -38,6 +38,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 				// the report down to nothing.
 				const report = frappe.query_report;
 				report.set_filter_value("party", []);
+				report.set_filter_value("vehicle", []);
 				report.set_filter_value("voucher_subtype", []);
 				report.set_filter_value("account", []);
 				report.refresh();
@@ -45,12 +46,28 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 		},
 		{
 			// Account / Party / Both — what each block of postings is headed by.
+			// Vehicle is Both with the vehicle where the party would be: the
+			// Journal Entry and Purchase Invoice lines that name one, each
+			// purchase with its bill and how it was paid.
 			fieldname: "categorized_by",
 			label: __("Group By"),
 			fieldtype: "Select",
 			reqd: 1,
-			options: ["Account", "Party", "Both"].join("\n"),
+			options: ["Account", "Party", "Both", "Vehicle"].join("\n"),
 			default: "Account",
+			on_change: function () {
+				// a party filter means nothing to a vehicle ledger, nor a
+				// vehicle filter to any other -- a hidden leftover would
+				// silently narrow the next run
+				const report = frappe.query_report;
+				if (report.get_filter_value("categorized_by") === "Vehicle") {
+					report.set_filter_value("party_type", []);
+					report.set_filter_value("party", []);
+				} else {
+					report.set_filter_value("vehicle", []);
+				}
+				report.refresh();
+			},
 		},
 		{
 			// Same Period control as Custom Ledger: one choice decides how the
@@ -160,6 +177,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldname: "party_type",
 			label: __("Party Type"),
 			fieldtype: "MultiSelectList",
+			depends_on: "eval:doc.categorized_by != 'Vehicle'",
 			get_data: function () {
 				return ["Supplier", "Customer", "Employee"].map((v) => ({
 					value: v,
@@ -175,6 +193,7 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 			fieldname: "party",
 			label: __("Party"),
 			fieldtype: "MultiSelectList",
+			depends_on: "eval:doc.categorized_by != 'Vehicle'",
 			get_data: function (txt) {
 				return frappe
 					.call({
@@ -188,6 +207,25 @@ frappe.query_reports["General Ledger Posting Detail"] = {
 							},
 							frappe.query_reports["General Ledger Posting Detail"].scope_args()
 						),
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
+			fieldname: "vehicle",
+			label: __("Vehicle"),
+			fieldtype: "MultiSelectList",
+			depends_on: "eval:doc.categorized_by == 'Vehicle'",
+			get_data: function (txt) {
+				return frappe
+					.call({
+						method:
+							"avinashgroup_app.avinash_group_app.report.general_ledger_posting_detail." +
+							"general_ledger_posting_detail.get_vehicles",
+						args: {
+							company: frappe.query_report.get_filter_value("company"),
+							txt: txt,
+						},
 					})
 					.then((r) => r.message || []);
 			},

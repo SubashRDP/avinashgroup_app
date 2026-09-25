@@ -71,6 +71,28 @@ CHEQUE_PLACEHOLDERS = {"", "1"}
 # record is left alone, 108 vouchers point at it.
 JV_TYPE_LABEL = {"Journal Entry": "Journal"}
 
+# "Group By: Vehicle" -- the legacy Normal Sub Ledger with a vehicle as the sub
+# ledger ("1SD4 Vehicle Expenses - S/D", then "00B Vehicle no. 8100"). An account
+# declares its vehicles in its Sub type list (custom_sub_type_list) and a voucher
+# line names one in custom_subtype, which Journal Entry and Purchase Invoice
+# offer only from that list. GL Entry cannot say which vehicle a posting was
+# for: a Purchase Invoice merges its expense lines per account, and
+# voucher_detail_no is empty. So these postings are read off the voucher lines
+# themselves -- base_net_amount / debit-credit, which foot to GL Entry exactly --
+# and the vehicle stands where "Both" puts the party. Everything downstream
+# (blocks, totals, both prints) is the "Both" layout, unchanged.
+VEHICLE = "Vehicle"
+
+
+def _is_vehicle(filters):
+	return filters.get("categorized_by") == VEHICLE
+
+
+def _category(filters):
+	"""The grouping layout: Vehicle is laid out exactly as Both."""
+	category = filters.get("categorized_by") or "Account"
+	return "Both" if category == VEHICLE else category
+
 
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
@@ -83,6 +105,8 @@ def execute(filters=None):
 	# gave a first half closing at 8,50,63,74,498.62 and a second half showing
 	# an empty report.
 	_decorate(postings, filters.company)
+	if _is_vehicle(filters):
+		_decorate_vehicles(postings, filters)
 	columns = _get_columns(filters)
 	return columns, _build_rows(
 		filters, postings, with_narration=True, columns=columns, always_narration=True
@@ -249,19 +273,22 @@ def _get_postings(filters):
 
 	subtype_clause = _subtype_clause(filters, params)
 
-	rows = frappe.db.sql(
-		"""
-		SELECT g.name, g.posting_date, g.account, g.voucher_type, g.voucher_no,
-		       IFNULL(g.party_type, '') AS party_type, IFNULL(g.party, '') AS party,
-		       g.debit, g.credit, g.remarks, g.against
-		FROM `tabGL Entry` g
-		WHERE {conditions}
-		  {subtype_clause}
-		ORDER BY g.posting_date, g.creation
-		""".format(conditions=" AND ".join(conditions), subtype_clause=subtype_clause),
-		params,
-		as_dict=True,
-	)
+	if _is_vehicle(filters):
+		rows = _vehicle_postings(filters)
+	else:
+		rows = frappe.db.sql(
+			"""
+			SELECT g.name, g.posting_date, g.account, g.voucher_type, g.voucher_no,
+			       IFNULL(g.party_type, '') AS party_type, IFNULL(g.party, '') AS party,
+			       g.debit, g.credit, g.remarks, g.against
+			FROM `tabGL Entry` g
+			WHERE {conditions}
+			  {subtype_clause}
+			ORDER BY g.posting_date, g.creation
+			""".format(conditions=" AND ".join(conditions), subtype_clause=subtype_clause),
+			params,
+			as_dict=True,
+		)
 
 	# Voucher number is filtered after the fact: it lives in a different field
 	# per doctype (Numbering Configuration), so it cannot be a SQL condition
@@ -278,6 +305,322 @@ def _get_postings(filters):
 		]
 
 	return rows
+
+
+# ── vehicle sub ledger ─────────────────────────────────────────────────────────
+
+def _vehicle_lines(dates):
+	"""Every submitted voucher line that names a vehicle, shaped like GL Entry.
+
+	Aliased `g` so the filters written for GL Entry -- _subtype_clause among
+	them -- apply unchanged. `dates` restricts each half on its own document's
+	posting_date (alias p), where the index is.
+
+	A Purchase Invoice line posts base_net_amount to its expense account; a
+	return's is negative and so lands on the credit side, as it does in GL.
+	"""
+	return """(
+		SELECT i.name, p.posting_date, p.creation, i.expense_account AS account,
+		       'Purchase Invoice' AS voucher_type, p.name AS voucher_no,
+		       'Vehicle' AS party_type, i.custom_subtype AS party,
+		       GREATEST(i.base_net_amount, 0) AS debit,
+		       GREATEST(-i.base_net_amount, 0) AS credit,
+		       p.remarks AS remarks, '' AS against,
+		       IFNULL(p.is_opening, 'No') AS is_opening
+		FROM `tabPurchase Invoice` p
+		JOIN `tabPurchase Invoice Item` i
+		  ON i.parent = p.name AND i.parenttype = 'Purchase Invoice'
+		WHERE p.docstatus = 1 AND p.company = %(company)s
+		  AND IFNULL(i.custom_subtype, '') != ''
+		  AND {dates}
+
+		UNION ALL
+
+		SELECT a.name, p.posting_date, p.creation, a.account,
+		       'Journal Entry', p.name, 'Vehicle', a.custom_subtype,
+		       a.debit, a.credit,
+		       IFNULL(NULLIF(a.user_remark, ''), p.user_remark), '',
+		       IFNULL(p.is_opening, 'No')
+		FROM `tabJournal Entry` p
+		JOIN `tabJournal Entry Account` a
+		  ON a.parent = p.name AND a.parenttype = 'Journal Entry'
+		WHERE p.docstatus = 1 AND p.company = %(company)s
+		  AND IFNULL(a.custom_subtype, '') != ''
+		  AND {dates}
+	) g""".format(dates=dates)
+
+
+def _vehicle_narrowing(filters, params):
+	"""The filters that narrow vehicle postings -- and so their opening too."""
+	conditions = []
+
+	accounts = _normalize(filters.get("account"))
+	if accounts:
+		from erpnext.accounts.report.general_ledger.general_ledger import get_accounts_with_children
+
+		params["accounts"] = get_accounts_with_children(accounts)
+		conditions.append("g.account IN %(accounts)s")
+
+	voucher_types = _normalize(filters.get("voucher_type"))
+	if voucher_types:
+		params["voucher_types"] = voucher_types
+		conditions.append("g.voucher_type IN %(voucher_types)s")
+
+	vehicles = _normalize(filters.get("vehicle"))
+	if vehicles:
+		params["vehicles"] = vehicles
+		conditions.append("g.party IN %(vehicles)s")
+
+	return conditions
+
+
+def _vehicle_postings(filters):
+	"""The period's vehicle postings, in GL Entry's shape."""
+	params = {"company": filters.company, "from_date": filters.from_date, "to_date": filters.to_date}
+	conditions = _vehicle_narrowing(filters, params)
+	# the same opening-entry split as GL Entry; see _get_postings
+	if not cint(filters.get("show_opening_entries")):
+		conditions.append("g.is_opening = 'No'")
+
+	return frappe.db.sql(
+		"""
+		SELECT g.name, g.posting_date, g.account, g.voucher_type, g.voucher_no,
+		       g.party_type, g.party, g.debit, g.credit, g.remarks, g.against
+		FROM {lines}
+		WHERE {conditions}
+		  {subtype_clause}
+		ORDER BY g.posting_date, g.creation, g.voucher_no
+		""".format(
+			lines=_vehicle_lines("p.posting_date BETWEEN %(from_date)s AND %(to_date)s"),
+			conditions=" AND ".join(conditions) or "1 = 1",
+			subtype_clause=_subtype_clause(filters, params),
+		),
+		params,
+		as_dict=True,
+	)
+
+
+def _vehicle_opening(filters, totals_out=None):
+	"""What each (account, vehicle) carried into the period.
+
+	The same rules as _opening_balances: opening entries inside the window are
+	opening, not movement, and an Income / Expense account starts afresh at the
+	fiscal year start -- which every vehicle account is.
+	"""
+	params = {"company": filters.company, "from_date": filters.from_date, "to_date": filters.to_date}
+	conditions = _vehicle_narrowing(filters, params)
+
+	if cint(filters.get("show_opening_entries")):
+		dates = "p.posting_date < %(from_date)s"
+	else:
+		dates = """(p.posting_date < %(from_date)s
+			OR (IFNULL(p.is_opening, 'No') = 'Yes'
+			    AND p.posting_date BETWEEN %(from_date)s AND %(to_date)s))"""
+
+	floor = frappe.db.sql(
+		"""SELECT year_start_date FROM `tabFiscal Year`
+		   WHERE %(from_date)s BETWEEN year_start_date AND year_end_date
+		   ORDER BY year_start_date DESC LIMIT 1""",
+		{"from_date": filters.from_date},
+	)
+	floor = floor[0][0] if floor else None
+	if floor and getdate(floor) >= getdate(filters.from_date):
+		# opening on the year start: a P&L account carries nothing in
+		conditions.append("acc.root_type NOT IN ('Income', 'Expense')")
+	elif floor:
+		params["floor"] = floor
+		conditions.append("(acc.root_type NOT IN ('Income', 'Expense') OR g.posting_date >= %(floor)s)")
+
+	rows = frappe.db.sql(
+		"""
+		SELECT g.account, g.party,
+		       SUM(g.debit) - SUM(g.credit) AS balance,
+		       SUM(g.debit) AS dr, SUM(g.credit) AS cr
+		FROM {lines}
+		JOIN `tabAccount` acc ON acc.name = g.account
+		WHERE {conditions}
+		  {subtype_clause}
+		GROUP BY g.account, g.party
+		""".format(
+			lines=_vehicle_lines(dates),
+			conditions=" AND ".join(conditions) or "1 = 1",
+			subtype_clause=_subtype_clause(filters, params),
+		),
+		params,
+		as_dict=True,
+	)
+
+	opening = {}
+	for r in rows:
+		key = (r.account, VEHICLE, r.party)
+		opening[key] = flt(r.balance)
+		if totals_out is not None:
+			totals_out[key] = [flt(r.dr), flt(r.cr)]
+	return opening
+
+
+def _vehicle_names(vehicles):
+	"""Vehicle -> its number plate, the name a vehicle is known by."""
+	vehicles = sorted({v for v in vehicles if v})
+	if not vehicles:
+		return {}
+	return {
+		row.name: row.license_plate or row.name
+		for row in frappe.get_all(
+			"Vehicle", filters={"name": ("in", vehicles)}, fields=["name", "license_plate"]
+		)
+	}
+
+
+def _bill_settlements(invoices, to_date):
+	"""Per Purchase Invoice: its amount, what settled it, and what is still due.
+
+	Read from the Payment Ledger, which is where ERPNext itself keeps this: the
+	bill books +amount against itself and every Payment Entry, Journal Entry or
+	debit note that settles it books -amount against the bill. Cancelled
+	settlements are delinked, not deleted, so they are excluded by that flag.
+	Only what happened by the report's To Date counts -- a bill paid after it
+	was still due on that date.
+	"""
+	invoices = sorted(set(invoices))
+	out = {}
+	for start in range(0, len(invoices), 500):
+		for row in frappe.db.sql(
+			"""
+			SELECT against_voucher_no AS bill, voucher_type, voucher_no,
+			       MIN(posting_date) AS posting_date, SUM(amount) AS amount
+			FROM `tabPayment Ledger Entry`
+			WHERE against_voucher_type = 'Purchase Invoice'
+			  AND against_voucher_no IN %(bills)s
+			  AND delinked = 0
+			  AND posting_date <= %(to_date)s
+			GROUP BY against_voucher_no, voucher_type, voucher_no
+			ORDER BY MIN(posting_date), voucher_no
+			""",
+			{"bills": invoices[start : start + 500], "to_date": to_date},
+			as_dict=True,
+		):
+			entry = out.setdefault(row.bill, frappe._dict(amount=0.0, due=0.0, settled=[]))
+			entry.due += flt(row.amount)
+			if row.voucher_type == "Purchase Invoice" and row.voucher_no == row.bill:
+				entry.amount += flt(row.amount)
+			else:
+				entry.settled.append(row)
+	return out
+
+
+# What a settlement is called on the bill's line.
+SETTLEMENT_LABEL = {
+	"Payment Entry": "Paid",
+	"Journal Entry": "Paid by JV",
+	"Purchase Invoice": "Debit Note",
+}
+
+
+def _decorate_vehicles(postings, filters):
+	"""Name each vehicle, and say of each purchase who billed it and how it was paid.
+
+	The legacy print nests the source bill under the posting -- the PBO number,
+	the supplier, the bill's own narration. Here the supplier is the posting's
+	description, and the line under it carries the bill and its payments:
+
+	    Bill No: 542 Dt: 2083/01/11 · Bill Amount: 30,188.23 ·
+	    Paid: NGI-VP-000078 Dt: 2083/04/25 30,188.23 · Due: 0.00
+
+	Payment is the bill's, not the vehicle's: a bill for two vehicles is paid
+	as one. So the line states the whole bill's figures, labelled as such,
+	rather than an apportioned share nobody paid.
+	"""
+	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
+	from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+	from avinashgroup_app.utils.voucher_numbers import resolve
+
+	names = _vehicle_names(p.party for p in postings)
+	for p in postings:
+		p.party_name = names.get(p.party) or p.party
+
+	bills = sorted({p.voucher_no for p in postings if p.voucher_type == "Purchase Invoice"})
+	if not bills:
+		return
+
+	def miti(date):
+		try:
+			return bs_date_str(date).replace("-", "/") if date else ""
+		except Exception:
+			return ""
+
+	docs = {}
+	for start in range(0, len(bills), 500):
+		for row in frappe.get_all(
+			"Purchase Invoice",
+			filters={"name": ("in", bills[start : start + 500])},
+			fields=["name", "supplier", "supplier_name", "bill_no", "bill_date", "is_return", "return_against"],
+		):
+			docs[row.name] = row
+
+	settlements = _bill_settlements(bills, filters.to_date)
+	numbers = resolve(
+		[(s.voucher_type, s.voucher_no) for entry in settlements.values() for s in entry.settled]
+		+ [("Purchase Invoice", d.return_against) for d in docs.values() if d.return_against]
+	)
+
+	lines = {}
+	for name, doc in docs.items():
+		parts = []
+		if doc.bill_no:
+			parts.append(
+				"Bill No: {0}{1}".format(doc.bill_no, "  Dt: {0}".format(miti(doc.bill_date)) if doc.bill_date else "")
+			)
+		if doc.is_return:
+			if doc.return_against:
+				parts.append(
+					"Debit Note against {0}".format(
+						numbers.get(("Purchase Invoice", doc.return_against)) or doc.return_against
+					)
+				)
+			lines[name] = "  ·  ".join(parts)
+			continue
+
+		entry = settlements.get(name) or frappe._dict(amount=0.0, due=0.0, settled=[])
+		if entry.amount:
+			parts.append("Bill Amount: {0}".format(_fmt_npr(entry.amount)))
+		for s in entry.settled:
+			parts.append(
+				"{0}: {1}  Dt: {2}  {3}".format(
+					SETTLEMENT_LABEL.get(s.voucher_type, s.voucher_type),
+					numbers.get((s.voucher_type, s.voucher_no)) or s.voucher_no,
+					miti(s.posting_date),
+					_fmt_npr(-flt(s.amount)) or "0.00",
+				)
+			)
+		if entry.amount:
+			parts.append("Due: {0}".format(_fmt_npr(entry.due) or "0.00") if entry.settled else "Not paid")
+		lines[name] = "  ·  ".join(parts)
+
+	for p in postings:
+		doc = docs.get(p.voucher_no) if p.voucher_type == "Purchase Invoice" else None
+		if doc:
+			p.description = doc.supplier_name or doc.supplier or ""
+			p.paid = lines.get(p.voucher_no) or ""
+
+
+@frappe.whitelist()
+def get_vehicles(company=None, txt=None):
+	"""The company's vehicles, for the Vehicle filter: id with its number plate."""
+	conditions, params = [], {"txt": "%{0}%".format((txt or "").strip())}
+	if company and frappe.db.has_column("Vehicle", "custom_company"):
+		conditions.append("custom_company = %(company)s")
+		params["company"] = company
+	if txt:
+		conditions.append("(name LIKE %(txt)s OR license_plate LIKE %(txt)s)")
+	return frappe.db.sql(
+		"""SELECT name AS value, license_plate AS description FROM `tabVehicle`
+		   {0} ORDER BY name LIMIT 500""".format(
+			"WHERE " + " AND ".join(conditions) if conditions else ""
+		),
+		params,
+		as_dict=True,
+	)
 
 
 def _describe_against(against, company, names=None):
@@ -543,7 +886,7 @@ def _decorate(postings, filters_company=None):
 
 def _section_key(filters, posting):
 	"""What this posting is grouped under, per "Categorized by"."""
-	category = filters.get("categorized_by") or "Account"
+	category = _category(filters)
 	if category == "Party":
 		return (posting.party_type or "", posting.party or "")
 	if category == "Both":
@@ -555,6 +898,8 @@ def _party_label(party_type, party):
 	"""A party's display name, for a section with no postings to read it from."""
 	if not (party_type and party):
 		return ""
+	if party_type == VEHICLE:
+		return _vehicle_names([party]).get(party, "")
 	field = PARTY_NAME_FIELD.get(party_type)
 	if not field or not frappe.db.has_column(party_type, field):
 		return ""
@@ -562,7 +907,7 @@ def _party_label(party_type, party):
 
 
 def _section_label(filters, key, postings):
-	category = filters.get("categorized_by") or "Account"
+	category = _category(filters)
 	if not postings:
 		# a section that carries a balance but saw no movement -- the key is all
 		# there is to name it by
@@ -644,6 +989,9 @@ def _opening_balances(filters, postings, totals_out=None):
 	query: the join costs the optimiser the fin_stmt_agg_index and turned this
 	into a 14.8s scan, which alone tripped Frappe's 15s prepared-report timer.
 	"""
+	if _is_vehicle(filters):
+		return _vehicle_opening(filters, totals_out)
+
 	# Accounts come from the postings in the period, plus any the user asked
 	# for explicitly. Without the second half, an account picked by name that
 	# happened to have no movement in the window reported no opening balance at
@@ -791,7 +1139,7 @@ def _opening_balances(filters, postings, totals_out=None):
 	if pl and (not floor or getdate(floor) < getdate(filters.from_date)):
 		rows += totals(sorted(pl), since=floor)
 
-	category = filters.get("categorized_by") or "Account"
+	category = _category(filters)
 	opening = {}
 	for r in rows:
 		if r.account in extra and (r.party or "") not in in_scope:
@@ -878,6 +1226,10 @@ def _party_section_label(key, postings):
 	# key[2] is the party itself -- empty for the block of party-less postings,
 	# whose Party Name column names what they were posted against rather than a
 	# party of their own. See _section_label().
+	if key[1] == VEHICLE:
+		# the plate is what a vehicle is known by; the id is what to look it up by
+		name = (postings[0].party_name if postings else "") or _party_label(key[1], key[2])
+		return "{0}  ({1})".format(name, key[2]) if name and name != key[2] else key[2]
 	if postings and key[2]:
 		return postings[0].party_name or _("No Party")
 	return _party_label(key[1], key[2]) or key[2] or _("No Party")
@@ -909,7 +1261,7 @@ def _build_rows(filters, postings, with_narration=False, columns=None, always_na
 	show_remarks = with_narration and (always_narration or cint(filters.get("remarks", 1)))
 	columns = columns or _get_columns(filters)
 
-	category = filters.get("categorized_by") or "Account"
+	category = _category(filters)
 
 	# A posting with no party is kept, and blocks under "No Party".
 	#
@@ -1495,7 +1847,7 @@ def _print_pages(filters, postings):
 	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
 
 	X = PRINT_X
-	category = filters.get("categorized_by") or "Account"
+	category = _category(filters)
 	show_remarks = cint(filters.get("remarks", 1))
 	totals = {}
 	opening = _opening_balances(filters, postings, totals_out=totals)
@@ -1750,7 +2102,10 @@ def _print_parameters(filters):
 		[
 			("Closing Narration", "No"),
 			("Show Grand Total", "No"),
-			("Class Segment Wise", listed(_normalize(filters.get("party")))),
+			(
+				"Class Segment Wise",
+				listed(_normalize(filters.get("vehicle" if _is_vehicle(filters) else "party"))),
+			),
 		],
 		[("Filter", "; ".join(narrowing) or "All"), None, None],
 	]
@@ -1862,11 +2217,18 @@ def _std_context(filters):
 	)
 	category = filters.get("categorized_by") or "Account"
 	pairs = [
-		(_("Categorised by"), {"Account": _("Account"), "Party": _("Party"), "Both": _("Account & Party")}[category]),
+		(
+			_("Categorised by"),
+			{"Account": _("Account"), "Party": _("Party"), "Both": _("Account & Party"), VEHICLE: _("Account & Vehicle")}[
+				category
+			],
+		),
 		(_("Accounts"), listed(numbers or accounts)),
 		(_("Voucher type"), listed(_normalize(filters.get("voucher_type")))),
-		(_("Party type"), listed(_normalize(filters.get("party_type")))),
-		(_("Parties"), listed(_normalize(filters.get("party")))),
+		None if category == VEHICLE else (_("Party type"), listed(_normalize(filters.get("party_type")))),
+		(_("Vehicles"), listed(_normalize(filters.get("vehicle"))))
+		if category == VEHICLE
+		else (_("Parties"), listed(_normalize(filters.get("party")))),
 		(_("Voucher subtype"), listed(_normalize(filters.get("voucher_subtype")))),
 		(_("Voucher No."), filters.get("voucher_no") or _("All")),
 		(
@@ -1875,6 +2237,7 @@ def _std_context(filters):
 		),
 		(_("Narration"), _("Shown") if cint(filters.get("remarks", 1)) else _("Hidden")),
 	]
+	pairs = [pair for pair in pairs if pair]
 	now = frappe.utils.now_datetime()
 	return frappe._dict(
 		company=filters.company,
@@ -1954,7 +2317,7 @@ def _std_pages(filters, postings, ctx):
 	from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
 
 	S = STD
-	category = filters.get("categorized_by") or "Account"
+	category = _category(filters)
 	show_remarks = cint(filters.get("remarks", 1))
 	totals = {}
 	opening = _opening_balances(filters, postings, totals_out=totals)
@@ -2226,7 +2589,13 @@ def _std_pages(filters, postings, ctx):
 		part
 		for part in (
 			counted(len(accounts), _("account"), _("accounts")),
-			counted(party_count, _("party"), _("parties")) if party_count else "",
+			(
+				counted(party_count, _("vehicle"), _("vehicles"))
+				if _is_vehicle(filters)
+				else counted(party_count, _("party"), _("parties"))
+			)
+			if party_count
+			else "",
 			counted(len(vouchers), _("voucher"), _("vouchers")),
 			counted(len(postings), _("posting"), _("postings")),
 		)
@@ -2283,6 +2652,8 @@ def download_pdf(filters, orientation="Portrait", style="legacy"):
 
 	postings = _get_postings(filters)
 	_decorate(postings, filters.company)
+	if _is_vehicle(filters):
+		_decorate_vehicles(postings, filters)
 	# "standard" prints the same ledger laid out for reading (see the note above
 	# STD); anything else is the legacy Posting Detail page.
 	if style == "standard":
