@@ -798,6 +798,52 @@ def _payment_details(postings):
 	return out
 
 
+# Where each voucher keeps the narration its author typed, first non-empty wins.
+#
+# GL Entry.remarks is not that. ERPNext composes it on submit: a Payment Entry's
+# reads "Amount NPR 160390 received from NGI-CUS-00938 / Transaction reference
+# no 1 dated ..." while the operator's own "Being amount received for gas sale
+# ..." sits in custom_remark (27,225 of 27,234 on avinas1); a Journal Entry's is
+# "Note: " + user_remark, or just "Reference #..." when there is no narration at
+# all. A voucher type not listed here keeps GL Entry's text.
+SOURCE_NARRATION = {
+	"Journal Entry": ("user_remark",),
+	"Payment Entry": ("custom_remark",),
+	"Purchase Invoice": ("remarks",),
+	"Sales Invoice": ("remarks",),
+	"Purchase Receipt": ("custom_remark", "remarks"),
+	"Stock Entry": ("remarks",),
+}
+
+
+def _source_narrations(postings):
+	"""(voucher_type, voucher_no) -> the narration on the voucher itself."""
+	wanted = {}
+	for p in postings:
+		if p.voucher_type in SOURCE_NARRATION and p.voucher_no:
+			wanted.setdefault(p.voucher_type, set()).add(p.voucher_no)
+
+	out = {}
+	for doctype, names in wanted.items():
+		# a field this site has not got (custom fields differ between sites)
+		fields = [f for f in SOURCE_NARRATION[doctype] if frappe.db.has_column(doctype, f)]
+		if not fields:
+			continue
+		names = sorted(names)
+		for start in range(0, len(names), 500):
+			for row in frappe.db.sql(
+				"SELECT name, {0} FROM `tab{1}` WHERE name IN %(names)s".format(
+					", ".join("`{0}`".format(f) for f in fields), doctype
+				),
+				{"names": names[start : start + 500]},
+				as_dict=True,
+			):
+				out[(doctype, row.name)] = next(
+					(row[f] for f in fields if (row[f] or "").strip()), ""
+				)
+	return out
+
+
 def _decorate(postings, filters_company=None):
 	"""Add the BS miti, the printed voucher number as a link, and party names."""
 	from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
@@ -806,6 +852,7 @@ def _decorate(postings, filters_company=None):
 	numbers = resolve((r.voucher_type, r.voucher_no) for r in postings)
 	journals = _journal_descriptions(postings)
 	payments = _payment_details(postings)
+	narrations = _source_narrations(postings)
 	suffix = _company_suffix(filters_company)
 
 	# Some rows carry a party with no party_type -- 343 in a fortnight on NGI.
@@ -855,6 +902,11 @@ def _decorate(postings, filters_company=None):
 			r.miti = ""
 		r.number = numbers.get((r.voucher_type, r.voucher_no)) or r.voucher_no
 		r.voucher_link = link(r.voucher_type, r.voucher_no, r.number)
+		# The voucher's own narration, not GL Entry's composed text. A vehicle
+		# posting already carries its line's own (a Journal Entry row's
+		# user_remark before the entry's), so it is left alone.
+		if r.party_type != VEHICLE and (r.voucher_type, r.voucher_no) in narrations:
+			r.remarks = narrations[(r.voucher_type, r.voucher_no)]
 		r.party_name = (
 			party_names.get((r.party_type, r.party))
 			or (r.party if r.party else "")
