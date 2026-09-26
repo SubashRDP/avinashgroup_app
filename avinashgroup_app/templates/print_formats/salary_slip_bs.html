@@ -1,0 +1,114 @@
+{#-
+  Salary Slip (BS): the payslip in Bikram Sambat. Print format "Salary Slip BS".
+  Also the attachment HRMS emails to staff (it is the Salary Slip default print
+  format; see patches/setup_hr_bs_dates.py). BS fields come from hr/bs_dates.py.
+-#}
+{#- Whole Employee doc: PAN / SSF No. fields differ between sites, and .get() on a
+    missing field is simply empty. -#}
+{%- set emp = frappe.get_doc("Employee", doc.employee) -%}
+{%- set earnings = doc.earnings | selectattr("statistical_component", "equalto", 0) | list -%}
+{%- set deductions = doc.deductions | selectattr("statistical_component", "equalto", 0) | list -%}
+{%- set rows = [earnings | length, deductions | length] | max -%}
+<style>
+	.ssbs { font-family: "Noto Sans", "Helvetica Neue", Arial, sans-serif; font-size: 11.5px; color: #1b2230; }
+	.ssbs h1 { font-size: 17px; margin: 0; letter-spacing: .02em; }
+	.ssbs .co { text-align: center; border-bottom: 2px solid #1b2230; padding-bottom: 6px; margin-bottom: 10px; }
+	.ssbs .co .sub { font-size: 12px; margin-top: 2px; }
+	.ssbs .month { font-size: 14px; font-weight: 700; margin-top: 4px; }
+	.ssbs .muted { color: #5b6574; }
+	.ssbs table { width: 100%; border-collapse: collapse; }
+	.ssbs .info td { padding: 2px 4px; vertical-align: top; }
+	.ssbs .info td.k { color: #5b6574; width: 17%; white-space: nowrap; }
+	.ssbs .pay th, .ssbs .pay td { border: 1px solid #b9c0ca; padding: 4px 6px; }
+	.ssbs .pay th { background: #eef1f5; text-align: left; }
+	.ssbs .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.ssbs .tot td { font-weight: 700; background: #f6f7f9; }
+	.ssbs .net { margin-top: 10px; border: 2px solid #1b2230; padding: 7px 10px; display: flex; justify-content: space-between; font-size: 13.5px; font-weight: 700; }
+	.ssbs .words { margin-top: 4px; font-style: italic; }
+	.ssbs .days td { border: 1px solid #b9c0ca; padding: 3px 6px; text-align: center; }
+	.ssbs .days tr:first-child td { background: #eef1f5; color: #5b6574; font-size: 10.5px; }
+	.ssbs .sign { margin-top: 42px; }
+	.ssbs .sign td { width: 33%; text-align: center; padding-top: 4px; border-top: 1px solid #1b2230; }
+	.ssbs .sign td + td { border-left: 24px solid #fff; }
+	.ssbs .note { font-size: 10px; margin-top: 8px; }
+</style>
+
+<div class="ssbs">
+	<div class="co">
+		<h1>{{ doc.company }}</h1>
+		<div class="sub">तलब भुक्तानी विवरण · Salary Slip</div>
+		<div class="month">{{ doc.custom_bs_month or "" }}</div>
+		<div class="muted">
+			{{ doc.custom_start_miti or "" }} – {{ doc.custom_end_miti or "" }}
+			({{ frappe.format(doc.start_date, {"fieldtype": "Date"}) }} – {{ frappe.format(doc.end_date, {"fieldtype": "Date"}) }})
+		</div>
+	</div>
+
+	<table class="info">
+		<tr>
+			<td class="k">Employee</td><td><b>{{ doc.employee_name }}</b> ({{ doc.employee }})</td>
+			<td class="k">Slip No.</td><td>{{ doc.name }}</td>
+		</tr>
+		<tr>
+			<td class="k">Designation</td><td>{{ doc.designation or "—" }}</td>
+			<td class="k">Department</td><td>{{ doc.department or "—" }}</td>
+		</tr>
+		<tr>
+			<td class="k">PAN</td><td>{{ emp.get("custom_pan") or emp.get("pan_number") or "—" }}</td>
+			<td class="k">SSF No.</td><td>{{ emp.get("custom_ssf_id_no") or "—" }}</td>
+		</tr>
+		<tr>
+			<td class="k">Joined</td><td>{{ emp.get("custom_joining_miti") or "—" }}</td>
+			<td class="k">Bank</td><td>{{ doc.bank_name or emp.get("bank_name") or "—" }} {{ doc.bank_account_no or emp.get("bank_ac_no") or "" }}</td>
+		</tr>
+	</table>
+
+	<table class="days" style="margin: 10px 0;">
+		<tr><td>Working Days</td><td>Payment Days</td><td>Leave Without Pay</td><td>Absent</td><td>Posting (BS)</td></tr>
+		<tr>
+			<td>{{ doc.total_working_days | float | round(1) }}</td>
+			<td>{{ doc.payment_days | float | round(1) }}</td>
+			<td>{{ doc.leave_without_pay | float | round(1) }}</td>
+			<td>{{ doc.absent_days | float | round(1) }}</td>
+			<td>{{ doc.custom_posting_miti or "" }}</td>
+		</tr>
+	</table>
+
+	<table class="pay">
+		<tr><th>Earnings</th><th class="num">Amount</th><th>Deductions</th><th class="num">Amount</th></tr>
+		{%- for i in range(rows) %}
+		<tr>
+			{%- if i < earnings | length %}
+			<td>{{ earnings[i].salary_component }}</td>
+			<td class="num">{{ frappe.format(earnings[i].amount, {"fieldtype": "Currency"}, currency=doc.currency) }}</td>
+			{%- else %}<td></td><td></td>{% endif %}
+			{%- if i < deductions | length %}
+			<td>{{ deductions[i].salary_component }}</td>
+			<td class="num">{{ frappe.format(deductions[i].amount, {"fieldtype": "Currency"}, currency=doc.currency) }}</td>
+			{%- else %}<td></td><td></td>{% endif %}
+		</tr>
+		{%- endfor %}
+		<tr class="tot">
+			<td>Gross Pay</td><td class="num">{{ frappe.format(doc.gross_pay, {"fieldtype": "Currency"}, currency=doc.currency) }}</td>
+			<td>Total Deduction</td><td class="num">{{ frappe.format(doc.total_deduction, {"fieldtype": "Currency"}, currency=doc.currency) }}</td>
+		</tr>
+	</table>
+
+	<div class="net">
+		<span>Net Pay · खुद भुक्तानी</span>
+		<span>{{ frappe.format(doc.rounded_total or doc.net_pay, {"fieldtype": "Currency"}, currency=doc.currency) }}</span>
+	</div>
+	<div class="words">{{ doc.total_in_words or "" }}</div>
+
+	{%- if doc.get("custom_override_income_tax") or doc.get("custom_retirement_excess") or doc.get("custom_women_rebate") %}
+	<div class="note muted">
+		{%- if doc.get("custom_women_rebate") %}Women's tax rebate of {{ doc.custom_women_rebate | float | round(0) | int }}% applied. {% endif %}
+		{%- if doc.get("custom_retirement_excess") %}Retirement contribution above the yearly cap ({{ frappe.format(doc.custom_retirement_excess, {"fieldtype": "Currency"}, currency=doc.currency) }}) is taxed. {% endif %}
+		{%- if doc.get("custom_override_income_tax") %}Income tax set by accounts. {% endif %}
+	</div>
+	{%- endif %}
+
+	<table class="sign">
+		<tr><td>Prepared by</td><td>Approved by</td><td>Received by</td></tr>
+	</table>
+</div>

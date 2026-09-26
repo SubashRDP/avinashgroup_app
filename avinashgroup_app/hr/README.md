@@ -27,7 +27,10 @@ the map, not a mess waiting to be tidied.
 | `year_setup.py` | `setup_year(fiscal_year)`: a whole fiscal year for every company — holiday lists, shifts, leave period/policies, payroll period, tax slab, **pay rolled onto the new slab** (`payroll/year_rollover.py`), leave policy assignments. Refuses without the Fiscal Year or the year's tax rates; warns without festival dates. Runbook: `docs/payroll-handover.md` §9 "Year rollover". | `bench execute` |
 | `holiday_year_switch.py` | On a fiscal year's first day, repoints Company defaults and employees (the women's lists) from last year's holiday lists to this year's. HRMS keeps one list per person, so without it nobody has holidays after 31 Ashadh. | `scheduler_events` → `daily_long` |
 | `leave_policy_assignment_bs.py` | Leave Policy Assignment override: a mid-year assignment back-fills earned leave in **BS** months (HRMS counts AD months and over-credits one). | `override_doctype_class` |
-| `utils.py` | HR overrides — currently: monthly earned-leave accrual on **Bikram Sambat** months | `scheduler_events` → `daily_long` (not yet wired — see its docstring) |
+| `utils.py` | HR overrides — currently: monthly earned-leave accrual on **Bikram Sambat** months | `scheduler_events` → `daily_long` (the stock job is stopped by `patches/setup_bs_leave_accrual`) |
+| `shift_backdate.py` | A Shift Request / Shift Assignment reaching into past days: those days' attendance is re-marked on the new shift, Overtime Sheet rows re-measured; refused when the days are already paid. Detaches the days first, because HRMS will not cancel an assignment while attendance names its shift. | `doc_events` → Shift Request / Shift Assignment |
+| `replacement_leave.py` | Overtime Sheet rows earning Replacement Leave (officer / admin holiday work) become a submitted Compensatory Leave Request once attendance shows the day was worked; cancelling the sheet takes the days back. | `doc_events` → Overtime Sheet on_submit / on_cancel; `daily_long` → `grant_pending` |
+| `bs_dates.py` | `custom_*_miti` BS dates beside the AD dates on Leave Application, Payroll Entry, Employee and Salary Slip, plus `Salary Slip.custom_bs_month`. Server side of rdp_common_app's Bs Conversion picker. | `doc_events` → validate |
 
 ## Why this package exists
 

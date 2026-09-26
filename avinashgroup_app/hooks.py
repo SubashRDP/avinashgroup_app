@@ -337,6 +337,10 @@ _add_doc_event(
 
 # Income tax: the slab computes it, the slip can override it by hand. Runs after
 # the controller's validate, so the computed figure is already on the row.
+# Retirement cap and women's rebate, which HRMS's slab cannot express. Runs
+# before the manual override so a hand-typed figure still wins. See
+# payroll/tax_relief.py.
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.tax_relief.apply_tax_reliefs")
 _add_doc_event(
     "Salary Slip",
     "validate",
@@ -402,9 +406,9 @@ _add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.namin
 # Make room before HRMS inserts the requested assignment, and close the gap if
 # the request is cancelled.
 _add_doc_event("Shift Request", "validate", "avinashgroup_app.hr.shift_change.validate_request")
-_add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_backdate.mark_request_in_progress")
+_add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_backdate.prepare_request")
 _add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_change.make_room_for_request")
-_add_doc_event("Shift Request", "before_cancel", "avinashgroup_app.hr.shift_backdate.mark_request_in_progress")
+_add_doc_event("Shift Request", "before_cancel", "avinashgroup_app.hr.shift_backdate.prepare_request")
 _add_doc_event("Shift Request", "on_cancel", "avinashgroup_app.hr.shift_change.close_gap_after_cancel")
 
 # Shifts may be backdated. A change reaching into past days re-marks those days'
@@ -415,6 +419,7 @@ _add_doc_event("Shift Request", "on_submit", "avinashgroup_app.hr.shift_backdate
 _add_doc_event("Shift Request", "on_cancel", "avinashgroup_app.hr.shift_backdate.rebuild_for_request")
 _add_doc_event("Shift Assignment", "validate", "avinashgroup_app.hr.shift_backdate.guard_paid_period")
 _add_doc_event("Shift Assignment", "on_submit", "avinashgroup_app.hr.shift_backdate.rebuild_for_assignment")
+_add_doc_event("Shift Assignment", "before_cancel", "avinashgroup_app.hr.shift_backdate.prepare_assignment_cancel")
 _add_doc_event("Shift Assignment", "on_cancel", "avinashgroup_app.hr.shift_backdate.rebuild_for_assignment")
 
 # Holiday work that earns replacement leave (officer / admin) is credited as a
@@ -422,6 +427,11 @@ _add_doc_event("Shift Assignment", "on_cancel", "avinashgroup_app.hr.shift_backd
 # job catches sheets approved ahead of the day. See hr/replacement_leave.py.
 _add_doc_event("Overtime Sheet", "on_submit", "avinashgroup_app.hr.replacement_leave.on_sheet_submit")
 _add_doc_event("Overtime Sheet", "on_cancel", "avinashgroup_app.hr.replacement_leave.on_sheet_cancel")
+
+# BS (miti) dates beside the AD dates on the HR forms, filled server-side so
+# slips and bulk-made documents carry them too. See hr/bs_dates.py.
+for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):
+    _add_doc_event(_dt, "validate", "avinashgroup_app.hr.bs_dates.set_bs_dates")
 
 # Tea and meal rates differ per company, so an employee may only be put in a
 # category belonging to their own company.

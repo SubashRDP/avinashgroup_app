@@ -81,7 +81,12 @@ on ng-group.
 | `payroll/onboarding.py` | Reads a company's own Excel salary sheet and builds components, structure, employee pay inputs and assignments. PROFILES per company; the 21-component catalogue lives here. |
 | `payroll/hr_journal.py` | JV Type + Document No on HR journals, and the cost-centre → expense-account routing (547101 O/O, 547102 S/D, 547103 F/P). |
 | Doctypes | Dashain Bonus, Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category, Employee Category. |
-| Reports | Monthly Attendance BS, Yearly Leave Details BS. |
+| Reports | Monthly Attendance BS, Yearly Leave Details BS, Salary Tax and SSF Deposit (SSF 31% / SST / remuneration tax per BS month, with deadlines). |
+| `hr/shift_backdate.py` | *(2026-09-27)* Backdated Shift Request / Shift Assignment: past days re-marked on the new shift, OT re-measured, refused into a paid month. A worked day never flips to Absent because its punches miss the new shift; it is kept and flagged. |
+| `hr/replacement_leave.py` | *(2026-09-27)* Officer / admin holiday work on an Overtime Sheet → Compensatory Leave Request (leave type **Replacement Leave**) once attendance shows the day; daily job catches late attendance. |
+| `payroll/tax_relief.py` | *(2026-09-27)* Retirement cap (s.63) and women's rebate on the slip's tax. Insurance / CIT via HRMS Employee Tax Exemption Declaration; `CIT` deduction component for payroll CIT (recurring Additional Salary). |
+| `hr/bs_dates.py` + print format **Salary Slip BS** | *(2026-09-27)* BS miti beside every AD date on Leave Application, Payroll Entry, Employee, Salary Slip; BS payslip is the default Salary Slip format and email attachment. |
+| `patches/add_site_only_hr_fields.py` | *(2026-09-27)* Holiday List.custom_company, the Attendance deviation fields and Shift Type cutoff existed only as site data; a fresh site (ng-group) now gets them. |
 
 ---
 
@@ -188,6 +193,14 @@ every delete — a blanket DELETE once cost 357k rows on another site.
 Advance is typed Payable on 6 companies and must be Receivable; the payroll
 payable accounts whose Account Type was cleared need confirming; 547101 "O/O"
 may want a readable name.
+
+**Accountant — tax figures added 2026-09-27** (all data, editable in the desk):
+insurance exemptions Life 40,000 / Health 20,000 / Building 5,000; retirement
+cap lower of ⅓ income or 5,00,000; women's rebate 10% (Income Tax Slab field).
+Open: does the women's rebate also reduce the 1% SST band? (Today it does — it
+applies to the slip's whole tax.) And the SST / remuneration-tax split in the
+deposit report is proportional to the year's bands; confirm that is how IRD
+expects it filed.
 
 **Client decisions:**
 

@@ -23,8 +23,8 @@ shift may still be running and is left to the normal flow):
   * A day with punches is rebuilt: the row is removed, the check-ins forget
     their old shift, and `reconcile_employee_day` (the same primitive Attendance
     Fix and self-heal use) marks it again on the new shift. If the punches do
-    not fit the new shift at all, the old row is restored and the day is logged
-    rather than left empty.
+    not fit the new shift (nothing marked, or a worked day turning Absent), the
+    old verdict is kept on the new shift and the day is flagged.
   * Approved Overtime Sheet rows for those days are re-measured, because
     "hours outside the shift" moved with the shift.
 
@@ -32,10 +32,18 @@ Payroll already paid is a hard stop: a change reaching into a period with a
 submitted Salary Slip is refused, since rebuilding attendance under a paid slip
 would silently disagree with the money. Cancel the slip first.
 
+HRMS refuses to cancel a Shift Assignment while any Attendance or Employee
+Checkin in its range still names its shift, so a backdated change could never be
+undone. Before an assignment is cancelled (or split, on submit) the covered days
+are detached: their attendance and check-ins forget the shift, and are re-marked
+straight after on whatever shift the roster now says.
+
 Registered in hooks.py:
   Shift Request     validate → guard_paid_period
+                    before_submit / before_cancel → prepare_request
                     on_submit / on_cancel → rebuild_for_request
   Shift Assignment  validate → guard_paid_period
+                    before_cancel → prepare_assignment_cancel
                     on_submit / on_cancel → rebuild_for_assignment
 Assignments that `hr.shift_change` creates or cancels while processing a
 request are skipped (flag `in_shift_request`); the request rebuilds once, after
@@ -73,9 +81,10 @@ def guard_paid_period(doc, method=None):
 	"""Refuse a backdated change into a period already paid. Hook: validate.
 
 	Works for both Shift Request (from_date/to_date) and Shift Assignment
-	(start_date/end_date).
+	(start_date/end_date); the prepare hooks call it again on cancel, which
+	does not run validate.
 	"""
-	start, end = _past_range(doc)
+	start, end = _covered_range(doc, until_today=True)
 	if not start:
 		return
 	slip = frappe.db.get_value(
@@ -96,7 +105,7 @@ def guard_paid_period(doc, method=None):
 				"those days would change attendance under a paid salary. Cancel the salary "
 				"slip first, or start the change after {2}."
 			).format(
-				doc.employee_name or doc.employee,
+				doc.get("employee_name") or doc.employee,
 				slip.start_date,
 				slip.end_date,
 				frappe.bold(slip.name),
@@ -105,22 +114,46 @@ def guard_paid_period(doc, method=None):
 		)
 
 
+def prepare_request(doc, method=None):
+	"""Clear the way before HRMS and hr.shift_change move assignments.
+
+	Hook: Shift Request before_submit, before_cancel.
+
+	  * Tells the Shift Assignment hooks to stand aside: HRMS inserts / cancels
+	    the request's own assignment and hr.shift_change splits the standing
+	    one; rebuilding after each step would mark the same days three times on
+	    half-finished rosters. The request rebuilds once, in rebuild_for_request.
+	  * Detaches the covered days (see `detach_days`), because HRMS refuses to
+	    cancel an assignment while any attendance or check-in in its range still
+	    names its shift. Without this a backdated request can never be undone.
+	"""
+	if method == "before_submit" and doc.status != "Approved":
+		return
+	frappe.flags.in_shift_request = True
+	if method == "before_cancel":
+		guard_paid_period(doc)
+	start, end = _covered_range(doc, until_today=True, whole_tail=(method == "before_cancel"))
+	if start:
+		detach_days(doc.employee, start, end)
+
+
 def rebuild_for_request(doc, method=None):
 	"""Re-mark the past days a Shift Request covers. Hook: on_submit, on_cancel."""
 	if method == "on_submit" and doc.status != "Approved":
 		return
 	frappe.flags.in_shift_request = False
-	_schedule(doc.employee, *_past_range(doc))
+	_schedule(doc.employee, *_covered_range(doc, whole_tail=(method == "on_cancel")))
+	refetch_todays_checkins(doc.employee)
 
 
-def mark_request_in_progress(doc, method=None):
-	"""Tell the Shift Assignment hooks to stand aside. Hook: before_submit, before_cancel.
-
-	HRMS inserts / cancels the request's own assignment and `hr.shift_change`
-	splits the standing one; rebuilding after each of those steps would mark the
-	same days three times on half-finished rosters.
-	"""
-	frappe.flags.in_shift_request = True
+def prepare_assignment_cancel(doc, method=None):
+	"""Detach a directly-cancelled assignment's days. Hook: Shift Assignment before_cancel."""
+	if frappe.flags.in_shift_request:
+		return
+	guard_paid_period(doc)
+	start, end = _covered_range(doc, until_today=True)
+	if start:
+		detach_days(doc.employee, start, end)
 
 
 def rebuild_for_assignment(doc, method=None):
@@ -131,21 +164,69 @@ def rebuild_for_assignment(doc, method=None):
 	"""
 	if frappe.flags.in_shift_request:
 		return
-	_schedule(doc.employee, *_past_range(doc))
+	_schedule(doc.employee, *_covered_range(doc))
+	refetch_todays_checkins(doc.employee)
 
 
 # ───────────────────────────────────────────────────────────── the work ──
 
 
-def _past_range(doc):
-	"""(start, end) of the days this change covers that are already over, or (None, None)."""
+def _covered_range(doc, until_today=False, whole_tail=False):
+	"""(start, end) of the already-lived days this change covers, or (None, None).
+
+	until_today: include today. Detaching must, since today's punches also block
+	an assignment cancel; rebuilding stops at yesterday, as today's shift may
+	still be running.
+	whole_tail: run to the last lived day regardless of the end date. Cancelling a
+	temporary request also cancels the "resumed" assignment after it, so every
+	day from the request's start is re-marked.
+	"""
 	start = getdate(doc.get("from_date") or doc.get("start_date"))
+	last = getdate(today()) if until_today else getdate(add_days(today(), -1))
 	to = doc.get("to_date") if doc.doctype == "Shift Request" else doc.get("end_date")
-	yesterday = getdate(add_days(today(), -1))
-	end = min(getdate(to), yesterday) if to else yesterday
+	end = last if (whole_tail or not to) else min(getdate(to), last)
 	if start > end:
 		return None, None
 	return start, end
+
+
+def detach_days(employee, start, end):
+	"""Make these days forget their shift, so HRMS lets the assignment go.
+
+	Attendance keeps its status and its check-in links; only the `shift` column is
+	cleared, on every row whatever its docstatus (HRMS counts cancelled rows too).
+	Check-ins lose their resolved shift window, which `fetch_shift` re-derives from
+	the roster once it has changed. The days are re-marked straight after by
+	rebuild_days / refetch_todays_checkins.
+	"""
+	frappe.db.sql(
+		"""update `tabAttendance` set shift = null
+		where employee = %s and attendance_date between %s and %s""",
+		(employee, start, end),
+	)
+	frappe.db.sql(
+		f"""update `tabEmployee Checkin`
+		set {", ".join(f"{f} = null" for f in CHECKIN_SHIFT_FIELDS)}
+		where employee = %s and time between %s and %s""",
+		(employee, datetime.combine(getdate(start), time.min), datetime.combine(getdate(end), time.max)),
+	)
+
+
+def refetch_todays_checkins(employee):
+	"""Give today's detached punches their shift back, for the normal auto-attendance run."""
+	day = getdate(today())
+	for name in frappe.get_all(
+		"Employee Checkin",
+		filters={
+			"employee": employee,
+			"shift": ("is", "not set"),
+			"time": ("between", [datetime.combine(day, time.min), datetime.combine(day, time.max)]),
+		},
+		pluck="name",
+	):
+		checkin = frappe.get_doc("Employee Checkin", name)
+		checkin.fetch_shift()
+		checkin.db_update()
 
 
 def _schedule(employee, start, end):
@@ -256,13 +337,19 @@ def _rebuild_day(employee, day, shift_doc):
 		["name", "status"],
 		as_dict=True,
 	)
-	if not after:
-		# The punches do not fall inside the new shift at all. An empty day would
-		# read as "never came", which is worse than the old row: put it back.
+	worked_before = existing and existing.status in ("Present", "Half Day")
+	if not after or (worked_before and after.status == "Absent"):
+		# The punches do not fit the new shift (e.g. they fall before its check-in
+		# window). A day somebody worked must not silently become "never came":
+		# keep the old verdict, on the new shift, and say so. HR can still repair
+		# the day by hand if Absent really is right.
 		frappe.db.rollback(save_point=savepoint)
-		return f"{day}: punches do not fit {shift_doc.name}; old attendance kept"
+		if existing:
+			frappe.db.set_value("Attendance", existing.name, "shift", shift_doc.name, update_modified=False)
+		return f"{day}: punches do not fit {shift_doc.name}; kept {existing.status if existing else 'no attendance'}, please check"
 
-	was = f"{existing.status} on {existing.shift}" if existing else "no attendance"
+	# `shift` on the old row is usually already cleared by detach_days.
+	was = (existing.status + (f" on {existing.shift}" if existing.shift else "")) if existing else "no attendance"
 	return f"{day}: {was} → {after.status} on {shift_doc.name}"
 
 
