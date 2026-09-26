@@ -402,8 +402,26 @@ _add_doc_event("*", "after_delete", "avinashgroup_app.custom_code.Override.namin
 # Make room before HRMS inserts the requested assignment, and close the gap if
 # the request is cancelled.
 _add_doc_event("Shift Request", "validate", "avinashgroup_app.hr.shift_change.validate_request")
+_add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_backdate.mark_request_in_progress")
 _add_doc_event("Shift Request", "before_submit", "avinashgroup_app.hr.shift_change.make_room_for_request")
+_add_doc_event("Shift Request", "before_cancel", "avinashgroup_app.hr.shift_backdate.mark_request_in_progress")
 _add_doc_event("Shift Request", "on_cancel", "avinashgroup_app.hr.shift_change.close_gap_after_cancel")
+
+# Shifts may be backdated. A change reaching into past days re-marks those days'
+# attendance on the new shift (after the split above is complete), and is refused
+# outright when those days are already paid. See hr/shift_backdate.py.
+_add_doc_event("Shift Request", "validate", "avinashgroup_app.hr.shift_backdate.guard_paid_period")
+_add_doc_event("Shift Request", "on_submit", "avinashgroup_app.hr.shift_backdate.rebuild_for_request")
+_add_doc_event("Shift Request", "on_cancel", "avinashgroup_app.hr.shift_backdate.rebuild_for_request")
+_add_doc_event("Shift Assignment", "validate", "avinashgroup_app.hr.shift_backdate.guard_paid_period")
+_add_doc_event("Shift Assignment", "on_submit", "avinashgroup_app.hr.shift_backdate.rebuild_for_assignment")
+_add_doc_event("Shift Assignment", "on_cancel", "avinashgroup_app.hr.shift_backdate.rebuild_for_assignment")
+
+# Holiday work that earns replacement leave (officer / admin) is credited as a
+# Compensatory Leave Request once attendance shows the day was worked; a daily
+# job catches sheets approved ahead of the day. See hr/replacement_leave.py.
+_add_doc_event("Overtime Sheet", "on_submit", "avinashgroup_app.hr.replacement_leave.on_sheet_submit")
+_add_doc_event("Overtime Sheet", "on_cancel", "avinashgroup_app.hr.replacement_leave.on_sheet_cancel")
 
 # Tea and meal rates differ per company, so an employee may only be put in a
 # category belonging to their own company.
@@ -469,6 +487,8 @@ scheduler_events = {
         # On a fiscal year's first day, move companies and employees onto that
         # year's holiday lists (HRMS keeps one list per person, not per year).
         "avinashgroup_app.hr.holiday_year_switch.switch_to_current_year_lists",
+        # Replacement leave for holiday work, once the day's attendance is in.
+        "avinashgroup_app.hr.replacement_leave.grant_pending",
     ],
     "cron": {
         # Only the send-side retry is scheduled. CBMS Bills are created solely by the

@@ -8,6 +8,9 @@ Client decisions of 2026-09-15, refined 2026-09-17
   Maternity Leave   granted when a child is born, women only, never encashed
   Paternity Leave   granted when a child is born, fathers only, never encashed
   Leave Without Pay everything else an employee takes is unpaid
+  Replacement Leave officer / admin staff who work a holiday (policy 2.2, 2.5),
+                    credited per day by hr/replacement_leave.py through a
+                    Compensatory Leave Request — never by the Leave Policy
 
 The day counts are NOT here: they differ per company (NGK 8 casual + 12 sick,
 the others 21 + 12) and live in each company's Leave Policy. This patch only
@@ -58,6 +61,13 @@ LEAVE_TYPES = {
 		"allow_encashment": 0,
 		"is_carry_forward": 0,
 		"max_continuous_days_allowed": 15,  # Labour Act 2074
+	},
+	"Replacement Leave": {
+		"is_compensatory": 1,
+		"is_earned_leave": 0,
+		"include_holiday": INCLUDE_HOLIDAY,
+		"allow_encashment": 0,
+		"is_carry_forward": 0,
 	},
 	"Leave Without Pay": {
 		"is_lwp": 1,
