@@ -58,7 +58,9 @@ def execute(filters=None):
 	data = []
 	for slip in slips:
 		a = amounts.get(slip.name, {})
-		tax = flt(a.get(TAX_COMPONENT))
+		# Slips store amounts at 5 decimals (currency precision 5); deposits are
+		# made in paisa, so round first and split the rounded figure.
+		tax = flt(a.get(TAX_COMPONENT), 2)
 		ssf = flt(a.get(SSF_DEDUCTION))
 		employer = flt(a.get(SSF_EMPLOYER))
 		sst = sst_share(slip, tax)
@@ -75,7 +77,7 @@ def execute(filters=None):
 				"ssf_total": ssf,
 				"cit": flt(a.get(CIT_COMPONENT)),
 				"sst": sst,
-				"remuneration_tax": tax - sst,
+				"remuneration_tax": flt(tax - sst, 2),
 				"income_tax": tax,
 			}
 		)
@@ -142,7 +144,9 @@ def _sst_share_calculator(company, on_date):
 		if annual <= 0:
 			return 0.0
 		band_top = flt(first.to_amount) or annual
-		band_tax = min(annual, band_top) * flt(first.percent_deduction) / 100
+		# Same arithmetic as HRMS's calculate_tax_by_tax_slab: a band is charged
+		# on (amount - from + 1), so the ratio is exactly 1 inside the band.
+		band_tax = (min(annual, band_top) - flt(first.from_amount) + 1) * flt(first.percent_deduction) / 100
 		total_tax, __ = calculate_tax_by_tax_slab(
 			annual, slab, {}, frappe._dict(slip, custom_ssf_applicable=0, annual_taxable_earning=annual)
 		)

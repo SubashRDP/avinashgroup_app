@@ -19,8 +19,14 @@
  "report_name": "Salary Tax and SSF Deposit",
  "report_type": "Script Report",
  "roles": [
-  {"role": "HR Manager"},
-  {"role": "Accounts Manager"},
-  {"role": "System Manager"}
+  {
+   "role": "HR Manager"
+  },
+  {
+   "role": "HR User"
+  },
+  {
+   "role": "System Manager"
+  }
  ]
 }
