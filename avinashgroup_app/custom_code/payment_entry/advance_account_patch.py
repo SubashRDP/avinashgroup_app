@@ -1,9 +1,8 @@
 import frappe
 
-# Payment - Receipt Types (custom_p_type) on which a manually chosen account is kept.
-# Every other type — Bank Customers Receipt, NOC Payment, … — keeps core behaviour
-# and is booked to the advance account.
-KEEP_CHOSEN_ACCOUNT_TYPES = frozenset(("Customers/Suppliers Receipt", "Vendor Payment"))
+# Party Types on which a manually chosen account is kept. Any other party type
+# (Employee, Shareholder, …) keeps core behaviour and is booked to the advance account.
+KEEP_CHOSEN_ACCOUNT_PARTY_TYPES = frozenset(("Customer", "Supplier"))
 
 
 def apply_patch():
@@ -15,10 +14,10 @@ def apply_patch():
 	on every save — even when the user picked a different account on purpose (e.g. a
 	cylinder deposit account).
 
-	After core runs, if the Payment - Receipt Type is one of KEEP_CHOSEN_ACCOUNT_TYPES and
+	After core runs, if the Party Type is one of KEEP_CHOSEN_ACCOUNT_PARTY_TYPES and
 	the account the user had selected is neither the party's normal receivable/payable
 	account nor its advance account, put the user's account back and untick the flag, so
-	the entry posts as a normal payment against that account. Any other Receipt Type is
+	the entry posts as a normal payment against that account. Any other Party Type is
 	left exactly as core set it.
 	Leaving the field on the normal receivable/payable account keeps core behaviour
 	(switched to the advance account), but without core's "Paid From account changed"
@@ -45,7 +44,7 @@ def apply_patch():
 		if not self.book_advance_payments_in_separate_party_account or not chosen_account:
 			return
 
-		if self.get("custom_p_type") not in KEEP_CHOSEN_ACCOUNT_TYPES:
+		if self.party_type not in KEEP_CHOSEN_ACCOUNT_PARTY_TYPES:
 			return
 
 		advance_account = self.get(self.party_account_field)
