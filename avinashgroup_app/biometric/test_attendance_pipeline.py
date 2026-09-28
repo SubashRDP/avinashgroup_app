@@ -482,7 +482,7 @@ class TestAttendancePipeline(FrappeTestCase):
             att.out_time = "2026-06-05 17:00:00"
             att.insert(ignore_permissions=True)
             self.assertEqual(att.status, "Half Day")
-            self.assertEqual(att.leave_type, "Leave Without Pay")
+            self.assertTrue(frappe.db.get_value("Leave Type", att.leave_type, "is_lwp"))
         finally:
             frappe.db.set_value(
                 "Shift Type", self.shift.name, "custom_late_arrival_cutoff_time", None

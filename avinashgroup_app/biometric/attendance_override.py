@@ -94,7 +94,12 @@ def enforce_late_arrival_half_day(doc, method=None):
 
         if get_datetime(doc.in_time) > min(cutoffs):
             doc.status = "Half Day"
-            doc.leave_type = "Leave Without Pay"
+            # The unpaid half needs a leave type ticked Is Leave Without Pay, or
+            # payroll pays it. Which one is the Shift Type's setting ("Late Half
+            # Day"), so reports say "late", not "took unpaid leave".
+            doc.leave_type = shift.get("custom_late_half_day_leave_type") or frappe.db.get_value(
+                "Leave Type", {"is_lwp": 1}, "name"
+            )
 
     except Exception:
         frappe.log_error(
