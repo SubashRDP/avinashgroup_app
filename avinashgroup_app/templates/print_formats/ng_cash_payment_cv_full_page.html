@@ -37,7 +37,7 @@ body {
   margin: 0; /* No margin on body, margins are on @page */
   padding-bottom: 0; /* was 25mm — kept at 0 so it doesn't add height below the
                         fixed-height .jv-sheet box. */
-  font-size:12px !important;
+  font-size:13px !important;
 }
  
  
@@ -51,7 +51,7 @@ body {
 th, td { 
   border:1px solid #000; 
   padding:4px;
-  font-size:12px;
+  font-size:13px;
 }
 
 th { font-weight:600; }
@@ -80,13 +80,13 @@ tr, td, th { page-break-inside: avoid; }
  {
     font-weight: 600;
     margin: 0;
-    font-size: 20px;
+    font-size: 21px;
  }
   .company-info h4
   {
      font-weight: 600;
     margin: 0;
-    font-size: 15px;
+    font-size: 16px;
   }
    .company-info div
    {
@@ -98,7 +98,7 @@ tr, td, th { page-break-inside: avoid; }
     own fields. Out of flow, so it costs the header no height. */
  .main-table tr.company-info .page-of {
     position:absolute; top:2px; right:0;
-    font-size:9px; font-weight:400;
+    font-size:10px; font-weight:400;
  }
 
  /* Header spacing. This block is emitted once per page (page_head below), so every
@@ -127,10 +127,14 @@ tr, td, th { page-break-inside: avoid; }
     align-items: flex-start;
     gap: 12px;
   }
+ /* Allowed to wrap: at 14px a long bank account name ("Prabhu Bank A/c no. ...")
+    beside the Voucher No block ran past the page width, and the browser then shrank
+    the whole sheet to fit. Wrapped, it sits beside the 2-line Voucher No / Posting
+    Miti block, so the header gets no taller. */
  .voucher-left-block {
     flex: 1 1 auto;
+    min-width: 0;
     text-align: left;
-    white-space: nowrap;
     padding-top: 2px;
   }
  .voucher-right-block {
@@ -140,7 +144,6 @@ tr, td, th { page-break-inside: avoid; }
     display: table;
   }
  .voucher-cashbank-row {
-    white-space: nowrap;
     text-align: left;
     padding-top: 2px;
   }
@@ -171,12 +174,12 @@ tr, td, th { page-break-inside: avoid; }
   
   .title strong
   {
-      font-size:16px;
+      font-size:17px;
   }
  
  .top-table tr td,.table2 tr td
  {
-     font-size:12px !important;
+     font-size:13px !important;
      padding: 4px 0px !important;
  }
  /*
@@ -189,13 +192,13 @@ tr, td, th { page-break-inside: avoid; }
  
  .main-table tr th
  {
-     font-size:12px !important;
+     font-size:13px !important;
      font-weight:600;
         padding:4px !important;
  }
   .main-table tr td
  {
-     font-size:12px !important;
+     font-size:13px !important;
         padding: 1px 4px !important;
  
  }
@@ -220,7 +223,7 @@ tr, td, th { page-break-inside: avoid; }
       position: absolute;
       bottom: 0;
       width: 100%;
-      font-size: 12px;
+      font-size: 13px;
       border-top: 1px solid #000;
       padding-top: 10px;
     }
@@ -233,7 +236,7 @@ tr, td, th { page-break-inside: avoid; }
   bottom: 20px;
   width: 100%;
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
   right:0;
 
      }
@@ -279,7 +282,7 @@ td.texleft p {
   {
       text-align:left;
       text-transform: uppercase;
-    font-size: 18px !important;
+    font-size: 19px !important;
     margin-top:0px;
     margin-bottom:0px;
     color:#192734;
@@ -292,7 +295,7 @@ td.texleft p {
     margin-top: 10px;
     font-weight: 500;
     padding: 3px;
-    font-size: 16px;
+    font-size: 17px;
     letter-spacing: 1.5px;
         
         
@@ -301,7 +304,7 @@ td.texleft p {
  
  .template label {
  
-    font-size: 12px;
+    font-size: 13px;
    color:#192734;
  
 }
@@ -317,14 +320,14 @@ td.texleft p {
   
   .template td {
     padding: 3px !important;
-    font-size:12px;
+    font-size:13px;
 }
   
   
   .template th 
   {
 padding: 3px !important;
-    font-size:12px;
+    font-size:13px;
     font-weight:700;
     color:#030404;
 } 
@@ -425,7 +428,7 @@ padding: 3px !important;
 
 .authorized label span
 {
-    font-size:12px;
+    font-size:13px;
 }
 
 
@@ -499,14 +502,14 @@ padding:0px 30px;
        
      .template label
         {
-    font-size: 12px;
+    font-size: 13px;
    
 }
          
 .template td, .template th 
 {
     padding: 3px !important;
-    font-size:12px;
+    font-size:13px;
 }
  
   
@@ -547,7 +550,7 @@ padding:0px 30px;
  
   .top-table tr td,.table2 tr td
  {
-     font-size:12px !important;
+     font-size:13px !important;
      padding: 4px 0px !important;
  }
  
@@ -599,7 +602,7 @@ padding:0px 30px;
    the spacer spent on the sheet before. Kept whole, a spacer that does not fit moves
    to the next sheet and the closing group lands at that sheet's foot as intended.
    It can never force a blank sheet: spacer + closing group is at most
-   TARGET_PX - HEAD_PX (718px), which always fits a fresh 930px page. */
+   TARGET_PX - HEAD_PX (840px), which always fits a fresh 1028px page. */
 .main-table tr.jv-spacer { height:auto !important; page-break-inside:avoid !important; }
 .main-table tr.jv-spacer td { padding:0 !important; border:none !important; }
 
@@ -691,89 +694,77 @@ padding:0px 30px;
 
    Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
      PAGE_PX   printable height of one page (297 - 10 top - 15 bottom = 272mm)
-     HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
-               little over, like the row heights, so the breaks err early. It must
-               stay under 265px (25% of PAGE_PX) or Chrome stops reprinting it —
-               see the .company-info rules up in the stylesheet.
-     LINE_PX   one line of 12px text; PAD_PX is a <td>'s padding + border
-     FOOT_PX   the signature block + "Printed on" line
+     HEAD_PX   the per-page header (company block + Voucher No grid + column
+               headings). Measures 140px; stated a little over, like the row
+               heights, so the breaks err early.
+     LINE_PX   one line of 13px text; PAD_PX is a <td>'s padding + border
+     FOOT_PX   the signature block + "Printed on" line (measures 95px)
      TARGET_PX where the footer's bottom edge should land, measured from the top
-               of the printable area (266mm -> 276mm down the sheet, just above
-               the 15mm bottom margin). The gap to PAGE_PX is the cushion that
-               absorbs estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
+               of the printable area
      CH_*      characters that fit on one line of a column, for guessing wraps.
-               Courier New at 12px advances 7.2px per character, so a column's
-               capacity is (its % of the 718px printable width) less ~10px of
-               padding and borders, divided by 7.2.
+               Courier New at 13px advances 7.8px per character, so a column's
+               capacity is its width less ~8px of padding, divided by 7.8.
 
-   BUDGETED AT 100% SCALE. PAGE_PX and the CH_* counts are the measurements taken off
-   a sheet printed at Scale 100%: a 272mm band is 1028px, Description holds 38 Courier
-   characters, Party Name 24, a full-width row 92.
-
-   They were briefly divided by 1.105 (930, and 34/21/83) to budget for printing with
-   the dialog's Scale on "Fit to page width". That made every page short: the
-   38-character `11111 TDS-Individual or Proprietorship` was billed a second line it
-   does not use, so a page took 25 one-line rows instead of ~38 and an un-narrated
-   voucher ended a third of the way up the sheet with its tail rows pushed onto an
-   extra one. Narrated vouchers hid it, their rows being genuinely tall.
-
-   The cost of budgeting at 100% is the opposite failure: printed at a scale above
-   100%, the browser runs out of page before the forced break arrives and strands the
-   last rows of a page on the next sheet. So print these at Scale 100% — "Fit to page
-   width" is what these constants no longer allow for.
-
-   Only the page geometry differs from the half-page twin
-   (nepal_gas_journal_voucher_cash_bank.html), which has not been recalibrated. -#}
+   SCALE HEADROOM. Firefox's "Fit to page width" enlarges the sheet ~1.02x, and at
+   that scale a closing group asked to end at 1000px (7mm above the bottom margin)
+   no longer fitted: the rows, Total, In Words and Remarks printed on sheet 1 and the
+   signatures alone on sheet 2. Every page now leaves room for up to 1.05x: data
+   pages stop 80px short of the band (CAP_PX) and the footer ends at TARGET_PX, both
+   of which still fit 1028px after a 1.05x enlargement. The price is ~20mm of white
+   under the signatures at Scale 100%. -#}
 {#- 272mm printable band at 100% is 1028px. -#}
 {% set PAGE_PX = 1028 %}
-{% set HEAD_PX = 132 %}
-{#- PAD_PX + LINE_PX * lines, so a row costs 20px for its first line and 10px for
-   each extra one. Both numbers were read off a printed sheet rather than guessed:
-   rendering a voucher at 96dpi and measuring the S.N. column's ink gives a pitch of
-   exactly 20px between one-line rows and exactly 30px across a wrapped one — the
-   second line only costs 10px because `.main-table tr` forces a 20px row height that
-   the first line does not fill. The earlier 4 + 16 * lines billed a wrapped row 36px
-   and a three-line row 52px, which on a sheet of wrapped party names added up to a
-   third of a page of phantom height and broke the page with the bottom still empty. -#}
-{% set LINE_PX = 10 %}
-{% set PAD_PX = 10 %}
-{% set FOOT_PX = 92 %}
-{#- Where the footer's bottom edge is asked to land, measured from the top of the
-   printable band. It has to stay INSIDE the band (<= PAGE_PX): pushed past it, the
-   signature block does not fit under the closing rows and a short voucher that used
-   to print on one sheet grows a second one carrying nothing but the signatures.
-   Tuned against Firefox, which is what prints these: measured off a real Firefox
-   print, "Fit to page width" there enlarges the sheet only ~1.02x, not the 1.105x
-   the band above is budgeted for, so the last page has more room than the band
-   arithmetic credits. 1000 is chosen to MATCH "A5 Avinash Purchase Invoice A4
-   Full Page": measured the same way at 1.02, that format's footer ends 28mm off the
-   sheet foot, and so does this one's at 1000. 1010 still adds no sheet on any tested
-   voucher, so this keeps a step in hand. In CHROME with fit-to-width (1.105x)
-   anything above 900 gives short vouchers an extra sheet carrying only the
-   signatures. -#}
-{% set TARGET_PX = 1000 %}
-{#- At 100% scale, Description (40% of the printable width, 277px after padding and
-    borders) holds 38 Courier characters, Party Name (26%) ~24, and CH_WIDE (the
-    full-width Narration / In Words rows) 92. These must match what the sheet really
-    prints: too low bills a phantom second line to every long account name and empties
-    the bottom of each page, too high misses real wraps and overfills it. -#}
-{% set CH_ACC = 38 %}
-{% set CH_PARTY = 24 %}
-{% set CH_WIDE = 92 %}
-{#- Rows per page are budgeted 20px short of the band so the forced breaks always fire
-   BEFORE the browser would have broken by itself — the browser winning that race is
-   what prints 2-4 rows alone on a sheet of their own. Verified by printing 11
-   vouchers of 2 to 444 rows at A4 / Margins None / fit-to-width and comparing the
-   pages the template planned (forced breaks + 1) with the pages that came out: equal
-   on every one. Re-verify after any change to the row heights, the header, the
-   @page margins, or the print dialog's Scale setting.
-   The numbers hold for both Firefox and Chrome, which both reprint the <thead> on
-   every page now that it is under Chrome's 25% limit. wkhtmltopdf ("Get PDF") still
-   does not reprint it, so on that path alone the footer lands about HEAD_PX higher
-   than TARGET_PX asks for. -#}
-{% set CAP_PX = PAGE_PX - HEAD_PX - 20 %}
+{% set HEAD_PX = 145 %}
+{#- PAD_PX + LINE_PX * lines. Measured at 13px: a one-line row is 20.6px and a
+   two-line row 39.6px (a 19px line box plus the <td> padding), billed 21 / 40. -#}
+{% set LINE_PX = 19 %}
+{% set PAD_PX = 2 %}
+{% set FOOT_PX = 98 %}
+{#- Footer bottom at 985px = 271mm down the sheet, 26mm off the paper's foot (moved
+   12mm down from 940 on request). 985 * 1.02 = 1005 still fits the 1028px band at
+   Firefox's "Fit to page width"; above ~1.04x the closing group moves to a new
+   sheet, Remarks and signatures together. -#}
+{% set TARGET_PX = 985 %}
+{#- Measured at 13px: Description is 279px wide (34 chars), Party Name 181px (22), a
+    full-width In Words / Remarks row 703px (89, stated 88) and a Narration row, which
+    starts after the S.N. column, 662px (83, stated 82). wrapped() below does the
+    word-by-word wrapping. Too low bills a phantom second line to every long account
+    name and empties the bottom of each page; too high misses real wraps and
+    overfills it. -#}
+{% set CH_ACC = 34 %}
+{% set CH_PARTY = 22 %}
+{% set CH_WIDE = 88 %}
+{% set CH_NARR = 82 %}
+{#- Rows per page are budgeted 80px short of the band so the forced breaks fire
+   BEFORE the browser would have broken by itself, even at 1.05x — the browser
+   winning that race is what prints a few rows alone on a sheet of their own.
+   Re-verify after any change to the row heights, the header, the @page margins, or
+   the print dialog's Scale setting. wkhtmltopdf ("Get PDF") does not reprint the
+   header, so on that path alone the footer lands about HEAD_PX higher than
+   TARGET_PX asks for. -#}
+{% set CAP_PX = PAGE_PX - HEAD_PX - 80 %}
 {#- One entry per <tr> in <tbody>, in render order — the indexes double as the
    nth-child selectors used to force the page breaks below. -#}
+{#- Lines a text takes in a column CH characters wide, wrapped word by word the way
+   the browser does. Counting characters alone (len / CH) under-billed any name whose
+   last word does not fit on the line — "Himalayan Petrochamicals Pvt. Ltd" is 33
+   characters, billed 2 lines at 20 a line but printed on 3 — and on a long voucher
+   those misses added up to rows stranded on a sheet of their own. A word longer
+   than a whole line is broken mid-word, as the browser does. -#}
+{%- macro wrapped(text, ch) -%}
+{%- set W = namespace(lines=1, cur=0) -%}
+{%- for word in ((text or "")|string).split(" ") if word -%}
+  {%- set n = word|length -%}
+  {%- if W.cur and W.cur + 1 + n <= ch -%}
+    {%- set W.cur = W.cur + 1 + n -%}
+  {%- else -%}
+    {%- if W.cur -%}{%- set W.lines = W.lines + 1 -%}{%- endif -%}
+    {%- set W.lines = W.lines + (n - 1) // ch -%}
+    {%- set W.cur = n - ((n - 1) // ch) * ch -%}
+  {%- endif -%}
+{%- endfor -%}
+{{ W.lines }}
+{%- endmacro -%}
 {% set G = namespace(items=[], data_count=0) %}
 {% if true %}
   {% for row in doc.accounts %}
@@ -782,12 +773,11 @@ padding:0px 30px;
     {%- set skipped = show_cash_bank_header and row.account == cash_bank.account -%}
     {% if not skipped %}
       {% set pname = frappe.get_cached_doc(row.party_type, row.party).get_title() if row.party else "" %}
-      {% set lines = [1, ((acc.account_name|length) + CH_ACC - 1) // CH_ACC,
-                         ((pname|string|length) + CH_PARTY - 1) // CH_PARTY]|max %}
+      {% set lines = [wrapped(acc.account_name, CH_ACC)|int, wrapped(pname, CH_PARTY)|int]|max %}
       {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
       {#- Every row may print a Narration on its own line. -#}
       {% if row.user_remark %}
-        {% set nlines = [1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max %}
+        {% set nlines = wrapped("Narration: " ~ row.user_remark|replace("\n", " "), CH_NARR)|int %}
         {% set _add = G.items.append(PAD_PX + LINE_PX * nlines) %}
       {% endif %}
     {% endif %}
@@ -796,14 +786,14 @@ padding:0px 30px;
   {#- Trailing rows: Total, [Paid To], [Cheque No / Dated], In Words, Remarks. -#}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% if doc.custom_paid_to %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((("Paid To/Receive From: " ~ doc.custom_paid_to)|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
+    {% set _add = G.items.append(PAD_PX + LINE_PX * wrapped("Paid To/Receive From: " ~ doc.custom_paid_to, CH_WIDE)|int) %}
   {% endif %}
   {% if (doc.cheque_no or "")|string|trim not in ("", "1") %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
   {% set words = frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.user_remark or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
+  {% set _add = G.items.append(PAD_PX + LINE_PX * wrapped("In Words: " ~ words, CH_WIDE)|int) %}
+  {% set _add = G.items.append(PAD_PX + LINE_PX * wrapped("Remarks: " ~ (doc.user_remark or "")|replace("\n", " "), CH_WIDE)|int) %}
 {% endif %}
 {#- The closing group — Total, Paid To, Cheque No, In Words, Remarks — is measured
    as one lump because it travels down to the page foot together with the signatures
@@ -830,14 +820,13 @@ padding:0px 30px;
 {#- The whole closing group has to fit beneath the data on the last page. If it does
    not, the entire group moves to a page of its own — splitting it would put the
    Total on one sheet and the signatures on the next. -#}
-{% if G.data_count and S.used + TRAIL_PX + FOOT_PX > CAP_PX %}
+{% if G.data_count and S.used + TRAIL_PX + FOOT_PX > TARGET_PX - HEAD_PX %}
   {% set _add = S.breaks.append(G.data_count) %}
   {% set S.used = 0 %}
 {% endif %}
-{#- Clamped to PAGE_PX + 100 as well as to TARGET_PX, so a mistyped TARGET_PX can't
-   push the closing group onto a page of its own. The cap sits past PAGE_PX because
-   Firefox prints at ~1.02x, leaving real room beyond the 1.105x-budgeted band. -#}
-{% set spacer_px = [TARGET_PX, PAGE_PX + 100]|min - HEAD_PX - S.used - TRAIL_PX - FOOT_PX %}
+{#- Clamped to PAGE_PX as well as to TARGET_PX, so a mistyped TARGET_PX can't push
+   the closing group onto a page of its own. -#}
+{% set spacer_px = [TARGET_PX, PAGE_PX]|min - HEAD_PX - S.used - TRAIL_PX - FOOT_PX %}
 {% set TOTAL_PAGES = S.breaks|length + 1 %}
 <style>
   /* Forced breaks are marked with a class on the row rather than nth-child: the
@@ -969,8 +958,35 @@ padding:0px 30px;
       <tr style="border-top:1px solid #000;">
         <td colspan="{{ ncols }}"><strong>In Words:</strong> {{ frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") }}</td>
       </tr>
-      <tr style="border-top:1px solid #000;">
-        <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}</td>
+      {#- Remarks and the signatories share ONE row, and a row never splits across a
+         page. So when the closing group runs out of room (a print scaled up past what
+         the footer arithmetic allows for, or a row taller than estimated), Remarks
+         moves to the next page WITH the signatures — the signatures can never print
+         alone on a page of their own. They used to be a separate block after the
+         table, and at 1.02x ("Fit to page width") exactly that happened. -#}
+      <tr class="jv-closing" style="border-top:1px solid #000;">
+        <td colspan="{{ ncols }}"><strong>Remarks:</strong> {{ (doc.user_remark or "")|replace("\n", " ")|trim }}
+         <div class="jv-footer">
+           {#- The Cash/Bank signature set: "Received By" in front of the usual four. -#}
+           {%- set jv_sigs = ["Received By", "Prepared By", "Checked By", "Verified By", "Approved By"] -%}
+           <table style="width:100%; border:none; color:#000;">
+              <tr>
+                {%- for s in jv_sigs %}
+                <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000; padding-top:0;">
+                  {#- padding-top is the blank signing space above the rule; it is also
+                     the gap between Remarks and the signatures, so it feeds FOOT_PX.
+                     Tightened 16px -> 6px (and the cell's own 4px top padding to 0) to
+                     close the gap under Remarks; FOOT_PX below drops by the same 14px. -#}
+                  <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:6px;padding-bottom:10px;">&nbsp;</div>
+                  <div>{{ s }}</div>
+                  {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
+                </td>
+                {%- endfor %}
+              </tr>
+            </table>
+            <div style="text-align:left; font-size:10px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+         </div>
+        </td>
       </tr>
     </tbody>
 
@@ -979,29 +995,4 @@ padding:0px 30px;
      
      </table>
 
-     {#- Footer (signatories + printed-on). The .jv-spacer row inside the table above,
-        just before the Total row, is sized in the page geometry block near the top
-        of this file — it carries the whole closing group (Total .. Remarks .. these
-        signatures) down to the page foot (~95%) on the last page without ever
-        overlapping the data. -#}
-     <div class="jv-footer">
-       {#- The Cash/Bank signature set: "Received By" in front of the usual four. -#}
-       {%- set jv_sigs = ["Received By", "Prepared By", "Checked By", "Verified By", "Approved By"] -%}
-       <table style="width:100%; border:none; color:#000;">
-          <tr>
-            {%- for s in jv_sigs %}
-            <td style="width:{{ (100 / (jv_sigs|length))|round(2) }}%; text-align:center; border:none; color:#000; padding-top:0;">
-              {#- padding-top is the blank signing space above the rule; it is also
-                 the gap between Remarks and the signatures, so it feeds FOOT_PX.
-                 Tightened 16px -> 6px (and the cell's own 4px top padding to 0) to
-                 close the gap under Remarks; FOOT_PX below drops by the same 14px. -#}
-              <div style="border-bottom:1px solid #000; display:inline-block; width:80%;padding-top:6px;padding-bottom:10px;">&nbsp;</div>
-              <div>{{ s }}</div>
-              {%- if s == "Prepared By" %}<div><strong>{{ frappe.db.get_value("User", doc.custom_created_by or doc.owner, "full_name") or "&nbsp;" }}</strong></div>{%- endif %}
-            </td>
-            {%- endfor %}
-          </tr>
-        </table>
-        <div style="text-align:left; font-size:9px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
-     </div>
      </div>
