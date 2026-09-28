@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 9px;
+  color: #222;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.ds-title    { text-align: center; font-size: 13px; font-weight: bold; }
+.ds-subtitle { text-align: center; font-size: 11px; font-weight: bold; margin-bottom: 6px; }
+
+table { width: 100%; border-collapse: collapse; }
+tr    { page-break-inside: avoid; }
+
+th, td { border: 1px solid #bbb; padding: 3px 4px; }
+th     { background: #f0f2f5; font-weight: bold; text-align: center; }
+/* Neighbouring column groups alternate shades so each one reads as a block. */
+th.ds-group-b { background: #dde1e6; }
+
+td.r   { text-align: right; white-space: nowrap; }
+/* Codes, SN and remarks stay on one line; only names may wrap. A wrapped code
+   doubles every row's height and throws off the rows-per-page count. */
+td.c   { text-align: center; white-space: nowrap; }
+td.l   { text-align: left; }
+tr.ds-bold td { font-weight: bold; border-top: 1.5px solid #777; }
+
+/* A second table on the same page (portrait Monthly's second part). */
+.ds-next-table { margin-top: 12px; }
+
+.ds-pageno { text-align: center; font-size: 9px; color: #555; margin-top: 6px; }
+.brk { page-break-after: always; }
+
+{% if orientation == 'Portrait' %}
+body     { font-size: 7px; line-height: 1.2; }
+th, td   { padding: 1px 3px; }
+td.l     { word-break: break-word; }
+{% endif %}
+</style>
+</head>
+<body>
+{% set total_pages = pages | length %}
+{% for page in pages %}
+<div{% if not loop.last %} class="brk"{% endif %}>
+  <div class="ds-title">{{ page.title }}</div>
+  {% if page.subtitle %}<div class="ds-subtitle">{{ page.subtitle }}</div>{% endif %}
+
+  {% for table in page.tables %}
+  <table{% if not loop.first %} class="ds-next-table"{% endif %}>
+    <thead>
+      <tr>
+        {% set shade = namespace(n=0) %}
+        {% for group in table.groups %}
+          {% if group.label %}
+            <th colspan="{{ group.columns | length }}" class="{{ 'ds-group-b' if shade.n % 2 else '' }}">{{ group.label }}</th>
+            {% set shade.n = shade.n + 1 %}
+          {% else %}
+            {# Ungrouped columns (Date, SN) span both heading rows. #}
+            {% for col in group.columns %}<th rowspan="2">{{ col.sub_label or col.label }}</th>{% endfor %}
+          {% endif %}
+        {% endfor %}
+      </tr>
+      <tr>
+        {% for group in table.groups %}
+          {% if group.label %}
+            {% for col in group.columns %}<th>{{ col.sub_label or col.label }}</th>{% endfor %}
+          {% endif %}
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in table.rows %}
+      <tr{% if row.bold %} class="ds-bold"{% endif %}>
+        {% for col in table.columns %}
+          {% set cls = 'r' if col.fieldtype == 'Currency' else ('l' if col.align == 'left' else 'c') %}
+          <td class="{{ cls }}">{{ row.cells[loop.index0] }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+
+  <div class="ds-pageno">Page {{ loop.index }} of {{ total_pages }}</div>
+</div>
+{% endfor %}
+</body>
+</html>
