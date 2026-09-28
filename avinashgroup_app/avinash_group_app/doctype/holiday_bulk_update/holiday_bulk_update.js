@@ -25,6 +25,17 @@ frappe.ui.form.on("Holiday Bulk Update", {
 								msg += `<b>${__("Updated")} (${changed.length})</b><br>${changed.join("<br>")}<br><br>`;
 							if (skipped.length)
 								msg += `<b>${__("Skipped")} (${skipped.length})</b><br>${skipped.join("<br>")}`;
+							// A past date: what happened to attendance already marked that day.
+							const a = r.message.attendance || {};
+							const names = (l) => (l || []).join(", ");
+							if ((a.worked || []).length)
+								msg += `<br><br><b>${__("Marked worked on holiday")} (${a.worked.length})</b><br>${names(a.worked)}`;
+							if ((a.absent_cleared || []).length)
+								msg += `<br><br><b>${__("Absent removed, it was a holiday")} (${a.absent_cleared.length})</b><br>${names(a.absent_cleared)}`;
+							if ((a.paid_skipped || []).length)
+								msg += `<br><br><b>${__("Not changed: salary already submitted")} (${a.paid_skipped.length})</b><br>${names(a.paid_skipped)}`;
+							if ((a.overtime_sheets || []).length)
+								msg += `<br><br><b>${__("Overtime Sheets made as a working day, amend them")}</b><br>${names(a.overtime_sheets)}`;
 							frappe.msgprint({
 								title: __("Holiday Lists Updated"),
 								message: msg || __("Nothing to do"),

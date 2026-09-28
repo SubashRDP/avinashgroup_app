@@ -66,8 +66,11 @@ one company's two for a branch festival.
 The desk screen only adds; `apply_holiday_change(action="Remove Holiday", ...)`
 stays available for scripts and for whatever replaces the removal UI.
 
-It writes Holiday List rows only. Attendance already marked on that date is not
-re-marked — use Attendance Fix for that.
+For a date already past, `holiday_backdate.follow_up()` then brings that day's
+attendance in line: "Worked on Holiday" ticked for everyone who came, Absent rows
+with no punches removed, employees whose month is already paid skipped and
+named, approved Overtime Sheets for the date listed for HR to amend. Removing a
+holiday (on the Holiday List itself) does not re-mark anything; use Attendance Fix.
 
 ## Employee Category — who gets OT, who gets replacement leave
 

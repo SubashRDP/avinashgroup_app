@@ -86,6 +86,7 @@ on ng-group.
 | `hr/replacement_leave.py` | *(2026-09-27)* Officer / admin holiday work on an Overtime Sheet → Compensatory Leave Request (leave type **Replacement Leave**) once attendance shows the day; daily job catches late attendance. |
 | `payroll/tax_relief.py` | *(2026-09-27)* Retirement cap (s.63) and women's rebate on the slip's tax. Insurance / CIT via HRMS Employee Tax Exemption Declaration; `CIT` deduction component for payroll CIT (recurring Additional Salary). |
 | `hr/bs_dates.py` + print format **Salary Slip BS** | *(2026-09-27)* BS miti beside every AD date on Leave Application, Payroll Entry, Employee, Salary Slip; BS payslip is the default Salary Slip format and email attachment. |
+| `hr/holiday_backdate.py` | *(2026-09-28)* Holiday Bulk Update on a past date: worked-on-holiday flags set, no-punch Absent rows removed, paid employees skipped and named, Overtime Sheets for the date listed. |
 | `patches/add_site_only_hr_fields.py` | *(2026-09-27)* Holiday List.custom_company, the Attendance deviation fields and Shift Type cutoff existed only as site data; a fresh site (ng-group) now gets them. |
 
 ---

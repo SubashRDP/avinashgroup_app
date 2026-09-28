@@ -15,8 +15,9 @@ the form and records what the last run did.
 
 Deliberately narrow: this screen only ADDS. Taking a holiday out again is done on
 the Holiday List itself, where the row can be seen in context before it goes.
-Attendance already marked for the date is left to Attendance Fix, and no Holiday
-List is created or deleted here.
+For a date already past, attendance marked that day is brought in line
+(hr/holiday_backdate.py): worked-on-holiday flags set, stale Absent rows cleared,
+paid months skipped and named. No Holiday List is created or deleted here.
 """
 
 import frappe
@@ -24,6 +25,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
+from avinashgroup_app.hr.holiday_backdate import follow_up
 from avinashgroup_app.hr.holiday_lists import apply_holiday_change
 
 
@@ -46,12 +48,28 @@ class HolidayBulkUpdate(Document):
 			holiday_lists=self.chosen_lists(),
 		)
 
-		self.db_set("last_applied_on", now_datetime(), update_modified=False)
-		self.db_set(
-			"result",
-			f"Added {self.holiday_date}: "
-			f"{len(report['changed'])} list(s) changed, {len(report['skipped'])} skipped",
-			update_modified=False,
+		# Every chosen list that now carries the date, whether this run added it or
+		# an earlier one did: the attendance follow-up is safe to repeat.
+		lists = self.chosen_lists() or frappe.get_all("Holiday List", pluck="name")
+		lists = frappe.get_all(
+			"Holiday",
+			filters={"parent": ("in", lists), "holiday_date": self.holiday_date},
+			pluck="parent",
+			distinct=True,
 		)
+		report["attendance"] = follow_up(self.holiday_date, lists)
+
+		att = report["attendance"]
+		result = (
+			f"Added {self.holiday_date}: "
+			f"{len(report['changed'])} list(s) changed, {len(report['skipped'])} skipped"
+		)
+		if att["worked"] or att["absent_cleared"] or att["paid_skipped"]:
+			result += (
+				f"; attendance: {len(att['worked'])} marked worked on holiday, "
+				f"{len(att['absent_cleared'])} Absent cleared, {len(att['paid_skipped'])} skipped (paid)"
+			)
+		self.db_set("last_applied_on", now_datetime(), update_modified=False)
+		self.db_set("result", result, update_modified=False)
 		frappe.db.commit()
 		return report
