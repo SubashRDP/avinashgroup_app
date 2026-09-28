@@ -112,4 +112,4 @@ avinashgroup_app.patches.order_delivery_days_setting
 avinashgroup_app.patches.setup_hr_bs_dates
 avinashgroup_app.patches.assign_womens_holiday_lists
 avinashgroup_app.patches.setup_meal_rule_fields
-avinashgroup_app.patches.setup_late_half_day_leave_type
+avinashgroup_app.patches.late_half_day_as_half_absent

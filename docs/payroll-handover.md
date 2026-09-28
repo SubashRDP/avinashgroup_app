@@ -224,6 +224,13 @@ expects it filed.
 
 ## 9. Go-live runbook
 
+> **Late half day = half-absent (2026-09-28).** More than 2 h late is Half Day
+> with Half Day Status *Absent* and no leave type; the salary slip counts it as
+> ½ day absent (same pay as before, verified on 58 slips). The deploy patch
+> `late_half_day_as_half_absent` converts existing late half days. **Delete and
+> recreate any DRAFT salary slip made before the deploy**: HRMS keeps a draft's
+> saved Leave Without Pay figure, so re-saving it would deduct the half twice.
+
 > **Shift punch windows (set by HR on each Shift Type, not in code).** Set
 > *Begin check-in before shift start* = **180** and *Allow check-out after shift
 > end* = **240** minutes on every Shift Type. At 120 an overtime check-out is

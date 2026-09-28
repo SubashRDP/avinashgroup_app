@@ -93,13 +93,12 @@ def enforce_late_arrival_half_day(doc, method=None):
             return
 
         if get_datetime(doc.in_time) > min(cutoffs):
+            # Paid, but half: HRMS's own half-absent. Half Day Status "Absent"
+            # with no leave type is counted as half a day absent by the salary
+            # slip (get_half_absent_days), so nothing reads as leave.
             doc.status = "Half Day"
-            # The unpaid half needs a leave type ticked Is Leave Without Pay, or
-            # payroll pays it. Which one is the Shift Type's setting ("Late Half
-            # Day"), so reports say "late", not "took unpaid leave".
-            doc.leave_type = shift.get("custom_late_half_day_leave_type") or frappe.db.get_value(
-                "Leave Type", {"is_lwp": 1}, "name"
-            )
+            doc.half_day_status = "Absent"
+            doc.leave_type = None
 
     except Exception:
         frappe.log_error(
