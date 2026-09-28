@@ -111,3 +111,4 @@ avinashgroup_app.patches.setup_pay_input_fields
 avinashgroup_app.patches.order_delivery_days_setting
 avinashgroup_app.patches.setup_hr_bs_dates
 avinashgroup_app.patches.assign_womens_holiday_lists
+avinashgroup_app.patches.widen_shift_punch_windows
