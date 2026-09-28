@@ -224,6 +224,12 @@ expects it filed.
 
 ## 9. Go-live runbook
 
+> **Shift punch windows (set by HR on each Shift Type, not in code).** Set
+> *Begin check-in before shift start* = **180** and *Allow check-out after shift
+> end* = **240** minutes on every Shift Type. At 120 an overtime check-out is
+> ignored by HRMS and the worked day is marked Absent (200 days on avinas1,
+> Bhadra 2083). Then re-mark affected days with Attendance Fix.
+
 1. Fill the §8 data gaps on the live site. Nothing else matters until this is done.
 2. Get the accountant's sign-off on the account mapping and the Staff Advance type.
 3. On ng-group: `git pull`, `bench migrate`, restart. (Watch memory — that box

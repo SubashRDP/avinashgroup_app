@@ -216,17 +216,6 @@ def default_company():
 	)[0]
 
 
-# Punch windows around every shift (decision 2026-08-30, "take whenever the
-# employee checks in and out"). HRMS ignores a punch outside the window: a late
-# check-out then leaves only the IN punch, 0 hours, and a worked day is marked
-# Absent. Staff stay up to 3 h past shift end (avinas1 data, Bhadra 2083), so
-# 4 h after; 12-8 + 4 h still ends by midnight, so no day's punches can land on
-# the next day's shift. patches/widen_shift_punch_windows applies these to
-# existing shifts.
-CHECK_IN_BEFORE_START_MINUTES = 180
-CHECK_OUT_AFTER_END_MINUTES = 240
-
-
 def ensure_shift_types(company, abbr):
 	"""This company's shifts, with the rules that make a day late or half.
 
@@ -250,8 +239,6 @@ def ensure_shift_types(company, abbr):
 				"enable_auto_attendance": 1,
 				"determine_check_in_and_check_out": "Alternating entries as IN and OUT during the same shift",
 				"working_hours_calculation_based_on": "First Check-in and Last Check-out",
-				"begin_check_in_before_shift_start_time": CHECK_IN_BEFORE_START_MINUTES,
-				"allow_check_out_after_shift_end_time": CHECK_OUT_AFTER_END_MINUTES,
 				"working_hours_threshold_for_half_day": 5,
 				"working_hours_threshold_for_absent": 2,
 				"enable_late_entry_marking": 1,
@@ -259,6 +246,18 @@ def ensure_shift_types(company, abbr):
 				"custom_half_day_if_late_by_hours": HALF_DAY_IF_LATE_BY_HOURS,
 			}
 		)
+		# Punch windows are HR's setting on the Shift Type, not code: copy them
+		# from a shift this company already has, else leave HRMS's default for HR
+		# to set. Too narrow a check-out window drops overtime OUT punches and
+		# marks worked days Absent.
+		windows = frappe.db.get_value(
+			"Shift Type",
+			{"custom_company": company},
+			["begin_check_in_before_shift_start_time", "allow_check_out_after_shift_end_time"],
+			as_dict=True,
+		)
+		if windows:
+			doc.update(windows)
 		doc.flags.ignore_permissions = True
 		doc.insert()
 		# Saving a Shift Type fills this empty Time field with the clock time,
