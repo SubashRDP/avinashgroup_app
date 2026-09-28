@@ -13,7 +13,7 @@ Per Payroll Entry:
 
 import frappe
 from frappe import _
-from frappe.utils import flt, getdate
+from frappe.utils import cint, flt, getdate
 
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
 from avinashgroup_app.hr.shift_day import measure_day
@@ -241,18 +241,16 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	return 0.0
 
 
-# Policy 1.3 and 2.3 (client meeting 2026-09-15): a meal for coming 1.5 hours
-# early and one for staying 1.5 hours late, never more than two in a day; on a
-# holiday one meal at 6 hours worked and two at 8.
-DEFAULT_MEAL_OFFSET_HOURS = 1.5
-HOLIDAY_MEAL_HOURS = ((8.0, 2), (6.0, 1))
-MAX_MEALS_PER_DAY = 2
-
-
 def _meals_for_day(row, sc, present_statuses) -> float:
-	"""How many meals one attendance row earns.
+	"""How many meals one attendance row earns (policy 1.3 / 2.3).
 
-	A meal is earned by the extra time worked, not by turning up — counting one
+	Every number comes from the Meal Salary Component's own form, never from code:
+	    Time Offset (Hours)          came this early / stayed this late -> 1 meal each
+	    Holiday: Hours for 1 / 2     hours worked on a holiday -> 1 or 2 meals
+	    Max Meals per Day            cap (0 = none)
+	Seeded 1.5 / 6 / 8 / 2 by patches/setup_meal_rule_fields.py.
+
+	A meal is earned by the extra time worked, not by turning up. Counting one
 	per present day paid 132,525 against the sheet's 52,275 for Falgun 2082.
 	"""
 	if row.status not in present_statuses and row.status != "Half Day":
@@ -260,18 +258,17 @@ def _meals_for_day(row, sc, present_statuses) -> float:
 
 	if row.custom_worked_on_holiday:
 		worked = flt(row.working_hours)
-		for hours, meals in HOLIDAY_MEAL_HOURS:
-			if worked >= hours:
-				return float(meals)
-		return 0.0
+		two, one = flt(sc.get("custom_holiday_hours_two_meals")), flt(sc.get("custom_holiday_hours_one_meal"))
+		meals = 2 if two and worked >= two else 1 if one and worked >= one else 0
+	else:
+		offset = flt(sc.custom_time_offset_hours) * 3600.0
+		meals = 0
+		if offset:
+			meals += flt(row.custom_early_entry) >= offset
+			meals += flt(row.custom_late_exit) >= offset
 
-	offset = (flt(sc.custom_time_offset_hours) or DEFAULT_MEAL_OFFSET_HOURS) * 3600.0
-	meals = 0
-	if flt(row.custom_early_entry) >= offset:
-		meals += 1
-	if flt(row.custom_late_exit) >= offset:
-		meals += 1
-	return float(min(meals, MAX_MEALS_PER_DAY))
+	cap = cint(sc.get("custom_max_per_day"))
+	return float(min(meals, cap) if cap else meals)
 
 
 def _authorised_overtime_hours(employee: str, work_date) -> float:

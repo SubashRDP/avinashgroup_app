@@ -173,6 +173,7 @@ COMPONENTS = (
 	("Meal", "MEAL", "Earning", 0, {
 		"custom_is_attendance_driven": 1, "custom_condition_type": "Meal Entitlement",
 		"custom_unit": "Per Day", "custom_time_offset_hours": 1.5, "custom_summary_group": "Meal",
+		"custom_holiday_hours_one_meal": 6, "custom_holiday_hours_two_meals": 8, "custom_max_per_day": 2,
 	}),
 	("Overtime", "OT", "Earning", 0, {
 		"custom_is_attendance_driven": 1, "custom_condition_type": "Authorised Overtime",
