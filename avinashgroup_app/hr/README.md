@@ -30,6 +30,7 @@ the map, not a mess waiting to be tidied.
 | `utils.py` | HR overrides — currently: monthly earned-leave accrual on **Bikram Sambat** months | `scheduler_events` → `daily_long` (the stock job is stopped by `patches/setup_bs_leave_accrual`) |
 | `shift_backdate.py` | A Shift Request / Shift Assignment reaching into past days: those days' attendance is re-marked on the new shift, Overtime Sheet rows re-measured; refused when the days are already paid. Detaches the days first, because HRMS will not cancel an assignment while attendance names its shift. | `doc_events` → Shift Request / Shift Assignment |
 | `replacement_leave.py` | Overtime Sheet rows earning Replacement Leave (officer / admin holiday work) become a submitted Compensatory Leave Request once attendance shows the day was worked; cancelling the sheet takes the days back. | `doc_events` → Overtime Sheet on_submit / on_cancel; `daily_long` → `grant_pending` |
+| `womens_holiday_list.py` | Women go on their company's (Women) holiday list (adds Teej), anyone else is taken off one; on every Employee save, so a new hire is never missed. `patches/assign_womens_holiday_lists` runs it over existing staff. | `doc_events` → Employee validate |
 | `bs_dates.py` | `custom_*_miti` BS dates beside the AD dates on Leave Application, Payroll Entry, Employee and Salary Slip, plus `Salary Slip.custom_bs_month`. Server side of rdp_common_app's Bs Conversion picker. | `doc_events` → validate |
 
 ## Why this package exists

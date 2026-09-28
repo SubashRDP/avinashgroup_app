@@ -55,8 +55,14 @@ STATUTORY_DEPOSITS = (
 )
 
 # Labour Act 2074: the festival allowance is paid before the main festival.
-# Dashain's first holiday on our lists is Fulpati; warn this many days ahead.
-DASHAIN_FIRST_HOLIDAY = "Fulpati"
+# Dashain's first holiday differs per company and per sheet: Ghatasthapana at NGN,
+# Maha Ashtami at NGG / NGK (2083 lists), Fulpati on the setup_year defaults.
+# The deadline is the earliest upcoming holiday matching any of these names, in
+# English or Nepali; warn this many days ahead.
+DASHAIN_HOLIDAY_NAMES = (
+	"Ghatasthapana", "घटस्थापना", "Fulpati", "फूलपाती", "Saptami", "सप्तमी",
+	"Ashtami", "अष्टमी", "Nawami", "Navami", "नवमी", "Dashami", "दशमी",
+)
 DASHAIN_WARN_DAYS = 45
 
 # How far ahead "decisions due" looks, per kind of decision.
@@ -416,10 +422,15 @@ def _dashain_deadline(companies, date_today):
 	]
 	if not holiday_lists:
 		return None
+	name_match = " or ".join(f"description like %(n{i})s" for i in range(len(DASHAIN_HOLIDAY_NAMES)))
 	fulpati = frappe.db.sql(
-		"""select min(holiday_date) from tabHoliday where parent in %(h)s
-		and description like %(d)s and holiday_date >= %(t)s""",
-		{"h": holiday_lists, "d": f"%{DASHAIN_FIRST_HOLIDAY}%", "t": date_today},
+		f"""select min(holiday_date) from tabHoliday where parent in %(h)s
+		and weekly_off = 0 and ({name_match}) and holiday_date >= %(t)s""",
+		{
+			"h": holiday_lists,
+			"t": date_today,
+			**{f"n{i}": f"%{n}%" for i, n in enumerate(DASHAIN_HOLIDAY_NAMES)},
+		},
 	)[0][0]
 	if not fulpati or (fulpati - date_today).days > DASHAIN_WARN_DAYS:
 		return None

@@ -440,6 +440,10 @@ _add_doc_event(
     "avinashgroup_app.avinash_group_app.doctype.allowance_category.allowance_category.validate_employee_category",
 )
 
+# Women go on their company's (Women) holiday list, which adds Teej; set on
+# every Employee save so a new hire is never missed. See hr/womens_holiday_list.py.
+_add_doc_event("Employee", "validate", "avinashgroup_app.hr.womens_holiday_list.set_holiday_list")
+
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.
 for _dt in ("Leave Allocation", "Leave Application"):
