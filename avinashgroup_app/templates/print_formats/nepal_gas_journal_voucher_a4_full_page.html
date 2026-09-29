@@ -34,7 +34,7 @@ body {
   margin: 0; /* No margin on body, margins are on @page */
   padding-bottom: 0; /* was 25mm — kept at 0 so it doesn't add height below the
                         fixed-height .jv-sheet box. */
-  font-size:10px !important;
+  font-size:13px !important;
 }
  
  
@@ -48,7 +48,7 @@ body {
 th, td { 
   border:1px solid #000; 
   padding:4px;
-  font-size:10px;
+  font-size:13px;
 }
 
 th { font-weight:600; }
@@ -77,13 +77,13 @@ tr, td, th { page-break-inside: avoid; }
  {
     font-weight: 600;
     margin: 0;
-    font-size: 20px;
+    font-size: 21px;
  }
   .company-info h4
   {
      font-weight: 600;
     margin: 0;
-    font-size: 15px;
+    font-size: 16px;
   }
    .company-info div
    {
@@ -95,7 +95,7 @@ tr, td, th { page-break-inside: avoid; }
     own fields. Out of flow, so it costs the header no height. */
  .main-table tr.company-info .page-of {
     position:absolute; top:2px; right:0;
-    font-size:9px; font-weight:400;
+    font-size:10px; font-weight:400;
  }
 
  /* Header spacing. This block is emitted once per page (page_head below), so every
@@ -120,12 +120,12 @@ tr, td, th { page-break-inside: avoid; }
   
   .title strong
   {
-      font-size:16px;
+      font-size:17px;
   }
  
  .top-table tr td,.table2 tr td
  {
-     font-size:10px !important;
+     font-size:13px !important;
      padding: 4px 0px !important;
  }
  /*
@@ -138,13 +138,13 @@ tr, td, th { page-break-inside: avoid; }
  
  .main-table tr th
  {
-     font-size:10px !important;
+     font-size:13px !important;
      font-weight:600;
         padding:4px !important;
  }
   .main-table tr td
  {
-     font-size:10px !important;
+     font-size:13px !important;
         padding: 4px !important;
  
  }
@@ -169,7 +169,7 @@ tr, td, th { page-break-inside: avoid; }
       position: absolute;
       bottom: 0;
       width: 100%;
-      font-size: 10px;
+      font-size: 13px;
       border-top: 1px solid #000;
       padding-top: 10px;
     }
@@ -182,7 +182,7 @@ tr, td, th { page-break-inside: avoid; }
   bottom: 20px;
   width: 100%;
   text-align: center;
-  font-size: 10px;
+  font-size: 13px;
   right:0;
 
      }
@@ -228,7 +228,7 @@ td.texleft p {
   {
       text-align:left;
       text-transform: uppercase;
-    font-size: 18px !important;
+    font-size: 19px !important;
     margin-top:0px;
     margin-bottom:0px;
     color:#192734;
@@ -241,7 +241,7 @@ td.texleft p {
     margin-top: 10px;
     font-weight: 500;
     padding: 3px;
-    font-size: 16px;
+    font-size: 17px;
     letter-spacing: 1.5px;
         
         
@@ -250,7 +250,7 @@ td.texleft p {
  
  .template label {
  
-    font-size: 10px;
+    font-size: 13px;
    color:#192734;
  
 }
@@ -266,14 +266,14 @@ td.texleft p {
   
   .template td {
     padding: 3px !important;
-    font-size:10px;
+    font-size:13px;
 }
   
   
   .template th 
   {
 padding: 3px !important;
-    font-size:10px;
+    font-size:13px;
     font-weight:700;
     color:#030404;
 } 
@@ -387,7 +387,7 @@ padding: 3px !important;
 
 .authorized label span
 {
-    font-size:10px;
+    font-size:13px;
 }
 
 
@@ -461,14 +461,14 @@ padding:0px 30px;
        
      .template label
         {
-    font-size: 10px;
+    font-size: 13px;
    
 }
          
 .template td, .template th 
 {
     padding: 3px !important;
-    font-size:10px;
+    font-size:13px;
 }
  
   
@@ -509,7 +509,7 @@ padding:0px 30px;
  
   .top-table tr td,.table2 tr td
  {
-     font-size:10px !important;
+     font-size:13px !important;
      padding: 4px 0px !important;
  }
  
@@ -662,40 +662,96 @@ padding:0px 30px;
    even if the estimate is off the footer can only sit a few mm high or low; it
    can no longer overlap anything.
 
-   Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
+   Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher
+   at 13px body text (the same sizes as NG CV Payment Voucher A4):
      PAGE_PX   printable height of one page (297 - 10 top - 6 bottom = 281mm)
-     HEAD_PX   the <thead> block, reprinted on every page. Measures 120px; stated a
-               little over, like the row heights, so the breaks err early. It must
-               stay under 131px (25% of PAGE_PX) or Chrome stops reprinting it —
-               see the .company-info rules up in the stylesheet.
-     LINE_PX   one line of 10px text; PAD_PX is a <td>'s padding + border
-     FOOT_PX   the signature block + "Printed on" line
+     HEAD_PX   the per-page header (company block + Voucher No grid + column
+               headings). Measures 149px; stated a little over, like the row
+               heights, so the breaks err early.
+     LINE_PX   one line of 13px text; PAD_PX is a <td>'s 4px top + bottom padding.
+               A one-line row measures 26.5px and a two-line row 45.5px, billed
+               27 / 46.
+     FOOT_PX   the signature block + "Printed on" line (measures 108px)
      TARGET_PX where the footer's bottom edge should land, measured from the top
-               of the printable area (132mm -> 142mm down the sheet, just above the
-               fold at 148.5mm). The gap to PAGE_PX is the cushion that absorbs
+               of the printable area. The gap to PAGE_PX is the cushion that absorbs
                estimate error, so keep TARGET_PX a good 20px below PAGE_PX.
-     CH_*      characters that fit on one line of a column, for guessing wraps -#}
+     CH_*      characters that fit on one line of a column, for guessing wraps.
+               Courier New at 13px advances 7.8px per character, so a column's
+               capacity is its width less 8px of padding, divided by 7.8. -#}
 {% set PAGE_PX = 1062 %}
-{% set HEAD_PX = 117 %}
-{% set LINE_PX = 13 %}
-{#- One line of a Party Journal block. Its lines are inner-table <tr>s, which
-   `.main-table tr` pins to 20px, so they cost far more than a LINE_PX text line. -#}
-{% set BLOCK_PX = 26 %}
-{% set PAD_PX = 11 %}
-{% set FOOT_PX = 100 %}
+{% set HEAD_PX = 152 %}
+{% set LINE_PX = 19 %}
+{% set PAD_PX = 8 %}
+{#- A Narration row gives up the padding and 20px minimum height its line item
+   would otherwise leave between them (the jv-hasnarration / jv-narration rules),
+   so its first line adds only 11px under the item and each further line 17px. -#}
+{% set NARR_FIRST_PX = 11 %}
+{% set NARR_LINE_PX = 17 %}
+{#- One line of a Party Journal block. Its lines are inner-table <tr>s whose <td>s
+   pick up the 4px `.main-table tr td` padding, so they cost more than a LINE_PX
+   text line: a 5-line block (Code / Name / gap / Amount / Document Class) measures
+   155px = PAD_PX + 5 * BLOCK_PX. -#}
+{% set BLOCK_PX = 30 %}
+{% set FOOT_PX = 110 %}
 {% set TARGET_PX = 1010 %}
-{% set CH_ACC = 36 %}
-{% set CH_PARTY = 26 %}
-{% set CH_WIDE = 110 %}
-{#- Rows per page are budgeted 25px short of the real page so the forced breaks
+{#- Account and Party Name column capacities differ per JV type because each type
+   has its own column widths. Measured at 13px (column width in px -> chars):
+     Journal Entry       Particular 164 -> 20   Party Name 131 -> 15
+     Cash/Bank Contra    Description 250 -> 31  Party Name 136 -> 16
+     Cash Entry          Debit 183 -> 22        Party Name 118 -> 14
+     Debit/Credit Note   Particular 171 -> 20   Party Name 157 -> 19
+     all other types     Account 214 -> 26      Party Name 142 -> 17
+   Cash Entry's Debit column also gives way to a long vehicle plate, so it is
+   taken at its narrowest. Too low bills a phantom second line to long account
+   names and empties the bottom of each page; too high misses real wraps and
+   overfills it. -#}
+{% if is_journal_voucher %}
+  {% set CH_ACC, CH_PARTY = 20, 15 %}
+{% elif is_cash_contra %}
+  {% set CH_ACC, CH_PARTY = 31, 16 %}
+{% elif is_cash_entry %}
+  {% set CH_ACC, CH_PARTY = 22, 14 %}
+{% elif is_note %}
+  {% set CH_ACC, CH_PARTY = 20, 19 %}
+{% else %}
+  {% set CH_ACC, CH_PARTY = 26, 17 %}
+{% endif %}
+{#- A full-width row (Paid To, In Words, Remarks) is 710px of text -> 91 chars,
+   stated 90. A Narration row starts after the S.N. column: 671px -> 86, stated 85.
+   Party Journal's In Words shares its row with the amount cells: 50. -#}
+{% set CH_WIDE = 90 %}
+{% set CH_NARR = 85 %}
+{% set CH_PJ_WORDS = 50 %}
+{#- Rows per page are budgeted 45px short of the real page so the forced breaks
    below always fire BEFORE the browser would have broken by itself — the browser
    winning that race is what puts an unplanned page between the data and the
-   footer. Row heights above are rounded up for the same reason. The numbers are
-   measured off a rendered voucher and hold for both Firefox and Chrome, which both
-   reprint the <thead> on every page now that it is under Chrome's 25% limit.
-   wkhtmltopdf ("Get PDF") still does not reprint it, so on that path alone the
-   footer lands about HEAD_PX higher than TARGET_PX asks for. -#}
-{% set CAP_PX = PAGE_PX - HEAD_PX - 25 %}
+   footer. The 45px (rather than a bare minimum) also leaves room for Firefox's
+   "Fit to page width", which enlarges the sheet ~1.02x. Row heights above are
+   rounded up for the same reason. wkhtmltopdf ("Get PDF") does not reprint the
+   header, so on that path alone the footer lands about HEAD_PX higher than
+   TARGET_PX asks for. -#}
+{% set CAP_PX = PAGE_PX - HEAD_PX - 45 %}
+{#- Lines a text takes in a column CH characters wide, wrapped word by word the way
+   the browser does. Counting characters alone (len / CH) under-bills any name whose
+   words leave a gap at the end of a line — e.g. 21 characters in a 20-character
+   column that break as 15 + 6 cost 2 lines, but 38 characters that break as
+   15 + 16 + 7 cost 3, where a character count says 2. Same macro as NG CV Payment
+   Voucher A4. A word longer than a whole line is broken mid-word, as the browser
+   does. -#}
+{%- macro wrapped(text, ch) -%}
+{%- set W = namespace(lines=1, cur=0) -%}
+{%- for word in ((text or "")|string).split(" ") if word -%}
+  {%- set n = word|length -%}
+  {%- if W.cur and W.cur + 1 + n <= ch -%}
+    {%- set W.cur = W.cur + 1 + n -%}
+  {%- else -%}
+    {%- if W.cur -%}{%- set W.lines = W.lines + 1 -%}{%- endif -%}
+    {%- set W.lines = W.lines + (n - 1) // ch -%}
+    {%- set W.cur = n - ((n - 1) // ch) * ch -%}
+  {%- endif -%}
+{%- endfor -%}
+{{ W.lines }}
+{%- endmacro -%}
 {#- One entry per <tr> in <tbody>, in render order — the indexes double as the
    nth-child selectors used to force the page breaks below. -#}
 {% set G = namespace(items=[], data_count=0) %}
@@ -706,23 +762,27 @@ padding:0px 30px;
      one of them to 20px (only .voucher-meta's inner table is exempted). So a line
      here costs BLOCK_PX, not LINE_PX — billing it at LINE_PX made the block barely
      half its printed height, and since the spacer is computed as the leftover, the
-     shortfall became extra spacer that pushed the signatures off the page.
-     BLOCK_PX is measured off a rendered voucher (a 5-line block spans 36.3mm) and
-     rounded up so it also covers the debit/credit separator row. -#}
+     shortfall became extra spacer that pushed the signatures off the page. -#}
   {% for row in doc.accounts %}
-    {#- A row carrying a Narration prints one more line inside the same block. -#}
-    {% set nlines = ([1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max) if (row.user_remark and row.user_remark|trim) else 0 %}
-    {% set _add = G.items.append(PAD_PX + BLOCK_PX * (5 + nlines)) %}
+    {#- A row carrying a Narration prints one more line (or more, once it wraps in
+       the ~70-character value column) inside the same block. -#}
+    {% set nlines = (wrapped(row.user_remark|replace("\n", " ")|trim, 70)|int) if (row.user_remark and row.user_remark|trim) else 0 %}
+    {#- "Credit Note Amount" (18 characters) wraps in its 20% label column at 13px;
+       "Debit Note Amount" (17) just fits. -#}
+    {% set label_wrap = 0 if row.debit_in_account_currency else 1 %}
+    {% set _add = G.items.append(PAD_PX + BLOCK_PX * (5 + nlines) + LINE_PX * label_wrap) %}
   {% endfor %}
   {% set G.data_count = G.items|length %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX) %}
+  {% set words = frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
+  {#- In Words + amount: this row also carries 6px of extra top padding. -#}
+  {% set _add = G.items.append(PAD_PX + 6 + LINE_PX * (wrapped("In Words: " ~ words, CH_PJ_WORDS)|int)) %}
   {% if doc.custom_paid_to %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX) %}
+    {% set _add = G.items.append(PAD_PX + LINE_PX * (wrapped("Paid To/Receive From: " ~ doc.custom_paid_to, CH_WIDE)|int)) %}
   {% endif %}
   {% if (doc.cheque_no or "")|string|trim not in ("", "1") %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX) %}
+  {% set _add = G.items.append(PAD_PX + LINE_PX * (wrapped("Remarks: " ~ (doc.user_remark or "")|replace("\n", " ")|trim, CH_WIDE)|int)) %}
 {% else %}
   {% for row in doc.accounts %}
     {% set acc = frappe.get_cached_doc("Account", row.account) %}
@@ -730,13 +790,18 @@ padding:0px 30px;
           or (is_cash_contra and show_cash_bank_header and row.account == cash_bank.account) -%}
     {% if not skipped %}
       {% set pname = frappe.get_cached_doc(row.party_type, row.party).get_title() if row.party else "" %}
-      {% set lines = [1, ((acc.account_name|length) + CH_ACC - 1) // CH_ACC,
-                         ((pname|string|length) + CH_PARTY - 1) // CH_PARTY]|max %}
+      {% set party_lines = wrapped(pname, CH_PARTY)|int %}
+      {#- The fallback layout stacks the subtype under the party name when there is
+         no Vehicle column to hold it. -#}
+      {% if row.custom_subtype and not show_vehicle and not (is_note or is_cash_contra or is_cash_entry or is_journal_voucher) %}
+        {% set party_lines = party_lines + (1 if row.party else 0) %}
+      {% endif %}
+      {% set lines = [wrapped(acc.account_name, CH_ACC)|int, party_lines]|max %}
       {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
       {#- Every type prints a per-row Narration on its own line when the row carries one. -#}
       {% if row.user_remark and row.user_remark|trim %}
-        {% set nlines = [1, ((row.user_remark|length) + CH_WIDE - 1) // CH_WIDE]|max %}
-        {% set _add = G.items.append(PAD_PX + LINE_PX * nlines) %}
+        {% set nlines = wrapped("Narration: " ~ row.user_remark|replace("\n", " ")|trim, CH_NARR)|int %}
+        {% set _add = G.items.append(NARR_FIRST_PX + NARR_LINE_PX * (nlines - 1)) %}
       {% endif %}
     {% endif %}
   {% endfor %}
@@ -744,14 +809,14 @@ padding:0px 30px;
   {#- Trailing rows: Total, [Paid To], [Cheque No / Dated], In Words, Remarks. -#}
   {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% if doc.custom_paid_to %}
-    {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((("Paid To/Receive From: " ~ doc.custom_paid_to)|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
+    {% set _add = G.items.append(PAD_PX + LINE_PX * (wrapped("Paid To/Receive From: " ~ doc.custom_paid_to, CH_WIDE)|int)) %}
   {% endif %}
   {% if (doc.cheque_no or "")|string|trim not in ("", "1") %}
     {% set _add = G.items.append(PAD_PX + LINE_PX) %}
   {% endif %}
   {% set words = frappe.utils.money_in_words(doc.total_debit).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ") %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX * [1, ((words|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
-  {% set _add = G.items.append(PAD_PX + LINE_PX * [1, (((doc.user_remark or "")|length) + CH_WIDE - 1) // CH_WIDE]|max) %}
+  {% set _add = G.items.append(PAD_PX + LINE_PX * (wrapped("In Words: " ~ words, CH_WIDE)|int)) %}
+  {% set _add = G.items.append(PAD_PX + LINE_PX * (wrapped("Remarks: " ~ (doc.user_remark or "")|replace("\n", " ")|trim, CH_WIDE)|int)) %}
 {% endif %}
 {#- The closing group — Total, Paid To, Cheque No, In Words, Remarks — is measured
    as one lump because it travels down to the fold together with the signatures
@@ -1242,6 +1307,6 @@ padding:0px 30px;
             {%- endfor %}
           </tr>
         </table>
-        <div style="text-align:left; font-size:9px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
+        <div style="text-align:left; font-size:10px; color:#000; margin-top:6px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
      </div>
      </div>

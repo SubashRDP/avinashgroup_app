@@ -3,16 +3,55 @@ Nepal Gas Payment Voucher — Payment Entry voucher (avinashgroup_app).
 Source of truth for the "Nepal Gas Payment Voucher" standard Print Format;
 print_format/nepal_gas_payment_voucher/nepal_gas_payment_voucher.json only
 {% include %}s this file. Code-backed, built fresh (not copied from any existing).
-Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
+Header intentionally omits the "Paid To" (party) line. Full A4 sheet: the body
+sits at the top and in-words / remarks / signatures at the foot of the page.
 =========================================================================== -#}
 {% set company = frappe.get_doc("Company", doc.company) %}
 {#- Nepali (lakh) comma grouping, e.g. 6700000.5 -> 67,00,000.50 -#}
 {%- macro amt(v) -%}{{ frappe.utils.fmt_money(v or 0, 2, format="#,##,###.##") }}{%- endmacro -%}
+{#- ---- Page count, for placing the footer on the last page ----------------------
+   Heights are CSS px at 96dpi (1mm = 3.78px), measured off a rendered A4 voucher:
+     FIRST_PX  frame height on page 1: 265mm (the 281mm band less the 30px top
+               padding and an 8mm cushion)
+     NEXT_PX   frame height added per further page: the 281mm band (1062px) less
+               30px of cushion, which also absorbs a line pushed to the next page
+               and the column headings reprinted at the top of it
+     HEAD_PX   top of the page down to the first reference line (title, company,
+               Voucher/Date lines, column headings, Paid To / Paid From rows and
+               the "Voucher :" title) — measures 264px with 2 header lines
+     LINE_PX   one reference line (they never wrap: white-space:nowrap)
+     FOOT_PX   the sum line under the amounts + in-words + remarks + signatures
+               + "Printed on" (measures ~180px); a remark long enough to wrap adds
+               a line per ~140 characters -#}
+{% set FIRST_PX = 1001 %}
+{% set NEXT_PX = 1032 %}
+{% set HEAD_PX = 264 %}
+{% set LINE_PX = 16 %}
+{% set FOOT_PX = 185 %}
+{#- The header prints 2 lines on the right (Voucher, Date); the left or right can
+   run longer — Paid To/Receive From, Ref + Dt, Bank Charge — at 16px a line. -#}
+{% set chq_est = (doc.reference_no or "")|string|trim %}
+{% set left_lines = (1 if doc.custom_paid_to_from else 0) + (2 if chq_est and chq_est != "1" else 0) %}
+{% set right_lines = 2 + (1 if doc.deductions else 0) %}
+{% set est = namespace(px=HEAD_PX + 16 * ([left_lines, right_lines]|max - 2)) %}
+{#- Bank charges keep a blank title row plus one blank row per charge in the body. -#}
+{% if doc.deductions %}
+  {% set est.px = est.px + 22 * (1 + doc.deductions|length) %}
+{% endif %}
+{% if doc.payment_type in ("Pay", "Receive") and doc.references %}
+  {% set est.px = est.px + LINE_PX * doc.references|length %}
+{% endif %}
+{% set est.px = est.px + FOOT_PX + 16 * (((doc.custom_remark or "")|length) // 140) %}
+{% set pages = 1 if est.px <= FIRST_PX else 1 + ((est.px - FIRST_PX + NEXT_PX - 1) // NEXT_PX) %}
+{% set frame_px = FIRST_PX + NEXT_PX * (pages - 1) %}
 <style>
 @page {
   size: A4;
-  /* Confine content to the top ~half of the A4 sheet; caps at ~48.8%. */
-  margin-bottom: 152mm;
+  /* Content band = the whole A4 sheet: 10mm top + 6mm bottom leaves a 281mm
+     band. Both margins are stated so the PDF does not fall back to its own
+     defaults. */
+  margin-top: 10mm;
+  margin-bottom: 6mm;
 }
 .print-format { padding-top:30px !important; }
 .npv { color:#000; font-size:8px; }
@@ -39,9 +78,20 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 .npv .pv-items td { padding:1px 4px; vertical-align:top; }
 .npv .pv-items th.r, .npv .pv-items td.r { text-align:right; }
 .npv .pv-items tr.total td { font-weight:bold; padding-top:4px; }
+/* Reference lines sit flush under one another, as they did when they were stacked
+   <div>s inside one cell: the cell padding (3px, forced with !important by the
+   print style) stays only above the "Voucher :" title and below the last line, so
+   the block is exactly as tall as before. */
+.npv .pv-items tr.pv-ref-title td { padding-bottom:0 !important; }
+.npv .pv-items tr.pv-ref td { padding-top:0 !important; padding-bottom:0 !important; white-space:nowrap; }
+.npv .pv-items tr.pv-ref:last-child td { padding-bottom:3px !important; }
 
 /* In-words + remarks */
 .npv .pv-words   { border-top:1px solid #000; border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
+/* Voucher total above the in-words band, with the small rule over it that it
+   carried when it sat under the amounts column. */
+.npv .pv-total-above { text-align:right; font-weight:bold; white-space:nowrap; font-size:11px; padding:0 4px 3px; }
+.npv .pv-total-above span { display:inline-block; border-top:1px solid #000; padding-top:2px; }
 .npv .pv-remarks { border-bottom:1px solid #000; padding:5px 4px; font-size:10px; }
 
 /* Signatures */
@@ -51,9 +101,26 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
 .npv .pv-sign { width:100%; border-collapse:collapse; }
 .npv .pv-sign td { width:25%; text-align:center; vertical-align:bottom; padding-top:38px; font-size:10px; }
 .npv .pv-sign .line { border-top:1px solid #000; width:75%; margin:0 auto 4px; padding-top:2px; }
+
+/* Page frame: the body sits at the top and in-words/remarks/signatures at the
+   bottom of the frame, with blank space between. On a one-page voucher the frame
+   is 265mm: plus the 30px (~8mm) .print-format top padding, that puts the
+   footer's last line ~273mm into the 281mm band, leaving an 8mm cushion. A
+   voucher that runs past one page gets a frame stretched over every page it
+   needs (frame_px below), so the footer lands at the foot of the LAST page
+   rather than straight under the final reference line. */
+.npv .pv-page { width:100%; height:{{ frame_px }}px; border-collapse:collapse; }
+.npv .pv-page > tbody > tr > td { padding:0; }
+.npv .pv-page-top    { vertical-align:top; }
+.npv .pv-page-bottom { vertical-align:bottom; }
+/* A 1px bottom row gives all spare height to the body row, so the footer lands
+   at the frame bottom whatever the body holds. */
+.npv .pv-page-bottom-row { height:1px; }
 </style>
 
 <div class="npv">
+<table class="pv-page"><tbody>
+<tr><td class="pv-page-top">
 
   {#- ---------- Header (no "Paid To") ---------- -#}
   <div class="pv-title">{{ doc.custom_p_type or "Payment" }} Voucher</div>
@@ -151,51 +218,56 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
         <td class="r"></td>
       </tr>
 
-      {#- Total / reference row comes immediately under Paid From so the "Voucher : ..."
-         lines sit right below it. Any blank spacer is moved BELOW this row (see end of
-         tbody) so the overall table height -- the gap between the two lines -- is unchanged. -#}
+      {#- One <tr> per reference rather than one row holding every line as stacked
+         <div>s: print CSS keeps a table row whole on one page, so a single row
+         carrying a long reference list could not fit under the header and was
+         pushed, entire, onto page 2 — leaving page 1 with only the header. Separate
+         rows let the page break fall between any two references. -#}
+      {% if doc.payment_type in ("Pay", "Receive") and doc.references %}
+      {#- A single bold "Voucher :" title, then each reference on its own row. -#}
+      <tr class="total pv-ref-title">
+        <td {% if show_party %}colspan="3"{% endif %}><strong>Voucher :</strong></td>
+        <td class="r"></td>
+      </tr>
+      {% for ref in doc.references %}
+        {% set src = frappe.get_cached_doc(ref.reference_doctype, ref.reference_name) if ref.reference_name else None %}
+        {% set vno = (src.get("custom_branch_name") if (src and ref.reference_doctype == "Sales Invoice") else "") or (src.get("custom_name") if src else "") or ref.reference_name or "" %}
+        {% set pmiti = (src.get("custom_posting_miti")|string).split(" ")[0] if (src and src.get("custom_posting_miti")) else (frappe.utils.formatdate(src.posting_date, "yyyy-MM-dd") if (src and src.get("posting_date")) else "") %}
+        {% if (ref.outstanding_amount or 0)|round(2) != 0 %}{% set status = "partially" %}
+        {% elif (ref.total_amount or 0)|round(2) == (ref.allocated_amount or 0)|round(2) %}{% set status = "full" %}
+        {% else %}{% set status = "balance" %}{% endif %}
+      <tr class="pv-ref">
+        <td {% if show_party %}colspan="3"{% endif %}>{{ vno }}{% if pmiti %} dated {{ pmiti }}{% endif %} ({{ status }})</td>
+        <td class="r">{{ amt(ref.allocated_amount) }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
       <tr class="total">
         <td {% if show_party %}colspan="3"{% endif %}>
           {% if doc.payment_type in ("Pay", "Receive") %}
-            {% if doc.references %}
-              {#- A single bold "Voucher :" title, then each reference value listed under it. -#}
-              <div><strong>Voucher :</strong></div>
-              {% for ref in doc.references %}
-                {% set src = frappe.get_cached_doc(ref.reference_doctype, ref.reference_name) if ref.reference_name else None %}
-                {% set vno = (src.get("custom_branch_name") if (src and ref.reference_doctype == "Sales Invoice") else "") or (src.get("custom_name") if src else "") or ref.reference_name or "" %}
-                {% set pmiti = (src.get("custom_posting_miti")|string).split(" ")[0] if (src and src.get("custom_posting_miti")) else (frappe.utils.formatdate(src.posting_date, "yyyy-MM-dd") if (src and src.get("posting_date")) else "") %}
-                {% if (ref.outstanding_amount or 0)|round(2) != 0 %}{% set status = "partially" %}
-                {% elif (ref.total_amount or 0)|round(2) == (ref.allocated_amount or 0)|round(2) %}{% set status = "full" %}
-                {% else %}{% set status = "balance" %}{% endif %}
-                <div style="font-weight:normal; white-space:nowrap;">{{ vno }}{% if pmiti %} dated {{ pmiti }}{% endif %} ({{ status }})</div>
-              {% endfor %}
-            {% else %}
-              <div style="white-space:nowrap;"><strong>Advance {{ "Paid" if doc.payment_type == "Pay" else "Received" }}</strong></div>
-            {% endif %}
+          <div style="white-space:nowrap;"><strong>Advance {{ "Paid" if doc.payment_type == "Pay" else "Received" }}</strong></div>
           {% endif %}
         </td>
-        {#- One allocated amount per reference, in the same order as the Voucher lines on
-           the left, so each amount lines up with its own "Voucher : ..." row. -#}
-        <td class="r">
-          {% if doc.payment_type in ("Pay", "Receive") and doc.references %}
-            {#- Blank line to align with the bold "Voucher :" title on the left. -#}
-            <div>&nbsp;</div>
-            {% for ref in doc.references %}
-            <div style="font-weight:normal; white-space:nowrap;">{{ amt(ref.allocated_amount) }}</div>
-            {% endfor %}
-            {#- Small rule under the amounts, then the total of all voucher allocations. -#}
-            <div style="display:inline-block; border-top:1px solid #000; padding-top:2px; margin-top:1px; font-weight:bold; white-space:nowrap;">{{ amt(doc.references | sum(attribute='allocated_amount')) }}</div>
-          {% else %}
-            {{ amt(doc.paid_amount) }}
-          {% endif %}
-        </td>
+        <td class="r">{{ amt(doc.paid_amount) }}</td>
       </tr>
+      {% endif %}
 
     </tbody>
   </table>
 
 
   
+</td></tr>
+<tr class="pv-page-bottom-row"><td class="pv-page-bottom">
+
+  {#- ---------- Voucher total ----------
+     The total of all voucher allocations travels with the footer, right-aligned
+     just above the in-words band, rather than staying under the last reference
+     line. A payment without references shows its amount in the row itself. -#}
+  {% if doc.payment_type in ("Pay", "Receive") and doc.references %}
+  <div class="pv-total-above"><span>{{ amt(doc.references | sum(attribute='allocated_amount')) }}</span></div>
+  {% endif %}
+
   {#- ---------- In words ---------- -#}
   <div class="pv-words">
     {{ frappe.utils.money_in_words(doc.paid_amount, company.default_currency).replace("NPR", "Nepalese Rupee").replace(",", "").replace(" And ", " ").replace("only.", "Only").replace(" only", " Only") }}
@@ -220,4 +292,6 @@ Header intentionally omits the "Paid To" (party) line. Standard A4 paper.
     <div style="text-align:left; font-size:7px; margin-top:-4px;">Printed on: {{ frappe.utils.format_datetime(frappe.utils.now(), "dd-MM-yyyy hh:mm a") }}</div>
   </div>
 
+</td></tr>
+</tbody></table>
 </div>
