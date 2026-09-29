@@ -427,6 +427,13 @@ _add_doc_event("Shift Assignment", "on_cancel", "avinashgroup_app.hr.shift_backd
 # job catches sheets approved ahead of the day. See hr/replacement_leave.py.
 _add_doc_event("Overtime Sheet", "on_submit", "avinashgroup_app.hr.replacement_leave.on_sheet_submit")
 _add_doc_event("Overtime Sheet", "on_cancel", "avinashgroup_app.hr.replacement_leave.on_sheet_cancel")
+# Overtime paid 0 on any sheet nobody pressed "Measure from Attendance" on, so
+# measuring runs on submit too. Only rows never measured — see overtime_settlement.
+_add_doc_event("Overtime Sheet", "on_submit", "avinashgroup_app.hr.overtime_settlement.on_sheet_submit")
+
+# Saving a Shift Type fills a blank Late Arrival Cutoff with the clock time of
+# the save, which then half-days everybody from that minute. See hr/shift_type_guard.
+_add_doc_event("Shift Type", "validate", "avinashgroup_app.hr.shift_type_guard.clear_invented_late_cutoff")
 
 # BS (miti) dates beside the AD dates on the HR forms, filled server-side so
 # slips and bulk-made documents carry them too. See hr/bs_dates.py.
@@ -439,10 +446,6 @@ _add_doc_event(
     "Employee", "validate",
     "avinashgroup_app.avinash_group_app.doctype.allowance_category.allowance_category.validate_employee_category",
 )
-
-# Women go on their company's (Women) holiday list, which adds Teej; set on
-# every Employee save so a new hire is never missed. See hr/womens_holiday_list.py.
-_add_doc_event("Employee", "validate", "avinashgroup_app.hr.womens_holiday_list.set_holiday_list")
 
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.
@@ -503,6 +506,8 @@ scheduler_events = {
         "avinashgroup_app.hr.holiday_year_switch.switch_to_current_year_lists",
         # Replacement leave for holiday work, once the day's attendance is in.
         "avinashgroup_app.hr.replacement_leave.grant_pending",
+        # Overtime hours for the sheets whose attendance arrived after submission.
+        "avinashgroup_app.hr.overtime_settlement.measure_pending",
     ],
     "cron": {
         # Only the send-side retry is scheduled. CBMS Bills are created solely by the

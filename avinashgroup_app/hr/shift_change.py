@@ -120,9 +120,16 @@ def close_gap_after_cancel(doc, method=None):
 		doc_after.cancel()
 		frappe.delete_doc("Shift Assignment", after.name, force=1, ignore_permissions=True)
 	elif before:
-		# Nothing followed: the standing shift simply runs on again.
+		# The freed days go back to the standing shift that preceded them.
 		frappe.db.set_value("Shift Assignment", before.name, "end_date", end)
-		_resume(frappe.get_doc("Shift Assignment", before.name), add_days(end, 1), None)
+		if not after:
+			# Nothing follows, so the standing shift runs on open-ended again.
+			_resume(frappe.get_doc("Shift Assignment", before.name), add_days(end, 1), None)
+		# If something DOES follow on a different shift — a second request on the
+		# very next day — resuming open-ended would start the old shift on a day
+		# that request already owns, and HRMS refuses the overlap
+		# (MultipleShiftError), leaving the cancel half-done. That request carries
+		# its own tail, so extending `before` over the freed days is the whole job.
 
 
 def _overlapping_assignments(employee, start, end=None):

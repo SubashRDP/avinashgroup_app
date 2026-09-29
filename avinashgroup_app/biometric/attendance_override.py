@@ -1,6 +1,6 @@
 import frappe
 from datetime import datetime, timedelta
-from frappe.utils import getdate, get_datetime
+from frappe.utils import flt, getdate, get_datetime
 
 from avinashgroup_app.biometric.attendance_sync import compute_shift_deviations
 
@@ -66,8 +66,17 @@ def enforce_late_arrival_half_day(doc, method=None):
     `custom_late_arrival_cutoff_time`, the older absolute cutoff, still applies
     where it is set; the earlier of the two wins. Blank the hours (0) and clear
     the cutoff to switch the rule off for a shift.
+
+    HR can waive one day with `custom_late_excused` — the traffic, the funeral,
+    the thing the rule cannot know. The lateness stays recorded and visible in
+    the reports; it just stops costing anything. Because HR ticks the box on a
+    day the rule has already demoted, excusing also puts that day back to
+    Present, but only when lateness is the sole reason it fell.
     """
     if not doc.shift or not doc.in_time:
+        return
+    if doc.get("custom_late_excused"):
+        _undo_excused_late_half_day(doc)
         return
     if doc.status in ("On Leave", "Absent", "Half Day"):
         return
@@ -105,6 +114,32 @@ def enforce_late_arrival_half_day(doc, method=None):
             frappe.get_traceback(),
             f"Error enforcing late-arrival Half Day for Attendance {doc.name}"
         )
+
+
+def _undo_excused_late_half_day(doc):
+    """Put an excused day back to Present, if lateness is why it is a Half Day.
+
+    Only this rule's own signature is undone: Half Day, half-day status Absent,
+    no leave type. A half day that carries a leave type was granted, not
+    deducted, and is none of this rule's business.
+
+    Short hours are checked as well, because they demote the same day
+    independently: somebody two hours late who then left early has earned their
+    half day on the hours alone, and excusing the lateness must not hand back
+    what the hours took. Only when the hours clear the shift's own threshold is
+    the day restored.
+    """
+    if doc.status != "Half Day" or doc.get("half_day_status") != "Absent" or doc.leave_type:
+        return
+
+    threshold = frappe.get_cached_value(
+        "Shift Type", doc.shift, "working_hours_threshold_for_half_day"
+    )
+    if threshold and flt(doc.working_hours) < flt(threshold):
+        return
+
+    doc.status = "Present"
+    doc.half_day_status = None
 
 
 def half_day_when_working_on_leave(doc, method=None):

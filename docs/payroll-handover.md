@@ -71,7 +71,7 @@ on ng-group.
 
 | File | What it is |
 |---|---|
-| `hr/year_setup.py` | One call puts a whole fiscal year in place per company: holiday lists, shifts, categories, leave policies, cost centres, periods, slabs. Safe to re-run. Holds the FESTIVALS table. |
+| `hr/year_setup.py` | One call puts a whole fiscal year in place per company: holiday lists (Saturdays), leave period, payroll period, tax slab, leave policy assignments. Safe to re-run. Creates only year data — `require_standing_setup` refuses the run, listing everything absent, rather than inventing shifts, categories or entitlements. |
 | `hr/shift_day.py` | The single measurement of a working day — per-day shift resolution, late minutes, OT to the nearest half hour, eligibility. Both reports and the OT settlement use it, which is why they cannot disagree. |
 | `hr/leave_ceiling.py` | Refuses an allocation that would take the year past the policy's figure. Carry-forward excluded. |
 | `hr/overtime*.py`, `shift_change.py`, `statutory_leave.py`, `holiday_lists.py` | Overtime Sheet, shift requests splitting standing assignments, maternity/paternity, holiday bulk update. |
@@ -208,7 +208,8 @@ expects it filed.
 - **Which employee-category vocabulary to keep.** avinas1 uses *Operation* (78 staff, overtime) and
   *Admin & Officer* (35, compensatory leave); nepalgas uses *Plant* (238) and *Officer & Admin* (57) for the
   same two things. The flags are right on both. Renaming touches live Employee records, so it was not done —
-  `ensure_employee_categories` now matches on the flags rather than the name so it stops creating a second pair.
+  `setup_year` no longer creates categories at all — it refuses until one exists for each policy — so it can no
+  longer make a second pair whatever they are called.
 
 - Tick `mark_auto_attendance_on_holidays` on the shifts? It makes holiday punches
   produce Present automatically (proven in `test_shift_type.py:356`) — but a
@@ -262,14 +263,21 @@ the 7 companies and 22 women moved to the new lists.
 2. **Tax rates** from the Finance Act (budget speech, 15 Jestha): add the year to
    `TAX_SLABS_BY_YEAR` in `payroll/income_tax.py`, or submit an Income Tax Slab
    per company effective the year's first day. `setup_year` refuses without one.
-3. **Festivals** for the year in `FESTIVALS` (`hr/year_setup.py`), from the
-   published calendar — Teej as `women`. Without them the lists get Saturdays
-   only and `setup_year` returns a warning.
+3. **Standing setup**, or `setup_year` refuses and lists what is absent: a Shift
+   Type per company (with its punch windows), an Employee Category for paid
+   overtime and one for replacement leave, and submitted Leave Policies titled
+   `<ABBR> Regular <year>` / `<ABBR> Probation <year>` carrying that company's
+   entitlement. None of it is invented any more — a wrong shift or entitlement is
+   worse than a missing one.
 4. `bench --site <site> execute avinashgroup_app.hr.year_setup.setup_year --kwargs "{'fiscal_year': '84/85'}"`
    — builds the year, rolls pay onto the new slab, assigns leave policies. Safe to re-run.
-5. **Before 31 Ashadh:** encash the closing year's casual leave (policy: encashed
+5. **Festivals**, once the lists exist: Holiday Bulk Update, from the published
+   calendar, Teej on the Women list alone. `setup_year` builds Saturdays only, and
+   its warnings name every list still waiting for them — do this before the first
+   festival falls.
+6. **Before 31 Ashadh:** encash the closing year's casual leave (policy: encashed
    at year end) — the allocation expires the day after.
-6. **On 1 Shrawan:** nothing by hand. `hr.holiday_year_switch` (daily) repoints
+7. **On 1 Shrawan:** nothing by hand. `hr.holiday_year_switch` (daily) repoints
    holiday lists; check its Error Log entry if a list was missing.
 
 ---

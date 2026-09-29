@@ -42,7 +42,7 @@ from avinashgroup_app.payroll.year_rollover import tax_slab_for
 
 SSF_DEDUCTION = "SSF"  # the full 31%, deducted
 SSF_EMPLOYER = "SSF Addition"  # the employer's 20%, added to gross first
-CIT_COMPONENT = "CIT"  # patches/setup_tax_exemptions.py
+CIT_COMPONENT = "CIT"  # a deduction component HR creates; absent, the column is 0
 
 
 def execute(filters=None):

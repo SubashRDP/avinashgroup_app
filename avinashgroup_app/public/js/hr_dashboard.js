@@ -473,15 +473,12 @@
 				.join("");
 			const dash = s.dashain
 				? `<li>${icon("gift")}<span><strong>${__("Dashain allowance")}</strong>
-					<small>${s.dashain.pending.length
-						? __("Pay before {0} · not yet created for {1}", [esc(s.dashain.deadline_bs), esc(s.dashain.pending.join(", "))])
-						: __("Paid for every company")}</small></span>
-					${s.dashain.pending.length ? left(s.dashain.days_left) : `<b class="due due-ok">${__("Done")}</b>`}</li>`
+					<small>${__("Pay before {0}", [esc(s.dashain.deadline_bs)])}</small></span>
+					${left(s.dashain.days_left)}</li>`
 				: "";
 			return `<article class="hrd-card hrd-due">
 				<h3 class="hrd-eyebrow">${__("Due soon")}</h3>
 				<ul class="hrd-events">${deposits}${dash}</ul>
-				${s.dashain && s.dashain.pending.length ? `<a class="hrd-card-link" href="/app/dashain-bonus/new">${__("Create Dashain bonus")} →</a>` : ""}
 			</article>`;
 		}
 

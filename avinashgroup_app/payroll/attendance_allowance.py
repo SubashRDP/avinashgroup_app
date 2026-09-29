@@ -181,6 +181,14 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	unit = sc.custom_unit or "Per Day"
 	present_statuses = get_present_statuses()
 
+	if condition in ("Status = Present", "Status = Half Day") and row.custom_worked_on_holiday:
+		# A component earned by turning up need not be earned on a holiday: NGI's
+		# sheet pays tea for working days only, and pays the holiday itself
+		# through Worked on Holiday. Blank reads as Pay, so a component that has
+		# never been asked the question keeps paying exactly what it paid.
+		if (sc.get("custom_pay_on_holiday") or "Pay") == "Do Not Pay":
+			return 0.0
+
 	if condition == "Status = Present":
 		if status in present_statuses:
 			return _per_unit(unit, day=1.0, hours=working_hours)
@@ -217,11 +225,17 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	if condition == "Late Time":
 		# Late arrival plus leaving early, against the day's shift — the sheet's
 		# "Late Time", and exactly the minutes the attendance report shows.
+		if row.get("custom_late_excused"):
+			# HR waived this day. The minutes stay on the row and in the reports;
+			# they simply stop being charged.
+			return 0.0
 		measured = measure_day(row, is_holiday=bool(row.custom_worked_on_holiday))
 		minutes = measured.late_minutes + measured.early_exit_minutes
 		return _per_unit(unit, day=1.0 if minutes else 0.0, hours=minutes / 60)
 
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
+		if condition == "Late Arrival After" and row.get("custom_late_excused"):
+			return 0.0
 		if condition == "Late Arrival After" and status == "Half Day":
 			# Arriving more than two hours late already costs half the day's pay
 			# (policy 1.2). Fining the same minutes again would charge the one
@@ -296,6 +310,9 @@ def _authorised_overtime_hours(employee: str, work_date) -> float:
 
 #: The Labour Act's hourly wage: a month's basic over 30 days of 8 hours. The
 #: sheet prices overtime at 1.5 times this, and a late minute at 1/60th of it.
+#: Fallbacks only — the divisors are fields on the Salary Component, seeded with
+#: these by patches/setup_ot_rate_fields.py. A blank field falls back here
+#: rather than dividing by zero.
 RATE_DAYS_PER_MONTH = 30
 RATE_HOURS_PER_DAY = 8
 
@@ -314,14 +331,21 @@ def _is_daily_wage(structure) -> bool:
 	return bool(structure and frappe.get_cached_value("Salary Structure", structure, "custom_daily_wage"))
 
 
-def _hourly_basic(employee: str, on_date) -> float:
+def _hourly_basic(employee: str, on_date, sc=None) -> float:
 	"""The hourly wage: a month's basic over 30 days of 8 hours — or, for a
 	daily-wage worker, whose base IS the day's wage, that day over 8 hours
-	(NGK's labour sheet: OT rate = 754 / 8 * 1.5)."""
+	(NGK's labour sheet: OT rate = 754 / 8 * 1.5).
+
+	Both divisors come off the Salary Component that is being priced, so HR can
+	restate the basis for overtime without touching the late fine, or either
+	without a developer.
+	"""
+	days = flt(sc and sc.get("custom_rate_days_per_month")) or RATE_DAYS_PER_MONTH
+	hours = flt(sc and sc.get("custom_rate_hours_per_day")) or RATE_HOURS_PER_DAY
 	a = _assignment(employee, on_date)
 	if _is_daily_wage(a.salary_structure):
-		return flt(a.base) / RATE_HOURS_PER_DAY
-	return flt(a.base) / RATE_DAYS_PER_MONTH / RATE_HOURS_PER_DAY
+		return flt(a.base) / hours
+	return flt(a.base) / days / hours
 
 
 def _per_unit(unit: str, day: float, hours: float) -> float:
@@ -444,6 +468,7 @@ def _attendance_rows(employee: str, start_date, end_date) -> list:
 			"custom_early_entry",
 			"custom_early_exit",
 			"custom_late_exit",
+			"custom_late_excused",
 			"in_time",
 			"out_time",
 		],
@@ -517,7 +542,7 @@ def _resolve_rate(emp_overrides: dict, category_rates: dict, sc, employee=None, 
 	if sc.get("custom_rate_basis") == "Hourly Basic × Multiplier" and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,
 		# and rounding the rate first drifts the amount by a paisa.
-		rate = _hourly_basic(employee, on_date) * flt(sc.get("custom_rate_multiplier") or 1)
+		rate = _hourly_basic(employee, on_date, sc) * flt(sc.get("custom_rate_multiplier") or 1)
 		return rate if rate else None
 
 	default_rate = flt(getattr(sc, "custom_default_rate", 0))

@@ -6,21 +6,25 @@ cover the simple cases:
   * SSF is a deduction component marked `exempted_from_income_tax`, so it
     leaves taxable income before the slab is applied.
   * Insurance premiums and CIT paid outside payroll are HRMS's standard Employee
-    Tax Exemption Declaration, against the categories seeded by
-    patches/setup_tax_exemptions.py (each capped at its own maximum).
+    Tax Exemption Declaration, against categories HR creates in the desk (each
+    capped at its own Max Amount).
   * CIT deducted through payroll is the `CIT` deduction component, also exempt.
 
 Two rules of the Income Tax Act 2058 have no HRMS equivalent, and live here:
 
   1. Retirement cap (s.63). Contributions to an approved retirement fund (SSF,
-     CIT, PF) are deductible only up to the LOWER of one third of assessable
-     income or Rs 5,00,000 a year. HRMS exempts every such rupee with no cap,
-     so a high earner's tax came out low. The excess over the cap is put back
-     into taxable income.
+     CIT, PF) are deductible only up to the LOWER of a share of assessable
+     income and a fixed amount a year. HRMS exempts every such rupee with no
+     cap, so a high earner's tax came out low. The excess over the cap is put
+     back into taxable income. Both figures are on the Employee Tax Exemption
+     Category ticked `custom_is_retirement_contribution`: its Max Amount and
+     `custom_cap_percent_of_income`.
   2. Women's rebate (Schedule 1, 1(10)). A resident woman whose income is only
      from employment gets a rebate on her tax. The percentage is a field on the
-     Income Tax Slab (`custom_women_rebate_percent`, 10 for FY 83/84) so a
-     Finance Act change is a data edit.
+     Income Tax Slab (`custom_women_rebate_percent`).
+
+No figure lives in this module: a blank field means the relief is off, never
+"use the Act's number" (user, 2026-09-29: no data comes as default).
 
 How: HRMS computes the month's tax in the Salary Slip controller's validate and
 leaves every intermediate figure (total taxable earnings, tax already paid,
@@ -35,9 +39,6 @@ still wins and `custom_income_tax_computed` shows the figure with reliefs.
 Why a hook and not a Salary Slip class: rdp_common_app already overrides the
 Salary Slip class (BS months) and is installed after this app, so a second
 override here would be silently ignored.
-
-The amounts come from third-party summaries of the Finance Act 2083 and are
-awaiting the accountant's confirmation (docs/payroll-handover.md §8).
 """
 
 from math import ceil
@@ -49,14 +50,25 @@ from hrms.payroll.doctype.salary_slip.salary_slip import calculate_tax_by_tax_sl
 
 from avinashgroup_app.payroll.income_tax import get_tax_row
 
-# Income Tax Act 2058 s.63(1): retirement contributions deductible up to the
-# lower of one third of assessable income or this amount a year.
-RETIREMENT_CAP_AMOUNT = 500_000
-RETIREMENT_CAP_FRACTION = 1 / 3
 
-# Employee Tax Exemption Category that holds retirement contributions made
-# outside payroll (CIT paid directly). Seeded by patches/setup_tax_exemptions.py.
-RETIREMENT_EXEMPTION_CATEGORY = "Retirement Contribution"
+def retirement_categories():
+	"""The exemption categories HR ticked as retirement contributions, with their cap."""
+	return frappe.get_all(
+		"Employee Tax Exemption Category",
+		filters={"custom_is_retirement_contribution": 1, "is_active": 1},
+		fields=["name", "max_amount", "custom_cap_percent_of_income"],
+	)
+
+
+def retirement_cap(categories, assessable):
+	"""The lower of the caps HR entered, or None when none is entered."""
+	caps = []
+	for c in categories:
+		if flt(c.max_amount):
+			caps.append(flt(c.max_amount))
+		if flt(c.custom_cap_percent_of_income):
+			caps.append(assessable * flt(c.custom_cap_percent_of_income) / 100)
+	return min(caps) if caps else None
 
 
 def apply_tax_reliefs(doc, method=None):
@@ -107,7 +119,12 @@ def apply_tax_reliefs(doc, method=None):
 
 
 def retirement_excess(doc):
-	"""Rupees of retirement contribution this year above the s.63 cap (0 when within it)."""
+	"""Rupees of retirement contribution this year above the s.63 cap (0 when within
+	it, or when HR has entered no cap)."""
+	categories = retirement_categories()
+	if not categories:
+		return 0.0
+
 	# Exempt deductions HRMS already took out of taxable income: past slips,
 	# this slip, and this slip's figure projected over the months still to come.
 	previous = flt(doc.get("previous_taxable_earnings_before_exemption")) - flt(
@@ -121,7 +138,7 @@ def retirement_excess(doc):
 		if full_month
 		else 0
 	)
-	declared = declared_retirement(doc)
+	declared = declared_retirement(doc, [c.name for c in categories])
 	contributions = previous + current + future + declared
 	if not contributions:
 		return 0.0
@@ -134,11 +151,13 @@ def retirement_excess(doc):
 		+ current
 		+ future
 	)
-	cap = min(assessable * RETIREMENT_CAP_FRACTION, RETIREMENT_CAP_AMOUNT)
+	cap = retirement_cap(categories, assessable)
+	if cap is None:
+		return 0.0
 	return max(contributions - cap, 0.0)
 
 
-def declared_retirement(doc):
+def declared_retirement(doc, categories):
 	"""CIT / PF paid outside payroll, from the employee's exemption declaration for the period."""
 	period = getattr(doc, "payroll_period", None)
 	if not period:
@@ -151,14 +170,14 @@ def declared_retirement(doc):
 	rows = frappe.db.sql(
 		f"""select sum(c.amount) from `tab{child}` c join `tab{parent}` p on p.name = c.parent
 		where p.employee = %s and p.payroll_period = %s and p.docstatus = 1
-		  and c.exemption_category = %s""",
-		(doc.employee, period.name, RETIREMENT_EXEMPTION_CATEGORY),
+		  and c.exemption_category in %s""",
+		(doc.employee, period.name, tuple(categories)),
 	)
 	return flt(rows[0][0]) if rows else 0.0
 
 
 def women_rebate_fraction(doc, slab):
-	"""0.1 for a woman on a slab with a 10% rebate; 0 otherwise."""
+	"""The slab's rebate as a fraction, for a woman; 0 otherwise or when the field is blank."""
 	percent = flt(slab.get("custom_women_rebate_percent"))
 	if not percent:
 		return 0.0

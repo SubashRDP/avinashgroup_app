@@ -42,13 +42,5 @@ if lwp:
 from avinashgroup_app.payroll.year_rollover import tax_slab_for
 check("revision in 83/84 takes the 83/84 slab", tax_slab_for(NGI, "2026-08-17") == "Nepal 83/84 - NGI")
 
-# Dashain service in BS months
-from avinashgroup_app.avinash_group_app.doctype.dashain_bonus.dashain_bonus import months_of_service as mos, add_bs_months
-from rdp_common_app.utils.bs_boundaries import bs_to_ad
-j = bs_to_ad(2083, 4, 16)   # Shrawan 16
-check("Shrawan 16 → Kartik 1: 2.5 months", abs(mos(j, bs_to_ad(2083, 7, 1)) - 2.5) < 0.04, str(mos(j, bs_to_ad(2083, 7, 1))))
-check("Shrawan 1 → Ashwin 1: exactly 2", mos(bs_to_ad(2083, 4, 1), bs_to_ad(2083, 6, 1)) == 2.0)
-check("capped at 12", mos("2020-01-01", "2026-10-18") == 12.0)
-check("Ashadh 32 + 1 month → Shrawan's last day", add_bs_months(bs_to_ad(2083, 3, 32), 1) == bs_to_ad(2083, 4, 31), str(add_bs_months(bs_to_ad(2083, 3, 32), 1)))
 frappe.db.rollback()
 print("\n".join(out))

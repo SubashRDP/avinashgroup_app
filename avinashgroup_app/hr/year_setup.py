@@ -1,14 +1,10 @@
-"""Everything a company needs in place before a Nepali fiscal year can run.
+"""Everything a Nepali fiscal year needs in place, for every company.
 
-A year cannot start until eight things exist for every company: a holiday list
-with its Saturdays, the shifts people work, the two employee categories, the
-allowance (tea) groups, the leave period, the leave policies, the payroll period
-and the income tax slab — and then every employee has to be given their leave
-policy. Miss one and the failure comes much later, as a person silently missing
-from a payroll run or a leave balance stuck at zero.
-
-So this is one callable that puts the whole year in place, and is safe to run
-again: everything is created only if it is not already there.
+A year cannot start until a holiday list, a leave period, a payroll period, an
+income tax slab and a leave policy assignment exist for every company. Miss one
+and the failure comes much later, as a person silently missing from a payroll run
+or a leave balance stuck at zero. So this is one callable that puts the year in
+place, safe to run again: everything is created only if it is not already there.
 
     bench --site <site> execute avinashgroup_app.hr.year_setup.setup_year \\
         --kwargs "{'fiscal_year': '83/84'}"
@@ -18,21 +14,35 @@ For a year after the first it also carries everyone's pay across
 pointing at the new year's tax slab, because HRMS reads the slab from the
 assignment and would otherwise tax the new year at last year's rates.
 
-Two things must exist first, and the call refuses to start without them:
+It creates only what belongs to the YEAR. The standing setup a year rests on —
+the hours each company works, what an employee category entitles someone to, how
+many leave days a year is worth — is the client's answer, not this module's, and
+`require_standing_setup` refuses the run with the whole list of what is absent
+rather than inventing any of it. This module used to hold those answers as tables
+in code, and they were wrong in the ways guesses are wrong: four of the seven
+companies got a nine-to-five nobody had confirmed, Leave Policies were submitted
+from a dict, and the festival dates had to be retyped into Python every year or a
+list came out with no Dashain on it. A wrong shift or entitlement is worse than a
+missing one — it looks deliberate, and it surfaces in somebody's pay.
+
+So before it will run, these must exist:
 
   * the Fiscal Year record itself;
   * the year's tax table — an Income Tax Slab already entered in the desk, or
     the year in `payroll.income_tax.TAX_SLABS_BY_YEAR`. Last year's rates are
-    never copied.
-
-Festivals come from FESTIVALS below: four of the five move with the moon, so a
-new year's dates are typed from the published calendar. A year missing there
-still gets its Saturdays, and the returned report carries a warning to add the
-festivals (Holiday Bulk Update) before the first one falls. Teej goes on the
-women's list alone.
+    never copied;
+  * per company: a Shift Type, and submitted Leave Policies titled
+    `<ABBR> Regular <year>` and `<ABBR> Probation <year>`;
+  * group-wide: an Employee Category for paid overtime and one for replacement
+    leave.
 
 What it deliberately does NOT do:
 
+  * Invent a shift, a category or a leave entitlement — see above.
+  * Put festivals on a holiday list. It builds the Saturdays; four of the five
+    festivals move with the moon, so the dates are HR's to enter with Holiday
+    Bulk Update, and every list it creates comes back with a warning saying so.
+    Teej goes on the women's list alone (policy 2.4).
   * Build a first salary structure or anyone's first pay — that comes from the
     company's own salary sheet, through `payroll.onboarding`.
   * Change anyone's pay — a rise is a Salary Revision.
@@ -46,67 +56,9 @@ from frappe.utils import getdate
 
 from avinashgroup_app.payroll.year_rollover import roll_salary_assignments
 
-#: The shifts each company works, named with the company so one company's hours
-#: can change without touching another's (client, 2026-09-22). A company not
-#: listed here gets the group default, a nine to five.
-SHIFTS_BY_COMPANY = {
-	"NGI": (
-		("6 AM - 2 PM", "06:00:00", "14:00:00"),
-		("9 AM - 6 PM", "09:00:00", "18:00:00"),
-		("12 PM - 8 PM", "12:00:00", "20:00:00"),
-	),
-	"NGN": (("7 AM - 3 PM", "07:00:00", "15:00:00"), ("9 AM - 5 PM", "09:00:00", "17:00:00")),
-}
-DEFAULT_SHIFTS = (("9 AM - 5 PM", "09:00:00", "17:00:00"),)
-
-#: Policy 1.2 (client meeting 2026-09-15): more than two hours late is a half
-#: day, and there is no grace period.
-HALF_DAY_IF_LATE_BY_HOURS = 2
-
-EMPLOYEE_CATEGORIES = (
-	("Plant", 1, 0, "Paid overtime for extra hours and for holiday work."),
-	("Officer & Admin", 0, 1, "Earns replacement leave for holiday work instead of overtime pay."),
-)
-
-#: Leave a year, per company. Karnali gives 8 casual where the rest give 21.
-LEAVE_BY_COMPANY = {"NGK": {"Casual Leave": 8, "Sick Leave": 12}}
-LEAVE_DEFAULT = {"Casual Leave": 21, "Sick Leave": 12}
-LEAVE_PROBATION = {"Casual Leave": 12}
-
+#: Nepal's weekly off. Not a policy dial — the group does not have companies
+#: that rest on a different day — so the holiday list is built on it directly.
 WEEKLY_OFF = "Saturday"
-
-#: The group's chart splits salary cost three ways in the ACCOUNT NAMES —
-#: 547101 O/O, 547102 S/D, 547103 F/P — but a salary component maps to one
-#: account per company, so an account can never tell office pay from plant pay.
-#: Cost centres can. These three per company reproduce that split on the payroll
-#: journal, and the employee's own cost centre decides which one their pay lands
-#: on (`Employee.payroll_cost_center`, or a percentage split on the employee).
-COST_CENTRES = (
-	("Office", "O/O"),
-	("Sales & Distribution", "S/D"),
-	("Filling Plant", "F/P"),
-)
-
-#: The festivals the group closes for, per fiscal year: (AD date, name, who).
-#: Four of the five move with the moon, so they are typed from the Nepali
-#: calendar each year and cannot be calculated — only Maghe Sankranti is fixed
-#: (Magh 1). `women` marks a day that goes on the women's list alone.
-#: Confirmed with the client for 83/84 on 2026-09-22: Dashain 5 days, Tihar 3.
-FESTIVALS = {
-	"83/84": (
-		("2026-08-28", "Janai Purnima", "all"),
-		("2026-09-14", "Haritalika Teej", "women"),
-		("2026-10-18", "Fulpati", "all"),
-		("2026-10-19", "Maha Ashtami", "all"),
-		("2026-10-20", "Maha Nawami", "all"),
-		("2026-10-21", "Vijaya Dashami", "all"),
-		("2026-10-22", "Ekadashi", "all"),
-		("2026-11-09", "Laxmi Puja", "all"),
-		("2026-11-10", "Gobardhan Puja", "all"),
-		("2026-11-11", "Bhai Tika", "all"),
-		("2027-01-15", "Maghe Sankranti", "all"),
-	),
-}
 
 
 def setup_year(fiscal_year, companies=None, assign_leave=True, roll_pay=True):
@@ -131,33 +83,31 @@ def setup_year(fiscal_year, companies=None, assign_leave=True, roll_pay=True):
 	# work done outside a request (utils/audit_file_manager.py).
 	frappe.flags.audit_user = frappe.flags.audit_user or frappe.session.user
 
-	warnings = []
-	if fiscal_year not in FESTIVALS:
-		warnings.append(
-			_(
-				"No festival dates for {0}: its holiday lists have Saturdays only — no Dashain, "
-				"Tihar or Teej. Add them to FESTIVALS (year_setup.py) and re-run, or enter them "
-				"with Holiday Bulk Update, before the first festival."
-			).format(fiscal_year)
-		)
-
-	ensure_nepali_payroll()
-	# The app names a Shift Type and a Holiday List per company, so both carry
-	# `custom_company`. Shifts themselves are shared across the group — one set
-	# of three, tagged to the first company, as on the working site.
-	ensure_employee_categories()
 	ensure_leave_types()
+	require_standing_setup(fiscal_year, companies)
+
+	warnings = []
+	ensure_nepali_payroll()
 
 	report = {"fiscal_year": fiscal_year, "companies": {}, "warnings": warnings}
 	for company in companies:
 		abbr = frappe.db.get_value("Company", company, "abbr")
 		done = {}
-		done["shifts"] = ensure_shift_types(company, abbr)
-		done["holiday_list"] = ensure_holiday_list(company, abbr, fiscal_year, year)
-		done["womens_holiday_list"] = ensure_holiday_list(company, abbr, fiscal_year, year, womens=True)
+		done["holiday_list"], made = ensure_holiday_list(company, abbr, fiscal_year, year)
+		done["womens_holiday_list"], made_w = ensure_holiday_list(
+			company, abbr, fiscal_year, year, womens=True
+		)
+		if made or made_w:
+			warnings.append(
+				_(
+					"{0}: holiday lists for {1} have Saturdays only. Enter the year's festivals "
+					"with Holiday Bulk Update before the first one falls — Teej on the Women list "
+					"alone (policy 2.4)."
+				).format(abbr, fiscal_year)
+			)
 		done["company_defaults"] = ensure_company_defaults(company, abbr, done["holiday_list"])
 		done["leave_period"] = ensure_leave_period(company, fiscal_year, year)
-		done["leave_policies"] = ensure_leave_policies(company, abbr, fiscal_year)
+		done["leave_policies"] = find_leave_policies(abbr, fiscal_year)
 		done["payroll_period"] = ensure_payroll_period(company, abbr, fiscal_year, year)
 		done["income_tax_slab"] = ensure_income_tax_slab(company, abbr, fiscal_year, year)
 		if roll_pay:
@@ -172,6 +122,51 @@ def setup_year(fiscal_year, companies=None, assign_leave=True, roll_pay=True):
 		print("WARNING:", w)
 	frappe.db.commit()
 	return report
+
+
+def require_standing_setup(fiscal_year, companies):
+	"""Refuse to start a year until the standing setup it rests on exists.
+
+	None of this is year data, so none of it is invented here. A shift's hours, a
+	category's policy and a leave entitlement are the client's answers, and this
+	module used to hold guesses at them: four of the seven companies got a 9-to-5
+	nobody had confirmed, and a Leave Policy was submitted from a table in code.
+	A wrong shift or entitlement is worse than a missing one, because it looks
+	deliberate and is only found in somebody's pay.
+
+	So the whole list of what is absent is collected and raised at once — one pass
+	for HR to work through, rather than a refusal per run.
+	"""
+	missing = []
+
+	for policy, label in (("ot_eligible", "paid overtime"), ("compensatory_leave", "replacement leave")):
+		if not frappe.db.exists("Employee Category", {policy: 1}):
+			missing.append(
+				_("No Employee Category for {0} — one record per answer is needed").format(label)
+			)
+
+	for company in companies:
+		abbr = frappe.db.get_value("Company", company, "abbr")
+
+		if not frappe.db.exists("Shift Type", {"custom_company": company}):
+			missing.append(
+				_("{0}: no Shift Type. Enter the hours this company works, with its punch windows.").format(abbr)
+			)
+
+		for kind in ("Regular", "Probation"):
+			title = f"{abbr} {kind} {fiscal_year}"
+			if not frappe.db.exists("Leave Policy", {"title": title, "docstatus": 1}):
+				missing.append(
+					_("{0}: no submitted Leave Policy titled \"{1}\" — it carries the year's entitlement").format(
+						abbr, title
+					)
+				)
+
+	if missing:
+		frappe.throw(
+			_("Enter these before setting up {0}:").format(fiscal_year)
+			+ "\n\n" + "\n".join(f"\u2022 {m}" for m in missing)
+		)
 
 
 def require_tax_table(fiscal_year, year, companies):
@@ -216,91 +211,6 @@ def default_company():
 	)[0]
 
 
-def ensure_shift_types(company, abbr):
-	"""This company's shifts, with the rules that make a day late or half.
-
-	Named `NGN 9 AM - 5 PM`, not `9 AM - 5 PM`: the companies keep different
-	hours, and the app names a Shift Type per company anyway.
-	"""
-	made = []
-	for title, start, end in SHIFTS_BY_COMPANY.get(abbr, DEFAULT_SHIFTS):
-		name = f"{abbr} {title}"
-		if frappe.db.exists("Shift Type", name):
-			made.append(name)
-			continue
-		doc = frappe.get_doc(
-			{
-				"doctype": "Shift Type",
-				"__newname": name,
-				"start_time": start,
-				"end_time": end,
-				"company": company if frappe.get_meta("Shift Type").has_field("company") else None,
-				"custom_company": company,
-				"enable_auto_attendance": 1,
-				"determine_check_in_and_check_out": "Alternating entries as IN and OUT during the same shift",
-				"working_hours_calculation_based_on": "First Check-in and Last Check-out",
-				"working_hours_threshold_for_half_day": 5,
-				"working_hours_threshold_for_absent": 2,
-				"enable_late_entry_marking": 1,
-				"late_entry_grace_period": 0,
-				"custom_half_day_if_late_by_hours": HALF_DAY_IF_LATE_BY_HOURS,
-			}
-		)
-		# Punch windows are HR's setting on the Shift Type, not code: copy them
-		# from a shift this company already has, else leave HRMS's default for HR
-		# to set. Too narrow a check-out window drops overtime OUT punches and
-		# marks worked days Absent.
-		windows = frappe.db.get_value(
-			"Shift Type",
-			{"custom_company": company},
-			["begin_check_in_before_shift_start_time", "allow_check_out_after_shift_end_time"],
-			as_dict=True,
-		)
-		if windows:
-			doc.update(windows)
-		doc.flags.ignore_permissions = True
-		doc.insert()
-		# Saving a Shift Type fills this empty Time field with the clock time,
-		# which the half-day rule would then read as a cutoff. Blank means "no
-		# absolute cutoff", so make it blank.
-		doc.db_set("custom_late_arrival_cutoff_time", None, update_modified=False)
-		made.append(doc.name)
-	return made
-
-
-def ensure_employee_categories():
-	"""The two categories, unless the site already names them something else.
-
-	A category is really one bit of policy — is this person paid for extra hours,
-	or given a day off instead — and a site only needs one record per answer.
-	avinas1 calls them Operation and Admin & Officer; nepalgas calls the same two
-	Plant and Officer & Admin. Matching on the name alone created a second pair on
-	avinas1 and left 113 employees pointing at the older one, so the check is on
-	the policy the record carries, not on what it is called.
-
-	Which vocabulary the group settles on is theirs to decide; renaming touches
-	live Employee records and is not done here.
-	"""
-	for name, ot, comp, description in EMPLOYEE_CATEGORIES:
-		if frappe.db.exists("Employee Category", name):
-			continue
-
-		existing = frappe.db.get_value(
-			"Employee Category", {"ot_eligible": ot, "compensatory_leave": comp}, "name"
-		)
-		if existing:
-			continue
-		frappe.get_doc(
-			{
-				"doctype": "Employee Category",
-				"category_name": name,
-				"ot_eligible": ot,
-				"compensatory_leave": comp,
-				"description": description,
-			}
-		).insert(ignore_permissions=True)
-
-
 def ensure_leave_types():
 	"""The four leave types the group uses, plus the unpaid catch-all.
 
@@ -321,15 +231,21 @@ def ensure_leave_types():
 
 
 def ensure_holiday_list(company, abbr, fiscal_year, year, womens=False):
-	"""The year's list, with every Saturday on it.
+	"""The year's list, with every Saturday on it. Returns (name, was_created).
 
 	Two per company: the common one, and one for women — identical until Teej is
 	added to the women's list and nowhere else (policy 2.4).
+
+	Saturdays only. The festivals are not seeded: four of the five move with the
+	moon, so they were typed into this module from the published calendar every
+	year, and a year nobody had typed silently produced a list with no Dashain on
+	it. They are HR's to enter with Holiday Bulk Update, and setup_year says so in
+	its warnings for every list it creates.
 	"""
 	title = f"{abbr} {'Women ' if womens else ''}{fiscal_year}"
 	existing = frappe.db.get_value("Holiday List", {"holiday_list_name": title}, "name")
 	if existing:
-		return existing
+		return existing, False
 
 	doc = frappe.get_doc(
 		{
@@ -342,27 +258,9 @@ def ensure_holiday_list(company, abbr, fiscal_year, year, womens=False):
 		}
 	)
 	doc.get_weekly_off_dates()
-	add_festivals(doc, fiscal_year, womens)
 	doc.flags.ignore_permissions = True
 	doc.insert()
-	return doc.name
-
-
-def add_festivals(doc, fiscal_year, womens):
-	"""Put the year's festivals on the list, without doubling a Saturday.
-
-	A festival that lands on the weekly off is already a holiday; adding it again
-	would show the day twice and count it twice in any report.
-	"""
-	taken = {getdate(h.holiday_date) for h in doc.holidays}
-	for date_str, name, audience in FESTIVALS.get(fiscal_year, ()):
-		if audience == "women" and not womens:
-			continue
-		day = getdate(date_str)
-		if day < getdate(doc.from_date) or day > getdate(doc.to_date) or day in taken:
-			continue
-		doc.append("holidays", {"holiday_date": day, "description": name})
-		taken.add(day)
+	return doc.name, True
 
 
 def ensure_company_defaults(company, abbr, holiday_list):
@@ -416,34 +314,20 @@ def ensure_leave_period(company, fiscal_year, year):
 	return doc.name
 
 
-def ensure_leave_policies(company, abbr, fiscal_year):
-	"""Two policies per company: the regular one, and one for probation."""
-	out = {}
-	for kind, allocations in (
-		("Regular", LEAVE_BY_COMPANY.get(abbr, LEAVE_DEFAULT)),
-		("Probation", LEAVE_PROBATION),
-	):
-		title = f"{abbr} {kind} {fiscal_year}"
-		existing = frappe.db.get_value("Leave Policy", {"title": title, "docstatus": 1}, "name")
-		if existing:
-			out[kind] = existing
-			continue
-		doc = frappe.get_doc(
-			{
-				"doctype": "Leave Policy",
-				"title": title,
-				"leave_policy_details": [
-					{"leave_type": leave_type, "annual_allocation": days}
-					for leave_type, days in allocations.items()
-					if frappe.db.exists("Leave Type", leave_type)
-				],
-			}
+def find_leave_policies(abbr, fiscal_year):
+	"""The two policies HR submitted for this company and year.
+
+	Entitlements are the client's answer and differ by company — Karnali gives 8
+	casual days where the rest give 21 — so they are read, never written.
+	`require_standing_setup` has already refused the run if either is absent, so
+	both are here.
+	"""
+	return {
+		kind: frappe.db.get_value(
+			"Leave Policy", {"title": f"{abbr} {kind} {fiscal_year}", "docstatus": 1}, "name"
 		)
-		doc.flags.ignore_permissions = True
-		doc.insert()
-		doc.submit()
-		out[kind] = doc.name
-	return out
+		for kind in ("Regular", "Probation")
+	}
 
 
 def ensure_payroll_period(company, abbr, fiscal_year, year):

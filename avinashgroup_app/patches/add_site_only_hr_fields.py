@@ -12,7 +12,7 @@ fixture creates them. On ng-group or any fresh site:
                                   attendance and every manual save would fail.
   Shift Type.custom_late_arrival_cutoff_time
                                   read by attendance_override, cleared by
-                                  year_setup.ensure_shift_types via db_set.
+                                  year_setup via db_set.
 
 Definitions are copied from avinas1 as they stood that day, so on the sites that
 already have them this is a no-op (`update=True` rewrites identical values).

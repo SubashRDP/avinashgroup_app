@@ -22,11 +22,17 @@ Deliberately narrow:
     a reason on the row — someone was called in and did not come, which HR needs
     to see rather than have smoothed over.
   * re-measuring is safe: it overwrites the same fields from the same source.
+
+Measuring used to be a button only, so overtime paid 0 for any sheet nobody
+thought to press it on. It now also runs by itself — on submit for a day already
+past, and daily for the sheets whose attendance arrived later — but only over
+rows never measured before. A row HR has measured, by button or by hand, is left
+exactly as HR left it; correcting one stays a deliberate press.
 """
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_datetime, getdate
+from frappe.utils import add_days, flt, get_datetime, getdate, today
 
 from avinashgroup_app.hr.shift_day import round_to_half_hour
 from avinashgroup_app.hr.overtime import (
@@ -35,6 +41,11 @@ from avinashgroup_app.hr.overtime import (
 	get_shift_window,
 	hours_outside_shift,
 )
+
+# How far back the daily pass keeps looking for a sheet nobody has measured.
+# Two BS months, the same window replacement leave retries over: long enough for
+# a late Attendance Fix, short enough that an old dead row stops being read.
+LOOKBACK_DAYS = 62
 
 
 def measure_sheet(sheet_name):
@@ -145,3 +156,58 @@ def get_measured_hours(start_date, end_date, company=None):
 	for r in query.run(as_dict=True):
 		hours[r.employee] = flt(hours.get(r.employee, 0)) + flt(r.worked_hours)
 	return hours
+
+
+def _is_unmeasured(row) -> bool:
+	"""Never measured — no note, no hours, no attendance named.
+
+	The note is the real marker: every measurement writes one, including the ones
+	that legitimately land on zero hours ("called in but did not come"), so a
+	measured-as-zero row is not mistaken for an untouched one and quietly redone.
+	"""
+	return not (row.settlement_note or flt(row.worked_hours) or row.attendance)
+
+
+def measure_unmeasured(sheet) -> list:
+	"""Measure only this sheet's rows that nobody has measured yet."""
+	report = []
+	for row in sheet.employees:
+		if row.entitlement != ENTITLEMENT_OVERTIME or not _is_unmeasured(row):
+			continue
+		measured = measure_row(row.employee, sheet.work_date, row.work_type, row.entitlement)
+		row.db_set("worked_hours", measured["hours"], update_modified=False)
+		row.db_set("attendance", measured["attendance"], update_modified=False)
+		row.db_set("settlement_note", measured["note"], update_modified=False)
+		report.append({"employee": row.employee, "employee_name": row.employee_name, **measured})
+
+	if report:
+		total = sum(flt(r.worked_hours) for r in sheet.employees)
+		sheet.db_set("total_worked_hours", total, update_modified=False)
+	return report
+
+
+def on_sheet_submit(doc, method=None):
+	"""Measure what can be measured now. Hook: Overtime Sheet on_submit.
+
+	A sheet for today or later has no punches to read yet; the daily pass takes it
+	once the day is over.
+	"""
+	if getdate(doc.work_date) >= getdate(today()):
+		return
+	measure_unmeasured(doc)
+
+
+def measure_pending():
+	"""Daily job: measure submitted sheets whose day has passed and whose
+	attendance has since arrived."""
+	sheets = frappe.get_all(
+		"Overtime Sheet",
+		filters={
+			"docstatus": 1,
+			"work_date": ("between", [add_days(today(), -LOOKBACK_DAYS), add_days(today(), -1)]),
+		},
+		pluck="name",
+	)
+	for name in sheets:
+		measure_unmeasured(frappe.get_doc("Overtime Sheet", name))
+		frappe.db.commit()

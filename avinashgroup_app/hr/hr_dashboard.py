@@ -434,28 +434,10 @@ def _dashain_deadline(companies, date_today):
 	)[0][0]
 	if not fulpati or (fulpati - date_today).days > DASHAIN_WARN_DAYS:
 		return None
-	fiscal_year = frappe.db.get_value(
-		"Fiscal Year", {"year_start_date": ["<=", fulpati], "year_end_date": [">=", fulpati]}, "name"
-	)
-	paid = []
-	if frappe.db.exists("DocType", "Dashain Bonus"):
-		paid = frappe.get_all(
-			"Dashain Bonus",
-			filters={"docstatus": 1, "company": ["in", companies], "fiscal_year": fiscal_year},
-			pluck="company",
-		)
-	abbr = dict(frappe.get_all("Company", fields=["name", "abbr"], as_list=True))
-	paying = frappe.db.sql_list(
-		"select distinct company from `tabSalary Structure Assignment` where docstatus=1 and company in %(c)s",
-		{"c": companies},
-	)
 	return {
 		"deadline": str(fulpati),
 		"deadline_bs": _bs_short(fulpati),
 		"days_left": (fulpati - date_today).days,
-		"fiscal_year": fiscal_year,
-		"pending": [abbr.get(c, c) for c in paying if c not in paid],
-		"paid": [abbr.get(c, c) for c in paid],
 	}
 
 
@@ -705,7 +687,6 @@ MENU = [
 		("doctype", "Payroll Adjustment", "Payroll Adjustments"),
 		("doctype", "Additional Salary", "Additional Salary"),
 		("doctype", "Employee Advance", "Employee Advances"),
-		("doctype", "Dashain Bonus", "Dashain Bonus"),
 		("doctype", "Salary Revision", "Salary Revisions"),
 		("doctype", "Salary Structure Assignment", "Structure Assignments"),
 	]),
