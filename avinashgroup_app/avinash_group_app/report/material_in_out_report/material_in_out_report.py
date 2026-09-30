@@ -89,6 +89,7 @@ def execute(filters=None):
 	if data:
 		total = {
 			"company": None,
+			"branch": None,
 			"item_code": None,
 			"item_name": _("Total"),
 			"uom": None,
@@ -105,10 +106,13 @@ def execute(filters=None):
 def get_columns():
 	return [
 		{"fieldname": "company",    "label": _("Company"),            "fieldtype": "Link",  "options": "Company",    "width": 160},
+		{"fieldname": "branch",     "label": _("Branch"),             "fieldtype": "Data",                           "width": 140},
 		{"fieldname": "item_code",  "label": _("Product Code"),       "fieldtype": "Data",                           "width": 120},
 		{"fieldname": "item_name",  "label": _("Product Description"),"fieldtype": "Data",                           "width": 200},
 		{"fieldname": "uom",        "label": _("UOM"),                "fieldtype": "Link",  "options": "UOM",        "width": 90},
 		{"fieldname": "price_list", "label": _("Price List"),         "fieldtype": "Data",                           "width": 140},
+		# Actual stock on hand before From Date, from the Stock Ledger — see _opening().
+		{"fieldname": "opening_stock", "label": _("Opening Stock"),   "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "received",   "label": _("Received"),           "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "delivered",  "label": _("Delivered"),          "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "balance",    "label": _("Balance"),            "fieldtype": "Float", "width": 110, "precision": 3},
@@ -167,6 +171,20 @@ def _item_names(item_codes):
 	)
 
 
+def _branch_names(branch_ids):
+	"""{Branch id: readable branch name} — Branch ids are series like NGK-Branch-00001."""
+	if not branch_ids:
+		return {}
+	return dict(
+		frappe.get_all(
+			"Branch",
+			filters=[["name", "in", list(branch_ids)]],
+			fields=["name", "branch"],
+			as_list=True,
+		)
+	)
+
+
 def _price_list_filter(column, price_lists):
 	"""SQL condition for the Price List filter, or "" when nothing is selected.
 
@@ -189,8 +207,8 @@ def _received(companies, from_date, to_date, price_lists, items):
 	item_condition_pi = _item_filter("pii.item_code", items)
 	return frappe.db.sql(
 		"""
-		SELECT company, item_code, uom, price_list, SUM(qty) AS qty FROM (
-			SELECT pr.company AS company, pri.item_code AS item_code, pri.uom AS uom, NULLIF(pr.buying_price_list, '') AS price_list, pri.qty AS qty
+		SELECT company, branch, item_code, uom, price_list, SUM(qty) AS qty FROM (
+			SELECT pr.company AS company, NULLIF(pr.custom_branch, '') AS branch, pri.item_code AS item_code, pri.uom AS uom, NULLIF(pr.buying_price_list, '') AS price_list, pri.qty AS qty
 			FROM `tabPurchase Receipt Item` pri
 			JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
 			WHERE pr.docstatus = 1 AND pr.company IN %(companies)s
@@ -200,7 +218,7 @@ def _received(companies, from_date, to_date, price_lists, items):
 
 			UNION ALL
 
-			SELECT pi.company AS company, pii.item_code AS item_code, pii.uom AS uom, NULLIF(pi.buying_price_list, '') AS price_list, pii.qty AS qty
+			SELECT pi.company AS company, NULLIF(pi.custom_branch, '') AS branch, pii.item_code AS item_code, pii.uom AS uom, NULLIF(pi.buying_price_list, '') AS price_list, pii.qty AS qty
 			FROM `tabPurchase Invoice Item` pii
 			JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
 			WHERE pi.docstatus = 1 AND pi.update_stock = 1 AND pi.company IN %(companies)s
@@ -208,7 +226,7 @@ def _received(companies, from_date, to_date, price_lists, items):
 			  {price_list_condition_pi}
 			  {item_condition_pi}
 		) t
-		GROUP BY company, item_code, uom, price_list
+		GROUP BY company, branch, item_code, uom, price_list
 		""".format(price_list_condition=price_list_condition, price_list_condition_pi=price_list_condition_pi,
 			item_condition=item_condition, item_condition_pi=item_condition_pi),
 		{"companies": tuple(companies), "from_date": from_date, "to_date": to_date,
@@ -227,8 +245,8 @@ def _delivered(companies, from_date, to_date, price_lists, items):
 	item_condition_si = _item_filter("sii.item_code", items)
 	return frappe.db.sql(
 		"""
-		SELECT company, item_code, uom, price_list, SUM(qty) AS qty FROM (
-			SELECT dn.company AS company, dni.item_code AS item_code, dni.uom AS uom, NULLIF(dn.selling_price_list, '') AS price_list, dni.qty AS qty
+		SELECT company, branch, item_code, uom, price_list, SUM(qty) AS qty FROM (
+			SELECT dn.company AS company, NULLIF(dn.custom_branch, '') AS branch, dni.item_code AS item_code, dni.uom AS uom, NULLIF(dn.selling_price_list, '') AS price_list, dni.qty AS qty
 			FROM `tabDelivery Note Item` dni
 			JOIN `tabDelivery Note` dn ON dn.name = dni.parent
 			WHERE dn.docstatus = 1 AND dn.company IN %(companies)s
@@ -238,7 +256,7 @@ def _delivered(companies, from_date, to_date, price_lists, items):
 
 			UNION ALL
 
-			SELECT si.company AS company, sii.item_code AS item_code, sii.uom AS uom, NULLIF(si.selling_price_list, '') AS price_list, sii.qty AS qty
+			SELECT si.company AS company, NULLIF(si.custom_branch, '') AS branch, sii.item_code AS item_code, sii.uom AS uom, NULLIF(si.selling_price_list, '') AS price_list, sii.qty AS qty
 			FROM `tabSales Invoice Item` sii
 			JOIN `tabSales Invoice` si ON si.name = sii.parent
 			WHERE si.docstatus = 1 AND si.update_stock = 1 AND si.company IN %(companies)s
@@ -246,11 +264,37 @@ def _delivered(companies, from_date, to_date, price_lists, items):
 			  {price_list_condition_si}
 			  {item_condition_si}
 		) t
-		GROUP BY company, item_code, uom, price_list
+		GROUP BY company, branch, item_code, uom, price_list
 		""".format(price_list_condition=price_list_condition, price_list_condition_si=price_list_condition_si,
 			item_condition=item_condition, item_condition_si=item_condition_si),
 		{"companies": tuple(companies), "from_date": from_date, "to_date": to_date,
 		 "price_lists": price_lists, "items": items},
+		as_dict=True,
+	)
+
+
+def _opening(companies, from_date, items):
+	"""Stock on hand the day before From Date, per company + item, in the item's stock UOM.
+
+	Taken from the Stock Ledger rather than summed from the Received/Delivered
+	documents: the ledger is ERPNext's own stock figure and also carries opening
+	entries, stock reconciliations and stock entries, which those documents do not.
+	The ledger keeps no branch or price list, so the figure is per product; it is
+	not narrowed by the Price List filter.
+	"""
+	item_condition = _item_filter("sle.item_code", items)
+	return frappe.db.sql(
+		"""
+		SELECT sle.company AS company, sle.item_code AS item_code, it.stock_uom AS uom, SUM(sle.actual_qty) AS qty
+		FROM `tabStock Ledger Entry` sle
+		JOIN `tabItem` it ON it.name = sle.item_code
+		WHERE sle.is_cancelled = 0 AND sle.company IN %(companies)s
+		  AND sle.posting_date < %(from_date)s
+		  {item_condition}
+		GROUP BY sle.company, sle.item_code, it.stock_uom
+		HAVING SUM(sle.actual_qty) != 0
+		""".format(item_condition=item_condition),
+		{"companies": tuple(companies), "from_date": from_date, "items": items},
 		as_dict=True,
 	)
 
@@ -260,16 +304,24 @@ def get_data(filters, companies):
 	items = tuple(_as_list(filters.get("item"))) or None
 
 	received = {
-		(r.company, r.item_code, r.uom, r.price_list): r.qty or 0
+		(r.company, r.branch, r.item_code, r.uom, r.price_list): r.qty or 0
 		for r in _received(companies, filters["from_date"], filters["to_date"], price_lists, items)
 	}
 	delivered = {
-		(r.company, r.item_code, r.uom, r.price_list): r.qty or 0
+		(r.company, r.branch, r.item_code, r.uom, r.price_list): r.qty or 0
 		for r in _delivered(companies, filters["from_date"], filters["to_date"], price_lists, items)
 	}
 
+	# Opening stock has no branch or price list, and is in the stock UOM, so it sits on
+	# the (company, no branch, item, stock UOM, no price list) row — the same row a
+	# purchase without a branch lands on, which also carries no price list.
+	opening = {
+		(r.company, None, r.item_code, r.uom, None): r.qty or 0
+		for r in _opening(companies, filters["from_date"], items)
+	}
+
 	price_list_names = {}
-	all_price_lists = {k[3] for k in set(received) | set(delivered) if k[3]}
+	all_price_lists = {k[4] for k in set(received) | set(delivered) if k[4]}
 	if all_price_lists:
 		price_list_docs = frappe.get_all(
 			"Price List",
@@ -294,20 +346,23 @@ def get_data(filters, companies):
 			for d in price_list_docs
 		}
 
-	keys = set(received) | set(delivered)
-	item_names = _item_names({k[1] for k in keys})
+	keys = set(received) | set(delivered) | set(opening)
+	item_names = _item_names({k[2] for k in keys})
+	branch_names = _branch_names({k[1] for k in keys if k[1]})
 
 	rows = []
-	for key in sorted(keys, key=lambda k: (k[0] or "", k[1], k[2], k[3] or "")):
-		company, item_code, uom, row_price_list = key
+	for key in sorted(keys, key=lambda k: (k[0] or "", branch_names.get(k[1], k[1] or ""), k[2], k[3], k[4] or "")):
+		company, branch, item_code, uom, row_price_list = key
 		r = received.get(key, 0)
 		d = delivered.get(key, 0)
 		rows.append({
 			"company": company,
+			"branch": branch_names.get(branch, branch),
 			"item_code": item_code,
 			"item_name": item_names.get(item_code, item_code),
 			"uom": uom,
 			"price_list": price_list_names.get(row_price_list, row_price_list),
+			"opening_stock": opening.get(key, 0),
 			"received": r,
 			"delivered": d,
 			"balance": r - d,
