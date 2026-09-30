@@ -7,7 +7,9 @@ Customer Wise: one company's customers on a single date, largest balance first.
 
 Monthly: every company's closing balance for each day of a Bikram Sambat month,
 split into gas and cylinder columns with a group total. Advances from customers
-are a separate balance and are deliberately excluded.
+are a separate balance and are deliberately excluded. Below the days, a
+"For Comparison" block sets two BS dates side by side — each date's balances,
+the change between them and ▲ / ▼ / – per column — like the reference sheet.
 """
 
 import datetime
@@ -33,6 +35,9 @@ CYLINDER_ACCOUNT_NUMBERS = ["313101", "313102"]  # Deposit Customers Cylinders
 
 # Left-to-right company order in the Monthly view, following the reference report.
 COMPANY_ORDER = ["NGI", "NGN", "NGG", "NGK", "GEPL", "GLMI", "SGU"]
+
+# Up/Down marks in the comparison block.
+UP, DOWN, SAME = "▲", "▼", "–"
 
 BS_MONTH_NAMES = [
 	"Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin",
@@ -239,7 +244,10 @@ def _execute_monthly(filters):
 	if not bs_year or not bs_month:
 		return columns, []
 
-	return columns, get_monthly_data(bs_year, bs_month, companies)
+	data, movements = get_monthly_data(bs_year, bs_month, companies)
+	if data:
+		data += get_comparison_rows(filters, data, companies, movements)
+	return columns, data
 
 
 def _parse_bs_month(value):
@@ -286,9 +294,11 @@ def get_monthly_columns(companies):
 
 
 def get_monthly_data(bs_year, bs_month, companies):
+	"""The month's daily rows, plus the GL movements they were built from (reused by
+	the comparison block for any earlier date)."""
 	days = _bs_month_days(bs_year, bs_month)
 	if not days:
-		return []
+		return [], {}
 
 	# The reference report opens with the previous month's last day, so balances
 	# can be read against a starting point rather than from zero.
@@ -298,7 +308,7 @@ def get_monthly_data(bs_year, bs_month, companies):
 	today = datetime.date.today()
 	all_days = [entry for entry in all_days if entry[1] <= today]
 	if not all_days:
-		return []
+		return [], {}
 
 	first_ad = all_days[0][1]
 	last_ad = all_days[-1][1]
@@ -335,7 +345,99 @@ def get_monthly_data(bs_year, bs_month, companies):
 		row["grand_total"] = round(total_gas + total_cyl, 2)
 		data.append(row)
 
-	return data
+	return data, movements
+
+
+# ── Monthly comparison block ───────────────────────────────────────────────────
+
+def get_comparison_rows(filters, month_rows, companies, movements):
+	"""The "For Comparison" block under the month: a blank spacer, a heading, the
+	Compare Date's balances, the With Date's balances, Changes in Value
+	(compare − with) and Up/Down (▲ / ▼ / – per column).
+
+	Both dates are typed as BS dates ("2083.03.11") and may fall in any month.
+	Left blank, Compare Date is the month's latest reported day and With Date the
+	day before Compare Date. Every row carries compare_block so the PDF can keep
+	the block together as a table of its own.
+	"""
+	compare_bs = _parse_bs_date(filters.get("compare_date"), _("Compare Date"))
+	if not compare_bs:
+		compare_bs = _parse_bs_date(month_rows[-1]["date"], _("Compare Date"))
+	with_bs = _parse_bs_date(filters.get("with_date"), _("With Date"))
+	if not with_bs:
+		with_bs = _previous_bs_day(compare_bs)[0]
+
+	today = datetime.date.today()
+	for label, bs_date in ((_("Compare Date"), compare_bs), (_("With Date"), with_bs)):
+		if bs_date.to_datetime_date() > today:
+			frappe.throw(_("{0} {1} is in the future.").format(label, _format_bs(bs_date)))
+
+	compare_row = _balances_row(compare_bs, companies, month_rows, movements)
+	with_row = _balances_row(with_bs, companies, month_rows, movements)
+
+	change_row = {"date": _("Changes in Value"), "bold": 1}
+	updown_row = {"date": _("Up/Down"), "up_down": 1}
+	for fieldname, value in compare_row.items():
+		if fieldname == "date":
+			continue
+		change = round(value - with_row[fieldname], 2)
+		change_row[fieldname] = change
+		updown_row[fieldname] = UP if change > 0 else (DOWN if change < 0 else SAME)
+
+	heading = {"date": _("For Comparison"), "bold": 1}
+	rows = [{}, heading, compare_row, with_row, change_row, updown_row]
+	for row in rows:
+		row["compare_block"] = 1
+	return rows
+
+
+def _parse_bs_date(value, label):
+	"""A typed BS date — "2083.03.11", "2083-3-11" or "2083/03/11" — as a
+	nepali_datetime.date, or None when blank."""
+	text = (value or "").strip()
+	if not text:
+		return None
+	parts = text.replace("-", ".").replace("/", ".").split(".")
+	try:
+		year, month, day = (int(p) for p in parts)
+		return nd.date(year, month, day)
+	except (ValueError, TypeError):
+		frappe.throw(_("{0} \"{1}\" is not a valid BS date. Type it like 2083.03.11.").format(label, text))
+
+
+def _balances_row(bs_date, companies, month_rows, month_movements):
+	"""One Monthly-shaped row of closing balances on a BS date.
+
+	A date inside the reported month is copied from its daily row. An earlier
+	date is summed from the movements the month was built from, which run up to
+	the month's last reported day. Only a later date costs another pass over the GL.
+	"""
+	label = _format_bs(bs_date)
+	for row in month_rows:
+		if row.get("date") == label:
+			return dict(row)
+
+	ad_date = bs_date.to_datetime_date()
+	covered_to = max((d for (_c, _b, d) in month_movements), default=None)
+	if covered_to and ad_date <= covered_to:
+		movements = {k: v for k, v in month_movements.items() if k[2] <= ad_date}
+	else:
+		movements = _daily_movements(ad_date)
+	row = {"date": label}
+	total_gas = 0.0
+	total_cyl = 0.0
+	for company in companies:
+		gas = round(sum(v for (c, b, _d), v in movements.items() if c == company.name and b == "gas"), 2)
+		cyl = round(sum(v for (c, b, _d), v in movements.items() if c == company.name and b == "cyl"), 2)
+		row[f"{company.abbr}_gas"] = gas
+		row[f"{company.abbr}_cyl"] = cyl
+		row[f"{company.abbr}_total"] = round(gas + cyl, 2)
+		total_gas += gas
+		total_cyl += cyl
+	row["total_gas"] = round(total_gas, 2)
+	row["total_cyl"] = round(total_cyl, 2)
+	row["grand_total"] = round(total_gas + total_cyl, 2)
+	return row
 
 
 def _daily_movements(last_ad):
@@ -495,20 +597,35 @@ def _pdf_context(filters, orientation):
 	# table joins the current page while the page's rows — counting each table's
 	# heading as PDF_TABLE_HEADING_ROWS — stay within row_limit. So a portrait
 	# Monthly stacks both parts on one page, and anything longer runs on.
+	#
+	# Monthly's comparison block is kept out of that cutting: after all the daily
+	# tables, each part's comparison follows as one small table of its own, so it
+	# never splits across pages and the parts' comparisons print together. Its
+	# blank spacer row is dropped — the gap between tables already separates it.
 	row_limit = PDF_ROW_LIMIT[(view, orientation)]
+	main_rows = [row for row in data if not row.get("compare_block")]
+	compare_rows = [row for row in data if row.get("compare_block") and row.get("date")]
 	pages = []
 	used = row_limit  # forces a new page for the first table
+
+	def place(table):
+		nonlocal used
+		cost = len(table["rows"]) + PDF_TABLE_HEADING_ROWS
+		if used + cost > row_limit:
+			pages.append({"title": title, "subtitle": subtitle, "tables": []})
+			used = 0
+		pages[-1]["tables"].append(table)
+		used += cost
+
 	for part_columns in parts:
-		body = [_pdf_row(row, part_columns) for row in data] or [None]
+		body = [_pdf_row(row, part_columns) for row in main_rows] or [None]
 		for start in range(0, len(body), row_limit):
 			rows = [row for row in body[start:start + row_limit] if row]
-			table = {"groups": _group_runs(part_columns), "columns": part_columns, "rows": rows}
-			cost = len(rows) + PDF_TABLE_HEADING_ROWS
-			if used + cost > row_limit:
-				pages.append({"title": title, "subtitle": subtitle, "tables": []})
-				used = 0
-			pages[-1]["tables"].append(table)
-			used += cost
+			place({"groups": _group_runs(part_columns), "columns": part_columns, "rows": rows})
+	if compare_rows:
+		for part_columns in parts:
+			rows = [_pdf_row(row, part_columns) for row in compare_rows]
+			place({"groups": _group_runs(part_columns), "columns": part_columns, "rows": rows})
 
 	return {"orientation": orientation, "pages": pages}
 
@@ -530,7 +647,10 @@ def _pdf_row(row, columns):
 	cells = []
 	for col in columns:
 		value = row.get(col["fieldname"])
-		if col["fieldtype"] == "Currency":
+		if row.get("up_down"):
+			# ▲ / ▼ / – marks sit in the money columns; print them as they are.
+			cells.append("" if value is None else str(value))
+		elif col["fieldtype"] == "Currency":
 			cells.append(_fmt_inr(value) if value is not None else "")
 		else:
 			cells.append("" if value is None else str(value))
