@@ -5,6 +5,10 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import add_days
+
+# Start of the Opening Stock window — earlier than any document in the books.
+EARLIEST_DATE = "1900-01-01"
 
 # Every item that moved in the period is reported, not just gas. Rows are scoped by the
 # company on the stock document itself rather than by the item's custom_company, so an
@@ -111,7 +115,7 @@ def get_columns():
 		{"fieldname": "item_name",  "label": _("Product Description"),"fieldtype": "Data",                           "width": 200},
 		{"fieldname": "uom",        "label": _("UOM"),                "fieldtype": "Link",  "options": "UOM",        "width": 90},
 		{"fieldname": "price_list", "label": _("Price List"),         "fieldtype": "Data",                           "width": 140},
-		# Actual stock on hand before From Date, from the Stock Ledger — see _opening().
+		# Received minus Delivered before From Date — see _opening().
 		{"fieldname": "opening_stock", "label": _("Opening Stock"),   "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "received",   "label": _("Received"),           "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "delivered",  "label": _("Delivered"),          "fieldtype": "Float", "width": 110, "precision": 3},
@@ -322,30 +326,23 @@ def _delivered(companies, from_date, to_date, price_lists, items, branches):
 	)
 
 
-def _opening(companies, from_date, items):
-	"""Stock on hand the day before From Date, per company + item, in the item's stock UOM.
+def _opening(companies, from_date, price_lists, items, branches):
+	"""What was left of each row before From Date: everything it received minus
+	everything it delivered, from the same documents as the Received and Delivered
+	columns. Bought 80 and sold 75 up to yesterday → today opens at 5.
 
-	Taken from the Stock Ledger rather than summed from the Received/Delivered
-	documents: the ledger is ERPNext's own stock figure and also carries opening
-	entries, stock reconciliations and stock entries, which those documents do not.
-	The ledger keeps no branch or price list, so the figure is per product; it is
-	not narrowed by the Price List filter.
+	Returns {(company, branch, item_code, uom, price_list): qty}, keyed like the
+	Received and Delivered rows so the opening lands on the row it belongs to.
 	"""
-	item_condition = _item_filter("sle.item_code", items)
-	return frappe.db.sql(
-		"""
-		SELECT sle.company AS company, sle.item_code AS item_code, it.stock_uom AS uom, SUM(sle.actual_qty) AS qty
-		FROM `tabStock Ledger Entry` sle
-		JOIN `tabItem` it ON it.name = sle.item_code
-		WHERE sle.is_cancelled = 0 AND sle.company IN %(companies)s
-		  AND sle.posting_date < %(from_date)s
-		  {item_condition}
-		GROUP BY sle.company, sle.item_code, it.stock_uom
-		HAVING SUM(sle.actual_qty) != 0
-		""".format(item_condition=item_condition),
-		{"companies": tuple(companies), "from_date": from_date, "items": items},
-		as_dict=True,
-	)
+	day_before = add_days(from_date, -1)
+	opening = {}
+	for r in _received(companies, EARLIEST_DATE, day_before, price_lists, items, branches):
+		key = (r.company, r.branch, r.item_code, r.uom, r.price_list)
+		opening[key] = opening.get(key, 0) + (r.qty or 0)
+	for r in _delivered(companies, EARLIEST_DATE, day_before, price_lists, items, branches):
+		key = (r.company, r.branch, r.item_code, r.uom, r.price_list)
+		opening[key] = opening.get(key, 0) - (r.qty or 0)
+	return {key: qty for key, qty in opening.items() if round(qty, 3) != 0}
 
 
 def get_data(filters, companies):
@@ -362,18 +359,10 @@ def get_data(filters, companies):
 		for r in _delivered(companies, filters["from_date"], filters["to_date"], price_lists, items, branches)
 	}
 
-	# Opening stock has no branch or price list, and is in the stock UOM, so it sits on
-	# the (company, no branch, item, stock UOM, no price list) row — the same row a
-	# purchase without a branch lands on, which also carries no price list. The
-	# ledger keeps no branch, so there is no opening figure to show once the report
-	# is narrowed to particular branches.
-	opening = {} if branches else {
-		(r.company, None, r.item_code, r.uom, None): r.qty or 0
-		for r in _opening(companies, filters["from_date"], items)
-	}
+	opening = _opening(companies, filters["from_date"], price_lists, items, branches)
 
 	price_list_names = {}
-	all_price_lists = {k[4] for k in set(received) | set(delivered) if k[4]}
+	all_price_lists = {k[4] for k in set(received) | set(delivered) | set(opening) if k[4]}
 	if all_price_lists:
 		price_list_docs = frappe.get_all(
 			"Price List",
