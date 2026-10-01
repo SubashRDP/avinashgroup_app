@@ -434,7 +434,7 @@ function calculate_item_excise_value(frm, cdt, cdn) {
     if (!row || row.custom_excise_apply_on !== 'Percentage (%)') return;
 
     const base = flt(row.base_net_amount) || flt(row.net_amount) || flt(row.amount);
-    const excise = avinashgroup.purchase.truncate(base * flt(row.custom_excise_duty_rate) / 100, 2);
+    const excise = avinashgroup.purchase.round_half_up(base * flt(row.custom_excise_duty_rate) / 100, 2);
     frappe.model.set_value(cdt, cdn, 'custom_excise_value', excise);
 }
 
@@ -634,7 +634,7 @@ function calculate_item_custom_total(frm, cdt, cdn) {
     // from base_net_amount on save either way.
     if (row.custom_excise_apply_on === 'Percentage (%)') {
         const base = flt(row.base_net_amount) || flt(row.net_amount) || flt(row.amount);
-        const excise = avinashgroup.purchase.truncate(base * flt(row.custom_excise_duty_rate) / 100, 2);
+        const excise = avinashgroup.purchase.round_half_up(base * flt(row.custom_excise_duty_rate) / 100, 2);
         if (flt(row.custom_excise_value) !== excise) {
             frappe.model.set_value(cdt, cdn, 'custom_excise_value', excise);
             return; // the custom_excise_value handler re-enters here with the fresh value

@@ -74,3 +74,24 @@ frappe.ui.form.on("Material Request", {
 		});
 	},
 });
+
+// Line amount = qty x rate rounded HALF-UP to 2 dp, like every other buying
+// document (rule: custom_code/common/purchase_paisa_rounding.py; the server
+// re-derives it on save). ERPNext's own qty / rate handlers write the unrounded
+// product and run after this one, so the fix-up is deferred until they finish.
+function round_material_request_amount(frm, cdt, cdn) {
+	setTimeout(() => {
+		const row = locals[cdt] && locals[cdt][cdn];
+		if (!row) return;
+		const amount = avinashgroup.purchase.round_half_up(flt(row.qty) * flt(row.rate), precision("amount", row));
+		if (row.amount !== amount) {
+			row.amount = amount;
+			refresh_field("amount", row.name, row.parentfield);
+		}
+	}, 0);
+}
+
+frappe.ui.form.on("Material Request Item", {
+	qty: round_material_request_amount,
+	rate: round_material_request_amount,
+});

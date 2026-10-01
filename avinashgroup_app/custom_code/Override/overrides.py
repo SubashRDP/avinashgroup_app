@@ -9,7 +9,7 @@ from erpnext.buying.doctype.supplier_quotation.supplier_quotation import Supplie
 from erpnext.stock.doctype.material_request.material_request import MaterialRequest as ERPNextMaterialRequest
 from erpnext.buying.doctype.purchase_order.purchase_order import PurchaseOrder as ERPNextPurchaseOrder
 
-from avinashgroup_app.custom_code.common.purchase_paisa_truncation import CutDiscountShares
+from avinashgroup_app.custom_code.common.purchase_paisa_rounding import HalfUpAmounts
 
 
 def _lenient_warehouse_check(doc, validate):
@@ -169,7 +169,7 @@ class RequestforQuotation(ERPNextRequestforQuotation):
 				raise
 
 
-class SupplierQuotation(CutDiscountShares, ERPNextSupplierQuotation):
+class SupplierQuotation(HalfUpAmounts, ERPNextSupplierQuotation):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
@@ -186,7 +186,7 @@ class SupplierQuotation(CutDiscountShares, ERPNextSupplierQuotation):
 				raise
 
 
-class PurchaseOrder(CutDiscountShares, ERPNextPurchaseOrder):
+class PurchaseOrder(HalfUpAmounts, ERPNextPurchaseOrder):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
@@ -212,7 +212,7 @@ class PurchaseOrder(CutDiscountShares, ERPNextPurchaseOrder):
 				raise
 
 
-class PurchaseReceipt(CutDiscountShares, ERPNextPurchaseReceipt):
+class PurchaseReceipt(HalfUpAmounts, ERPNextPurchaseReceipt):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)
@@ -223,7 +223,7 @@ class PurchaseReceipt(CutDiscountShares, ERPNextPurchaseReceipt):
 		_lenient_warehouse_check(self, super().validate_warehouse)
 
 
-class PurchaseInvoice(CutDiscountShares, ERPNextPurchaseInvoice):
+class PurchaseInvoice(HalfUpAmounts, ERPNextPurchaseInvoice):
 	@frappe.whitelist()
 	def set_missing_values(self, for_validate=False):
 		super().set_missing_values(for_validate)

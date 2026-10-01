@@ -3,7 +3,10 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-from avinashgroup_app.custom_code.common.purchase_paisa_truncation import round_half_up, truncate
+from avinashgroup_app.custom_code.common.purchase_paisa_rounding import (
+    round_half_up,
+    round_material_request_amounts,
+)
 
 """
 Common TDS, Excise, and VAT calculation handler for Purchase documents.
@@ -117,8 +120,8 @@ def calculate_item_excise_values(doc):
         excise_apply_on = getattr(item, 'custom_excise_apply_on', None)
         if excise_apply_on == 'Percentage (%)':
             rate = flt(getattr(item, 'custom_excise_duty_rate', 0)) or 0
-            # Cut, not rounded -- see purchase_paisa_truncation.
-            item.custom_excise_value = truncate(flt(item.base_net_amount) * rate / 100, 2)
+            # Half-up to paisa -- see purchase_paisa_rounding.
+            item.custom_excise_value = round_half_up(flt(item.base_net_amount) * rate / 100, 2)
         elif excise_apply_on == 'Amount':
             # rate belongs to Percentage mode only (mirrors TDS Amount mode)
             item.custom_excise_duty_rate = 0
@@ -160,8 +163,8 @@ def calculate_item_vat_amounts(doc):
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
             custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-            # Round each line's VAT to paisa, HALF-UP (11.505 -> 11.51; TDS and
-            # excise are still cut -- see purchase_paisa_truncation). The header
+            # Round each line's VAT to paisa, HALF-UP (11.505 -> 11.51 -- see
+            # purchase_paisa_rounding). The header
             # VAT and the taxes-table row are built by summing these lines, so it
             # must happen HERE, once per line. At precision 5 the header summed
             # the unrounded values while ERPNext's round_floats_in stored each row
@@ -239,12 +242,12 @@ def calculate_item_tds_amounts(doc):
 
             if custom_tds_rate > 0:
                 custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-                # Paisa per line, same rule as VAT (CUT, not rounded -- see
-                # purchase_paisa_truncation): custom_total_tds_amount is the sum
+                # Paisa per line, same rule as VAT (half-up -- see
+                # purchase_paisa_rounding): custom_total_tds_amount is the sum
                 # of these, and the deduction posted to the GL must equal what the
                 # item rows show. Trade-off: the total withheld can land a paisa
-                # under custom_total x rate.
-                item.custom_tds_amount = truncate((custom_total * custom_tds_rate) / 100, 2)
+                # off custom_total x rate.
+                item.custom_tds_amount = round_half_up((custom_total * custom_tds_rate) / 100, 2)
             else:
                 item.custom_tds_amount = 0
 
@@ -626,6 +629,7 @@ def validate_supplier_quotation(doc, method=None):
 def validate_material_request(doc, method=None):
     """Wrapper for Material Request"""
     force_buying_warehouse(doc)
+    round_material_request_amounts(doc)
 
 
 def validate_request_for_quotation(doc, method=None):
