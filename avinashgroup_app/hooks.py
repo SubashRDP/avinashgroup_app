@@ -104,6 +104,8 @@ doctype_js = {
     "Attendance": "public/js/attendance.js",
     "Payroll Entry": "public/js/payroll_entry.js",
     "Employee": "public/js/employee.js",
+    # "Move Staff to This Shift" on a rotational shift. See hr/shift_rotation.py.
+    "Shift Type": "public/js/shift_type.js",
     "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
     "Supplier": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
     "Item": "public/js/item_default_account.js",

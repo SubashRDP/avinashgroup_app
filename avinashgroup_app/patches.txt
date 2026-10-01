@@ -117,3 +117,4 @@ avinashgroup_app.patches.setup_pay_on_holiday_field
 avinashgroup_app.patches.setup_late_excuse
 avinashgroup_app.patches.remove_dashain_bonus
 avinashgroup_app.patches.tax_relief_fields_without_defaults
+avinashgroup_app.patches.setup_shift_rotation
