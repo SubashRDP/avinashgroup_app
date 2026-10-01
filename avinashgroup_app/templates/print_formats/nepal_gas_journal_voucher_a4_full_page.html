@@ -145,7 +145,7 @@ tr, td, th { page-break-inside: avoid; }
   .main-table tr td
  {
      font-size:13px !important;
-        padding: 4px !important;
+        padding: 1px 4px !important;
  
  }
  
@@ -316,6 +316,12 @@ padding: 3px !important;
       Narration. Both rows now size to their text, closing the gap to 0. */
    .main-table tr.jv-hasnarration { height:auto !important; }
    .main-table tr.jv-hasnarration td { padding-bottom:0 !important; }
+
+   /* Line-item rows are packed tight: no top/bottom padding, no 20px minimum
+      height and a 1.15 line height, so every line in the body — within a wrapped
+      row or from one row to the next — steps by the same ~15px. */
+   .main-table tr.jv-line { height:auto !important; }
+   .main-table tr.jv-line td { padding-top:0 !important; padding-bottom:0 !important; line-height:1.15 !important; }
 
    .main-table tr.jv-narration { height:auto !important; }
    .main-table tr.jv-narration td { padding-top:0 !important; padding-bottom:0 !important; line-height:1.1 !important; }
@@ -666,11 +672,13 @@ padding:0px 30px;
    at 13px body text (the same sizes as NG CV Payment Voucher A4):
      PAGE_PX   printable height of one page (297 - 10 top - 6 bottom = 281mm)
      HEAD_PX   the per-page header (company block + Voucher No grid + column
-               headings). Measures 149px; stated a little over, like the row
+               headings). Measures 146px; stated a little over, like the row
                heights, so the breaks err early.
-     LINE_PX   one line of 13px text; PAD_PX is a <td>'s 4px top + bottom padding.
-               A one-line row measures 26.5px and a two-line row 45.5px, billed
-               27 / 46.
+     LINE_PX   one line of 13px text at the normal line height (measures 18.6px),
+               used by the closing rows (Total, In Words, Remarks ...), which also
+               keep a <td>'s 1px top + bottom padding and borders, PAD_PX.
+     ROW_LINE_PX one line of a line-item row: no padding and a 1.15 line height
+               (tr.jv-line) — measures 15px, within a row and row to row.
      FOOT_PX   the signature block + "Printed on" line (measures 108px)
      TARGET_PX where the footer's bottom edge should land, measured from the top
                of the printable area. The gap to PAGE_PX is the cushion that absorbs
@@ -679,19 +687,19 @@ padding:0px 30px;
                Courier New at 13px advances 7.8px per character, so a column's
                capacity is its width less 8px of padding, divided by 7.8. -#}
 {% set PAGE_PX = 1062 %}
-{% set HEAD_PX = 152 %}
+{% set HEAD_PX = 150 %}
 {% set LINE_PX = 19 %}
-{% set PAD_PX = 8 %}
-{#- A Narration row gives up the padding and 20px minimum height its line item
-   would otherwise leave between them (the jv-hasnarration / jv-narration rules),
-   so its first line adds only 11px under the item and each further line 17px. -#}
-{% set NARR_FIRST_PX = 11 %}
-{% set NARR_LINE_PX = 17 %}
-{#- One line of a Party Journal block. Its lines are inner-table <tr>s whose <td>s
-   pick up the 4px `.main-table tr td` padding, so they cost more than a LINE_PX
-   text line: a 5-line block (Code / Name / gap / Amount / Document Class) measures
-   155px = PAD_PX + 5 * BLOCK_PX. -#}
-{% set BLOCK_PX = 30 %}
+{% set ROW_LINE_PX = 15 %}
+{% set PAD_PX = 3 %}
+{#- A Narration row has no padding and a 1.1 line height (the jv-narration rule),
+   so each of its lines steps 15px, like a line-item row. -#}
+{% set NARR_FIRST_PX = 15 %}
+{% set NARR_LINE_PX = 15 %}
+{#- One line of a Party Journal block. Its lines are inner-table <tr>s, which
+   `.main-table tr` pins to 20px and whose <td>s pick up the `.main-table tr td`
+   padding, so they cost more than a LINE_PX text line: a 5-line block (Code /
+   Name / gap / Amount / Document Class) measures 125px = PAD_PX + 5 * BLOCK_PX. -#}
+{% set BLOCK_PX = 25 %}
 {% set FOOT_PX = 110 %}
 {% set TARGET_PX = 1010 %}
 {#- Account and Party Name column capacities differ per JV type because each type
@@ -701,20 +709,22 @@ padding:0px 30px;
      Cash Entry          Debit 183 -> 22        Party Name 118 -> 14
      Debit/Credit Note   Particular 171 -> 20   Party Name 157 -> 19
      all other types     Account 214 -> 26      Party Name 142 -> 17
-   Cash Entry's Debit column also gives way to a long vehicle plate, so it is
-   taken at its narrowest. Too low bills a phantom second line to long account
+   The capacities set below are one character under these, because Firefox's
+   "Fit to page width" narrows every column ~2% and a name that exactly fills
+   its column then wraps. Cash Entry's Debit column also gives way to a long
+   vehicle plate, so it is taken at its narrowest. Too low bills a phantom second line to long account
    names and empties the bottom of each page; too high misses real wraps and
    overfills it. -#}
 {% if is_journal_voucher %}
-  {% set CH_ACC, CH_PARTY = 20, 15 %}
+  {% set CH_ACC, CH_PARTY = 19, 14 %}
 {% elif is_cash_contra %}
-  {% set CH_ACC, CH_PARTY = 31, 16 %}
+  {% set CH_ACC, CH_PARTY = 30, 15 %}
 {% elif is_cash_entry %}
-  {% set CH_ACC, CH_PARTY = 22, 14 %}
+  {% set CH_ACC, CH_PARTY = 21, 13 %}
 {% elif is_note %}
-  {% set CH_ACC, CH_PARTY = 20, 19 %}
+  {% set CH_ACC, CH_PARTY = 19, 18 %}
 {% else %}
-  {% set CH_ACC, CH_PARTY = 26, 17 %}
+  {% set CH_ACC, CH_PARTY = 25, 16 %}
 {% endif %}
 {#- A full-width row (Paid To, In Words, Remarks) is 710px of text -> 91 chars,
    stated 90. A Narration row starts after the S.N. column: 671px -> 86, stated 85.
@@ -722,15 +732,16 @@ padding:0px 30px;
 {% set CH_WIDE = 90 %}
 {% set CH_NARR = 85 %}
 {% set CH_PJ_WORDS = 50 %}
-{#- Rows per page are budgeted 45px short of the real page so the forced breaks
+{#- Rows per page are budgeted 70px short of the real page so the forced breaks
    below always fire BEFORE the browser would have broken by itself — the browser
    winning that race is what puts an unplanned page between the data and the
-   footer. The 45px (rather than a bare minimum) also leaves room for Firefox's
-   "Fit to page width", which enlarges the sheet ~1.02x. Row heights above are
+   footer. The 70px (rather than a bare minimum) also leaves room for Firefox's
+   "Fit to page width", which enlarges the sheet ~1.02x and narrows every column,
+   so a few more names wrap than the estimate expects. Row heights above are
    rounded up for the same reason. wkhtmltopdf ("Get PDF") does not reprint the
    header, so on that path alone the footer lands about HEAD_PX higher than
    TARGET_PX asks for. -#}
-{% set CAP_PX = PAGE_PX - HEAD_PX - 45 %}
+{% set CAP_PX = PAGE_PX - HEAD_PX - 70 %}
 {#- Lines a text takes in a column CH characters wide, wrapped word by word the way
    the browser does. Counting characters alone (len / CH) under-bills any name whose
    words leave a gap at the end of a line — e.g. 21 characters in a 20-character
@@ -797,7 +808,7 @@ padding:0px 30px;
         {% set party_lines = party_lines + (1 if row.party else 0) %}
       {% endif %}
       {% set lines = [wrapped(acc.account_name, CH_ACC)|int, party_lines]|max %}
-      {% set _add = G.items.append(PAD_PX + LINE_PX * lines) %}
+      {% set _add = G.items.append(ROW_LINE_PX * lines) %}
       {#- Every type prints a per-row Narration on its own line when the row carries one. -#}
       {% if row.user_remark and row.user_remark|trim %}
         {% set nlines = wrapped("Narration: " ~ row.user_remark|replace("\n", " ")|trim, CH_NARR)|int %}
@@ -989,7 +1000,7 @@ padding:0px 30px;
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
@@ -1030,7 +1041,7 @@ padding:0px 30px;
       {% set sn.i = sn.i + 1 %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td>{{ row.party_type or "" }}</td>
@@ -1071,7 +1082,7 @@ padding:0px 30px;
       {% if acc.account_type not in ["Cash", "Bank"] %}
       {% set sn.i = sn.i + 1 %}
       {% set amount = row.debit_in_account_currency or row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
@@ -1107,7 +1118,7 @@ padding:0px 30px;
       {% set acc = frappe.get_cached_doc("Account", row.account) %}
       {% set dr = row.debit_in_account_currency or 0 %}
       {% set cr = row.credit_in_account_currency or 0 %}
-      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
+      {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
         <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
@@ -1212,7 +1223,7 @@ padding:0px 30px;
     {% else %}
     {% for row in doc.accounts %}
   {% set acc = frappe.get_cached_doc("Account", row.account) %}
-  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="{% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
+  {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
     <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
     <td>
       <strong>{{ acc.account_name }}</strong>

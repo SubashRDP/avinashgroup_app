@@ -18,11 +18,13 @@ const BS_MONTHS = [
 
 // Which filters belong to which view.
 const CUSTOMER_WISE_FILTERS = ["company", "as_on_date"];
-const MONTHLY_FILTERS = ["bs_year", "bs_month"];
+const MONTHLY_FILTERS = ["bs_year", "bs_month", "compare_date", "with_date"];
 
 frappe.query_reports["Debtors Summary"] = {
 	onload: function (report) {
 		toggle_filters();
+		attach_bs_picker("compare_date");
+		attach_bs_picker("with_date");
 
 		// Download PDF and Print both open the same server-rendered PDF, so a
 		// printed copy matches the downloaded one page for page. The app's
@@ -88,6 +90,21 @@ frappe.query_reports["Debtors Summary"] = {
 			fieldtype: "Select",
 			options: BS_MONTHS.join("\n"),
 		},
+		// The comparison block's two dates, as BS dates — picked from the Nepali
+		// calendar (see attach_bs_picker) or typed. Blank = the month's latest day
+		// compared with the day before it.
+		{
+			fieldname: "compare_date",
+			label: __("Compare Date"),
+			fieldtype: "Data",
+			description: __("Recent BS date, e.g. 2083-03-11"),
+		},
+		{
+			fieldname: "with_date",
+			label: __("With Date"),
+			fieldtype: "Data",
+			description: __("BS date to compare with, e.g. 2083-03-10"),
+		},
 	],
 
 	// The report carries its own SN column (so print and Excel keep the reference
@@ -102,6 +119,11 @@ frappe.query_reports["Debtors Summary"] = {
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {
+		// The comparison block's Up/Down row holds ▲ / ▼ / – in the money columns.
+		if (data && data.up_down && column.fieldname !== "date") {
+			const colour = value === "▲" ? "var(--green-600)" : value === "▼" ? "var(--red-600)" : "inherit";
+			return value ? `<div style="text-align:right; color:${colour}; font-weight:600;">${value}</div>` : "";
+		}
 		// The blocks are different lengths, so a row can have no entry for a block —
 		// leave those cells blank instead of printing "Rs 0.00". Real zeros (the
 		// totals row of an empty block) still show, since their value is present.
@@ -250,6 +272,25 @@ function add_group_header_style() {
 		.${GROUP_ROW_CLASS} .ds-shade-a { background: var(--subtle-fg); }
 		.${GROUP_ROW_CLASS} .ds-shade-b { background: var(--gray-200); }
 	</style>`).appendTo("head");
+}
+
+// Opens the Nepali (BS) calendar on a Data filter. The picker library is loaded
+// on every desk page by rdp_common_app. It writes the date as YYYY-MM-DD into
+// the input without telling Frappe, so the picked value is pushed into the
+// filter by hand, which also re-runs the report.
+function attach_bs_picker(fieldname) {
+	const filter = frappe.query_report.get_filter(fieldname);
+	const input = filter && filter.$input && filter.$input[0];
+	if (!input || typeof input.NepaliDatePicker !== "function") return;
+
+	input.NepaliDatePicker({
+		ndpYear: true,
+		ndpMonth: true,
+		dateFormat: "YYYY-MM-DD",
+		onSelect: function () {
+			frappe.query_report.set_filter_value(fieldname, input.value);
+		},
+	});
 }
 
 function set_filter_visible(fieldname, visible) {

@@ -5,6 +5,10 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import add_days
+
+# Start of the Opening Stock window — earlier than any document in the books.
+EARLIEST_DATE = "1900-01-01"
 
 # Every item that moved in the period is reported, not just gas. Rows are scoped by the
 # company on the stock document itself rather than by the item's custom_company, so an
@@ -89,6 +93,7 @@ def execute(filters=None):
 	if data:
 		total = {
 			"company": None,
+			"branch": None,
 			"item_code": None,
 			"item_name": _("Total"),
 			"uom": None,
@@ -105,10 +110,13 @@ def execute(filters=None):
 def get_columns():
 	return [
 		{"fieldname": "company",    "label": _("Company"),            "fieldtype": "Link",  "options": "Company",    "width": 160},
+		{"fieldname": "branch",     "label": _("Branch"),             "fieldtype": "Data",                           "width": 140},
 		{"fieldname": "item_code",  "label": _("Product Code"),       "fieldtype": "Data",                           "width": 120},
 		{"fieldname": "item_name",  "label": _("Product Description"),"fieldtype": "Data",                           "width": 200},
 		{"fieldname": "uom",        "label": _("UOM"),                "fieldtype": "Link",  "options": "UOM",        "width": 90},
 		{"fieldname": "price_list", "label": _("Price List"),         "fieldtype": "Data",                           "width": 140},
+		# Received minus Delivered before From Date — see _opening().
+		{"fieldname": "opening_stock", "label": _("Opening Stock"),   "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "received",   "label": _("Received"),           "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "delivered",  "label": _("Delivered"),          "fieldtype": "Float", "width": 110, "precision": 3},
 		{"fieldname": "balance",    "label": _("Balance"),            "fieldtype": "Float", "width": 110, "precision": 3},
@@ -146,6 +154,45 @@ def get_company_items(company=None, txt=None):
 	)
 
 
+@frappe.whitelist()
+def get_company_branches(company=None, txt=None):
+	"""Branch options scoped to the selected company(ies). Several companies have a
+	branch of the same name (Balaju, Chitwan), so the label carries the company
+	abbreviation."""
+	companies = _as_list(company)
+	like = f"%{(txt or '').strip()}%"
+	conditions = ["(br.name LIKE %(txt)s OR br.branch LIKE %(txt)s)"]
+	values = {"txt": like}
+	if companies:
+		conditions.append("br.custom_company IN %(companies)s")
+		values["companies"] = tuple(companies)
+	where = " AND ".join(conditions)
+
+	return frappe.db.sql(
+		f"""
+		SELECT
+			br.name AS value,
+			CASE WHEN co.abbr IS NULL OR co.abbr = '' THEN br.branch
+			     ELSE CONCAT(br.branch, ' - ', co.abbr) END AS label,
+			br.name AS description
+		FROM `tabBranch` br
+		LEFT JOIN `tabCompany` co ON co.name = br.custom_company
+		WHERE {where}
+		ORDER BY co.abbr, br.branch
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+def _branch_filter(column, branches):
+	"""SQL condition for the Branch filter, or "" when nothing is selected. Documents
+	with no branch are left out once a branch is picked."""
+	if not branches:
+		return ""
+	return "AND {0} IN %(branches)s".format(column)
+
+
 def _item_filter(column, items):
 	"""SQL condition for the Item filter, or "" when nothing is selected."""
 	if not items:
@@ -167,6 +214,20 @@ def _item_names(item_codes):
 	)
 
 
+def _branch_names(branch_ids):
+	"""{Branch id: readable branch name} — Branch ids are series like NGK-Branch-00001."""
+	if not branch_ids:
+		return {}
+	return dict(
+		frappe.get_all(
+			"Branch",
+			filters=[["name", "in", list(branch_ids)]],
+			fields=["name", "branch"],
+			as_list=True,
+		)
+	)
+
+
 def _price_list_filter(column, price_lists):
 	"""SQL condition for the Price List filter, or "" when nothing is selected.
 
@@ -179,7 +240,7 @@ def _price_list_filter(column, price_lists):
 	return "AND ({0} IN %(price_lists)s OR {0} IS NULL OR {0} = '')".format(column)
 
 
-def _received(companies, from_date, to_date, price_lists, items):
+def _received(companies, from_date, to_date, price_lists, items, branches):
 	"""Purchase Receipt (always stock-effecting) + Purchase Invoice with update_stock=1
 	(a PI billed against a PR, update_stock=0, is skipped — that PR already counted it).
 	Return rows carry negative qty already, so a Purchase Return nets straight out."""
@@ -187,37 +248,42 @@ def _received(companies, from_date, to_date, price_lists, items):
 	price_list_condition_pi = _price_list_filter("pi.buying_price_list", price_lists)
 	item_condition = _item_filter("pri.item_code", items)
 	item_condition_pi = _item_filter("pii.item_code", items)
+	branch_condition = _branch_filter("pr.custom_branch", branches)
+	branch_condition_pi = _branch_filter("pi.custom_branch", branches)
 	return frappe.db.sql(
 		"""
-		SELECT company, item_code, uom, price_list, SUM(qty) AS qty FROM (
-			SELECT pr.company AS company, pri.item_code AS item_code, pri.uom AS uom, NULLIF(pr.buying_price_list, '') AS price_list, pri.qty AS qty
+		SELECT company, branch, item_code, uom, price_list, SUM(qty) AS qty FROM (
+			SELECT pr.company AS company, NULLIF(pr.custom_branch, '') AS branch, pri.item_code AS item_code, pri.uom AS uom, NULLIF(pr.buying_price_list, '') AS price_list, pri.qty AS qty
 			FROM `tabPurchase Receipt Item` pri
 			JOIN `tabPurchase Receipt` pr ON pr.name = pri.parent
 			WHERE pr.docstatus = 1 AND pr.company IN %(companies)s
 			  AND pr.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition}
 			  {item_condition}
+			  {branch_condition}
 
 			UNION ALL
 
-			SELECT pi.company AS company, pii.item_code AS item_code, pii.uom AS uom, NULLIF(pi.buying_price_list, '') AS price_list, pii.qty AS qty
+			SELECT pi.company AS company, NULLIF(pi.custom_branch, '') AS branch, pii.item_code AS item_code, pii.uom AS uom, NULLIF(pi.buying_price_list, '') AS price_list, pii.qty AS qty
 			FROM `tabPurchase Invoice Item` pii
 			JOIN `tabPurchase Invoice` pi ON pi.name = pii.parent
 			WHERE pi.docstatus = 1 AND pi.update_stock = 1 AND pi.company IN %(companies)s
 			  AND pi.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition_pi}
 			  {item_condition_pi}
+			  {branch_condition_pi}
 		) t
-		GROUP BY company, item_code, uom, price_list
+		GROUP BY company, branch, item_code, uom, price_list
 		""".format(price_list_condition=price_list_condition, price_list_condition_pi=price_list_condition_pi,
-			item_condition=item_condition, item_condition_pi=item_condition_pi),
+			item_condition=item_condition, item_condition_pi=item_condition_pi,
+			branch_condition=branch_condition, branch_condition_pi=branch_condition_pi),
 		{"companies": tuple(companies), "from_date": from_date, "to_date": to_date,
-		 "price_lists": price_lists, "items": items},
+		 "price_lists": price_lists, "items": items, "branches": branches},
 		as_dict=True,
 	)
 
 
-def _delivered(companies, from_date, to_date, price_lists, items):
+def _delivered(companies, from_date, to_date, price_lists, items, branches):
 	"""Delivery Note (always stock-effecting) + Sales Invoice with update_stock=1
 	(an SI billed against a DN, update_stock=0, is skipped — that DN already counted it).
 	Sales Return rows carry negative qty already, so they net straight out."""
@@ -225,51 +291,78 @@ def _delivered(companies, from_date, to_date, price_lists, items):
 	price_list_condition_si = _price_list_filter("si.selling_price_list", price_lists)
 	item_condition = _item_filter("dni.item_code", items)
 	item_condition_si = _item_filter("sii.item_code", items)
+	branch_condition = _branch_filter("dn.custom_branch", branches)
+	branch_condition_si = _branch_filter("si.custom_branch", branches)
 	return frappe.db.sql(
 		"""
-		SELECT company, item_code, uom, price_list, SUM(qty) AS qty FROM (
-			SELECT dn.company AS company, dni.item_code AS item_code, dni.uom AS uom, NULLIF(dn.selling_price_list, '') AS price_list, dni.qty AS qty
+		SELECT company, branch, item_code, uom, price_list, SUM(qty) AS qty FROM (
+			SELECT dn.company AS company, NULLIF(dn.custom_branch, '') AS branch, dni.item_code AS item_code, dni.uom AS uom, NULLIF(dn.selling_price_list, '') AS price_list, dni.qty AS qty
 			FROM `tabDelivery Note Item` dni
 			JOIN `tabDelivery Note` dn ON dn.name = dni.parent
 			WHERE dn.docstatus = 1 AND dn.company IN %(companies)s
 			  AND dn.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition}
 			  {item_condition}
+			  {branch_condition}
 
 			UNION ALL
 
-			SELECT si.company AS company, sii.item_code AS item_code, sii.uom AS uom, NULLIF(si.selling_price_list, '') AS price_list, sii.qty AS qty
+			SELECT si.company AS company, NULLIF(si.custom_branch, '') AS branch, sii.item_code AS item_code, sii.uom AS uom, NULLIF(si.selling_price_list, '') AS price_list, sii.qty AS qty
 			FROM `tabSales Invoice Item` sii
 			JOIN `tabSales Invoice` si ON si.name = sii.parent
 			WHERE si.docstatus = 1 AND si.update_stock = 1 AND si.company IN %(companies)s
 			  AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
 			  {price_list_condition_si}
 			  {item_condition_si}
+			  {branch_condition_si}
 		) t
-		GROUP BY company, item_code, uom, price_list
+		GROUP BY company, branch, item_code, uom, price_list
 		""".format(price_list_condition=price_list_condition, price_list_condition_si=price_list_condition_si,
-			item_condition=item_condition, item_condition_si=item_condition_si),
+			item_condition=item_condition, item_condition_si=item_condition_si,
+			branch_condition=branch_condition, branch_condition_si=branch_condition_si),
 		{"companies": tuple(companies), "from_date": from_date, "to_date": to_date,
-		 "price_lists": price_lists, "items": items},
+		 "price_lists": price_lists, "items": items, "branches": branches},
 		as_dict=True,
 	)
+
+
+def _opening(companies, from_date, price_lists, items, branches):
+	"""What was left of each row before From Date: everything it received minus
+	everything it delivered, from the same documents as the Received and Delivered
+	columns. Bought 80 and sold 75 up to yesterday → today opens at 5.
+
+	Returns {(company, branch, item_code, uom, price_list): qty}, keyed like the
+	Received and Delivered rows so the opening lands on the row it belongs to.
+	"""
+	day_before = add_days(from_date, -1)
+	opening = {}
+	for r in _received(companies, EARLIEST_DATE, day_before, price_lists, items, branches):
+		key = (r.company, r.branch, r.item_code, r.uom, r.price_list)
+		opening[key] = opening.get(key, 0) + (r.qty or 0)
+	for r in _delivered(companies, EARLIEST_DATE, day_before, price_lists, items, branches):
+		key = (r.company, r.branch, r.item_code, r.uom, r.price_list)
+		opening[key] = opening.get(key, 0) - (r.qty or 0)
+	return {key: qty for key, qty in opening.items() if round(qty, 3) != 0}
 
 
 def get_data(filters, companies):
 	price_lists = tuple(_as_list(filters.get("price_list"))) or None
 	items = tuple(_as_list(filters.get("item"))) or None
+	branches = tuple(_as_list(filters.get("branch"))) or None
 
 	received = {
-		(r.company, r.item_code, r.uom, r.price_list): r.qty or 0
-		for r in _received(companies, filters["from_date"], filters["to_date"], price_lists, items)
+		(r.company, r.branch, r.item_code, r.uom, r.price_list): r.qty or 0
+		for r in _received(companies, filters["from_date"], filters["to_date"], price_lists, items, branches)
 	}
 	delivered = {
-		(r.company, r.item_code, r.uom, r.price_list): r.qty or 0
-		for r in _delivered(companies, filters["from_date"], filters["to_date"], price_lists, items)
+		(r.company, r.branch, r.item_code, r.uom, r.price_list): r.qty or 0
+		for r in _delivered(companies, filters["from_date"], filters["to_date"], price_lists, items, branches)
 	}
 
+	opening = _opening(companies, filters["from_date"], price_lists, items, branches)
+
 	price_list_names = {}
-	all_price_lists = {k[3] for k in set(received) | set(delivered) if k[3]}
+	all_price_lists = {k[4] for k in set(received) | set(delivered) | set(opening) if k[4]}
 	if all_price_lists:
 		price_list_docs = frappe.get_all(
 			"Price List",
@@ -294,20 +387,23 @@ def get_data(filters, companies):
 			for d in price_list_docs
 		}
 
-	keys = set(received) | set(delivered)
-	item_names = _item_names({k[1] for k in keys})
+	keys = set(received) | set(delivered) | set(opening)
+	item_names = _item_names({k[2] for k in keys})
+	branch_names = _branch_names({k[1] for k in keys if k[1]})
 
 	rows = []
-	for key in sorted(keys, key=lambda k: (k[0] or "", k[1], k[2], k[3] or "")):
-		company, item_code, uom, row_price_list = key
+	for key in sorted(keys, key=lambda k: (k[0] or "", branch_names.get(k[1], k[1] or ""), k[2], k[3], k[4] or "")):
+		company, branch, item_code, uom, row_price_list = key
 		r = received.get(key, 0)
 		d = delivered.get(key, 0)
 		rows.append({
 			"company": company,
+			"branch": branch_names.get(branch, branch),
 			"item_code": item_code,
 			"item_name": item_names.get(item_code, item_code),
 			"uom": uom,
 			"price_list": price_list_names.get(row_price_list, row_price_list),
+			"opening_stock": opening.get(key, 0),
 			"received": r,
 			"delivered": d,
 			"balance": r - d,
