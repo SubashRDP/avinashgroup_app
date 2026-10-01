@@ -704,23 +704,31 @@ padding:0px 30px;
 {% set TARGET_PX = 1010 %}
 {#- Account and Party Name column capacities differ per JV type because each type
    has its own column widths. Measured at 13px (column width in px -> chars):
-     Journal Entry       Particular 164 -> 20   Party Name 131 -> 15
+     Journal Entry       Particular 213 -> 26   Party Name 121 -> 14
      Cash/Bank Contra    Description 250 -> 31  Party Name 136 -> 16
-     Cash Entry          Debit 183 -> 22        Party Name 118 -> 14
+     Cash Entry          Debit 257 -> 31        Party Name 157 -> 19
      Debit/Credit Note   Particular 171 -> 20   Party Name 157 -> 19
      all other types     Account 214 -> 26      Party Name 142 -> 17
    The capacities set below are one character under these, because Firefox's
    "Fit to page width" narrows every column ~2% and a name that exactly fills
-   its column then wraps. Cash Entry's Debit column also gives way to a long
-   vehicle plate, so it is taken at its narrowest. Too low bills a phantom second line to long account
+   its column then wraps. Too low bills a phantom second line to long account
    names and empties the bottom of each page; too high misses real wraps and
-   overfills it. -#}
+   overfills it.
+   Cash Entry and Journal Entry also carry a Vehicle column. It is narrow
+   (86px -> 9 characters, CH_VEH), but a vehicle row with no party spans the plate
+   across Vehicle + Party + Party Name, which gives it CH_VEH_SPAN characters
+   (Journal Entry 278px -> 34, Cash Entry 315px -> 39; stated one under). A row
+   with both a vehicle and a party keeps the plate in the Vehicle column alone,
+   where it wraps. -#}
+{% set has_vehicle_col = is_cash_entry or is_journal_voucher %}
+{% set CH_VEH = 9 %}
+{% set CH_VEH_SPAN = 38 if is_cash_entry else 33 %}
 {% if is_journal_voucher %}
-  {% set CH_ACC, CH_PARTY = 19, 14 %}
+  {% set CH_ACC, CH_PARTY = 25, 13 %}
 {% elif is_cash_contra %}
   {% set CH_ACC, CH_PARTY = 30, 15 %}
 {% elif is_cash_entry %}
-  {% set CH_ACC, CH_PARTY = 21, 13 %}
+  {% set CH_ACC, CH_PARTY = 30, 18 %}
 {% elif is_note %}
   {% set CH_ACC, CH_PARTY = 19, 18 %}
 {% else %}
@@ -807,7 +815,9 @@ padding:0px 30px;
       {% if row.custom_subtype and not show_vehicle and not (is_note or is_cash_contra or is_cash_entry or is_journal_voucher) %}
         {% set party_lines = party_lines + (1 if row.party else 0) %}
       {% endif %}
-      {% set lines = [wrapped(acc.account_name, CH_ACC)|int, party_lines]|max %}
+      {% set plate = (frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") or "") if (has_vehicle_col and row.custom_subtype) else "" %}
+      {% set ch_plate = CH_VEH if (row.party_type or row.party) else CH_VEH_SPAN %}
+      {% set lines = [wrapped(acc.account_name, CH_ACC)|int, party_lines, wrapped(plate, ch_plate)|int]|max %}
       {% set _add = G.items.append(ROW_LINE_PX * lines) %}
       {#- Every type prints a per-row Narration on its own line when the row carries one. -#}
       {% if row.user_remark and row.user_remark|trim %}
@@ -956,20 +966,20 @@ padding:0px 30px;
       {#- Cash Entry header: S.N. | Debit | Vehicle | Party | Party Name | Amount -#}
       <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
         <th style="width:5%; text-align:center;">S.N.</th>
-        <th style="width:30%; text-align:left;">Debit</th>
-        <th style="width:15%; text-align:left;">Vehicle</th>
-        <th style="width:15%; text-align:left;">Party</th>
-        <th style="width:20%; text-align:left;">Party Name</th>
+        <th style="width:36%; text-align:left;">Debit</th>
+        <th style="width:12%; text-align:left;">Vehicle</th>
+        <th style="width:10%; text-align:left;">Party</th>
+        <th style="width:22%; text-align:left;">Party Name</th>
         <th style="width:15%; text-align:right;">Amount</th>
       </tr>
       {% elif is_journal_voucher %}
       {#- Journal Voucher header: S.N. | Particular | Vehicle | Party | Party Name | Debit (Rs.) | Credit (Rs.) -#}
       <tr style="border-top:solid #000 1px;border-bottom:solid #000 1px;">
         <th style="width:5%; text-align:center;">S.N.</th>
-        <th style="width:24%; text-align:left;">Particular</th>
-        <th style="width:13%; text-align:left;">Vehicle</th>
-        <th style="width:13%; text-align:left;">Party</th>
-        <th style="width:19%; text-align:left;">Party Name</th>
+        <th style="width:30%; text-align:left;">Particular</th>
+        <th style="width:12%; text-align:left;">Vehicle</th>
+        <th style="width:10%; text-align:left;">Party</th>
+        <th style="width:17%; text-align:left;">Party Name</th>
         <th style="width:13%; text-align:right;">Debit (Rs.)</th>
         <th style="width:13%; text-align:right;">Credit (Rs.)</th>
       </tr>
@@ -1085,9 +1095,17 @@ padding:0px 30px;
       {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ sn.i }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
-        <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
+        {#- A vehicle row with no party lets the plate run on across the empty Party
+           and Party Name cells, so a long plate stays on one line without the
+           Vehicle column itself having to be wide. -#}
+        {% set plate = (frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") or "") if row.custom_subtype else "" %}
+        {% if plate and not (row.party_type or row.party) %}
+        <td colspan="3">{{ plate }}</td>
+        {% else %}
+        <td>{{ plate }}</td>
         <td>{{ row.party_type or "" }}</td>
         <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% endif %}</td>
+        {% endif %}
         <td style="text-align:right;">{% if amount %}{{ amt(amount) }}{% endif %}</td>
       </tr>
       {% if row.user_remark and row.user_remark|trim %}
@@ -1121,9 +1139,17 @@ padding:0px 30px;
       {{ row_start(R, S, TOTAL_PAGES) }}<tr class="jv-line {% if row.user_remark and row.user_remark|trim %}jv-hasnarration{% endif %} {% if R.i in S.breaks %}jv-break{% endif %}">
         <td style="text-align:center;"><strong>{{ loop.index }}</strong></td>
         <td><strong>{{ acc.account_name }}</strong></td>
-        <td style="white-space:nowrap;">{% if row.custom_subtype %}{{ frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") }}{% endif %}</td>
+        {#- A vehicle row with no party lets the plate run on across the empty Party
+           and Party Name cells, so a long plate stays on one line without the
+           Vehicle column itself having to be wide. -#}
+        {% set plate = (frappe.db.get_value("Vehicle", row.custom_subtype, "license_plate") or "") if row.custom_subtype else "" %}
+        {% if plate and not (row.party_type or row.party) %}
+        <td colspan="3">{{ plate }}</td>
+        {% else %}
+        <td>{{ plate }}</td>
         <td>{{ row.party_type or "" }}</td>
         <td>{% if row.party %}{{ frappe.get_cached_doc(row.party_type, row.party).get_title() }}{% endif %}</td>
+        {% endif %}
         <td style="text-align:right;">{% if dr %}{{ amt(dr) }}{% endif %}</td>
         <td style="text-align:right;">{% if cr %}{{ amt(cr) }}{% endif %}</td>
       </tr>
