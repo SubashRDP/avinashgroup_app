@@ -15,13 +15,19 @@ Columns:
   • Date (BS day + month name)
   • AD Date, Day-of-week
   • Employee + Name + Department
-  • IN / OUT (from Attendance.in_time / out_time)
+  • IN / OUT — the day's first and last Employee Checkin, whatever the shift's
+    check-in window. NOT Attendance.in_time / out_time: HRMS leaves a punch
+    outside the window out of the attendance, so those read the second punch
+    as IN or the second-last as OUT. Hours, Late, O.T. and the allowance
+    columns still come from the Attendance row, which is what salary uses — so
+    OUT minus IN need not equal Hours.
   • Hours — Attendance.working_hours (decimal) rendered as HH:MM
   • Status
   • Shift — the shift rostered on THAT date (hr.shift_day.ShiftRoster), so a
     mid-month shift change shows on the day it happened
   • Late (min), Before ofc. Time, O.T. — measured against that shift by
-    hr.shift_day.measure_day, the same code overtime pay uses
+    hr.shift_day.measure_day. O.T. only on a day a submitted Overtime Sheet
+    authorises for that employee (hr.overtime.get_overtime_days); blank otherwise
   • Leave (1/blank)
   • Work In Holiday (1/blank)
   • One dynamic column per attendance-driven Salary Component, with the qty
@@ -33,7 +39,8 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
-from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day, overtime_eligibility
+from avinashgroup_app.hr.overtime import get_overtime_days
+from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
@@ -84,6 +91,7 @@ def execute(filters=None):
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
+	punch_map = _fetch_punches(employees, ad_start, ad_end)
 	# Employee.holiday_list is blank for nearly everyone; the list is set on the
 	# Company and inherited. Resolve that fallback once for the whole roster.
 	holiday_list_of = resolve_holiday_lists(employees)
@@ -94,7 +102,10 @@ def execute(filters=None):
 	# exactly the days someone is asking about. Per day, not per month: a shift
 	# change splits the assignment, and a month can hold two shifts.
 	roster = ShiftRoster(employees, ad_start, ad_end)
-	ot_eligible = overtime_eligibility(employees)
+	# Overtime shows only on a day a submitted Overtime Sheet names the person.
+	# Going by the Employee Category alone counted every early arrival and late
+	# stay of OT-eligible staff, asked for or not.
+	ot_days = get_overtime_days(employees, ad_start, ad_end)
 
 	data = []
 	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0, "ot_hours": 0.0}
@@ -121,7 +132,7 @@ def execute(filters=None):
 			day_label, weekday = date_info[ad_date]
 			row = _build_row(
 				emp, ad_date, day_label, weekday, att_map, emp_holidays, leave_map,
-				components, roster, ot_eligible.get(emp.name),
+				components, roster, (emp.name, ad_date) in ot_days, punch_map,
 			)
 			data.append(row)
 			_accumulate(totals, row)
@@ -433,6 +444,32 @@ def _fetch_attendance(employees, ad_start, ad_end, company=None):
 	return out
 
 
+def _fetch_punches(employees, ad_start, ad_end):
+	"""Return {(employee, date): (first punch, last punch or None)}.
+
+	Straight from Employee Checkin, by calendar day. Every punch counts: no
+	shift window, no log_type, no skip_auto_attendance. A day with a single
+	punch has an IN and no OUT.
+	"""
+	emp_names = [e.name for e in employees]
+	if not emp_names:
+		return {}
+	rows = frappe.db.sql(
+		"""select employee, date(`time`) as punch_date,
+			min(`time`) as first_punch, max(`time`) as last_punch, count(*) as punches
+		from `tabEmployee Checkin`
+		where employee in %(names)s
+		  and `time` >= %(start)s and `time` < %(end)s
+		group by employee, date(`time`)""",
+		{"names": emp_names, "start": ad_start, "end": frappe.utils.add_days(ad_end, 1)},
+		as_dict=True,
+	)
+	return {
+		(r.employee, getdate(r.punch_date)): (r.first_punch, r.last_punch if r.punches > 1 else None)
+		for r in rows
+	}
+
+
 def _fetch_holidays(holiday_list_of, ad_start, ad_end):
 	"""Return {holiday_list_name: {date: {description, weekly_off}}}.
 
@@ -485,10 +522,14 @@ def _fetch_leaves(employees, ad_start, ad_end, company=None):
 	return out
 
 
-def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, roster, ot_eligible=False):
+def _build_row(
+	emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, roster,
+	ot_eligible=False, punch_map=None,
+):
 	holiday = emp_holidays.get(ad_date)
 	leave_type = leave_map.get((emp.name, ad_date))
 	att = att_map.get((emp.name, ad_date))
+	punches = (punch_map or {}).get((emp.name, ad_date))
 
 	in_time_str = ""
 	out_time_str = ""
@@ -522,9 +563,9 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 	if att:
 		status = att.status or ""
 		working_hours = _fmt_hours(att.working_hours)
-		if att.in_time:
+		if not punches:
+			# Attendance keyed in by hand has times but no punches behind them.
 			in_time_str = _fmt_time(att.in_time)
-		if att.out_time:
 			out_time_str = _fmt_time(att.out_time)
 		if (holiday or work_in_holiday) and status in ("Present", "Half Day"):
 			work_in_holiday = 1
@@ -546,6 +587,12 @@ def _build_row(emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map
 			status = "On Leave"
 		else:
 			status = "Not Marked"
+
+	if punches:
+		# The punches themselves, on every kind of day — also one with no
+		# Attendance row yet, or marked Absent.
+		in_time_str = _fmt_time(punches[0])
+		out_time_str = _fmt_time(punches[1])
 
 	# Dynamic allowance columns — per-day qty (days/hours per the component's unit).
 	component_values = {}

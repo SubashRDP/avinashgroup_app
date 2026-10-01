@@ -1,15 +1,4 @@
-# Copyright (c) 2026, Raindrop and contributors
-# For license information, please see license.txt
 
-"""Set 5-decimal precision, field-wise, on the per-unit RATE fields only:
-
-- Item Price -> price_list_rate (its "Rate" field)
-- Sales Invoice Item / Sales Order Item / Quotation Item / Delivery Note Item
-  -> price_list_rate, base_price_list_rate, rate, base_rate, net_rate, base_net_rate
-
-Unlike sales_currency_precision_5 (which set every Currency field to 5), this
-targets only the rate fields, where the extra decimals actually matter. Applied
-once per site on migrate; idempotent (safe to re-run)."""
 
 import frappe
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter

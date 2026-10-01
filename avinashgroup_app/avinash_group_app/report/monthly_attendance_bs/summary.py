@@ -14,8 +14,8 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
   • Tea & Conveyance  = sum(Tea qty + Commute qty)
   • Tihar             = sum(Tihar component qty, when component exists)
   • O.T. (hrs)        = hr.shift_day.measure_day, summed: hours outside the day's
-                        shift (all hours on a holiday), to the half hour,
-                        overtime-eligible staff only — the figure overtime pay uses
+                        shift (all hours on a holiday), to the half hour, only on
+                        days a submitted Overtime Sheet authorises for the employee
   • Late Time (min)   = late arrival + leaving early, against the day's shift,
                         as the sheet's card adds them (Late + Before ofc. Time)
   • Present Days      = count(Present + WFH) + 0.5 × count(Half Day)
@@ -39,7 +39,8 @@ from rdp_common_app.utils.bs_boundaries import (
 	get_bs_month_range,
 	get_bs_month_name,
 )
-from avinashgroup_app.hr.shift_day import measure_day, overtime_eligibility
+from avinashgroup_app.hr.overtime import get_overtime_days
+from avinashgroup_app.hr.shift_day import measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
@@ -143,14 +144,15 @@ def execute_summary(filters):
 		"upto":     (upto_leave_dates,  fy_start, ad_end),
 	}
 
-	ot_eligible = overtime_eligibility(employees)
+	# Overtime counts only on days a submitted Overtime Sheet names the person.
+	ot_days = get_overtime_days(employees, ad_start, ad_end)
 
 	data = []
 	for idx, emp in enumerate(employees, start=1):
 		row = _build_summary_row(
 			idx, emp, ad_start, ad_end,
 			att_map, holiday_map, holiday_list_of, leave_windows,
-			components, groups, standalone_components, ot_eligible.get(emp.name),
+			components, groups, standalone_components, ot_days,
 		)
 		data.append(row)
 
@@ -164,7 +166,7 @@ def execute_summary(filters):
 def _build_summary_row(
 	idx, emp, ad_start, ad_end,
 	att_map, holiday_map, holiday_list_of, leave_windows,
-	components, groups, standalone_components, ot_eligible=False,
+	components, groups, standalone_components, ot_days=frozenset(),
 ):
 	emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
 
@@ -199,7 +201,9 @@ def _build_summary_row(
 		# Against the day's shift, by the same measure as the per-day grid and
 		# overtime pay. This used to need HRMS's `late_entry` flag, which nothing
 		# here sets, and counted every minute anyone stayed late as overtime.
-		measured = measure_day(att, is_holiday=ad_date in emp_holidays, ot_eligible=ot_eligible)
+		measured = measure_day(
+			att, is_holiday=ad_date in emp_holidays, ot_eligible=(emp.name, ad_date) in ot_days
+		)
 		late_min_total += measured.late_minutes + measured.early_exit_minutes
 		ot_hours_total += measured.ot_hours
 

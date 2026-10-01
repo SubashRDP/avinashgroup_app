@@ -253,6 +253,28 @@ def get_authorised(work_date, company=None):
 	return {r.employee: r for r in query.run(as_dict=True)}
 
 
+def get_overtime_days(employees, start, end):
+	"""{(employee, date)} the company authorised overtime for, over a period.
+
+	The period form of `get_authorised`, for the attendance reports: a day shows
+	overtime only when a submitted Overtime Sheet names that person on that date
+	with the Overtime entitlement. A Replacement Leave row earns a leave day, not
+	hours, and a category's OT eligibility alone authorises nothing (policy 5.1).
+	"""
+	names = [e if isinstance(e, str) else e.name for e in employees]
+	if not names:
+		return set()
+	rows = frappe.db.sql(
+		"""select r.employee, s.work_date
+		from `tabOvertime Sheet Employee` r
+		join `tabOvertime Sheet` s on s.name = r.parent
+		where s.docstatus = 1 and r.entitlement = %(entitlement)s
+		  and r.employee in %(names)s and s.work_date between %(start)s and %(end)s""",
+		{"entitlement": ENTITLEMENT_OVERTIME, "names": names, "start": getdate(start), "end": getdate(end)},
+	)
+	return {(employee, getdate(work_date)) for employee, work_date in rows}
+
+
 def was_authorised(employee, work_date):
 	return employee in get_authorised(work_date)
 
