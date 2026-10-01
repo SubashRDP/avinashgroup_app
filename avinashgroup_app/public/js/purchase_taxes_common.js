@@ -664,11 +664,11 @@ function calculate_item_vat_amount(frm, cdt, cdn) {
     const custom_total = flt(flt(row.base_net_amount) + flt(row.custom_excise_value), 2);
 
     if (vat_apply_on === 'VAT 13%') {
-        // Paisa-CUT per line (taxes on a buying line are cut, not rounded), mirroring the server
+        // Paisa per line, rounded HALF-UP (11.505 -> 11.51), mirroring the server
         // (purchase_taxes_handler.calculate_item_vat_amounts). The header VAT is
         // the sum of these rows, so the preview and the saved value only agree
         // if both round here.
-        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', avinashgroup.purchase.truncate((custom_total * 13) / 100, 2));
+        frappe.model.set_value(cdt, cdn, 'custom_vat_amount', avinashgroup.purchase.round_half_up((custom_total * 13) / 100, 2));
     } else if (vat_apply_on === 'VAT 0%') {
         frappe.model.set_value(cdt, cdn, 'custom_vat_amount', 0);
     }

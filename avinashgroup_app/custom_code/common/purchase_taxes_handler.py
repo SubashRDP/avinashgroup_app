@@ -3,7 +3,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-from avinashgroup_app.custom_code.common.purchase_paisa_truncation import truncate
+from avinashgroup_app.custom_code.common.purchase_paisa_truncation import round_half_up, truncate
 
 """
 Common TDS, Excise, and VAT calculation handler for Purchase documents.
@@ -160,15 +160,16 @@ def calculate_item_vat_amounts(doc):
         if vat_apply_on == 'VAT 13%':
             item.custom_vat_rate = 13
             custom_total = flt(getattr(item, 'custom_total', 0)) or 0
-            # CUT each line's VAT to paisa (taxes on a buying line are cut, not rounded --
-            # see purchase_paisa_truncation). The header VAT and the taxes-table
-            # row are built by summing these lines, so it must happen HERE, once
-            # per line. At precision 5 the header summed the unrounded
-            # values while ERPNext's round_floats_in stored each row at 2 dp, so
-            # the VAT column came out a paisa under the header -- and the govt VAT
-            # Purchase Book (purchase_register_report) sums the *item* field while
-            # the GL input credit comes from the tax row, so the two disagreed.
-            item.custom_vat_amount = truncate((custom_total * 13) / 100, 2)
+            # Round each line's VAT to paisa, HALF-UP (11.505 -> 11.51; TDS and
+            # excise are still cut -- see purchase_paisa_truncation). The header
+            # VAT and the taxes-table row are built by summing these lines, so it
+            # must happen HERE, once per line. At precision 5 the header summed
+            # the unrounded values while ERPNext's round_floats_in stored each row
+            # at 2 dp, so the VAT column came out a paisa under the header -- and
+            # the govt VAT Purchase Book (purchase_register_report) sums the *item*
+            # field while the GL input credit comes from the tax row, so the two
+            # disagreed.
+            item.custom_vat_amount = round_half_up((custom_total * 13) / 100, 2)
         elif vat_apply_on == 'VAT 0%':
             item.custom_vat_rate = 0
             item.custom_vat_amount = 0

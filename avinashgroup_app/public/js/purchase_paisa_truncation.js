@@ -1,18 +1,19 @@
 /**
- * Buying-side money derived FROM the line amount is CUT to 2 decimals — browser half.
+ * How buying-side money lands on 2 decimals — browser half.
  *
  * The rule and its boundary live in the server module's docstring
  * (custom_code/common/purchase_paisa_truncation.py). In short: the line amount
- * rounds like Sales Invoice; VAT / TDS / Excise and header-discount shares are
- * cut, never rounded.
+ * and VAT 13% round HALF-UP (a 5 in the third decimal always goes up); TDS /
+ * Excise and header-discount shares are cut, never rounded.
  *
  * This file provides:
- * - avinashgroup.purchase.truncate, used by purchase_taxes_common.js for the
- *   VAT and excise previews;
- * - a wrapper on erpnext.taxes_and_totals.apply_discount_amount so the form
- *   previews the same cut discount shares the server saves. The class is the
- *   base of every transaction form controller, so the wrapper is scoped to the
- *   four buying doctypes and is a no-op everywhere else.
+ * - avinashgroup.purchase.round_half_up and .truncate, used by
+ *   purchase_taxes_common.js for the VAT and excise previews;
+ * - wrappers on erpnext.taxes_and_totals.calculate_item_values and
+ *   .apply_discount_amount so the form previews the same line amounts and
+ *   discount shares the server saves. The class is the base of every
+ *   transaction form controller, so the wrappers are scoped to the four buying
+ *   doctypes and are a no-op everywhere else.
  */
 (function () {
     const BUYING_DOCTYPES = new Set([
@@ -29,8 +30,38 @@
         return flt(Math.trunc(flt(cleaned * factor, FLOAT_NOISE_PRECISION - precision)) / factor, precision);
     }
 
+    function round_half_up(value, precision) {
+        const cleaned = flt(value, FLOAT_NOISE_PRECISION);
+        const factor = Math.pow(10, precision);
+        // Round the magnitude so a tie goes away from zero on both signs
+        // (Math.round alone would send -11.505 to -11.50).
+        const scaled = flt(Math.abs(cleaned) * factor, FLOAT_NOISE_PRECISION - precision);
+        return flt(Math.sign(cleaned) * Math.round(scaled) / factor, precision);
+    }
+
     frappe.provide("avinashgroup.purchase");
     avinashgroup.purchase.truncate = truncate;
+    avinashgroup.purchase.round_half_up = round_half_up;
+
+    // Mirrors TruncatingTaxesAndTotals.calculate_item_values on the server:
+    // each line amount is rounded half-up instead of the site's Banker's Rounding.
+    function reround_item_amounts(ctrl) {
+        const doc = ctrl.frm.doc;
+        const conversion_rate = flt(doc.conversion_rate) || 1;
+        for (const item of doc.items || []) {
+            let qty = flt(item.qty);
+            // Mirrors ERPNext's zero-qty credit/debit note cases.
+            if (!qty && (doc.is_return || doc.is_debit_note)) {
+                qty = doc.is_debit_note ? 1 : -1;
+                if (doc.doctype !== "Purchase Receipt" && doc.is_return === 1) qty = 0;
+            }
+
+            const amount = round_half_up(flt(item.rate) * qty, precision("amount", item));
+            const base_amount = round_half_up(amount * conversion_rate, precision("base_amount", item));
+            item.amount = item.net_amount = amount;
+            item.base_amount = item.base_net_amount = base_amount;
+        }
+    }
 
     // Mirrors TruncatingTaxesAndTotals.apply_discount_amount on the server:
     // every row's share of a header discount is cut, the last row takes the
@@ -72,6 +103,16 @@
     function patch() {
         const proto = erpnext.taxes_and_totals && erpnext.taxes_and_totals.prototype;
         if (!proto || proto._purchase_truncation_patched) return;
+
+        const original_item_values = proto.calculate_item_values;
+        proto.calculate_item_values = function () {
+            const result = original_item_values.apply(this, arguments);
+            const doc = this.frm && this.frm.doc;
+            if (doc && BUYING_DOCTYPES.has(doc.doctype) && !this.discount_amount_applied) {
+                reround_item_amounts(this);
+            }
+            return result;
+        };
 
         const original_discount = proto.apply_discount_amount;
         proto.apply_discount_amount = function () {
