@@ -17,8 +17,8 @@ fiscal year):
   * Shift Request works once (`hr.shift_change` makes room for it) but one
     request per person per month is the painful part, and the second month is
     refused outright: the first request has no end date, so HRMS calls the next
-    one "already applied for Shift ... that overlaps within this period", and
-    refuses the way back a second time as "your Default Shift".
+    one "already applied for Shift ... that overlaps within this period". With
+    an end date instead, the way back is refused as "your Default Shift".
   * None of them knows which shifts rotate. Any shift can be picked.
 
 So this is the bulk form of the same move `hr.shift_change` makes for a permanent

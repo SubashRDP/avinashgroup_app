@@ -175,6 +175,10 @@ Live page, updated as work lands:
 
 ## An employee asking for a different shift (2026-09-20)
 
+> Moving many people between the two rotational shifts every month is a
+> different tool — **Move Staff to This Shift**, `docs/shift-rotation.md`. A Shift
+> Request stays the way to change one person's shift for a few days.
+
 Everyone holds one **open-ended Shift Assignment** from the start of the fiscal
 year — that is what keeps attendance right when it is marked weeks later. It also
 means a stock **Shift Request** can never be approved: ERPNext refuses a second

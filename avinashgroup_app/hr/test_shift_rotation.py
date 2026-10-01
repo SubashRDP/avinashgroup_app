@@ -15,12 +15,8 @@ Types, own assignments) and rolled back by FrappeTestCase, so nothing is left on
 the site. `rotational_shifts` is the only reader of `Shift Type.custom_in_rotation`
 and is replaced here, so the suite also runs on a site not yet migrated.
 
-Run (bench run-tests fails at bootstrap on this bench), from `sites/`:
-
-    ../env/bin/python -m unittest avinashgroup_app.hr.test_shift_rotation
-
-after `frappe.init(site=...)` / `frappe.connect()`; see docs/shift-rotation.md for
-the one-file runner.
+Run: bench run-tests fails at bootstrap on the dev bench; the runner is in
+docs/shift-rotation.md ("Tests").
 """
 
 from datetime import datetime, time
