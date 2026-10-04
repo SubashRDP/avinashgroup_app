@@ -43,6 +43,47 @@ person's refusal does not stop the others.
 | The date was wrong | Undo as above, then move again from the right date. |
 | One person, a few days only | A **Shift Request** with a To Date, as before (`hr/shift_change.py`). Rotation is not involved. |
 
+## A bounded period (the Shift Roster)
+
+`rotate` moves people from a date onwards and refuses anybody with a dated change
+already ahead. A roster painted month by month needs the other shape: "evenings
+for Kartik only", whatever is booked after. That is `set_period` and its batch
+form `set_periods`, which the Shift Roster page's Apply calls.
+
+```
+set_periods(company, changes)          # whitelisted
+  changes = [{"employee", "shift", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}, ...]   # end inclusive
+  -> {"moved":   [{"employee", "employee_name", "shift", "start", "end",
+                   "from_shifts": [shifts the range held before, in date order],
+                   "shift_assignment": the assignment now covering the range}],
+      "refused": [{"employee", "shift", "start", "end", "employee_name", "reason"}]}
+```
+
+Changes run in date order (start, then employee), each on its own savepoint: one
+refusal does not stop the rest, and nothing of a refused change is left behind.
+Send one change per run of consecutive painted months; two adjacent runs of the
+same shift for one person join into one assignment anyway.
+
+What it does to the assignments — every day outside [start, end] keeps its shift:
+
+    before          6 AM - 2 PM   Shrawan 1 ─────────────────────────▶ open
+    Kartik → 12-8   6 AM - 2 PM   Shrawan 1 ──▶ 30 Asoj
+                    12 PM - 8 PM                1 Kartik ─▶ 30 Kartik
+                    6 AM - 2 PM                             1 Mangsir ─▶ open
+    Kartik → 6-2    6 AM - 2 PM   Shrawan 1 ─────────────────────────▶ open   (back to one)
+
+An assignment running through the range is ended the day before and resumed the
+day after; one starting inside and running past has its start moved to the day
+after; one wholly inside is cancelled. Dates move by `set_value`, so nothing
+outside the range is cancelled. The new shift joins a neighbouring assignment of
+the same shift instead of adding a piece beside it.
+
+The same rules as `rotate`: the shift must be rotational and of the company; the
+person must be of the company and on a rotational shift on **every** day of the
+range (one day on the day shift, or on no shift, refuses the whole range — by
+name, with the dates); a range reaching into a paid month is refused; lived days
+in the range, and only those, are re-marked by `hr/shift_backdate.py`.
+
 ## Which shifts rotate
 
 A checkbox on the Shift Type: **Takes Part in Rotation** (`custom_in_rotation`).

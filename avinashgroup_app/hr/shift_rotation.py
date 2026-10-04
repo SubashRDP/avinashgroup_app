@@ -42,10 +42,16 @@ shift a person leaves and the one they join must be ticked and belong to the
 person's own company; anything else is refused by name, here on the server — the
 dialog only filters.
 
-Entry point: the "Move Staff to This Shift" button on a rotational Shift Type
-(public/js/shift_type.js), which calls `preview` and `rotate`. HR picks the date,
-the shift and the people. Nothing here runs on a schedule and nothing alternates
-by itself. Write-up: docs/shift-rotation.md.
+Entry points: the "Move Staff to This Shift" button on a rotational Shift Type
+(public/js/shift_type.js), which calls `preview` and `rotate` — open-ended, from
+one date; and the Shift Roster page's Apply, which calls `set_periods` — bounded
+ranges, one per painted run of months. Nothing here runs on a schedule and
+nothing alternates by itself. Write-up: docs/shift-rotation.md.
+
+`rotate` versus `set_period`: `rotate` moves people from a date onwards and
+refuses anybody with a dated change already ahead. `set_period` puts a person on
+a shift for [start, end] only — the assignment running through the range is cut
+around it and resumes the day after — so it works whatever is booked later.
 
 Deliberately narrow:
   * Attendance is not touched here. A date already lived is re-marked by
@@ -182,6 +188,228 @@ def rotate(company, to_shift, from_date, employees):
 				}
 			)
 	return {"moved": moved, "refused": refused}
+
+
+# ─────────────────────────────────────────────────── a bounded period ──
+
+
+@frappe.whitelist()
+def set_periods(company, changes):
+	"""Put people on rotational shifts for bounded date ranges — the Shift Roster's Apply.
+
+	`changes`: a list (or JSON list) of {"employee", "shift", "start", "end"}, one
+	per run of painted cells, dates as YYYY-MM-DD with `end` inclusive. Each runs
+	through `set_period` in date order (start, then employee), on its own
+	savepoint, so one refusal does not stop the rest — same contract as `rotate`.
+
+	Returns {"moved": [...], "refused": [...]}: every moved entry is what
+	`set_period` returns; every refused entry is the change as sent plus
+	"employee_name" and "reason" (plain text, worded for HR).
+	"""
+	frappe.has_permission("Shift Assignment", "create", throw=True)
+	frappe.has_permission("Shift Assignment", "submit", throw=True)
+	frappe.has_permission("Shift Assignment", "cancel", throw=True)
+
+	changes = frappe.parse_json(changes) or []
+	if not changes:
+		frappe.throw(_("Nothing to apply."), title=_("No Changes"))
+	shifts = rotational_shifts(company)
+
+	changes = [{key: change.get(key) for key in ("employee", "shift", "start", "end")} for change in changes]
+	moved, refused = [], []
+	for change in sorted(changes, key=lambda c: (str(c["start"] or ""), c["employee"] or "")):
+		savepoint = "shift_period"
+		frappe.db.savepoint(savepoint)
+		try:
+			moved.append(
+				set_period(company, change["employee"], change["shift"], change["start"], change["end"], shifts)
+			)
+		except frappe.ValidationError as e:
+			# Ours, HRMS's overlap check and the paid-month guard all land here,
+			# each already worded for HR. Anything else is a bug and must raise.
+			frappe.db.rollback(save_point=savepoint)
+			frappe.clear_last_message()
+			refused.append(
+				{
+					**change,
+					"employee_name": frappe.db.get_value("Employee", change["employee"], "employee_name"),
+					"reason": strip_html(str(e)),
+				}
+			)
+	return {"moved": moved, "refused": refused}
+
+
+def set_period(company, employee, shift, start, end, shifts=None):
+	"""Put `employee` on `shift` from `start` to `end` inclusive; every other day keeps its shift.
+
+	The bounded form of `rotate`. Painting Kartik onto the evening shift for
+	somebody on mornings all year ends the morning assignment on 30 Asoj, starts
+	evenings on 1 Kartik ending 30 Kartik, and resumes mornings on 1 Mangsir with
+	the end the morning assignment had. Unlike `rotate`, a dated change later on
+	is not in the way: it lies outside the range and is left alone.
+
+	The same rules as `rotate`, checked here: `shift` must be rotational and of
+	`company`; the person must be of `company` and, on EVERY day of the range, on
+	one of its rotational shifts (a day on the day shift, or on no shift, refuses
+	the whole range); a range reaching into a paid month is refused; lived days
+	are re-marked by `hr.shift_backdate`, as for a backdated Shift Assignment.
+
+	`shifts`: the company's rotational shifts, when the caller already has them.
+	Raises frappe.ValidationError (ShiftRotationError for the rotation rules)
+	with a sentence HR can act on. Returns {"employee", "employee_name", "shift",
+	"start", "end", "from_shifts" (the shifts the range held before, in date
+	order), "shift_assignment" (the assignment now covering the range)}.
+	"""
+	if not (start and end):
+		raise_rotation_error(_("Enter both the first and the last day of the period."))
+	start, end = getdate(start), getdate(end)
+	if start > end:
+		raise_rotation_error(
+			_("The period ends ({0}) before it starts ({1}).").format(formatdate(end), formatdate(start))
+		)
+	shifts = shifts if shifts is not None else rotational_shifts(company)
+	_check_target(company, shift, shifts)
+
+	person = frappe.db.get_value("Employee", employee, ["employee_name", "company"], as_dict=True)
+	if not person:
+		raise_rotation_error(_("Employee {0} does not exist.").format(employee))
+	label = f"{person.employee_name} ({employee})"
+	if person.company != company:
+		raise_rotation_error(_("{0} belongs to {1}, not {2}.").format(label, person.company, company))
+
+	held = _shifts_held(employee, start, end)
+	period = f"{formatdate(start)} – {formatdate(end)}"
+	if [s for s, _first, _last in held] == [shift]:
+		raise_rotation_error(_("{0} is already on {1} for {2}.").format(label, frappe.bold(shift), period))
+	for current, first, last in held:
+		if current not in shifts:
+			raise_rotation_error(
+				_(
+					"{0} is on {1} from {2} to {3}, which does not take part in rotation. Only staff on "
+					"{4} rotate; for a one-off change use a Shift Request."
+				).format(
+					label,
+					frappe.bold(current or _("no shift")),
+					formatdate(first),
+					formatdate(last),
+					", ".join(shifts),
+				)
+			)
+
+	# Lived days: refused if paid, detached now, re-marked once the roster is whole.
+	change = frappe._dict(
+		doctype="Shift Assignment",
+		employee=employee,
+		employee_name=person.employee_name,
+		start_date=start,
+		end_date=end,
+	)
+	shift_backdate.prepare_assignment_cancel(change)
+
+	frappe.flags.in_shift_request = True  # one rebuild below, not one per piece
+	try:
+		assignment = _carve(employee, company, shift, start, end)
+	finally:
+		frappe.flags.in_shift_request = False
+
+	shift_backdate.rebuild_for_assignment(change)
+	return {
+		"employee": employee,
+		"employee_name": person.employee_name,
+		"shift": shift,
+		"start": str(start),
+		"end": str(end),
+		"from_shifts": list(dict.fromkeys(s for s, _first, _last in held)),
+		"shift_assignment": assignment,
+	}
+
+
+def _shifts_held(employee, start, end):
+	"""The range as [(shift, first day, last day)], one entry per run, HRMS's precedence (ShiftRoster)."""
+	roster = ShiftRoster([employee], start, end)
+	runs, day = [], start
+	while day <= end:
+		current = roster.shift_on(employee, day)
+		if runs and runs[-1][0] == current:
+			runs[-1][2] = day
+		else:
+			runs.append([current, day, day])
+		day = add_days(day, 1)
+	return [tuple(run) for run in runs]
+
+
+def _carve(employee, company, shift, start, end):
+	"""Make room for [start, end] in the person's assignments, then cover it with `shift`.
+
+	Every overlapping assignment keeps the days outside the range:
+	  * starts before and runs past it  → ends the day before; a copy resumes the day after
+	  * starts before, ends inside      → ends the day before
+	  * starts inside, runs past it     → starts the day after
+	  * lies wholly inside              → cancelled (the record that it was replaced)
+	Dates move with set_value rather than cancel-and-recreate, so no assignment
+	outside the range is cancelled and HRMS never checks attendance outside it.
+	Returns the name of the assignment that covers the range.
+	"""
+	day_before, day_after = add_days(start, -1), add_days(end, 1)
+	for piece in _assignments_between(employee, start, end):
+		piece_start = getdate(piece.start_date)
+		piece_end = getdate(piece.end_date) if piece.end_date else None
+		runs_past = piece_end is None or piece_end > end
+		if piece_start < start:
+			frappe.db.set_value("Shift Assignment", piece.name, "end_date", day_before, update_modified=False)
+			if runs_past:
+				create_shift_assignment(employee, company, piece.shift_type, day_after, piece_end, "Active")
+		elif runs_past:
+			frappe.db.set_value("Shift Assignment", piece.name, "start_date", day_after, update_modified=False)
+		else:
+			frappe.get_doc("Shift Assignment", piece.name).cancel()
+	return _cover(employee, company, shift, start, end)
+
+
+def _cover(employee, company, shift, start, end):
+	"""Cover the now-empty [start, end] with `shift`, joining a neighbour on the same shift.
+
+	Painting a month back to what surrounds it should leave one assignment, not
+	three pieces of the same shift: the one ending the day before is stretched
+	over the range (and over the one resuming the day after, if that has no lived
+	day yet and can be cancelled cleanly); else the one starting the day after is
+	pulled back to `start`; else a new assignment covers exactly the range.
+	"""
+	before = _neighbour(employee, shift, end_date=add_days(start, -1))
+	after = _neighbour(employee, shift, start_date=add_days(end, 1))
+	if before:
+		if after and getdate(after.start_date) > getdate(today()):
+			frappe.db.set_value("Shift Assignment", before.name, "end_date", after.end_date, update_modified=False)
+			frappe.get_doc("Shift Assignment", after.name).cancel()
+		else:
+			frappe.db.set_value("Shift Assignment", before.name, "end_date", end, update_modified=False)
+		return before.name
+	if after:
+		frappe.db.set_value("Shift Assignment", after.name, "start_date", start, update_modified=False)
+		return after.name
+	return create_shift_assignment(employee, company, shift, start, end, "Active").name
+
+
+def _neighbour(employee, shift, **edge):
+	"""The submitted, active assignment of `shift` with exactly this start_date or end_date."""
+	return frappe.db.get_value(
+		"Shift Assignment",
+		{"employee": employee, "docstatus": 1, "status": "Active", "shift_type": shift, **edge},
+		["name", "start_date", "end_date"],
+		as_dict=True,
+	)
+
+
+def _assignments_between(employee, start, end):
+	"""Submitted, active assignments overlapping [start, end], earliest first."""
+	return frappe.db.sql(
+		"""select name, shift_type, start_date, end_date from `tabShift Assignment`
+		where employee = %s and docstatus = 1 and status = 'Active'
+		  and start_date <= %s and (end_date is null or end_date >= %s)
+		order by start_date""",
+		(employee, end, start),
+		as_dict=True,
+	)
 
 
 # ──────────────────────────────────────────────────────────────── the rule ──

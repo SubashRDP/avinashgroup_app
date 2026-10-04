@@ -8,6 +8,10 @@ Covers:
 - a dated shift change still ahead of the person is refused, not overwritten
 - a rotation into days already lived re-marks them on the new shift
 - a rotation into a paid month is refused
+- a bounded period (set_period / set_periods, the Shift Roster's Apply): resumes the
+  old shift after it, joins back into one assignment, works around a change booked
+  later, refuses a fixed or empty day anywhere in the range, paid months, bad input;
+  re-marks only its own lived days; batch order and isolation
 - the candidate list, and the permission check
 
 Everything is built inside one transaction (own companies' employees, own Shift
@@ -299,6 +303,219 @@ class TestShiftRotation(FrappeTestCase):
 		self.assertIn("already been paid", result["refused"][0]["reason"])
 		self.assertEqual(self._pieces(emp), [(self.morning, YEAR_START, None)])
 
+	# ────────────────────────────────────────── a bounded period (the roster) ──
+
+	def _period(self, employee, shift, start, end, company=None):
+		return shift_rotation.set_period(company or self.company, employee, shift, start, end)
+
+	def _last_day(self, start):
+		return add_days(start, 29)
+
+	def test_period_in_the_middle_resumes_the_old_shift_after_it(self):
+		emp = self._employee(self.morning)
+		end = self._last_day(self.month_1)
+
+		done = self._period(emp, self.evening, self.month_1, end)
+		self.assertEqual(done["from_shifts"], [self.morning])
+		self.assertEqual((done["start"], done["end"], done["shift"]), (str(getdate(self.month_1)), str(getdate(end)), self.evening))
+		self.assertEqual(
+			self._pieces(emp),
+			[
+				(self.morning, YEAR_START, add_days(self.month_1, -1)),
+				(self.evening, self.month_1, end),
+				(self.morning, add_days(end, 1), None),
+			],
+		)
+		self.assertEqual(get_shift_window(emp, add_days(self.month_1, 5))[0], self.evening)
+		self.assertEqual(get_shift_window(emp, add_days(end, 1))[0], self.morning)
+
+	def test_painting_back_leaves_one_assignment(self):
+		emp = self._employee(self.morning)
+		end = self._last_day(self.month_1)
+		self._period(emp, self.evening, self.month_1, end)
+		self._period(emp, self.morning, self.month_1, end)
+
+		self.assertEqual(self._pieces(emp), [(self.morning, YEAR_START, None)])
+		self.assertEqual(
+			frappe.db.count("Shift Assignment", {"employee": emp, "shift_type": self.evening, "docstatus": 2}), 1,
+			"the replaced piece is kept, cancelled",
+		)
+
+	def test_period_works_around_a_change_booked_later(self):
+		# `rotate` refuses this ("a dated shift change"); a bounded period does not touch it.
+		emp = self._employee(self.morning)
+		self._rotate(self.evening, self.month_3, [emp])
+		end = self._last_day(self.month_1)
+
+		self._period(emp, self.evening, self.month_1, end)
+		self.assertEqual(
+			self._pieces(emp),
+			[
+				(self.morning, YEAR_START, add_days(self.month_1, -1)),
+				(self.evening, self.month_1, end),
+				(self.morning, add_days(end, 1), add_days(self.month_3, -1)),
+				(self.evening, self.month_3, None),
+			],
+		)
+
+	def test_period_across_a_change_moves_its_edge(self):
+		emp = self._employee(self.morning)
+		self._rotate(self.evening, self.month_2, [emp])
+		end = add_days(self.month_2, 9)
+
+		done = self._period(emp, self.morning, self.month_1, end)
+		self.assertEqual(done["from_shifts"], [self.morning, self.evening])
+		self.assertEqual(
+			self._pieces(emp),
+			[(self.morning, YEAR_START, end), (self.evening, add_days(end, 1), None)],
+		)
+
+	def test_period_onto_a_day_off_rotation_or_no_shift_is_refused(self):
+		fixed = self._employee(self.day)
+		unrostered = self._employee(None)
+		end = self._last_day(self.month_1)
+		with self.assertRaises(shift_rotation.ShiftRotationError) as refused:
+			self._period(fixed, self.evening, self.month_1, end)
+		self.assertIn("does not take part in rotation", str(refused.exception))
+		with self.assertRaises(shift_rotation.ShiftRotationError) as refused:
+			self._period(unrostered, self.evening, self.month_1, end)
+		self.assertIn("no shift", str(refused.exception))
+		with self.assertRaises(shift_rotation.ShiftRotationError):
+			self._period(self._employee(self.morning), self.day, self.month_1, end)  # fixed target
+		self.assertEqual(self._pieces(fixed), [(self.day, YEAR_START, None)])
+
+	def test_one_fixed_day_inside_the_range_refuses_the_whole_range(self):
+		emp = self._employee(self.morning)
+		# Ten days on the day shift in the middle of month 1, by a dated assignment.
+		middle = add_days(self.month_1, 10)
+		self._period_raw(emp, self.day, middle, add_days(middle, 9))
+		before = self._pieces(emp)
+		with self.assertRaises(shift_rotation.ShiftRotationError) as refused:
+			self._period(emp, self.evening, self.month_1, self._last_day(self.month_1))
+		self.assertIn(self.day, str(refused.exception))
+		self.assertEqual(self._pieces(emp), before)
+
+	def _period_raw(self, employee, shift, start, end):
+		"""A dated assignment cut into the standing one, the way a Shift Request leaves it."""
+		standing = frappe.get_all(
+			"Shift Assignment", {"employee": employee, "docstatus": 1, "end_date": ("is", "not set")}, pluck="name"
+		)[0]
+		frappe.db.set_value("Shift Assignment", standing, "end_date", add_days(start, -1))
+		original = frappe.db.get_value("Shift Assignment", standing, "shift_type")
+		create_shift_assignment(employee, self.company, shift, start, end, "Active")
+		create_shift_assignment(employee, self.company, original, add_days(end, 1), None, "Active")
+
+	def test_period_bad_input_is_refused(self):
+		emp = self._employee(self.morning)
+		outsider = self._employee(self.elsewhere, company=self.other_company)
+		end = self._last_day(self.month_1)
+		cases = [
+			((emp, self.morning, self.month_1, end), "already on"),
+			((emp, self.evening, end, self.month_1), "before it starts"),
+			((emp, self.evening, self.month_1, None), "first and the last day"),
+			((outsider, self.evening, self.month_1, end), "belongs to"),
+		]
+		for args, words in cases:
+			with self.subTest(words=words):
+				with self.assertRaises(shift_rotation.ShiftRotationError) as refused:
+					self._period(*args)
+				self.assertIn(words, str(refused.exception))
+		self.assertEqual(self._pieces(emp), [(self.morning, YEAR_START, None)])
+
+	def test_period_into_a_paid_month_is_refused(self):
+		emp = self._employee(self.morning)
+		start = getdate(add_days(today(), -10))
+		frappe.get_doc(
+			{
+				"doctype": "Salary Slip",
+				"name": f"TEST-PERIOD-SLIP-{emp}",
+				"employee": emp,
+				"company": self.company,
+				"posting_date": today(),
+				"start_date": add_days(start, -20),
+				"end_date": add_days(start, 5),
+				"docstatus": 1,
+			}
+		).db_insert()
+		with self.assertRaises(frappe.ValidationError) as refused:
+			self._period(emp, self.evening, start, add_days(start, 20))
+		self.assertIn("already been paid", str(refused.exception))
+		self.assertEqual(self._pieces(emp), [(self.morning, YEAR_START, None)])
+
+	def test_backdated_period_remarks_only_its_own_days(self):
+		emp = self._employee(self.morning)
+		day = getdate(add_days(today(), -3))
+		next_day = add_days(day, 1)
+		for d in (day, next_day):
+			self._punch(emp, d, 11, 58)
+			self._punch(emp, d, 20, 3)
+			self._reconcile(emp, d)
+		self.assertGreater(self._attendance(emp, day).custom_late_entry, 5 * 3600)
+
+		self._period(emp, self.evening, day, day)
+		frappe.clear_messages()
+
+		after = self._attendance(emp, day)
+		self.assertEqual(after.shift, self.evening)
+		self.assertEqual(after.custom_late_entry, 0, "11:58 is on time for 12 PM")
+		untouched = self._attendance(emp, next_day)
+		self.assertEqual(untouched.shift, self.morning, "the day after the period is still mornings")
+		self.assertEqual(self._pieces(emp)[-1], (self.morning, str(next_day), None))
+
+	def _reconcile(self, employee, day):
+		reconcile_employee_day(
+			frappe.get_doc("Shift Type", self.morning),
+			employee,
+			day,
+			holiday_dates=frozenset(),
+			counters={"attendance_created_or_updated": 0, "absent_rows_deleted": 0, "checkins_relinked": 0},
+			log_lines=[],
+			include_skipped=True,
+			mark_absent_when_no_checkins=False,
+		)
+
+	def test_set_periods_runs_in_date_order_and_one_refusal_does_not_stop_the_rest(self):
+		a, b = self._employee(self.morning), self._employee(self.morning)
+		fixed = self._employee(self.day)
+		m1_end, m2_end = self._last_day(self.month_1), self._last_day(self.month_2)
+		frappe.clear_messages()
+
+		result = shift_rotation.set_periods(
+			self.company,
+			frappe.as_json(
+				[
+					# Sent out of order: month 2 before month 1 for the same person.
+					{"employee": a, "shift": self.evening, "start": str(self.month_2), "end": str(m2_end)},
+					{"employee": fixed, "shift": self.evening, "start": str(self.month_1), "end": str(m1_end)},
+					{"employee": a, "shift": self.evening, "start": str(self.month_1), "end": str(m1_end)},
+					{"employee": b, "shift": self.evening, "start": str(self.month_1), "end": str(m2_end)},
+				]
+			),
+		)
+		self.assertEqual(
+			[(m["employee"], m["start"]) for m in result["moved"]],
+			[(a, str(self.month_1)), (b, str(self.month_1)), (a, str(self.month_2))],
+		)
+		self.assertEqual([r["employee"] for r in result["refused"]], [fixed])
+		self.assertIn("does not take part in rotation", result["refused"][0]["reason"])
+		self.assertEqual(result["refused"][0]["shift"], self.evening)
+		self.assertTrue(result["refused"][0]["employee_name"])
+		self.assertEqual(frappe.get_message_log(), [], "a refusal must not leave a popup behind")
+
+		# Month 2 starts the day after month 1 ends, so `a`'s two evening runs join into one.
+		self.assertEqual(
+			self._pieces(a),
+			[
+				(self.morning, YEAR_START, add_days(self.month_1, -1)),
+				(self.evening, self.month_1, m2_end),
+				(self.morning, add_days(m2_end, 1), None),
+			],
+		)
+		for day in (self.month_1, self.month_2, m2_end):
+			self.assertEqual(get_shift_window(a, day)[0], self.evening)
+			self.assertEqual(get_shift_window(b, day)[0], self.evening)
+		self.assertEqual(get_shift_window(a, add_days(m2_end, 1))[0], self.morning)
+
 	# ──────────────────────────────────────────────────────────── the desk ──
 
 	def test_preview_lists_only_staff_on_the_other_rotational_shifts(self):
@@ -338,6 +555,11 @@ class TestShiftRotation(FrappeTestCase):
 				self._rotate(self.evening, self.month_1, [emp])
 			with self.assertRaises(frappe.PermissionError):
 				shift_rotation.preview(self.company, self.evening, self.month_1)
+			with self.assertRaises(frappe.PermissionError):
+				shift_rotation.set_periods(
+					self.company,
+					[{"employee": emp, "shift": self.evening, "start": self.month_1, "end": self.month_2}],
+				)
 		finally:
 			frappe.set_user("Administrator")
 		self.assertEqual(self._pieces(emp), [(self.morning, YEAR_START, None)])
