@@ -14,9 +14,13 @@ const SHIFT_ROTATION = "avinashgroup_app.hr.shift_rotation";
 frappe.ui.form.on("Shift Type", {
 	refresh(frm) {
 		if (frm.is_new() || !frm.doc.custom_in_rotation) return;
-		frm.add_custom_button(__("Move Staff to This Shift"), () =>
-			open_rotation_dialog(frm.doc.custom_company, frm.doc.name),
-		);
+		frm.add_custom_button(__("Move Staff to This Shift"), () => {
+			if (!frm.doc.custom_company) {
+				frappe.msgprint(__("Set the Company on this Shift Type first — staff rotate within one company."));
+				return;
+			}
+			open_rotation_dialog(frm.doc.custom_company, frm.doc.name);
+		});
 	},
 });
 
@@ -43,9 +47,17 @@ function open_rotation_dialog(company, to_shift) {
 				label: __("From Date"),
 				reqd: 1,
 				description: __("The first day on the new shift. It runs on until the person is moved again"),
-				onchange: () => load_candidates(dialog),
+				onchange: () => {
+					sync_miti_from_date(dialog);
+					load_candidates(dialog);
+				},
 			},
-			{ fieldname: "from_miti", fieldtype: "Data", label: __("From Date (BS)"), read_only: 1 },
+			{
+				fieldname: "from_miti",
+				fieldtype: "Data",
+				label: __("From Date (BS)"),
+				description: __("Nepali date, YYYY-MM-DD. Pick here or in From Date; each fills the other"),
+			},
 			{ fieldtype: "Section Break", label: __("Tick who moves") },
 			{
 				fieldname: "employees",
@@ -73,7 +85,7 @@ function open_rotation_dialog(company, to_shift) {
 			frappe
 				.call({
 					method: `${SHIFT_ROTATION}.rotate`,
-					args: { company: values.company, to_shift: values.to_shift, from_date: values.from_date, employees: picked },
+					args: { company: dialog.__company, to_shift: values.to_shift, from_date: values.from_date, employees: picked },
 					freeze: true,
 					freeze_message: __("Moving {0} employee(s)", [picked.length]),
 				})
@@ -88,16 +100,84 @@ function open_rotation_dialog(company, to_shift) {
 		},
 	});
 
+	// Kept on the dialog, not read back from its Company field: a Link field's
+	// default is set asynchronously, so the field is still blank on the first
+	// load and the server was asked with no company at all.
+	dialog.__company = company;
 	dialog.show();
+	attach_miti_picker(dialog);
 	load_candidates(dialog);
+}
+
+// ── Nepali (BS) date beside the AD date ─────────────────────────────────────
+// Conversion both ways is the Nepali datepicker library rdp_common_app already
+// loads on every desk page (window.NepaliFunctions) — the same one behind the BS
+// fields on the forms and reports. If it has not loaded, the field falls back to
+// the server's reading of the date and stays read-only.
+const BS_FORMAT = "YYYY-MM-DD";
+
+function nepali_dates() {
+	return window.NepaliFunctions;
+}
+
+function sync_miti_from_date(dialog) {
+	const ad = dialog.get_value("from_date");
+	if (!nepali_dates() || !ad) return;
+	const bs = nepali_dates().AD2BS(ad, BS_FORMAT);
+	if (bs && dialog.get_value("from_miti") !== bs) dialog.set_value("from_miti", bs);
+}
+
+function sync_date_from_miti(dialog, bs) {
+	bs = (bs || "").trim();
+	if (!nepali_dates() || !/^\d{4}-\d{1,2}-\d{1,2}$/.test(bs)) return;
+	// The library does not refuse an impossible date — 2083-13-40 quietly becomes
+	// some day the following year — so the answer is converted back and compared.
+	let ad = null;
+	try {
+		ad = nepali_dates().BS2AD(bs, BS_FORMAT);
+	} catch (e) {
+		ad = null;
+	}
+	const [y, m, d] = bs.split("-").map(Number);
+	const back = ad ? nepali_dates().AD2BS(ad, BS_FORMAT).split("-").map(Number) : [];
+	if (back[0] !== y || back[1] !== m || back[2] !== d) {
+		frappe.show_alert({ message: __("{0} is not a Nepali date", [bs]), indicator: "red" });
+		return;
+	}
+	// Setting From Date reloads the list through its own onchange.
+	if (ad && dialog.get_value("from_date") !== ad) dialog.set_value("from_date", ad);
+}
+
+function attach_miti_picker(dialog) {
+	const field = dialog.fields_dict.from_miti;
+	if (!nepali_dates()) {
+		dialog.set_df_property("from_miti", "read_only", 1);
+		return;
+	}
+	const $input = field.$input;
+	if (typeof $input.nepaliDatePicker === "function") {
+		// The calendar is drawn on <body> at z-index 1000, under a Bootstrap modal.
+		if (!document.getElementById("shift-rotation-ndp-style")) {
+			$('<style id="shift-rotation-ndp-style">.ndp-container{z-index:1100}</style>').appendTo("head");
+		}
+		$input.nepaliDatePicker({
+			ndpYear: true,
+			ndpMonth: true,
+			dateFormat: BS_FORMAT,
+			closeOnDateSelect: true,
+			onChange: (picked) => sync_date_from_miti(dialog, (picked && picked.bs) || $input.val()),
+		});
+	}
+	// Typed by hand, or a picker build that does not call onChange.
+	$input.on("change blur", () => sync_date_from_miti(dialog, $input.val()));
 }
 
 // Fill the date (first day of the next BS month when blank), the shift choices
 // and the candidate list from the server.
 function load_candidates(dialog, force) {
 	const args = {
-		company: dialog.get_value("company"),
-		to_shift: dialog.get_value("to_shift"),
+		company: dialog.__company,
+		to_shift: dialog.get_value("to_shift") || dialog.fields_dict.to_shift.df.default,
 		from_date: dialog.get_value("from_date") || null,
 	};
 	// Setting the date below fires onchange again; the same question is not asked twice.
@@ -111,8 +191,14 @@ function load_candidates(dialog, force) {
 		dialog.__asked = JSON.stringify({ ...args, from_date: r.from_date });
 
 		dialog.set_df_property("to_shift", "options", r.shifts);
-		dialog.set_value("from_miti", r.from_miti);
 		if (!args.from_date) dialog.set_value("from_date", r.from_date);
+		if (nepali_dates()) {
+			dialog.set_value("from_miti", nepali_dates().AD2BS(r.from_date, BS_FORMAT));
+			// The same date in words, so the month is read rather than counted.
+			dialog.set_df_property("from_miti", "description", r.from_miti);
+		} else {
+			dialog.set_value("from_miti", r.from_miti);
+		}
 
 		const table = dialog.fields_dict.employees;
 		table.df.data = r.employees;
