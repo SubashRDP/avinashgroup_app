@@ -3,14 +3,16 @@
 //
 // One row per employee, one column per BS month of the fiscal year. Pick a shift
 // from the palette and paint cells: a painted cell means "on this shift from the
-// first day of that month". Drag down a column to move many people at once;
+// first day of that month", carried to the next painted month or the year end.
+// Apply sends each run of changed months as one bounded period
+// (shift_rotation.set_periods), so a change already booked later is kept. Drag down a column to move many people at once;
 // right-click a cell to alternate that person's shift month by month to the year
 // end; a month header's ⇄ swaps everyone in that month. Nothing is saved until
 // Apply. Every rule (rotational shifts only, one company, paid months locked,
 // lived days re-marked) is enforced by avinashgroup_app.hr.shift_rotation —
 // this page only stages and asks.
 const ROSTER_API = "avinashgroup_app.hr.shift_roster.roster";
-const ROTATE_API = "avinashgroup_app.hr.shift_rotation.rotate";
+const PERIODS_API = "avinashgroup_app.hr.shift_rotation.set_periods";
 
 frappe.pages["shift-roster"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Shift Roster"), single_column: true });
@@ -101,7 +103,11 @@ class ShiftRoster {
 
 	// The shift a row shows in month i once staged changes are applied: the latest
 	// change at or before i wins, because every change is "from that month on".
+	// A month the person spends off rotation (fixed shift, none) is not carried into.
 	effective(row, i) {
+		if (!this.changes.has(`${row.employee}|${i}`) && !this.is_rotational(this.server_shift(row, i))) {
+			return { shift: this.server_shift(row, i), pending: false, spans: row.cells[i] };
+		}
 		for (let j = i; j >= 0; j--) {
 			const staged = this.changes.get(`${row.employee}|${j}`);
 			if (staged) return { shift: staged, pending: true, spans: null };
@@ -127,7 +133,7 @@ class ShiftRoster {
 
 	stage(row, i, shift) {
 		const key = `${row.employee}|${i}`;
-		if (this.month_locked(i)) return;
+		if (this.month_locked(i) || !this.is_rotational(this.server_shift(row, i))) return;
 		const base = this.baseline(row, i);
 		if (!this.is_rotational(base)) return; // fixed-shift and unrostered people stay put
 		delete this.refusals[key];
@@ -415,52 +421,67 @@ class ShiftRoster {
 	}
 
 	// ── review & apply ─────────────────────────────────────────────────────
-	planned_moves() {
-		// One server call per (date, shift), in date order: a later month's move
-		// builds on the earlier one.
-		const groups = new Map();
-		for (const [key, shift] of this.changes) {
-			const [employee, i] = key.split("|");
-			const month = this.data.months[+i];
-			const gkey = `${month.start}|${shift}`;
-			if (!groups.has(gkey)) groups.set(gkey, { from_date: month.start, month, shift, employees: [], keys: {} });
-			const g = groups.get(gkey);
-			g.employees.push(employee);
-			g.keys[employee] = key;
+	planned_periods() {
+		// One period per run of consecutive months a row would change to the same
+		// shift, carried months included. A month already wholly on that shift is
+		// not sent, so a run never asks for what is there.
+		const periods = [];
+		for (const row of this.data.rows) {
+			let run = null;
+			this.data.months.forEach((month, i) => {
+				const eff = this.effective(row, i);
+				const spans = row.cells[i];
+				const differs = eff.pending && !(spans.length === 1 && spans[0].shift === eff.shift);
+				if (differs && run && run.shift === eff.shift && run.last === i - 1) {
+					run.end = month.end;
+					run.last = i;
+					run.keys.push(`${row.employee}|${i}`);
+					return;
+				}
+				if (run) periods.push(run);
+				run = differs
+					? { employee: row.employee, employee_name: row.employee_name, shift: eff.shift, start: month.start, end: month.end, first: i, last: i, keys: [`${row.employee}|${i}`] }
+					: null;
+			});
+			if (run) periods.push(run);
 		}
-		return [...groups.values()].sort((a, b) => (a.from_date < b.from_date ? -1 : a.from_date > b.from_date ? 1 : 0));
+		return periods.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+	}
+
+	period_label(p) {
+		const m = this.data.months;
+		const from = `${m[p.first].label} ${m[p.first].bs_year}`;
+		return p.first === p.last ? from : `${from} – ${m[p.last].label} ${m[p.last].bs_year}`;
 	}
 
 	review() {
-		const names = Object.fromEntries(this.data.rows.map((r) => [r.employee, r.employee_name]));
-		const html = this.planned_moves()
+		const html = this.planned_periods()
 			.map(
-				(g) => `<p><b>${__("From {0} {1} ({2}) → {3}", [g.month.label, g.month.bs_year, frappe.datetime.str_to_user(g.from_date), frappe.utils.escape_html(g.shift)])}</b><br>
-				${g.employees.map((e) => frappe.utils.escape_html(names[e] || e)).join(", ")}</p>`,
+				(p) => `<p><b>${frappe.utils.escape_html(p.employee_name || p.employee)}</b>: ${frappe.utils.escape_html(this.period_label(p))}
+				(${frappe.datetime.str_to_user(p.start)} → ${frappe.datetime.str_to_user(p.end)}) → ${frappe.utils.escape_html(p.shift)}</p>`,
 			)
 			.join("");
-		frappe.msgprint({ title: __("Changes to apply"), message: html, wide: true });
+		frappe.msgprint({ title: __("Changes to apply"), message: html || __("Nothing would change."), wide: true });
 	}
 
 	async apply() {
-		const plan = this.planned_moves();
+		const periods = this.planned_periods();
 		const company = this.company.get_value();
-		const names = Object.fromEntries(this.data.rows.map((r) => [r.employee, r.employee_name]));
 		let moved = 0;
 		const refused = [];
 		this.refusals = {};
-		frappe.dom.freeze(__("Applying {0} change(s)…", [this.changes.size]));
+		if (!periods.length) return;
+		frappe.dom.freeze(__("Applying {0} change(s)…", [periods.length]));
 		try {
-			for (const g of plan) {
-				const { message } = await frappe.call({
-					method: ROTATE_API,
-					args: { company, to_shift: g.shift, from_date: g.from_date, employees: g.employees },
-				});
-				moved += message.moved.length;
-				for (const r of message.refused) {
-					refused.push(`${names[r.employee] || r.employee} (${g.month.label}): ${r.reason}`);
-					this.refusals[g.keys[r.employee]] = r.reason;
-				}
+			const { message } = await frappe.call({
+				method: PERIODS_API,
+				args: { company, changes: periods.map(({ employee, shift, start, end }) => ({ employee, shift, start, end })) },
+			});
+			moved = message.moved.length;
+			for (const r of message.refused) {
+				const p = periods.find((x) => x.employee === r.employee && x.start === r.start);
+				refused.push(`${r.employee_name || r.employee} (${p ? this.period_label(p) : r.start}): ${r.reason}`);
+				(p ? p.keys : []).forEach((key) => (this.refusals[key] = r.reason));
 			}
 		} finally {
 			frappe.dom.unfreeze();
