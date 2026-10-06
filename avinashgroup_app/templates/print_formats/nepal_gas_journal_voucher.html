@@ -732,10 +732,26 @@ padding:0px 30px;
 {% set VEH_SPAN_PCT = VEH_PCT + 10 + PARTY_PCT %}
 {#- A cell's 4px left + 4px right padding is not available to text. -#}
 {% set CELL_PAD_PX = 8 %}
-{% set CH_ACC = ((CONTENT_PX * ACC_PCT / 100 - CELL_PAD_PX) / CHAR_PX)|int %}
-{% set CH_PARTY = ((CONTENT_PX * PARTY_PCT / 100 - CELL_PAD_PX) / CHAR_PX)|int %}
-{% set CH_VEH = ((CONTENT_PX * VEH_PCT / 100 - CELL_PAD_PX) / CHAR_PX)|int %}
-{% set CH_VEH_SPAN = ((CONTENT_PX * VEH_SPAN_PCT / 100 - CELL_PAD_PX) / CHAR_PX)|int %}
+{#- An amount never wraps, so a figure wider than its column (crores, on an
+   Opening Entry) widens the amount columns and the browser takes that width out
+   of the text columns — names then wrap sooner than their declared width says.
+   NUM_PCT is the declared width of one amount column; the total is the widest
+   figure on the voucher. TEXT_SCALE is the share of their declared width the text
+   columns keep (1 when the amounts fit). The fallback layout's Debit cell carries
+   14px of extra right padding. -#}
+{% set is_fallback = not (is_note or is_cash_contra or is_cash_entry or is_journal_voucher or is_party_journal) %}
+{% set NUM_PCT = 18 if is_note else (14 if is_cash_contra else (13 if is_journal_voucher else 15)) %}
+{% set NUM_COLS = 1 if is_cash_entry else 2 %}
+{% set num_px = [CONTENT_PX * NUM_PCT / 100, (amt(doc.total_debit)|trim|length) * CHAR_PX + CELL_PAD_PX + (14 if is_fallback else 0)]|max %}
+{% set TEXT_SCALE = (CONTENT_PX * 0.95 - NUM_COLS * num_px) / (CONTENT_PX * (95 - NUM_COLS * NUM_PCT) / 100) %}
+{#- The browser does not shrink the text columns evenly — measured, the account
+   column gives up the most — so a badly squeezed voucher is billed 2 characters
+   tighter still. -#}
+{% set SQUEEZE_CH = 2 if TEXT_SCALE < 0.95 else 0 %}
+{% set CH_ACC = ((CONTENT_PX * ACC_PCT / 100 * TEXT_SCALE - CELL_PAD_PX) / CHAR_PX)|int - SQUEEZE_CH %}
+{% set CH_PARTY = ((CONTENT_PX * PARTY_PCT / 100 * TEXT_SCALE - CELL_PAD_PX) / CHAR_PX)|int %}
+{% set CH_VEH = ((CONTENT_PX * VEH_PCT / 100 * TEXT_SCALE - CELL_PAD_PX) / CHAR_PX)|int %}
+{% set CH_VEH_SPAN = ((CONTENT_PX * VEH_SPAN_PCT / 100 * TEXT_SCALE - CELL_PAD_PX) / CHAR_PX)|int %}
 {#- A full-width row (Paid To, In Words, Remarks). A Narration row starts after the
    5% S.N. column. -#}
 {% set CH_WIDE = ((CONTENT_PX - CELL_PAD_PX) / CHAR_PX)|int %}
