@@ -30,7 +30,6 @@ def execute():
 				"insert_after": "custom_is_attendance_driven",
 				"options": (
 					"\n"
-					"Working Hours >= Threshold\n"
 					"Status = Present\n"
 					"Status = Half Day\n"
 					"Worked on Holiday\n"
@@ -42,20 +41,9 @@ def execute():
 				"mandatory_depends_on": "eval:doc.custom_is_attendance_driven",
 			},
 			{
-				"fieldname": "custom_threshold_hours",
-				"label": "Threshold Hours",
-				"fieldtype": "Float",
-				"insert_after": "custom_condition_type",
-				"depends_on": 'eval:doc.custom_condition_type=="Working Hours >= Threshold"',
-				"description": (
-					"e.g. 6 → counts a day if working hours ≥ 6. "
-					"Half Day counts if hours ≥ threshold/2."
-				),
-			},
-			{
 				"fieldname": "custom_attendance_rule_col_break",
 				"fieldtype": "Column Break",
-				"insert_after": "custom_threshold_hours",
+				"insert_after": "custom_condition_type",
 			},
 			{
 				"fieldname": "custom_time_offset_hours",

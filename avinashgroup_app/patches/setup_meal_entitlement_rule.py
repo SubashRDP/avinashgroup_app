@@ -16,7 +16,6 @@ import frappe
 
 CONDITIONS = (
 	"",
-	"Working Hours >= Threshold",
 	"Status = Present",
 	"Status = Half Day",
 	"Worked on Holiday",

@@ -1,19 +1,11 @@
-// An employee's allowance (tea/meal) group belongs to their own company — the
-// rates differ, so offering another company's group invites paying NGI's 235 a
-// day to a Karnali employee.
+// The Allowances table offers only what the employee's own company pays
+// (Company Allowance): NGI's tea on a Karnali employee would be paid at a rate
+// nobody set for Karnali. The server checks the same on save.
 frappe.ui.form.on("Employee", {
 	setup(frm) {
-		frm.set_query("custom_allowance_category", () => ({
+		frm.set_query("salary_component", "custom_attendance_allowances", () => ({
+			query: "avinashgroup_app.payroll.company_allowance.allowance_query",
 			filters: { company: frm.doc.company },
 		}));
-	},
-	company(frm) {
-		if (frm.doc.custom_allowance_category) {
-			frappe.db.get_value("Allowance Category", frm.doc.custom_allowance_category, "company").then((r) => {
-				if (r.message && r.message.company !== frm.doc.company) {
-					frm.set_value("custom_allowance_category", null);
-				}
-			});
-		}
 	},
 });

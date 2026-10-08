@@ -1,3 +1,5 @@
+> **2026-10-08:** Allowance Category is replaced by Company Allowance and the employee's Allowances table: see [company-allowance.md](company-allowance.md). References to OLD / NEW / NO categories below describe the earlier setup.
+
 # NGI payroll — components, structure, and how it matches the sheet
 
 Built from **NGI.xlsx → "Falgun salary"** (92 employees, gross 3,731,812.16, net

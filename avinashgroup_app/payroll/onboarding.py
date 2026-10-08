@@ -9,8 +9,8 @@ The four sheets use two pay models:
 
   Initial-basic (NGI, NGN) — one template. Basic Salary, plus HRA as a share of
       a separate Initial Basic, flat gas and education allowances for those
-      flagged YES, dearness and other allowances per person, tea by an OLD /
-      NEW / NO category, SSF 20% added and 31% deducted.
+      flagged YES, dearness and other allowances per person, tea at the OLD or
+      NEW rate (or none), SSF 20% added and 31% deducted.
 
   Grade-scale (NGG, NGK) — the government scale. Basic plus increments plus
       grade is the salary scale; SSF is 20% / 31% of that scale; then a fixed
@@ -26,7 +26,8 @@ the fiscal year. Both are safe to run again.
 What varies per person lives on the Employee (the structure reads it in a
 formula); what varies per company lives in the structure; what attendance
 decides — tea, meals, overtime, late fines — the allowance engine posts each
-month. So a rate change is one edit, and a new starter is one Employee.
+month, by each company's Company Allowance and the employee's own Allowances
+rows. So a rate change is one edit, and a new starter is one Employee.
 
     bench --site <site> execute avinashgroup_app.payroll.onboarding.onboard \\
         --kwargs "{'key': 'NGN', 'path': '/path/to/NGN.xlsx'}"
@@ -39,6 +40,8 @@ import frappe
 from frappe import _
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.utils import flt
+
+from avinashgroup_app.payroll.company_allowance import company_allowance_doc, get_company_allowance
 
 FISCAL_YEAR = "83/84"
 
@@ -259,7 +262,7 @@ def setup_company(key):
 	create_custom_fields({"Employee": EMPLOYEE_FIELDS}, update=True)
 	ensure_payable_account(company)
 	ensure_components()
-	ensure_allowance_categories(key, profile)
+	ensure_company_allowances(key)
 
 	if profile.get("wages"):
 		ensure_wage_structure(key, company)
@@ -383,32 +386,64 @@ def ensure_components():
 	frappe.clear_cache(doctype="Salary Component")
 
 
-def ensure_allowance_categories(key, profile):
-	"""OLD / NEW / NO tea groups and the meal rate, for this company."""
-	r = profile["rates"]
-	groups = {}
-	if "tea_old" in r:
-		groups = {"OLD": r["tea_old"], "NEW": r["tea_new"], "NO": 0}
-	elif r.get("meal"):
-		groups = {"STAFF": None}
+#: COMPONENTS' rule flags (on the Salary Component) → Company Allowance fields.
+RULE_FIELDS = {
+	"custom_condition_type": "based_on",
+	"custom_unit": "unit",
+	"custom_half_day_counts": "half_day_counts",
+	"custom_time_offset_hours": "time_offset_hours",
+	"custom_holiday_hours_one_meal": "holiday_hours_one_meal",
+	"custom_holiday_hours_two_meals": "holiday_hours_two_meals",
+	"custom_max_per_day": "max_per_day",
+	"custom_rate_basis": "rate_basis",
+	"custom_rate_multiplier": "rate_multiplier",
+}
 
-	for group, tea in groups.items():
-		name = f"{key} {group}"
-		if frappe.db.exists("Allowance Category", name):
+
+def ensure_company_allowances(key):
+	"""The company's attendance allowances, at its own rates.
+
+	Only tagged employees are paid; import_sheet tags each person from the
+	sheet: tea at the company default (the OLD rate), 40 for NEW staff, an
+	unticked row for those on none (policy 1.4: tea for everyone present);
+	meal, overtime and late fine for all, behind their own gates (OT Eligible,
+	Late Fine Exempt); daily wage for the wage sheet's labour.
+	Tea is not paid on holidays: the sheet pays the holiday through Worked on
+	Holiday. Needs the component's account for the company, which
+	map_component_accounts sets once the accountant agrees — until then this
+	skips it, and map_component_accounts calls it again.
+	"""
+	profile = PROFILES[key]
+	company, r = profile["company"], profile["rates"]
+	defaults = {"Tea & Conveyance": r.get("tea_old"), "Meal": r.get("meal")}
+	doc = company_allowance_doc(company)
+	have = {row.salary_component for row in doc.allowances}
+	made = []
+	for name, _abbr, _type, _days, flags in COMPONENTS:
+		if not flags.get("custom_is_attendance_driven") or name in have:
 			continue
-		rates = []
-		if tea is not None:
-			rates.append({"salary_component": "Tea & Conveyance", "rate": tea})
-		if r.get("meal"):
-			rates.append({"salary_component": "Meal", "rate": r["meal"]})
-		frappe.get_doc(
-			{
-				"doctype": "Allowance Category",
-				"category_name": name,
-				"company": profile["company"],
-				"rates": rates,
-			}
-		).insert(ignore_permissions=True)
+		if name in defaults and not defaults[name]:
+			continue  # this company does not pay it
+		account = frappe.db.get_value("Salary Component Account", {"parent": name, "company": company}, "account")
+		if not account:
+			continue
+		row = {
+			"salary_component": name,
+			"is_attendance_based": 1,
+			"default_rate": flt(defaults.get(name)),
+			"ot_eligible_only": 1 if flags.get("custom_condition_type") == "Authorised Overtime" else 0,
+			"pay_on_holiday": "Do Not Pay" if name == "Tea & Conveyance" else "Pay",
+			"account_admin": account,
+		}
+		for old, new in RULE_FIELDS.items():
+			if old in flags:
+				row[new] = flags[old]
+		doc.append("allowances", row)
+		made.append(name)
+	if made:
+		doc.save(ignore_permissions=True)
+		frappe.local._agp_company_allowance = {}
+	return made
 
 
 # ───────────────────────────────────────────────────────────────── import ──
@@ -429,10 +464,11 @@ def import_sheet(key, path):
 			unmatched.append(row["name"])
 			continue
 
-		values, base, note = employee_values(key, profile, row)
+		values, base, note, allowances = employee_values(key, profile, row)
 		if note:
 			notes.append(f"{row['name']}: {note}")
 		frappe.db.set_value("Employee", employee, values, update_modified=False)
+		set_allowance_rows(employee, allowances)
 		updated.append(employee)
 
 		if base and assign(employee, key, company, base):
@@ -449,6 +485,7 @@ def import_sheet(key, path):
 				wage_unmatched.append(row["name"])
 				continue
 			frappe.db.set_value("Employee", employee, "custom_ssf_applicable", 0, update_modified=False)
+			set_allowance_rows(employee, {"Daily Wage": None, "Overtime": None})
 			if assign(employee, key, company, rate, structure=wage_structure_name(key)):
 				wage_assigned.append(employee)
 
@@ -487,9 +524,14 @@ def _sheet_rows(sheet, profile):
 
 
 def employee_values(key, profile, row):
-	"""The Employee fields this person's row decides, and their basic."""
+	"""The Employee fields this person's row decides, their basic, a note, and
+	the allowances to tag them with as {component: rate} (None = the company
+	default, 0 = tagged but not paid)."""
 	num = lambda v: flt(v) if isinstance(v, (int, float)) else 0.0
 	note = None
+	allowances = {"Overtime": None, "Late Fine": None}
+	if profile["rates"].get("meal"):
+		allowances["Meal"] = None
 
 	if profile["model"] == INITIAL_BASIC:
 		base = num(row.get("basic"))
@@ -503,9 +545,9 @@ def employee_values(key, profile, row):
 			"custom_other_allowance": num(row.get("other")),
 			"custom_fuel_allowance": num(row.get("fuel")),
 		}
-		category = tea_category(key, profile, num(row.get("tea")), num(row.get("attendance")))
-		if category:
-			values["custom_allowance_category"] = category
+		tea = tea_rate(profile, num(row.get("tea")), num(row.get("attendance")))
+		if tea is not False:
+			allowances["Tea & Conveyance"] = tea
 	else:
 		# Basic + increments + grade, taken from its parts: the sheet's own scale
 		# column is prorated for anyone who joined mid-month.
@@ -517,8 +559,6 @@ def employee_values(key, profile, row):
 			"custom_fuel_allowance": num(row.get("fuel")),
 			"custom_maintenance_allowance": num(row.get("maintenance")),
 		}
-		if profile["rates"].get("meal"):
-			values["custom_allowance_category"] = f"{key} STAFF"
 
 	values["custom_ssf_applicable"] = 1 if num(row.get("ssf")) else 0
 
@@ -536,22 +576,43 @@ def employee_values(key, profile, row):
 
 	if not base:
 		note = _("no basic on the sheet — not assigned a salary")
-	return values, base, note
+	return values, base, note, allowances
 
 
-def tea_category(key, profile, tea, attendance):
-	"""OLD / NEW / NO, read back from what the sheet paid for the days worked."""
+def tea_rate(profile, tea, attendance):
+	"""The employee's tea rate read back from what the sheet paid for the days
+	worked: None for the OLD rate (the company default), the NEW rate, or 0 for
+	none. False when the sheet cannot say (no attendance that month) — then
+	they are not tagged, and HR decides."""
 	r = profile["rates"]
-	if not attendance:
-		return None
-	per_day = tea / attendance
+	if not attendance or "tea_old" not in r:
+		return False
 	if not tea:
-		return f"{key} NO"
+		return 0
+	per_day = tea / attendance
 	if abs(per_day - r["tea_old"]) < 1:
-		return f"{key} OLD"
+		return None
 	if abs(per_day - r["tea_new"]) < 1:
-		return f"{key} NEW"
-	return None
+		return r["tea_new"]
+	return False
+
+
+def set_allowance_rows(employee, allowances):
+	"""Tag the employee with {component: rate}: None = the company default, 0 =
+	an unticked row, so the record says "not paid", not "unknown". Allowances
+	the company has not set up yet (no Company Allowance row) are skipped."""
+	doc = frappe.get_doc("Employee", employee)
+	allowances = {c: r for c, r in allowances.items() if get_company_allowance(doc.company, c)}
+	if not allowances:
+		return
+	rows = {r.salary_component: r for r in doc.get("custom_attendance_allowances")}
+	for component, rate in allowances.items():
+		row = rows.get(component) or doc.append("custom_attendance_allowances", {"salary_component": component})
+		row.rate = flt(rate)
+		row.eligible = 0 if rate == 0 else 1
+	doc.flags.ignore_permissions = True
+	doc.flags.ignore_mandatory = True
+	doc.save()
 
 
 def assign(employee, key, company, base, structure=None):
@@ -681,4 +742,7 @@ def map_component_accounts(company):
 		doc.flags.ignore_permissions = True
 		doc.save()
 		done.append((component.name, account))
+	key = next((k for k, p in PROFILES.items() if p["company"] == company), None)
+	if key:
+		ensure_company_allowances(key)
 	return done

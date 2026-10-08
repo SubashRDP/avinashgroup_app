@@ -1,0 +1,265 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "salary_component",
+  "component_type",
+  "disabled",
+  "column_break_top",
+  "default_rate",
+  "calculation_section",
+  "is_attendance_based",
+  "calculation",
+  "based_on",
+  "ot_eligible_only",
+  "unit",
+  "column_break_rule",
+  "half_day_counts",
+  "pay_on_holiday",
+  "time_offset_hours",
+  "holiday_hours_one_meal",
+  "holiday_hours_two_meals",
+  "max_per_day",
+  "rate_basis",
+  "rate_multiplier",
+  "rate_days_per_month",
+  "rate_hours_per_day",
+  "accounts_section",
+  "account_admin",
+  "column_break_acc1",
+  "account_marketing",
+  "column_break_acc2",
+  "account_plant"
+ ],
+ "fields": [
+  {
+   "fieldname": "salary_component",
+   "fieldtype": "Autocomplete",
+   "label": "Allowance",
+   "options": "",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "Pick an existing pay line or type a new name: a new one is created as a Salary Component when you save."
+  },
+  {
+   "fieldname": "component_type",
+   "fieldtype": "Select",
+   "label": "Type",
+   "in_list_view": 0,
+   "options": "Earning\nDeduction",
+   "default": "Earning",
+   "description": "Used when the allowance is new. For an existing one it follows its Salary Component."
+  },
+  {
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "default": "0",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "column_break_top",
+   "fieldtype": "Column Break",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "default_rate",
+   "fieldtype": "Float",
+   "label": "Default Rate",
+   "in_list_view": 1,
+   "description": "Used for every employee tagged with this allowance whose own rate is blank. Per day / meal / hour for an attendance-based allowance, per month for Fixed Monthly, a percentage for % of Initial Basic.",
+   "columns": 1
+  },
+  {
+   "fieldname": "calculation_section",
+   "fieldtype": "Section Break",
+   "label": "How It Is Calculated",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "is_attendance_based",
+   "fieldtype": "Check",
+   "label": "Attendance Based",
+   "default": "0",
+   "in_list_view": 1,
+   "description": "Counted from each month's attendance and posted by Prepare Payroll Inputs on the Payroll Entry."
+  },
+  {
+   "fieldname": "calculation",
+   "fieldtype": "Select",
+   "label": "Calculation",
+   "options": "\nFixed Monthly\n% of Initial Basic\nFrom Salary Structure",
+   "depends_on": "eval:!doc.is_attendance_based",
+   "mandatory_depends_on": "eval:!doc.is_attendance_based",
+   "description": "Fixed Monthly and % of Initial Basic are added to the salary slip from the employee's Allowances table. From Salary Structure: the structure already computes it; this record only supplies the accounts.",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "based_on",
+   "fieldtype": "Select",
+   "label": "Based On",
+   "options": "\nStatus = Present\nStatus = Half Day\nWorked on Holiday\nMeal Entitlement\nAuthorised Overtime\nLate Time\nEarly Entry Before\nLate Stay After\nLate Arrival After",
+   "depends_on": "eval:doc.is_attendance_based",
+   "mandatory_depends_on": "eval:doc.is_attendance_based",
+   "description": "Status = Present: days present (tea). Meal Entitlement: meals earned by extra time or holiday hours. Authorised Overtime: hours on a submitted Overtime Sheet. Late Time: late + early-exit time (fine).",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "ot_eligible_only",
+   "fieldtype": "Check",
+   "label": "Only OT-Eligible Staff",
+   "default": "0",
+   "depends_on": "eval:doc.is_attendance_based",
+   "description": "Pay only employees with OT Eligible ticked (policy 2.2: OT-eligible staff get overtime and meals).",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Select",
+   "label": "Unit",
+   "options": "Per Day\nPer Hour\nFlat per Period",
+   "default": "Per Day",
+   "depends_on": "eval:doc.is_attendance_based",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "column_break_rule",
+   "fieldtype": "Column Break",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "half_day_counts",
+   "fieldtype": "Select",
+   "label": "A Half Day Counts As",
+   "options": "Full Day\nHalf Day\nNot At All",
+   "default": "Full Day",
+   "depends_on": "eval:doc.is_attendance_based && doc.based_on==\"Status = Present\"",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "pay_on_holiday",
+   "fieldtype": "Select",
+   "label": "Pay on Holiday",
+   "options": "Pay\nDo Not Pay",
+   "default": "Pay",
+   "depends_on": "eval:doc.is_attendance_based && [\"Status = Present\",\"Status = Half Day\"].includes(doc.based_on)",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "time_offset_hours",
+   "fieldtype": "Float",
+   "label": "Time Offset (Hours)",
+   "depends_on": "eval:doc.is_attendance_based && [\"Early Entry Before\",\"Late Stay After\",\"Late Arrival After\",\"Meal Entitlement\"].includes(doc.based_on)",
+   "description": "Meal: arriving this many hours early, or leaving this many hours late, earns one meal each.",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "holiday_hours_one_meal",
+   "fieldtype": "Float",
+   "label": "Holiday: Hours for 1 Meal",
+   "depends_on": "eval:doc.is_attendance_based && doc.based_on==\"Meal Entitlement\"",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "holiday_hours_two_meals",
+   "fieldtype": "Float",
+   "label": "Holiday: Hours for 2 Meals",
+   "depends_on": "eval:doc.is_attendance_based && doc.based_on==\"Meal Entitlement\"",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "max_per_day",
+   "fieldtype": "Int",
+   "label": "Max Meals per Day",
+   "depends_on": "eval:doc.is_attendance_based && doc.based_on==\"Meal Entitlement\"",
+   "description": "0 = no cap",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "rate_basis",
+   "fieldtype": "Select",
+   "label": "Rate Basis",
+   "options": "Fixed Rate\nHourly Basic × Multiplier\nDaily Wage",
+   "default": "Fixed Rate",
+   "depends_on": "eval:doc.is_attendance_based",
+   "description": "Fixed Rate: the rate below/on the employee. Hourly Basic × Multiplier: overtime and late fine, priced off each person's basic. Daily Wage: the assignment base of a daily-wage structure.",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "rate_multiplier",
+   "fieldtype": "Float",
+   "label": "Multiplier",
+   "depends_on": "eval:doc.rate_basis==\"Hourly Basic × Multiplier\"",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "rate_days_per_month",
+   "fieldtype": "Float",
+   "label": "Rate: Days per Month",
+   "depends_on": "eval:doc.rate_basis==\"Hourly Basic × Multiplier\"",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "rate_hours_per_day",
+   "fieldtype": "Float",
+   "label": "Rate: Hours per Day",
+   "depends_on": "eval:doc.rate_basis==\"Hourly Basic × Multiplier\"",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Accounts",
+   "description": "Which account each section's cost posts to. The section is set on the employee's Department. A blank Marketing or Plant account falls back to the Admin & Accounts one.",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "account_admin",
+   "fieldtype": "Link",
+   "label": "Admin & Accounts (O/O)",
+   "options": "Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "column_break_acc1",
+   "fieldtype": "Column Break",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "account_marketing",
+   "fieldtype": "Link",
+   "label": "Marketing (S/D)",
+   "options": "Account",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "column_break_acc2",
+   "fieldtype": "Column Break",
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "account_plant",
+   "fieldtype": "Link",
+   "label": "Plant (F/P)",
+   "options": "Account",
+   "in_list_view": 0
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-08 16:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Company Allowance Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

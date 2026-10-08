@@ -310,8 +310,6 @@ _je = doc_events.setdefault("Journal Entry", {})
 _existing = _je.get("before_insert")
 _je["before_insert"] = [
     "avinashgroup_app.payroll.hr_journal.default_jv_type",
-    # Office pay to the O/O account, plant pay to F/P, sales pay to S/D.
-    "avinashgroup_app.payroll.hr_journal.route_salary_expense_by_cost_centre",
 ] + (
     list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
 )
@@ -336,6 +334,13 @@ _add_doc_event(
     "validate",
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
+
+# Fixed allowances from the employee's Allowances table (Company Allowance), then
+# the slip is recalculated so gross, tax and net include them. First of the
+# slip's own validate hooks: the two tax hooks below read the result. A hook,
+# not a class: rdp_common_app owns the Salary Slip class override, and only one
+# app's override can win. See payroll/salary_slip.py.
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.salary_slip.add_company_allowances")
 
 # Income tax: the slab computes it, the slip can override it by hand. Runs after
 # the controller's validate, so the computed figure is already on the row.
@@ -442,12 +447,9 @@ _add_doc_event("Shift Type", "validate", "avinashgroup_app.hr.shift_type_guard.c
 for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):
     _add_doc_event(_dt, "validate", "avinashgroup_app.hr.bs_dates.set_bs_dates")
 
-# Tea and meal rates differ per company, so an employee may only be put in a
-# category belonging to their own company.
-_add_doc_event(
-    "Employee", "validate",
-    "avinashgroup_app.avinash_group_app.doctype.allowance_category.allowance_category.validate_employee_category",
-)
+# An employee's Allowances table may only list allowances their own company
+# pays (Company Allowance); fills the table's read-only columns.
+_add_doc_event("Employee", "validate", "avinashgroup_app.payroll.company_allowance.validate_employee_allowances")
 
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.
@@ -483,6 +485,8 @@ override_doctype_class = {
     # Mid-year policy assignments back-fill earned leave in BS months, matching
     # the BS accrual job (hr/leave_policy_assignment_bs.py).
     "Leave Policy Assignment": "avinashgroup_app.hr.leave_policy_assignment_bs.BSLeavePolicyAssignment",
+    # Each section's pay to its own account. See payroll/payroll_entry.py.
+    "Payroll Entry": "avinashgroup_app.payroll.payroll_entry.AvinashPayrollEntry",
 }
 
 scheduler_events = {
