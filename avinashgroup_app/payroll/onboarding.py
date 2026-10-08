@@ -549,6 +549,67 @@ class EmployeeMatcher:
 		return None
 
 
+#: Each sheet's columns for the month's regular salary and the SSF deduction.
+SHEET_TOTALS = {"NGI": ("AD", "AJ"), "NGN": ("AC", "AH"), "NGG": ("X", "AF"), "NGK": ("V", "Y")}
+
+
+def check_against_sheet(key, path, posting_date=None):
+	"""Make every matched employee's slip for a full month and compare it with
+	the sheet's regular salary and SSF. Read-only: nothing is saved.
+
+	    bench --site <site> execute avinashgroup_app.payroll.onboarding.check_against_sheet \\
+	        --kwargs "{'key': 'NGI', 'path': '/path/to/NGI.xlsx'}"
+
+	posting_date: any day of the BS month to try (default: the first month of
+	the fiscal year). Prints and returns the people who differ.
+	"""
+	from unittest.mock import patch
+
+	import openpyxl
+	from openpyxl.utils import column_index_from_string
+
+	profile = PROFILES[key]
+	company = profile["company"]
+	posting_date = posting_date or frappe.db.get_value("Fiscal Year", FISCAL_YEAR, "year_start_date")
+	total_col, ssf_col = SHEET_TOTALS[key]
+	sheet = openpyxl.load_workbook(path, data_only=True)[profile["sheet"]]
+	matcher = EmployeeMatcher(key, company)
+	matched, differ = 0, []
+	frappe.db.savepoint("check_against_sheet")
+	try:
+		with patch.object(frappe.db, "commit"):
+			for row in _sheet_rows(sheet, profile):
+				employee = matcher.find(row)
+				if not employee or not frappe.db.exists(
+					"Salary Structure Assignment", {"employee": employee, "docstatus": 1}
+				):
+					continue
+				slip = frappe.get_doc(
+					{
+						"doctype": "Salary Slip",
+						"employee": employee,
+						"posting_date": posting_date,
+						"start_date": posting_date,
+						"payroll_frequency": "Monthly",
+						"company": company,
+					}
+				).insert(ignore_permissions=True)
+				gross = sum(flt(d.amount) for d in slip.earnings)
+				ssf = sum(flt(d.amount) for d in slip.deductions if d.salary_component == "SSF")
+				want = flt(sheet.cell(row["_row"], column_index_from_string(total_col)).value)
+				want_ssf = flt(sheet.cell(row["_row"], column_index_from_string(ssf_col)).value)
+				if abs(gross - want) < 1 and abs(ssf - want_ssf) < 1:
+					matched += 1
+				else:
+					differ.append((row["name"], employee, round(want, 2), round(gross, 2), slip.payment_days, slip.total_working_days))
+	finally:
+		frappe.db.rollback(save_point="check_against_sheet")
+	print(f"{key}: {matched} match the sheet, {len(differ)} differ")
+	for name, employee, want, got, days, total in differ:
+		print(f"  {name} ({employee}): sheet {want}, slip {got}, days {days}/{total}")
+	return {"matched": matched, "differ": differ}
+
+
 # ─────────────────────────────────────────────────────────────── accounts ──
 
 #: A PROPOSAL for the accountant, not applied by `onboard`. Every company's chart
