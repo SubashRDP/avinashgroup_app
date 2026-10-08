@@ -217,7 +217,10 @@ def add_fields():
 	)
 	for fieldname, values in (
 		("custom_attendance_rule_section", {"insert_after": "custom_allowance_kind"}),
-		("custom_attendance_allowances_section", {"label": "Allowance Exceptions"}),
+		# Payroll Inputs hung off the removed Allowance Category field; without a
+		# new anchor the section loses its place on the form.
+		("custom_payroll_inputs_section", {"insert_after": "custom_late_fine_exempt", "collapsible": 0}),
+		("custom_attendance_allowances_section", {"label": "Allowance Exceptions", "insert_after": "custom_maintenance_allowance"}),
 		(
 			"custom_attendance_allowances",
 			{
