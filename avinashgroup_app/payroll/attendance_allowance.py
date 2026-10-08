@@ -539,8 +539,7 @@ def _resolve_rate(row, sc, employee=None, on_date=None, company=None):
 		rate = _hourly_basic(employee, on_date, sc) * flt(sc.get("custom_rate_multiplier") or 1)
 		return rate if rate else None
 
-	default_rate = flt(getattr(sc, "custom_default_rate", 0))
-	return default_rate if default_rate else None
+	return None
 
 
 def _employees_in_payroll_entry(pe) -> list:

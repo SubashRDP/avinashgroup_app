@@ -103,7 +103,8 @@ doctype_js = {
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
     "Payroll Entry": "public/js/payroll_entry.js",
-    "Employee": "public/js/employee.js",
+    # Allowances on the assignment: allowances only. See payroll/allowance.py.
+    "Salary Structure Assignment": "public/js/salary_structure_assignment.js",
     # "Move Staff to This Shift" on a rotational shift. See hr/shift_rotation.py.
     "Shift Type": "public/js/shift_type.js",
     "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
@@ -335,6 +336,12 @@ _add_doc_event(
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
 
+# Fixed allowances from the employee's Allowances table, then the slip is
+# recalculated so gross, tax and net include them. Ahead of the tax hooks below,
+# which read the result. A hook, not a class: rdp_common_app owns the Salary
+# Slip class override. See payroll/salary_slip.py.
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.salary_slip.add_employee_allowances")
+
 # Income tax: the slab computes it, the slip can override it by hand. Runs after
 # the controller's validate, so the computed figure is already on the row.
 # Retirement cap and women's rebate, which HRMS's slab cannot express. Runs
@@ -442,10 +449,10 @@ for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):
 
 # Allowances (payroll/allowance.py): an allowance's kind sets its attendance
 # rule; an attendance allowance's structure row is only a tag; the employee's
-# own Allowances table holds exceptions to attendance allowances only.
+# assignment's Allowances table says which allowances each person gets, and their amount.
 _add_doc_event("Salary Component", "validate", "avinashgroup_app.payroll.allowance.validate_salary_component")
 _add_doc_event("Salary Structure", "validate", "avinashgroup_app.payroll.allowance.validate_salary_structure")
-_add_doc_event("Employee", "validate", "avinashgroup_app.payroll.allowance.validate_employee_allowances")
+_add_doc_event("Salary Structure Assignment", "validate", "avinashgroup_app.payroll.allowance.validate_assignment_allowances")
 
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.

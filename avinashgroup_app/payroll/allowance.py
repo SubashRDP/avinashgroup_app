@@ -1,46 +1,56 @@
-"""Allowances: a kind of Salary Component, with three accounts per company.
+"""Allowances: a kind of Salary Component, given per employee, three accounts per company.
 
 Every company in the group pays its own allowances (dearness, gas, HRA, tea,
-meal, overtime, fuel…) and the list grows. Three things needed fixing:
+meal, overtime, fuel…) and the list grows. Before this, each new allowance
+needed a new Employee field and a new structure row reading it — and a
+submitted structure cannot take a new row, so every addition meant new
+structures for everyone. The chart also keeps every staff cost three ways —
+O/O (Admin & Accounts), S/D (Marketing), F/P (Plant) — while a Salary
+Component carried one account per company.
 
-  * The chart keeps every staff cost three ways — O/O (Admin & Accounts), S/D
-    (Marketing), F/P (Plant) — but a Salary Component has ONE account per
-    company, so everything posted to O/O.
-  * Nothing said which components are allowances, or how each one is worked
-    out, so the setup lived only in people's heads and in the salary sheets.
-  * Attendance allowances went to every employee unless a 0 rate said
-    otherwise (the old Allowance Category).
+So:
 
-So, on the Salary Component itself:
+  * Salary Component: `custom_is_allowance` + `custom_allowance_kind`
+    (ALLOWANCE_KINDS). An attendance kind sets its own rule flags.
+  * Its Accounts table (Salary Component Account), per company: the Admin &
+    Accounts account (the row's own `account`), `custom_account_marketing`,
+    `custom_account_plant`, and `custom_default_rate` — the company's rate
+    (tea 235 at NGI, 265 at NGN; gas 1,690; HRA 25 %).
+  * Salary Structure Assignment → Allowances (`custom_allowances`, child
+    Assignment Allowance): one row per allowance the person gets, with their
+    Amount (blank = the company rate), Active, From Date. The assignment also
+    carries `custom_initial_basic` and `custom_ssf_applicable`.
 
-  * `custom_is_allowance` + `custom_allowance_kind` (ALLOWANCE_KINDS below). An
-    attendance kind sets the attendance rule fields itself (validate hook).
-  * Its Accounts table (Salary Component Account) gets, per company, a
-    Marketing (S/D) and a Plant (F/P) account beside the existing one (now the
-    Admin & Accounts one), and a Default Rate — tea is 235 at NGI, 265 at NGN.
+Pay lives on the assignment, not the Employee: an employee is created without
+any salary figure, whoever maintains employees does not see pay, and a change
+is a new dated assignment that leaves the old one as the record (Salary
+Revision works that way). Adding an allowance is a Salary Component and rows on
+the assignments of the people who get it — no new field, no new structure.
 
-Who gets an allowance is the Salary Structure: a row for it in the employee's
-structure tags them. Fixed kinds are ordinary structure rows with an amount or
-formula, computed by HRMS. An attendance kind's structure row only tags —
-`validate_salary_structure` blanks its amount — and the attendance engine
-(payroll/attendance_allowance.py) posts the month's figure. The employee's own
-Allowances table (`custom_attendance_allowances`) holds exceptions only: their
-own rate (NEW staff, tea at 40) or Eligible unticked; it also tags people on
-sites set up before structures carried the tag.
+Where each kind is paid:
+  * Fixed per Person / Fixed Company Rate / % of Initial Basic: added to the
+    salary slip from the assignment's rows (payroll/salary_slip.py) — prorated
+    by payment days like a structure row, and projected for income tax.
+  * Per Day Present / Per Meal / Per Hour: counted from attendance by Prepare
+    Payroll Inputs (payroll/attendance_allowance.py). These may also be a tag
+    row in the Salary Structure, which gives them to everyone on it (tea for
+    all staff); a row on the assignment then only carries an exception.
+  * Entered by Hand / Yearly: Additional Salary, or their own buttons.
 
-Hooks: doc_events → Salary Component / Salary Structure / Employee validate.
-Read by attendance_allowance.py and payroll_entry.py. See docs/allowances.md.
+The structure keeps only what every employee on it shares: Basic, SSF
+Addition, SSF, Income Tax and the attendance tags. `validate_salary_structure`
+refuses a fixed allowance there (it would be paid twice).
 
-Dashain bonus and leave encashment are Yearly kinds, paid by their own buttons
-on the Payroll Entry (not built yet); nothing here pays them.
+Hooks: doc_events → Salary Component / Salary Structure / Salary Structure
+Assignment validate.
+Read by attendance_allowance.py, salary_slip.py, payroll_entry.py and Salary
+Revision. See docs/allowances.md.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt, getdate
 
-#: How each allowance is worked out (docs/allowances.md has the full table, from
-#: the four companies' Falgun 2082 salary sheets).
 FIXED_PER_PERSON = "Fixed per Person"  # dearness, other, fixed, fuel, maintenance, transport
 FIXED_COMPANY_RATE = "Fixed Company Rate"  # gas, education, mobile
 PERCENT_OF_INITIAL_BASIC = "% of Initial Basic"  # HRA
@@ -60,15 +70,19 @@ ALLOWANCE_KINDS = (
 	ENTERED_BY_HAND,
 	YEARLY,
 )
-
-#: The attendance kinds and the engine condition each one sets on the component.
+#: Paid on the slip from the employee's Allowances rows.
+FIXED_KINDS = (FIXED_PER_PERSON, FIXED_COMPANY_RATE, PERCENT_OF_INITIAL_BASIC)
+#: Counted from attendance, and the engine condition each one sets.
 ATTENDANCE_KIND_CONDITION = {
 	PER_DAY_PRESENT: "Status = Present",
 	PER_MEAL: "Meal Entitlement",
 	PER_HOUR_OVERTIME: "Authorised Overtime",
 }
-#: Kinds that must never be a monthly structure row: they would be paid every month.
-NOT_IN_STRUCTURE = (ENTERED_BY_HAND, YEARLY)
+#: Never a structure row: fixed kinds come from the employee's rows, the rest
+#: are paid when entered.
+NOT_IN_STRUCTURE = FIXED_KINDS + (ENTERED_BY_HAND, YEARLY)
+#: Never on the employee's Allowances table.
+NOT_ON_EMPLOYEE = (ENTERED_BY_HAND, YEARLY)
 
 #: Department.custom_payroll_section → the Salary Component Account field.
 SECTION_ACCOUNT_FIELD = {
@@ -91,11 +105,7 @@ def _request_cache(key: str) -> dict:
 
 
 def get_account_row(company: str, salary_component: str):
-	"""The component's Accounts row for the company, as a dict, or None.
-
-	Carries `account` (Admin & Accounts, O/O), `custom_account_marketing`,
-	`custom_account_plant` and `custom_default_rate`. Cached per request.
-	"""
+	"""The component's Accounts row for the company, as a dict, or None. Cached per request."""
 	if not company or not salary_component:
 		return None
 	cache = _request_cache("_agp_account_row")
@@ -125,6 +135,11 @@ def section_account(company: str, salary_component: str, section: str | None) ->
 	return row.get(SECTION_ACCOUNT_FIELD.get(section or "", "account")) or row.account
 
 
+def has_section_accounts(company: str, salary_component: str) -> bool:
+	row = get_account_row(company, salary_component)
+	return bool(row and (row.custom_account_marketing or row.custom_account_plant))
+
+
 def sibling_account(account: str, marker: str) -> str | None:
 	"""The S/D or F/P twin of an O/O account, if the chart has one.
 
@@ -143,11 +158,6 @@ def sibling_account(account: str, marker: str) -> str | None:
 	return frappe.db.get_value("Account", {"company": company, "is_group": 0, "name": ["like", f"% - {name_part}"]})
 
 
-def has_section_accounts(company: str, salary_component: str) -> bool:
-	row = get_account_row(company, salary_component)
-	return bool(row and (row.custom_account_marketing or row.custom_account_plant))
-
-
 def get_section(employee: str) -> str | None:
 	"""The employee's payroll section, from their Department; None if unset."""
 	cache = _request_cache("_agp_payroll_section")
@@ -159,21 +169,44 @@ def get_section(employee: str) -> str | None:
 	return cache[employee]
 
 
-# ── who gets an attendance allowance ────────────────────────────────────────
+# ── the employee's allowances (on their salary assignment) ─────────────────
+
+
+def current_assignment(employee: str, on_date):
+	"""The employee's submitted Salary Structure Assignment in force on `on_date`, or None."""
+	cache = _request_cache("_agp_assignment")
+	key = (employee, str(getdate(on_date)))
+	if key not in cache:
+		cache[key] = frappe.db.get_value(
+			"Salary Structure Assignment",
+			{"employee": employee, "docstatus": 1, "from_date": ["<=", getdate(on_date)]},
+			["name", "salary_structure", "base", "custom_initial_basic", "custom_ssf_applicable"],
+			as_dict=True,
+			order_by="from_date desc",
+		)
+	return cache[key]
 
 
 def get_employee_allowance_rows(employee: str, on_date=None) -> dict:
-	"""{salary component: row} of the employee's exceptions table, in force on `on_date`."""
+	"""{allowance: row} on the employee's assignment in force on `on_date`.
+
+	Each row carries `rate` (the Amount column) and `eligible` (Active), the
+	names the attendance engine reads. A row whose From Date is later is not in
+	force yet.
+	"""
+	on_date = getdate(on_date) if on_date else getdate()
+	assignment = current_assignment(employee, on_date)
+	if not assignment:
+		return {}
 	rows = frappe.get_all(
-		"Employee Attendance Allowance",
-		filters={"parent": employee, "parenttype": "Employee"},
-		fields=["salary_component", "rate", "eligible", "effective_from"],
+		"Assignment Allowance",
+		filters={"parent": assignment.name, "parenttype": "Salary Structure Assignment"},
+		fields=["allowance", "amount", "active", "effective_from"],
 	)
-	on_date = getdate(on_date) if on_date else None
 	return {
-		r.salary_component: r
+		r.allowance: frappe._dict(salary_component=r.allowance, rate=r.amount, eligible=r.active, effective_from=r.effective_from)
 		for r in rows
-		if not (on_date and r.effective_from and getdate(r.effective_from) > on_date)
+		if not (r.effective_from and getdate(r.effective_from) > on_date)
 	}
 
 
@@ -182,12 +215,8 @@ def structure_components(employee: str, on_date) -> set:
 	cache = _request_cache("_agp_structure_components")
 	key = (employee, str(getdate(on_date)))
 	if key not in cache:
-		structure = frappe.db.get_value(
-			"Salary Structure Assignment",
-			{"employee": employee, "docstatus": 1, "from_date": ["<=", getdate(on_date)]},
-			"salary_structure",
-			order_by="from_date desc",
-		)
+		assignment = current_assignment(employee, on_date)
+		structure = assignment.salary_structure if assignment else None
 		cache[key] = (
 			set(
 				frappe.get_all(
@@ -203,11 +232,49 @@ def structure_components(employee: str, on_date) -> set:
 
 
 def is_tagged(employee: str, salary_component: str, row, on_date) -> bool:
-	"""Tagged = in their structure, or an Eligible row of their own; an
-	unticked row of their own always wins (staff on no tea)."""
+	"""Given an attendance allowance: an Active row of their own, or a tag row
+	in their structure. An unticked row of their own always wins."""
 	if row is not None:
 		return bool(row.get("eligible"))
 	return salary_component in structure_components(employee, on_date)
+
+
+def fixed_allowance_amounts(employee: str, company: str, on_date) -> dict:
+	"""{allowance: full-month amount} of the employee's fixed allowances.
+
+	Fixed per Person: their Amount. Fixed Company Rate: their Amount, else the
+	company's rate. % of Initial Basic: their Amount, else the company's %, of
+	the assignment's Initial Basic. A row without a figure to pay is left out.
+	"""
+	amounts = {}
+	initial_basic = flt((current_assignment(employee, on_date) or {}).get("custom_initial_basic"))
+	for allowance, row in get_employee_allowance_rows(employee, on_date).items():
+		if not row.eligible:
+			continue
+		kind = frappe.get_cached_value("Salary Component", allowance, "custom_allowance_kind")
+		if kind not in FIXED_KINDS:
+			continue
+		amount = flt(row.rate)
+		if not amount and kind != FIXED_PER_PERSON:
+			amount = company_default_rate(company, allowance)
+		if kind == PERCENT_OF_INITIAL_BASIC:
+			amount = initial_basic * amount / 100
+		if amount:
+			amounts[allowance] = flt(amount, 2)
+	return amounts
+
+
+def allowance_amount(assignment, allowance: str) -> float:
+	"""The Amount on an assignment's row for this allowance (0 if none)."""
+	return flt(
+		frappe.db.get_value(
+			"Assignment Allowance",
+			{"parent": assignment, "parenttype": "Salary Structure Assignment", "allowance": allowance},
+			"amount",
+		)
+		if assignment
+		else 0
+	)
 
 
 # ── hooks ───────────────────────────────────────────────────────────────────
@@ -251,10 +318,12 @@ def validate_salary_component(doc, method=None):
 
 
 def validate_salary_structure(doc, method=None):
-	"""Attendance allowance rows are tags; Yearly and hand-entered kinds stay out.
+	"""A structure holds what everyone on it shares; allowances come from the employee.
 
-	Hook: doc_events → Salary Structure → validate. An attendance allowance's
-	row would otherwise be paid by its own formula as well as by the engine.
+	Hook: doc_events → Salary Structure → validate. Refuses a fixed allowance
+	(the employee's row pays it, so it would be paid twice) and a Yearly or
+	hand-entered one (it would be paid every month). An attendance allowance's
+	row is a tag: its amount and formula are blanked.
 	"""
 	for table in ("earnings", "deductions"):
 		for row in doc.get(table) or []:
@@ -262,10 +331,13 @@ def validate_salary_structure(doc, method=None):
 				"Salary Component", row.salary_component, ["custom_is_attendance_driven", "custom_allowance_kind"]
 			)
 			if kind in NOT_IN_STRUCTURE:
+				where = (
+					_("give it on the employee's Allowances table")
+					if kind in FIXED_KINDS
+					else _("it is paid when entered, not every month")
+				)
 				frappe.throw(
-					_("Row {0}: {1} is a {2} allowance; it is paid when entered, not every month in the structure").format(
-						row.idx, row.salary_component, kind
-					)
+					_("Row {0}: {1} is a {2} allowance: {3}").format(row.idx, row.salary_component, kind, where)
 				)
 			if attendance:
 				row.amount = 0
@@ -274,28 +346,22 @@ def validate_salary_structure(doc, method=None):
 				row.amount_based_on_formula = 0
 
 
-def validate_employee_allowances(doc, method=None):
-	"""The employee's exceptions table: attendance allowances only, once each.
+def validate_assignment_allowances(doc, method=None):
+	"""Assignment → Allowances: allowances only, once each, with an amount where one is needed.
 
-	Hook: doc_events → Employee → validate. A fixed allowance is set in the
-	salary structure, so a row for one here would do nothing — refused rather
-	than left to mislead. Fills the row's read-only Kind and Company Default
-	Rate columns.
+	Hook: doc_events → Salary Structure Assignment → validate.
 	"""
 	seen = set()
-	for row in doc.get("custom_attendance_allowances") or []:
-		if row.salary_component in seen:
-			frappe.throw(_("Allowance {0} is listed twice").format(row.salary_component))
-		seen.add(row.salary_component)
-		attendance, kind = frappe.db.get_value(
-			"Salary Component", row.salary_component, ["custom_is_attendance_driven", "custom_allowance_kind"]
+	for row in doc.get("custom_allowances") or []:
+		if row.allowance in seen:
+			frappe.throw(_("Allowance {0} is listed twice").format(row.allowance))
+		seen.add(row.allowance)
+		is_allowance, kind = frappe.db.get_value(
+			"Salary Component", row.allowance, ["custom_is_allowance", "custom_allowance_kind"]
 		)
-		if not attendance:
-			frappe.throw(
-				_("Row {0}: {1} is not attendance based; set it in the Salary Structure instead").format(
-					row.idx, row.salary_component
-				)
-			)
-		row.attendance_based = 1
-		row.calculation = kind
-		row.default_rate = company_default_rate(doc.company, row.salary_component)
+		if not is_allowance:
+			frappe.throw(_("Row {0}: {1} is not an allowance").format(row.idx, row.allowance))
+		if kind in NOT_ON_EMPLOYEE:
+			frappe.throw(_("Row {0}: {1} is a {2} allowance and is paid when entered").format(row.idx, row.allowance, kind))
+		if kind == FIXED_PER_PERSON and row.active and not flt(row.amount):
+			frappe.throw(_("Row {0}: type {1}'s monthly amount").format(row.idx, row.allowance))
