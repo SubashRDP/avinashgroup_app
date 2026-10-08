@@ -8,8 +8,10 @@ centre) and takes ONE account per component and company
 
 This override groups by (component, cost centre, section) instead, where the
 section is the employee's Department → `custom_payroll_section`, and takes the
-account for that section from the component's Company Allowance. A component
-with no Company Allowance keeps HRMS's account.
+account for that section from the component's Accounts row for the company
+(`custom_account_marketing`, `custom_account_plant`; the row's own account is
+Admin & Accounts). A blank S/D or F/P falls back to the row's own account, which
+is exactly what HRMS would have posted. See payroll/allowance.py.
 
 Boundary: only the expense (earning) and deduction rows of the accrual
 journal. Employee-advance recoveries and the payable side are HRMS's own
@@ -23,12 +25,7 @@ from frappe.utils import flt
 
 from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
 
-from avinashgroup_app.payroll.company_allowance import (
-	get_company_allowance,
-	get_section,
-	has_section_accounts,
-	section_account,
-)
+from avinashgroup_app.payroll.allowance import get_section, has_section_accounts, section_account
 
 
 class AvinashPayrollEntry(PayrollEntry):
@@ -82,8 +79,7 @@ class AvinashPayrollEntry(PayrollEntry):
 
 	def section_for(self, item, missing_section: set):
 		"""The employee's section, if this component posts by section at all."""
-		allowance = get_company_allowance(self.company, item.salary_component)
-		if not allowance or not has_section_accounts(allowance):
+		if not has_section_accounts(self.company, item.salary_component):
 			return None
 		section = get_section(item.employee)
 		if not section:
@@ -93,8 +89,7 @@ class AvinashPayrollEntry(PayrollEntry):
 	def get_account(self, component_dict=None):
 		account_dict = {}
 		for (component, cost_center, section), amount in component_dict.items():
-			allowance = get_company_allowance(self.company, component)
-			account = (allowance and section_account(allowance, section)) or self.get_salary_component_account(
+			account = section_account(self.company, component, section) or self.get_salary_component_account(
 				component
 			)
 			accounting_key = (account, cost_center)

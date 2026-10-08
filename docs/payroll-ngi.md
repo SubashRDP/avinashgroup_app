@@ -1,4 +1,4 @@
-> **2026-10-08:** Allowance Category is replaced by Company Allowance and the employee's Allowances table: see [company-allowance.md](company-allowance.md). References to OLD / NEW / NO categories below describe the earlier setup.
+> **2026-10-08:** Allowance Category is replaced by allowance kinds and per-company rates on Salary Component, tags in the Salary Structure and the employee's Allowance Exceptions table: see [allowances.md](allowances.md). References to OLD / NEW / NO categories below describe the earlier setup.
 
 # NGI payroll — components, structure, and how it matches the sheet
 

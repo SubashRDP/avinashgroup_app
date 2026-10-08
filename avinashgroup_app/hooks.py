@@ -335,13 +335,6 @@ _add_doc_event(
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
 
-# Fixed allowances from the employee's Allowances table (Company Allowance), then
-# the slip is recalculated so gross, tax and net include them. First of the
-# slip's own validate hooks: the two tax hooks below read the result. A hook,
-# not a class: rdp_common_app owns the Salary Slip class override, and only one
-# app's override can win. See payroll/salary_slip.py.
-_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.salary_slip.add_company_allowances")
-
 # Income tax: the slab computes it, the slip can override it by hand. Runs after
 # the controller's validate, so the computed figure is already on the row.
 # Retirement cap and women's rebate, which HRMS's slab cannot express. Runs
@@ -447,9 +440,12 @@ _add_doc_event("Shift Type", "validate", "avinashgroup_app.hr.shift_type_guard.c
 for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):
     _add_doc_event(_dt, "validate", "avinashgroup_app.hr.bs_dates.set_bs_dates")
 
-# An employee's Allowances table may only list allowances their own company
-# pays (Company Allowance); fills the table's read-only columns.
-_add_doc_event("Employee", "validate", "avinashgroup_app.payroll.company_allowance.validate_employee_allowances")
+# Allowances (payroll/allowance.py): an allowance's kind sets its attendance
+# rule; an attendance allowance's structure row is only a tag; the employee's
+# own Allowances table holds exceptions to attendance allowances only.
+_add_doc_event("Salary Component", "validate", "avinashgroup_app.payroll.allowance.validate_salary_component")
+_add_doc_event("Salary Structure", "validate", "avinashgroup_app.payroll.allowance.validate_salary_structure")
+_add_doc_event("Employee", "validate", "avinashgroup_app.payroll.allowance.validate_employee_allowances")
 
 # Maternity is for mothers, paternity for fathers — checked when the leave is
 # allocated and again when it is applied for.

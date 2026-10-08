@@ -119,4 +119,4 @@ avinashgroup_app.patches.remove_dashain_bonus
 avinashgroup_app.patches.tax_relief_fields_without_defaults
 avinashgroup_app.patches.setup_shift_rotation
 avinashgroup_app.patches.remove_working_hours_threshold
-avinashgroup_app.patches.setup_company_allowance
+avinashgroup_app.patches.setup_allowance_kinds

@@ -22,10 +22,15 @@ frappe.ui.form.on("Payroll Entry", {
 								const created = r.message.created || 0;
 								const skipped = r.message.skipped || 0;
 								const recovered = r.message.advance_recoveries || 0;
+								const refreshed = r.message.slips_refreshed || 0;
 								let msg = __("{0} allowance and fine records, {1} advance instalments.", [created, recovered]);
+								if (refreshed) {
+									msg += " " + __("{0} draft salary slips updated.", [refreshed]);
+								}
 								if (skipped) {
 									msg += " " + __("{0} skipped — see Error Log.", [skipped]);
 								}
+								frm.reload_doc();
 								frappe.show_alert({
 									message: msg,
 									indicator: skipped ? "orange" : created ? "green" : "orange",
