@@ -271,10 +271,14 @@ class TestAllowance(FrappeTestCase):
 				"company": COMPANY,
 			}
 		).insert(ignore_permissions=True)
-		lines = {d.salary_component: d.amount for d in slip.earnings}
-		self.assertEqual(lines.get(self.mobile), 1500)
-		self.assertNotIn(self.tea, lines)
-		self.assertNotIn(self.meal, lines)
+		rows = {d.salary_component: d for d in slip.earnings}
+		mobile, basic = rows[self.mobile], rows["Basic"]
+		self.assertEqual(mobile.default_amount, 1500)
+		# Prorated exactly like Basic: a normal structure row (whatever the
+		# site's holiday setting makes of the month's payment days).
+		self.assertAlmostEqual(mobile.amount / 1500, basic.amount / basic.default_amount, places=3)
+		self.assertNotIn(self.tea, rows)
+		self.assertNotIn(self.meal, rows)
 
 	# ── the payroll journal ─────────────────────────────────────────────────
 

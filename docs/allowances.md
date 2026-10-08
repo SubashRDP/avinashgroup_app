@@ -87,9 +87,17 @@ Exceptions (older sites tag that way). An unticked row always wins.
 - Known components are marked by name or condition (avinas1: 8). Overtime-type
   conditions become Only OT-Eligible Staff.
 - Allowance Category rates become exception rows; the category doctypes go.
-- Whatever the old engine paid untagged (overtime, late fine, daily wage, and
-  tea or meal where no category decided it) is tagged on every active employee
+- Whatever the old engine paid untagged (overtime, late fine, and tea or meal
+  where no category decided it) is tagged on every active employee
   of the company, so nobody stops being paid. Existing rows are kept.
+
+## Not in payroll
+
+- **Daily-wage labour** (NGK's Wages tab, 754 a day; NGN's and NGG's helpers) is
+  paid in cash day to day, outside payroll (decided 2026-10-08). The Daily Wage
+  component is disabled and onboarding no longer imports the Wages tab.
+- **Grade Amount** and **Arrear** are disabled: grade is part of Basic at NGG and
+  NGK; back pay is **Salary Arrears**, posted by Salary Revision.
 
 ## Not done yet
 

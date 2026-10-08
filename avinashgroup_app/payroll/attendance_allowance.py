@@ -356,14 +356,11 @@ def _assignment(employee: str, on_date):
 	) or frappe._dict(base=0, salary_structure=None)
 
 
-def _is_daily_wage(structure) -> bool:
-	return bool(structure and frappe.get_cached_value("Salary Structure", structure, "custom_daily_wage"))
-
-
 def _hourly_basic(employee: str, on_date, sc=None) -> float:
-	"""The hourly wage: a month's basic over 30 days of 8 hours — or, for a
-	daily-wage worker, whose base IS the day's wage, that day over 8 hours
-	(NGK's labour sheet: OT rate = 754 / 8 * 1.5).
+	"""The hourly wage: a month's basic over 30 days of 8 hours.
+
+	Daily-wage labour is paid in cash day to day, outside payroll (decided
+	2026-10-08), so every assignment's base here is a monthly basic.
 
 	Both divisors come off the Salary Component that is being priced, so HR can
 	restate the basis for overtime without touching the late fine, or either
@@ -371,10 +368,7 @@ def _hourly_basic(employee: str, on_date, sc=None) -> float:
 	"""
 	days = flt(sc and sc.get("custom_rate_days_per_month")) or RATE_DAYS_PER_MONTH
 	hours = flt(sc and sc.get("custom_rate_hours_per_day")) or RATE_HOURS_PER_DAY
-	a = _assignment(employee, on_date)
-	if _is_daily_wage(a.salary_structure):
-		return flt(a.base) / hours
-	return flt(a.base) / days / hours
+	return flt(_assignment(employee, on_date).base) / days / hours
 
 
 def _per_unit(unit: str, day: float, hours: float) -> float:
@@ -538,11 +532,6 @@ def _resolve_rate(row, sc, employee=None, on_date=None, company=None):
 	company_rate = company_default_rate(company, sc.name)
 	if company_rate:
 		return company_rate
-
-	if sc.get("custom_rate_basis") == "Daily Wage" and employee:
-		# Only for staff on a daily-wage structure, whose base is the day's pay.
-		a = _assignment(employee, on_date)
-		return flt(a.base) if _is_daily_wage(a.salary_structure) and flt(a.base) else None
 
 	if sc.get("custom_rate_basis") == "Hourly Basic × Multiplier" and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,

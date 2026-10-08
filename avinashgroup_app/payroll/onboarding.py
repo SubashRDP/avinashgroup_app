@@ -103,8 +103,8 @@ PROFILES = {
 			"maintenance": "U", "ssf": "Y",
 		},
 		"rates": {},
-		# Labour paid by the day: 754 a day for the days worked.
-		"wages": {"sheet": "Wages", "first_row": 3, "match": "name", "cols": {"name": "B", "rate": "F"}},
+		# The sheet's Wages tab (labour at 754 a day) is not imported: labour is
+		# paid in cash day to day, outside payroll (decided 2026-10-08).
 	},
 }
 
@@ -190,11 +190,6 @@ COMPONENTS = (
 		"custom_unit": "Per Hour", "custom_rate_basis": "Hourly Basic × Multiplier",
 		"custom_rate_multiplier": 1.5, "custom_summary_group": "Overtime",
 	}),
-	("Daily Wage", "DW", "Earning", 0, {
-		"custom_is_attendance_driven": 1, "custom_condition_type": "Status = Present",
-		"custom_unit": "Per Day", "custom_half_day_counts": "Half Day",
-		"custom_rate_basis": "Daily Wage", "custom_summary_group": "Daily Wage",
-	}),
 	("SSF", "SSF", "Deduction", 0, {"exempted_from_income_tax": 1}),
 	("Income Tax", "TAX", "Deduction", 0, {"variable_based_on_taxable_salary": 1}),
 	("Late Fine", "LF", "Deduction", 0, {
@@ -222,10 +217,6 @@ def onboard(key, path):
 
 def structure_name(key):
 	return f"{key} Staff {FISCAL_YEAR}"
-
-
-def wage_structure_name(key):
-	return f"{key} Daily Wage {FISCAL_YEAR}"
 
 
 def structure_rows(profile):
@@ -279,9 +270,6 @@ def setup_company(key):
 	ensure_components()
 	ensure_company_rates(key)
 
-	if profile.get("wages"):
-		ensure_wage_structure(key, company)
-
 	name = structure_name(key)
 	if frappe.db.exists("Salary Structure", {"name": name, "docstatus": 1}):
 		# Assignments hang off a submitted structure, so it is never rebuilt
@@ -326,38 +314,6 @@ def ensure_payable_account(company):
 	account = f"347301 - Salary Payable - {abbr}"
 	if frappe.db.exists("Account", account):
 		frappe.db.set_value("Company", company, "default_payroll_payable_account", account)
-
-
-def ensure_wage_structure(key, company):
-	"""Daily-wage labour: nothing fixed in the structure. The base is one day's
-	pay; the `Daily Wage` component pays it per day present, overtime reads the
-	flag, and the tax slab withholds the 1%."""
-	name = wage_structure_name(key)
-	if frappe.db.exists("Salary Structure", {"name": name, "docstatus": 1}):
-		return name
-	doc = frappe.new_doc("Salary Structure")
-	doc.name = name
-	doc.update(
-		{
-			"company": company,
-			"currency": "NPR",
-			"payroll_frequency": "Monthly",
-			"is_active": "Yes",
-			"custom_daily_wage": 1,
-			"payment_account": frappe.db.get_value("Company", company, "default_payroll_payable_account"),
-		}
-	)
-	# Tags for the allowance engine: a day's wage per day present, and overtime.
-	doc.append("earnings", _row("Daily Wage", "", 0))
-	doc.append("earnings", _row("Overtime", "", 0))
-	doc.append(
-		"deductions",
-		{"salary_component": "Income Tax", "variable_based_on_taxable_salary": 1, "depends_on_payment_days": 0},
-	)
-	doc.flags.ignore_permissions = True
-	doc.save()
-	doc.submit()
-	return doc.name
 
 
 def _row(component, formula, prorate):
@@ -449,23 +405,7 @@ def import_sheet(key, path):
 		if base and assign(employee, key, company, base):
 			assigned.append(employee)
 
-	wages = profile.get("wages")
-	wage_assigned, wage_unmatched = [], []
-	if wages:
-		wage_sheet = openpyxl.load_workbook(path, data_only=True)[wages["sheet"]]
-		for row in _sheet_rows(wage_sheet, wages):
-			employee = matcher.find(row)
-			rate = flt(row.get("rate")) if isinstance(row.get("rate"), (int, float)) else 0
-			if not employee or not rate:
-				wage_unmatched.append(row["name"])
-				continue
-			frappe.db.set_value("Employee", employee, "custom_ssf_applicable", 0, update_modified=False)
-			if assign(employee, key, company, rate, structure=wage_structure_name(key)):
-				wage_assigned.append(employee)
-
 	return {
-		"daily_wage_assigned": len(wage_assigned),
-		"daily_wage_unmatched": wage_unmatched,
 		"company": company,
 		"structure": structure_name(key),
 		"employees_updated": len(updated),

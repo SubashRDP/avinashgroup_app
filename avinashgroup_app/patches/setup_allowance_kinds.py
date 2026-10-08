@@ -19,11 +19,14 @@ setup this keeps every slip and every journal the same:
      (a 0 rate an unticked row); the category doctypes and Employee field go.
   6. Who gets an attendance allowance is now a tag: the structure, or the
      employee's own row. Existing structures carry no tag rows, so whatever the
-     old engine paid without one — overtime, late fine, daily wage, and tea or
+     old engine paid without one — overtime, late fine, and tea or
      meal where no category decided it or the component had a default rate —
      is tagged on every active employee of the company. Nobody stops being paid.
   7. The rule fields the earlier Company Allowance build hid are shown again,
      and its doctypes are removed where a site has them.
+  8. Daily Wage is disabled and its rate basis option dropped: labour is paid
+     in cash day to day, outside payroll (decided 2026-10-08). This runs
+     before the tagging, so nobody is tagged with it.
 
 Re-runnable: nothing already set is overwritten.
 """
@@ -98,6 +101,7 @@ def execute():
 	show_rule_fields()
 	seed_sections()
 	rows = seed_account_rows()
+	retire_daily_wage()
 	marked = mark_allowances()
 	moved = move_categories()
 	tagged = tag_paid_to_all()
@@ -285,6 +289,15 @@ def seed_account_rows() -> int:
 	return changed
 
 
+def retire_daily_wage():
+	if frappe.db.exists("Salary Component", "Daily Wage"):
+		frappe.db.set_value("Salary Component", "Daily Wage", "disabled", 1, update_modified=False)
+	name = frappe.db.get_value("Custom Field", {"dt": "Salary Component", "fieldname": "custom_rate_basis"})
+	if name:
+		options = (frappe.db.get_value("Custom Field", name, "options") or "").split("\n")
+		frappe.db.set_value("Custom Field", name, "options", "\n".join(o for o in options if o != "Daily Wage"))
+
+
 def mark_allowances() -> int:
 	marked = 0
 	for sc in frappe.get_all(
@@ -297,7 +310,6 @@ def mark_allowances() -> int:
 		kind = KIND_BY_NAME.get(sc.name) or (
 			KIND_BY_CONDITION.get(sc.custom_condition_type) if sc.custom_is_attendance_driven else None
 		)
-		# Daily Wage is a labourer's pay, not an allowance, though it counts days present.
 		if kind and sc.name != "Daily Wage" and not sc.custom_is_allowance:
 			values.update({"custom_is_allowance": 1, "custom_allowance_kind": kind})
 			marked += 1
