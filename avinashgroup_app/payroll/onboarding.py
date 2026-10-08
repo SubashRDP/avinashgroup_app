@@ -9,8 +9,9 @@ The four sheets use two pay models:
 
   Initial-basic (NGI, NGN) — one template. Basic Salary, plus HRA as a share of
       a separate Initial Basic, flat gas and education allowances for those
-      flagged YES, dearness and other allowances per person, tea by an OLD /
-      NEW / NO category, SSF 20% added and 31% deducted.
+      flagged YES, dearness and other allowances per person, tea at the
+      company rate (OLD), 40 for NEW staff or none, SSF 20% added and 31%
+      deducted.
 
   Grade-scale (NGG, NGK) — the government scale. Basic plus increments plus
       grade is the salary scale; SSF is 20% / 31% of that scale; then a fixed
@@ -23,10 +24,15 @@ components and the salary structure; `import_sheet` matches the sheet's people t
 Employees, writes their pay inputs, and assigns the structure from the start of
 the fiscal year. Both are safe to run again.
 
-What varies per person lives on the Employee (the structure reads it in a
-formula); what varies per company lives in the structure; what attendance
-decides — tea, meals, overtime, late fines — the allowance engine posts each
-month. So a rate change is one edit, and a new starter is one Employee.
+Pay lives on the Salary Structure Assignment, not the Employee: Basic is its
+base, Initial Basic and SSF Applicable are its fields, and every allowance a
+person gets is a row on its Allowances table, with their own amount (dearness, other,
+fuel, fixed, maintenance) or blank for the company's rate (gas, education, HRA
+%, tea, meal), which is the Default Rate on the component's Accounts row for
+the company. The structure holds only what everyone shares: Basic, SSF
+Addition, SSF, income tax and the attendance tags (tea, meal, overtime, late
+fine). So a rate change is one edit, a new allowance is a component and some
+rows, and a new starter is one Employee. See docs/allowances.md.
 
     bench --site <site> execute avinashgroup_app.payroll.onboarding.onboard \\
         --kwargs "{'key': 'NGN', 'path': '/path/to/NGN.xlsx'}"
@@ -37,8 +43,9 @@ import re
 
 import frappe
 from frappe import _
-from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.utils import flt
+
+from avinashgroup_app.payroll.allowance import sibling_account
 
 FISCAL_YEAR = "83/84"
 
@@ -97,48 +104,11 @@ PROFILES = {
 			"maintenance": "U", "ssf": "Y",
 		},
 		"rates": {},
-		# Labour paid by the day: 754 a day for the days worked.
-		"wages": {"sheet": "Wages", "first_row": 3, "match": "name", "cols": {"name": "B", "rate": "F"}},
+		# The sheet's Wages tab (labour at 754 a day) is not imported: labour is
+		# paid in cash day to day, outside payroll (decided 2026-10-08).
 	},
 }
 
-#: The per-person pay inputs a structure formula reads. `setup_payroll_employee_fields`
-#: created the first batch; these four were only ever made by hand on the working
-#: site, so a fresh site had no column for them and every import failed.
-EMPLOYEE_FIELDS = [
-	{
-		"fieldname": "custom_dearness_allowance",
-		"label": "Dearness Allowance",
-		"fieldtype": "Currency",
-		"insert_after": "custom_ssf_applicable",
-		"description": "From the Grade sheet; differs per person",
-	},
-	{
-		"fieldname": "custom_other_allowance",
-		"label": "Other Allowance",
-		"fieldtype": "Currency",
-		"insert_after": "custom_dearness_allowance",
-	},
-	{
-		"fieldname": "custom_fuel_allowance",
-		"label": "Fuel Allowance",
-		"fieldtype": "Currency",
-		"insert_after": "custom_other_allowance",
-	},
-	{
-		"fieldname": "custom_fixed_allowance",
-		"label": "Fixed Allowance",
-		"fieldtype": "Currency",
-		"insert_after": "custom_fuel_allowance",
-		"description": "Grade-scale companies (NGG, NGK): the monthly fixed allowance",
-	},
-	{
-		"fieldname": "custom_maintenance_allowance",
-		"label": "Maintenance Allowance",
-		"fieldtype": "Currency",
-		"insert_after": "custom_fixed_allowance",
-	},
-]
 
 #: The payroll component catalogue: everything a structure or the attendance
 #: engine can put on a slip.
@@ -152,38 +122,37 @@ EMPLOYEE_FIELDS = [
 #: (name, abbr, type, payment_days, flags)
 COMPONENTS = (
 	("Basic", "B", "Earning", 1, {}),
-	("Dearness Allowance", "DA", "Earning", 1, {}),
-	("Other Allowance", "OA", "Earning", 1, {}),
-	("Fixed Allowance", "FA", "Earning", 1, {}),
-	("Fuel Allowance", "FUEL", "Earning", 1, {}),
-	("Maintenance Allowance", "MNT", "Earning", 1, {}),
-	("House Rent Allowance", "HRA", "Earning", 1, {}),
-	("Gas Allowance", "GAS", "Earning", 1, {}),
-	("Education Allowance", "EDU", "Earning", 1, {}),
+	("Dearness Allowance", "DA", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed per Person"}),
+	("Other Allowance", "OA", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed per Person"}),
+	("Fixed Allowance", "FA", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed per Person"}),
+	("Fuel Allowance", "FUEL", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed per Person"}),
+	("Maintenance Allowance", "MNT", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed per Person"}),
+	("House Rent Allowance", "HRA", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "% of Initial Basic"}),
+	("Gas Allowance", "GAS", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed Company Rate"}),
+	("Education Allowance", "EDU", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Fixed Company Rate"}),
 	("SSF Addition", "SSFA", "Earning", 0, {}),
 	# Paid month by month on Payroll Adjustment when there was loading work.
-	("Load/Unload Allowance", "LU", "Earning", 1, {}),
-	("Dashain Bonus", "DB", "Earning", 0, {}),
+	("Load/Unload Allowance", "LU", "Earning", 1, {"custom_is_allowance": 1, "custom_allowance_kind": "Entered by Hand"}),
+	("Dashain Bonus", "DB", "Earning", 0, {"custom_is_allowance": 1, "custom_allowance_kind": "Yearly"}),
 	("Salary Arrears", "ARR", "Earning", 0, {}),
 	# Worked out from attendance each month by `payroll.attendance_allowance`.
 	("Tea & Conveyance", "TEA", "Earning", 0, {
+		"custom_is_allowance": 1, "custom_allowance_kind": "Per Day Present",
+		"custom_pay_on_holiday": "Do Not Pay",
 		"custom_is_attendance_driven": 1, "custom_condition_type": "Status = Present",
 		"custom_unit": "Per Day", "custom_summary_group": "Tea", "custom_half_day_counts": "Full Day",
 	}),
 	("Meal", "MEAL", "Earning", 0, {
+		"custom_is_allowance": 1, "custom_allowance_kind": "Per Meal",
 		"custom_is_attendance_driven": 1, "custom_condition_type": "Meal Entitlement",
 		"custom_unit": "Per Day", "custom_time_offset_hours": 1.5, "custom_summary_group": "Meal",
 		"custom_holiday_hours_one_meal": 6, "custom_holiday_hours_two_meals": 8, "custom_max_per_day": 2,
 	}),
 	("Overtime", "OT", "Earning", 0, {
+		"custom_is_allowance": 1, "custom_allowance_kind": "Per Hour (Overtime)", "custom_ot_eligible_only": 1,
 		"custom_is_attendance_driven": 1, "custom_condition_type": "Authorised Overtime",
 		"custom_unit": "Per Hour", "custom_rate_basis": "Hourly Basic × Multiplier",
 		"custom_rate_multiplier": 1.5, "custom_summary_group": "Overtime",
-	}),
-	("Daily Wage", "DW", "Earning", 0, {
-		"custom_is_attendance_driven": 1, "custom_condition_type": "Status = Present",
-		"custom_unit": "Per Day", "custom_half_day_counts": "Half Day",
-		"custom_rate_basis": "Daily Wage", "custom_summary_group": "Daily Wage",
 	}),
 	("SSF", "SSF", "Deduction", 0, {"exempted_from_income_tax": 1}),
 	("Income Tax", "TAX", "Deduction", 0, {"variable_based_on_taxable_salary": 1}),
@@ -214,41 +183,27 @@ def structure_name(key):
 	return f"{key} Staff {FISCAL_YEAR}"
 
 
-def wage_structure_name(key):
-	return f"{key} Daily Wage {FISCAL_YEAR}"
-
-
 def structure_rows(profile):
-	"""(component, formula, depends_on_payment_days) for the company's model.
+	"""(component, formula, depends_on_payment_days) every employee of the company shares.
 
-	Anything a formula reads that is already prorated — Basic — must not be
-	prorated again, which is why the two SSF rows are not payment-days rows.
+	Allowances are not here: they are rows on each employee (Employee →
+	Allowances), added to the slip by payroll/salary_slip.py. SSF reads Basic,
+	which is prorated already, so the two SSF rows are not payment-days rows.
 	"""
 	r = profile["rates"]
-	if profile["model"] == INITIAL_BASIC:
-		earnings = [
-			("Basic", "base", 1),
-			("Dearness Allowance", "custom_dearness_allowance", 1),
-			("Other Allowance", "custom_other_allowance", 1),
-			("Fuel Allowance", "custom_fuel_allowance", 1),
-			("House Rent Allowance", f"custom_initial_basic * {r['hra']} if custom_hra_eligible else 0", 1),
-			("Gas Allowance", f"{r['gas']} if custom_gas_allowance else 0", 1),
-			("Education Allowance", f"{r['edu']} if custom_education_allowance else 0", 1),
-			("SSF Addition", "B * 0.20 if custom_ssf_applicable else 0", 0),
-		]
-	else:
-		earnings = [
-			("Basic", "base", 1),
-			("Fixed Allowance", "custom_fixed_allowance", 1),
-			("Dearness Allowance", "custom_dearness_allowance", 1),
-			("Other Allowance", "custom_other_allowance", 1),
-			("Fuel Allowance", "custom_fuel_allowance", 1),
-		]
-		if "maintenance" in profile["cols"]:
-			earnings.append(("Maintenance Allowance", "custom_maintenance_allowance", 1))
-		earnings.append(("SSF Addition", "B * 0.20 if custom_ssf_applicable else 0", 0))
+	earnings = [
+		("Basic", "base", 1),
+		("SSF Addition", "B * 0.20 if custom_ssf_applicable else 0", 0),
+	]
+	# Tags, not amounts: the allowance engine pays these from attendance to
+	# whoever's structure carries them (payroll/allowance.py blanks the row).
+	if r.get("tea_old"):
+		earnings.append(("Tea & Conveyance", "", 0))
+	if r.get("meal"):
+		earnings.append(("Meal", "", 0))
+	earnings.append(("Overtime", "", 0))
 
-	deductions = [("SSF", "B * 0.31 if custom_ssf_applicable else 0", 0)]
+	deductions = [("SSF", "B * 0.31 if custom_ssf_applicable else 0", 0), ("Late Fine", "", 0)]
 	return earnings, deductions
 
 
@@ -256,13 +211,9 @@ def setup_company(key):
 	profile = PROFILES[key]
 	company = profile["company"]
 
-	create_custom_fields({"Employee": EMPLOYEE_FIELDS}, update=True)
 	ensure_payable_account(company)
 	ensure_components()
-	ensure_allowance_categories(key, profile)
-
-	if profile.get("wages"):
-		ensure_wage_structure(key, company)
+	ensure_company_rates(key)
 
 	name = structure_name(key)
 	if frappe.db.exists("Salary Structure", {"name": name, "docstatus": 1}):
@@ -310,35 +261,6 @@ def ensure_payable_account(company):
 		frappe.db.set_value("Company", company, "default_payroll_payable_account", account)
 
 
-def ensure_wage_structure(key, company):
-	"""Daily-wage labour: nothing fixed in the structure. The base is one day's
-	pay; the `Daily Wage` component pays it per day present, overtime reads the
-	flag, and the tax slab withholds the 1%."""
-	name = wage_structure_name(key)
-	if frappe.db.exists("Salary Structure", {"name": name, "docstatus": 1}):
-		return name
-	doc = frappe.new_doc("Salary Structure")
-	doc.name = name
-	doc.update(
-		{
-			"company": company,
-			"currency": "NPR",
-			"payroll_frequency": "Monthly",
-			"is_active": "Yes",
-			"custom_daily_wage": 1,
-			"payment_account": frappe.db.get_value("Company", company, "default_payroll_payable_account"),
-		}
-	)
-	doc.append(
-		"deductions",
-		{"salary_component": "Income Tax", "variable_based_on_taxable_salary": 1, "depends_on_payment_days": 0},
-	)
-	doc.flags.ignore_permissions = True
-	doc.save()
-	doc.submit()
-	return doc.name
-
-
 def _row(component, formula, prorate):
 	flags = frappe.db.get_value(
 		"Salary Component", component, ["is_tax_applicable", "exempted_from_income_tax"], as_dict=True
@@ -383,32 +305,38 @@ def ensure_components():
 	frappe.clear_cache(doctype="Salary Component")
 
 
-def ensure_allowance_categories(key, profile):
-	"""OLD / NEW / NO tea groups and the meal rate, for this company."""
-	r = profile["rates"]
-	groups = {}
-	if "tea_old" in r:
-		groups = {"OLD": r["tea_old"], "NEW": r["tea_new"], "NO": 0}
-	elif r.get("meal"):
-		groups = {"STAFF": None}
+#: The sheet's company-wide rates → the allowance they price.
+RATE_COMPONENTS = (
+	("tea_old", "Tea & Conveyance", 1),
+	("meal", "Meal", 1),
+	("gas", "Gas Allowance", 1),
+	("edu", "Education Allowance", 1),
+	("hra", "House Rent Allowance", 100),  # 0.25 → 25 (%)
+)
 
-	for group, tea in groups.items():
-		name = f"{key} {group}"
-		if frappe.db.exists("Allowance Category", name):
+
+def ensure_company_rates(key):
+	"""The company's rates as Default Rate on each component's Accounts row.
+
+	The row is created without an account if the accountant has not mapped one
+	yet (map_component_accounts fills it in later). A rate already typed is left
+	alone.
+	"""
+	profile = PROFILES[key]
+	company, r = profile["company"], profile["rates"]
+	for rate_key, component, factor in RATE_COMPONENTS:
+		rate = flt(r.get(rate_key)) * factor
+		if not rate or not frappe.db.exists("Salary Component", component):
 			continue
-		rates = []
-		if tea is not None:
-			rates.append({"salary_component": "Tea & Conveyance", "rate": tea})
-		if r.get("meal"):
-			rates.append({"salary_component": "Meal", "rate": r["meal"]})
-		frappe.get_doc(
-			{
-				"doctype": "Allowance Category",
-				"category_name": name,
-				"company": profile["company"],
-				"rates": rates,
-			}
-		).insert(ignore_permissions=True)
+		doc = frappe.get_doc("Salary Component", component)
+		row = next((a for a in doc.accounts if a.company == company), None)
+		if row and flt(row.custom_default_rate):
+			continue
+		if not row:
+			row = doc.append("accounts", {"company": company})
+		row.custom_default_rate = rate
+		doc.flags.ignore_permissions = True
+		doc.save()
 
 
 # ───────────────────────────────────────────────────────────────── import ──
@@ -422,42 +350,24 @@ def import_sheet(key, path):
 	sheet = openpyxl.load_workbook(path, data_only=True)[profile["sheet"]]
 	matcher = EmployeeMatcher(key, company)
 
-	updated, unmatched, assigned, notes = [], [], [], []
+	matched, unmatched, assigned, notes = [], [], [], []
 	for row in _sheet_rows(sheet, profile):
 		employee = matcher.find(row)
 		if not employee:
 			unmatched.append(row["name"])
 			continue
+		matched.append(employee)
 
-		values, base, note = employee_values(key, profile, row)
+		values, base, note, allowances = employee_values(key, profile, row)
 		if note:
 			notes.append(f"{row['name']}: {note}")
-		frappe.db.set_value("Employee", employee, values, update_modified=False)
-		updated.append(employee)
-
-		if base and assign(employee, key, company, base):
+		if base and assign(employee, key, company, base, values=values, allowances=allowances):
 			assigned.append(employee)
 
-	wages = profile.get("wages")
-	wage_assigned, wage_unmatched = [], []
-	if wages:
-		wage_sheet = openpyxl.load_workbook(path, data_only=True)[wages["sheet"]]
-		for row in _sheet_rows(wage_sheet, wages):
-			employee = matcher.find(row)
-			rate = flt(row.get("rate")) if isinstance(row.get("rate"), (int, float)) else 0
-			if not employee or not rate:
-				wage_unmatched.append(row["name"])
-				continue
-			frappe.db.set_value("Employee", employee, "custom_ssf_applicable", 0, update_modified=False)
-			if assign(employee, key, company, rate, structure=wage_structure_name(key)):
-				wage_assigned.append(employee)
-
 	return {
-		"daily_wage_assigned": len(wage_assigned),
-		"daily_wage_unmatched": wage_unmatched,
 		"company": company,
 		"structure": structure_name(key),
-		"employees_updated": len(updated),
+		"employees_matched": len(matched),
 		"assignments_created": len(assigned),
 		"unmatched": unmatched,
 		"notes": notes,
@@ -486,76 +396,77 @@ def _sheet_rows(sheet, profile):
 		yield {field: cell(r, col) for field, col in cols.items()} | {"name": name.strip(), "_row": r}
 
 
+#: Sheet column → the allowance it is the person's own amount of.
+PER_PERSON = (
+	("dearness", "Dearness Allowance"),
+	("other", "Other Allowance"),
+	("fuel", "Fuel Allowance"),
+	("fixed", "Fixed Allowance"),
+	("maintenance", "Maintenance Allowance"),
+)
+#: Sheet column whose amount means "gets it at the company rate".
+AT_COMPANY_RATE = (
+	("hra", "House Rent Allowance"),
+	("gas", "Gas Allowance"),
+	("edu", "Education Allowance"),
+)
+
+
 def employee_values(key, profile, row):
-	"""The Employee fields this person's row decides, and their basic."""
+	"""The assignment fields this person's row decides, their basic, a note, and
+	their allowances as {allowance: amount}: a figure is their own amount, None
+	the company rate, 0 an inactive row (on no tea)."""
 	num = lambda v: flt(v) if isinstance(v, (int, float)) else 0.0
 	note = None
+	cols = profile["cols"]
+	values = {"custom_ssf_applicable": 1 if num(row.get("ssf")) else 0}
+	allowances = {}
 
 	if profile["model"] == INITIAL_BASIC:
 		base = num(row.get("basic"))
-		values = {
-			"custom_initial_basic": num(row.get("initial_basic")),
-			# The sheet shows the outcome, not the flag: an amount means YES.
-			"custom_hra_eligible": 1 if num(row.get("hra")) else 0,
-			"custom_gas_allowance": 1 if num(row.get("gas")) else 0,
-			"custom_education_allowance": 1 if num(row.get("edu")) else 0,
-			"custom_dearness_allowance": num(row.get("dearness")),
-			"custom_other_allowance": num(row.get("other")),
-			"custom_fuel_allowance": num(row.get("fuel")),
-		}
-		category = tea_category(key, profile, num(row.get("tea")), num(row.get("attendance")))
-		if category:
-			values["custom_allowance_category"] = category
+		values["custom_initial_basic"] = num(row.get("initial_basic"))
+		tea = tea_exception(profile, num(row.get("tea")), num(row.get("attendance")))
+		if tea is not None:
+			allowances["Tea & Conveyance"] = tea
 	else:
 		# Basic + increments + grade, taken from its parts: the sheet's own scale
 		# column is prorated for anyone who joined mid-month.
 		base = num(row.get("basic_total")) + num(row.get("grade"))
-		values = {
-			"custom_fixed_allowance": num(row.get("fixed")),
-			"custom_dearness_allowance": num(row.get("dearness")),
-			"custom_other_allowance": num(row.get("other")),
-			"custom_fuel_allowance": num(row.get("fuel")),
-			"custom_maintenance_allowance": num(row.get("maintenance")),
-		}
-		if profile["rates"].get("meal"):
-			values["custom_allowance_category"] = f"{key} STAFF"
 
-	values["custom_ssf_applicable"] = 1 if num(row.get("ssf")) else 0
-
-	# Only what this company's sheet actually has: NGI's sheet has no fuel
-	# column (its one fuel allowance is paid separately), and writing a 0 for a
-	# column that is not there would wipe a figure kept elsewhere.
-	source = {
-		"custom_initial_basic": "initial_basic", "custom_hra_eligible": "hra",
-		"custom_gas_allowance": "gas", "custom_education_allowance": "edu",
-		"custom_dearness_allowance": "dearness", "custom_other_allowance": "other",
-		"custom_fuel_allowance": "fuel", "custom_fixed_allowance": "fixed",
-		"custom_maintenance_allowance": "maintenance", "custom_ssf_applicable": "ssf",
-	}
-	values = {f: v for f, v in values.items() if f not in source or source[f] in profile["cols"]}
+	for col, allowance in PER_PERSON:
+		if col in cols and num(row.get(col)):
+			allowances[allowance] = num(row.get(col))
+	for col, allowance in AT_COMPANY_RATE:
+		# The sheet shows the outcome, not the flag: an amount means YES.
+		if col in cols and num(row.get(col)):
+			allowances[allowance] = None
 
 	if not base:
 		note = _("no basic on the sheet — not assigned a salary")
-	return values, base, note
+	return values, base, note, allowances
 
 
-def tea_category(key, profile, tea, attendance):
-	"""OLD / NEW / NO, read back from what the sheet paid for the days worked."""
+def tea_exception(profile, tea, attendance):
+	"""Tea paid at the company rate (OLD) needs nothing: the structure tags it.
+	NEW staff get their own rate, staff on none an unticked row (0). None when
+	there is nothing to record, or the sheet cannot say (no attendance)."""
 	r = profile["rates"]
-	if not attendance:
+	if not attendance or "tea_old" not in r:
 		return None
-	per_day = tea / attendance
 	if not tea:
-		return f"{key} NO"
-	if abs(per_day - r["tea_old"]) < 1:
-		return f"{key} OLD"
-	if abs(per_day - r["tea_new"]) < 1:
-		return f"{key} NEW"
+		return 0
+	if abs(tea / attendance - r["tea_new"]) < 1:
+		return r["tea_new"]
 	return None
 
 
-def assign(employee, key, company, base, structure=None):
-	"""Assign the company structure from the fiscal year's first day, once."""
+def assign(employee, key, company, base, structure=None, values=None, allowances=None):
+	"""Assign the company structure from the fiscal year's first day, once.
+
+	`values` are the assignment's own fields (Initial Basic, SSF Applicable);
+	`allowances` is {allowance: amount}: a figure is their own amount, None the
+	company rate (blank), 0 an inactive row, so the record says "not paid", not
+	"unknown"."""
 	fy_start = frappe.db.get_value("Fiscal Year", FISCAL_YEAR, "year_start_date")
 	if frappe.db.exists(
 		"Salary Structure Assignment",
@@ -584,6 +495,12 @@ def assign(employee, key, company, base, structure=None):
 			),
 		}
 	)
+	doc.update(values or {})
+	for allowance, amount in (allowances or {}).items():
+		doc.append(
+			"custom_allowances",
+			{"allowance": allowance, "amount": flt(amount) if amount else 0, "active": 0 if amount == 0 else 1},
+		)
 	doc.flags.ignore_permissions = True
 	doc.insert()
 	doc.submit()
@@ -632,6 +549,67 @@ class EmployeeMatcher:
 		return None
 
 
+#: Each sheet's columns for the month's regular salary and the SSF deduction.
+SHEET_TOTALS = {"NGI": ("AD", "AJ"), "NGN": ("AC", "AH"), "NGG": ("X", "AF"), "NGK": ("V", "Y")}
+
+
+def check_against_sheet(key, path, posting_date=None):
+	"""Make every matched employee's slip for a full month and compare it with
+	the sheet's regular salary and SSF. Read-only: nothing is saved.
+
+	    bench --site <site> execute avinashgroup_app.payroll.onboarding.check_against_sheet \\
+	        --kwargs "{'key': 'NGI', 'path': '/path/to/NGI.xlsx'}"
+
+	posting_date: any day of the BS month to try (default: the first month of
+	the fiscal year). Prints and returns the people who differ.
+	"""
+	from unittest.mock import patch
+
+	import openpyxl
+	from openpyxl.utils import column_index_from_string
+
+	profile = PROFILES[key]
+	company = profile["company"]
+	posting_date = posting_date or frappe.db.get_value("Fiscal Year", FISCAL_YEAR, "year_start_date")
+	total_col, ssf_col = SHEET_TOTALS[key]
+	sheet = openpyxl.load_workbook(path, data_only=True)[profile["sheet"]]
+	matcher = EmployeeMatcher(key, company)
+	matched, differ = 0, []
+	frappe.db.savepoint("check_against_sheet")
+	try:
+		with patch.object(frappe.db, "commit"):
+			for row in _sheet_rows(sheet, profile):
+				employee = matcher.find(row)
+				if not employee or not frappe.db.exists(
+					"Salary Structure Assignment", {"employee": employee, "docstatus": 1}
+				):
+					continue
+				slip = frappe.get_doc(
+					{
+						"doctype": "Salary Slip",
+						"employee": employee,
+						"posting_date": posting_date,
+						"start_date": posting_date,
+						"payroll_frequency": "Monthly",
+						"company": company,
+					}
+				).insert(ignore_permissions=True)
+				gross = sum(flt(d.amount) for d in slip.earnings)
+				ssf = sum(flt(d.amount) for d in slip.deductions if d.salary_component == "SSF")
+				want = flt(sheet.cell(row["_row"], column_index_from_string(total_col)).value)
+				want_ssf = flt(sheet.cell(row["_row"], column_index_from_string(ssf_col)).value)
+				if abs(gross - want) < 1 and abs(ssf - want_ssf) < 1:
+					matched += 1
+				else:
+					differ.append((row["name"], employee, round(want, 2), round(gross, 2), slip.payment_days, slip.total_working_days))
+	finally:
+		frappe.db.rollback(save_point="check_against_sheet")
+	print(f"{key}: {matched} match the sheet, {len(differ)} differ")
+	for name, employee, want, got, days, total in differ:
+		print(f"  {name} ({employee}): sheet {want}, slip {got}, days {days}/{total}")
+	return {"matched": matched, "differ": differ}
+
+
 # ─────────────────────────────────────────────────────────────── accounts ──
 
 #: A PROPOSAL for the accountant, not applied by `onboard`. Every company's chart
@@ -659,7 +637,8 @@ def map_component_accounts(company):
 
 	Without this the payroll journal cannot be written and submitting the
 	month's salary slips fails. Run only once the accountant has agreed the
-	mapping above. Existing rows are left as they are.
+	mapping above. A row with an account is left as it is; a row made earlier
+	only to hold the company's rate gets its account.
 	"""
 	abbr = frappe.db.get_value("Company", company, "abbr")
 	done = []
@@ -672,13 +651,23 @@ def map_component_accounts(company):
 		account = f"{base} - {abbr}"
 		if not frappe.db.exists("Account", account):
 			continue
-		if frappe.db.exists(
-			"Salary Component Account", {"parent": component.name, "company": company}
-		):
-			continue
 		doc = frappe.get_doc("Salary Component", component.name)
-		doc.append("accounts", {"company": company, "account": account})
+		row = next((a for a in doc.accounts if a.company == company), None)
+		if row and row.account:
+			continue
+		if not row:
+			row = doc.append("accounts", {"company": company})
+		row.update(
+			{
+				"account": account,
+				"custom_account_marketing": sibling_account(account, "S/D"),
+				"custom_account_plant": sibling_account(account, "F/P"),
+			}
+		)
 		doc.flags.ignore_permissions = True
 		doc.save()
 		done.append((component.name, account))
+	key = next((k for k, p in PROFILES.items() if p["company"] == company), None)
+	if key:
+		ensure_company_rates(key)
 	return done

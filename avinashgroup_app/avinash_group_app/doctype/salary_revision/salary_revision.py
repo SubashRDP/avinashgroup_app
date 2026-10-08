@@ -21,10 +21,11 @@ Two things follow from that, and both are why this document exists:
   never a backdated edit to submitted slips. Each month's share follows the
   days that month actually paid, so a month with unpaid leave owes less.
 
-The dearness allowance is the one part of NGI's pay that is not dated: the
-structure reads it off the Employee, so raising it changes the field. The old
-value is written onto the row before it is overwritten, which makes this
-document the history, and lets cancelling put it back.
+The dearness allowance, like every allowance, is a row on the assignment
+(payroll/allowance.py), so it is dated with it: the new assignment carries the
+old one's allowances, Initial Basic and SSF Applicable, with the dearness row
+at its new amount. Cancelling cancels the new assignment, and the old one —
+old dearness included — is in force again.
 """
 
 import frappe
@@ -32,9 +33,11 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, getdate
 
+from avinashgroup_app.payroll.allowance import allowance_amount
 from avinashgroup_app.payroll.year_rollover import tax_slab_for
 
 ARREARS_COMPONENT = "Salary Arrears"
+DEARNESS_COMPONENT = "Dearness Allowance"
 
 
 class SalaryRevision(Document):
@@ -124,7 +127,6 @@ class SalaryRevision(Document):
 	def on_submit(self):
 		for row in self.employees:
 			self.assign_new_salary(row)
-			self.move_dearness_allowance(row)
 			self.pay_the_arrears(row)
 
 	def on_cancel(self):
@@ -145,11 +147,6 @@ class SalaryRevision(Document):
 					doc.flags.ignore_permissions = True
 					doc.cancel()
 
-			# Put the dearness allowance back: the field has no history of its own.
-			if flt(row.new_dearness_allowance) != flt(row.current_dearness_allowance):
-				frappe.db.set_value(
-					"Employee", row.employee, "custom_dearness_allowance", flt(row.current_dearness_allowance)
-				)
 
 	def assign_new_salary(self, row):
 		current = current_assignment(row.employee, self.effective_date)
@@ -169,19 +166,38 @@ class SalaryRevision(Document):
 				"income_tax_slab": tax_slab_for(self.company, self.effective_date)
 				or (current.income_tax_slab if current else None),
 				"payroll_payable_account": current.payroll_payable_account if current else None,
+				"custom_initial_basic": current.get("custom_initial_basic") if current else 0,
+				"custom_ssf_applicable": current.get("custom_ssf_applicable") if current else 1,
 			}
 		)
+		for allowance in (current.get("custom_allowances") or []) if current else []:
+			doc.append(
+				"custom_allowances",
+				{
+					"allowance": allowance.allowance,
+					"amount": allowance.amount,
+					"active": allowance.active,
+					"effective_from": allowance.effective_from,
+				},
+			)
+		self.set_dearness(doc, row)
 		doc.flags.ignore_permissions = True
 		doc.insert()
 		doc.submit()
 		row.db_set("salary_structure_assignment", doc.name, update_modified=False)
 
-	def move_dearness_allowance(self, row):
-		if flt(row.new_dearness_allowance) == flt(row.current_dearness_allowance):
-			return
-		frappe.db.set_value(
-			"Employee", row.employee, "custom_dearness_allowance", flt(row.new_dearness_allowance)
-		)
+	def set_dearness(self, doc, row):
+		"""The new assignment's dearness row at the revised amount (0 removes it)."""
+		existing = next((a for a in doc.custom_allowances if a.allowance == DEARNESS_COMPONENT), None)
+		if not flt(row.new_dearness_allowance):
+			if existing:
+				doc.remove(existing)
+		elif existing:
+			existing.amount = flt(row.new_dearness_allowance)
+		else:
+			doc.append(
+				"custom_allowances", {"allowance": DEARNESS_COMPONENT, "amount": flt(row.new_dearness_allowance), "active": 1}
+			)
 
 	def pay_the_arrears(self, row):
 		if not self.pay_arrears or not flt(row.arrears_amount):
@@ -217,7 +233,7 @@ class SalaryRevision(Document):
 		for employee in frappe.get_all(
 			"Employee",
 			filters={"company": self.company, "status": "Active"},
-			fields=["name", "employee_name", "custom_dearness_allowance"],
+			fields=["name", "employee_name"],
 			order_by="employee_name",
 		):
 			current = current_assignment(employee.name, self.effective_date)
@@ -234,8 +250,8 @@ class SalaryRevision(Document):
 					"current_base": current.base,
 					"increment_percent": percent,
 					"new_base": new_base,
-					"current_dearness_allowance": flt(employee.custom_dearness_allowance),
-					"new_dearness_allowance": flt(employee.custom_dearness_allowance),
+					"current_dearness_allowance": allowance_amount(current.name, DEARNESS_COMPONENT),
+					"new_dearness_allowance": allowance_amount(current.name, DEARNESS_COMPONENT),
 					"arrears_months": months_already_paid(employee.name, self.effective_date),
 					"arrears_amount": arrears_for(
 						employee.name, self.effective_date, new_base - flt(current.base)

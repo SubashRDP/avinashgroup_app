@@ -37,6 +37,7 @@ from hrms.payroll.doctype.salary_slip.salary_slip import calculate_tax_by_tax_sl
 from rdp_common_app.utils.bs_boundaries import bs_to_ad, get_bs_month_name, get_bs_month_range
 
 from avinashgroup_app.hr.hr_dashboard import STATUTORY_DEPOSITS
+from avinashgroup_app.payroll.allowance import current_assignment
 from avinashgroup_app.payroll.income_tax import TAX_COMPONENT
 from avinashgroup_app.payroll.year_rollover import tax_slab_for
 
@@ -91,7 +92,7 @@ def _month(value):
 
 
 def _slips(company, start, end, docstatus):
-	fields = ["name", "employee", "employee_name", "gross_pay", "annual_taxable_amount"]
+	fields = ["name", "employee", "employee_name", "gross_pay", "annual_taxable_amount", "end_date"]
 	slips = frappe.get_list(
 		"Salary Slip",
 		filters={"company": company, "docstatus": docstatus, "end_date": ("between", [start, end])},
@@ -99,7 +100,7 @@ def _slips(company, start, end, docstatus):
 		order_by="employee asc",
 	)
 	ids = _employee_id_fields()
-	wanted = [f for f in ids.values() if f] + ["custom_ssf_applicable"]
+	wanted = [f for f in ids.values() if f]
 	if slips:
 		employees = {
 			e.name: e
@@ -111,6 +112,9 @@ def _slips(company, start, end, docstatus):
 		}
 		for s in slips:
 			s.update({k: v for k, v in employees.get(s.employee, {}).items() if k != "name"})
+			# SSF Applicable is pay data: it lives on the salary assignment.
+			assignment = current_assignment(s.employee, s.end_date)
+			s.custom_ssf_applicable = assignment.custom_ssf_applicable if assignment else 0
 	return slips
 
 

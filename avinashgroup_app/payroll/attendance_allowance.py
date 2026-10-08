@@ -1,22 +1,32 @@
-"""Calculator: Attendance + per-employee rates → Additional Salary drafts.
+"""Calculator: Attendance + per-employee rates → Additional Salary.
 
 Per Payroll Entry:
 1. List Salary Components where `custom_is_attendance_driven = 1` and not disabled.
-2. For each (employee, component), evaluate the component's condition against the
-   employee's submitted Attendance rows in the period and sum the qty.
-3. Multiply qty × rate (employee row → Allowance Category → the component's
-   rate basis: a flat default, or Hourly Basic × Multiplier for OT and late fine).
-4. Create an Additional Salary draft per (employee, component, payroll_date),
-   tagged with `custom_source = "Nepal HRMS Attendance Allowance"`. Idempotent —
-   prior drafts with the same tag are deleted before recreating.
+2. For each (employee, component), skip anyone not tagged with it — not in their
+   salary structure and no Eligible row of their own (payroll/allowance.py) —
+   and, for an "Only OT-Eligible Staff" component, anyone not OT eligible.
+3. Evaluate the component's condition against the employee's submitted
+   Attendance rows in the period — the payroll's BS month, or the one before
+   it when the component's Attendance Month says so — and sum the qty.
+4. Multiply qty × rate (employee's own row → the company's Default Rate on the
+   component's Accounts row → the component's rate basis: a flat default, or
+   Hourly Basic × Multiplier for OT and late fine).
+5. Create and submit an Additional Salary per (employee, component,
+   payroll_date), tagged with `custom_source = "Nepal HRMS Attendance
+   Allowance"`. Idempotent: earlier rows with the same tag are replaced.
 """
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt, getdate
+from frappe.utils import add_days, cint, flt, getdate
 
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
 from avinashgroup_app.hr.shift_day import measure_day
+from avinashgroup_app.payroll.allowance import (
+	company_default_rate,
+	get_employee_allowance_rows,
+	is_tagged,
+)
 
 SOURCE_TAG = "Nepal HRMS Attendance Allowance"
 
@@ -59,6 +69,7 @@ def trigger_for_payroll_entry(payroll_entry: str) -> dict:
 	from avinashgroup_app.payroll.advance_recovery import post_recoveries
 
 	recoveries = post_recoveries(pe)
+	refreshed = refresh_draft_slips(pe)
 	frappe.db.commit()
 	return {
 		"payroll_entry": pe.name,
@@ -67,8 +78,26 @@ def trigger_for_payroll_entry(payroll_entry: str) -> dict:
 		"records": result["created"],
 		"skipped_records": result["skipped"],
 		"advance_recoveries": len(recoveries),
+		"slips_refreshed": refreshed,
 		"recovery_records": recoveries,
 	}
+
+
+def refresh_draft_slips(pe) -> int:
+	"""Recalculate the entry's draft salary slips so they show what was just posted.
+
+	HRMS makes the slips when the Payroll Entry is submitted. Pressed after
+	that, the button's Additional Salary would reach a slip only when the slip
+	is next saved, so HR would review drafts without this month's tea, meals
+	and overtime. Submitted slips are never touched.
+	"""
+	refreshed = 0
+	for name in frappe.get_all("Salary Slip", filters={"payroll_entry": pe.name, "docstatus": 0}, pluck="name"):
+		slip = frappe.get_doc("Salary Slip", name)
+		slip.flags.ignore_permissions = True
+		slip.save()
+		refreshed += 1
+	return refreshed
 
 
 def create_additional_salaries(payroll_entry) -> dict:
@@ -92,15 +121,15 @@ def create_additional_salaries(payroll_entry) -> dict:
 	skipped: list[dict] = []
 	for employee in employees:
 		emp_doc = frappe.get_cached_doc("Employee", employee)
-		emp_overrides = _get_employee_overrides(employee)
-		category_rates = _get_category_rates(emp_doc)
+		emp_rows = get_employee_allowance_rows(employee, end_date)
 		for sc in components:
-			if _skip_for_ot_eligibility(emp_doc, sc):
+			row = emp_rows.get(sc.name)
+			if not is_tagged(employee, sc.name, row, end_date) or _skip_for_eligibility(emp_doc, sc):
 				continue
-			rate = _resolve_rate(emp_overrides, category_rates, sc, employee, end_date)
+			rate = _resolve_rate(row, sc, employee, end_date, emp_doc.company)
 			if rate is None:
 				continue
-			qty = _qty_for_employee(employee, sc, start_date, end_date)
+			qty = _qty_for_employee(employee, sc, *_attendance_period(sc, start_date, end_date))
 			if qty <= 0:
 				continue
 			amount = flt(qty * rate, 2)
@@ -327,14 +356,11 @@ def _assignment(employee: str, on_date):
 	) or frappe._dict(base=0, salary_structure=None)
 
 
-def _is_daily_wage(structure) -> bool:
-	return bool(structure and frappe.get_cached_value("Salary Structure", structure, "custom_daily_wage"))
-
-
 def _hourly_basic(employee: str, on_date, sc=None) -> float:
-	"""The hourly wage: a month's basic over 30 days of 8 hours — or, for a
-	daily-wage worker, whose base IS the day's wage, that day over 8 hours
-	(NGK's labour sheet: OT rate = 754 / 8 * 1.5).
+	"""The hourly wage: a month's basic over 30 days of 8 hours.
+
+	Daily-wage labour is paid in cash day to day, outside payroll (decided
+	2026-10-08), so every assignment's base here is a monthly basic.
 
 	Both divisors come off the Salary Component that is being priced, so HR can
 	restate the basis for overtime without touching the late fine, or either
@@ -342,10 +368,7 @@ def _hourly_basic(employee: str, on_date, sc=None) -> float:
 	"""
 	days = flt(sc and sc.get("custom_rate_days_per_month")) or RATE_DAYS_PER_MONTH
 	hours = flt(sc and sc.get("custom_rate_hours_per_day")) or RATE_HOURS_PER_DAY
-	a = _assignment(employee, on_date)
-	if _is_daily_wage(a.salary_structure):
-		return flt(a.base) / hours
-	return flt(a.base) / days / hours
+	return flt(_assignment(employee, on_date).base) / days / hours
 
 
 def _per_unit(unit: str, day: float, hours: float) -> float:
@@ -430,15 +453,28 @@ def recompute_holiday_flags(start_date=None, end_date=None) -> dict:
 	return {"scanned": len(rows), "updated": updated}
 
 
-def _skip_for_ot_eligibility(emp_doc, sc) -> bool:
-	if sc.custom_condition_type in ("Late Stay After", "Early Entry Before", "Authorised Overtime"):
-		return not bool(getattr(emp_doc, "custom_ot_eligibility", 0))
+def _skip_for_eligibility(emp_doc, sc) -> bool:
+	if sc.get("custom_ot_eligible_only") and not emp_doc.get("custom_ot_eligibility"):
+		# Policy 2.2: overtime money and meals are for OT-eligible staff; admin
+		# and officers take replacement leave instead.
+		return True
 	if sc.custom_condition_type in ("Late Time", "Late Arrival After"):
 		# NGI's sheet types the late rate as 0 for its managers — CEO, AGM,
 		# managers, assistant managers, the company secretary. That is a person-
 		# level decision, so it is a tick on the Employee.
-		return bool(getattr(emp_doc, "custom_late_fine_exempt", 0))
+		return bool(emp_doc.get("custom_late_fine_exempt"))
 	return False
+
+
+def _attendance_period(sc, start_date, end_date):
+	"""The days a component counts: the payroll's own BS month, or the one
+	before it for a component whose attendance closes a month behind."""
+	if sc.get("custom_attendance_month") != "Previous Month":
+		return start_date, end_date
+	from rdp_common_app.utils.bs_boundaries import get_bs_month_end, get_bs_month_start
+
+	last_day = add_days(start_date, -1)
+	return getdate(get_bs_month_start(last_day)), getdate(get_bs_month_end(last_day))
 
 
 def get_attendance_driven_components() -> list:
@@ -481,63 +517,21 @@ def _savepoint_name(employee: str, component: str) -> str:
 	return "".join(ch if ch.isalnum() else "_" for ch in raw)[:60]
 
 
-def _get_employee_overrides(employee: str) -> dict:
-	rows = frappe.get_all(
-		"Employee Attendance Allowance",
-		filters={"parent": employee, "parenttype": "Employee"},
-		fields=["salary_component", "rate", "eligible", "effective_from"],
-	)
-	return {r.salary_component: r for r in rows}
+def _resolve_rate(row, sc, employee=None, on_date=None, company=None):
+	"""The employee's own rate, then the company's, then the component's basis.
 
-
-def _get_category_rates(emp_doc) -> dict:
-	"""{salary component: rate} for this employee's Allowance Category.
-
-	The category is how a group is paid: NGI pays tea at 235 a day to one group
-	and 40 to another, and that is decided per employee, not per department.
-	Moving somebody between groups, or changing what a group is paid, is then one
-	edit instead of one per person.
+	Most allowances pay a flat rate: tea at the company's 235 a day (NGN: 265),
+	typed as Default Rate on the component's Accounts row for that company; NEW
+	staff carry 40 on their own row. Overtime and the late fine are priced off
+	each person's own basic instead — `Hourly Basic × Multiplier` — so they
+	follow a pay rise without anyone retyping a rate.
 	"""
-	category = emp_doc.get("custom_allowance_category")
-	if not category:
-		return {}
-	return {
-		row.salary_component: flt(row.rate)
-		for row in frappe.get_all(
-			"Allowance Category Rate",
-			filters={"parent": category, "parenttype": "Allowance Category"},
-			fields=["salary_component", "rate"],
-		)
-	}
+	if row is not None and flt(row.get("rate")):
+		return flt(row.get("rate"))
 
-
-def _resolve_rate(emp_overrides: dict, category_rates: dict, sc, employee=None, on_date=None):
-	"""Employee's own row first, then their category, then the component's basis.
-
-	Most components pay a flat rate (tea at 235 a day). Overtime and the late
-	fine are priced off each person's own basic instead — `Hourly Basic ×
-	Multiplier` — so they follow a pay rise without anyone retyping a rate.
-
-	A category rate of 0 means the group is not paid this component at all — the
-	sheet's "NO" tea category — so it stops here rather than falling through to
-	the default.
-	"""
-	override = emp_overrides.get(sc.name)
-	if override:
-		if not override.get("eligible"):
-			return None
-		rate = flt(override.get("rate"))
-		if rate:
-			return rate
-
-	if sc.name in category_rates:
-		rate = category_rates[sc.name]
-		return rate if rate else None
-
-	if sc.get("custom_rate_basis") == "Daily Wage" and employee:
-		# Only for staff on a daily-wage structure, whose base is the day's pay.
-		a = _assignment(employee, on_date)
-		return flt(a.base) if _is_daily_wage(a.salary_structure) and flt(a.base) else None
+	company_rate = company_default_rate(company, sc.name)
+	if company_rate:
+		return company_rate
 
 	if sc.get("custom_rate_basis") == "Hourly Basic × Multiplier" and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,
@@ -545,8 +539,7 @@ def _resolve_rate(emp_overrides: dict, category_rates: dict, sc, employee=None, 
 		rate = _hourly_basic(employee, on_date, sc) * flt(sc.get("custom_rate_multiplier") or 1)
 		return rate if rate else None
 
-	default_rate = flt(getattr(sc, "custom_default_rate", 0))
-	return default_rate if default_rate else None
+	return None
 
 
 def _employees_in_payroll_entry(pe) -> list:

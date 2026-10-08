@@ -1,0 +1,70 @@
+{
+ "actions": [],
+ "creation": "2026-10-08 18:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "allowance",
+  "amount",
+  "active",
+  "effective_from",
+  "kind"
+ ],
+ "fields": [
+  {
+   "fieldname": "allowance",
+   "fieldtype": "Link",
+   "label": "Allowance",
+   "options": "Salary Component",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 3
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Float",
+   "label": "Amount",
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "Fixed per Person: this person's monthly amount. Fixed Company Rate / % of Initial Basic / tea, meal: blank = the company's rate; type a figure to give this person their own."
+  },
+  {
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "label": "Active",
+   "default": "1",
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "Untick to stop it (e.g. staff on no tea)."
+  },
+  {
+   "fieldname": "effective_from",
+   "fieldtype": "Date",
+   "label": "From Date",
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "Leave blank: it starts with the assignment."
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Data",
+   "label": "Kind",
+   "fetch_from": "allowance.custom_allowance_kind",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-08 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Assignment Allowance",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -646,7 +646,7 @@ MENU = [
 		("doctype", "Employee", "Employees"),
 		("new", "Employee", "New Employee"),
 		("doctype", "Employee Category", "Employee Categories"),
-		("doctype", "Allowance Category", "Allowance Categories"),
+		("doctype", "Salary Component", "Allowances & Pay Lines"),
 		("doctype", "Department", "Departments"),
 		("doctype", "Designation", "Designations"),
 		("doctype", "Employee Promotion", "Promotions"),
