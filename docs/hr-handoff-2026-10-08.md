@@ -168,7 +168,7 @@ A dry run on avinas1 (rolled back) posted Basic to 547101/2/3 and Mobile + Tea t
 | `avinash_group_app/doctype/salary_revision/salary_revision.py` | raises carry the allowances; DA on the new assignment |
 | `patches/setup_allowance_kinds.py`, `patches/move_pay_to_salary_assignment.py` | migration |
 | `public/js/salary_structure_assignment.js`, `public/js/payroll_entry.js` | form scripts |
-| `payroll/test_allowance.py` | 17 tests; with the attendance and shift suites, 53 pass |
+| `payroll/test_allowance.py` | 18 tests; with the attendance and shift suites, 53 pass on develop after the merge |
 
 Tests: run with the runner in `docs/shift-rotation.md` ("Tests"), module
 `avinashgroup_app.payroll.test_allowance`.
