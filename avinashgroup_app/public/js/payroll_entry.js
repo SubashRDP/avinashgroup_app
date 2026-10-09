@@ -16,6 +16,7 @@ function lock_bs_dates(frm) {
 function show_bs_month(frm) {
 	const { custom_fiscal_year: fiscal_year, custom_bs_month: bs_month, company } = frm.doc;
 	lock_bs_dates(frm);
+	fill_company_defaults(frm);
 	if (frm.doc.docstatus !== 0 || !fiscal_year || !bs_month) return;
 	frappe.call({
 		method: `${BS_CALENDAR}.get_month`,
@@ -39,6 +40,27 @@ function show_bs_month(frm) {
 			lock_bs_dates(frm);
 		},
 	});
+}
+
+// HRMS fills the payable account, cost centre and currency only when the
+// company is *changed*; a new entry that opens with the default company has
+// them blank, and the form refuses Save on the mandatory account before the
+// server (payroll_month.py) could fill it. Blanks only: a deliberate choice
+// is kept.
+function fill_company_defaults(frm) {
+	if (frm.doc.docstatus !== 0 || !frm.doc.company) return;
+	if (frm.doc.payroll_payable_account && frm.doc.cost_center && frm.doc.currency) return;
+	const company = frm.doc.company;
+	frappe.db
+		.get_value("Company", company, ["default_payroll_payable_account", "cost_center", "default_currency"])
+		.then(({ message: c }) => {
+			if (!c || frm.doc.company !== company) return;
+			if (!frm.doc.payroll_payable_account && c.default_payroll_payable_account) {
+				frm.set_value("payroll_payable_account", c.default_payroll_payable_account);
+			}
+			if (!frm.doc.cost_center && c.cost_center) frm.set_value("cost_center", c.cost_center);
+			if (!frm.doc.currency && c.default_currency) frm.set_value("currency", c.default_currency);
+		});
 }
 
 const MONTH_CALENDAR_API = "avinashgroup_app.payroll.payroll_month.month_calendar";
