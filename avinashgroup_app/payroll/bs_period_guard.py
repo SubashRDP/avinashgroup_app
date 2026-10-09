@@ -24,18 +24,17 @@ import frappe
 from frappe import _
 from frappe.utils import formatdate, getdate
 
-from rdp_common_app.nepal_hrms_common.doctype.nepal_bs_period.nepal_bs_period import (
-	get_user_defined_period,
-)
 from rdp_common_app.nepal_hrms_common.doctype.nepal_hrms_settings.nepal_hrms_settings import (
 	is_bs_payroll_enabled,
 )
-from rdp_common_app.utils.bs_boundaries import ad_to_bs, get_bs_month_name, get_salary_period
+from rdp_common_app.utils.bs_boundaries import ad_to_bs, get_bs_month_name
+
+from avinashgroup_app.hr.bs_calendar import month_of_date
 
 
 def period_for(posting_date, company):
 	"""The BS period a slip posted on this date will cover — the slip's own rule."""
-	return get_user_defined_period(getdate(posting_date), company) or get_salary_period(getdate(posting_date))
+	return month_of_date(company, posting_date)
 
 
 def _label(date):

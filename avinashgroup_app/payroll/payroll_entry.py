@@ -13,6 +13,9 @@ account for that section from the component's Accounts row for the company
 Admin & Accounts). A blank S/D or F/P falls back to the row's own account, which
 is exactly what HRMS would have posted. See payroll/allowance.py.
 
+The entry is made by choosing a Fiscal Year and BS month; validate fills the
+dates and company defaults from them first (payroll/payroll_month.py).
+
 Boundary: only the expense (earning) and deduction rows of the accrual
 journal. Employee-advance recoveries and the payable side are HRMS's own
 logic, untouched. Replaces the Salary-Expenses-only routing that used to live
@@ -26,9 +29,14 @@ from frappe.utils import flt
 from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
 
 from avinashgroup_app.payroll.allowance import get_section, has_section_accounts, section_account
+from avinashgroup_app.payroll.payroll_month import fill_from_bs_month
 
 
 class AvinashPayrollEntry(PayrollEntry):
+	def validate(self):
+		fill_from_bs_month(self)
+		super().validate()
+
 	def get_salary_component_total(
 		self,
 		component_type=None,

@@ -6,6 +6,7 @@
 | `attendance_allowance.py` | Tea, meal, overtime, late fine, daily wage → submitted Additional Salary rows (tagged `custom_source`), for tagged employees at their own or the company's rate; then refreshes the entry's draft slips | Payroll Entry → Prepare Payroll Inputs |
 | `salary_slip.py` | Fixed allowances from the assignment's rows onto the slip (prorated; projected for tax) | `doc_events` → Salary Slip validate, before the tax hooks |
 | `daily_breakdown.py` | The slip's Daily Breakdown table: each day's attendance, fixed share, tea / meal / OT / late fine, running balance to net pay | `doc_events` → Salary Slip validate, last |
+| `payroll_month.py` | A Payroll Entry from Fiscal Year + Month (BS): fills dates, posting date (month end), frequency, currency, payable account, cost centre, employees | `AvinashPayrollEntry.validate`; form: `public/js/payroll_entry.js` |
 | `payroll_entry.py` | Accrual journal posts each section's pay to its own account | `override_doctype_class` → Payroll Entry |
 | `tax_relief.py` | Retirement cap (SSF + CIT + PF ≤ lower of ⅓ income or 5,00,000) and the women's rebate (`Income Tax Slab.custom_women_rebate_percent`); insurance / CIT declarations use HRMS's own Employee Tax Exemption Declaration (categories seeded by `patches/setup_tax_exemptions`) | `doc_events` → Salary Slip validate, before the override |
 | `income_tax.py` | Nepal salary tax: `TAX_SLABS_BY_YEAR` (one table per fiscal year) and the per-slip override | `doc_events` → Salary Slip validate |

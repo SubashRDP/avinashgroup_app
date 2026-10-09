@@ -34,9 +34,10 @@ from frappe import _
 from frappe.utils import flt
 
 from hrms.payroll.doctype.salary_slip.salary_slip import calculate_tax_by_tax_slab
-from rdp_common_app.utils.bs_boundaries import bs_to_ad, get_bs_month_name, get_bs_month_range
+from rdp_common_app.utils.bs_boundaries import bs_to_ad, get_bs_month_name
 
 from avinashgroup_app.hr.hr_dashboard import STATUTORY_DEPOSITS
+from avinashgroup_app.hr.bs_calendar import month_period
 from avinashgroup_app.payroll.allowance import current_assignment
 from avinashgroup_app.payroll.income_tax import TAX_COMPONENT
 from avinashgroup_app.payroll.year_rollover import tax_slab_for
@@ -49,7 +50,9 @@ CIT_COMPONENT = "CIT"  # a deduction component HR creates; absent, the column is
 def execute(filters=None):
 	filters = frappe._dict(filters or {})
 	year, month = int(filters.bs_year), _month(filters.bs_month)
-	start, end = get_bs_month_range(year, month)
+	# The month's dates as the payroll used them: Nepal BS Period, else the calendar.
+	period = month_period(filters.company, year, month)
+	start, end = period.start_date, period.end_date
 
 	slips = _slips(filters.company, start, end, 0 if str(filters.docstatus).startswith("0") else 1)
 	amounts = _amounts([s.name for s in slips])

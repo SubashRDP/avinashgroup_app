@@ -4,9 +4,9 @@ Monthly Attendance BS
 Monthly attendance grid keyed by Bikram Sambat (BS) month.
 
 Filter resolution (override rule):
-  1. If from_date AND to_date provided → use that AD range.
-  2. Else use bs_year + bs_month → resolve via Nepal BS Period (company override)
-     or fall back to get_bs_month_range(year, month).
+  1. Fiscal Year + BS Month → that month's dates from hr/bs_calendar.py
+     (Nepal BS Period, company then global, else the Nepali calendar).
+  2. Else from_date AND to_date → that AD range. See _resolve_period.
 
 Storage layer is 100% AD: Attendance.attendance_date, Employee Checkin.time, etc.
 BS is presentation only — row label = ad_to_bs(date).day + month name.
@@ -44,13 +44,9 @@ from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
-	get_bs_month_range,
 	get_bs_month_name,
-	BS_MONTH_NAMES,
 )
-from rdp_common_app.nepal_hrms_common.doctype.nepal_bs_period.nepal_bs_period import (
-	get_user_defined_period,
-)
+from avinashgroup_app.hr.bs_calendar import bs_year_of, month_period, parse_bs_month
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
 	get_attendance_driven_components,
@@ -188,20 +184,12 @@ def _resolve_period(filters):
 	company = filters.get("company")
 
 	def month_range(bs_year, bs_month, note=None):
-		raw_start, raw_end = get_bs_month_range(bs_year, bs_month)
-		label = f"{get_bs_month_name(bs_month)} {bs_year}"
-		if company:
-			custom = get_user_defined_period(raw_start, company)
-			if custom and custom.bs_year == bs_year and custom.bs_month == bs_month:
-				return custom.start_date, custom.end_date, label, note
-		return raw_start, raw_end, label, note
+		# Nepal BS Period (company, then global), else the calendar: the same
+		# dates a Payroll Entry for this month uses. See hr/bs_calendar.py.
+		period = month_period(company, bs_year, bs_month)
+		return period.start_date, period.end_date, period.label, note
 
-	def bs_year_for(fy_name, bs_month):
-		"""A fiscal year starts on Shrawan 1. Months 4-12 belong to its opening
-		BS year; months 1-3 (Baisakh–Ashadh) roll into the next one."""
-		fy = frappe.get_cached_doc("Fiscal Year", fy_name)
-		opening = ad_to_bs(getdate(fy.year_start_date)).year
-		return opening if bs_month >= 4 else opening + 1
+	bs_year_for = bs_year_of
 
 	# 1. the intended pair
 	if filters.get("fiscal_year") and filters.get("bs_month"):
@@ -308,26 +296,7 @@ def get_ad_range(fiscal_year=None, bs_month=None, company=None):
 	return {"from_date": str(ad_start), "to_date": str(ad_end), "label": label}
 
 
-def _parse_bs_month(value):
-	"""Accept '7', 7, '07 - Kartik', 'Kartik' — return int 1-12."""
-	if value is None or value == "":
-		frappe.throw(_("BS Month is required."))
-	if isinstance(value, int):
-		return value
-	s = str(value).strip()
-	digits = ""
-	for ch in s:
-		if ch.isdigit():
-			digits += ch
-		else:
-			break
-	if digits:
-		return int(digits)
-	low = s.lower()
-	for num, name in BS_MONTH_NAMES.items():
-		if name.lower() == low:
-			return num
-	frappe.throw(_("Could not parse BS Month: {0}").format(value))
+_parse_bs_month = parse_bs_month
 
 
 # ---------------------------------------------------------------------------
