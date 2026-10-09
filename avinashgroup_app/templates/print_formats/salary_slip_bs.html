@@ -31,6 +31,16 @@
 	.ssbs .sign td { width: 33%; text-align: center; padding-top: 4px; border-top: 1px solid #1b2230; }
 	.ssbs .sign td + td { border-left: 24px solid #fff; }
 	.ssbs .note { font-size: 10px; margin-top: 8px; }
+	.ssbs .daily { page-break-before: always; margin-top: 14px; }
+	.ssbs .daily h2 { font-size: 13px; margin: 0 0 6px; }
+	.ssbs .daily table { font-size: 9.5px; }
+	.ssbs .daily th, .ssbs .daily td { border: 1px solid #c9ced6; padding: 2px 4px; vertical-align: top; }
+	.ssbs .daily th { background: #eef1f5; text-align: left; }
+	.ssbs .daily tr { page-break-inside: avoid; }
+	.ssbs .daily .zero td { color: #8a929e; }
+	.ssbs .daily .end td { background: #f6f7f9; }
+	.ssbs .daily .final td { font-weight: 700; border-top: 2px solid #1b2230; }
+	.ssbs .daily .dt { color: #5b6574; }
 </style>
 
 <div class="ssbs">
@@ -111,4 +121,39 @@
 	<table class="sign">
 		<tr><td>Prepared by</td><td>Approved by</td><td>Received by</td></tr>
 	</table>
+
+	{#- Day by day, ending at the net pay: payroll/daily_breakdown.py. #}
+	{%- set daily = doc.get("custom_daily_breakdown") or [] -%}
+	{%- if daily %}
+	{%- macro money(v) -%}{{ frappe.format(v, {"fieldtype": "Currency"}, currency=doc.currency) if v else "" }}{%- endmacro -%}
+	<div class="daily">
+		<h2>दैनिक विवरण · Daily Breakdown — {{ doc.employee_name }}, {{ doc.custom_bs_month or "" }}</h2>
+		<table>
+			<tr>
+				<th>Miti</th><th>Day</th><th>Attendance</th><th class="num">Fixed</th>
+				<th class="num">Earned</th><th class="num">Deducted</th><th>Detail</th><th class="num">Balance</th>
+			</tr>
+			{%- for r in daily %}
+			{%- if r.line_type == "Month End" %}
+			<tr class="end">
+				<td colspan="3">{{ r.attendance }}</td><td></td>
+				<td class="num">{{ money(r.earned) }}</td><td class="num">{{ money(r.deducted) }}</td>
+				<td></td><td class="num">{{ money(r.balance) }}</td>
+			</tr>
+			{%- else %}
+			<tr class="{{ 'zero' if not r.paid_day else '' }}">
+				<td>{{ r.miti }}</td><td>{{ r.weekday }}</td><td>{{ r.attendance }}</td>
+				<td class="num">{{ money(r.fixed_pay) }}</td><td class="num">{{ money(r.earned) }}</td>
+				<td class="num">{{ money(r.deducted) }}</td><td class="dt">{{ r.detail or "" }}</td>
+				<td class="num">{{ money(r.balance) }}</td>
+			</tr>
+			{%- endif %}
+			{%- endfor %}
+			<tr class="final">
+				<td colspan="7">Net Pay · खुद भुक्तानी</td>
+				<td class="num">{{ frappe.format(doc.net_pay, {"fieldtype": "Currency"}, currency=doc.currency) }}</td>
+			</tr>
+		</table>
+	</div>
+	{%- endif %}
 </div>

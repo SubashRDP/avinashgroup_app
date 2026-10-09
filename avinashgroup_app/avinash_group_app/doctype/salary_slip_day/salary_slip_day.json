@@ -1,0 +1,140 @@
+{
+ "actions": [],
+ "creation": "2026-10-09 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "line_type",
+  "miti",
+  "date",
+  "weekday",
+  "attendance",
+  "paid_day",
+  "fixed_pay",
+  "earned",
+  "deducted",
+  "detail",
+  "day_total",
+  "balance",
+  "currency"
+ ],
+ "fields": [
+  {
+   "fieldname": "line_type",
+   "fieldtype": "Select",
+   "label": "Line",
+   "read_only": 1,
+   "in_list_view": 0,
+   "options": "Day\nMonth End"
+  },
+  {
+   "fieldname": "miti",
+   "fieldtype": "Data",
+   "label": "Miti",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "read_only": 1,
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "weekday",
+   "fieldtype": "Data",
+   "label": "Day",
+   "read_only": 1,
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "attendance",
+   "fieldtype": "Data",
+   "label": "Attendance",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "paid_day",
+   "fieldtype": "Float",
+   "label": "Paid Day",
+   "read_only": 1,
+   "in_list_view": 0
+  },
+  {
+   "fieldname": "fixed_pay",
+   "fieldtype": "Currency",
+   "label": "Fixed Pay",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "options": "currency"
+  },
+  {
+   "fieldname": "earned",
+   "fieldtype": "Currency",
+   "label": "Earned",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "options": "currency"
+  },
+  {
+   "fieldname": "deducted",
+   "fieldtype": "Currency",
+   "label": "Deducted",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "options": "currency"
+  },
+  {
+   "fieldname": "detail",
+   "fieldtype": "Small Text",
+   "label": "Detail",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "day_total",
+   "fieldtype": "Currency",
+   "label": "Day Total",
+   "read_only": 1,
+   "in_list_view": 0,
+   "options": "currency"
+  },
+  {
+   "fieldname": "balance",
+   "fieldtype": "Currency",
+   "label": "Balance",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "options": "currency"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "hidden": 1,
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-09 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Salary Slip Day",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

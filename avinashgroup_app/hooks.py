@@ -359,6 +359,9 @@ _add_doc_event(
 # slip whose month differs from its entry's. See payroll/bs_period_guard.py.
 _add_doc_event("Payroll Entry", "validate", "avinashgroup_app.payroll.bs_period_guard.validate_payroll_entry")
 _add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.bs_period_guard.validate_salary_slip")
+# Last of the slip's validate hooks: the day-by-day table needs the final net
+# pay. Describes the slip only; never blocks a save. See payroll/daily_breakdown.py.
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.daily_breakdown.build_daily_breakdown")
 
 _clear_filter_cache = "avinashgroup_app.custom_code.globalfilter.globalfilter.clear_filter_config_cache"
 for _dt in ("Company Filter Config", "Company Filter Field"):

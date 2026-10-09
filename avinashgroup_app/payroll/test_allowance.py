@@ -430,3 +430,95 @@ class TestAllowance(FrappeTestCase):
 		self.assertEqual(
 			frappe.db.get_value("Salary Component Account", {"parent": gas, "company": COMPANY}, "custom_default_rate"), 1690
 		)
+
+	# ── the daily breakdown (payroll/daily_breakdown.py) ───────────────────
+
+	@staticmethod
+	def _day(date, status="Present"):
+		return frappe._dict(
+			name=f"ATT-{date}", attendance_date=getdate(date), status=status, leave_type=None, half_day_status=None,
+			working_hours=8, custom_worked_on_holiday=0, custom_late_entry=0, custom_early_entry=0,
+			custom_early_exit=0, custom_late_exit=0, custom_late_excused=0,
+			in_time=f"{date} 09:00:00", out_time=f"{date} 17:00:00",
+		)
+
+	def _posted(self, employee, component, amount):
+		from avinashgroup_app.payroll import attendance_allowance as aa
+
+		aa._make_additional_salary(
+			employee=employee, salary_component=frappe.get_cached_doc("Salary Component", component),
+			amount=amount, payroll_date=PERIOD_END, company=COMPANY, qty=0, rate=0,
+		)
+
+	def _late_fine(self):
+		name = "CA Test Late Fine"
+		if not frappe.db.exists("Salary Component", name):
+			frappe.get_doc(
+				{
+					"doctype": "Salary Component",
+					"salary_component": name,
+					"salary_component_abbr": "CALF",
+					"type": "Deduction",
+					"depends_on_payment_days": 0,
+					"custom_is_attendance_driven": 1,
+					"custom_condition_type": "Late Time",
+					"custom_unit": "Per Hour",
+					"accounts": [{"company": COMPANY, "account": OTHER[0]}],
+				}
+			).insert(ignore_permissions=True)
+		return name
+
+	def test_daily_breakdown_reconciles_to_net_pay(self):
+		from frappe.utils import add_days
+
+		from avinashgroup_app.payroll import daily_breakdown as daily
+
+		employee = self._employee([(self.mobile, 0, 1)], structure=self.structure)
+		days = [self._day(str(add_days(getdate(PERIOD_START), i))) for i in range(31)]
+		late_day = getdate("2026-07-20")
+		# Tea on the first 10 days; 30 minutes late on one of them.
+		self._posted(employee, self.tea, 10 * 235)
+		late_fine = self._late_fine()
+		self._posted(employee, late_fine, 60)
+
+		def qty(row, sc, emp):
+			if sc.name == self.tea:
+				return 1 if row.attendance_date < getdate("2026-07-27") else 0
+			if sc.name == late_fine:
+				return 0.5 if row.attendance_date == late_day else 0
+			return 0
+
+		with (
+			patch.object(daily, "fetch_attendance", return_value=days),
+			patch.object(daily, "fetch_holidays", return_value={getdate("2026-07-18"): "Saturday"}),
+			patch.object(daily, "evaluate_rule", side_effect=qty),
+		):
+			slip = self._slip(employee)
+			rows = slip.custom_daily_breakdown
+			day_rows = [r for r in rows if r.line_type == "Day"]
+			self.assertEqual(len(day_rows), 31)
+
+			fixed = sum(e.amount for e in slip.earnings if not e.additional_salary)
+			self.assertAlmostEqual(sum(r.fixed_pay for r in day_rows), fixed, delta=0.5)
+			first = day_rows[0]
+			self.assertEqual((first.earned, first.detail), (235, "CA Test Tea 235"))
+			late = next(r for r in day_rows if getdate(r.date) == late_day)
+			self.assertEqual(late.deducted, 60)
+			self.assertIn("30 min", late.detail)
+			self.assertEqual(next(r for r in day_rows if getdate(r.date) == getdate("2026-07-18")).attendance, "Present 09:00–17:00 (holiday)")
+			self.assertEqual(rows[-1].balance, slip.net_pay)
+
+			slip.save(ignore_permissions=True)  # rebuilt, not appended
+			self.assertEqual(len([r for r in slip.custom_daily_breakdown if r.line_type == "Day"]), 31)
+
+	def test_daily_breakdown_paid_day_weights(self):
+		from avinashgroup_app.payroll import daily_breakdown as daily
+
+		employee = self._employee(structure=self.structure)
+		slip = frappe._dict(employee=employee, date_of_joining="2020-01-01", relieving_date=None)
+		d = getdate(PERIOD_START)
+		self.assertEqual(daily.paid_weight(slip, d, self._day(str(d), "Absent"), False), 0)
+		self.assertEqual(daily.paid_weight(slip, d, self._day(str(d), "Half Day"), False), 0.5)
+		self.assertEqual(daily.paid_weight(slip, d, self._day(str(d), "Present"), False), 1)
+		self.assertEqual(daily.paid_weight(slip, d, None, True), 1)  # holiday, paid
+		self.assertEqual(daily.paid_weight(frappe._dict(slip, date_of_joining="2026-08-01"), d, None, False), 0)

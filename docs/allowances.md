@@ -74,6 +74,26 @@ Payroll Inputs. Settings on the Meal component: Time Offset (1.5), Max Meals per
 Day (2), Only OT-Eligible Staff ✔. Code: `_meals_for_day` in
 `payroll/attendance_allowance.py`.
 
+## Daily breakdown on the salary slip
+
+Every slip carries a **Daily Breakdown** table (section on the Salary Slip, and a
+second page on the "Salary Slip BS" print, so it is emailed too). One row per day
+of the BS month, then month-end rows, ending at the net pay:
+
+| Column | Day row | Month-end row |
+|---|---|---|
+| Miti, Day | 03 Shrawan, Sun | – |
+| Attendance | "Present 07:20–18:45", "Absent", "Half Day", "Leave: Casual", "Holiday: …" | the line: SSF, Income Tax, Advance, Rounding |
+| Fixed | the slip's daily rate (fixed earnings ÷ payment days) × that day's paid share (absent 0, half day ½, holiday 1) | – |
+| Earned / Deducted | tea, meal, overtime / late fine that day | one-off earnings / SSF, tax, advances |
+| Detail | "Tea & Conveyance 235 · Meal 2 × 75 = 150 · Overtime 1.5 h = 412.50 · Late Fine 30 min −60" | – |
+| Balance | running | the last = **net pay** |
+
+Built on every save (frozen at submit) by `payroll/daily_breakdown.py`, from the
+same rules that posted the amounts, so it always adds up. If attendance changed
+after the slip was made, the gap shows as an **Adjustment** line instead of
+being hidden in the days; re-save the slip to bring them back in step.
+
 ## A month's run
 
 1. Attendance submitted.
