@@ -124,3 +124,4 @@ avinashgroup_app.patches.move_pay_to_salary_assignment
 avinashgroup_app.patches.meal_on_authorised_overtime
 avinashgroup_app.patches.setup_salary_slip_daily_breakdown
 avinashgroup_app.patches.setup_payroll_entry_bs_month
+avinashgroup_app.patches.clear_payroll_payable_account_type
