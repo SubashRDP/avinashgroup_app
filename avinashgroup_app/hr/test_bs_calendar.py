@@ -93,14 +93,16 @@ class TestPayrollEntryByMonth(FrappeTestCase):
 				"doctype": "Payroll Entry",
 				"company": COMPANY,
 				"custom_fiscal_year": FY,
-				"custom_bs_month": "05 - Bhadra",
+				# A month nobody has been paid for yet: HRMS finds no one to pay
+				# in a month whose payroll is already submitted.
+				"custom_bs_month": "06 - Ashwin",
 				"posting_date": "2026-10-09",  # typed by mistake: replaced
 			}
 		)
 		entry.insert()
 		self.assertEqual(
 			(entry.start_date, entry.end_date, entry.posting_date),
-			(getdate("2026-08-17"), getdate("2026-09-16"), getdate("2026-09-16")),
+			(getdate("2026-09-17"), getdate("2026-10-17"), getdate("2026-10-17")),
 		)
 		self.assertEqual(entry.payroll_frequency, "Monthly")
 		self.assertEqual(
@@ -110,9 +112,11 @@ class TestPayrollEntryByMonth(FrappeTestCase):
 		self.assertEqual(entry.cost_center, frappe.get_cached_value("Company", COMPANY, "cost_center"))
 		self.assertTrue(entry.employees)
 
-		entry.custom_bs_month = "06 - Ashwin"
+		entry.custom_bs_month = "07 - Kartik"
 		entry.save()
-		self.assertEqual((entry.start_date, entry.posting_date), (getdate("2026-09-17"), getdate("2026-10-17")))
+		kartik = month_period(COMPANY, 2083, 7)
+		self.assertEqual((entry.start_date, entry.posting_date), (kartik.start_date, kartik.end_date))
+		self.assertEqual(entry.start_date, getdate("2026-10-18"))
 
 	def test_month_calendar(self):
 		from avinashgroup_app.payroll.payroll_month import month_calendar

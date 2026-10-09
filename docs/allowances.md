@@ -101,6 +101,16 @@ being hidden in the days; re-save the slip to bring them back in step.
 3. **Prepare Payroll Inputs** (tea, meal, OT, late fine, advances). It refreshes the entry's draft slips.
 4. Submit → slips → **Submit Salary Slips** → the journal posts each person to their section's account.
 
+## The salary sheet (Avinas Salary Statement)
+
+The client's Excel salary sheet, printed from the slips: Company, Fiscal Year +
+BS Month (as on the Payroll Entry), optionally one Payroll Entry.
+
+- **Columns, in the sheet's order:** Attendance, OT Hr., Meal Qty., Late Hr., Initial Basic, Basic Salary, OT Rate, Late Deduction Rate, Unpaid Leave, Deduction, Net Basic, SSF Addition, HRA … Edu, Total Allowance, Regular Salary, Tea, OT, Meal, Gross, SSF, Tax, Late Fine, advances, Total Deduction, Net Payable, Last Month Net. A component the sheet does not name gets its own column, so the columns always add up to the slip's gross and net.
+- **Rows:** grouped O/O, S/D, F/P (Department → Payroll Section) with a subtotal each, then the sections' summary and the grand total, as on the sheet.
+- **Quantities** (OT hours, meals, late hours, rates) come from Additional Salary → Quantity / Rate, written by Prepare Payroll Inputs.
+- **Check against the books:** the summary compares each section's gross with the payroll journal's expense debits for that section, and net pay with the credit to the payable account. Green "Matches Journal", or a red card per difference. A difference means a component's section accounts are wrong (2026-10-09: NGN Education Allowance's S/D account pointed at O/O, 11,250 for Bhadra).
+
 ## Onboarding from the Falgun 2082 sheets (2026-10-08, avinas1)
 
 | Company | Structure | Assignments | Slip = sheet |
