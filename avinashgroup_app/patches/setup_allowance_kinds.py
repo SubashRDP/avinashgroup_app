@@ -94,15 +94,19 @@ RULE_FIELDS = (
 
 
 def execute():
-	frappe.reload_doc("avinash_group_app", "doctype", "employee_attendance_allowance")
 	add_fields()
 	show_rule_fields()
 	seed_sections()
 	rows = seed_account_rows()
 	retire_daily_wage()
 	marked = mark_allowances()
-	moved = move_categories()
-	tagged = tag_paid_to_all()
+	moved = tagged = 0
+	# Tags and category rates go into the old per-employee table, which
+	# move_pay_to_salary_assignment then copies onto the assignments and drops.
+	# Once it is gone there is nothing left to tag here.
+	if frappe.db.table_exists("Employee Attendance Allowance"):
+		moved = move_categories()
+		tagged = tag_paid_to_all()
 	remove_categories()
 	remove_company_allowance()
 	for doctype in ("Salary Component", "Salary Component Account", "Department", "Employee"):
@@ -293,6 +297,10 @@ def seed_account_rows() -> int:
 def retire_daily_wage():
 	if frappe.db.exists("Salary Component", "Daily Wage"):
 		frappe.db.set_value("Salary Component", "Daily Wage", "disabled", 1, update_modified=False)
+	# A component left on the dropped option could no longer be saved.
+	frappe.db.sql(
+		"update `tabSalary Component` set custom_rate_basis = 'Fixed Rate' where custom_rate_basis = 'Daily Wage'"
+	)
 	name = frappe.db.get_value("Custom Field", {"dt": "Salary Component", "fieldname": "custom_rate_basis"})
 	if name:
 		options = (frappe.db.get_value("Custom Field", name, "options") or "").split("\n")
@@ -373,7 +381,8 @@ def remove_categories():
 	for doctype in ("Allowance Category", "Allowance Category Rate"):
 		if frappe.db.exists("DocType", doctype):
 			frappe.delete_doc("DocType", doctype, force=True, ignore_permissions=True)
-		frappe.db.sql_ddl(f"drop table if exists `tab{doctype}`")
+		if frappe.db.table_exists(doctype):
+			frappe.db.sql_ddl(f"drop table `tab{doctype}`")
 
 
 def tag_paid_to_all() -> int:
@@ -415,4 +424,5 @@ def remove_company_allowance():
 	for doctype in ("Company Allowance", "Company Allowance Item"):
 		if frappe.db.exists("DocType", doctype):
 			frappe.delete_doc("DocType", doctype, force=True, ignore_permissions=True)
-			frappe.db.sql_ddl(f"drop table if exists `tab{doctype}`")
+		if frappe.db.table_exists(doctype):
+			frappe.db.sql_ddl(f"drop table `tab{doctype}`")

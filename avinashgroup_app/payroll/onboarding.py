@@ -357,6 +357,7 @@ def import_sheet(key, path):
 			unmatched.append(row["name"])
 			continue
 		matched.append(employee)
+		set_department(employee, company, row.get("department"))
 
 		values, base, note, allowances = employee_values(key, profile, row)
 		if note:
@@ -372,6 +373,26 @@ def import_sheet(key, path):
 		"unmatched": unmatched,
 		"notes": notes,
 	}
+
+
+def set_department(employee, company, sheet_department):
+	"""Give the employee the sheet's department when they have none.
+
+	The department decides the payroll section (O/O, S/D, F/P) and so the
+	journal's account; without it the payroll journal stops. The NGI sheet
+	spells one "Genaral Management", so the match tolerates a near spelling
+	within the company's own departments. A department already set is kept.
+	"""
+	if not sheet_department or frappe.db.get_value("Employee", employee, "department"):
+		return
+	departments = frappe.get_all("Department", filters={"company": company, "is_group": 0}, pluck="name")
+	by_name = {EmployeeMatcher.norm(d.rsplit(" - ", 1)[0]): d for d in departments}
+	key = EmployeeMatcher.norm(str(sheet_department))
+	match = by_name.get(key) or next(
+		iter(by_name[k] for k in difflib.get_close_matches(key, list(by_name), n=1, cutoff=0.85)), None
+	)
+	if match:
+		frappe.db.set_value("Employee", employee, "department", match, update_modified=False)
 
 
 def _sheet_rows(sheet, profile):
@@ -642,7 +663,7 @@ def map_component_accounts(company):
 	"""
 	abbr = frappe.db.get_value("Company", company, "abbr")
 	done = []
-	for component in frappe.get_all("Salary Component", fields=["name", "type"]):
+	for component in frappe.get_all("Salary Component", filters={"disabled": 0}, fields=["name", "type"]):
 		base = PROPOSED_ACCOUNTS.get(component.name) or (
 			PROPOSED_ACCOUNTS["__earnings__"] if component.type == "Earning" else None
 		)

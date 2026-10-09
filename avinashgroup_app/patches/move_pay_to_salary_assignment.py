@@ -263,7 +263,8 @@ def remove_old(unassigned) -> list:
 	if not unassigned:
 		if frappe.db.exists("DocType", OLD_TABLE):
 			frappe.delete_doc("DocType", OLD_TABLE, force=True, ignore_permissions=True)
-		frappe.db.sql_ddl(f"drop table if exists `tab{OLD_TABLE}`")
+		if frappe.db.table_exists(OLD_TABLE):
+			frappe.db.sql_ddl(f"drop table `tab{OLD_TABLE}`")
 	elif kept:
 		print(f"  employees holding pay with no assignment: {', '.join(sorted(unassigned)[:20])}")
 
