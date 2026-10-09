@@ -243,7 +243,7 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		return _per_unit(unit, day=1.0, hours=working_hours)
 
 	if condition == "Meal Entitlement":
-		return _meals_for_day(row, sc, present_statuses)
+		return _meals_for_day(row, sc, present_statuses, employee)
 
 	if condition == "Authorised Overtime":
 		# Policy 5.1: the per-day Overtime Sheet decides who is paid overtime and
@@ -284,25 +284,32 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	return 0.0
 
 
-def _meals_for_day(row, sc, present_statuses) -> float:
-	"""How many meals one attendance row earns (policy 1.3 / 2.3).
+def _meals_for_day(row, sc, present_statuses, employee: str) -> float:
+	"""How many meals one attendance row earns.
 
-	Every number comes from the Meal Salary Component's own form, never from code:
-	    Time Offset (Hours)          came this early / stayed this late -> 1 meal each
-	    Holiday: Hours for 1 / 2     hours worked on a holiday -> 1 or 2 meals
-	    Max Meals per Day            cap (0 = none)
-	Seeded 1.5 / 6 / 8 / 2 by patches/setup_meal_rule_fields.py.
+	A meal is part of overtime the company asked for, not of turning up early
+	or staying late on one's own (the user's rule of 2026-10-09; policy 1.3,
+	2.2, 2.3, 5.1):
 
-	A meal is earned by the extra time worked, not by turning up. Counting one
-	per present day paid 132,525 against the sheet's 52,275 for Falgun 2082.
+	  * only an OT-eligible employee (Employee → OT Eligible), and only on a
+	    day a submitted Overtime Sheet names them with the Overtime entitlement;
+	  * a working day: called in Time Offset (1.5 h) or more before the shift →
+	    1 meal; kept that long after it → 1 meal;
+	  * a holiday worked on such a sheet: 2 meals;
+	  * never more than Max Meals per Day (2).
+
+	Early and late are the day's own measures against its shift
+	(`custom_early_entry` / `custom_late_exit`, biometric/attendance_override.py).
 	"""
 	if row.status not in present_statuses and row.status != "Half Day":
 		return 0.0
+	if not frappe.get_cached_value("Employee", employee, "custom_ot_eligibility"):
+		return 0.0
+	if not _on_overtime_sheet(employee, row.attendance_date):
+		return 0.0
 
 	if row.custom_worked_on_holiday:
-		worked = flt(row.working_hours)
-		two, one = flt(sc.get("custom_holiday_hours_two_meals")), flt(sc.get("custom_holiday_hours_one_meal"))
-		meals = 2 if two and worked >= two else 1 if one and worked >= one else 0
+		meals = HOLIDAY_MEALS
 	else:
 		offset = flt(sc.custom_time_offset_hours) * 3600.0
 		meals = 0
@@ -312,6 +319,36 @@ def _meals_for_day(row, sc, present_statuses) -> float:
 
 	cap = cint(sc.get("custom_max_per_day"))
 	return float(min(meals, cap) if cap else meals)
+
+
+#: Meals for a holiday worked on an authorised Overtime Sheet (user, 2026-10-09).
+HOLIDAY_MEALS = 2
+
+
+def _on_overtime_sheet(employee: str, work_date) -> bool:
+	"""Whether a submitted Overtime Sheet names the employee on that date with
+	the Overtime entitlement — the company called them in (policy 5.1).
+
+	A row is enough: a holiday authorisation counts before its hours are
+	settled. Cached per request: the report asks once per employee per day.
+	"""
+	cache = getattr(frappe.local, "_agp_on_ot_sheet", None)
+	if cache is None:
+		cache = frappe.local._agp_on_ot_sheet = {}
+	key = (employee, getdate(work_date))
+	if key not in cache:
+		cache[key] = bool(
+			frappe.db.sql(
+				"""select 1
+				from `tabOvertime Sheet Employee` r
+				join `tabOvertime Sheet` s on s.name = r.parent
+				where s.docstatus = 1 and r.employee = %s and s.work_date = %s
+				  and r.entitlement = %s
+				limit 1""",
+				(employee, key[1], ENTITLEMENT_OVERTIME),
+			)
+		)
+	return cache[key]
 
 
 def _authorised_overtime_hours(employee: str, work_date) -> float:

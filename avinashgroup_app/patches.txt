@@ -121,3 +121,4 @@ avinashgroup_app.patches.setup_shift_rotation
 avinashgroup_app.patches.remove_working_hours_threshold
 avinashgroup_app.patches.setup_allowance_kinds
 avinashgroup_app.patches.move_pay_to_salary_assignment
+avinashgroup_app.patches.meal_on_authorised_overtime

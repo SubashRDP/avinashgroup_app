@@ -85,8 +85,6 @@ RULE_FIELDS = (
 	"custom_half_day_counts",
 	"custom_pay_on_holiday",
 	"custom_time_offset_hours",
-	"custom_holiday_hours_one_meal",
-	"custom_holiday_hours_two_meals",
 	"custom_max_per_day",
 	"custom_rate_basis",
 	"custom_rate_multiplier",

@@ -141,7 +141,7 @@ A dry run on avinas1 (rolled back) posted Basic to 547101/2/3 and Mobile + Tea t
    - new joiners and others who need Basic + allowances. Give them an assignment by hand, or a sheet in the same layout.
    - Some NGN joining dates (1960, 1962) look like birth dates.
 3. **7 sheet names with no employee:** NGN Shreeram Sah, Dinesh Chaudhary, Hari Sharan Mahato, Dipak Chaudhary; NGG Subash Chaudhary; NGK Arun Kumar Tharu, Pal Bahadur Lohar.
-4. **Meal "Only OT-Eligible Staff":** off for now; policy 2.2 says meals are for OT-eligible staff. HR to decide.
+4. ~~Meal for OT-eligible only~~ **Done 2026-10-09:** a meal is earned only on overtime the company authorised (submitted Overtime Sheet, entitlement Overtime), by OT-eligible staff. 1.5 h early or late on a working day = 1 meal each; a holiday = 2; max 2 a day. The holiday 6 h / 8 h fields are removed. Patch `meal_on_authorised_overtime`. See allowances.md → Meal.
 5. **M.OT** on the attendance sheet: meaning unknown, treated as ordinary overtime.
 6. **Not built yet:** Dashain Bonus button and Leave Encashment button on the Payroll Entry. Both are pressed by HR: Dashain before the Dashain holiday, leave at Ashadh.
 7. **Docs** `payroll-manual.html`, `hr-payroll-handbook.html` and `payroll-documentation.html` still describe Allowance Category and the Employee pay fields.

@@ -64,8 +64,6 @@ class TestAllowance(FrappeTestCase):
 			rate=75,
 			custom_ot_eligible_only=1,
 			custom_time_offset_hours=1.5,
-			custom_holiday_hours_one_meal=6,
-			custom_holiday_hours_two_meals=8,
 			custom_max_per_day=2,
 		)
 		cls.da = cls._component("CA Test DA", "CADA", "Fixed per Person")
@@ -303,21 +301,59 @@ class TestAllowance(FrappeTestCase):
 		paid = {k: v for k, v in self._run_engine([eligible, not_eligible], qty=4).items() if k[1] == self.meal}
 		self.assertEqual(paid, {(eligible, self.meal): 300})
 
-	def test_meal_rule(self):
-		employee = self._employee()
-		sc = frappe.get_doc("Salary Component", self.meal)
-		day = frappe._dict(
-			status="Present",
-			working_hours=11,
-			custom_worked_on_holiday=0,
-			custom_early_entry=100 * 60,  # 1 h 40 m early
-			custom_late_exit=105 * 60,  # 1 h 45 m late
+	def _overtime_sheet(self, employee, work_date, entitlement="Overtime"):
+		"""A submitted Overtime Sheet calling the employee in on that date."""
+		sheet = frappe.get_doc(
+			{
+				"doctype": "Overtime Sheet",
+				"company": COMPANY,
+				"work_date": work_date,
+				"reason": "Test: called in",
+				"employees": [{"employee": employee, "entitlement": entitlement, "work_type": "Overtime"}],
+			}
 		)
-		self.assertEqual(attendance_allowance.evaluate_rule(day, sc, employee), 2)
-		day.custom_late_exit = 30 * 60
-		self.assertEqual(attendance_allowance.evaluate_rule(day, sc, employee), 1)
-		holiday = frappe._dict(status="Present", working_hours=6.5, custom_worked_on_holiday=1)
-		self.assertEqual(attendance_allowance.evaluate_rule(holiday, sc, employee), 1)
+		sheet.flags.ignore_validate = True
+		sheet.flags.ignore_links = True
+		sheet.insert(ignore_permissions=True)
+		sheet.db_set("docstatus", 1)
+		frappe.local._agp_on_ot_sheet = {}
+
+	def test_meal_rule(self):
+		"""A meal follows overtime the company authorised, for OT-eligible staff
+		only: 1.5 h early or late on a working day = 1 each, a holiday = 2, max 2."""
+		sc = frappe.get_doc("Salary Component", self.meal)
+		day, holiday = "2026-07-20", "2026-07-25"
+
+		def meals(employee, date, early=0, late=0, on_holiday=0):
+			row = frappe._dict(
+				status="Present",
+				attendance_date=date,
+				working_hours=11,
+				custom_worked_on_holiday=on_holiday,
+				custom_early_entry=early * 60,
+				custom_late_exit=late * 60,
+			)
+			return attendance_allowance.evaluate_rule(row, sc, employee)
+
+		called = self._employee(custom_ot_eligibility=1)
+		self._overtime_sheet(called, day)
+		self._overtime_sheet(called, holiday)
+		self.assertEqual(meals(called, day, early=100, late=105), 2)  # IN 07:20, OUT 18:45
+		self.assertEqual(meals(called, day, early=100, late=30), 1)  # IN 07:20, OUT 17:30
+		self.assertEqual(meals(called, day, early=60, late=60), 0)  # neither side reaches 1.5 h
+		self.assertEqual(meals(called, holiday, on_holiday=1), 2)  # a holiday, any hours
+
+		on_own = self._employee(custom_ot_eligibility=1)  # same punches, nobody called them
+		self.assertEqual(meals(on_own, day, early=100, late=105), 0)
+		self.assertEqual(meals(on_own, holiday, on_holiday=1), 0)
+
+		not_eligible = self._employee(custom_ot_eligibility=0)
+		self._overtime_sheet(not_eligible, day)
+		self.assertEqual(meals(not_eligible, day, early=100, late=105), 0)
+
+		replacement = self._employee(custom_ot_eligibility=1)
+		self._overtime_sheet(replacement, holiday, entitlement="Replacement Leave")
+		self.assertEqual(meals(replacement, holiday, on_holiday=1), 0)
 
 	def test_previous_attendance_month(self):
 		sc = frappe._dict(custom_attendance_month="Previous Month")

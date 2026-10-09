@@ -10,7 +10,7 @@ Code: `payroll/allowance.py`, `payroll/salary_slip.py`,
 | What | Where |
 |---|---|
 | The allowance and its **kind** | **Salary Component** → Is Allowance, Allowance Kind |
-| The attendance rule (tea not on holidays; meal 1.5 h / 6 h / 8 h, max 2) | the same Salary Component → Attendance-Driven Rule |
+| The attendance rule (tea not on holidays; meal Time Offset 1.5 h, max 2) | the same Salary Component → Attendance-Driven Rule |
 | **Rate per company** (tea 235 NGI / 265 NGN, meal 75, gas 1,690, edu 2,780, HRA 25 %) | Salary Component → Accounts row for the company → **Default Rate** |
 | **Three accounts per company** | the same row: **Admin & Accounts (O/O)**, **Marketing (S/D)**, **Plant (F/P)** |
 | What everyone on a structure shares | **Salary Structure**: Basic, SSF Addition, SSF, Income Tax, and tags for Tea, Meal, Overtime, Late Fine |
@@ -46,7 +46,7 @@ No new field and no new structure are needed.
 | Fixed Company Rate | Gas, Education, Mobile | the same |
 | % of Initial Basic | HRA | the same, % × the assignment's Initial Basic |
 | Per Day Present ⏱ | Tea & Conveyance | Prepare Payroll Inputs → Additional Salary |
-| Per Meal ⏱ | Meal | the same |
+| Per Meal ⏱ | Meal | the same (see **Meal** below) |
 | Per Hour (Overtime) ⏱ | Overtime | the same (Overtime Sheets) |
 | Entered by Hand | Load/Unload | Additional Salary typed by HR |
 | Yearly | Dashain Bonus, Leave Encashment | their own Payroll Entry buttons (not built yet) |
@@ -54,6 +54,25 @@ No new field and no new structure are needed.
 **Who gets an attendance allowance (⏱):** the structure's tag row (tea for everyone on NGI/NGN Staff), or a row on the person's assignment. A row on the assignment always wins: its own rate, or Active unticked.
 
 A structure refuses fixed allowances (they would be paid twice) and Yearly or hand-entered ones (they would be paid every month).
+
+## Meal
+
+A meal is part of **overtime the company asked for** (rule of 2026-10-09):
+
+| Check, per attendance day | Meals |
+|---|---|
+| Employee not **OT Eligible** | 0 |
+| Not on a **submitted Overtime Sheet** for that date with entitlement **Overtime** (stayed late on their own, replacement-leave staff) | 0 |
+| Working day: punched in **≥ 1.5 h before** the shift start | +1 |
+| Working day: punched out **≥ 1.5 h after** the shift end | +1 |
+| **Holiday** worked on the Overtime Sheet | 2 |
+| Any day | max **2** |
+
+The month's meals × the rate (the person's own on their assignment, else the
+company's: NGI 75, NGN 75, NGG 100) become the "Meal" line, posted by Prepare
+Payroll Inputs. Settings on the Meal component: Time Offset (1.5), Max Meals per
+Day (2), Only OT-Eligible Staff ✔. Code: `_meals_for_day` in
+`payroll/attendance_allowance.py`.
 
 ## A month's run
 
