@@ -78,7 +78,10 @@ def roll_salary_assignments(company, year_start):
 		current = frappe.db.get_value(
 			"Salary Structure Assignment",
 			{"employee": employee, "docstatus": 1, "from_date": ["<", year_start]},
-			["salary_structure", "base", "variable", "currency", "payroll_payable_account"],
+			[
+				"name", "salary_structure", "base", "variable", "currency", "payroll_payable_account",
+				"custom_initial_basic", "custom_ssf_applicable",
+			],
 			as_dict=True,
 			order_by="from_date desc",
 		)
@@ -98,8 +101,21 @@ def roll_salary_assignments(company, year_start):
 				"currency": current.currency,
 				"payroll_payable_account": current.payroll_payable_account,
 				"income_tax_slab": slab,
+				# A person's pay is the whole assignment, not just Basic: without
+				# these the new year's slips lost HRA (% of Initial Basic), SSF
+				# and every allowance. Salary Revision carries them the same way.
+				"custom_initial_basic": current.custom_initial_basic,
+				"custom_ssf_applicable": current.custom_ssf_applicable,
 			}
 		)
+		for row in frappe.get_all(
+			"Assignment Allowance",
+			filters={"parent": current.name, "parenttype": "Salary Structure Assignment"},
+			# From Date left blank: the row runs with the new assignment.
+			fields=["allowance", "amount", "active"],
+			order_by="idx",
+		):
+			doc.append("custom_allowances", row)
 		doc.flags.ignore_permissions = True
 		doc.insert()
 		doc.submit()
