@@ -58,7 +58,15 @@ function short_date(d) {
 // The month calendar: a fiscal year's twelve months in fiscal order, each with
 // its English dates and any payroll already made for it. Clicking a month sets
 // Fiscal Year + Month (BS); everything else follows from them.
+// The calendar is how Fiscal Year + Month are set; the plain fields would only
+// repeat it. Hidden on the form at once (not after the calendar loads), and
+// kept as real fields for the list view, filters and imports.
+function hide_month_fields(frm) {
+	frm.toggle_display(["custom_fiscal_year", "custom_bs_month"], false);
+}
+
 function draw_month_calendar(frm, fiscal_year) {
+	hide_month_fields(frm);
 	const field = frm.get_field("custom_month_calendar");
 	if (!field || !frm.doc.company) {
 		field && field.$wrapper.html(`<div class="text-muted small">${__("Choose the company first.")}</div>`);
@@ -78,8 +86,6 @@ function draw_month_calendar(frm, fiscal_year) {
 
 function render_month_calendar(frm, cal) {
 	frm.__calendar_year = cal.fiscal_year;
-	// The calendar is how they are set; the plain fields would only repeat it.
-	frm.toggle_display(["custom_fiscal_year", "custom_bs_month"], false);
 	const editable = frm.doc.docstatus === 0;
 	const chosen = frm.doc.custom_fiscal_year === cal.fiscal_year ? frm.doc.custom_bs_month : null;
 
@@ -179,7 +185,9 @@ function render_month_calendar(frm, cal) {
 }
 
 frappe.ui.form.on("Payroll Entry", {
+	setup: hide_month_fields,
 	onload(frm) {
+		hide_month_fields(frm);
 		if (!frm.is_new() || frm.doc.custom_bs_month) return;
 		frappe.call({
 			method: `${BS_CALENDAR}.get_default_month`,
