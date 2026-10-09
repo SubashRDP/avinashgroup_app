@@ -1,6 +1,6 @@
 """Payroll Entry is chosen by Fiscal Year + BS month (payroll/payroll_month.py).
 
-Adds the two fields at the top of the form and fills them on existing
+Adds the month calendar and the two fields it fills at the top of the form and fills them on existing
 entries from their start date, so old entries read the same way as new ones.
 """
 
@@ -15,11 +15,17 @@ def execute():
 		{
 			"Payroll Entry": [
 				{
+					"fieldname": "custom_month_calendar",
+					"label": "Month",
+					"fieldtype": "HTML",
+					"insert_after": "select_payroll_period",
+				},
+				{
 					"fieldname": "custom_fiscal_year",
 					"label": "Fiscal Year",
 					"fieldtype": "Link",
 					"options": "Fiscal Year",
-					"insert_after": "select_payroll_period",
+					"insert_after": "custom_month_calendar",
 					"in_list_view": 1,
 					"in_standard_filter": 1,
 					"description": "e.g. 83/84: Shrawan 2083 to Ashadh 2084.",

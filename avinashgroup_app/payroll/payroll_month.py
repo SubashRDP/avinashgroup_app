@@ -17,6 +17,10 @@ an Ashwin payroll. So the entry carries `custom_fiscal_year` and
   * the employee list, when it is empty or the month changed (HRMS's own Get
     Employees, with any branch / department / designation filter set).
 
+The form picks the month on a calendar (`month_calendar`, drawn by
+public/js/payroll_entry.js): a fiscal year's months with their dates and any
+entry already made for each.
+
 Runs from AvinashPayrollEntry.validate (payroll/payroll_entry.py), before HRMS
 and before the BS period guard. Drafts only; a submitted entry is history.
 """
@@ -24,7 +28,18 @@ and before the BS period guard. Drafts only; a submitted entry is history.
 import frappe
 from frappe import _
 
-from avinashgroup_app.hr.bs_calendar import bs_year_of, month_option, month_period, parse_bs_month
+from frappe.utils import today
+
+from avinashgroup_app.hr.bs_calendar import (
+	MONTH_OPTIONS,
+	bs_year_of,
+	fiscal_year_of,
+	last_closed_month,
+	month_of_date,
+	month_option,
+	month_period,
+	parse_bs_month,
+)
 
 
 def fill_from_bs_month(doc):
@@ -57,3 +72,55 @@ def fill_from_bs_month(doc):
 	# Who is paid depends on the month (joiners, leavers): refill on a new month.
 	if not doc.employees or (not doc.is_new() and doc.has_value_changed("start_date")):
 		doc.fill_employee_details()
+
+
+@frappe.whitelist()
+def month_calendar(company, fiscal_year=None, exclude=None) -> dict:
+	"""The month calendar on the Payroll Entry form: a fiscal year's twelve
+	months with their dates, whether each has ended, and the payroll entries
+	already made for it (so a month is not paid twice by accident)."""
+	running = month_of_date(company, today())
+	fiscal_year = fiscal_year or fiscal_year_of(last_closed_month(company).start_date)
+	years = frappe.get_all("Fiscal Year", filters={"disabled": 0}, order_by="year_start_date", pluck="name")
+	at = years.index(fiscal_year) if fiscal_year in years else -1
+
+	entries = {}
+	for e in frappe.get_all(
+		"Payroll Entry",
+		filters={
+			"company": company,
+			"custom_fiscal_year": fiscal_year,
+			"docstatus": ("<", 2),
+			"name": ("!=", exclude or ""),
+		},
+		fields=["name", "custom_bs_month", "docstatus"],
+		order_by="creation",
+	):
+		entries.setdefault(e.custom_bs_month, []).append({"name": e.name, "docstatus": e.docstatus})
+
+	months = []
+	for option in MONTH_OPTIONS:
+		period = month_period(company, bs_year_of(fiscal_year, option), option)
+		state = (
+			"running"
+			if period.start_date <= running.end_date and period.end_date >= running.start_date
+			else "ended" if period.end_date < running.start_date else "future"
+		)
+		months.append(
+			{
+				"option": option,
+				"bs_month": period.bs_month,
+				"bs_year": period.bs_year,
+				"start_date": str(period.start_date),
+				"end_date": str(period.end_date),
+				"source": period.source,
+				"state": state,
+				"entries": entries.get(option, []),
+			}
+		)
+	return {
+		"fiscal_year": fiscal_year,
+		"previous": years[at - 1] if at > 0 else None,
+		"next": years[at + 1] if 0 <= at < len(years) - 1 else None,
+		"months": months,
+	}

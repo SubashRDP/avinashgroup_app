@@ -112,7 +112,7 @@ Prints how many slips equal the sheet's regular salary and SSF, and lists the re
 
 ### 2.8 First payroll run
 1. Attendance submitted for the BS month.
-2. New Payroll Entry → choose **Company, Fiscal Year, Month (BS)** → Save. Dates, posting date, accounts and employees fill themselves; the English date fields are locked. (Added 2026-10-09: `patches/setup_payroll_entry_bs_month` adds the two fields; month borders from Nepal BS Period, else the calendar.)
+2. New Payroll Entry → **Company**, click the month on the **month calendar** → Save. Dates, posting date, accounts and employees fill themselves; the English date fields are locked. (Added 2026-10-09: `patches/setup_payroll_entry_bs_month` adds the two fields; month borders from Nepal BS Period, else the calendar.)
 3. **Nepal HRMS → Prepare Payroll Inputs** (tea, meal, overtime, late fine, advances). Best before Submit; afterwards it refreshes the draft slips.
 4. Submit → slips are created → review a few against the sheet.
 5. **Submit Salary Slips** → the accrual journal splits Basic and allowances by O/O / S/D / F/P.

@@ -97,7 +97,7 @@ being hidden in the days; re-save the slip to bring them back in step.
 ## A month's run
 
 1. Attendance submitted.
-2. New Payroll Entry → **Company, Fiscal Year (83/84), Month (05 - Bhadra)** → Save. That is all HR types: the dates, the posting date (the month's last day), frequency, currency, payable account, cost centre and the employee list fill themselves (`payroll/payroll_month.py`). A new entry starts on the last finished month. Month borders come from **Nepal BS Period** when it has the month, else the Nepali calendar (`hr/bs_calendar.py`); the slips, the Monthly Attendance BS report and the deposit report read the same calendar.
+2. New Payroll Entry → **Company**, then click the month on the **month calendar** (a fiscal year's 12 BS months with their dates; paid / draft / running marked; asks before a second entry for a paid month) → Save. That is all HR types: the dates, the posting date (the month's last day), frequency, currency, payable account, cost centre and the employee list fill themselves (`payroll/payroll_month.py`). A new entry starts on the last finished month. Month borders come from **Nepal BS Period** when it has the month, else the Nepali calendar (`hr/bs_calendar.py`); the slips, the Monthly Attendance BS report and the deposit report read the same calendar.
 3. **Prepare Payroll Inputs** (tea, meal, OT, late fine, advances). It refreshes the entry's draft slips.
 4. Submit → slips → **Submit Salary Slips** → the journal posts each person to their section's account.
 

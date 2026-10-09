@@ -113,3 +113,22 @@ class TestPayrollEntryByMonth(FrappeTestCase):
 		entry.custom_bs_month = "06 - Ashwin"
 		entry.save()
 		self.assertEqual((entry.start_date, entry.posting_date), (getdate("2026-09-17"), getdate("2026-10-17")))
+
+	def test_month_calendar(self):
+		from avinashgroup_app.payroll.payroll_month import month_calendar
+
+		with patch("avinashgroup_app.payroll.payroll_month.today", return_value="2026-10-09"):
+			cal = month_calendar(COMPANY, FY)
+		self.assertEqual(cal["previous"], "82/83")
+		self.assertEqual([m["option"] for m in cal["months"]][:2], ["04 - Shrawan", "05 - Bhadra"])
+		states = {m["option"]: m["state"] for m in cal["months"]}
+		self.assertEqual(
+			(states["05 - Bhadra"], states["06 - Ashwin"], states["07 - Kartik"]), ("ended", "running", "future")
+		)
+		shrawan = cal["months"][0]
+		self.assertEqual((shrawan["start_date"], shrawan["end_date"]), ("2026-07-17", "2026-08-16"))
+		# The test month's payroll shows on Shrawan, but not on its own form.
+		paid = frappe.get_all("Payroll Entry", {"company": COMPANY, "custom_bs_month": "04 - Shrawan", "docstatus": 1}, pluck="name")
+		self.assertEqual([e["name"] for e in shrawan["entries"]], paid)
+		if paid:
+			self.assertEqual(month_calendar(COMPANY, FY, exclude=paid[0])["months"][0]["entries"], [])

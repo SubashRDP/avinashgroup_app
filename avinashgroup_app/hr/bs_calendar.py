@@ -146,10 +146,19 @@ def last_closed_month(company, on_date=None) -> frappe._dict:
 
 @frappe.whitelist()
 def get_month(fiscal_year, bs_month, company=None) -> dict:
-	"""For forms and report filters: the dates of a Fiscal Year + BS Month."""
+	"""For forms and report filters: the dates of a Fiscal Year + BS Month,
+	in AD and as mitis (so a form can show its BS date fields straight away)."""
+	from avinashgroup_app.hr.bs_dates import to_miti
+
 	bs_month = parse_bs_month(bs_month)
 	period = month_period(company, bs_year_of(fiscal_year, bs_month), bs_month)
-	return {**period, "start_date": str(period.start_date), "end_date": str(period.end_date)}
+	return {
+		**period,
+		"start_date": str(period.start_date),
+		"end_date": str(period.end_date),
+		"start_miti": to_miti(period.start_date),
+		"end_miti": to_miti(period.end_date),
+	}
 
 
 @frappe.whitelist()
