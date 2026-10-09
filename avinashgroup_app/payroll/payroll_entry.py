@@ -29,13 +29,46 @@ from frappe.utils import flt
 from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
 
 from avinashgroup_app.payroll.allowance import get_section, has_section_accounts, section_account
-from avinashgroup_app.payroll.payroll_month import fill_from_bs_month
+from avinashgroup_app.payroll.payroll_month import fill_from_bs_month, warn_missing_attendance
+
+
+#: The account types a salary payment may be made from (HRMS's own filter on
+#: the Payment Account field, payroll_entry.js).
+PAYMENT_ACCOUNT_TYPES = ("Bank", "Cash")
 
 
 class AvinashPayrollEntry(PayrollEntry):
 	def validate(self):
 		fill_from_bs_month(self)
 		super().validate()
+		if self.is_new() or self.has_value_changed("start_date"):
+			warn_missing_attendance(self)
+
+	def before_submit(self):
+		warn_missing_attendance(self)
+		super().before_submit()
+
+	@frappe.whitelist()
+	def make_bank_entry(self, for_withheld_salaries=False):
+		"""HRMS's Make Bank Entry, refused when the saved Payment Account cannot pay.
+
+		Payment Account is allow-on-submit, and the button checks only the
+		form's unsaved value: picked but not saved with Update, the server saw
+		none and ERPNext crashed with a TypeError (NGI-PAYR-83/84-00002,
+		2026-10-09). And nothing stopped a non-bank account: the same entry held
+		the gas stock account, which would have credited stock with the month's
+		net pay.
+		"""
+		if not self.payment_account:
+			frappe.throw(_("Choose the Payment Account and press Update to save it, then make the bank entry."))
+		account_type = frappe.db.get_value("Account", self.payment_account, "account_type")
+		if account_type not in PAYMENT_ACCOUNT_TYPES:
+			frappe.throw(
+				_("Payment Account {0} is a {1} account. Salary is paid from a Bank or Cash account.").format(
+					frappe.bold(self.payment_account), account_type or _("untyped")
+				)
+			)
+		return super().make_bank_entry(for_withheld_salaries=for_withheld_salaries)
 
 	def get_salary_component_total(
 		self,

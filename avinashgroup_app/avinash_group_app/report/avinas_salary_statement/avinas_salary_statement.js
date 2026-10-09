@@ -9,7 +9,7 @@ const SALARY_SHEET_MONTHS = [
 
 frappe.query_reports["Avinas Salary Statement"] = {
 	onload(report) {
-		_make_full_width(report);
+		salary_sheet_full_width();
 		frappe.call({
 			method: "avinashgroup_app.hr.bs_calendar.get_default_month",
 			args: { company: frappe.query_report.get_filter_value("company") },
@@ -72,22 +72,19 @@ frappe.query_reports["Avinas Salary Statement"] = {
 	},
 };
 
-function _make_full_width(report) {
-	if (!$("#nepal-hrms-fullwidth-style").length) {
-		$(
-			'<style id="nepal-hrms-fullwidth-style">' +
-			".page-container, .page-content, .page-form, .page-body," +
-			" .layout-main, .layout-main-section, .layout-main-section-wrapper," +
-			" .container, .container-fluid, .container-xl, .container-lg, .container-md" +
-			" { max-width: 100% !important; width: 100% !important; padding-left: 12px !important; padding-right: 12px !important; }" +
-			".dt-scrollable, .datatable, .datatable-wrapper, .report-wrapper, .query-report-container" +
-			" { width: 100% !important; max-width: 100% !important; }" +
-			"</style>"
-		).appendTo("head");
-	}
-	const $page = report && report.page ? report.page.wrapper : $(document.body);
-	$page.find(".container, .layout-main-section, .layout-main-section-wrapper, .page-content").css({
-		"max-width": "100%",
-		width: "100%",
-	});
+// Full width for this report only: every rule is scoped to the page's route
+// (Frappe sets body[data-route]), so it cannot leak onto the next page opened.
+// A global !important style stayed on every page until a reload.
+const SALARY_SHEET_ROUTE = 'body[data-route="query-report/Avinas Salary Statement"]';
+
+function salary_sheet_full_width() {
+	if ($("#avinas-salary-sheet-width").length) return;
+	const scoped = (selectors) => selectors.map((sel) => `${SALARY_SHEET_ROUTE} ${sel}`).join(", ");
+	$(
+		`<style id="avinas-salary-sheet-width">
+		${scoped([".page-container", ".page-content", ".page-body", ".layout-main", ".layout-main-section",
+			".layout-main-section-wrapper", ".container", ".container-fluid"])}
+		{ max-width: 100% !important; width: 100% !important; padding-left: 12px !important; padding-right: 12px !important; }
+		</style>`
+	).appendTo("head");
 }

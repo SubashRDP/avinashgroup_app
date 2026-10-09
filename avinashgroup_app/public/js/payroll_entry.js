@@ -212,7 +212,8 @@ frappe.ui.form.on("Payroll Entry", {
 		hide_month_fields(frm);
 		if (!frm.is_new() || frm.doc.custom_bs_month) return;
 		frappe.call({
-			method: `${BS_CALENDAR}.get_default_month`,
+			// The month after the company's last payroll (payroll_month.default_month).
+			method: "avinashgroup_app.payroll.payroll_month.default_month",
 			args: { company: frm.doc.company },
 			callback: (r) => {
 				if (!r.message || frm.doc.custom_bs_month) return;

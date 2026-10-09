@@ -65,7 +65,10 @@ Normal. Preview only shows the structure. A real slip shows everything (Chapter 
 Their Department has no Payroll Section, or they have no Department. See Chapter 2.
 
 ### The salary sheet shows a red card instead of "Matches Journal"
-See Chapter 7, section 7.1 "What a red card means".
+See Chapter 7, section 7.1 "What a red card means". A card such as **"Education Allowance: S/D column holds the O/O account 547101"** names the setting to fix: the accountant opens that Salary Component, finds the company's Accounts row and corrects that column (Chapter 9).
+
+### A new Payroll Entry opens on a month I did not expect
+It opens on the month after the company's last payroll (so a paid month is not offered again), but never later than the month running today. Click another month on the calendar if needed.
 
 ### A list view shows an error or "unknown column", but the form opens fine
 The list views read from a copy of the database that may be behind. Tell IT ("the read replica may be stuck").
@@ -89,6 +92,9 @@ The Leave Allocation is still a **draft**. Open it and **Submit** it.
 | **No employees found for the mentioned criteria: Company … Currency … Payroll Payable Account …** | Nobody matches: no submitted assignments for that month, or their payable account differs | Check the assignments (section 10.1, "Someone is missing") |
 | **Posting date is in another BS month** — "This entry pays … but is posted on …, which is in …. Every salary slip takes its month from the posting date…" | The posting date was changed to a date outside the month being paid | Choose the month again on the calendar (it resets the posting date to the month's last day), or set the posting date to the date the message suggests |
 | **Slip and payroll entry disagree on the month** — "Salary slip covers … but its payroll entry … pays …. Fix the entry's posting date." | A slip's month differs from its Payroll Entry | Tell IT. Usually the entry's dates were changed after slips were made: cancel and remake the slips |
+| **Attendance missing** — "… of … employees have no submitted attendance between … and …. Their unmarked days count as Present, and they get no tea, meal, overtime or late fine." | An orange warning on Save or Submit: the month has no attendance for these people | If attendance is still to come, stop: mark it, run **Prepare Payroll Inputs**, then submit. If paying a full month without attendance is intended, carry on |
+| **Choose the Payment Account and press Update to save it, then make the bank entry.** | **Make Bank Entry** was pressed before the Payment Account was saved on the submitted entry | Choose the bank account, press **Update**, then **Make Bank Entry** |
+| **Payment Account … is a … account. Salary is paid from a Bank or Cash account.** | The Payment Account is not a bank or cash account (for example a stock account) | Choose the bank or cash account the salary is paid from, press **Update**, try again |
 | **Cannot submit. Attendance is not marked for some employees.** | The entry has **Validate Attendance** ticked and some days have no attendance | Complete the attendance, or untick Validate Attendance |
 | **Salary Slip of employee … already created for this period** | The person already has a slip for this month | Do not pay them twice. Remove them from this entry, or cancel the other slip if it was wrong |
 | **No active or default Salary Structure found for employee … for the given dates** | The person has no submitted Salary Structure Assignment for the month | Create and submit one (Chapter 2) |

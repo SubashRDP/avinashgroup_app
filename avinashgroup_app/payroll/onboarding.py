@@ -62,7 +62,7 @@ PROFILES = {
 		"cols": {
 			"code": "B", "name": "C", "department": "D", "designation": "F", "attendance": "I",
 			"initial_basic": "M", "basic": "N", "hra": "U", "dearness": "V", "other": "W",
-			"gas": "Y", "edu": "Z", "tea": "AE", "ssf": "AJ",
+			"fuel": "X", "gas": "Y", "edu": "Z", "tea": "AE", "ssf": "AJ",
 		},
 		"rates": {"hra": 0.25, "gas": 1690, "edu": 2780, "tea_old": 235, "tea_new": 40, "meal": 75},
 	},
@@ -529,13 +529,25 @@ def assign(employee, key, company, base, structure=None, values=None, allowances
 
 
 class EmployeeMatcher:
-	"""Sheet row → Employee: by code where the sheet has one, else by name.
+	"""Sheet row → Employee: by name, with the sheet's code as a cross-check.
+
+	The code alone is not enough. The NGN sheet's codes drift one place from
+	the ERP IDs from about NGN0035 (sheet NGN0045 "Parmeshwor Shah" is
+	NGN-EMP-00044; NGN-EMP-00045 is Bal Krishna Neupane), and trusting the code
+	put fifteen people on a neighbour's pay in October 2026. So a code is taken
+	only when the employee it points at has the row's name; otherwise the name
+	decides.
 
 	Names on the grade-scale sheets carry titles and stray spacing ("Mr Jiwan
 	Chhatkuli", "Rupak Chaudhary "), so names are compared stripped of titles
 	and anything but letters, and a near spelling is accepted only when it is
 	the single close candidate.
 	"""
+
+	#: How alike two normalised names must be to count as the same person
+	#: ("Bishnu Prasad Upadhayay" / "Upadhyay" pass, "Ratna" / "Raju Kumar
+	#: Shrestha" do not).
+	SAME_NAME_RATIO = 0.88
 
 	TITLES = re.compile(r"^(mr|mrs|ms|miss|dr)\.?\s+", re.I)
 
@@ -552,22 +564,27 @@ class EmployeeMatcher:
 		return re.sub(r"[^a-z]", "", cls.TITLES.sub("", (name or "").strip()).lower())
 
 	def find(self, row):
+		key = self.norm(row["name"])
 		code = row.get("code")
-		if code:
-			digits = "".join(ch for ch in str(code) if ch.isdigit())
+		digits = "".join(ch for ch in str(code or "") if ch.isdigit())
+		if digits:
 			candidate = f"{self.key}-EMP-{int(digits):05d}"
-			if frappe.db.exists("Employee", candidate):
+			name = frappe.db.get_value("Employee", candidate, "employee_name")
+			if name and self.same_name(key, self.norm(name)):
 				return candidate
 
-		key = self.norm(row["name"])
 		exact = self.by_name.get(key)
 		if exact and len(exact) == 1:
 			return exact[0]
 
-		close = difflib.get_close_matches(key, list(self.by_name), n=2, cutoff=0.88)
+		close = difflib.get_close_matches(key, list(self.by_name), n=2, cutoff=self.SAME_NAME_RATIO)
 		if len(close) == 1 and len(self.by_name[close[0]]) == 1:
 			return self.by_name[close[0]][0]
 		return None
+
+	@classmethod
+	def same_name(cls, a, b):
+		return a == b or difflib.SequenceMatcher(None, a, b).ratio() >= cls.SAME_NAME_RATIO
 
 
 #: Each sheet's columns for the month's regular salary and the SSF deduction.
@@ -595,13 +612,16 @@ def check_against_sheet(key, path, posting_date=None):
 	total_col, ssf_col = SHEET_TOTALS[key]
 	sheet = openpyxl.load_workbook(path, data_only=True)[profile["sheet"]]
 	matcher = EmployeeMatcher(key, company)
-	matched, differ = 0, []
+	matched, differ, not_found = 0, [], []
 	frappe.db.savepoint("check_against_sheet")
 	try:
 		with patch.object(frappe.db, "commit"):
 			for row in _sheet_rows(sheet, profile):
 				employee = matcher.find(row)
-				if not employee or not frappe.db.exists(
+				if not employee:
+					not_found.append(row["name"])
+					continue
+				if not frappe.db.exists(
 					"Salary Structure Assignment", {"employee": employee, "docstatus": 1}
 				):
 					continue
@@ -625,10 +645,12 @@ def check_against_sheet(key, path, posting_date=None):
 					differ.append((row["name"], employee, round(want, 2), round(gross, 2), slip.payment_days, slip.total_working_days))
 	finally:
 		frappe.db.rollback(save_point="check_against_sheet")
-	print(f"{key}: {matched} match the sheet, {len(differ)} differ")
+	print(f"{key}: {matched} match the sheet, {len(differ)} differ, {len(not_found)} not found as employees")
 	for name, employee, want, got, days, total in differ:
 		print(f"  {name} ({employee}): sheet {want}, slip {got}, days {days}/{total}")
-	return {"matched": matched, "differ": differ}
+	for name in not_found:
+		print(f"  not found: {name}")
+	return {"matched": matched, "differ": differ, "not_found": not_found}
 
 
 # ─────────────────────────────────────────────────────────────── accounts ──

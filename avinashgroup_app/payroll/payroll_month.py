@@ -28,7 +28,7 @@ and before the BS period guard. Drafts only; a submitted entry is history.
 import frappe
 from frappe import _
 
-from frappe.utils import today
+from frappe.utils import add_days, today
 
 from avinashgroup_app.hr.bs_calendar import (
 	MONTH_OPTIONS,
@@ -72,6 +72,76 @@ def fill_from_bs_month(doc):
 	# Who is paid depends on the month (joiners, leavers): refill on a new month.
 	if not doc.employees or (not doc.is_new() and doc.has_value_changed("start_date")):
 		doc.fill_employee_details()
+
+
+def warn_missing_attendance(doc):
+	"""Tell HR, before the slips are made, who has no attendance in the month.
+
+	Payroll Settings count an unmarked day as Present, so a month with no
+	attendance pays everyone in full and posts no tea, meal, overtime or late
+	fine, and nothing said so: both Bhadra 2083 payrolls ran that way. A
+	warning, not a refusal: until the devices are live there is no attendance
+	anywhere, and HR may knowingly pay a full month.
+
+	Runs from AvinashPayrollEntry.validate and before_submit, on drafts.
+	"""
+	if doc.docstatus != 0 or not (doc.start_date and doc.end_date and doc.employees):
+		return
+	if frappe.db.get_single_value("Payroll Settings", "payroll_based_on") != "Attendance":
+		return
+	employees = [e.employee for e in doc.employees]
+	with_attendance = set(
+		frappe.get_all(
+			"Attendance",
+			filters={
+				"employee": ("in", employees),
+				"docstatus": 1,
+				"attendance_date": ("between", [doc.start_date, doc.end_date]),
+			},
+			pluck="employee",
+			distinct=True,
+		)
+	)
+	missing = len(set(employees) - with_attendance)
+	if not missing:
+		return
+	unmarked = frappe.db.get_single_value("Payroll Settings", "consider_unmarked_attendance_as") or "Absent"
+	frappe.msgprint(
+		_(
+			"{0} of {1} employees have no submitted attendance between {2} and {3}. "
+			"Their unmarked days count as {4}, and they get no tea, meal, overtime or late fine. "
+			"Mark the attendance first unless this is intended."
+		).format(missing, len(employees), doc.start_date, doc.end_date, frappe.bold(unmarked)),
+		title=_("Attendance missing"),
+		indicator="orange",
+	)
+
+
+@frappe.whitelist()
+def default_month(company=None) -> dict:
+	"""The month a new Payroll Entry starts on: the one after the company's
+	last payroll, never later than the month now running; with no payroll yet,
+	the last finished month.
+
+	The last finished month alone (bs_calendar.get_default_month, right for
+	reports) opened a new entry on Bhadra after Bhadra had been paid.
+	"""
+	running = month_of_date(company, today())
+	month = last_closed_month(company)
+	if company:
+		last_end = frappe.db.get_value(
+			"Payroll Entry", {"company": company, "docstatus": ("<", 2)}, "end_date", order_by="end_date desc"
+		)
+		if last_end:
+			month = month_of_date(company, add_days(last_end, 1))
+			if month.start_date > running.start_date:
+				month = running
+	return {
+		"fiscal_year": fiscal_year_of(month.start_date),
+		"bs_year": month.bs_year,
+		"bs_month": month_option(month.bs_month),
+		"label": month.label,
+	}
 
 
 @frappe.whitelist()

@@ -80,7 +80,7 @@ def execute(filters=None):
 	quantities = get_quantities(names)
 	present = get_present_days(slips)
 	initial_basic = get_initial_basic(slips)
-	prev_net = get_prev_net(filters.company, period, [s.employee for s in slips], docstatus)
+	prev_net = get_prev_net(filters.company, period, [s.employee for s in slips])
 
 	rows = []
 	for s in slips:
@@ -213,7 +213,9 @@ def get_initial_basic(slips):
 	return out
 
 
-def get_prev_net(company, period, employees, docstatus):
+def get_prev_net(company, period, employees):
+	"""Last month's net pay as paid: submitted slips, whichever slips this
+	month's sheet shows (a draft month compared with draft last month showed 0)."""
 	prev = month_of_date(company, add_days(period.start_date, -1))
 	return {
 		r.employee: flt(r.net_pay)
@@ -221,7 +223,7 @@ def get_prev_net(company, period, employees, docstatus):
 			"Salary Slip",
 			filters={
 				"company": company,
-				"docstatus": docstatus,
+				"docstatus": 1,
 				"employee": ("in", employees),
 				"start_date": (">=", prev.start_date),
 				"end_date": ("<=", prev.end_date),
@@ -420,7 +422,7 @@ def journal_check(rows, slips, net):
 		as_dict=True,
 	)
 	company = slips[0].company
-	account_section = section_of_accounts(company)
+	account_section, clashes = section_of_accounts(company)
 	journal = {}
 	for l in lines:
 		if l.root_type == "Expense":
@@ -443,9 +445,18 @@ def journal_check(rows, slips, net):
 	if abs(journal_net - net) >= 0.5:
 		differences.append((_("Net payable"), journal_net, net))
 	names = ", ".join(sorted(vouchers))
+	setup = [
+		{
+			"label": _("{0}: {1} column").format(component, section),
+			"value": _("holds the {0} account {1}").format(first, account.split(" - ")[0]),
+			"datatype": "Data",
+			"indicator": "Red",
+		}
+		for component, account, first, section in clashes
+	]
 	if not differences:
-		return [{"label": _("Matches Journal"), "value": names, "datatype": "Data", "indicator": "Green"}]
-	return [
+		return [{"label": _("Matches Journal"), "value": names, "datatype": "Data", "indicator": "Green"}] + setup
+	return setup + [
 		{
 			"label": _("{0}: journal {1}").format(what, fmt_money(in_journal)),
 			"value": _("{0} vs sheet").format(fmt_money(in_journal - in_sheet)),
@@ -457,15 +468,27 @@ def journal_check(rows, slips, net):
 
 
 def section_of_accounts(company):
-	"""{expense account: section label} from the salary components' account rows
-	(the row's own account is O/O, then the S/D and F/P columns)."""
-	out = {}
-	for row in frappe.get_all(
+	"""({expense account: section label}, [accounts set for two sections]).
+
+	Each column of a component's account row names a section: the row's own
+	account O/O, then S/D and F/P. Read column by column, O/O first, so the
+	answer never depends on which row comes first; an account a row puts under
+	another section too is a set-up mistake and is returned, not guessed (NGN
+	Education Allowance's S/D column held the O/O ledger, October 2026).
+	"""
+	rows = frappe.get_all(
 		"Salary Component Account",
 		filters={"company": company, "parenttype": "Salary Component"},
-		fields=["account", "custom_account_marketing", "custom_account_plant"],
-	):
-		for fieldname, section in (("custom_account_plant", "F/P"), ("custom_account_marketing", "S/D"), ("account", "O/O")):
-			if row.get(fieldname):
-				out.setdefault(row.get(fieldname), section)
-	return out
+		fields=["parent", "account", "custom_account_marketing", "custom_account_plant"],
+	)
+	out, clashes = {}, []
+	for fieldname, section in (("account", "O/O"), ("custom_account_marketing", "S/D"), ("custom_account_plant", "F/P")):
+		for row in rows:
+			account = row.get(fieldname)
+			if not account:
+				continue
+			if account in out and out[account] != section:
+				clashes.append((row.parent, account, out[account], section))
+				continue
+			out[account] = section
+	return out, clashes
