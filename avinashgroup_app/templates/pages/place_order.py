@@ -2,7 +2,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, getdate, nowdate, flt
+from frappe.utils import add_days, cint, nowdate, flt
 
 from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
 
@@ -121,8 +121,6 @@ def get_context(context):
 	)
 
 	context.number_format = frappe.db.get_default("number_format") or "#,###.##"
-	context.today = nowdate()
-	context.default_delivery_date = add_days(nowdate(), _delivery_days())
 
 	# The item is fixed on the form (no item picker) but resolved per company.
 	default_item = _get_lp_gas_item(company)
@@ -511,6 +509,9 @@ def _set_order_miti(so):
 		)
 
 
+# Matches the maxlength on the page's Remarks box.
+REMARKS_MAX_LENGTH = 500
+
 # Used until the Selling Settings field exists (patch not yet run on a site).
 DEFAULT_DELIVERY_DAYS = 7
 
@@ -530,7 +531,7 @@ def _delivery_days():
 
 
 @frappe.whitelist()
-def create_sales_order(customer, company, transaction_date, delivery_date, items):
+def create_sales_order(customer, company, items, remarks=None, transaction_date=None, delivery_date=None):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can place orders."), frappe.PermissionError)
 
@@ -558,15 +559,12 @@ def create_sales_order(customer, company, transaction_date, delivery_date, items
 		or frappe.db.get_single_value("Global Defaults", "default_currency")
 	)
 
-	# The order date is always today. The page shows it read-only; the browser's
-	# value is ignored so an order can't be back- or forward-dated by editing the
-	# request. The argument stays for callers that still send it.
+	# Both dates are set here, never by the browser: the page no longer shows
+	# them. The order is dated today, and delivery is today + Selling Settings >
+	# Default Delivery Days. The date arguments stay only so an older cached
+	# page that still sends them doesn't fail; their values are ignored.
 	transaction_date = nowdate()
-
-	if not delivery_date:
-		frappe.throw(_("Expected Delivery Date is required."))
-	if getdate(delivery_date) < getdate(transaction_date):
-		frappe.throw(_("Expected Delivery Date cannot be before the Transaction Date."))
+	delivery_date = add_days(transaction_date, _delivery_days())
 
 	if isinstance(items, str):
 		items = json.loads(items)
@@ -613,6 +611,8 @@ def create_sales_order(customer, company, transaction_date, delivery_date, items
 	so.company = company
 	so.transaction_date = transaction_date
 	so.delivery_date = delivery_date
+	if remarks and remarks.strip():
+		so.custom_remarks = remarks.strip()[:REMARKS_MAX_LENGTH]
 	_set_order_miti(so)
 	so.selling_price_list = selling_price_list
 	so.currency = currency
@@ -641,4 +641,4 @@ def create_sales_order(customer, company, transaction_date, delivery_date, items
 	so.insert()
 	so.submit()
 
-	return {"status": "success", "order_id": so.name}
+	return {"status": "success", "order_id": so.name, "delivery_date": so.delivery_date}

@@ -316,6 +316,8 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 }
 .ag-bar.is-alarm .ag-bar-value { color: var(--ag-red-600); }
 .ag-bar .ag-pill { margin-left: auto; align-self: center; }
+/* In the account card the pill sits on its own line under the name and customer. */
+.ag-who .ag-pill:not([hidden]) { display: inline-block; margin-top: 7px; }
 
 /* ── Recent — a seated surface, no shadow ───────────────────────────────── */
 .ag-panel {
@@ -501,8 +503,8 @@ body[data-path="me"] .page-breadcrumbs { display: none; }
 			<div class="ag-who">
 				<span class="ag-name">{{ current_user.full_name | e }}</span>
 				<span class="ag-account" id="ag-account">{{ current_user.name | e }}</span>
+				<span class="ag-pill" id="ag-pill" hidden></span>
 			</div>
-			<span class="ag-pill" id="ag-pill" hidden></span>
 		</div>
 
 		<div class="ag-stats" id="ag-stats" hidden>

@@ -52,6 +52,8 @@ app_include_js = [
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
+    # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
+    "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.1",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -646,6 +648,9 @@ fixtures = [
                     # Days added to today for Expected Delivery on the portal's
                     # Place Order page. Read by place_order.get_context.
                     "Selling Settings-custom_order_delivery_days",
+                    # Customer's note from the portal's Place Order page.
+                    # Written by place_order.create_sales_order.
+                    "Sales Order-custom_remarks",
                     # Customer's own Mobile Number, independent of
                     # mobile_no (which only fills in via a Primary Contact).
                     # Read by the Nepal Gas Invoice Overlay print format.

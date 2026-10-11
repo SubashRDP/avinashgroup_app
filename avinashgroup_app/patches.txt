@@ -108,6 +108,7 @@ avinashgroup_app.patches.remove_merged_attendance_summary_report
 
 avinashgroup_app.patches.setup_pay_input_fields
 avinashgroup_app.patches.order_delivery_days_setting
+avinashgroup_app.patches.sales_order_remarks_field
 avinashgroup_app.patches.setup_hr_bs_dates
 avinashgroup_app.patches.setup_meal_rule_fields
 avinashgroup_app.patches.late_half_day_as_half_absent

@@ -233,7 +233,15 @@ body { background: var(--po-paper); }
 	box-shadow: 0 0 0 3px rgba(67, 92, 168, .16);
 }
 .po .form-control[readonly] { color: var(--po-muted); cursor: default; }
-#po-date .form-control, #po-delivery-date .form-control { font-variant-numeric: tabular-nums; }
+/* Remarks takes the two columns to the right of Company and Customer. */
+.po-field--remarks { grid-column: span 2; }
+.po .po-remarks {
+	display: block;
+	min-height: 46px;
+	resize: vertical;
+	line-height: 1.4;
+	text-overflow: clip;
+}
 
 /* Autocomplete menus (built in JS, styled here) */
 .po-dd {
@@ -365,6 +373,15 @@ body { background: var(--po-paper); }
 .po .po-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .po .po-qty { -moz-appearance: textfield; }
 .po .po-rate { background: transparent; border-color: var(--po-line-soft); }
+
+/* Qty left at 0 when Place Order is pressed. */
+.po .po-qty.po-invalid,
+.po .po-qty.po-invalid:focus {
+	background: var(--po-red-050);
+	border-color: var(--po-red-600);
+	box-shadow: 0 0 0 3px rgba(214, 32, 42, .14);
+	color: var(--po-red-700);
+}
 
 .po .po-uom {
 	appearance: none;
@@ -550,6 +567,49 @@ body { background: var(--po-paper); }
 	color: var(--po-muted);
 }
 .po-inwords:empty { display: none; }
+
+/* Order-blocking notice shown above the Place Order button. */
+.po-alert {
+	display: flex;
+	gap: 11px;
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	background: var(--po-red-050);
+	border: 1px solid rgba(214, 32, 42, .22);
+	border-left: 3px solid var(--po-red-600);
+	border-radius: 10px;
+	animation: po-rise .28s cubic-bezier(.2, .7, .3, 1) both;
+}
+.po-alert[hidden] { display: none; }
+.po-alert-icon {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 20px; height: 20px;
+	margin-top: 1px;
+	border-radius: 50%;
+	background: var(--po-red-600);
+	color: #fff;
+	font-family: var(--po-sans);
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1;
+}
+.po-alert-title {
+	margin: 0 0 2px;
+	font-family: var(--po-cond);
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: .1em;
+	text-transform: uppercase;
+	color: var(--po-red-700);
+}
+.po-alert-text {
+	margin: 0;
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--po-navy-900);
+}
 .po-foot-note {
 	margin: 12px 0 0;
 	font-size: 12px;
@@ -767,8 +827,6 @@ window.place_order_ctx = {
 	price_list: {{ (price_list or "") | tojson }},
 	currency: {{ (currency or "") | tojson }},
 	number_format: {{ (number_format or "#,###.##") | tojson }},
-	today: {{ (today or "") | tojson }},
-	default_delivery_date: {{ (default_delivery_date or "") | tojson }},
 	default_item_code: {{ (default_item_code or "") | tojson }},
 	default_item_name: {{ (default_item_name or "LP Gas") | tojson }},
 	sales_uom: {{ (default_sales_uom or "") | tojson }},
@@ -829,40 +887,6 @@ class PlaceOrder {
 		this.brand();
 		this.apply_item_availability();
 		this.preselect_only_customer();
-		this.make_date_controls();
-	}
-
-	// ── Order / delivery dates: Frappe Date controls ───────────────────
-	// Same calendar as the desk. Website pages don't carry the form controls,
-	// so they are fetched first; until they arrive the dates read as the
-	// server's defaults (today / default_delivery_date).
-	make_date_controls() {
-		var me = this;
-		this.date_ctl = {};
-		frappe.require("controls.bundle.js", function () {
-			// Order Date is read-only: an order is always placed today (the
-			// server ignores the browser's value and uses today regardless).
-			[
-				["order", "po-date", me.ctx.today, 1],
-				["delivery", "po-delivery-date", me.ctx.default_delivery_date, 0]
-			].forEach(function ([key, id, value, read_only]) {
-				const ctl = frappe.ui.form.make_control({
-					parent: $("#" + id),
-					df: { fieldtype: "Date", fieldname: id.replace(/-/g, "_"), reqd: 1, read_only: read_only },
-					only_input: true,
-					render_input: true
-				});
-				ctl.set_value(value || "");
-				me.date_ctl[key] = ctl;
-			});
-		});
-	}
-
-	// Always YYYY-MM-DD, whatever display format the site uses.
-	get_date(key) {
-		const ctl = this.date_ctl && this.date_ctl[key];
-		if (ctl) return ctl.get_value() || "";
-		return (key === "order" ? this.ctx.today : this.ctx.default_delivery_date) || "";
 	}
 
 	// ── The company decides the item ──────────────────────────────────
@@ -1194,7 +1218,7 @@ class PlaceOrder {
 					<input type="text" class="form-control po-item-code" data-idx="${idx}"
 						value="${defaultItemName}" readonly tabindex="-1" title="${defaultItemName}">
 				</td>
-				<td class="po-num" data-label="Qty"><input type="number" class="form-control po-qty" data-idx="${idx}" value="1" min="0" step="1" placeholder="0"></td>
+				<td class="po-num" data-label="Qty"><input type="number" class="form-control po-qty" data-idx="${idx}" value="0" min="0" step="1" placeholder="0"></td>
 				<td data-label="Size">
 					<select class="form-control po-uom" data-idx="${idx}" aria-label="Cylinder size">${this.uom_options_html(this.default_size())}</select>
 				</td>
@@ -1265,6 +1289,9 @@ class PlaceOrder {
 		$(`input.po-qty[data-idx=${idx}]`).on("change", function () {
 			me.update_row_amount(idx);
 			me.recalculate_totals();
+		});
+		$(`input.po-qty[data-idx=${idx}]`).on("input", function () {
+			me.clear_qty_alert_if_resolved();
 		});
 
 		// VAT Apply On change
@@ -1392,6 +1419,55 @@ class PlaceOrder {
 		this.ctx.items = this.ctx.items.filter(i => i._idx !== idx);
 		this.renumber_rows();
 		this.recalculate_totals();
+		this.clear_qty_alert_if_resolved();
+	}
+
+	// Marks every line whose Qty is 0/blank and shows the notice above the
+	// Place Order button. Returns true when all lines have a quantity.
+	check_quantities() {
+		const missing = [];
+		$("#po-items-body tr").each(function (i) {
+			const $qty = $(this).find("input.po-qty");
+			const empty = !(flt($qty.val()) > 0);
+			$qty.toggleClass("po-invalid", empty).attr("aria-invalid", empty ? "true" : null);
+			if (empty) missing.push(i + 1);
+		});
+		if (!missing.length) {
+			this.hide_alert();
+			return true;
+		}
+
+		const lines = missing.length === 1
+			? `line ${missing[0]}`
+			: `lines ${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+		this.show_alert(
+			"Quantity required",
+			`Enter the number of cylinders for ${lines} to place this order.`
+		);
+
+		const $first = $("#po-items-body input.po-qty.po-invalid").first();
+		$first[0].scrollIntoView({ behavior: "smooth", block: "center" });
+		$first.trigger("focus");
+		return false;
+	}
+
+	// Called as the client types: drops the red mark from a filled-in Qty and
+	// hides the notice once no line is left without a quantity.
+	clear_qty_alert_if_resolved() {
+		$("#po-items-body input.po-qty.po-invalid").each(function () {
+			if (flt($(this).val()) > 0) $(this).removeClass("po-invalid").removeAttr("aria-invalid");
+		});
+		if (!$("#po-items-body input.po-qty.po-invalid").length) this.hide_alert();
+	}
+
+	show_alert(title, text) {
+		$("#po-alert-title").text(title);
+		$("#po-alert-text").text(text);
+		$("#po-alert").prop("hidden", false);
+	}
+
+	hide_alert() {
+		$("#po-alert").prop("hidden", true);
 	}
 
 	renumber_rows() {
@@ -1492,17 +1568,15 @@ class PlaceOrder {
 			return;
 		}
 
-		const delivery_date = me.get_date("delivery");
-		if (!delivery_date) {
-			frappe.msgprint({ title: "Missing Date", message: "Please set the Expected Delivery Date.", indicator: "red" });
-			return;
-		}
-
-		const valid_items = me.ctx.items.filter(i => i.item_code && i.qty > 0);
+		const valid_items = me.ctx.items.filter(i => i.item_code);
 		if (!valid_items.length) {
 			frappe.msgprint({ title: "Missing Items", message: "Please add at least one item with quantity.", indicator: "red" });
 			return;
 		}
+
+		// Every line must carry a quantity — a 0 or blank Qty blocks the order
+		// instead of the line being silently dropped.
+		if (!me.check_quantities()) return;
 
 		for (let i = 0; i < valid_items.length; i++) {
 			if (!valid_items[i].uom) {
@@ -1541,14 +1615,13 @@ class PlaceOrder {
 			args: {
 				customer: customer,
 				company: company,
-				transaction_date: me.get_date("order") || me.ctx.today,
-				delivery_date: delivery_date,
+				remarks: $("#po-remarks").val().trim(),
 				items: JSON.stringify(payload)
 			},
 			callback: function (r) {
 				frappe.unfreeze();
 				if (r.message && r.message.status === "success") {
-					me.show_done(r.message.order_id, delivery_date);
+					me.show_done(r.message.order_id, r.message.delivery_date);
 				} else {
 					me.submitting = false;
 					$("#po-submit").prop("disabled", false).text("Place Order");
@@ -1622,14 +1695,10 @@ class PlaceOrder {
 						{% endif %}
 					</div>
 
-					<div class="po-field">
-						<label class="po-label" for="po-date">Order Date <i>*</i></label>
-						<div id="po-date"></div>
-					</div>
-
-					<div class="po-field">
-						<label class="po-label" for="po-delivery-date">Expected Delivery <i>*</i></label>
-						<div id="po-delivery-date"></div>
+					<div class="po-field po-field--remarks">
+						<label class="po-label" for="po-remarks">Remarks</label>
+						<textarea class="form-control po-remarks" id="po-remarks" rows="1" maxlength="500"
+							placeholder="Any note for the depot (optional)"></textarea>
 					</div>
 
 					<input type="hidden" id="po-currency" value="{{ currency }}">
@@ -1695,6 +1764,14 @@ class PlaceOrder {
 				</div>
 
 				<p class="po-inwords" id="po-in-words"></p>
+
+				<div class="po-alert" id="po-alert" role="alert" hidden>
+					<span class="po-alert-icon" aria-hidden="true">!</span>
+					<div>
+						<p class="po-alert-title" id="po-alert-title"></p>
+						<p class="po-alert-text" id="po-alert-text"></p>
+					</div>
+				</div>
 
 				<button type="button" class="po-btn po-btn--primary" id="po-submit">Place Order</button>
 				<p class="po-foot-note">Your order goes straight to the depot for dispatch.</p>

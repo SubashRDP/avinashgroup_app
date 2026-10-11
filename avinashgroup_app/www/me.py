@@ -39,6 +39,7 @@ from frappe import _
 from frappe.utils import fmt_money
 from frappe.website.utils import get_portal_sidebar_items
 
+from avinashgroup_app.custom_code.Override.overrides import SalesOrder
 from avinashgroup_app.templates.pages.place_order import get_credit_snapshot
 from avinashgroup_app.utils.voucher_numbers import resolve as resolve_voucher_numbers
 
@@ -179,7 +180,7 @@ def _recent_activity(customer_names, labels, exposure):
 		"""
 		SELECT * FROM (
 			SELECT 'Sales Invoice' AS doctype, name, customer, posting_date AS date,
-			       grand_total, outstanding_amount, status, currency
+			       grand_total, outstanding_amount, status, NULL AS billing_status, currency
 			FROM `tabSales Invoice`
 			WHERE docstatus = 1 AND customer IN %(customers)s
 			ORDER BY posting_date DESC, name DESC
@@ -188,7 +189,7 @@ def _recent_activity(customer_names, labels, exposure):
 		UNION ALL
 		SELECT * FROM (
 			SELECT 'Sales Order' AS doctype, name, customer, transaction_date AS date,
-			       grand_total, NULL AS outstanding_amount, status, currency
+			       grand_total, NULL AS outstanding_amount, status, billing_status, currency
 			FROM `tabSales Order`
 			WHERE docstatus = 1 AND customer IN %(customers)s
 			ORDER BY transaction_date DESC, name DESC
@@ -214,7 +215,14 @@ def _recent_activity(customer_names, labels, exposure):
 		due = float(r.outstanding_amount or 0) if is_invoice else 0.0
 
 		if not is_invoice:
-			state, tone = _(r.status or ""), "plain"
+			# Same label as the /orders list (SalesOrder.set_indicator): billing
+			# progress, except On Hold / Closed, which keep their own status.
+			pill = SalesOrder.PORTAL_BILLING_STATUS.get(r.billing_status)
+			if pill and r.status not in ("On Hold", "Closed"):
+				state = _(pill[0])
+			else:
+				state = _(r.status or "")
+			tone = "plain"
 		elif due <= 0:
 			state, tone = _("Paid"), "ok"
 		elif exposure.get(r.customer) is None:
