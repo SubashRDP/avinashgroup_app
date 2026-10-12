@@ -106,10 +106,22 @@ Leave left at the end of the fiscal year is to be **encashed**, not carried forw
 
 ## 8.6 Tax: insurance, CIT and manual tax
 
-- **Insurance premiums and CIT paid outside payroll:** record them on **Employee Tax Exemption Declaration** for the person and the year. The tax on the following slips is reduced.
+The limits below are the Finance Act 2083 figures for FY 2083/84, from the IRD's "Tax rate for natural persons" sheet. They were entered on avinas1 on 12 October 2026. They are records, not code: when a Finance Act changes a limit, edit the record.
+
+| Exemption Category | Sub Category | Limit a year |
+|---|---|---|
+| **Insurance Premium** | Life Insurance | premium or 40,000, whichever is lower |
+| | Health Insurance (Nepali insurer) | premium or 20,000, lower |
+| | Private Building Insurance (own building) | premium or 10,000, lower |
+| **Retirement Contribution** | CIT paid directly · Provident Fund paid directly | SSF + CIT + PF together: 5,00,000 or ⅓ of assessable income, lower |
+
+The Insurance Premium category's own limit is 70,000, the three limits added together, so it never cuts anything. HRMS only needs it to be at least each sub-limit.
+
+- **Insurance premiums, and CIT or PF paid outside payroll:** record them on **Employee Tax Exemption Declaration** for the person and the year (Payroll Period `83/84 - <company>`), one row per sub category with the premium actually paid. The system applies each limit itself, so a 55,000 life premium counts as 40,000. The tax on the slips that follow is reduced. In Ashadh, the **Proof Submission** (with the receipts) replaces the declaration. If a receipt is lower or missing, the tax saved earlier is taken back in that month.
 - **CIT deducted through payroll:** a **CIT** deduction component (create a recurring Additional Salary for the person).
-- **Women's rebate:** a percentage on the company's **Income Tax Slab** (field **Women's Rebate (%)**). On 9 October 2026 it is 0 on every slab.
-- **Retirement contribution cap:** SSF + CIT + PF are tax-free only up to a limit. The system adds back anything over the cap; the slip shows it in **Retirement Contribution Over Cap (year)**.
+- **Retirement contribution cap:** SSF + CIT + PF are tax-free only up to the limit above. The system adds back anything over it, and the slip shows that amount in **Retirement Contribution Over Cap (year)**. On SSF alone, this happens only above about 1,34,000 Basic a month. It is reached sooner when someone also pays CIT.
+- **Women's rebate:** a percentage on the company's **Income Tax Slab** (field **Women's Rebate (%)**). On 12 October 2026 it is 0 on every slab. The law gives 10%, but only to a woman whose **only** income is salary, and the system cannot yet tell who has other income. Do not fill it in until that is built.
+- **Not handled by payroll:** donations (the person claims them on their own tax return), children's tuition fees (25% or 25,000), remote-area deduction, disability, and the medical tax credit.
 - **Changing one person's tax for one month:** on the draft slip, tick **Override Income Tax** and type **Income Tax (manual)** (Chapter 5).
 
 ## 8.7 The new fiscal year (every year, before 1 Shrawan)
