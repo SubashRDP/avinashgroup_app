@@ -3,7 +3,10 @@
 Stock ERPNext's picker lists only the order ID and the customer link, so the
 billing clerk cannot tell two open orders of the same customer apart without
 opening each one. This query feeds public/js/sales_invoice_so_picker.js, which
-shows Miti, Sales Order ID, Customer Name, Qty and Amount instead.
+shows Sales Order ID, Customer Name, Qty, Order Miti and Remarks instead.
+
+Remarks is custom_remarks (the customer's note from the portal's Place Order
+page, patches/sales_order_remarks_field.py); read only where that column exists.
 
 Sales Order has no Miti column on every site (custom_miti exists only where
 place_order._set_order_miti found it), so the BS date is worked out here from
@@ -25,8 +28,8 @@ from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
 def search_open_sales_orders(doctype, txt, searchfield, start, page_len, filters, as_dict=False, **kwargs):
 	"""Called by frappe.desk.search.search_widget (MultiSelectDialog's query).
 
-	Returns dicts with name, miti, customer_name, total_qty, grand_total and
-	currency. get_list keeps the user's Sales Order read permissions in force.
+	Returns dicts with name, customer_name, total_qty, miti and remarks.
+	get_list keeps the user's Sales Order read permissions in force.
 	"""
 	filters = frappe.parse_json(filters) or {}
 	or_filters = None
@@ -34,11 +37,16 @@ def search_open_sales_orders(doctype, txt, searchfield, start, page_len, filters
 		like = ["like", f"%{txt}%"]
 		or_filters = {"name": like, "customer_name": like}
 
+	fields = ["name", "transaction_date", "customer_name", "total_qty"]
+	has_remarks = frappe.db.has_column("Sales Order", "custom_remarks")
+	if has_remarks:
+		fields.append("custom_remarks")
+
 	rows = frappe.get_list(
 		"Sales Order",
 		filters=filters,
 		or_filters=or_filters,
-		fields=["name", "transaction_date", "customer_name", "total_qty", "grand_total", "currency"],
+		fields=fields,
 		order_by="transaction_date desc, name desc",
 		start=start,
 		page_length=page_len,
@@ -46,5 +54,5 @@ def search_open_sales_orders(doctype, txt, searchfield, start, page_len, filters
 	for r in rows:
 		r.miti = bs_date_str(r.transaction_date) if r.transaction_date else ""
 		r.total_qty = flt(r.total_qty)
-		r.grand_total = flt(r.grand_total)
+		r.remarks = (r.get("custom_remarks") or "") if has_remarks else ""
 	return rows

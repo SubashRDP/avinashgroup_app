@@ -53,7 +53,7 @@ app_include_js = [
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
     # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
-    "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.1",
+    "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.3",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -102,6 +102,9 @@ doctype_js = {
     "Purchase Order": ["public/js/purchase_order.js", "public/js/buying_guide.js"],
     "Supplier Quotation": ["public/js/back_to_material_request.js", "public/js/buying_guide.js"],
     "Purchase Invoice": "public/js/pi.js",
+    # Hold / Close / Cancel ask for a reason and save it in the "Reason" field.
+    # See custom_code/sales_order_status_reason.py.
+    "Sales Order": "public/js/sales_order_status_reason.js",
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
     "Payroll Entry": "public/js/payroll_entry.js",
@@ -651,6 +654,9 @@ fixtures = [
                     # Customer's note from the portal's Place Order page.
                     # Written by place_order.create_sales_order.
                     "Sales Order-custom_remarks",
+                    # Last Hold / Close / Cancel reason ("Hold: ...").
+                    # Written by sales_order_status_reason.record_status_reason.
+                    "Sales Order-custom_hold_reason",
                     # Customer's own Mobile Number, independent of
                     # mobile_no (which only fills in via a Primary Contact).
                     # Read by the Nepal Gas Invoice Overlay print format.

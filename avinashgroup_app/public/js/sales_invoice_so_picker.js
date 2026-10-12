@@ -3,7 +3,7 @@
 // Stock ERPNext lists only the order ID and customer link, so open orders of
 // one customer look alike. This replaces the button's handler (frm.cscript.
 // sales_order_btn, which ERPNext's refresh calls) with the same picker plus
-// these columns: Miti · Sales Order ID · Customer Name · Qty · Amount.
+// these columns: Sales Order ID · Customer Name · Qty · Order Miti · Remarks.
 //
 // Rows come from avinashgroup_app...sales_order_picker.search_open_sales_orders,
 // which computes Miti and applies the exact filters ERPNext sends. Selecting,
@@ -15,13 +15,13 @@
 	const QUERY = "avinashgroup_app.custom_code.SalesInvoice.sales_order_picker.search_open_sales_orders";
 
 	// fieldname → [label, right-aligned?, column width (flex-grow), formatter]
-	// The ID gets the widest share so "NGK-SO-83/84-00001" is never cut off.
+	// The ID gets a wide share so "NGK-SO-83/84-00001" is never cut off.
 	const COLUMNS = [
-		["miti", __("Sales Order Miti"), false, 1, (v) => v || ""],
-		["name", __("Sales Order ID"), false, 1.5, null],
-		["customer_name", __("Customer Name"), false, 1.5, (v) => v || ""],
-		["total_qty", __("Qty"), true, 0.6, (v) => format_number(v || 0, null, 2)],
-		["grand_total", __("Amount"), true, 1, (v, r) => format_currency(v || 0, r.currency)],
+		["name", __("Sales Order ID"), false, 1.7, null],
+		["customer_name", __("Customer Name"), false, 1.4, (v) => v || ""],
+		["total_qty", __("Qty"), true, 0.5, (v) => format_number(v || 0, null, 2)],
+		["miti", __("Order Miti"), false, 0.9, (v) => v || ""],
+		["remarks", __("Remarks"), false, 1.5, (v) => v || ""],
 	];
 
 	// Same row markup as MultiSelectDialog.make_list_row, with our own labels
