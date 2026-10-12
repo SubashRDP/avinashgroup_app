@@ -117,7 +117,9 @@ The Leave Allocation is still a **draft**. Open it and **Submit** it.
 | **Allowance … is listed twice** | Remove the duplicate row on the assignment |
 | **Row …: … is not an allowance** | Only components ticked **Is Allowance** can go in the Allowances table |
 | **Row …: … is a … allowance and is paid when entered** | Load/Unload, Dashain Bonus, Leave Encashment cannot be on the assignment. Use a Payroll Adjustment |
-| **Row …: type …'s monthly amount** | A Fixed per Person allowance (Dearness, Other, Fixed…) needs this person's Amount. Type it, or untick Active |
+| **Allowances row …: type …'s rate for this person, or remove the row…** | Neither the row nor the salary structure has a rate for it (Dearness, Other, Fixed…). Type this person's Rate, or remove the row if they do not get it |
+| **… is an allowance. List its rate under Allowance Rates…** | An allowance was put in a structure's Earnings. Remove it there; put its usual rate in Allowance Rates and give it to people on their assignments |
+| **Use a Salary Revision** (on a structure) | A submitted structure's existing rate was changed. Make a Salary Revision with **Raise Rate** instead (Chapter 8) |
 
 ## 10.4 Salary Revision and Payroll Adjustment messages
 

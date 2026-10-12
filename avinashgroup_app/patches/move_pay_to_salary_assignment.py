@@ -138,7 +138,15 @@ def latest_assignment(employee: str):
 	)
 
 
+#: The Rate written for a row that said "not paid" (Active unticked), where the
+#: table no longer has an Active column. allowance_rate_list, which runs after
+#: this, reads it as "this person is excluded" and removes the row.
+EXCLUDED_RATE = -1
+
+
 def add_row(assignment: str, allowance: str, amount=0.0, active=1, effective_from=None) -> bool:
+	# The figure is the row's Rate (allowance_rate_list). A row without a figure
+	# is given the company's rate by allowance_rate_list.
 	if not frappe.db.exists("Salary Component", allowance) or frappe.db.exists(
 		"Assignment Allowance",
 		{"parent": assignment, "parenttype": "Salary Structure Assignment", "allowance": allowance},
@@ -153,8 +161,7 @@ def add_row(assignment: str, allowance: str, amount=0.0, active=1, effective_fro
 			"parentfield": "custom_allowances",
 			"idx": idx,
 			"allowance": allowance,
-			"amount": flt(amount),
-			"active": active,
+			"rate": flt(amount) if active else EXCLUDED_RATE,
 			"effective_from": effective_from,
 		}
 	)

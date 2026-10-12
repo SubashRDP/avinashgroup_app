@@ -2,8 +2,8 @@
 
 | File | What it owns | Entry point |
 |---|---|---|
-| `allowance.py` | Allowances on Salary Component (Is Allowance, kind; per company O/O·S/D·F/P accounts and Default Rate); a person's pay on the Salary Structure Assignment (Initial Basic, SSF Applicable, Allowances table). See `docs/allowances.md` | `doc_events` → Salary Component / Salary Structure / Salary Structure Assignment validate |
-| `attendance_allowance.py` | Tea, meal, overtime, late fine, daily wage → submitted Additional Salary rows (tagged `custom_source`), for tagged employees at their own or the company's rate; then refreshes the entry's draft slips | Payroll Entry → Prepare Payroll Inputs |
+| `allowance.py` | Allowances on Salary Component (Is Allowance, kind; per company O/O·S/D·F/P accounts, no rate); the structure's Allowance Rates (usual rates, changed only by Salary Revision once submitted); a person's pay on the Salary Structure Assignment (Initial Basic, SSF Applicable, Allowances with their Rate). See `docs/allowances.md` | `doc_events` → Salary Component / Salary Structure / Salary Structure Assignment validate, Salary Structure before_update_after_submit; `get_rate_for_assignment` (form) |
+| `attendance_allowance.py` | Tea, meal, overtime, late fine, daily wage → submitted Additional Salary rows (tagged `custom_source`), for employees with a row on their assignment, at its Rate (overtime and late fine from basic); then refreshes the entry's draft slips | Payroll Entry → Prepare Payroll Inputs |
 | `salary_slip.py` | Fixed allowances from the assignment's rows onto the slip (prorated; projected for tax) | `doc_events` → Salary Slip validate, before the tax hooks |
 | `daily_breakdown.py` | The slip's Daily Breakdown table: each day's attendance, fixed share, tea / meal / OT / late fine, running balance to net pay | `doc_events` → Salary Slip validate, last |
 | `payroll_month.py` | A Payroll Entry from Fiscal Year + Month (BS): fills dates, posting date (month end), frequency, currency, payable account, cost centre, employees | `AvinashPayrollEntry.validate`; form: `public/js/payroll_entry.js` |

@@ -1,21 +1,25 @@
-"""Tests for allowances (payroll/allowance.py, salary_slip.py, attendance_allowance.py).
+"""Tests for allowances (payroll/allowance.py, salary_slip.py, attendance_allowance.py,
+Salary Revision, patches/allowance_rate_list.py).
 
 Covers:
 - an allowance's kind sets its attendance settings; S/D and F/P accounts must
   be the row's company's
-- the structure holds only shared lines: an attendance allowance's row is a
-  tag; a fixed, yearly or hand-entered allowance is refused there
-- the assignment's Allowances: allowances only, not yearly / hand-entered, a
-  per-person allowance needs its amount
-- the slip: per-person amount, company rate, own amount over the company rate,
-  % of Initial Basic; prorated like Basic; projected for income tax; dropped
-  when the row is made inactive
-- attendance allowances: tagged by the structure or the person's own row, an
-  inactive row stops it, OT-eligible-only, own rate over the company rate
+- the structure: an allowance is refused in Earnings; Allowance Rates take
+  allowances only, once each, no rate for one worked out from basic; a
+  submitted structure's rate changes only through a Salary Revision
+- the assignment's Allowances: allowances only, not yearly / hand-entered; a
+  row takes the structure's rate when left blank; a row without any rate is
+  refused
+- the slip: the person's rates, % of Initial Basic; prorated like Basic;
+  projected for income tax; dropped when the row is removed; the structure's
+  rate list alone pays nobody
+- attendance allowances: paid only with a row, at its rate; OT-eligible-only
 - the meal rule; counting the previous BS month's attendance
 - the payroll journal posts each section to its own account, and refuses an
   employee whose Department has no section
-- the migration reads the old structures' company rates from their formulas
+- the migration makes each row say what it paid
+- Salary Revision: Raise Rate moves only people at the structure's rate, and
+  the rate list; Add / Stop / Change Rate; cancelling puts it back
 
 Everything is built inside one transaction and rolled back by FrappeTestCase.
 The attendance count, the Additional Salary writer and the commit are replaced
@@ -39,13 +43,14 @@ ADMIN_DEPT = "Finance/ Accounts - NGI"
 MARKETING_DEPT = "Sales/ Marketing - NGI"
 PLANT_DEPT = "Plant/ Maintenance - NGI"
 PERIOD_START, PERIOD_END = "2026-07-17", "2026-08-16"  # Shrawan 2083
+BHADRA_1 = "2026-08-17"
 OTHER = ("547110 - Other Allowance - O/O - NGI", "547111 - Other Allowance - S/D - NGI", "547112 - Other Allowance - F/P - NGI")
 MEAL = ("547130 - Meal Allowance - O/O - NGI", "547131 - Meal Allowance - S/D - NGI", "547132 - Meal Allowance - F/P - NGI")
 TAX_SLAB = "Nepal 83/84 - NGI"
 
 
 def _clear_request_caches():
-	for key in ("_agp_account_row", "_agp_payroll_section", "_agp_structure_components"):
+	for key in ("_agp_account_row", "_agp_payroll_section", "_agp_structure_components", "_agp_assignment"):
 		if hasattr(frappe.local, key):
 			delattr(frappe.local, key)
 
@@ -55,30 +60,33 @@ class TestAllowance(FrappeTestCase):
 	def setUpClass(cls):
 		super().setUpClass()
 		frappe.set_user("Administrator")
-		cls.tea = cls._component("CA Test Tea", "CATEA", "Per Day Present", rate=235)
+		cls.tea = cls._component("CA Test Tea", "CATEA", "Per Day Present")
 		cls.meal = cls._component(
 			"CA Test Meal",
 			"CAMEAL",
 			"Per Meal",
 			accounts=MEAL,
-			rate=75,
 			custom_ot_eligible_only=1,
 			custom_time_offset_hours=1.5,
 			custom_max_per_day=2,
 		)
-		cls.da = cls._component("CA Test DA", "CADA", "Fixed per Person")
-		cls.mobile = cls._component("CA Test Mobile", "CAMOB", "Fixed Company Rate", rate=1500)
-		cls.hra = cls._component("CA Test HRA", "CAHRA", "% of Initial Basic", rate=25)
+		cls.da = cls._component("CA Test DA", "CADA", "Monthly")
+		cls.mobile = cls._component("CA Test Mobile", "CAMOB", "Monthly")
+		cls.hra = cls._component("CA Test HRA", "CAHRA", "% of Initial Basic")
+		cls.ot = cls._component(
+			"CA Test OT", "CAOT", "Per Overtime Hour",
+			custom_rate_basis="Hourly Basic × Multiplier", custom_rate_multiplier=1.5,
+		)
 		basic = {"salary_component": "Basic", "amount_based_on_formula": 1, "formula": "base", "depends_on_payment_days": 1}
 		cls.structure = cls._structure(
 			"CA Test Structure",
-			# The tea row is a tag: the hook blanks the 999.
-			earnings=[basic, {"salary_component": cls.tea, "amount": 999}, {"salary_component": cls.meal}],
+			earnings=[basic],
+			rates=[(cls.tea, 235), (cls.meal, 75), (cls.mobile, 1500), (cls.hra, 25), (cls.da, 0), (cls.ot, 0)],
 		)
 		cls.bare_structure = cls._structure("CA Test Bare Structure", earnings=[dict(basic)])
 
 	@classmethod
-	def _component(cls, name, abbr, kind, accounts=OTHER, rate=0, company=COMPANY, **values):
+	def _component(cls, name, abbr, kind, accounts=OTHER, company=COMPANY, **values):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Salary Component",
@@ -95,7 +103,6 @@ class TestAllowance(FrappeTestCase):
 						"account": accounts[0],
 						"custom_account_marketing": accounts[1],
 						"custom_account_plant": accounts[2],
-						"custom_default_rate": rate,
 					}
 				],
 				**values,
@@ -104,7 +111,7 @@ class TestAllowance(FrappeTestCase):
 		return doc.name
 
 	@classmethod
-	def _structure(cls, name, earnings):
+	def _structure(cls, name, earnings, rates=()):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Salary Structure",
@@ -114,6 +121,7 @@ class TestAllowance(FrappeTestCase):
 				"payroll_frequency": "Monthly",
 				"is_active": "Yes",
 				"earnings": earnings,
+				"custom_allowance_rates": [{"allowance": a, "rate": r} for a, r in rates],
 			}
 		).insert(ignore_permissions=True)
 		doc.submit()
@@ -127,7 +135,7 @@ class TestAllowance(FrappeTestCase):
 		self, allowances=(), department=ADMIN_DEPT, company=COMPANY, structure=None, initial_basic=0, **values
 	):
 		"""An employee; with a structure, an assignment carrying the allowances
-		as (allowance, amount, active) tuples and the Initial Basic."""
+		as (allowance, rate) pairs (0 = the structure's rate) and the Initial Basic."""
 		emp = frappe.get_doc(
 			{
 				"doctype": "Employee",
@@ -153,12 +161,16 @@ class TestAllowance(FrappeTestCase):
 					"base": 30000,
 					"income_tax_slab": TAX_SLAB,
 					"custom_initial_basic": initial_basic,
-					"custom_allowances": [
-						{"allowance": a, "amount": amount, "active": active} for a, amount, active in allowances
-					],
+					"custom_allowances": [{"allowance": a, "rate": rate} for a, rate in allowances],
 				}
 			).insert(ignore_permissions=True).submit()
 		return emp.name
+
+	def _rows(self, employee, on=PERIOD_END):
+		_clear_request_caches()
+		from avinashgroup_app.payroll.allowance import get_employee_allowance_rows
+
+		return {k: v.rate for k, v in get_employee_allowance_rows(employee, on).items()}
 
 	def _slip(self, employee):
 		return frappe.get_doc(
@@ -183,51 +195,72 @@ class TestAllowance(FrappeTestCase):
 		mobile = frappe.get_doc("Salary Component", self.mobile)
 		self.assertEqual((mobile.custom_is_attendance_driven, mobile.depends_on_payment_days), (0, 1))
 
-	def test_structure_row_of_attendance_allowance_is_a_tag(self):
-		doc = frappe.get_doc("Salary Structure", self.structure)
-		tea = next(r for r in doc.earnings if r.salary_component == self.tea)
-		self.assertEqual((tea.amount, tea.formula or "", tea.amount_based_on_formula), (0, "", 0))
-
-	def test_fixed_and_yearly_allowances_refused_in_structure(self):
-		with self.assertRaisesRegex(frappe.ValidationError, "Allowances table"):
+	def test_allowance_refused_in_structure_earnings(self):
+		with self.assertRaisesRegex(frappe.ValidationError, "is an allowance"):
 			self._structure("CA Test Fixed Structure", earnings=[{"salary_component": self.mobile, "amount": 1500}])
+		with self.assertRaisesRegex(frappe.ValidationError, "is an allowance"):
+			self._structure("CA Test Tag Structure", earnings=[{"salary_component": self.tea}])
+
+	def test_rate_list_checks(self):
 		bonus = self._component("CA Test Bonus", "CABON", "Yearly")
 		with self.assertRaisesRegex(frappe.ValidationError, "paid when entered"):
-			self._structure("CA Test Yearly Structure", earnings=[{"salary_component": bonus, "amount": 1}])
+			self._structure("CA Test Yearly Structure", earnings=[], rates=[(bonus, 1)])
+		with self.assertRaisesRegex(frappe.ValidationError, "listed twice"):
+			self._structure("CA Test Twice Structure", earnings=[], rates=[(self.tea, 1), (self.tea, 2)])
+		doc = frappe.get_doc("Salary Structure", self.structure)
+		units = {r.allowance: (r.rate, r.unit) for r in doc.custom_allowance_rates}
+		self.assertEqual(units[self.tea], (235, "per day present"))
+		self.assertEqual(units[self.hra], (25, "% of initial basic"))
+		self.assertEqual(units[self.ot][0], 0)
+		self.assertIn("from basic", units[self.ot][1])
+
+	def test_submitted_rate_changes_only_by_revision(self):
+		doc = frappe.get_doc("Salary Structure", self.structure)
+		next(r for r in doc.custom_allowance_rates if r.allowance == self.tea).rate = 260
+		with self.assertRaisesRegex(frappe.ValidationError, "Salary Revision"):
+			doc.save(ignore_permissions=True)
+		doc.reload()
+		extra = self._component("CA Test Extra", "CAEXT", "Monthly")
+		doc.append("custom_allowance_rates", {"allowance": extra, "rate": 500})  # adding one is fine
+		doc.save(ignore_permissions=True)
 
 	def test_section_account_of_another_company_is_refused(self):
 		gandaki = frappe.db.get_value("Account", {"company": OTHER_COMPANY, "is_group": 0, "root_type": "Expense"})
 		with self.assertRaisesRegex(frappe.ValidationError, "is not an account of"):
-			self._component("CA Test Fuel", "CAFUEL", "Fixed per Person", accounts=(OTHER[0], gandaki, None))
+			self._component("CA Test Fuel", "CAFUEL", "Monthly", accounts=(OTHER[0], gandaki, None))
 
 	# ── the assignment's table ──────────────────────────────────────────────
 
 	def test_assignment_table_checks(self):
 		bonus = self._component("CA Test Bonus 2", "CABON2", "Yearly")
 		with self.assertRaisesRegex(frappe.ValidationError, "paid when entered"):
-			self._employee([(bonus, 1, 1)], structure=self.bare_structure)
-		with self.assertRaisesRegex(frappe.ValidationError, "monthly amount"):
-			self._employee([(self.da, 0, 1)], structure=self.bare_structure)
+			self._employee([(bonus, 1)], structure=self.bare_structure)
+		with self.assertRaisesRegex(frappe.ValidationError, "rate for this person"):
+			self._employee([(self.da, 0)], structure=self.structure)  # the structure lists none
 		with self.assertRaisesRegex(frappe.ValidationError, "not an allowance"):
-			self._employee([("Basic", 1, 1)], structure=self.bare_structure)
+			self._employee([("Basic", 1)], structure=self.bare_structure)
+
+	def test_row_takes_the_structures_rate(self):
+		employee = self._employee([(self.mobile, 0), (self.tea, 40), (self.ot, 99)], structure=self.structure)
+		self.assertEqual(self._rows(employee), {self.mobile: 1500, self.tea: 40, self.ot: 0})
 
 	def test_employee_holds_no_pay(self):
 		meta = frappe.get_meta("Employee")
 		for field in ("custom_dearness_allowance", "custom_initial_basic", "custom_ssf_applicable", "custom_allowances"):
 			self.assertFalse(meta.has_field(field), field)
 
-	# ── fixed allowances on the slip ────────────────────────────────────────
+	# ── monthly allowances on the slip ──────────────────────────────────────
 
-	def test_slip_has_the_employees_fixed_allowances(self):
+	def test_slip_has_the_persons_allowances(self):
 		employee = self._employee(
-			[(self.da, 7380, 1), (self.mobile, 0, 1), (self.hra, 0, 1)],
-			structure=self.bare_structure,
+			[(self.da, 7380), (self.mobile, 0), (self.hra, 0)],
+			structure=self.structure,
 			initial_basic=20000,
 		)
 		slip = self._slip(employee)
 		rows = {d.salary_component: d for d in slip.earnings}
-		self.assertEqual(rows[self.da].default_amount, 7380)  # their own amount
-		self.assertEqual(rows[self.mobile].default_amount, 1500)  # the company rate
+		self.assertEqual(rows[self.da].default_amount, 7380)  # their own rate
+		self.assertEqual(rows[self.mobile].default_amount, 1500)  # the structure's, copied onto the row
 		self.assertEqual(rows[self.hra].default_amount, 5000)  # 25 % of 20,000
 		basic = rows["Basic"]
 		ratio = basic.amount / basic.default_amount
@@ -235,27 +268,26 @@ class TestAllowance(FrappeTestCase):
 			self.assertFalse(rows[component].additional_salary)  # projected for tax
 			self.assertAlmostEqual(rows[component].amount / rows[component].default_amount, ratio, places=3)
 
-		# A change is a new dated assignment; this one stops the mobile allowance.
+		# Taking the row off stops it.
 		assignment = frappe.get_last_doc("Salary Structure Assignment", {"employee": employee, "docstatus": 1})
-		frappe.db.set_value(
-			"Assignment Allowance", {"parent": assignment.name, "allowance": self.mobile}, "active", 0
-		)
+		frappe.db.delete("Assignment Allowance", {"parent": assignment.name, "allowance": self.mobile})
+		_clear_request_caches()
 		slip.reload()
 		slip.save(ignore_permissions=True)
 		self.assertNotIn(self.mobile, {d.salary_component for d in slip.earnings})
 
-	def test_own_amount_beats_company_rate(self):
-		slip = self._slip(self._employee([(self.mobile, 2000, 1)], structure=self.bare_structure))
+	def test_own_rate_on_the_slip(self):
+		slip = self._slip(self._employee([(self.mobile, 2000)], structure=self.structure))
 		self.assertEqual(next(d for d in slip.earnings if d.salary_component == self.mobile).default_amount, 2000)
 
-	def test_fixed_allowance_is_projected_for_tax(self):
-		with_mobile = self._slip(self._employee([(self.mobile, 0, 1)], structure=self.bare_structure))
-		without = self._slip(self._employee(structure=self.bare_structure))
+	def test_monthly_allowance_is_projected_for_tax(self):
+		with_mobile = self._slip(self._employee([(self.mobile, 0)], structure=self.structure))
+		without = self._slip(self._employee(structure=self.structure))
 		self.assertGreaterEqual(with_mobile.annual_taxable_amount - without.annual_taxable_amount, 1500 * 11)
 
-	def test_tag_rows_print_nothing_on_the_slip(self):
+	def test_rate_list_alone_pays_nobody(self):
 		slip = self._slip(self._employee(structure=self.structure))
-		self.assertFalse({self.tea, self.meal} & {d.salary_component for d in slip.earnings})
+		self.assertFalse({self.tea, self.meal, self.mobile, self.hra} & {d.salary_component for d in slip.earnings})
 
 	# ── attendance allowances ───────────────────────────────────────────────
 
@@ -272,6 +304,7 @@ class TestAllowance(FrappeTestCase):
 			end_date=PERIOD_END,
 			employees=[frappe._dict(employee=e) for e in employees],
 		)
+		_clear_request_caches()
 		with (
 			patch.object(attendance_allowance, "_qty_for_employee", return_value=qty),
 			patch.object(attendance_allowance, "_make_additional_salary", side_effect=capture),
@@ -282,22 +315,16 @@ class TestAllowance(FrappeTestCase):
 			attendance_allowance.create_additional_salaries(entry)
 		return {(e, c): a for e, c, a in made if c in (self.tea, self.meal)}
 
-	def test_structure_tags_who_is_paid_at_company_rate(self):
-		tagged = self._employee(structure=self.structure)
-		untagged = self._employee(structure=self.bare_structure)
-		paid = self._run_engine([tagged, untagged])
-		self.assertEqual(paid, {(tagged, self.tea): 2350})
-
-	def test_own_rate_inactive_and_row_tag(self):
-		new_staff = self._employee([(self.tea, 40, 1)], structure=self.structure)
-		no_tea = self._employee([(self.tea, 0, 0)], structure=self.structure)
-		row_only = self._employee([(self.tea, 0, 1)], structure=self.bare_structure)
-		paid = self._run_engine([new_staff, no_tea, row_only])
-		self.assertEqual(paid, {(new_staff, self.tea): 400, (row_only, self.tea): 2350})
+	def test_attendance_allowance_needs_a_row(self):
+		usual = self._employee([(self.tea, 0)], structure=self.structure)
+		new_staff = self._employee([(self.tea, 40)], structure=self.structure)
+		no_row = self._employee(structure=self.structure)
+		paid = self._run_engine([usual, new_staff, no_row])
+		self.assertEqual(paid, {(usual, self.tea): 2350, (new_staff, self.tea): 400})
 
 	def test_meal_only_for_ot_eligible(self):
-		eligible = self._employee(structure=self.structure, custom_ot_eligibility=1)
-		not_eligible = self._employee(structure=self.structure, custom_ot_eligibility=0)
+		eligible = self._employee([(self.meal, 0)], structure=self.structure, custom_ot_eligibility=1)
+		not_eligible = self._employee([(self.meal, 0)], structure=self.structure, custom_ot_eligibility=0)
 		paid = {k: v for k, v in self._run_engine([eligible, not_eligible], qty=4).items() if k[1] == self.meal}
 		self.assertEqual(paid, {(eligible, self.meal): 300})
 
@@ -317,7 +344,6 @@ class TestAllowance(FrappeTestCase):
 		sheet.insert(ignore_permissions=True)
 		sheet.db_set("docstatus", 1)
 		frappe.local._agp_on_ot_sheet = {}
-
 	def test_meal_rule(self):
 		"""A meal follows overtime the company authorised, for OT-eligible staff
 		only: 1.5 h early or late on a working day = 1 each, a holiday = 2, max 2."""
@@ -404,32 +430,84 @@ class TestAllowance(FrappeTestCase):
 		with self.assertRaisesRegex(frappe.ValidationError, "Payroll Section"):
 			self._journal_lines([employee])
 
-	# ── the migration ───────────────────────────────────────────────────────
+	# ── the migration (patches/allowance_rate_list.py) ─────────────────────
 
-	def test_migration_reads_company_rate_from_old_formula(self):
-		from avinashgroup_app.patches import move_pay_to_salary_assignment as patch_
+	def test_migration_makes_each_row_say_what_it_paid(self):
+		from avinashgroup_app.patches import allowance_rate_list as patch_
 
-		gas = self._component("Gas Allowance" if not frappe.db.exists("Salary Component", "Gas Allowance") else "CA Test Gas", "CAGAS", "Fixed Company Rate")
-		frappe.db.set_value("Salary Component Account", {"parent": gas, "company": COMPANY}, "custom_default_rate", 0)
-		old = frappe.get_doc(
+		employee = self._employee([(self.da, 7380)], structure=self.bare_structure)
+		assignment = frappe.get_last_doc("Salary Structure Assignment", {"employee": employee, "docstatus": 1}).name
+		# As the old model left it: gas "at the company rate" (no figure), tea
+		# "not paid" (an excluded row), meal given by a structure tag.
+		for allowance, rate in ((self.mobile, 0), (self.tea, patch_.EXCLUDED_RATE)):
+			patch_._insert_child(
+				"Assignment Allowance", "Salary Structure Assignment", assignment, "custom_allowances",
+				{"allowance": allowance, "rate": rate},
+			)
+		added, filled, removed = patch_.settle_assignment(
+			assignment, tags=[self.meal, self.tea], company_rates={self.mobile: 1500, self.meal: 75, self.tea: 235}
+		)
+		self.assertEqual((added, filled, removed), (1, 1, 1))
+		self.assertEqual(self._rows(employee), {self.da: 7380, self.mobile: 1500, self.meal: 75})
+
+	# ── Salary Revision ─────────────────────────────────────────────────────
+
+	def _revision(self, changes, employees=()):
+		doc = frappe.get_doc(
 			{
-				"doctype": "Salary Structure",
-				"name": "CA Test Old Structure",
+				"doctype": "Salary Revision",
 				"company": COMPANY,
-				"currency": "NPR",
-				"payroll_frequency": "Monthly",
-				"is_active": "Yes",
-				"earnings": [{"salary_component": gas, "amount_based_on_formula": 1, "formula": "1690 if custom_gas_allowance else 0"}],
+				"effective_date": BHADRA_1,
+				"reason": "Test",
+				"allowance_changes": [
+					{"change": c, "allowance": a, "new_rate": r, "salary_structure": s} for c, a, r, s in changes
+				],
+				"employees": [{"employee": e} for e in employees],
 			}
 		)
-		old.flags.ignore_validate = True  # an old structure, from before the check
-		old.insert(ignore_permissions=True)
-		old.submit()
-		with patch.object(patch_, "RATE_IN_FORMULA", {gas: 1}):
-			patch_.rates_from_structures()
-		self.assertEqual(
-			frappe.db.get_value("Salary Component Account", {"parent": gas, "company": COMPANY}, "custom_default_rate"), 1690
+		return doc
+
+	def test_raise_rate_moves_only_people_at_the_structures_rate(self):
+		usual = self._employee([(self.tea, 0), (self.da, 7000)], structure=self.structure)
+		new_staff = self._employee([(self.tea, 40)], structure=self.structure)
+		no_tea = self._employee([(self.da, 5000)], structure=self.structure)
+
+		rev = self._revision([("Raise Rate", self.tea, 260, self.structure)])
+		rev.validate_allowance_changes()
+		self.assertEqual(rev.allowance_changes[0].old_rate, 235)
+		plans = {e: rev.plan_allowances(frappe.get_last_doc("Salary Structure Assignment", {"employee": e, "docstatus": 1})) for e in (usual, new_staff, no_tea)}
+		self.assertEqual(plans[usual].changes, [f"{self.tea} 235.0 → 260.0"])
+		self.assertEqual((plans[new_staff].changes, len(plans[new_staff].own_rate)), ([], 1))
+		self.assertEqual(plans[no_tea].changes, [])
+
+		rev.set("employees", [{"employee": usual}])
+		rev.insert(ignore_permissions=True)
+		rev.submit()
+		self.assertEqual(self._rows(usual, BHADRA_1), {self.tea: 260, self.da: 7000})
+		self.assertEqual(self._rows(usual, PERIOD_END), {self.tea: 235, self.da: 7000})  # Shrawan stays as paid
+		rate = lambda: frappe.db.get_value(
+			"Structure Allowance Rate", {"parent": self.structure, "allowance": self.tea}, "rate"
 		)
+		self.assertEqual(rate(), 260)
+
+		rev.cancel()
+		self.assertEqual(rate(), 235)
+		self.assertEqual(self._rows(usual, BHADRA_1), {self.tea: 235, self.da: 7000})
+
+	def test_add_stop_and_change_rate(self):
+		a = self._employee([(self.mobile, 0), (self.da, 7000)], structure=self.structure, initial_basic=20000)
+		b = self._employee([(self.da, 6000)], structure=self.structure, initial_basic=20000)
+		rev = self._revision(
+			[("Add", self.hra, 0, None), ("Stop", self.da, 0, None), ("Change Rate", self.mobile, 1800, None)],
+			employees=[a, b],
+		)
+		rev.insert(ignore_permissions=True)
+		by = {r.employee: r for r in rev.employees}
+		# a: + HRA 25 % of 20,000, − DA 7,000, mobile +300  → 5,000 − 7,000 + 300
+		self.assertAlmostEqual(rev.monthly_increase(by[a], frappe.get_last_doc("Salary Structure Assignment", {"employee": a, "docstatus": 1})), -1700)
+		rev.submit()
+		self.assertEqual(self._rows(a, BHADRA_1), {self.mobile: 1800, self.hra: 25})
+		self.assertEqual(self._rows(b, BHADRA_1), {self.hra: 25})
 
 	# ── the daily breakdown (payroll/daily_breakdown.py) ───────────────────
 
@@ -473,7 +551,7 @@ class TestAllowance(FrappeTestCase):
 
 		from avinashgroup_app.payroll import daily_breakdown as daily
 
-		employee = self._employee([(self.mobile, 0, 1)], structure=self.structure)
+		employee = self._employee([(self.mobile, 0)], structure=self.structure)
 		days = [self._day(str(add_days(getdate(PERIOD_START), i))) for i in range(31)]
 		late_day = getdate("2026-07-20")
 		# Tea on the first 10 days; 30 minutes late on one of them.

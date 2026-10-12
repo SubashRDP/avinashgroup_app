@@ -29,7 +29,6 @@ Every salary component that appears on a slip needs one **Accounts** row **per c
 | **Account** | The **Admin & Accounts (O/O)** account. For a deduction, the liability account (see 9.3) |
 | **Marketing (S/D)** | The S/D account of the **same company** |
 | **Plant (F/P)** | The F/P account of the **same company** |
-| **Default Rate** | Only for company-rate allowances: the company's rate (Gas 1,690; HRA 25 meaning 25%; Tea 235 per day; Meal 75 per meal). Leave 0 for others |
 
 3. Save.
 
@@ -38,7 +37,7 @@ Every salary component that appears on a slip needs one **Accounts** row **per c
 - If S/D or F/P is left **blank**, that section's cost goes to the row's **Account** (O/O). Nothing fails, but the section split is lost.
 - If S/D or F/P is filled for a component, then **every** employee paid that component must have a Department with a Payroll Section. Otherwise submission stops with "**Set Payroll Section on the Department of these employees…**".
 - If a component has **no row** for the company at all, submission stops with "**Please set account in Salary Component …**".
-- Changing the **Default Rate** changes the rate for every employee who has no own rate, from the next payroll.
+- Rates are not kept here. The usual rate is on the salary structure (Allowance Rates), and each person's rate on their assignment (Chapter 2).
 
 ## 9.3 Deduction accounts
 

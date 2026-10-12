@@ -2,58 +2,85 @@
 
 Code: `payroll/allowance.py`, `payroll/salary_slip.py`,
 `payroll/attendance_allowance.py`, `payroll/payroll_entry.py`,
-`payroll/onboarding.py`. Patches: `setup_allowance_kinds`,
-`move_pay_to_salary_assignment`. Tests: `payroll/test_allowance.py`.
+`payroll/onboarding.py`, Salary Revision. Patches: `setup_allowance_kinds`,
+`move_pay_to_salary_assignment`, `allowance_rate_list`. Tests:
+`payroll/test_allowance.py`.
 
-## One picture
+## One picture (agreed with the user 2026-10-12)
 
-| What | Where |
-|---|---|
-| The allowance and its **kind** | **Salary Component** → Is Allowance, Allowance Kind |
-| The attendance rule (tea not on holidays; meal Time Offset 1.5 h, max 2) | the same Salary Component → Attendance-Driven Rule |
-| **Rate per company** (tea 235 NGI / 265 NGN, meal 75, gas 1,690, edu 2,780, HRA 25 %) | Salary Component → Accounts row for the company → **Default Rate** |
-| **Three accounts per company** | the same row: **Admin & Accounts (O/O)**, **Marketing (S/D)**, **Plant (F/P)** |
-| What everyone on a structure shares | **Salary Structure**: Basic, SSF Addition, SSF, Income Tax, and tags for Tea, Meal, Overtime, Late Fine |
-| **A person's pay** | **Salary Structure Assignment**: Base (= Basic), **Initial Basic**, **SSF Applicable**, and the **Allowances** table |
-| Which account a person's pay posts to | **Department → Payroll Section** |
+| Screen | Holds | Example |
+|---|---|---|
+| **Salary Component** | What the allowance is and **how it is counted** (Is Allowance, Allowance Kind, the attendance rule), and per company the **three accounts** O/O, S/D, F/P. **No rate.** | Tea is paid per day present, not on holidays |
+| **Salary Structure** | The formula lines (Basic, SSF Addition, SSF, Income Tax, Late Fine) and **Allowance Rates**: the usual rate of each allowance for the people on it. A template: it pays nobody an allowance by itself | NGI Staff 83/84: Tea 235, Meal 75, Gas 1,690, HRA 25 % |
+| **Salary Structure Assignment** | A person's pay: Base (= Basic), Initial Basic, SSF Applicable and the **Allowances** they get, each with **their Rate**. Picking an allowance fills the Rate from the structure; HR changes it for this person. **No row, not paid.** Payroll reads only this | Ram: Tea 40, Gas 1,690, Dearness 7,380 |
+| **Salary Revision** | Every change in pay, from the 1st of a BS month: a raise in Basic / Dearness, and **Raise Rate / Add / Stop / Change Rate** for an allowance | Tea 235 → 260 from 1 Kartik for everyone on NGI Staff at 235 |
+| **Department → Payroll Section** | Which of the three accounts a person's pay posts to | Sales/ Marketing → S/D |
+
+Why the structure does not decide who gets what: in October 2026 the 195
+assigned people had **27 different combinations** of allowances (some gas, some
+rent, some neither). Who gets what is per person; the structure keeps the usual
+rate and is the anchor for raising it.
 
 **Pay is not on the Employee.**
 - An employee can be created with no salary figure.
 - Whoever maintains employees does not see pay unless they can open assignments.
-- A change in pay is a new dated assignment, and the old one stays as the record. Salary Revision works this way: a raise carries every allowance over, with the new dearness amount.
+- A change in pay is a new dated assignment, and the old one stays as the record.
 
 ## The Allowances table (Assignment Allowance)
 
 | Column | Meaning |
 |---|---|
-| Allowance | a Salary Component marked Is Allowance |
-| Amount | **Fixed per Person**: this person's monthly figure (DA 7,380). **Company Rate / % / tea, meal**: blank = the company's rate; a figure = their own (NEW staff tea 40) |
-| Active | untick to stop it (staff on no tea) |
+| Allowance | a Salary Component marked Is Allowance (not Entered by Hand / Yearly) |
+| Rate | what this person is paid, in the Unit. Filled from the structure's Allowance Rate when picked; a row saved at 0 is filled from it too; still 0 is refused |
+| Unit | from the kind: per month, % of initial basic, per day present, per meal; "from basic × 1.5" for overtime, whose rate is never typed |
 | From Date | blank = with the assignment |
-| Kind | shown from the component |
+
+One meaning per column: no "blank = company rate", no Active tick. To stop an
+allowance, remove the row (by Salary Revision → Stop, for a submitted one).
 
 **Adding a new allowance:**
-1. Create a Salary Component with Is Allowance, its kind, and a company row (accounts + rate).
-2. Add rows on the assignments of the people who get it.
+1. A Salary Component with Is Allowance, its kind, and a company row (accounts).
+2. Its usual rate in the Allowance Rates of the structures that have one.
+3. Rows on the people who get it — or a Salary Revision with **Add**.
 
 No new field and no new structure are needed.
 
-## The eight kinds
+## The kinds (how the allowance is counted)
 
 | Kind | Examples | Reaches the slip |
 |---|---|---|
-| Fixed per Person | Dearness, Other, Fixed, Fuel, Maintenance, Transport | the assignment's rows; prorated by payment days; projected for income tax |
-| Fixed Company Rate | Gas, Education, Mobile | the same |
-| % of Initial Basic | HRA | the same, % × the assignment's Initial Basic |
-| Per Day Present ⏱ | Tea & Conveyance | Prepare Payroll Inputs → Additional Salary |
+| Monthly | Dearness, Other, Fixed, Fuel, Maintenance, Transport, Gas, Education | the assignment's rows; prorated by payment days; projected for income tax |
+| % of Initial Basic | HRA | the same, Rate % × the assignment's Initial Basic |
+| Per Day Present ⏱ | Tea & Conveyance | Prepare Payroll Inputs → Additional Salary (days × Rate) |
 | Per Meal ⏱ | Meal | the same (see **Meal** below) |
-| Per Hour (Overtime) ⏱ | Overtime | the same (Overtime Sheets) |
+| Per Overtime Hour ⏱ | Overtime | the same (Overtime Sheets × basic per hour × 1.5) |
 | Entered by Hand | Load/Unload | Additional Salary typed by HR |
 | Yearly | Dashain Bonus, Leave Encashment | their own Payroll Entry buttons (not built yet) |
 
-**Who gets an attendance allowance (⏱):** the structure's tag row (tea for everyone on NGI/NGN Staff), or a row on the person's assignment. A row on the assignment always wins: its own rate, or Active unticked.
+"Fixed per Person" and "Fixed Company Rate" were one kind with the rate kept in
+two places; both are **Monthly** since 2026-10-12.
 
-A structure refuses fixed allowances (they would be paid twice) and Yearly or hand-entered ones (they would be paid every month).
+A structure refuses an allowance in Earnings / Deductions (it would be paid to
+everyone on it, whatever their assignment says). Its Allowance Rates refuse
+Yearly and hand-entered ones. A submitted structure's existing rate changes only
+through a Salary Revision (`guard_structure_rates`): editing it in place would
+leave the people at the old rate behind, and the next raise would find nobody at
+the structure's rate.
+
+## Salary Revision: allowance changes
+
+| Change | Reaches | Does |
+|---|---|---|
+| Raise Rate | everyone on the chosen structure **at its listed rate** | their row → New Rate; the structure's rate → New Rate. Own rates (new staff's tea 40) untouched and named by Get Employees |
+| Add | listed employees without it | a row at New Rate, or blank = their structure's rate |
+| Stop | listed employees with it | removes the row |
+| Change Rate | listed employees with it | their row → New Rate |
+
+One new assignment per person carries all of it. Arrears for months already
+paid: monthly kinds by each month's payment days / working days; tea and meal
+by the days or meals each month counted (`attendance_qty_paid`, the engine's
+own rule). Cancel restores the old assignments and the structure's rate (only if
+it is still the revision's rate).
 
 ## Meal
 
@@ -68,11 +95,26 @@ A meal is part of **overtime the company asked for** (rule of 2026-10-09):
 | **Holiday** worked on the Overtime Sheet | 2 |
 | Any day | max **2** |
 
-The month's meals × the rate (the person's own on their assignment, else the
-company's: NGI 75, NGN 75, NGG 100) become the "Meal" line, posted by Prepare
-Payroll Inputs. Settings on the Meal component: Time Offset (1.5), Max Meals per
-Day (2), Only OT-Eligible Staff ✔. Code: `_meals_for_day` in
-`payroll/attendance_allowance.py`.
+The month's meals × the Rate on the person's Meal row (usually NGI 75, NGN 75,
+NGG 100) become the "Meal" line, posted by Prepare Payroll Inputs. Settings on
+the Meal component: Time Offset (1.5), Max Meals per Day (2), Only OT-Eligible
+Staff ✔. Code: `_meals_for_day` in `payroll/attendance_allowance.py`.
+
+## The 2026-10-12 migration (`allowance_rate_list`) on avinas1
+
+| Step | Count |
+|---|---|
+| Kinds renamed (Fixed per Person / Fixed Company Rate → Monthly, Per Hour (Overtime) → Per Overtime Hour) | 9 |
+| Old Amount copied to Rate | 343 |
+| Structure Allowance Rates listed (from the components' old Default Rates and what people carry) | 27 |
+| Rows added for what a structure tag paid (tea 89, meal 177, overtime 195) | 461 |
+| Company rates written onto rows that relied on them (gas 77, education 74, HRA 74) | 225 |
+| "Not paid" (Active unticked) rows removed | 31 |
+
+Proven unchanged: every one of the 195 assigned people has the same monthly
+allowance amounts (total 2,422,537.33) and the same tea / meal / overtime rate
+(704 entries) before and after; the Falgun sheet check gives the same result
+for the same people (NGI 71/79, NGN 26/43, NGG 27/27, NGK 18/18).
 
 ## Daily breakdown on the salary slip
 
@@ -145,6 +187,7 @@ BS Month (as on the Payroll Entry), optionally one Payroll Entry.
 ## Still open
 
 - Accounts: no tea account exists yet (O/O, S/D, F/P), and other components have no accounts per company.
+- Falgun parity on avinas1 has dropped since 2026-10-08 (NGI 83 → 71 matching, NGN 61 → 26) — before the 2026-10-12 change, which leaves it exactly as it found it. Not yet investigated.
 - Unpaid absence: allowances are currently prorated like Basic. Confirm, or make them full.
 - Dashain Bonus and Leave Encashment buttons.
 - `docs/payroll-manual.html`, `docs/hr-payroll-handbook.html` and `docs/payroll-documentation.html` still describe the old setup.

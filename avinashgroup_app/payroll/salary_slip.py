@@ -1,10 +1,10 @@
-"""Fixed allowances on the salary slip, from the employee's Allowances table.
+"""Monthly allowances on the salary slip, from the person's salary assignment.
 
 Dearness, other, fuel, gas, education, HRA and any allowance added later are
-not structure rows: each employee's own rows (Employee → Allowances) say what
-they get, so a new allowance needs no new field and no new structure. This hook
-puts those rows on the slip (amounts from payroll/allowance.py
-`fixed_allowance_amounts`).
+not structure rows: the Allowances on each person's Salary Structure Assignment
+say what they get and at what rate, so a new allowance needs no new field and
+no new structure. This hook puts those rows on the slip (amounts from
+payroll/allowance.py `fixed_allowance_amounts`).
 
 Why on the slip and not as a monthly Additional Salary: HRMS projects a slip's
 non-additional earnings over the rest of the year when it computes income
@@ -32,7 +32,7 @@ from avinashgroup_app.payroll.allowance import FIXED_KINDS, fixed_allowance_amou
 
 
 def add_employee_allowances(doc, method=None):
-	"""Add, update or drop the slip rows of the employee's fixed allowances.
+	"""Add, update or drop the slip rows of the employee's monthly allowances.
 
 	Hook: doc_events → Salary Slip → validate, ahead of the tax hooks. Leaves a
 	submitted slip, and a slip without a structure, alone.
@@ -40,7 +40,7 @@ def add_employee_allowances(doc, method=None):
 	if doc.docstatus != 0 or not doc.salary_structure or not doc.employee:
 		return
 
-	wanted = fixed_allowance_amounts(doc.employee, doc.company, doc.end_date)
+	wanted = fixed_allowance_amounts(doc.employee, doc.end_date)
 	managed = {
 		d.salary_component
 		for d in doc.earnings
