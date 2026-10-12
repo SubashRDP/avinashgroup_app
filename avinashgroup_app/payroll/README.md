@@ -1,5 +1,7 @@
 # payroll/ — salary, allowances, tax
 
+Code map: [docs/salary-code-map.md](../../docs/salary-code-map.md) — every function from punch to journal, in run order, with a CodeTour (`.tours/salary-calculation.tour`).
+
 | File | What it owns | Entry point |
 |---|---|---|
 | `allowance.py` | Allowances on Salary Component (Is Allowance, kind; per company O/O·S/D·F/P accounts, no rate); the structure's Allowance Rates (usual rates, changed only by Salary Revision once submitted); a person's pay on the Salary Structure Assignment (Initial Basic, SSF Applicable, Allowances with their Rate). See `docs/allowances.md` | `doc_events` → Salary Component / Salary Structure / Salary Structure Assignment validate, Salary Structure before_update_after_submit; `get_rate_for_assignment` (form) |

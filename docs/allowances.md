@@ -6,6 +6,8 @@ Code: `payroll/allowance.py`, `payroll/salary_slip.py`,
 `move_pay_to_salary_assignment`, `allowance_rate_list`. Tests:
 `payroll/test_allowance.py`.
 
+Code map: [salary-code-map.md](salary-code-map.md) — every function from punch to journal, with links to the line.
+
 ## One picture (agreed with the user 2026-10-12)
 
 | Screen | Holds | Example |
