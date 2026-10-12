@@ -76,7 +76,7 @@ If one person cannot be saved (for example a required field is empty), they are 
 Lateness, early leaving and overtime are all measured against the person's shift for that day.
 
 - **Default Shift** on the Employee: the person's usual shift.
-- **Shift Assignment**: a dated shift that overrides the default. Most staff hold one open-ended assignment from the start of the fiscal year.
+- **Shift Assignment**: a dated shift that overrides the default. Someone with no Shift Assignment works their Default Shift; someone with neither has no shift, and then lateness, overtime and meals cannot be measured for them at all.
 
 To change a shift later, see Chapter 3, section 3.7.
 
@@ -131,13 +131,14 @@ A person's pay is a **dated** record: the **Salary Structure Assignment**. It ho
 |---|---|
 | **Employee** | The person |
 | **Salary Structure** | The company's structure, for example **NGI Staff 83/84** |
-| **From Date** | The first day of the BS month the pay starts (for a joiner: the joining month's first day) |
+| **From Date** | The first day of the BS month the pay starts. For a joiner: the **joining date** itself (the system refuses a date before it); the first month is then paid from that day |
 | **Base** | The person's monthly **Basic** salary |
 | **Income Tax Slab** | The company's slab for the year, for example **Nepal 83/84 - NGI** |
 | **Payroll Payable Account** | The company's salary payable account, for example **347301 - Salary Payable - NGI**. Do not leave it empty: an assignment without it is silently left out of the payroll |
 | **Initial Basic** (Pay Details) | The person's initial basic. House Rent Allowance is a percentage of this, not of Basic |
 | **SSF Applicable** (Pay Details) | Tick if the person contributes to the Social Security Fund. Untick for the few who do not; they pay 1% social security tax (SST) instead |
 | **Allowances** table | One row per allowance the person gets — see below |
+| **Taxable Earnings Till Date** / **Tax Deducted Till Date** | Only for months of this tax year paid **outside** the system (before go-live, or by a previous employer): the taxable pay of those months after SSF, and the tax already deducted. Leave 0 otherwise. They can be edited after submit. Without them the year's tax leaves those months out and too little is deducted — the Payroll Entry warns "Tax history missing" |
 
 **To create one:**
 1. Open **Salary Structure Assignment** → **New**.

@@ -65,7 +65,9 @@ What it works out, per person, for the month:
 
 Who gets tea, meal and overtime: anyone with a row for it on their salary assignment; no row, none. Late fine: everyone on a structure with the Late Fine line. Meals and overtime are only for OT-eligible staff.
 
-**You can press the button again** whenever attendance or an Overtime Sheet changes. It replaces what it made last time for that month. It never touches amounts HR typed by hand, and never touches submitted slips.
+**You can press the button again** whenever attendance or an Overtime Sheet changes. It replaces what it made last time for that month, and removes what is no longer due: if a correction leaves someone with no tea, meal, overtime or fine, last time's record is taken away and the message adds "**… earlier records removed: nothing is due for them now.**" It never touches amounts HR typed by hand. It cannot change a month whose slips are already **submitted**: those records are reported as skipped ("linked with Salary Slip"); cancel the slip first if it really must change.
+
+Only users who may create **Additional Salary** see the button.
 
 If a line says "**… skipped — see Error Log**", some records could not be made. Ask IT to look at the Error Log; the usual causes are in Chapter 10.
 

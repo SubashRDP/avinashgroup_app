@@ -35,7 +35,7 @@ What HR must have in place:
 |---|---|---|
 | Present | Full day | Earns tea (on a working day) |
 | Work From Home | Full day | |
-| Half Day | Half day, unless the other half is paid leave | Still earns a **full** day of tea |
+| Half Day | Half day, unless the other half is paid leave | Still earns a **full** day of tea. Typed by hand: set **Status for Other Half** to **Absent** (or choose the leave type for the other half). Left blank, the day is paid in **full** |
 | On Leave (paid leave type) | Full day | |
 | On Leave (Leave Without Pay) | Not paid | |
 | Absent | Not paid | |
@@ -52,8 +52,10 @@ What HR must have in place:
 
 **Excusing lateness for one day.** For a real reason (traffic jam, funeral):
 1. Open the person's **Attendance** for that day.
-2. Tick **Late Excused** and type the **Reason for Excusing**.
-3. Save.
+2. If it is submitted (the usual case), click **Cancel**, then **Amend**: Late Excused cannot be ticked on a submitted Attendance.
+3. Tick **Late Excused** and type the **Reason for Excusing**.
+4. Save and **Submit**.
+5. If the month's **Prepare Payroll Inputs** was already pressed, press it again.
 
 The lateness stays recorded in reports but is no longer fined. If lateness was the only reason the day became a Half Day, the day goes back to Present.
 
@@ -75,7 +77,9 @@ The Attendance form also shows a **Checkin Log** with each punch of the day.
 4. Set **From Date** and **To Date**. Optionally limit to some **Devices**.
 5. Save and **Submit**. The repair runs in the background. **Status**, **Progress %** and **Current Step** show how far it is. At the end you see how many rows were created, updated or removed, and a **Per-Day Log**.
 
-Use Attendance Fix after: a device was offline, device IDs were filled late, a shift was changed, or a holiday was added or removed for a past date.
+Use Attendance Fix after: a device was offline, device IDs were filled late, a shift was changed, or a holiday was **removed** for a past date.
+
+Attendance Fix **skips holiday dates** (each person's own list). For a holiday **added** for a past date, nothing is needed: Holiday Bulk Update corrects that day's attendance itself. For one person's holiday that was worked, use **Repair from Check-ins** on that day instead.
 
 ### A punch is genuinely missing
 If the person forgot to punch, the device cannot know. Create or edit the **Attendance** for that day by hand with the right status, after checking with the person's manager.

@@ -61,6 +61,10 @@ def get_present_statuses() -> tuple:
 @frappe.whitelist()
 def trigger_for_payroll_entry(payroll_entry: str) -> dict:
 	pe = frappe.get_doc("Payroll Entry", payroll_entry)
+	# The engine writes with ignore_permissions, so the caller's rights are
+	# checked here: someone who may read this entry and create Additional Salary.
+	pe.check_permission("read")
+	frappe.has_permission("Additional Salary", "create", throw=True)
 	if pe.docstatus == 2:
 		frappe.throw(_("Cannot calculate allowances for a cancelled Payroll Entry."))
 	result = create_additional_salaries(pe)
@@ -76,6 +80,7 @@ def trigger_for_payroll_entry(payroll_entry: str) -> dict:
 		"payroll_entry": pe.name,
 		"created": len(result["created"]),
 		"skipped": len(result["skipped"]),
+		"cleared": len(result["cleared"]),
 		"records": result["created"],
 		"skipped_records": result["skipped"],
 		"advance_recoveries": len(recoveries),
@@ -120,23 +125,12 @@ def create_additional_salaries(payroll_entry) -> dict:
 
 	created: list[dict] = []
 	skipped: list[dict] = []
+	cleared: list[dict] = []
 	for employee in employees:
 		emp_doc = frappe.get_cached_doc("Employee", employee)
 		emp_rows = get_employee_allowance_rows(employee, end_date)
 		for sc in components:
-			row = emp_rows.get(sc.name)
-			if not _gets(employee, sc, row, end_date) or _skip_for_eligibility(emp_doc, sc):
-				continue
-			period = _attendance_period(sc, start_date, end_date)
-			rate = _resolve_rate(row, sc, employee, end_date, month_days=date_diff(period[1], period[0]) + 1)
-			if rate is None:
-				continue
-			qty = _qty_for_employee(employee, sc, *period)
-			if qty <= 0:
-				continue
-			amount = flt(qty * rate, 2)
-			if amount <= 0:
-				continue
+			qty, rate, amount = _priced(employee, emp_doc, sc, emp_rows.get(sc.name), start_date, end_date)
 
 			# A savepoint is a SQL identifier, so anything but letters, digits and
 			# underscores has to go: "Tea & Conveyance" made MariaDB reject the
@@ -144,7 +138,14 @@ def create_additional_salaries(payroll_entry) -> dict:
 			savepoint = _savepoint_name(employee, sc.name)
 			frappe.db.savepoint(savepoint)
 			try:
-				_delete_existing_draft(employee, sc.name, payroll_date)
+				# The last press's row goes first, whatever this press finds: when a
+				# corrected attendance, a stopped allowance or a lost eligibility
+				# brings the amount to nothing, the old figure must not stay paid.
+				removed = _delete_existing_draft(employee, sc.name, payroll_date)
+				if not amount:
+					if removed:
+						cleared.append({"employee": employee, "salary_component": sc.name, "removed": removed})
+					continue
 				doc = _make_additional_salary(
 					employee=employee,
 					salary_component=sc,
@@ -184,7 +185,21 @@ def create_additional_salaries(payroll_entry) -> dict:
 			indicator="orange",
 			alert=True,
 		)
-	return {"created": created, "skipped": skipped}
+	return {"created": created, "skipped": skipped, "cleared": cleared}
+
+
+def _priced(employee: str, emp_doc, sc, row, start_date, end_date) -> tuple:
+	"""(qty, rate, amount) this person earns from the component this month; amount 0 when nothing."""
+	if not _gets(employee, sc, row, end_date) or _skip_for_eligibility(emp_doc, sc):
+		return 0, None, 0
+	period = _attendance_period(sc, start_date, end_date)
+	rate = _resolve_rate(row, sc, employee, end_date, month_days=date_diff(period[1], period[0]) + 1)
+	if rate is None:
+		return 0, None, 0
+	qty = _qty_for_employee(employee, sc, *period)
+	if qty <= 0:
+		return qty, rate, 0
+	return qty, rate, max(flt(qty * rate, 2), 0)
 
 
 def _qty_for_employee(employee: str, sc, start_date, end_date) -> float:
@@ -465,6 +480,8 @@ def recompute_holiday_flags(start_date=None, end_date=None) -> dict:
 	Run after editing a Holiday List, or as a one-time backfill on patch install.
 	If no dates passed, scans every Attendance row.
 	"""
+	# Writes with set_value (no permission check), so the caller's is checked here.
+	frappe.has_permission("Attendance", "write", throw=True)
 	filters = {}
 	if start_date and end_date:
 		filters["attendance_date"] = ["between", [start_date, end_date]]
@@ -601,7 +618,7 @@ def _employees_in_payroll_entry(pe) -> list:
 	)
 
 
-def _delete_existing_draft(employee: str, salary_component: str, payroll_date) -> None:
+def _delete_existing_draft(employee: str, salary_component: str, payroll_date) -> int:
 	"""Clear a previous run's row for this employee, component and month.
 
 	Submitted ones are cancelled first: the calculator submits what it creates, so
@@ -626,6 +643,7 @@ def _delete_existing_draft(employee: str, salary_component: str, payroll_date) -
 			doc.flags.ignore_permissions = True
 			doc.cancel()
 		frappe.delete_doc("Additional Salary", row.name, force=True, ignore_permissions=True)
+	return len(existing)
 
 
 def _make_additional_salary(

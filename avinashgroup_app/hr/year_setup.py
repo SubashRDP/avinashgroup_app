@@ -171,9 +171,16 @@ def require_standing_setup(fiscal_year, companies):
 
 def require_tax_table(fiscal_year, year, companies):
 	"""Refuse to start a year whose tax rates nobody has entered."""
-	from avinashgroup_app.payroll.income_tax import TAX_SLABS_BY_YEAR
+	from avinashgroup_app.payroll.income_tax import TAX_SLABS_BY_YEAR, WOMEN_REBATE_BY_YEAR
 
 	if fiscal_year in TAX_SLABS_BY_YEAR:
+		if fiscal_year not in WOMEN_REBATE_BY_YEAR:
+			frappe.throw(
+				_(
+					"The {0} tax rates are entered but not the women's rebate. Add \"{0}\" to "
+					"WOMEN_REBATE_BY_YEAR in payroll/income_tax.py from the Finance Act (0 if it was abolished)."
+				).format(fiscal_year)
+			)
 		return
 	missing = [
 		c
@@ -356,7 +363,7 @@ def ensure_income_tax_slab(company, abbr, fiscal_year, year):
 	An Income Tax Slab already entered for the year wins; otherwise it is built
 	from TAX_SLABS_BY_YEAR (require_tax_table has made sure one of the two exists).
 	"""
-	from avinashgroup_app.payroll.income_tax import TAX_SLABS_BY_YEAR
+	from avinashgroup_app.payroll.income_tax import TAX_SLABS_BY_YEAR, WOMEN_REBATE_BY_YEAR
 
 	existing = frappe.db.get_value(
 		"Income Tax Slab",
@@ -375,6 +382,7 @@ def ensure_income_tax_slab(company, abbr, fiscal_year, year):
 			"currency": frappe.db.get_value("Company", company, "default_currency") or "NPR",
 			"allow_tax_exemption": 1,
 			"standard_tax_exemption_amount": 0,
+			"custom_women_rebate_percent": WOMEN_REBATE_BY_YEAR[fiscal_year],
 			"slabs": [
 				{
 					"from_amount": from_amount,

@@ -34,6 +34,7 @@ except frappe.ValidationError as e:
 
 # 3. with rates entered -> full rollover
 income_tax.TAX_SLABS_BY_YEAR["84/85"] = income_tax.FY_8384_SLABS   # stand-in for the Finance Act 2084
+income_tax.WOMEN_REBATE_BY_YEAR["84/85"] = income_tax.WOMEN_REBATE_BY_YEAR["83/84"]
 r = y.setup_year("84/85"); a = count()
 print("LPA:", {k: (c.get("leave_assigned") or {}).get("assigned") for k, c in r["companies"].items()}, [f for c in r["companies"].values() for f in (c.get("leave_assigned") or {}).get("failed", [])][:3])
 check("84/85 builds the year", True, str({k: a[k]-b[k] for k in a if a[k]!=b[k]}))
@@ -42,6 +43,8 @@ rolled = {k: c["salary_rolled"]["created"] for k, c in r["companies"].items()}
 check("pay rolled for every paid employee", sum(rolled.values()) == frappe.db.count("Salary Structure Assignment", {"docstatus": 1, "from_date": "2026-07-17"}), str(rolled))
 bad = frappe.db.sql("""select count(*) from `tabSalary Structure Assignment` where docstatus=1 and from_date='2027-07-17' and income_tax_slab not like 'Nepal 84/85 - %%'""")[0][0]
 check("every new assignment points at the 84/85 slab", bad == 0, f"{bad} wrong")
+rebates = set(frappe.get_all("Income Tax Slab", filters={"name": ["like", "Nepal 84/85 - %"]}, pluck="custom_women_rebate_percent"))
+check("84/85 slabs carry the women's rebate", rebates == {income_tax.WOMEN_REBATE_BY_YEAR["84/85"]}, str(rebates))
 same = frappe.db.sql("""select count(*) from `tabSalary Structure Assignment` n join `tabSalary Structure Assignment` o
   on o.employee=n.employee and o.docstatus=1 and o.from_date='2026-07-17'
   where n.docstatus=1 and n.from_date='2027-07-17' and (n.base<>o.base or n.salary_structure<>o.salary_structure or n.payroll_payable_account<>o.payroll_payable_account)""")[0][0]

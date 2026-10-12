@@ -241,6 +241,8 @@ frappe.ui.form.on("Payroll Entry", {
 		lock_bs_dates(frm);
 		draw_month_calendar(frm, frm.doc.custom_fiscal_year);
 		if (frm.doc.docstatus === 2) return;
+		// It writes Additional Salary; the server refuses anyone who cannot.
+		if (!frappe.model.can_create("Additional Salary")) return;
 
 		frm.add_custom_button(
 			__("Prepare Payroll Inputs"),
@@ -263,7 +265,11 @@ frappe.ui.form.on("Payroll Entry", {
 								const skipped = r.message.skipped || 0;
 								const recovered = r.message.advance_recoveries || 0;
 								const refreshed = r.message.slips_refreshed || 0;
+								const cleared = r.message.cleared || 0;
 								let msg = __("{0} allowance and fine records, {1} advance instalments.", [created, recovered]);
+								if (cleared) {
+									msg += " " + __("{0} earlier records removed: nothing is due for them now.", [cleared]);
+								}
 								if (refreshed) {
 									msg += " " + __("{0} draft salary slips updated.", [refreshed]);
 								}

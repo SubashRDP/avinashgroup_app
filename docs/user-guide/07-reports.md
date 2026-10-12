@@ -113,7 +113,7 @@ Rules used: late minutes count from the shift start with no grace (09:08 on a 9 
 |---|---|
 | **Company** | The company |
 | **BS Year** | The **calendar** BS year of the salary month — for example **2083** for Bhadra 2083, **2084** for Baisakh 2084. (Not the fiscal year "83/84".) |
-| **Salary Month** | The month the salary is **for** (the report defaults to last month) |
+| **Salary Month** | The month the salary is **for**, picked from the list as number and name, for example **05 - Bhadra** (the report defaults to last month) |
 | **Slips** | 1 - Submitted, or 0 - Draft to preview |
 
 **Columns:** Employee, Name, PAN, SSF No., Gross Pay, **SSF Employer 20%**, **SSF Employee 11%**, **SSF Deposit 31%**, CIT, **SST (1%)**, **Remuneration Tax**, **Total Tax Withheld**, Salary Slip.

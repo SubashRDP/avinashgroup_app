@@ -24,7 +24,6 @@ Slip does not run validate, so it shows the structure's lines only.
 """
 
 import frappe
-from frappe.utils import flt
 
 from hrms.payroll.doctype.salary_slip.salary_slip import get_salary_component_data
 
@@ -47,13 +46,13 @@ def add_employee_allowances(doc, method=None):
 		if not d.additional_salary
 		and frappe.get_cached_value("Salary Component", d.salary_component, "custom_allowance_kind") in FIXED_KINDS
 	} | set(wanted)
-	have = {
-		d.salary_component: flt(d.default_amount)
-		for d in doc.earnings
-		if d.salary_component in managed and not d.additional_salary
-	}
-	if have == wanted:
+	if not managed:
 		return
+
+	# Rebuilt on every save, even when the full-month amounts are unchanged:
+	# payment days may have moved (an absence marked since the last save), and
+	# only update_component_row prorates these rows — HRMS re-prorates its own
+	# structure rows but would leave ours at last save's figure.
 
 	# An allowance taken off the employee since the slip was last saved must
 	# leave it, or it keeps being paid.

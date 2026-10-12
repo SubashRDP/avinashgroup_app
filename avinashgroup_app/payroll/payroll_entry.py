@@ -29,6 +29,7 @@ from frappe.utils import flt
 from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
 
 from avinashgroup_app.payroll.allowance import get_section, has_section_accounts, section_account
+from avinashgroup_app.payroll.income_tax import warn_missing_tax_history
 from avinashgroup_app.payroll.payroll_month import fill_from_bs_month, warn_missing_attendance
 
 
@@ -43,9 +44,11 @@ class AvinashPayrollEntry(PayrollEntry):
 		super().validate()
 		if self.is_new() or self.has_value_changed("start_date"):
 			warn_missing_attendance(self)
+			warn_missing_tax_history(self)
 
 	def before_submit(self):
 		warn_missing_attendance(self)
+		warn_missing_tax_history(self)
 		super().before_submit()
 
 	@frappe.whitelist()

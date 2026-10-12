@@ -50,10 +50,10 @@ Usually a **Late Arrival Cutoff (forces Half Day)** time was saved on a Shift Ty
 The Shift Type's **Allow check-out after shift end time** is too short (it should be 240 minutes), so the late check-out was ignored. Correct it, then run **Attendance Fix**.
 
 ### Someone worked on a Saturday or holiday but has no attendance
-Automatic attendance may skip holidays. Open **Attendance** for that day and use **Repair from Check-ins**, or run **Attendance Fix** for that date.
+Automatic attendance may skip holidays. Open **Attendance** for that day and use **Repair from Check-ins**. (Attendance Fix skips holiday dates, so it will not help here.)
 
 ### A woman did not get Teej off
-Her **Holiday List** on the Employee is not her company's **Women** list. Set it, then run **Attendance Fix** for that date. Also make sure no Shift Type has a Holiday List set (it would override hers).
+Her **Holiday List** on the Employee is not her company's **Women** list. Set it. If she was marked Absent that day, the absence is no longer deducted (payroll ignores an absence on a person's own holiday); cancel that Attendance if you want the screens clean. If she worked that day, use **Repair from Check-ins** on it so it is marked as holiday work. Attendance Fix skips holidays, so it will not help here. Also make sure no Shift Type has a Holiday List set (it would override hers).
 
 ### A slip shows an "Adjustment: attendance differs from the slip's payment days" row
 Attendance was changed after the slip was made. Open the draft slip and **Save** it again. See Chapter 6.
@@ -93,6 +93,8 @@ The Leave Allocation is still a **draft**. Open it and **Submit** it.
 | **Posting date is in another BS month** — "This entry pays … but is posted on …, which is in …. Every salary slip takes its month from the posting date…" | The posting date was changed to a date outside the month being paid | Choose the month again on the calendar (it resets the posting date to the month's last day), or set the posting date to the date the message suggests |
 | **Slip and payroll entry disagree on the month** — "Salary slip covers … but its payroll entry … pays …. Fix the entry's posting date." | A slip's month differs from its Payroll Entry | Tell IT. Usually the entry's dates were changed after slips were made: cancel and remake the slips |
 | **Attendance missing** — "… of … employees have no submitted attendance between … and …. Their unmarked days count as Present, and they get no tea, meal, overtime or late fine." | An orange warning on Save or Submit: the month has no attendance for these people | If attendance is still to come, stop: mark it, run **Prepare Payroll Inputs**, then submit. If paying a full month without attendance is intended, carry on |
+| **Tax history missing** — "… employees have earlier months of this tax year with no salary slip: …" | An orange warning on Save or Submit: those people's tax leaves out months paid outside the system, so too little is deducted | Get from accounts what each was paid and taxed in those months, and enter it on their Salary Structure Assignment as **Taxable Earnings Till Date** and **Tax Deducted Till Date** (Chapter 2.7). Then save the Payroll Entry again |
+| **Insufficient Permission for Additional Salary** (Prepare Payroll Inputs) | You may not create Additional Salary | Ask an HR Manager to press it |
 | **Choose the Payment Account and press Update to save it, then make the bank entry.** | **Make Bank Entry** was pressed before the Payment Account was saved on the submitted entry | Choose the bank account, press **Update**, then **Make Bank Entry** |
 | **Payment Account … is a … account. Salary is paid from a Bank or Cash account.** | The Payment Account is not a bank or cash account (for example a stock account) | Choose the bank or cash account the salary is paid from, press **Update**, try again |
 | **Cannot submit. Attendance is not marked for some employees.** | The entry has **Validate Attendance** ticked and some days have no attendance | Complete the attendance, or untick Validate Attendance |
