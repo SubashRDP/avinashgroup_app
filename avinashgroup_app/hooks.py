@@ -105,8 +105,10 @@ doctype_js = {
     "Journal Entry": "public/js/journal_entry.js",
     "Attendance": "public/js/attendance.js",
     "Payroll Entry": "public/js/payroll_entry.js",
-    # Allowances on the assignment: allowances only. See payroll/allowance.py.
+    # Allowances on the assignment: picked allowance → the structure's rate. See payroll/allowance.py.
     "Salary Structure Assignment": "public/js/salary_structure_assignment.js",
+    # The structure's Allowance Rates: allowances only. See payroll/allowance.py.
+    "Salary Structure": "public/js/salary_structure.js",
     # "Move Staff to This Shift" on a rotational shift. See hr/shift_rotation.py.
     "Shift Type": "public/js/shift_type.js",
     "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
@@ -453,10 +455,12 @@ for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):
     _add_doc_event(_dt, "validate", "avinashgroup_app.hr.bs_dates.set_bs_dates")
 
 # Allowances (payroll/allowance.py): an allowance's kind sets its attendance
-# rule; an attendance allowance's structure row is only a tag; the employee's
-# assignment's Allowances table says which allowances each person gets, and their amount.
+# rule; the structure's Allowance Rates list the usual rates (changed only by a
+# Salary Revision once submitted); the assignment's Allowances say which
+# allowances each person gets, and their rate.
 _add_doc_event("Salary Component", "validate", "avinashgroup_app.payroll.allowance.validate_salary_component")
 _add_doc_event("Salary Structure", "validate", "avinashgroup_app.payroll.allowance.validate_salary_structure")
+_add_doc_event("Salary Structure", "before_update_after_submit", "avinashgroup_app.payroll.allowance.guard_structure_rates")
 _add_doc_event("Salary Structure Assignment", "validate", "avinashgroup_app.payroll.allowance.validate_assignment_allowances")
 
 # Maternity is for mothers, paternity for fathers — checked when the leave is

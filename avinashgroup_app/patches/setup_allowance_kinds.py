@@ -36,18 +36,27 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.utils import flt
 
-from avinashgroup_app.payroll.allowance import (
-	ALLOWANCE_KINDS,
-	FIXED_COMPANY_RATE,
+from avinashgroup_app.payroll.allowance import SECTIONS, sibling_account
+
+# The kinds as they were named when this patch ran. Frozen here so a fresh
+# site still migrates in order: allowance_rate_list renames them afterwards.
+FIXED_PER_PERSON = "Fixed per Person"
+FIXED_COMPANY_RATE = "Fixed Company Rate"
+PERCENT_OF_INITIAL_BASIC = "% of Initial Basic"
+PER_DAY_PRESENT = "Per Day Present"
+PER_MEAL = "Per Meal"
+PER_HOUR_OVERTIME = "Per Hour (Overtime)"
+ENTERED_BY_HAND = "Entered by Hand"
+YEARLY = "Yearly"
+ALLOWANCE_KINDS = (
 	FIXED_PER_PERSON,
-	PER_DAY_PRESENT,
-	PER_HOUR_OVERTIME,
-	PER_MEAL,
+	FIXED_COMPANY_RATE,
 	PERCENT_OF_INITIAL_BASIC,
-	SECTIONS,
-	YEARLY,
+	PER_DAY_PRESENT,
+	PER_MEAL,
+	PER_HOUR_OVERTIME,
 	ENTERED_BY_HAND,
-	sibling_account,
+	YEARLY,
 )
 
 #: Allowances by name, from the four companies' Falgun 2082 sheets.

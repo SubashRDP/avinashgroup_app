@@ -1,0 +1,85 @@
+{
+ "actions": [],
+ "creation": "2026-10-12 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "change",
+  "allowance",
+  "salary_structure",
+  "old_rate",
+  "new_rate",
+  "unit"
+ ],
+ "fields": [
+  {
+   "fieldname": "change",
+   "fieldtype": "Select",
+   "label": "Change",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2,
+   "options": "Raise Rate\nAdd\nStop\nChange Rate",
+   "description": "Raise Rate: everyone on the structure who is at its rate, and the structure's rate. Add / Stop / Change Rate: every employee listed below."
+  },
+  {
+   "fieldname": "allowance",
+   "fieldtype": "Link",
+   "label": "Allowance",
+   "options": "Salary Component",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "salary_structure",
+   "fieldtype": "Link",
+   "label": "Salary Structure",
+   "options": "Salary Structure",
+   "in_list_view": 1,
+   "columns": 2,
+   "mandatory_depends_on": "eval:doc.change=='Raise Rate'",
+   "depends_on": "eval:doc.change=='Raise Rate'"
+  },
+  {
+   "fieldname": "old_rate",
+   "fieldtype": "Float",
+   "label": "Current Rate",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "depends_on": "eval:doc.change=='Raise Rate'",
+   "description": "The structure's rate before this revision; only people at this rate are raised."
+  },
+  {
+   "fieldname": "new_rate",
+   "fieldtype": "Float",
+   "label": "New Rate",
+   "in_list_view": 1,
+   "columns": 1,
+   "depends_on": "eval:doc.change!='Stop'",
+   "description": "Add: blank takes the rate from the person's salary structure."
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Data",
+   "label": "Unit",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "From the allowance's kind: per month, per day present, per meal, % of initial basic, or worked out from basic."
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-12 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Salary Revision Allowance",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

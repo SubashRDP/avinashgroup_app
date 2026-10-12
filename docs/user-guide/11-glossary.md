@@ -6,8 +6,9 @@
 |---|---|
 | **AD** | The English (Gregorian) calendar. ERPNext stores dates in AD |
 | **Additional Salary** | A one-month amount for one person (earning or deduction). Made by Prepare Payroll Inputs, Payroll Adjustment, Salary Revision (arrears) and advance recovery |
-| **Allowance Kind** | How an allowance is paid: Fixed per Person, Fixed Company Rate, % of Initial Basic, Per Day Present, Per Meal, Per Hour (Overtime), Entered by Hand, Yearly (Chapter 2) |
-| **Allowances table** | The table on a person's Salary Structure Assignment listing the allowances they get, with their own amount or the company rate |
+| **Allowance Kind** | How an allowance is counted: Monthly, % of Initial Basic, Per Day Present, Per Meal, Per Overtime Hour, Entered by Hand, Yearly (Chapter 2) |
+| **Allowance Rates** | The usual rate of each allowance on a salary structure (tea per day, meal per meal, gas per month, HRA %). Fills the Rate on an assignment; raised by a Salary Revision |
+| **Allowances table** | The table on a person's Salary Structure Assignment listing the allowances they get and the Rate they are paid. No row, not paid |
 | **Arrears** | The difference owed for months already paid at the old rate when a raise is agreed late. Paid as **Salary Arrears** in one month |
 | **Attendance** | One record per person per day: Present, Absent, Half Day, On Leave, Work From Home |
 | **Attendance Device ID** | The number a person is enrolled under on the biometric device |
@@ -16,7 +17,6 @@
 | **BS (Bikram Sambat)** | The Nepali calendar. The books and payroll run on BS months |
 | **BS Month** | A Nepali month: Shrawan, Bhadra, Ashwin, Kartik, Mangsir, Poush, Magh, Falgun, Chaitra, Baisakh, Jestha, Ashadh |
 | **CIT** | Citizen Investment Trust contribution; reduces taxable income |
-| **Company rate / Default Rate** | The company's standard rate for an allowance (tea per day, meal per meal, gas per month, HRA %), on Salary Component → Accounts row → Default Rate |
 | **Daily Breakdown** | The table on every salary slip that shows each day's attendance, pay and fines, adding up to the net pay |
 | **DA** | Dearness Allowance, a person's own fixed monthly allowance |
 | **Employee Category** | **Operation** (paid overtime) or **Officer & Admin** (replacement leave). Decides what holiday and extra work earns |
@@ -53,7 +53,7 @@
 | **S/D** | Sales and Distribution. The **Marketing** payroll section, and its salary expense account |
 | **Salary Revision** | The screen for pay raises: makes new dated assignments, carries allowances over, pays arrears |
 | **Salary Slip BS** | The print format of the payslip in Bikram Sambat, with the Daily Breakdown on page 2. Also what is emailed |
-| **Salary Structure** | What everyone in a company's payroll shares: Basic, SSF Addition, SSF, Income Tax and the tags (for example **NGI Staff 83/84**) |
+| **Salary Structure** | A template for a company's staff: the formula lines (Basic, SSF Addition, SSF, Income Tax, Late Fine) and the Allowance Rates (for example **NGI Staff 83/84**) |
 | **Salary Structure Assignment** | A person's pay from a date: Base (Basic), Initial Basic, SSF Applicable, Allowances, tax slab, payable account |
 | **Sandwich rule** | Holidays that fall between two leave days are counted as leave |
 | **SSF** | Social Security Fund. On the slip, **SSF** is the deduction of **31% of Basic** (20% employer + 11% employee), deposited by the 15th of the next month |

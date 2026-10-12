@@ -1,8 +1,22 @@
 // Salary Revision — type a percent or type an amount; the other one follows.
+// Allowance changes and arrears are worked out on the server when the form is
+// saved (salary_revision.py), so what the form shows is what will be paid.
+const NOT_ON_ASSIGNMENT = ["Entered by Hand", "Yearly"];
+
 frappe.ui.form.on("Salary Revision", {
 	setup(frm) {
 		frm.set_query("employee", "employees", () => ({
 			filters: { company: frm.doc.company, status: "Active" },
+		}));
+		frm.set_query("allowance", "allowance_changes", () => ({
+			filters: {
+				custom_is_allowance: 1,
+				disabled: 0,
+				custom_allowance_kind: ["not in", NOT_ON_ASSIGNMENT],
+			},
+		}));
+		frm.set_query("salary_structure", "allowance_changes", () => ({
+			filters: { company: frm.doc.company, docstatus: 1 },
 		}));
 	},
 
@@ -46,42 +60,8 @@ frappe.ui.form.on("Salary Revision Row", {
 				frappe.model.set_value(cdt, cdn, "increment_percent", percent);
 			}
 		}
-		set_arrears(frm, row);
-		set_totals(frm);
-	},
-
-	new_dearness_allowance(frm, cdt, cdn) {
-		set_arrears(frm, locals[cdt][cdn]);
-		set_totals(frm);
-	},
-
-	arrears_amount(frm) {
-		set_totals(frm);
-	},
-
-	employees_remove(frm) {
-		set_totals(frm);
 	},
 });
-
-// Arrears are the monthly difference times the months already paid at the old
-// rate, so any change to the new pay has to redraw them.
-function set_arrears(frm, row) {
-	if (!frm.doc.pay_arrears) {
-		return;
-	}
-	const difference =
-		flt(row.new_base) +
-		flt(row.new_dearness_allowance) -
-		flt(row.current_base) -
-		flt(row.current_dearness_allowance);
-	frappe.model.set_value(
-		row.doctype,
-		row.name,
-		"arrears_amount",
-		difference * flt(row.arrears_months)
-	);
-}
 
 function get_employees(frm) {
 	frappe.call({
@@ -90,29 +70,11 @@ function get_employees(frm) {
 		freeze: true,
 		freeze_message: __("Reading everyone's current salary…"),
 		callback(r) {
-			frm.refresh_field("employees");
-			frm.refresh_field("total_increase");
-			frm.refresh_field("employee_count");
+			frm.refresh_fields();
 			frappe.show_alert({
 				message: __("{0} employees", [r.message || 0]),
 				indicator: "green",
 			});
 		},
 	});
-}
-
-function set_totals(frm) {
-	let increase = 0;
-	let arrears = 0;
-	(frm.doc.employees || []).forEach((row) => {
-		increase +=
-			flt(row.new_base) +
-			flt(row.new_dearness_allowance) -
-			flt(row.current_base) -
-			flt(row.current_dearness_allowance);
-		arrears += flt(row.arrears_amount);
-	});
-	frm.set_value("total_increase", increase);
-	frm.set_value("total_arrears", arrears);
-	frm.set_value("employee_count", (frm.doc.employees || []).length);
 }

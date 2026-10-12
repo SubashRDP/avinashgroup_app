@@ -2,15 +2,16 @@
 
 Per Payroll Entry:
 1. List Salary Components where `custom_is_attendance_driven = 1` and not disabled.
-2. For each (employee, component), skip anyone not tagged with it — not in their
-   salary structure and no Eligible row of their own (payroll/allowance.py) —
-   and, for an "Only OT-Eligible Staff" component, anyone not OT eligible.
+2. For each (employee, component), skip anyone who does not get it — an
+   allowance needs a row on their salary assignment (payroll/allowance.py); the
+   late fine, which is not an allowance, a row in their salary structure — and,
+   for an "Only OT-Eligible Staff" component, anyone not OT eligible.
 3. Evaluate the component's condition against the employee's submitted
    Attendance rows in the period — the payroll's BS month, or the one before
    it when the component's Attendance Month says so — and sum the qty.
-4. Multiply qty × rate (employee's own row → the company's Default Rate on the
-   component's Accounts row → the component's rate basis: a flat default, or
-   Hourly Basic × Multiplier for OT and late fine).
+4. Multiply qty × rate: the Rate on the person's assignment row, or, for a
+   component priced Hourly Basic × Multiplier (overtime, late fine), the
+   person's own basic per hour times the multiplier.
 5. Create and submit an Additional Salary per (employee, component,
    payroll_date), tagged with `custom_source = "Nepal HRMS Attendance
    Allowance"`. Idempotent: earlier rows with the same tag are replaced.
@@ -23,9 +24,9 @@ from frappe.utils import add_days, cint, flt, getdate
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
 from avinashgroup_app.hr.shift_day import measure_day
 from avinashgroup_app.payroll.allowance import (
-	company_default_rate,
+	COMPUTED_RATE_BASIS,
 	get_employee_allowance_rows,
-	is_tagged,
+	structure_components,
 )
 
 SOURCE_TAG = "Nepal HRMS Attendance Allowance"
@@ -124,9 +125,9 @@ def create_additional_salaries(payroll_entry) -> dict:
 		emp_rows = get_employee_allowance_rows(employee, end_date)
 		for sc in components:
 			row = emp_rows.get(sc.name)
-			if not is_tagged(employee, sc.name, row, end_date) or _skip_for_eligibility(emp_doc, sc):
+			if not _gets(employee, sc, row, end_date) or _skip_for_eligibility(emp_doc, sc):
 				continue
-			rate = _resolve_rate(row, sc, employee, end_date, emp_doc.company)
+			rate = _resolve_rate(row, sc, employee, end_date)
 			if rate is None:
 				continue
 			qty = _qty_for_employee(employee, sc, *_attendance_period(sc, start_date, end_date))
@@ -554,27 +555,34 @@ def _savepoint_name(employee: str, component: str) -> str:
 	return "".join(ch if ch.isalnum() else "_" for ch in raw)[:60]
 
 
-def _resolve_rate(row, sc, employee=None, on_date=None, company=None):
-	"""The employee's own rate, then the company's, then the component's basis.
+def _gets(employee: str, sc, row, on_date) -> bool:
+	"""Whether this person is paid the component at all.
 
-	Most allowances pay a flat rate: tea at the company's 235 a day (NGN: 265),
-	typed as Default Rate on the component's Accounts row for that company; NEW
-	staff carry 40 on their own row. Overtime and the late fine are priced off
-	each person's own basic instead — `Hourly Basic × Multiplier` — so they
-	follow a pay rise without anyone retyping a rate.
+	An allowance: a row on their salary assignment — no row, not paid. The late
+	fine is not an allowance; a row in their salary structure's Deductions
+	tags it.
 	"""
-	if row is not None and flt(row.get("rate")):
-		return flt(row.get("rate"))
+	if sc.get("custom_is_allowance"):
+		return row is not None
+	return sc.name in structure_components(employee, on_date)
 
-	company_rate = company_default_rate(company, sc.name)
-	if company_rate:
-		return company_rate
 
-	if sc.get("custom_rate_basis") == "Hourly Basic × Multiplier" and employee:
+def _resolve_rate(row, sc, employee=None, on_date=None):
+	"""The rate per unit: the person's own Rate, or worked out from their basic.
+
+	Tea and meal pay the Rate on the person's assignment row (235 a day at NGI,
+	40 for new staff). Overtime and the late fine are priced off each person's
+	own basic instead — `Hourly Basic × Multiplier` — so they follow a pay rise
+	without anyone retyping a rate. None when there is nothing to price by.
+	"""
+	if sc.get("custom_rate_basis") == COMPUTED_RATE_BASIS and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,
 		# and rounding the rate first drifts the amount by a paisa.
 		rate = _hourly_basic(employee, on_date, sc) * flt(sc.get("custom_rate_multiplier") or 1)
 		return rate if rate else None
+
+	if row is not None and flt(row.get("rate")):
+		return flt(row.get("rate"))
 
 	return None
 

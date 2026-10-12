@@ -57,13 +57,13 @@ What it works out, per person, for the month:
 
 | Line | Counted from | Rate |
 |---|---|---|
-| **Tea & Conveyance** | Days present on **working days**. A Half Day counts as a full day. Holidays and Saturdays are **not** counted | The person's own rate, else the company rate (NGI 235, NGN 265 per day) |
-| **Meal** | Chapter 4, section 4.6 | The person's own rate, else the company rate |
+| **Tea & Conveyance** | Days present on **working days**. A Half Day counts as a full day. Holidays and Saturdays are **not** counted | The Rate on the person's Tea row (usually NGI 235, NGN 265 per day) |
+| **Meal** | Chapter 4, section 4.6 | The Rate on the person's Meal row |
 | **Overtime** | Measured hours on submitted Overtime Sheets | Basic ÷ 30 ÷ 8 × 1.5 per hour |
 | **Late Fine** (deduction) | Minutes late in + minutes left early, on working days worked in full. Not on a Half Day (already a penalty), not on a day marked **Late Excused**, never for **Late Fine Exempt** staff | Basic ÷ 30 ÷ 8 per hour |
 | **Salary Advance** (deduction) | Each open Employee Advance set to be recovered from salary | The smaller of the monthly instalment and what is still owed |
 
-Who gets tea, meal, overtime and late fine: everyone on a structure that has them as a tag, plus anyone with an Active row on their assignment. A row with Active unticked stops it. Meals and overtime are only for OT-eligible staff.
+Who gets tea, meal and overtime: anyone with a row for it on their salary assignment; no row, none. Late fine: everyone on a structure with the Late Fine line. Meals and overtime are only for OT-eligible staff.
 
 **You can press the button again** whenever attendance or an Overtime Sheet changes. It replaces what it made last time for that month. It never touches amounts HR typed by hand, and never touches submitted slips.
 

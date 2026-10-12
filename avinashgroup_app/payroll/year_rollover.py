@@ -112,7 +112,7 @@ def roll_salary_assignments(company, year_start):
 			"Assignment Allowance",
 			filters={"parent": current.name, "parenttype": "Salary Structure Assignment"},
 			# From Date left blank: the row runs with the new assignment.
-			fields=["allowance", "amount", "active"],
+			fields=["allowance", "rate"],
 			order_by="idx",
 		):
 			doc.append("custom_allowances", row)

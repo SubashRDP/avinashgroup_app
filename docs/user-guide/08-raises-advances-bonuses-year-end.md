@@ -2,30 +2,44 @@
 
 [Back to contents](README.md)
 
-## 8.1 Pay raises — Salary Revision
+## 8.1 Pay changes — Salary Revision
 
-A raise is never an edit of the old pay. It is a **new, dated** salary assignment. **Salary Revision** makes these for a whole company at once.
+A change in pay is never an edit of the old pay. It is a **new, dated** salary assignment. **Salary Revision** makes these for many people at once: a raise in Basic or Dearness, and any change to an allowance.
 
 **Rules**
-- The **Effective From** date must be the **first day of a BS month**. A slip is paid at one rate for the whole month, so a raise in the middle of a month is not possible. If you type another day, the system tells you which date to use.
-- If the raise is agreed late (for example it runs from Shrawan but was decided in Mangsir), the months already paid at the old rate are paid as **arrears** in one later month. Submitted slips are never changed.
+- The **Effective From** date must be the **first day of a BS month**. A slip is paid at one rate for the whole month, so a change in the middle of a month is not possible. If you type another day, the system tells you which date to use.
+- If the change is agreed late (for example it runs from Shrawan but was decided in Mangsir), the months already paid at the old pay are paid as **arrears** in one later month. Submitted slips are never changed.
+- Each person listed gets **one** new assignment carrying everything the revision changes for them.
+
+**Allowance Changes**
+
+| Change | Who it reaches | What it does |
+|---|---|---|
+| **Raise Rate** | Everyone on the chosen **Salary Structure** whose rate is the structure's usual rate | Their rate becomes the **New Rate**, and so does the structure's Allowance Rate. People on a rate of their own (for example new staff's tea at 40) are **not** raised; Get Employees names them |
+| **Add** | Every listed employee who does not have it | Gives the allowance at the **New Rate**, or, if blank, their structure's usual rate |
+| **Stop** | Every listed employee who has it | Takes the allowance off |
+| **Change Rate** | Every listed employee who has it | Sets their rate to the **New Rate** |
+
+Overtime cannot be raised here: it is worked out from each person's Basic, so raise the Basic.
 
 **Steps**
 1. Open **Salary Revision** → **New**.
 2. Choose the **Company**.
 3. **Effective From**: the first day of the BS month the new pay starts. The **BS Month** fills itself.
-4. **Reason**: for example "Annual increment 2083".
-5. **Hike % for Everyone**: the percentage for all (you can change each person after).
-6. If the raise starts in a month already paid: tick **Pay Arrears** and set **Arrears Paid In** to a date **inside** the BS month in which the arrears should be paid.
-7. Click **Get Employees**. Everyone of the company with a salary is listed with **Current Basic**, **Hike %**, **New Basic**, **Current Dearness Allowance**, **New DA**, **Arrears Months** and **Arrears**.
-8. Change any row: type a different **Hike %** or **New Basic** (each updates the other), a new **New DA**, or remove people who get no raise.
-9. Check the totals (**Monthly Increase**, **Arrears**). Save, then **Submit**.
+4. **Reason**: for example "Annual increment 2083" or "Tea rate 2083".
+5. For a raise in Basic: **Hike % for Everyone** (you can change each person after).
+6. For allowances: add rows to **Allowance Changes** (table above).
+7. If the change starts in a month already paid: tick **Pay Arrears** and set **Arrears Paid In** to a date **inside** the BS month in which the arrears should be paid.
+8. Click **Get Employees**. With a Hike %, everyone with a salary is listed. Without one, only the people an allowance change reaches. Each row shows **Current Basic**, **New Basic**, **Current / New Dearness**, **Allowance Changes** (for example "Tea & Conveyance 235 → 260", "+ Gas Allowance 1690") and **Arrears**.
+9. Change any row: a different **Hike %** or **New Basic** (each updates the other), a new **New DA**, or remove people. For Add / Stop / Change Rate you can also add people by hand.
+10. **Save**. The Allowance Changes column and the Arrears are worked out on save. Check the totals (**Monthly Increase**, **Arrears**), then **Submit**.
 
 **What happens on submit**
-- Each person gets a new Salary Structure Assignment from the effective date, with the new Basic, the new Dearness Allowance, and **all their other allowances, Initial Basic and SSF Applicable carried over**.
-- If Pay Arrears is ticked, each person gets a **Salary Arrears** earning in the chosen month. Arrears follow the days actually paid in each past month, so a month with unpaid leave owes less. The arrears are taxed in the month they are paid.
+- Each person gets a new Salary Structure Assignment from the effective date, with the new Basic, the new Dearness Allowance, the allowance changes, and **all their other allowances, Initial Basic and SSF Applicable carried over**.
+- A **Raise Rate** also changes the structure's Allowance Rate, so people assigned later get the new rate.
+- If Pay Arrears is ticked, each person gets a **Salary Arrears** earning in the chosen month. Monthly pay (Basic, Dearness, Gas, HRA…) is owed by the days each past month actually paid, so a month with unpaid leave owes less. Tea and meal are owed by the days or meals each past month counted. The arrears are taxed in the month they are paid.
 
-**Undo:** cancel the Salary Revision. The new assignments and the arrears are cancelled, and the old pay (old Dearness Allowance included) is in force again.
+**Undo:** cancel the Salary Revision. The new assignments and the arrears are cancelled, a raised structure rate goes back, and the old pay is in force again.
 
 | Message | Fix |
 |---|---|
@@ -34,6 +48,9 @@ A raise is never an edit of the old pay. It is a **new, dated** salary assignmen
 | "Row …: … already has a salary assigned from …" | Someone already has an assignment from that date. Remove the row, or cancel that assignment |
 | "Row …: the new basic must be more than zero" | Type the New Basic |
 | "Row …: … is listed twice" / "Row …: … belongs to …" | Remove the duplicate row / the person from another company |
+| "Allowance Changes row …: … lists no rate for …, so nobody is on it" | The structure has no usual rate for that allowance. Use **Change Rate** for the people concerned |
+| "Add …: … lists no rate for it; type the New Rate" | Type the rate the listed people should get |
+| "… is worked out from each person's basic; raise the basic instead" | Overtime cannot be raised by rate |
 
 ## 8.2 One-off amounts in a month — Payroll Adjustment
 

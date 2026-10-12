@@ -145,9 +145,11 @@ A person's pay is a **dated** record: the **Salary Structure Assignment**. It ho
 
 A pay change is **never** an edit of the old assignment. It is a new assignment from a new date (use **Salary Revision**, Chapter 8). The old one stays as the record of what was paid before.
 
-### What the salary structure gives everyone
+### What the salary structure holds
 
-The structure holds only what everyone on it shares:
+A structure is a **template**. It pays nobody an allowance by itself.
+
+**Earnings and Deductions**: what HRMS works out by formula for everyone on it.
 
 | Line | How it is worked out |
 |---|---|
@@ -155,49 +157,64 @@ The structure holds only what everyone on it shares:
 | SSF Addition | 20% of Basic, if SSF Applicable (the employer's share, added to gross) |
 | SSF (deduction) | 31% of Basic, if SSF Applicable (20% employer + 11% employee) |
 | Income Tax | From the Income Tax Slab |
-| Tea & Conveyance, Meal, Overtime, Late Fine | "Tags": they mean "this allowance or fine applies to everyone on this structure". The amounts come from attendance (Chapter 5) |
+| Late Fine (deduction) | From attendance (Chapter 5) |
 
-The NGG structure has no Tea tag; NGG staff get tea only through a row on their own assignment.
+An allowance cannot be put in Earnings: "**… is an allowance. List its rate under Allowance Rates…**".
 
-### The Allowances table
+**Allowance Rates**: the **usual rate** of each allowance for people on this structure.
+
+| Allowance | Rate | Unit |
+|---|---|---|
+| Tea & Conveyance | 235 | per day present |
+| Meal | 75 | per meal |
+| Gas Allowance | 1,690 | per month |
+| House Rent Allowance | 25 | % of initial basic |
+| Dearness Allowance | 0 | per month — differs for every person |
+| Overtime | 0 | from basic × 1.50 — worked out, never typed |
+
+When you pick an allowance on someone's assignment, its Rate is filled in from this list. That is all the list does for pay. It is also what a **Salary Revision** raises (Chapter 8).
+
+On a submitted structure you can add or remove an allowance in this list, but you cannot change an existing rate here: "**Use a Salary Revision**". The revision raises the people at that rate too.
+
+### The Allowances table: what this person gets
 
 | Column | Meaning |
 |---|---|
 | **Allowance** | The allowance (only allowances can be chosen) |
-| **Amount** | For a person's own fixed allowance (Dearness, Other, Fixed, Fuel, Maintenance, Transport): **this person's monthly amount** — required. For a company-rate allowance (Gas, Education, House Rent, Tea, Meal): leave **blank** to use the company's rate, or type a figure to give this person a different rate |
-| **Active** | Untick to stop the allowance (for example a staff member who gets no tea) |
+| **Rate** | What **this person** is paid, in the unit shown. Filled in from the structure's rate when you pick the allowance; change it for this person |
+| **Unit** | Shown automatically: per month, per day present, per meal, % of initial basic, or "from basic" |
 | **From Date** | Leave blank to start with the assignment. Type a later date if the allowance starts later |
-| **Kind** | Shown automatically |
 
-**Examples:**
-- Dearness Allowance, Amount 7,380 → this person gets 7,380 a month.
-- Gas Allowance, Amount blank → this person gets the company rate (NGI 1,690).
-- House Rent Allowance, Amount blank → company rate (NGI 25%) × Initial Basic.
-- Tea & Conveyance, Amount 40 → a newer staff member at 40 a day instead of the company's 235.
-- Tea & Conveyance, Active unticked → no tea for this person, even though the structure gives tea to everyone.
+**No row means the allowance is not paid.** Payroll reads only this table.
 
-A row on the person's assignment always wins over the structure's tag.
+**Examples (NGI):**
+- Dearness Allowance, Rate 7,380 → 7,380 a month. The structure has no usual dearness, so type it.
+- Gas Allowance → Rate fills in 1,690 → 1,690 a month.
+- House Rent Allowance → Rate fills in 25 → 25% × this person's Initial Basic.
+- Tea & Conveyance → Rate fills in 235; change it to 40 for a newer staff member.
+- No Tea row → no tea for this person.
+
+A row left at 0 is filled from the structure when you save. If the structure has no rate for it either, the save stops: "**type …'s rate for this person, or remove the row if they do not get it**".
 
 ### The allowance kinds
 
-Each allowance has a **kind**, set on its Salary Component. The kind decides how it is paid:
+Each allowance has a **kind**, set on its Salary Component. The kind decides how it is counted:
 
 | Kind | Examples | How it reaches the slip |
 |---|---|---|
-| Fixed per Person | Dearness, Other, Fixed, Fuel, Maintenance, Transport | From the person's row, every month, reduced for unpaid days |
-| Fixed Company Rate | Gas, Education | Same; blank Amount = company rate |
-| % of Initial Basic | House Rent Allowance | Same; % × Initial Basic |
-| Per Day Present | Tea & Conveyance | Counted from attendance by **Prepare Payroll Inputs** |
-| Per Meal | Meal | Counted from attendance and Overtime Sheets by **Prepare Payroll Inputs** |
-| Per Hour (Overtime) | Overtime | Hours from approved Overtime Sheets, by **Prepare Payroll Inputs** |
+| Monthly | Dearness, Other, Fixed, Fuel, Maintenance, Transport, Gas, Education | The row's Rate every month, reduced for unpaid days |
+| % of Initial Basic | House Rent Allowance | Rate % × Initial Basic, reduced for unpaid days |
+| Per Day Present | Tea & Conveyance | Days counted from attendance × Rate, by **Prepare Payroll Inputs** |
+| Per Meal | Meal | Meals counted from attendance and Overtime Sheets × Rate, by **Prepare Payroll Inputs** |
+| Per Overtime Hour | Overtime | Hours from approved Overtime Sheets × the person's basic per hour × 1.5, by **Prepare Payroll Inputs** |
 | Entered by Hand | Load/Unload Allowance | Typed each month on a **Payroll Adjustment** (Chapter 8) |
 | Yearly | Dashain Bonus, Dashain Allowance, Leave Encashment | Their own buttons — **not built yet** (Chapter 8) |
 
-"Entered by Hand" and "Yearly" allowances cannot be put on the Allowances table.
+"Entered by Hand" and "Yearly" allowances cannot be put on an Allowances table or a structure's Allowance Rates.
 
-### Company rates (as of 9 October 2026)
+### Usual rates (as of 12 October 2026)
 
-The company rate is the **Default Rate** on the allowance's **Salary Component → Accounts** row for that company. The accountant or HR manager changes it there. Current figures:
+On each company's salary structure, under **Allowance Rates**:
 
 | Allowance | NGI | NGN | NGG | NGK |
 |---|---|---|---|---|
@@ -207,15 +224,16 @@ The company rate is the **Default Rate** on the allowance's **Salary Component �
 | Education Allowance (per month) | 2,780 | 1,250 | — | — |
 | House Rent Allowance (% of Initial Basic) | 25% | 27% | — | — |
 
-"—" means no rate is set for that company yet. Always check the Salary Component for the current figure.
+"—" means the structure lists no usual rate. Always check the structure for the current figure.
 
 ### Adding a new kind of allowance
 
 1. Open **Salary Component** → **New**. Type the name, Type = Earning.
 2. Tick **Is Allowance** and choose the **Allowance Kind**.
-3. In **Accounts**, add a row for each company that pays it: Company, the three accounts (Admin & Accounts, Marketing (S/D), Plant (F/P)) and the **Default Rate** if it is a company-rate allowance.
+3. In **Accounts**, add a row for each company that pays it: Company and the three accounts (Admin & Accounts, Marketing (S/D), Plant (F/P)).
 4. Save.
-5. Add a row for this allowance on the assignment of each person who gets it.
+5. If there is a usual rate, add it to the **Allowance Rates** of each structure that has one.
+6. Give it to people: a row on each person's assignment, or a **Salary Revision** with **Add** for many at once (Chapter 8).
 
 No new field and no new structure is needed.
 
