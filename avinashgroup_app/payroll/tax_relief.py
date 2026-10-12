@@ -20,8 +20,10 @@ Two rules of the Income Tax Act 2058 have no HRMS equivalent, and live here:
      Category ticked `custom_is_retirement_contribution`: its Max Amount and
      `custom_cap_percent_of_income`.
   2. Women's rebate (Schedule 1, 1(10)). A resident woman whose income is only
-     from employment gets a rebate on her tax. The percentage is a field on the
-     Income Tax Slab (`custom_women_rebate_percent`).
+     from employment gets a rebate on her tax. Who qualifies is HR's tick on the
+     Employee (`custom_womens_tax_rebate`): gender alone cannot say whether she
+     has other income. The percentage is a field on the Income Tax Slab
+     (`custom_women_rebate_percent`).
 
 No figure lives in this module: a blank field means the relief is off, never
 "use the Act's number" (user, 2026-09-29: no data comes as default).
@@ -44,6 +46,7 @@ override here would be silently ignored.
 from math import ceil
 
 import frappe
+from frappe import _
 from frappe.utils import flt
 
 from hrms.payroll.doctype.salary_slip.salary_slip import calculate_tax_by_tax_slab
@@ -177,10 +180,23 @@ def declared_retirement(doc, categories):
 
 
 def women_rebate_fraction(doc, slab):
-	"""The slab's rebate as a fraction, for a woman; 0 otherwise or when the field is blank."""
+	"""The slab's rebate as a fraction, for a woman ticked Women's Tax Rebate; else 0."""
 	percent = flt(slab.get("custom_women_rebate_percent"))
 	if not percent:
 		return 0.0
-	if frappe.db.get_value("Employee", doc.employee, "gender") != "Female":
+	employee = frappe.db.get_value(
+		"Employee", doc.employee, ["gender", "custom_womens_tax_rebate"], as_dict=True
+	)
+	if not employee or employee.gender != "Female" or not employee.custom_womens_tax_rebate:
 		return 0.0
 	return percent / 100
+
+
+def validate_womens_tax_rebate(doc, method=None):
+	"""The rebate is for women only. Hook: Employee validate."""
+	if doc.get("custom_womens_tax_rebate") and doc.gender != "Female":
+		frappe.throw(
+			_("Women's Tax Rebate is only for female employees. {0} is recorded as {1}.").format(
+				doc.employee_name or doc.name, doc.gender or _("no gender")
+			)
+		)

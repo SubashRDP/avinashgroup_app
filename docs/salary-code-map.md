@@ -190,24 +190,24 @@ Run after the controller's `validate` (stages 6–7), in the order `hooks.py` re
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 8.1 | `add_employee_allowances` | [hooks.py:347](../avinashgroup_app/hooks.py#L347) | Registration (first). | — |
+| 8.1 | `add_employee_allowances` | [hooks.py:349](../avinashgroup_app/hooks.py#L349) | Registration (first). | — |
 | 8.2 | `add_employee_allowances` | [salary_slip.py:34](../avinashgroup_app/payroll/salary_slip.py#L34) | Draft slips: adds, updates or drops the Monthly and % of Initial Basic allowance rows, then reruns `calculate_net_pay`. | Assignment Allowance; Salary Component `custom_allowance_kind` |
 | 8.3 | `fixed_allowance_amounts` | [allowance.py:283](../avinashgroup_app/payroll/allowance.py#L283) | Full-month amount per fixed allowance: the Rate, or Rate % of the assignment's Initial Basic. | Assignment `custom_initial_basic` |
 | 8.4 | `current_assignment` | [allowance.py:221](../avinashgroup_app/payroll/allowance.py#L221) | The submitted assignment in force on the date (cached per request). | Salary Structure Assignment |
-| 8.5 | `apply_tax_reliefs` | [hooks.py:354](../avinashgroup_app/hooks.py#L354) | Registration (second). | — |
-| 8.6 | `apply_tax_reliefs` | [tax_relief.py:74](../avinashgroup_app/payroll/tax_relief.py#L74) | When a retirement excess or women's rebate applies, recomputes the tax row from HRMS's figures and resets net pay; otherwise leaves the slip alone. | — |
-| 8.7 | `retirement_excess` | [tax_relief.py:121](../avinashgroup_app/payroll/tax_relief.py#L121) | Retirement contributions for the year above the lower cap, put back into taxable income. | Employee Tax Exemption Category `custom_is_retirement_contribution`, `max_amount`, `custom_cap_percent_of_income` |
-| 8.8 | `women_rebate_fraction` | [tax_relief.py:179](../avinashgroup_app/payroll/tax_relief.py#L179) | The slab's rebate percent for a female employee, else 0. | Income Tax Slab `custom_women_rebate_percent`; Employee `gender` |
-| 8.9 | `apply_income_tax_override` | [hooks.py:358](../avinashgroup_app/hooks.py#L358) | Registration (third). | — |
+| 8.5 | `apply_tax_reliefs` | [hooks.py:356](../avinashgroup_app/hooks.py#L356) | Registration (second). | — |
+| 8.6 | `apply_tax_reliefs` | [tax_relief.py:77](../avinashgroup_app/payroll/tax_relief.py#L77) | When a retirement excess or women's rebate applies, recomputes the tax row from HRMS's figures and resets net pay; otherwise leaves the slip alone. | — |
+| 8.7 | `retirement_excess` | [tax_relief.py:124](../avinashgroup_app/payroll/tax_relief.py#L124) | Retirement contributions for the year above the lower cap, put back into taxable income. | Employee Tax Exemption Category `custom_is_retirement_contribution`, `max_amount`, `custom_cap_percent_of_income` |
+| 8.8 | `women_rebate_fraction` | [tax_relief.py:182](../avinashgroup_app/payroll/tax_relief.py#L182) | The slab's rebate percent for a woman ticked Women's Tax Rebate, else 0. | Income Tax Slab `custom_women_rebate_percent`; Employee `gender`, `custom_womens_tax_rebate` |
+| 8.9 | `apply_income_tax_override` | [hooks.py:360](../avinashgroup_app/hooks.py#L360) | Registration (third). | — |
 | 8.10 | `apply_income_tax_override` | [income_tax.py:60](../avinashgroup_app/payroll/income_tax.py#L60) | Stores the computed tax in `custom_income_tax_computed`; with Override ticked, sets the tax row to the typed amount and resets net pay. | Salary Slip `custom_override_income_tax`, `custom_income_tax_override` |
 | 8.11 | `get_tax_row` | [income_tax.py:52](../avinashgroup_app/payroll/income_tax.py#L52) | The deduction row with `variable_based_on_taxable_salary`. | — |
 | 8.12 | `FY_8384_SLABS` | [income_tax.py:31](../avinashgroup_app/payroll/income_tax.py#L31) | The 83/84 rate table. Not read by the slip: `hr/year_setup.py` uses it to create the Income Tax Slab record, which the slip reads (6.18). | — |
-| 8.13 | `validate_salary_slip` | [hooks.py:365](../avinashgroup_app/hooks.py#L365) | Registration (fourth). | — |
+| 8.13 | `validate_salary_slip` | [hooks.py:367](../avinashgroup_app/hooks.py#L367) | Registration (fourth). | — |
 | 8.14 | `validate_salary_slip` | [bs_period_guard.py:70](../avinashgroup_app/payroll/bs_period_guard.py#L70) | Refuses a slip whose start date differs from its Payroll Entry's. | Payroll Entry `start_date` |
-| 8.15 | `build_daily_breakdown` | [hooks.py:368](../avinashgroup_app/hooks.py#L368) | Registration (fifth). | — |
+| 8.15 | `build_daily_breakdown` | [hooks.py:370](../avinashgroup_app/hooks.py#L370) | Registration (fifth). | — |
 | 8.16 | `build_daily_breakdown` | [daily_breakdown.py:64](../avinashgroup_app/payroll/daily_breakdown.py#L64) | Fills the Daily Breakdown table; logs and carries on if it fails. | — |
 | 8.17 | `breakdown_rows` | [daily_breakdown.py:76](../avinashgroup_app/payroll/daily_breakdown.py#L76) | Per day: paid weight × daily rate, attendance items spread by `evaluate_rule`, running balance; month-end rows and a Rounding / Adjustment row to reach net pay. | Attendance, Holiday List |
-| 8.18 | `set_bs_dates` | [hooks.py:455](../avinashgroup_app/hooks.py#L455) | Registration (sixth, from a loop further down `hooks.py`). | — |
+| 8.18 | `set_bs_dates` | [hooks.py:457](../avinashgroup_app/hooks.py#L457) | Registration (sixth, from a loop further down `hooks.py`). | — |
 | 8.19 | `set_bs_dates` | [bs_dates.py:75](../avinashgroup_app/hr/bs_dates.py#L75) | Writes the miti fields and `custom_bs_month` from the slip's dates; changes no amount. | — |
 
 ## 9. Journal on submit

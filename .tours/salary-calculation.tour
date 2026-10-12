@@ -660,7 +660,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 347,
+      "line": 349,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -684,31 +684,31 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 354,
+      "line": 356,
       "title": "8.5 apply_tax_reliefs",
       "description": "Registration (second)."
     },
     {
       "file": "avinashgroup_app/payroll/tax_relief.py",
-      "line": 74,
+      "line": 77,
       "title": "8.6 apply_tax_reliefs",
       "description": "When a retirement excess or women's rebate applies, recomputes the tax row from HRMS's figures and resets net pay; otherwise leaves the slip alone."
     },
     {
       "file": "avinashgroup_app/payroll/tax_relief.py",
-      "line": 121,
+      "line": 124,
       "title": "8.7 retirement_excess",
       "description": "Retirement contributions for the year above the lower cap, put back into taxable income.\n\nReads: Employee Tax Exemption Category `custom_is_retirement_contribution`, `max_amount`, `custom_cap_percent_of_income`"
     },
     {
       "file": "avinashgroup_app/payroll/tax_relief.py",
-      "line": 179,
+      "line": 182,
       "title": "8.8 women_rebate_fraction",
-      "description": "The slab's rebate percent for a female employee, else 0.\n\nReads: Income Tax Slab `custom_women_rebate_percent`; Employee `gender`"
+      "description": "The slab's rebate percent for a woman ticked Women's Tax Rebate, else 0.\n\nReads: Income Tax Slab `custom_women_rebate_percent`; Employee `gender`, `custom_womens_tax_rebate`"
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 358,
+      "line": 360,
       "title": "8.9 apply_income_tax_override",
       "description": "Registration (third)."
     },
@@ -732,7 +732,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 365,
+      "line": 367,
       "title": "8.13 validate_salary_slip",
       "description": "Registration (fourth)."
     },
@@ -744,7 +744,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 368,
+      "line": 370,
       "title": "8.15 build_daily_breakdown",
       "description": "Registration (fifth)."
     },
@@ -762,7 +762,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 455,
+      "line": 457,
       "title": "8.18 set_bs_dates",
       "description": "Registration (sixth, from a loop further down `hooks.py`)."
     },

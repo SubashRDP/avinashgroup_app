@@ -129,3 +129,4 @@ avinashgroup_app.patches.clear_payroll_payable_account_type
 avinashgroup_app.patches.setup_additional_salary_quantity
 avinashgroup_app.patches.allowance_rate_list
 avinashgroup_app.patches.rate_on_actual_month_days
+avinashgroup_app.patches.women_rebate_on_employee

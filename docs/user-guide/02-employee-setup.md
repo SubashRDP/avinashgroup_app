@@ -69,6 +69,8 @@ If one person cannot be saved (for example a required field is empty), they are 
 
 **Late Fine Exempt:** on the Employee, tick **Late Fine Exempt** for staff who are never fined for lateness (for example CEO, managers, company secretary). Their lateness is still shown in reports.
 
+**Women's Tax Rebate:** shown only for a woman. Tick it when salary is her **only** income (no rent, business or investment income). Her income tax is then reduced by 10%, the figure on the company's Income Tax Slab. Leave it unticked if you do not know: unticked means no rebate. Ask her once a year, before Shrawan's payroll.
+
 ## 2.3 Shift
 
 Lateness, early leaving and overtime are all measured against the person's shift for that day.

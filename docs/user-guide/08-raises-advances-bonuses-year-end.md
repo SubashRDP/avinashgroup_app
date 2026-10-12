@@ -120,7 +120,11 @@ The Insurance Premium category's own limit is 70,000, the three limits added tog
 - **Insurance premiums, and CIT or PF paid outside payroll:** record them on **Employee Tax Exemption Declaration** for the person and the year (Payroll Period `83/84 - <company>`), one row per sub category with the premium actually paid. The system applies each limit itself, so a 55,000 life premium counts as 40,000. The tax on the slips that follow is reduced. In Ashadh, the **Proof Submission** (with the receipts) replaces the declaration. If a receipt is lower or missing, the tax saved earlier is taken back in that month.
 - **CIT deducted through payroll:** a **CIT** deduction component (create a recurring Additional Salary for the person).
 - **Retirement contribution cap:** SSF + CIT + PF are tax-free only up to the limit above. The system adds back anything over it, and the slip shows that amount in **Retirement Contribution Over Cap (year)**. On SSF alone, this happens only above about 1,34,000 Basic a month. It is reached sooner when someone also pays CIT.
-- **Women's rebate:** a percentage on the company's **Income Tax Slab** (field **Women's Rebate (%)**). On 12 October 2026 it is 0 on every slab. The law gives 10%, but only to a woman whose **only** income is salary, and the system cannot yet tell who has other income. Do not fill it in until that is built.
+- **Women's rebate:** 10% off the tax of a woman whose **only** income is salary. Two places:
+  - **who** gets it: tick **Women's Tax Rebate** on her Employee (Chapter 2). Unticked means no rebate.
+  - **how much**: **Women's Rebate (%)** on the company's **Income Tax Slab**. It is 10 on all seven 83/84 slabs, set on 12 October 2026. Enter it again on each new year's slab.
+
+  The slip shows **Women's Rebate Applied (%)**. On 12 October 2026 no one is ticked yet.
 - **Not handled by payroll:** donations (the person claims them on their own tax return), children's tuition fees (25% or 25,000), remote-area deduction, disability, and the medical tax credit.
 - **Changing one person's tax for one month:** on the draft slip, tick **Override Income Tax** and type **Income Tax (manual)** (Chapter 5).
 

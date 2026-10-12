@@ -339,6 +339,8 @@ _add_doc_event(
     "validate",
     "avinashgroup_app.biometric.employee.validate_unique_device_id",
 )
+# Women's Tax Rebate is ticked by HR for a woman whose only income is salary.
+_add_doc_event("Employee", "validate", "avinashgroup_app.payroll.tax_relief.validate_womens_tax_rebate")
 
 # Fixed allowances from the employee's Allowances table, then the slip is
 # recalculated so gross, tax and net include them. Ahead of the tax hooks below,
