@@ -59,8 +59,8 @@ What it works out, per person, for the month:
 |---|---|---|
 | **Tea & Conveyance** | Days present on **working days**. A Half Day counts as a full day. Holidays and Saturdays are **not** counted | The Rate on the person's Tea row (usually NGI 235, NGN 265 per day) |
 | **Meal** | Chapter 4, section 4.6 | The Rate on the person's Meal row |
-| **Overtime** | Measured hours on submitted Overtime Sheets | Basic ÷ 30 ÷ 8 × 1.5 per hour |
-| **Late Fine** (deduction) | Minutes late in + minutes left early, on working days worked in full. Not on a Half Day (already a penalty), not on a day marked **Late Excused**, never for **Late Fine Exempt** staff | Basic ÷ 30 ÷ 8 per hour |
+| **Overtime** | Measured hours on submitted Overtime Sheets | Basic ÷ days in the BS month ÷ 8 × 1.5 per hour |
+| **Late Fine** (deduction) | Minutes late in + minutes left early, on working days worked in full. Not on a Half Day (already a penalty), not on a day marked **Late Excused**, never for **Late Fine Exempt** staff | Basic ÷ days in the BS month ÷ 8 per hour |
 | **Salary Advance** (deduction) | Each open Employee Advance set to be recovered from salary | The smaller of the monthly instalment and what is still owed |
 
 Who gets tea, meal and overtime: anyone with a row for it on their salary assignment; no row, none. Late fine: everyone on a structure with the Late Fine line. Meals and overtime are only for OT-eligible staff.

@@ -282,8 +282,8 @@ Press **Prepare Payroll Inputs** on the Payroll Entry. It posts, per person:
 |---|---|---|
 | Tea & Conveyance | days present (a half day earns the full day) | Allowance Category rate (OLD/NEW/NO) |
 | Meal | 1.5 h early / 1.5 h late, max 2; holiday 6 h → 1, 8 h → 2 | Allowance Category rate |
-| Overtime | hours on a submitted **Overtime Sheet**, backed by punches (policy 5.1) | Basic ÷ 30 ÷ 8 × 1.5 |
-| Late Fine | Late Time minutes; not on a half day; not for **Late Fine Exempt** staff | Basic ÷ 30 ÷ 8 per hour |
+| Overtime | hours on a submitted **Overtime Sheet**, backed by punches (policy 5.1) | Basic ÷ days in the BS month ÷ 8 × 1.5 (the sheet used ÷ 30; changed 2026-10-12) |
+| Late Fine | Late Time minutes; not on a half day; not for **Late Fine Exempt** staff | Basic ÷ days in the BS month ÷ 8 per hour (the sheet used ÷ 30) |
 | Daily Wage | days present, half day = half | the day's rate (assignment base) |
 | Salary Advance | min(instalment, outstanding) per open Employee Advance | — |
 

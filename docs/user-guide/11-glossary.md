@@ -28,7 +28,7 @@
 | **Initial Basic** | A person's starting basic, kept on their assignment. HRA is worked out from it, not from the current Basic |
 | **IRD** | Inland Revenue Department, where salary tax (SST and remuneration tax) is deposited |
 | **Late Excused** | A tick on one day's Attendance that stops the late fine for that day (with a reason) |
-| **Late Fine** | A deduction for minutes late in and minutes left early: Basic ÷ 30 ÷ 8 per hour |
+| **Late Fine** | A deduction for minutes late in and minutes left early: Basic ÷ days in the BS month ÷ 8 per hour |
 | **Late Fine Exempt** | A tick on the Employee for staff never fined for lateness |
 | **Late Time** | Minutes late in + minutes left early, on a full working day |
 | **Leave Without Pay (LWP)** | Unpaid leave. The day is not paid |
@@ -39,7 +39,7 @@
 | **Nepal BS Period** | Optional screen to change a month's first and last day for payroll |
 | **Net Pay / Net Payable** | What the employee receives: gross minus deductions |
 | **O/O** | Office. The **Admin & Accounts** payroll section, and its salary expense account |
-| **OT** | Overtime. Paid at Basic ÷ 30 ÷ 8 × 1.5 per hour, only on an approved Overtime Sheet |
+| **OT** | Overtime. Paid at Basic ÷ days in the BS month ÷ 8 × 1.5 per hour, only on an approved Overtime Sheet |
 | **OT Eligible** | A tick on the Employee, filled from the Employee Category. Only OT-eligible staff get overtime and meals |
 | **Overtime Sheet** | The document that authorises extra work for a date. Without it, no overtime or meal is paid |
 | **Payment Days** | Days paid in the month. Holidays are paid; absent and unpaid days are not |

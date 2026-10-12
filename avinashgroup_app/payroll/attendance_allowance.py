@@ -19,7 +19,7 @@ Per Payroll Entry:
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, flt, getdate
+from frappe.utils import add_days, cint, date_diff, flt, getdate
 
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
 from avinashgroup_app.hr.shift_day import measure_day
@@ -127,10 +127,11 @@ def create_additional_salaries(payroll_entry) -> dict:
 			row = emp_rows.get(sc.name)
 			if not _gets(employee, sc, row, end_date) or _skip_for_eligibility(emp_doc, sc):
 				continue
-			rate = _resolve_rate(row, sc, employee, end_date)
+			period = _attendance_period(sc, start_date, end_date)
+			rate = _resolve_rate(row, sc, employee, end_date, month_days=date_diff(period[1], period[0]) + 1)
 			if rate is None:
 				continue
-			qty = _qty_for_employee(employee, sc, *_attendance_period(sc, start_date, end_date))
+			qty = _qty_for_employee(employee, sc, *period)
 			if qty <= 0:
 				continue
 			amount = flt(qty * rate, 2)
@@ -375,12 +376,12 @@ def _authorised_overtime_hours(employee: str, work_date) -> float:
 	return cache[key]
 
 
-#: The Labour Act's hourly wage: a month's basic over 30 days of 8 hours. The
-#: sheet prices overtime at 1.5 times this, and a late minute at 1/60th of it.
-#: Fallbacks only — the divisors are fields on the Salary Component, seeded with
-#: these by patches/setup_ot_rate_fields.py. A blank field falls back here
-#: rather than dividing by zero.
-RATE_DAYS_PER_MONTH = 30
+#: The hourly wage is a month's basic over the days of that BS month (29–32) and
+#: 8 hours a day — the same month length the slip prorates Basic by (decided by
+#: the user 2026-10-12; the client's Excel sheets used a flat 30). Overtime is
+#: 1.5 times it, a late minute 1/60th of it. "Rate: Days per Month" on the Salary
+#: Component, when filled, fixes the days instead (30 restores the sheets' rule);
+#: "Rate: Hours per Day" blank falls back to 8.
 RATE_HOURS_PER_DAY = 8
 
 
@@ -394,8 +395,11 @@ def _assignment(employee: str, on_date):
 	) or frappe._dict(base=0, salary_structure=None)
 
 
-def _hourly_basic(employee: str, on_date, sc=None) -> float:
-	"""The hourly wage: a month's basic over 30 days of 8 hours.
+def _hourly_basic(employee: str, on_date, sc=None, month_days: int | None = None) -> float:
+	"""The hourly wage: a month's basic over the month's days of 8 hours.
+
+	`month_days` is the length of the BS month whose attendance is being priced
+	(29–32). A fixed "Rate: Days per Month" on the component overrides it.
 
 	Daily-wage labour is paid in cash day to day, outside payroll (decided
 	2026-10-08), so every assignment's base here is a monthly basic.
@@ -404,7 +408,9 @@ def _hourly_basic(employee: str, on_date, sc=None) -> float:
 	restate the basis for overtime without touching the late fine, or either
 	without a developer.
 	"""
-	days = flt(sc and sc.get("custom_rate_days_per_month")) or RATE_DAYS_PER_MONTH
+	days = flt(sc and sc.get("custom_rate_days_per_month")) or flt(month_days)
+	if not days:
+		frappe.throw(_("Cannot work out the hourly wage for {0}: no month length given").format(employee))
 	hours = flt(sc and sc.get("custom_rate_hours_per_day")) or RATE_HOURS_PER_DAY
 	return flt(_assignment(employee, on_date).base) / days / hours
 
@@ -567,7 +573,7 @@ def _gets(employee: str, sc, row, on_date) -> bool:
 	return sc.name in structure_components(employee, on_date)
 
 
-def _resolve_rate(row, sc, employee=None, on_date=None):
+def _resolve_rate(row, sc, employee=None, on_date=None, month_days=None):
 	"""The rate per unit: the person's own Rate, or worked out from their basic.
 
 	Tea and meal pay the Rate on the person's assignment row (235 a day at NGI,
@@ -578,7 +584,7 @@ def _resolve_rate(row, sc, employee=None, on_date=None):
 	if sc.get("custom_rate_basis") == COMPUTED_RATE_BASIS and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,
 		# and rounding the rate first drifts the amount by a paisa.
-		rate = _hourly_basic(employee, on_date, sc) * flt(sc.get("custom_rate_multiplier") or 1)
+		rate = _hourly_basic(employee, on_date, sc, month_days) * flt(sc.get("custom_rate_multiplier") or 1)
 		return rate if rate else None
 
 	if row is not None and flt(row.get("rate")):

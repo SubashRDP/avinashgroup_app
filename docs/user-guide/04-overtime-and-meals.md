@@ -77,11 +77,13 @@ You cannot type the hours by hand. To change them, correct the attendance, then 
 
 At payroll time, **Prepare Payroll Inputs** (Chapter 5) adds up each OT-eligible person's measured hours for the month and pays:
 
-> **Overtime per hour = Basic ÷ 30 days ÷ 8 hours × 1.5**
+> **Overtime per hour = Basic ÷ days in that BS month ÷ 8 hours × 1.5**
 
-Example: Basic 30,000 → 30,000 ÷ 30 ÷ 8 = 125 an hour × 1.5 = **187.50 per overtime hour**.
+The days are the real length of the Nepali month whose overtime is paid (29 to 32), the same length the slip uses to cut Basic for an absent day.
 
-The 30, 8 and 1.5 are settings on the **Overtime** salary component ("Rate: Days per Month", "Rate: Hours per Day", "Multiplier"). Change them only with management approval.
+Example: Basic 30,000 in Bhadra (31 days) → 30,000 ÷ 31 ÷ 8 = 120.97 an hour × 1.5 = **181.45 per overtime hour**. In a 30-day month the same person gets 30,000 ÷ 30 ÷ 8 × 1.5 = **187.50**.
+
+The 8 and 1.5 are settings on the **Overtime** salary component ("Rate: Hours per Day", "Multiplier"). "Rate: Days per Month" is **blank**, which means the month's real days; typing a number (for example 30, as the old Excel sheets used) fixes it. Change these only with management approval.
 
 ## 4.6 Meals
 

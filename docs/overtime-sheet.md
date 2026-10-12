@@ -103,6 +103,6 @@ on nepalgas: a holiday worked came out at 8.1 h, and staying to 14:15 on a
 
 ## Next
 
-Paying it: hours × `basic ÷ 30 ÷ 8 × 1.5` as an Additional Salary, and the
+Paying it: hours × `basic ÷ days in the BS month ÷ 8 × 1.5` as an Additional Salary, and the
 replacement-leave side for Officer & Admin. Punched but never authorised stays
 unpaid by design — fix it with a backdated sheet.

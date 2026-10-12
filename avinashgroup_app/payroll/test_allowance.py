@@ -328,6 +328,41 @@ class TestAllowance(FrappeTestCase):
 		paid = {k: v for k, v in self._run_engine([eligible, not_eligible], qty=4).items() if k[1] == self.meal}
 		self.assertEqual(paid, {(eligible, self.meal): 300})
 
+	def test_hourly_wage_uses_the_months_actual_days(self):
+		employee = self._employee([(self.ot, 0)], structure=self.structure)  # base 30,000
+		sc = frappe.get_doc("Salary Component", self.ot)
+		# Bhadra 2083 has 31 days: 30,000 ÷ 31 ÷ 8 × 1.5.
+		rate = attendance_allowance._resolve_rate(None, sc, employee, PERIOD_END, month_days=31)
+		self.assertAlmostEqual(rate, 30000 / 31 / 8 * 1.5, places=6)
+		# A fixed Days per Month on the component overrides the month's length.
+		sc.custom_rate_days_per_month = 30
+		rate = attendance_allowance._resolve_rate(None, sc, employee, PERIOD_END, month_days=31)
+		self.assertAlmostEqual(rate, 30000 / 30 / 8 * 1.5, places=6)
+
+	def test_engine_prices_overtime_on_the_attendance_months_days(self):
+		employee = self._employee([(self.ot, 0)], structure=self.structure, custom_ot_eligibility=1)
+		made = []
+
+		def capture(employee, salary_component, amount, **kwargs):
+			made.append((salary_component.name, kwargs.get("rate")))
+			return frappe._dict(name="x")
+
+		entry = frappe._dict(
+			company=COMPANY, start_date=PERIOD_START, end_date=PERIOD_END,
+			employees=[frappe._dict(employee=employee)],
+		)
+		_clear_request_caches()
+		with (
+			patch.object(attendance_allowance, "_qty_for_employee", return_value=2),
+			patch.object(attendance_allowance, "_make_additional_salary", side_effect=capture),
+			patch.object(attendance_allowance, "_delete_existing_draft"),
+			patch.object(attendance_allowance, "refresh_draft_slips", return_value=0),
+			patch.object(frappe.db, "commit"),
+		):
+			attendance_allowance.create_additional_salaries(entry)
+		ot = dict(made)[self.ot]
+		self.assertAlmostEqual(ot, 30000 / 31 / 8 * 1.5, places=6)  # Shrawan 2083 has 31 days
+
 	def _overtime_sheet(self, employee, work_date, entitlement="Overtime"):
 		"""A submitted Overtime Sheet calling the employee in on that date."""
 		sheet = frappe.get_doc(
