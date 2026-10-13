@@ -1,18 +1,17 @@
-"""The per-person pay inputs that were only ever created by hand.
+"""Superseded: per-person pay inputs no longer live on the Employee.
 
-Dearness, other, fuel, fixed and maintenance allowances are read by the salary
-structures' formulas, but four of them were made on the working site with an
-ad-hoc script and never as a patch. A fresh site therefore had no column for
-them, and importing a company's salary sheet failed with
-`Unknown column 'custom_dearness_allowance'`.
+This patch used to create the Dearness, Other, Fuel, Fixed and Maintenance
+Allowance custom fields on Employee from `payroll.onboarding.EMPLOYEE_FIELDS`.
+Pay later moved to the Salary Structure Assignment (commit 77b9500c), which
+removed `EMPLOYEE_FIELDS`. The later patch `move_pay_to_salary_assignment` also
+deletes these Employee fields again, after copying any values it finds, and
+skips a column that does not exist.
+
+The import of a name that no longer exists broke `bench migrate` on every site
+that had not run this patch yet. It is kept as a no-op so that its line in
+patches.txt, and the Patch Log rows of sites that already ran it, stay valid.
 """
-
-import frappe
-from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-
-from avinashgroup_app.payroll.onboarding import EMPLOYEE_FIELDS
 
 
 def execute():
-	create_custom_fields({"Employee": EMPLOYEE_FIELDS}, update=True)
-	frappe.clear_cache(doctype="Employee")
+	pass
