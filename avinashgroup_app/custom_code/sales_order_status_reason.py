@@ -1,22 +1,13 @@
-"""Sales Order Hold / Close / Cancel: keep the typed reason, and tell the customer.
+"""Sales Order Hold / Close / Cancel: save the reason and notify the customer.
 
-Stock ERPNext asks for a reason only on Hold, and stores it only as a timeline
-Comment, so the order itself never says why it was stopped and the customer
-is never told. Close and Cancel ask for nothing. public/js/
-sales_order_status_reason.js asks on all three and, once the action has gone
-through, calls record_status_reason, which
+public/js/sales_order_status_reason.js asks for a reason, then calls
+record_status_reason, which:
+  1. adds "<Action>: <reason> (<date>)" as a new line in the Reason field
+     (custom_hold_reason), under the earlier reasons,
+  2. adds it as a timeline comment,
+  3. sends a bell notification to the customer's portal users.
 
-  1. writes "<Action>: <reason>" into custom_hold_reason ("Reason"),
-  2. adds the same text as a timeline comment, and
-  3. raises a Notification Log for every Portal User of the order's customer,
-     which is what the portal bell (portal_notifications.py) shows them.
-
-Deliberately narrow: the actions themselves are still ERPNext's update_status
-(Hold, Close) and Frappe's cancel. This only records why and passes it on.
-The field keeps the latest reason, even after Resume / Re-open (the client
-wants to see it); the timeline keeps every one. The notification is best
-effort: the reason is already saved by then, so a failure there is logged
-and never raised back to the clerk.
+If the notification fails, the error is logged but the reason stays saved.
 """
 
 import frappe
@@ -42,7 +33,7 @@ CUSTOMER_NOTICES = {
 
 @frappe.whitelist()
 def record_status_reason(sales_order: str, action: str, reason: str):
-	"""Store "<action>: <reason>" on the order and as a timeline comment.
+	"""Add "<action>: <reason> (<date>)" to the order's Reason field and timeline.
 
 	Called right after the action succeeds. Throws if the action is unknown,
 	the reason is blank, the order is not actually in that state, or the user
@@ -60,8 +51,12 @@ def record_status_reason(sales_order: str, action: str, reason: str):
 	if not happened(doc):
 		frappe.throw(_("{0} is not {1}; reason not saved.").format(sales_order, _(state)))
 
-	text = f"{action}: {reason}"
-	doc.db_set("custom_hold_reason", text)
+	# Date the order was held / closed / cancelled, e.g. "Hold: no gas left (2026-10-13)".
+	text = f"{action}: {reason} ({frappe.utils.nowdate()})"
+	# Add on a new line under the earlier reasons, so every reason stays.
+	old_reasons = (doc.custom_hold_reason or "").strip()
+	all_reasons = f"{old_reasons}\n{text}" if old_reasons else text
+	doc.db_set("custom_hold_reason", all_reasons)
 	doc.add_comment("Comment", text)
 	_notify_customer(doc, action, reason)
 
