@@ -221,6 +221,7 @@ Enabled users with each role on avinas1: HR Manager 17, HR User 17, Leave Approv
 | [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L126) | Overtime Sheet write | |
 | [`repair_attendance_day`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L524) | `only_for(HR Manager, System Manager)` | |
 | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L209) | Salary Structure read | |
+| [`get_structure_allowances`](../../avinashgroup_app/payroll/allowance.py#L219) | Salary Structure read | |
 | `shift_rotation.rotate` / `set_periods` | Shift Assignment create/submit(/cancel) | |
 | [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L709) | `only_for(HR Manager, HR User, System Manager)`; pay blocks need Salary Slip read | |
 | `SalaryRevision.get_employees` | doc method: needs write on the Salary Revision | |

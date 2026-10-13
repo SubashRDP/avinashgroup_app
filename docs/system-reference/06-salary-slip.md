@@ -20,7 +20,7 @@ A slip save runs `Document.validate` → the controller's `validate()` → the d
 
 | # | Step | Code | Notes |
 |---|---|---|---|
-| 1 | `BSSalarySlip.validate` | [`validate`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L235) | Calls HRMS's `validate` and only logs afterwards |
+| 1 | `BSSalarySlip.validate` | [`validate`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L265) | Calls HRMS's `validate` and only logs afterwards |
 | 2 | HRMS `SalarySlip.validate` | [`validate`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L152) | Dates, structure, working days, `calculate_net_pay`, YTD (6.1–6.4) |
 | 3 | Audit fields | [`AuditEventMapper`](../../avinashgroup_app/hooks.py#L257) | `doc_events` starts as the audit mapper's dict, so its `validate` handler is first in the list (Salary Slip is in its doctype list) |
 | 4 | `add_employee_allowances` | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L358) | 6.5 |
@@ -77,8 +77,8 @@ Inside `calculate_net_pay`:
 |---|---|---|
 | [`get_date_details`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L60) | `start_date` / `end_date` = the BS month that contains **`posting_date`**: a Nepal BS Period record ([`get_user_defined_period`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/doctype/nepal_bs_period/nepal_bs_period.py#L109)) first, else [`get_salary_period`](../../../rdp_common_app/rdp_common_app/utils/bs_boundaries.py#L162) | The period is recomputed on **every** save from the posting date. A Bhadra entry posted on 2 Ashwin silently produces Ashwin slips; that is why `bs_period_guard` exists (6.10, [05-payroll-entry.md](05-payroll-entry.md)) |
 | [`get_working_days_details`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L122) | Runs HRMS's version, then sets `total_working_days` = length of the BS month of `start_date` ([`get_total_working_days_in_bs_month`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L111)) | Payment days are **not** touched. With holidays included (avinas1) HRMS already counts every calendar day, so the override only matters when a Nepal BS Period differs from the calendar month |
-| [`get_amount_based_on_payment_days`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L161) | Temporarily sets `total_working_days` to the BS month length and calls HRMS's [`get_amount_based_on_payment_days`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L1795) | Proration = `default_amount × payment_days ÷ BS month days` (29–32) |
-| [`compute_current_and_future_taxable_earnings`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L195) | `remaining_sub_periods` = BS months from the slip's start to the Payroll Period end, inclusive ([`get_bs_months_between`](../../../rdp_common_app/rdp_common_app/utils/bs_boundaries.py#L187)) | Shrawan = 12, Bhadra = 11 … Ashadh = 1. Every projected and per-month tax figure uses it, and so does our `apply_tax_reliefs` |
+| [`get_amount_based_on_payment_days`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L191) | Temporarily sets `total_working_days` to the BS month length and calls HRMS's [`get_amount_based_on_payment_days`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L1795) | Proration = `default_amount × payment_days ÷ BS month days` (29–32) |
+| [`compute_current_and_future_taxable_earnings`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L225) | `remaining_sub_periods` = BS months from the slip's start to the Payroll Period end, inclusive ([`get_bs_months_between`](../../../rdp_common_app/rdp_common_app/utils/bs_boundaries.py#L187)) | Shrawan = 12, Bhadra = 11 … Ashadh = 1. Every projected and per-month tax figure uses it, and so does our `apply_tax_reliefs` |
 
 **Gotchas.**
 - `get_total_working_days_in_bs_month` uses the BS month of `start_date`, not the length of the slip's period. A Nepal BS Period that starts or ends off the calendar month would prorate with the calendar month's length (unverified in practice: no BS Period rows exist).
@@ -151,7 +151,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 **What.** Puts the employee's **Monthly** and **% of Initial Basic** allowances on the slip as ordinary (non-additional) earning rows, adds/updates/drops them to match the assignment, then reruns HRMS's `calculate_net_pay`.
 
-**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L283), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L236), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L221); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L72).
+**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L321), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L274), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L259); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L72).
 
 **Why** (module docstring, [../allowances.md](../allowances.md)):
 - Every person has their own mix (27 combinations across 195 people, October 2026), so allowances are rows on the person's Salary Structure Assignment, not structure formulas. No row → not paid.

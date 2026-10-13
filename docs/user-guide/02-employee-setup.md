@@ -137,8 +137,8 @@ A person's pay is a **dated** record: the **Salary Structure Assignment**. It ho
 
 **To create one:**
 1. Open **Salary Structure Assignment** → **New**.
-2. Fill the fields above.
-3. Add the allowance rows.
+2. Fill the fields above. When you pick the **Salary Structure**, the **Allowances** table fills with every allowance on the structure's **Allowance Rates**, at the usual rate. If the table already has rows, you are asked first whether to replace them (the rates typed for this person would be lost).
+3. Go through the allowance rows: **remove** each allowance this person does not get, and type the rate wherever it is 0 (Dearness, Other, Fixed… — the message after filling lists them). Overtime stays at 0: its rate is worked out from basic.
 4. Save, check, then **Submit**. Only a submitted assignment is used.
 
 A pay change is **never** an edit of the old assignment. It is a new assignment from a new date (use **Salary Revision**, Chapter 8). The old one stays as the record of what was paid before.
@@ -170,7 +170,7 @@ An allowance cannot be put in Earnings: "**… is an allowance. List its rate un
 | Dearness Allowance | 0 | per month — differs for every person |
 | Overtime | 0 | from basic × 1.50 — worked out, never typed |
 
-When you pick an allowance on someone's assignment, its Rate is filled in from this list. That is all the list does for pay. It is also what a **Salary Revision** raises (Chapter 8).
+When you pick the structure on a new assignment, this list becomes the assignment's starting Allowances table; when you pick an allowance on a row, its Rate is filled in from this list. That is all the list does for pay — the person is paid only the rows left on their assignment. It is also what a **Salary Revision** raises (Chapter 8).
 
 On a submitted structure you can add or remove an allowance in this list, but you cannot change an existing rate here: "**Use a Salary Revision**". The revision raises the people at that rate too.
 
@@ -183,7 +183,9 @@ On a submitted structure you can add or remove an allowance in this list, but yo
 | **Unit** | Shown automatically: per month, per day present, per meal, % of initial basic, or "from basic" |
 | **From Date** | Leave blank to start with the assignment. Type a later date if the allowance starts later |
 
-**No row means the allowance is not paid.** Payroll reads only this table.
+**No row means the allowance is not paid.** Payroll reads only this table. The rows filled in when you picked the structure are only a starting list: remove the ones this person does not get before you submit.
+
+Only the form fills the table. An assignment made by a Salary Revision, an import or a script is never filled from its structure.
 
 **Examples (NGI):**
 - Dearness Allowance, Rate 7,380 → 7,380 a month. The structure has no usual dearness, so type it.

@@ -157,7 +157,7 @@ Actual journal, NGI Bhadra (NGI-JE-83/84-00005, 2026-09-16): Dr F/P 16,44,441.81
 **How.** For a non-SSF slip: `SST = month's tax × (first-band tax ÷ total annual tax)`, both from the slip's `annual_taxable_amount` and the company's slab (found by [`tax_slab_for`](../../avinashgroup_app/payroll/year_rollover.py#L35)); SSF members get SST 0. Over a year the shares add to the SST actually charged. SSF employee share = SSF − SSF Addition. Slips are those whose period **ends** in the chosen BS month. Deadlines come from `STATUTORY_DEPOSITS`, "pending the accountant's confirmation".
 
 **Gotchas.**
-- `custom_ssf_applicable` is read from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L221) at the slip's end date, not from the slip; a later assignment change alters an old month's split.
+- `custom_ssf_applicable` is read from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L259) at the slip's end date, not from the slip; a later assignment change alters an old month's split.
 - The SST share uses the slip's `annual_taxable_amount`, which `apply_tax_reliefs` raises by the retirement excess but `apply_income_tax_override` does not touch; on an overridden slip the split is proportional to an annual figure the override ignored.
 - [`CIT_COMPONENT`](../../avinashgroup_app/avinash_group_app/report/salary_tax_and_ssf_deposit/salary_tax_and_ssf_deposit.py#L47) = `CIT`, a component that does not exist on avinas1: the CIT column is always 0.
 - Nothing is posted: the deposit vouchers are made by hand. The accrual journal's credits to `347302 SSF Payable` and `348102 TDS-Remuneration` are what those vouchers clear.

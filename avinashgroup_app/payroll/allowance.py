@@ -215,6 +215,44 @@ def get_rate_for_assignment(salary_structure: str, allowance: str) -> dict:
 	}
 
 
+@frappe.whitelist()
+def get_structure_allowances(salary_structure: str) -> list[dict]:
+	"""The Allowances rows an assignment starts with when its structure is picked.
+
+	One row per allowance on the structure's Allowance Rates, in its order, at
+	the usual rate (0 where it lists none, or where `computed`: worked out from basic).
+	The form offers them as a starting list: HR removes the ones this person
+	does not get and types the 0 rates — the assignment's validate refuses a row
+	still at 0. Disabled allowances and Entered by Hand / Yearly ones are left out.
+	Called only from the form (public/js/salary_structure_assignment.js); a
+	saved assignment is never filled from its structure, since no row means not paid.
+	"""
+	frappe.has_permission("Salary Structure", "read", salary_structure, throw=True)
+	rows = frappe.get_all(
+		"Structure Allowance Rate",
+		filters={"parent": salary_structure, "parenttype": "Salary Structure", "parentfield": "custom_allowance_rates"},
+		fields=["allowance", "rate"],
+		order_by="idx asc",
+	)
+	out = []
+	for row in rows:
+		kind, disabled = frappe.get_cached_value(
+			"Salary Component", row.allowance, ["custom_allowance_kind", "disabled"]
+		) or (None, 1)
+		if disabled or kind in NOT_ON_ASSIGNMENT:
+			continue
+		computed = rate_is_computed(row.allowance)
+		out.append(
+			{
+				"allowance": row.allowance,
+				"rate": 0 if computed else flt(row.rate),
+				"unit": unit_for(row.allowance),
+				"computed": int(computed),
+			}
+		)
+	return out
+
+
 # ── the person's allowances (on their salary assignment) ───────────────────
 
 
