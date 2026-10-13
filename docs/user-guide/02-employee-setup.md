@@ -60,7 +60,7 @@ You cannot tick both: the save stops with "Tick either Overtime Eligible or Repl
 
 **For many people at once:** Employee list → filter (Company, Department, Designation) → tick the rows → **Edit** → choose **Overtime Eligible** (or **Replacement Leave for Holiday Work**) → Yes. Do not set one tick on someone who already has the other: the save stops for them.
 
-> **Changed 13 October 2026.** This used to be decided by the **Employee Category** (Operation / Officer & Admin) the person was linked to. Each person's answer was copied from their category onto the two ticks, so nobody's pay or leave changed. The **Employee Category** field and the **Employee Category Tool** are still there, but they no longer decide anything.
+> **Changed 13 October 2026.** This used to be decided by the **Employee Category** (Operation / Officer & Admin) the person was linked to. Each person's answer was copied from their category onto the two ticks, so nobody's pay or leave changed. The **Employee Category** field, the Employee Category list and the **Employee Category Tool** were then removed from the system (same day); there is nothing to set for a category any more.
 
 **Late Fine Exempt:** on the Employee, tick **Late Fine Exempt** for staff who are never fined for lateness (for example CEO, managers, company secretary). Their lateness is still shown in reports.
 

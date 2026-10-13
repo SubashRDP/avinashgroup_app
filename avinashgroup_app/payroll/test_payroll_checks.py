@@ -276,8 +276,9 @@ class TestNewYearSlab(FrappeTestCase):
 
 
 class TestHolidayWorkRuleOnEmployee(FrappeTestCase):
-	"""Overtime or replacement leave is two ticks on the Employee (2026-10-13),
-	not the Employee Category — and a holiday worked earns one, never both."""
+	"""Overtime or replacement leave is two ticks on the Employee (2026-10-13)
+	— and a holiday worked earns one, never both. The Employee Category that
+	used to decide it has been removed."""
 
 	def setUp(self):
 		self.employee = frappe.db.get_value("Employee", {"status": "Active"}, "name")
@@ -325,16 +326,15 @@ class TestHolidayWorkRuleOnEmployee(FrappeTestCase):
 		with self.assertRaisesRegex(overtime.OvertimeRuleError, "neither"):
 			self._evaluate_on(overtime.DAY_HOLIDAY)
 
-	def test_category_no_longer_decides(self):
-		"""A category saying the opposite changes nothing."""
+	def test_employee_category_is_gone(self):
+		"""The category, its bulk tool and the Employee link were removed."""
 		from avinashgroup_app.hr import overtime
 		from avinashgroup_app.hr.shift_day import overtime_eligibility
 
-		leave_category = frappe.db.get_value("Employee Category", {"compensatory_leave": 1}, "name")
-		if leave_category:
-			frappe.db.set_value(
-				"Employee", self.employee, "custom_employee_category", leave_category, update_modified=False
-			)
+		self.assertFalse(frappe.db.exists("DocType", "Employee Category"))
+		self.assertFalse(frappe.db.exists("DocType", "Employee Category Tool"))
+		self.assertFalse(frappe.get_meta("Employee").has_field("custom_employee_category"))
+		self.assertFalse(frappe.get_meta("Overtime Sheet Employee").has_field("employee_category"))
 		self._tick(1, 0)
 		self.assertEqual(overtime.get_holiday_work_rule(self.employee), (True, False))
 		self.assertEqual(overtime_eligibility([self.employee]), {self.employee: True})

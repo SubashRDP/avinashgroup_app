@@ -46,8 +46,9 @@ Gotchas that cost time before:
   script, then call `create_salary_slips_for_employees` directly — submitting the
   entry alone creates 0 slips when the queue is stubbed.
 - Overtime vs replacement leave is two ticks on the Employee since 2026-10-13:
-  `custom_ot_eligibility` and `custom_compensatory_leave`. The old
-  `custom_employee_category` link is a label only.
+  `custom_ot_eligibility` and `custom_compensatory_leave`. The old Employee
+  Category doctype, its `custom_employee_category` link and the Employee Category
+  Tool were removed the same day (patch `drop_employee_category`).
 
 ---
 
@@ -81,7 +82,7 @@ on ng-group.
 | `payroll/advance_recovery.py` | Instalments: min(instalment, outstanding), referenced back to the Employee Advance. |
 | `payroll/onboarding.py` | Reads a company's own Excel salary sheet and builds components, structure, employee pay inputs and assignments. PROFILES per company; the 21-component catalogue lives here. |
 | `payroll/hr_journal.py` | JV Type + Document No on HR journals, and the cost-centre → expense-account routing (547101 O/O, 547102 S/D, 547103 F/P). |
-| Doctypes | Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category, Employee Category (label only since 2026-10-13). |
+| Doctypes | Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category. (Employee Category was removed 2026-10-13.) |
 | Reports | Monthly Attendance BS, Yearly Leave Details BS, Salary Tax and SSF Deposit (SSF 31% / SST / remuneration tax per BS month, with deadlines). |
 | `hr/shift_backdate.py` | *(2026-09-27)* Backdated Shift Request / Shift Assignment: past days re-marked on the new shift, OT re-measured, refused into a paid month. A worked day never flips to Absent because its punches miss the new shift; it is kept and flagged. |
 | `hr/replacement_leave.py` | *(2026-09-27)* Officer / admin holiday work on an Overtime Sheet → Compensatory Leave Request (leave type **Replacement Leave**) once attendance shows the day; daily job catches late attendance. |
@@ -206,7 +207,7 @@ expects it filed.
 
 **Client decisions:**
 
-- **Which employee-category vocabulary to keep.** avinas1 uses *Operation* (78 staff, overtime) and
+- ~~**Which employee-category vocabulary to keep.**~~ *Moot: Employee Category was removed on 2026-10-13.* avinas1 uses *Operation* (78 staff, overtime) and
   *Admin & Officer* (35, compensatory leave); nepalgas uses *Plant* (238) and *Officer & Admin* (57) for the
   same two things. The flags are right on both. Renaming touches live Employee records, so it was not done —
   `setup_year` no longer creates categories at all. Since 2026-10-13 the categories are labels only — the rule

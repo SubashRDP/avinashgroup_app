@@ -1,11 +1,17 @@
-# Employee Category — overtime vs replacement leave
+# Employee Category — overtime vs replacement leave (REMOVED)
 
+> **Removed 2026-10-13.** The Employee Category doctype, the Employee link
+> `custom_employee_category`, the Employee Category Tool and the hidden
+> `employee_category` column on Overtime Sheet Employee were deleted by patch
+> `drop_employee_category` (the `tabEmployee.custom_employee_category` column is
+> left in the database, unread). Everything below is history.
+>
 > **Superseded 2026-10-13.** The rule now lives on the Employee itself: two ticks,
 > **Overtime Eligible** (`custom_ot_eligibility`) and **Replacement Leave for Holiday
 > Work** (`custom_compensatory_leave`), never both (Employee `validate` hook
 > `hr.overtime.validate_employee_holiday_rule`). Patch `holiday_work_rule_on_employee`
-> copied each person's answer from their category. The Employee Category doctype,
-> the link and the tool remain but decide nothing. Current description:
+> copied each person's answer from their category; the category was then removed
+> (above). Current description:
 > [user-guide §2.2](user-guide/02-employee-setup.md) and
 > [system-reference 01 §1.2](system-reference/01-masters.md). The rest of this page
 > is the original design, kept as a record.

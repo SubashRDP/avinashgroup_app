@@ -216,7 +216,7 @@ h3.grp{margin-top:26px}
     <tr><th>Step</th><th>What happens</th><th>Decided by</th></tr>
     <tr><td>Punch</td><td>The machine records a time against a device ID</td><td>The ID on the Employee</td></tr>
     <tr><td>Attendance</td><td>Each hour, the punches for a day become one row: Present, Half Day or Absent, with late minutes measured</td><td>The <b>shift</b> the person was on that day</td></tr>
-    <tr><td>Allowance engine</td><td>Once a month, counts days and hours and turns them into money</td><td>Their <b>allowance category</b> and <b>employee category</b></td></tr>
+    <tr><td>Allowance engine</td><td>Once a month, counts days and hours and turns them into money</td><td>Their <b>allowance category</b> and the <b>Overtime Eligible</b> tick</td></tr>
     <tr><td>Additional Salary</td><td>One record per person per allowance, saying qty × rate = amount</td><td>Written by the engine, not by hand</td></tr>
     <tr><td>Salary Slip</td><td>Fixed pay from the structure, prorated by days paid, plus those extras, minus SSF and tax</td><td>The <b>salary structure</b> and their <b>Basic</b></td></tr>
     <tr><td>Journal Entry</td><td>The total cost posted to the books, split by cost centre</td><td>Component → account mapping and the employee's <b>cost centre</b></td></tr>
@@ -387,7 +387,7 @@ h3.grp{margin-top:26px}
 
 <section id="s-categories">
   <h2>2.7 · Overtime ticks and allowance category</h2>
-  <p>They answer different questions and must not be confused. (Employee Category still exists but is a label only; it decides nothing.)</p>
+  <p>They answer different questions and must not be confused. (The old Employee Category was removed on 13 October 2026.)</p>
   <div class="tablewrap"><table>
     <tr><th></th><th>Overtime Eligible / Replacement Leave (Employee ticks)</th><th>Allowance Category</th></tr>
     <tr><td>Answers</td><td>Is extra work paid, or given back as leave?</td><td>What rate of tea and meals?</td></tr>

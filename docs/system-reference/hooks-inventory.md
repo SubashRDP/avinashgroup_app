@@ -250,13 +250,13 @@ Notable: Employee, Overtime Sheet, Salary Structure and Salary Revision are **no
 | Script | Registration | Purpose |
 |---|---|---|
 | `hr_report_common.js` | [`hr_report_common.js`](../../avinashgroup_app/hooks.py#L41) | Shared cell renderers (stacked employee cell) for the HR/payroll reports. |
-| `hr_workspace.js` | [`hr_workspace.js`](../../avinashgroup_app/hooks.py#L77) | Mounts the HR dashboard above the stock HR workspace for HR Manager, HR User and System Manager, and hides HRMS's onboarding there. It loads `hr_dashboard.js`, which calls [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75) and [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L709). |
+| `hr_workspace.js` | [`hr_workspace.js`](../../avinashgroup_app/hooks.py#L77) | Mounts the HR dashboard above the stock HR workspace for HR Manager, HR User and System Manager, and hides HRMS's onboarding there. It loads `hr_dashboard.js`, which calls [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75) and [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L708). |
 | `approval_workflow_common.js`, `approval_workflow_auto.js`, `approval_field_visibility.js` | [`approval_workflow_auto.js`](../../avinashgroup_app/hooks.py#L60) | The Dynamic Approval banner and reject dialog on any doctype set up for approval, including Leave Application. |
 | `auto_fiscal_year.js`, `fiscal_year_cache.js` | [`auto_fiscal_year.js`](../../avinashgroup_app/hooks.py#L63) | Fiscal-year field defaults. Any HR doc with a fiscal-year field is affected. |
 
 ### Form scripts owned by our HR doctypes (not hooks, listed for completeness)
 
-`attendance_fix.js`, `biometric_device.js`, `employee_category_tool.js`, `holiday_bulk_update.js`, `overtime_sheet.js`, `salary_revision.js`, all under `avinash_group_app/doctype/<name>/`.
+`attendance_fix.js`, `biometric_device.js`, `holiday_bulk_update.js`, `overtime_sheet.js`, `salary_revision.js`, all under `avinash_group_app/doctype/<name>/`.
 
 ## 7. Whitelisted endpoints in the HR/payroll code
 
@@ -282,9 +282,8 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `preview`, `rotate`, `set_periods` (rotation) | [`preview`](../../avinashgroup_app/hr/shift_rotation.py#L111), [`rotate`](../../avinashgroup_app/hr/shift_rotation.py#L152), [`set_periods`](../../avinashgroup_app/hr/shift_rotation.py#L197) | Shift Type form |
 | `roster` | [`roster`](../../avinashgroup_app/hr/shift_roster.py#L30) | shift roster view |
 | `preview_accrual_dates` | [`preview_accrual_dates`](../../avinashgroup_app/hr/utils.py#L237) | Leave setup check |
-| `get_dashboard`, `get_menu` | [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L709) | HR dashboard |
+| `get_dashboard`, `get_menu` | [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L708) | HR dashboard |
 | `Salary Revision.get_employees` | [`get_employees`](../../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L423) | Salary Revision form |
-| `Employee Category Tool.get_employees`, `bulk_assign` | [`get_employees`](../../avinashgroup_app/avinash_group_app/doctype/employee_category_tool/employee_category_tool.py#L29), [`bulk_assign`](../../avinashgroup_app/avinash_group_app/doctype/employee_category_tool/employee_category_tool.py#L64) | Employee Category Tool |
 | `Holiday Bulk Update.apply` | [`apply`](../../avinashgroup_app/avinash_group_app/doctype/holiday_bulk_update/holiday_bulk_update.py#L42) | Holiday Bulk Update |
 | `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L55) | Payroll Entry **Make Bank Entry** |
 

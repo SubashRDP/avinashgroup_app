@@ -82,9 +82,9 @@ per person; never both (`overtime.validate_employee_holiday_rule`, an Employee
 validate hook). `overtime.get_holiday_work_rule` reads them. Until 2026-10-13 this
 came from the Employee Category the person was linked to; patch
 `holiday_work_rule_on_employee` copied each person's answer across. The
-`Employee Category` doctype, `custom_employee_category` link and `Employee
-Category Tool` remain as labels only — nothing reads them. History:
-`docs/employee-category.md`.
+`Employee Category` doctype, the `custom_employee_category` link and the
+`Employee Category Tool` were then removed (patch `drop_employee_category`).
+History: `docs/employee-category.md`.
 
 
 ## overtime.py — the overtime rules

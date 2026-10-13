@@ -19,7 +19,7 @@
 | **CIT** | Citizen Investment Trust contribution; reduces taxable income |
 | **Daily Breakdown** | The table on every salary slip that shows each day's attendance, pay and fines, adding up to the net pay |
 | **DA** | Dearness Allowance, a person's own fixed monthly allowance |
-| **Employee Category** | A label (Operation / Officer & Admin). Since 13 October 2026 it decides nothing — see Overtime Eligible and Replacement Leave for Holiday Work |
+| **Employee Category** | *Removed 13 October 2026.* Used to group staff as Operation / Officer & Admin; replaced by the Overtime Eligible and Replacement Leave for Holiday Work ticks on the Employee |
 | **F/P** | Filling Plant. The **Plant** payroll section, and its salary expense account |
 | **Fiscal Year** | Shrawan 1 to the end of Ashadh. "83/84" = Shrawan 2083 to Ashadh 2084 |
 | **Gross** | Total earnings on the slip, before deductions |

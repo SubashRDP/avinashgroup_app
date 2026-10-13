@@ -99,7 +99,7 @@ def execute(filters=None):
 	# change splits the assignment, and a month can hold two shifts.
 	roster = ShiftRoster(employees, ad_start, ad_end)
 	# Overtime shows only on a day a submitted Overtime Sheet names the person.
-	# Going by the Employee Category alone counted every early arrival and late
+	# Going by OT eligibility alone counted every early arrival and late
 	# stay of OT-eligible staff, asked for or not.
 	ot_days = get_overtime_days(employees, ad_start, ad_end)
 

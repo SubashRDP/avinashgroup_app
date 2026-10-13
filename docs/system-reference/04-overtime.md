@@ -48,16 +48,15 @@ Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-1
 
 | Field | Written by | Read by |
 |---|---|---|
-| [`employee`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L25) | HR | everything |
-| [`work_type`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L43) (`Work on Holiday` / `Overtime`) | HR, or pre-filled from the day by `preview` | `evaluate`, `measure_row` |
-| [`day_type`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L57) (Holiday / Weekly Off / Working Day) | `apply_rules` | replacement-leave reason text |
-| [`entitlement`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L66) (`Overtime` / `Replacement Leave`) | `apply_rules`, never HR | settlement, replacement leave, **payroll** (`_on_overtime_sheet`, `_authorised_overtime_hours`), reports (`get_overtime_days`) |
-| [`shift`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L85) | `apply_rules` (snapshot) | display only |
-| [`employee_category`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L76) | Nothing since 2026-10-13 (hidden; older rows keep their value) | nothing |
-| [`worked_hours`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L97) | settlement (`db_set`). **Read only**: HR cannot type it | **payroll**: OT quantity |
-| [`attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L107) | settlement | `_is_unmeasured` |
-| [`settlement_note`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L114) | settlement and replacement leave (both write it) | `_is_unmeasured` (the "already measured" marker) |
-| [`compensatory_leave_request`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L120) | `grant_row` | `on_sheet_cancel`, `grant_pending` |
+| [`employee`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L24) | HR | everything |
+| [`work_type`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L42) (`Work on Holiday` / `Overtime`) | HR, or pre-filled from the day by `preview` | `evaluate`, `measure_row` |
+| [`day_type`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L56) (Holiday / Weekly Off / Working Day) | `apply_rules` | replacement-leave reason text |
+| [`entitlement`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L65) (`Overtime` / `Replacement Leave`) | `apply_rules`, never HR | settlement, replacement leave, **payroll** (`_on_overtime_sheet`, `_authorised_overtime_hours`), reports (`get_overtime_days`) |
+| [`shift`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L93) | `apply_rules` (snapshot) | display only |
+| [`worked_hours`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L86) | settlement (`db_set`). **Read only**: HR cannot type it | **payroll**: OT quantity |
+| [`attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L115) | settlement | `_is_unmeasured` |
+| [`settlement_note`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L103) | settlement and replacement leave (both write it) | `_is_unmeasured` (the "already measured" marker) |
+| [`compensatory_leave_request`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L109) | `grant_row` | `on_sheet_cancel`, `grant_pending` |
 
 **Contradiction.** The `shift_day` docstring ([`put it through the`](../../avinashgroup_app/hr/shift_day.py#L29)) says a one-off agreement such as "after 5pm counts as 2 hours" should go "through the Overtime Sheet, where authorised hours can be typed over". In fact `worked_hours` is `read_only` and not allow-on-submit, so the desk cannot type over it. Only a script or a `db_set` can.
 
@@ -111,7 +110,7 @@ A blank work type defaults through [`default_work_type`](../../avinashgroup_app/
 
 ### Config on avinas1 (2026-10-13)
 
-Until 2026-10-13 the two answers came from the Employee Category the person was linked to (`Operation`: overtime; `Officer & Admin`: replacement leave). Patch `holiday_work_rule_on_employee` ([`execute`](../../avinashgroup_app/patches/holiday_work_rule_on_employee.py#L26)) copied each member's answer onto the Employee ticks:
+Until 2026-10-13 the two answers came from the Employee Category (removed the same day, with the Overtime Sheet Employee `employee_category` column, by `drop_employee_category`) the person was linked to (`Operation`: overtime; `Officer & Admin`: replacement leave). Patch `holiday_work_rule_on_employee` ([`execute`](../../avinashgroup_app/patches/holiday_work_rule_on_employee.py#L27)) copied each member's answer onto the Employee ticks:
 
 | Active employees | `custom_ot_eligibility` | `custom_compensatory_leave` |
 |---|---|---|

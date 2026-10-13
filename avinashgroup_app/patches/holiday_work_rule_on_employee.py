@@ -15,8 +15,9 @@ Each employee's current answer is copied from their category, so nobody's pay
 or leave changes on the day this runs. `hr.overtime.validate_employee_holiday_rule`
 keeps the either/or rule.
 
-The Employee Category link stays on the form as a plain label; it no longer
-decides anything.
+The Employee Category link was kept as a label at first, then removed together
+with the doctype (drop_employee_category). On a site that never had the
+category there is nothing to copy, so that step is skipped.
 """
 
 import frappe
@@ -61,23 +62,18 @@ def execute():
 					"insert_after": "custom_compensatory_leave",
 					"description": "Late time is still recorded, but not fined — NGI's managers",
 				},
-				{
-					"fieldname": "custom_employee_category",
-					"label": "Employee Category",
-					"fieldtype": "Link",
-					"options": "Employee Category",
-					"insert_after": "custom_womens_tax_rebate",
-					"in_standard_filter": 0,
-					"description": (
-						"A label only. Overtime or replacement leave is set by the two ticks above."
-					),
-				},
 			]
 		},
 		update=True,
 	)
 
 	# Copy each person's current answer from their category, so nothing changes.
+	if not (
+		frappe.db.table_exists("Employee Category")
+		and frappe.db.has_column("Employee", "custom_employee_category")
+	):
+		frappe.clear_cache(doctype="Employee")
+		return
 	frappe.db.sql(
 		"""update `tabEmployee` e
 		join `tabEmployee Category` c on c.name = e.custom_employee_category

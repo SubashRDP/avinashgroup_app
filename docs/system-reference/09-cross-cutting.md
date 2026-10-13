@@ -203,7 +203,7 @@ Consequences when it is on:
 | Payroll Adjustment | all | — | System Manager all |
 | Overtime Sheet | all incl. submit/cancel | read/write/create, **no submit** | System Manager all |
 | Attendance Fix | all | read | System Manager all |
-| Employee Category, Holiday Bulk Update, Biometric Device | read/write/create | read | System Manager |
+| Holiday Bulk Update, Biometric Device | read/write/create | read | System Manager |
 | Payroll Entry | all | — | — |
 | Salary Slip | all | submit, no cancel | Employee / Employee Self Service: read (own, via HRMS user permission) |
 | Salary Structure Assignment | all | submit, no cancel | System Manager read/write/create |
@@ -223,7 +223,7 @@ Enabled users with each role on avinas1: HR Manager 17, HR User 17, Leave Approv
 | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L209) | Salary Structure read | |
 | [`get_structure_allowances`](../../avinashgroup_app/payroll/allowance.py#L219) | Salary Structure read | |
 | `shift_rotation.rotate` / `set_periods` | Shift Assignment create/submit(/cancel) | |
-| [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L709) | `only_for(HR Manager, HR User, System Manager)`; pay blocks need Salary Slip read | |
+| [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L708) | `only_for(HR Manager, HR User, System Manager)`; pay blocks need Salary Slip read | |
 | `SalaryRevision.get_employees` | doc method: needs write on the Salary Revision | |
 | `biometric.api.receive_attendance`, `heartbeat.ping`, `bridge_commands.*` | Device must be a known, enabled Biometric Device ([02](02-checkin-to-attendance.md)) | Called by the bridge with an API key |
 
