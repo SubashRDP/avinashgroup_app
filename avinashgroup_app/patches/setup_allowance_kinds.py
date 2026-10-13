@@ -386,7 +386,16 @@ def move_categories() -> int:
 
 
 def remove_categories():
-	"""After tag_paid_to_all has read which components a category decided."""
+	"""After tag_paid_to_all has read which components a category decided.
+
+	The Employee field linking to the category goes with the doctype, whatever
+	path execute() took: left behind, it points at a doctype that no longer
+	exists and the Employee form will not open (drop_orphan_allowance_category_field).
+	"""
+	for field in frappe.get_all(
+		"Custom Field", filters={"dt": "Employee", "fieldname": "custom_allowance_category"}, pluck="name"
+	):
+		frappe.delete_doc("Custom Field", field, force=True, ignore_permissions=True)
 	for doctype in ("Allowance Category", "Allowance Category Rate"):
 		if frappe.db.exists("DocType", doctype):
 			frappe.delete_doc("DocType", doctype, force=True, ignore_permissions=True)
