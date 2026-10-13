@@ -60,7 +60,7 @@ ZKTeco / Hikvision / HTMS  ──▶  K40 Bridge (Windows, on site)
                                      ▼
                               Attendance                   ← the row payroll trusts
                                      ▼
-              self-heal (hourly)             attendance_self_heal.py
+              self-heal (daily)              attendance_self_heal.py
 ```
 
 ### The iron rule
@@ -114,7 +114,7 @@ override; nothing validates it against the employee's company.
 | **Scheduled jobs stopped since 2026-07-28** | **3** | see below |
 
 ### The stopped jobs — decision needed
-`heal_unlinked_checkins` (hourly_long), `check_bridge_heartbeats` (hourly) and
+`heal_unlinked_checkins` (hourly_long at the time; daily_long since 2026-10-13), `check_bridge_heartbeats` (hourly) and
 `retry_failed_cbms_syncs` (*/5) are all `stopped=1`, last run 2026-07-28.
 **Self-heal being off means the repair layer does not run at all** — not "runs and
 skips". Not restarted: CBMS retry reports bills to the IRD irreversibly, so it is

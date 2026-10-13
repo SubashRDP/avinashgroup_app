@@ -329,7 +329,7 @@ for _event, _handler in attendance_events.items():
 # existing Present/Half Day Attendance's computed values consistent when
 # punches are entered, edited or deleted via desk/API, or arrive late for an
 # already-marked day. Status is never changed by these hooks — status
-# transitions stay in Attendance Fix / the hourly self-heal.
+# transitions stay in Attendance Fix / the daily self-heal.
 for _event in ("after_insert", "on_update", "after_delete"):
     _add_doc_event(
         "Employee Checkin",
@@ -510,19 +510,23 @@ scheduler_events = {
     "hourly": [
         "avinashgroup_app.biometric.heartbeat.check_bridge_heartbeats",
     ],
-    # Self-heal runs in the same long-job bucket as HRMS's auto attendance so
-    # each hour goes: HRMS marks what it can → self-heal repairs what it
-    # couldn't (late punches on Absent days, poisoned skip flags, checkins
-    # stored before a shift assignment existed).
-    "hourly_long": [
-        "avinashgroup_app.biometric.attendance_self_heal.heal_unlinked_checkins",
-    ],
-    # Earned leave accrues on Bikram Sambat months, because the leave year runs
-    # Shrawan -> Ashad. REPLACES hrms.hr.utils.allocate_earned_leaves, whose
-    # Scheduled Job Type must be stopped per site or every credit lands twice
-    # (setup_bs_leave_accrual does that). See hr/utils.py for why the stock job
-    # is wrong twice over: 14-17 days late, and the Ashad instalment never runs.
     "daily_long": [
+        # Self-heal: repairs the days HRMS auto attendance could not mark (late
+        # punches on Absent days, poisoned skip flags, checkins stored before a
+        # shift assignment existed). Daily, not hourly: it only ever touches
+        # days before today, and attendance feeds a monthly payroll, so an
+        # hourly pass bought nothing. Long queue because a backlog can outlast
+        # the default queue's timeout. Midnight is after both shifts' checkout
+        # buffer (17:00 + up to 4h) and HRMS's last hourly pass on the day.
+        # Frappe shuffles the enqueue order, so grant_pending / measure_pending
+        # below may run first; they re-scan their lookback window nightly, so
+        # a day self-heal repairs is picked up by them the following night.
+        "avinashgroup_app.biometric.attendance_self_heal.heal_unlinked_checkins",
+        # Earned leave accrues on Bikram Sambat months, because the leave year runs
+        # Shrawan -> Ashad. REPLACES hrms.hr.utils.allocate_earned_leaves, whose
+        # Scheduled Job Type must be stopped per site or every credit lands twice
+        # (setup_bs_leave_accrual does that). See hr/utils.py for why the stock job
+        # is wrong twice over: 14-17 days late, and the Ashad instalment never runs.
         "avinashgroup_app.hr.utils.allocate_earned_leaves_bs",
         # On a fiscal year's first day, move companies and employees onto that
         # year's holiday lists (HRMS keeps one list per person, not per year).
@@ -546,11 +550,11 @@ scheduler_events = {
         # Reported in Asia/Kathmandu, the site time zone the scheduler uses.
         #
         # :10 rather than :00 deliberately. Every "Hourly" and "Hourly Long"
-        # event fires at "0 * * * *" — including heal_unlinked_checkins, which
-        # is the job that REPAIRS the very rows this digest reports on. Sending
-        # at 13:00 would race it and mail out problems self-heal was in the
-        # middle of fixing. Ten minutes lets it finish, so the digest describes
-        # the repaired state and lands in the lunch break either way.
+        # event fires at "0 * * * *" — including HRMS's auto attendance, which
+        # marks the very rows this digest reports on. Sending at 13:00 would
+        # race it. Ten minutes lets it finish, so the digest describes the
+        # settled state and lands in the lunch break either way. Self-heal ran
+        # at midnight, so the past days in section A are already repaired.
         "10 13 * * *": [
             "avinashgroup_app.biometric.daily_digest.send_daily_attendance_digest",
         ],

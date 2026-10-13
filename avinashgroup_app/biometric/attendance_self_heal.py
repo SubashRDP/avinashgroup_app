@@ -15,8 +15,8 @@ permanently and silently:
       has no `shift`, so the auto-attendance job never selects it, even
       after a shift is assigned later.
 
-This job runs hourly and re-reconciles every (employee, day) in a bounded
-lookback window that still has unlinked checkins, using the same primitives
+This job runs daily (daily_long, midnight) and re-reconciles every
+(employee, day) in a bounded lookback window that still has unlinked checkins, using the same primitives
 as the Attendance Fix doctype:
 
   - day already Present / Half Day / On Leave / WFH → link orphan punches
@@ -43,16 +43,20 @@ from avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix im
 
 # Days with unlinked checkins older than this are left for manual review via
 # Attendance Fix — an unbounded scan would rework ancient unresolvable rows
-# (e.g. holiday punches, ex-employees) every hour.
+# (e.g. holiday punches, ex-employees) every run. The window already spans far
+# more than a day, so running once a day misses nothing: a day not repairable
+# tonight (shift not closed, late punches still arriving) is retried tomorrow.
 LOOKBACK_DAYS = 45
 
 # Per-run cap so a huge backlog (first run after an outage) can't starve the
-# long worker; the hourly cadence drains the rest.
-MAX_GROUPS_PER_RUN = 500
+# long worker; the next night's run drains the rest. Sized for a daily run:
+# ~265 active employees means one day is at most ~265 groups, so this covers
+# a ten-day outage in one pass (it was 500 when the job ran hourly).
+MAX_GROUPS_PER_RUN = 3000
 
 
 def heal_unlinked_checkins():
-    """Hourly scheduler entry point."""
+    """Daily scheduler entry point (hooks.scheduler_events["daily_long"])."""
     window_start = datetime.combine(add_days(getdate(today()), -LOOKBACK_DAYS), time.min)
     window_end = datetime.combine(getdate(today()), time.min)  # strictly before today
 

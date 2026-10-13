@@ -275,7 +275,7 @@ def reconcile_employee_day(
 ):
     """Reconcile one (employee, date) against whatever is in the database.
 
-    Shared by Attendance Fix (manual, HR-submitted) and the hourly self-heal
+    Shared by Attendance Fix (manual, HR-submitted) and the daily self-heal
     job (biometric/attendance_self_heal.py).
 
     include_skipped: also consider checkins flagged skip_auto_attendance=1.

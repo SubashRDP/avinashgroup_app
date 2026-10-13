@@ -20,7 +20,7 @@ Two primitives, plus the Employee Checkin doc-event handlers that apply them:
       times, late/early flags, shift-deviation fields) from the full punch set.
 
 Status is NEVER changed here. Absent→Present transitions, row creation and
-deletion stay in Attendance Fix and the hourly self-heal, so HR keeps an
+deletion stay in Attendance Fix and the daily self-heal, so HR keeps an
 auditable trail of every status decision.
 """
 
@@ -206,7 +206,7 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
     # Comparing the unrounded computed value against the rounded stored one
     # made every call look like a change: the row was rewritten, and a repair
     # logged, on every single self-heal pass — for every Present day in the
-    # 45-day window, every hour, without ever converging.
+    # 45-day window, on every run, without ever converging.
     hours_precision = get_field_precision(
         frappe.get_meta("Attendance").get_field("working_hours")
     )

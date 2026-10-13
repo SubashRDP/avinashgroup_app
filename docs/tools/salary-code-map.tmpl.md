@@ -54,7 +54,7 @@ Stage 10 is the setup data (components, structures, assignments, revisions) that
 
 ## 2. Checkin → Attendance
 
-HRMS marks attendance from checkins every hour; our Attendance hooks then apply the late and leave rules; self-heal and Attendance Fix repair what HRMS could not mark. There is no `mark_auto_attendance` function in hrms v15.49.2: the entry point is `process_auto_attendance_for_all_shifts`.
+HRMS marks attendance from checkins every hour; our Attendance hooks then apply the late and leave rules; self-heal (nightly) and Attendance Fix repair what HRMS could not mark. There is no `mark_auto_attendance` function in hrms v15.49.2: the entry point is `process_auto_attendance_for_all_shifts`.
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
@@ -76,7 +76,7 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 | 2.16 | `enforce_late_arrival_half_day` | @@avinashgroup_app/biometric/attendance_override.py::enforce_late_arrival_half_day@@ | In-time after the earliest cutoff → Half Day with `half_day_status` Absent; an excused day goes to `_undo_excused_late_half_day`. | Shift Type `custom_half_day_if_late_by_hours`, `custom_late_arrival_cutoff_time`; Attendance `custom_late_excused` |
 | 2.17 | `_undo_excused_late_half_day` | @@avinashgroup_app/biometric/attendance_override.py::_undo_excused_late_half_day@@ | Puts an excused late half day back to Present, unless it has a leave type or the hours are below the half-day threshold. | Shift Type `working_hours_threshold_for_half_day` |
 | 2.18 | `half_day_when_working_on_leave` | @@avinashgroup_app/biometric/attendance_override.py::half_day_when_working_on_leave@@ | On Leave from a leave application but punched in → Half Day, `half_day_status` Present, leave type kept. | Attendance `leave_application` |
-| 2.19 | `heal_unlinked_checkins` | @@avinashgroup_app/biometric/attendance_self_heal.py::heal_unlinked_checkins@@ | Hourly: every (employee, day) of the last 45 days with unlinked checkins, whose shift has auto attendance on and has ended, goes through `reconcile_employee_day`. | Shift Type `enable_auto_attendance`, `last_sync_of_checkin`, `process_attendance_after` |
+| 2.19 | `heal_unlinked_checkins` | @@avinashgroup_app/biometric/attendance_self_heal.py::heal_unlinked_checkins@@ | Daily (`daily_long`, midnight): every (employee, day) of the last 45 days with unlinked checkins, whose shift has auto attendance on and has ended, goes through `reconcile_employee_day`. | Shift Type `enable_auto_attendance`, `last_sync_of_checkin`, `process_attendance_after` |
 | 2.20 | `reconcile_employee_day` | @@avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py::reconcile_employee_day@@ | A non-Absent day: link orphan punches and refresh values. An Absent or empty day with punches: replace it with attendance built by `get_attendance` + `mark_attendance_and_link_log`. | Employee Checkin, Attendance |
 | 2.21 | `AttendanceFix.on_submit` | @@avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py::on_submit@@ | HR's Attendance Fix: queues the same per-day reconcile over a date range for one shift. | Attendance Fix |
 | 2.22 | `measure_day` | @@avinashgroup_app/hr/shift_day.py::measure_day@@ | Late and early-exit minutes (full working days only) and overtime hours to the half hour (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13). | Attendance `custom_*` deviation fields |

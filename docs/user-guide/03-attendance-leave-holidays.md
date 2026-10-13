@@ -20,7 +20,7 @@ Salary slip        — payment days, tea, meals, overtime, late fine
 
 Things the system does by itself:
 - The **last punch of the day is always treated as the check-out** (OUT), and the punches in between alternate IN / OUT.
-- **Every hour**, a repair job links punches that arrived late and refreshes the day's hours.
+- **Every night at midnight**, a repair job links punches that arrived late and refreshes the hours of past days. Today is never touched; a day repaired overnight looks right the next morning.
 - **Around midday** each day, an attendance summary email with an Excel file is sent per company to the people set up to receive it.
 - If a device bridge stops sending, an alert is raised.
 

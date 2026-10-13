@@ -13,7 +13,7 @@ days of 31. With "Attendance" he is paid 18: each half day costs half a day
 leave is still paid, because HRMS marks those days On Leave rather than Absent.
 
 The trade this makes: attendance becomes the source of truth for pay, so a missing
-punch is a pay cut until it is repaired — which is what the hourly self-heal job
+punch is a pay cut until it is repaired — which is what the daily self-heal job
 and Attendance Fix are for.
 """
 

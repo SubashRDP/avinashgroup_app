@@ -122,7 +122,7 @@ every day he turned up.
 Approved leave is unaffected: HRMS marks those days On Leave, not Absent.
 
 The trade: attendance is now the source of truth for pay, so a missing punch is a
-pay cut until it is repaired. That is what the hourly self-heal job and Attendance
+pay cut until it is repaired. That is what the daily self-heal job and Attendance
 Fix exist for.
 
 ## Known gaps

@@ -24,7 +24,7 @@ flowchart LR
   REC --> SD[attendance_sync.sync_day<br/>past days, existing row only]
   DESK[Checkin made / edited / deleted on desk or API] -->|checkin_* hooks| SD
   CK -->|hourly_long, if Shift Type auto attendance ON| HR[HRMS process_auto_attendance]
-  CK -->|hourly_long| SH[self-heal heal_unlinked_checkins]
+  CK -->|daily_long, midnight| SH[self-heal heal_unlinked_checkins]
   CK -->|HR submits| AF[Attendance Fix / Repair from Check-ins]
   HR --> ATT[(Attendance)]
   SH --> ATT
@@ -102,14 +102,14 @@ So on avinas1 the **only** source of attendance is hand entry / import (and Atte
 | [`poll_commands`](../../avinashgroup_app/biometric/bridge_commands.py#L31) | Bridge pulls Pending commands, server flips them to Running atomically. | Bridge, ~30 s |
 | [`report_command_result`](../../avinashgroup_app/biometric/bridge_commands.py#L80) | Bridge reports Done/Failed + result. | Bridge |
 | [`ping`](../../avinashgroup_app/biometric/heartbeat.py#L101) | Stamps `last_contact_time` on every sync cycle even when no punches — so a quiet device is distinguishable from a dead bridge. | Bridge |
-| [`check_bridge_heartbeats`](../../avinashgroup_app/biometric/heartbeat.py#L26) | Hourly: compares `last_contact_time` with `alert_threshold_minutes`; emails Alert Recipients only on a Connected↔Disconnected **transition**. | `scheduler_events.hourly` ([`check_bridge_heartbeats`](../../avinashgroup_app/hooks.py#L508) in hooks.py) — **not running on avinas1** (scheduler disabled). |
+| [`check_bridge_heartbeats`](../../avinashgroup_app/biometric/heartbeat.py#L26) | Hourly: compares `last_contact_time` with `alert_threshold_minutes`; emails Alert Recipients only on a Connected↔Disconnected **transition**. | `scheduler_events.hourly` ([`check_bridge_heartbeats`](../../avinashgroup_app/hooks.py#L511) in hooks.py) — **not running on avinas1** (scheduler disabled). |
 
 ### 2e. Midday attendance digest
 
 | | |
 |---|---|
 | **What** | One email per company at 13:10 (Asia/Kathmandu): **A** Missed punches (odd punch count per day over a rolling window, holidays included, today excluded) — [`_missed_punches`](../../avinashgroup_app/biometric/daily_digest.py#L171); **B** Not seen today (rostered, shift started, no punch, no leave, not on holiday) — [`_not_seen_today`](../../avinashgroup_app/biometric/daily_digest.py#L218); **C** Device status — [`_device_status`](../../avinashgroup_app/biometric/daily_digest.py#L343). Recipients = devices' `digest_recipients`, pooled per company; none = no mail. Nothing is *sent* on a company holiday. [`preview_digest`](../../avinashgroup_app/biometric/daily_digest.py#L556) renders it on demand. |
-| **Why** | Docstring: "a bridge that stopped three days ago looks exactly like a workforce that stopped punching." 13:10 not 13:00 so it does not race the hourly self-heal it reports on (comment above [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L552) in hooks.py). |
+| **Why** | Docstring: "a bridge that stopped three days ago looks exactly like a workforce that stopped punching." 13:10 not 13:00 so it does not race HRMS's hourly auto attendance (self-heal runs at midnight, so past days are already repaired) (comment above [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L559) in hooks.py). |
 | **Where** | [`send_daily_attendance_digest`](../../avinashgroup_app/biometric/daily_digest.py#L76), [`build_digest`](../../avinashgroup_app/biometric/daily_digest.py#L139). |
 | **Config on avinas1** | Never run (scheduler disabled; no devices → no recipients). |
 
@@ -130,7 +130,7 @@ So on avinas1 the **only** source of attendance is hand entry / import (and Atte
 | | |
 |---|---|
 | **What** | (1) Employee of the **device's company** whose `attendance_device_id` = the user ID (a device with no company matches across all companies — legacy). (2) Only on a miss: the device's Allowed Employees list (explicit `device_user_id` first, else the visitor's own `attendance_device_id`). |
-| **Where** | [`resolve_employee_for_punch`](../../avinashgroup_app/biometric/utils.py#L48). Uniqueness enforced at save time by [`validate_unique_device_id`](../../avinashgroup_app/biometric/employee.py#L13) (Employee `validate`, registered in hooks.py at [`validate_unique_device_id`](../../avinashgroup_app/hooks.py#L340)). |
+| **Where** | [`resolve_employee_for_punch`](../../avinashgroup_app/biometric/utils.py#L48). Uniqueness enforced at save time by [`validate_unique_device_id`](../../avinashgroup_app/biometric/employee.py#L13) (Employee `validate`, registered in hooks.py at [`validate_unique_device_id`](../../avinashgroup_app/hooks.py#L343)). |
 | **Why** | Same work number repeats across companies; within one company it must be unique "so the matching side never has to guess" (docstring). |
 | **Impacts** | Changing an employee's `attendance_device_id` or `company` re-routes future punches only; checkins already stored keep their employee. |
 
@@ -160,7 +160,7 @@ Stock fields used: `employee`, `time`, `log_type`, `device_id`, `shift`, `shift_
 | Employee Checkin `on_update` | [`checkin_on_update`](../../avinashgroup_app/biometric/attendance_sync.py#L319) | Only when `time` or `log_type` changed: relabel and sync both the old and the new day. |
 | Employee Checkin `after_delete` | [`checkin_after_delete`](../../avinashgroup_app/biometric/attendance_sync.py#L339) | Relabel and sync the day. |
 
-Registered in a loop in hooks.py ([`attendance_sync.checkin_`](../../avinashgroup_app/hooks.py#L334)). **Why** (hooks.py comment and module docstring of `attendance_sync.py`): keep IN/OUT alternation and an existing Present/Half Day row's numbers right "no matter how punches arrive"; **status is never changed by these hooks** — status transitions stay with Attendance Fix and self-heal "so HR keeps an auditable trail of every status decision". Manual `log_type` choices are deliberately overwritten by [`relabel_day_checkins`](../../avinashgroup_app/biometric/attendance_sync.py#L81).
+Registered in a loop in hooks.py ([`attendance_sync.checkin_`](../../avinashgroup_app/hooks.py#L337)). **Why** (hooks.py comment and module docstring of `attendance_sync.py`): keep IN/OUT alternation and an existing Present/Half Day row's numbers right "no matter how punches arrive"; **status is never changed by these hooks** — status transitions stay with Attendance Fix and self-heal "so HR keeps an auditable trail of every status decision". Manual `log_type` choices are deliberately overwritten by [`relabel_day_checkins`](../../avinashgroup_app/biometric/attendance_sync.py#L81).
 
 ### 3f. `sync_day` and `refresh_attendance_values`
 
@@ -185,14 +185,14 @@ Four creators, one primitive set. Whatever creates the row, the same Attendance 
 | **Consequences of OFF** | No row is created from punches automatically; **nobody is ever auto-marked Absent**; with `consider_unmarked_attendance_as = Present` every unmarked working day is paid. Self-heal also refuses to act (it requires auto attendance on). Attendance can only come from hand entry, import, Attendance Fix or Repair. Also, because thresholds are 0, HRMS's own status is always Present — Half Day / Absent come only from our late rule, leave, or hand entry. |
 | **Turning it ON needs** | `enable_auto_attendance = 1` **and** a `last_sync_of_checkin` (or `auto_update_last_sync = 1`), **and** the scheduler enabled for the site. Clear NGK's stale Shift-Type holiday list first, or 83/84 holidays will be treated as working days (and absentees marked Absent on them). [hrms-attendance-handoff.md](../hrms-attendance-handoff.md) describes three Shift Types switched on with "Strictly based on Log Type", 4 h / 2 h thresholds and 15-min grace — **that does not match avinas1 today** (likely another site or an earlier state). |
 
-### 4b. Hourly self-heal — `heal_unlinked_checkins`
+### 4b. Daily self-heal — `heal_unlinked_checkins`
 
 | | |
 |---|---|
-| **What** | Every (employee, day) in the last [`LOOKBACK_DAYS`](../../avinashgroup_app/biometric/attendance_self_heal.py#L47) = 45 days (up to yesterday) with unlinked checkins, at most [`MAX_GROUPS_PER_RUN`](../../avinashgroup_app/biometric/attendance_self_heal.py#L51) = 500 per run, goes through `reconcile_employee_day` with `include_skipped=True`, `mark_absent_when_no_checkins=False`, and **no holiday skip** (punches on holidays still count). |
+| **What** | Every (employee, day) in the last [`LOOKBACK_DAYS`](../../avinashgroup_app/biometric/attendance_self_heal.py#L49) = 45 days (up to yesterday) with unlinked checkins, at most [`MAX_GROUPS_PER_RUN`](../../avinashgroup_app/biometric/attendance_self_heal.py#L55) = 3000 per run, goes through `reconcile_employee_day` with `include_skipped=True`, `mark_absent_when_no_checkins=False`, and **no holiday skip** (punches on holidays still count). |
 | **Why** | Docstring failure modes F1–F3: punches arriving after HRMS marked the day Absent (HRMS poisons them), any ValidationError poisoning logs, punches stored before a shift existed. "Deliberately narrow: it never marks anyone Absent." |
-| **Gates** | Skips a group unless the shift (majority of checkins' shifts, else Default Shift — [`_resolve_shift`](../../avinashgroup_app/biometric/attendance_self_heal.py#L140)) has [`enable_auto_attendance`](../../avinashgroup_app/biometric/attendance_self_heal.py#L91) on, a `last_sync_of_checkin`, the day is on/after `process_attendance_after`, and the shift + checkout buffer ended before last sync ([`_shift_window_closed`](../../avinashgroup_app/biometric/attendance_self_heal.py#L166)). |
-| **Where / trigger** | [`heal_unlinked_checkins`](../../avinashgroup_app/biometric/attendance_self_heal.py#L54), `scheduler_events.hourly_long` ([`heal_unlinked_checkins`](../../avinashgroup_app/hooks.py#L515) in hooks.py). |
+| **Gates** | Skips a group unless the shift (majority of checkins' shifts, else Default Shift — [`_resolve_shift`](../../avinashgroup_app/biometric/attendance_self_heal.py#L144)) has [`enable_auto_attendance`](../../avinashgroup_app/biometric/attendance_self_heal.py#L95) on, a `last_sync_of_checkin`, the day is on/after `process_attendance_after`, and the shift + checkout buffer ended before last sync ([`_shift_window_closed`](../../avinashgroup_app/biometric/attendance_self_heal.py#L170)). |
+| **Where / trigger** | [`heal_unlinked_checkins`](../../avinashgroup_app/biometric/attendance_self_heal.py#L58), `scheduler_events.daily_long`, midnight ([`heal_unlinked_checkins`](../../avinashgroup_app/hooks.py#L524) in hooks.py). Was `hourly_long` until 2026-10-13: it only repairs days before today, so an hourly pass gained nothing over a nightly one. |
 | **Config on avinas1** | Inert twice over: scheduler disabled, and both shifts have auto attendance off and no last sync. |
 | **Important consequence** | HRMS never auto-marks holidays, so **holiday work is turned into attendance only by self-heal or by the Repair button** (Attendance Fix skips holidays, see 4c). With self-heal inert, holiday work needs Repair or hand entry. |
 
@@ -211,7 +211,7 @@ Four creators, one primitive set. Whatever creates the row, the same Attendance 
 
 | | |
 |---|---|
-| **What** | Button added by [`add_repair_button`](../../avinashgroup_app/public/js/attendance.js#L85) (doctype_js, [`public/js/attendance.js`](../../avinashgroup_app/hooks.py#L106) in hooks.py) calling [`repair_attendance_day`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L524): HR Manager / System Manager only; same `reconcile_employee_day` with **no shift gates**, **no holiday skip**, `include_skipped=True`, and never marks Absent. Reports before/after; if a stale Absent was replaced the form routes to the new document. |
+| **What** | Button added by [`add_repair_button`](../../avinashgroup_app/public/js/attendance.js#L85) (doctype_js, [`public/js/attendance.js`](../../avinashgroup_app/hooks.py#L107) in hooks.py) calling [`repair_attendance_day`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L524): HR Manager / System Manager only; same `reconcile_employee_day` with **no shift gates**, **no holiday skip**, `include_skipped=True`, and never marks Absent. Reports before/after; if a stale Absent was replaced the form routes to the new document. |
 | **Why** | Docstring: single-record counterpart to Attendance Fix; "Creating an Absent from an empty day is a payroll decision; this button exists to make attendance agree with the punches." |
 | **Also on the form** | [`render_checkin_log`](../../avinashgroup_app/public/js/attendance.js#L14): a table of the day's checkins (IN = Checkin, OUT = Checkout) under the status field. |
 
@@ -223,7 +223,7 @@ Attendance can be created on the desk or by Data Import. It still passes through
 
 ## 5. Attendance `validate`: HRMS first, then our four hooks
 
-HRMS `Attendance.validate` ([`validate`](../../../hrms/hrms/hr/doctype/attendance/attendance.py#L41)) runs first: date/joining checks, [`validate_duplicate_record`](../../../hrms/hrms/hr/doctype/attendance/attendance.py#L67) (one row per employee-day, half-day-leave exceptions), overlapping shift, employee status, and [`check_leave_record`](../../../hrms/hrms/hr/doctype/attendance/attendance.py#L154): an **approved, submitted Leave Application** covering the date sets `leave_type`, `leave_application` and status **On Leave** (or **Half Day** on its half-day date). Then our doc_events run, in the order registered at [hooks.py `attendance_events`](../../avinashgroup_app/hooks.py#L223).
+HRMS `Attendance.validate` ([`validate`](../../../hrms/hrms/hr/doctype/attendance/attendance.py#L41)) runs first: date/joining checks, [`validate_duplicate_record`](../../../hrms/hrms/hr/doctype/attendance/attendance.py#L67) (one row per employee-day, half-day-leave exceptions), overlapping shift, employee status, and [`check_leave_record`](../../../hrms/hrms/hr/doctype/attendance/attendance.py#L154): an **approved, submitted Leave Application** covering the date sets `leave_type`, `leave_application` and status **On Leave** (or **Half Day** on its half-day date). Then our doc_events run, in the order registered at [hooks.py `attendance_events`](../../avinashgroup_app/hooks.py#L226).
 
 Why `validate` and not `before_save` (hooks.py comment): auto attendance inserts already-submitted rows, and Frappe runs `before_submit`, not `before_save`, on that path; `validate` fires on both.
 
@@ -291,13 +291,13 @@ Which list: the employee's `holiday_list`, else the company's `default_holiday_l
 |---|---|
 | **What** | When a Shift Request / Shift Assignment reaches into past days, those days' attendance is rebuilt on the new shift: leave rows and no-punch rows keep status (shift corrected); days with punches are deleted and re-marked through `reconcile_employee_day`; approved Overtime Sheet rows re-measured ([`_remeasure_overtime`](../../avinashgroup_app/hr/shift_backdate.py#L356)). Before cancel/split the covered days are detached ([`detach_days`](../../avinashgroup_app/hr/shift_backdate.py#L193)) because HRMS refuses to cancel an assignment whose shift is still named by attendance or checkins. |
 | **Guard** | [`guard_paid_period`](../../avinashgroup_app/hr/shift_backdate.py#L80) (validate): refuses a change overlapping a **submitted Salary Slip** — "Cancel the salary slip first". |
-| **Where / trigger** | Hooks in hooks.py from [`guard_paid_period`](../../avinashgroup_app/hooks.py#L433) to line 439: Shift Request validate / before_submit / on_submit / before_cancel / on_cancel; Shift Assignment validate / on_submit / before_cancel / on_cancel → [`rebuild_for_request`](../../avinashgroup_app/hr/shift_backdate.py#L140), [`rebuild_for_assignment`](../../avinashgroup_app/hr/shift_backdate.py#L159), [`_rebuild_day`](../../avinashgroup_app/hr/shift_backdate.py#L279). |
+| **Where / trigger** | Hooks in hooks.py from [`guard_paid_period`](../../avinashgroup_app/hooks.py#L436) to line 439: Shift Request validate / before_submit / on_submit / before_cancel / on_cancel; Shift Assignment validate / on_submit / before_cancel / on_cancel → [`rebuild_for_request`](../../avinashgroup_app/hr/shift_backdate.py#L140), [`rebuild_for_assignment`](../../avinashgroup_app/hr/shift_backdate.py#L159), [`_rebuild_day`](../../avinashgroup_app/hr/shift_backdate.py#L279). |
 | **Why** | Module docstring example: NGI-EMP-00029 Asoj 12 punched 11:58–20:03; on the old 6–2 shift that was Half Day, ½ LWP and 6 h of "OT"; on the real 12–8 shift it is Present, on time, no OT. Pay reads those rows. |
 | **More** | Rotation and shift-change rules: [docs/shift-rotation.md](../shift-rotation.md); [09-cross-cutting.md](09-cross-cutting.md). |
 
 ## 8. Shift Type save guard
 
-[`clear_invented_late_cutoff`](../../avinashgroup_app/hr/shift_type_guard.py#L37) (Shift Type validate, [`clear_invented_late_cutoff`](../../avinashgroup_app/hooks.py#L452) in hooks.py): saving a Shift Type fills a blank `custom_late_arrival_cutoff_time` with the clock time of the save; a cutoff that changed in this save to within [`INVENTED_WITHIN_SECONDS`](../../avinashgroup_app/hr/shift_type_guard.py#L32) = 90 s of "now" is cleared. **Why**: on the first run of test attendance it made 2,423 of 2,808 days half days (docstring; commit `70baa36`). `enforce_late_arrival_half_day` has a second defence (cutoff ≤ shift start is ignored). Both shifts on avinas1 have the cutoff blank and `custom_half_day_if_late_by_hours = 2.00`.
+[`clear_invented_late_cutoff`](../../avinashgroup_app/hr/shift_type_guard.py#L37) (Shift Type validate, [`clear_invented_late_cutoff`](../../avinashgroup_app/hooks.py#L455) in hooks.py): saving a Shift Type fills a blank `custom_late_arrival_cutoff_time` with the clock time of the save; a cutoff that changed in this save to within [`INVENTED_WITHIN_SECONDS`](../../avinashgroup_app/hr/shift_type_guard.py#L32) = 90 s of "now" is cleared. **Why**: on the first run of test attendance it made 2,423 of 2,808 days half days (docstring; commit `70baa36`). `enforce_late_arrival_half_day` has a second defence (cutoff ≤ shift start is ignored). Both shifts on avinas1 have the cutoff blank and `custom_half_day_if_late_by_hours = 2.00`.
 
 ---
 
