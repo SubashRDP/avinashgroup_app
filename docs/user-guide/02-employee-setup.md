@@ -230,6 +230,7 @@ On each company's salary structure, under **Allowance Rates**:
 1. Open **Salary Component** → **New**. Type the name, Type = Earning.
 2. Tick **Is Allowance** and choose the **Allowance Kind**.
 3. In **Accounts**, add a row for each company that pays it: Company and the three accounts (Admin & Accounts, Marketing (S/D), Plant (F/P)).
+   Pick the Company first: each account list shows only that company's ledger (non-group) accounts, and only Expense accounts for an earning. Saving with another company's account, or a group account, is refused.
 4. Save.
 5. If there is a usual rate, add it to the **Allowance Rates** of each structure that has one.
 6. Give it to people: a row on each person's assignment, or a **Salary Revision** with **Add** for many at once (Chapter 8).

@@ -54,7 +54,7 @@ Then [`make_journal_entry`](../../../hrms/hrms/payroll/doctype/payroll_entry/pay
 
 ### 7.2.1 Section accounts (O/O · S/D · F/P) — our override
 
-**What.** `AvinashPayrollEntry` (registered in `override_doctype_class` as [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L517)) replaces two HRMS methods:
+**What.** `AvinashPayrollEntry` (registered in `override_doctype_class` as [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L519)) replaces two HRMS methods:
 
 | Method | HRMS behaviour | Ours |
 |---|---|---|
@@ -90,7 +90,7 @@ Actual journal, NGI Bhadra (NGI-JE-83/84-00005, 2026-09-16): Dr F/P 16,44,441.81
 
 **What.** Before a Journal Entry is inserted, if any row references a Payroll Entry or Employee Advance ([`HR_REFERENCES`](../../avinashgroup_app/payroll/hr_journal.py#L28)): sets `custom_p_type` (JV Type) to the voucher type when such a JV Type exists (else *Journal Entry*); for a hand-numbered series, draws the next `custom_document_no` with the numbering engine's [`_docno_scope`](../../avinashgroup_app/custom_code/Override/naming_series.py#L952) / [`_draw_next_document_no`](../../avinashgroup_app/custom_code/Override/naming_series.py#L1163) and ticks `custom_document_no_manual`; an auto-numbered series (Bank Entry) is left to number itself.
 
-**Where.** [`default_jv_type`](../../avinashgroup_app/payroll/hr_journal.py#L30), registered **first** in Journal Entry `before_insert` ([`default_jv_type`](../../avinashgroup_app/hooks.py#L323)), ahead of the naming hooks that read the JV Type.
+**Where.** [`default_jv_type`](../../avinashgroup_app/payroll/hr_journal.py#L30), registered **first** in Journal Entry `before_insert` ([`default_jv_type`](../../avinashgroup_app/hooks.py#L325)), ahead of the naming hooks that read the JV Type.
 
 **Why.** Every Journal Entry here requires a JV Type and Document No; HRMS writes two journals with nobody at the form (payroll accrual, Employee Advance payout) and they failed, rolling back 87 submitted slips (module docstring). Anything an accountant typed is left alone.
 

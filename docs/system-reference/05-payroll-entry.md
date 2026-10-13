@@ -24,7 +24,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 
 **HRMS vs us.** HRMS owns the Payroll Entry doctype, slip creation, the accrual journal and the bank entry. We add the following:
 
-* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L517);
+* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L519);
 * the **BS month** fields and calendar;
 * one **doc_event** guard;
 * the whole **attendance engine**. HRMS has no attendance-driven pay at all, only proration by payment days (stage [06](06-salary-slip.md)).
@@ -110,7 +110,7 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 ## 5.3 The BS period guard (Payroll Entry side)
 
-[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L375).
+[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L377).
 
 | | |
 |---|---|

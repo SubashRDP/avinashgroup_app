@@ -78,7 +78,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 340,
+      "line": 342,
       "title": "1.12 checkin_{_event}",
       "description": "Registers `checkin_after_insert` / `checkin_on_update` / `checkin_after_delete` on Employee Checkin."
     },
@@ -174,7 +174,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 229,
+      "line": 231,
       "title": "2.12 attendance_events",
       "description": "Our Attendance `validate` hooks, run in this order (on `validate`, so they also fire for attendance submitted on insert)."
     },
@@ -660,7 +660,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 358,
+      "line": 360,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -684,7 +684,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 365,
+      "line": 367,
       "title": "8.5 apply_tax_reliefs",
       "description": "Registration (second)."
     },
@@ -708,7 +708,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 369,
+      "line": 371,
       "title": "8.9 apply_income_tax_override",
       "description": "Registration (third)."
     },
@@ -732,7 +732,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 376,
+      "line": 378,
       "title": "8.13 validate_salary_slip",
       "description": "Registration (fourth)."
     },
@@ -744,7 +744,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 379,
+      "line": 381,
       "title": "8.15 build_daily_breakdown",
       "description": "Registration (fifth)."
     },
@@ -762,7 +762,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 462,
+      "line": 464,
       "title": "8.18 set_bs_dates",
       "description": "Registration (sixth, from a loop further down `hooks.py`)."
     },
@@ -828,7 +828,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 323,
+      "line": 325,
       "title": "9.10 default_jv_type",
       "description": "Registered first in Journal Entry `before_insert`."
     },
@@ -858,19 +858,19 @@
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 418,
+      "line": 425,
       "title": "10.2 validate_salary_structure",
       "description": "Refuses allowances in Earnings / Deductions; blanks the amount and formula of attendance-driven rows (late fine tag); checks Allowance Rates.\n\nReads: Salary Structure"
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 447,
+      "line": 454,
       "title": "10.3 guard_structure_rates",
       "description": "After submit, a listed rate changes only through a Salary Revision."
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 473,
+      "line": 480,
       "title": "10.4 validate_assignment_allowances",
       "description": "Allowances on an assignment: allowances only, once each; a blank rate takes the structure's; still 0 is refused.\n\nReads: Structure Allowance Rate"
     },

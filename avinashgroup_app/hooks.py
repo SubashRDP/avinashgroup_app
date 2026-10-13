@@ -115,6 +115,8 @@ doctype_js = {
     "Salary Structure Assignment": "public/js/salary_structure_assignment.js",
     # The structure's Allowance Rates: allowances only. See payroll/allowance.py.
     "Salary Structure": "public/js/salary_structure.js",
+    # Accounts rows: every account column filtered to the row's company. See payroll/allowance.py.
+    "Salary Component": "public/js/salary_component.js",
     # "Move Staff to This Shift" on a rotational shift. See hr/shift_rotation.py.
     "Shift Type": "public/js/shift_type.js",
     "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],

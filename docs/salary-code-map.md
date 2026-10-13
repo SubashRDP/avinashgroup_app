@@ -46,7 +46,7 @@ Stage 10 is the setup data (components, structures, assignments, revisions) that
 | 1.9 | `desired_log_type` | [attendance_sync.py:54](../avinashgroup_app/biometric/attendance_sync.py#L54) | IN, OUT, IN … in time order, with the day's last punch forced to OUT when there are two or more. | — |
 | 1.10 | `sync_day` | [attendance_sync.py:238](../avinashgroup_app/biometric/attendance_sync.py#L238) | Past days only: links the day's unlinked checkins to an existing Present / Half Day Attendance and refreshes its values. Never changes status. | Attendance, Employee Checkin |
 | 1.11 | `refresh_attendance_values` | [attendance_sync.py:169](../avinashgroup_app/biometric/attendance_sync.py#L169) | Recomputes working hours, in/out, late/early flags (via `ShiftType.get_attendance`) and the four deviation fields; writes only what changed, with `db.set_value`. | Shift Type |
-| 1.12 | `checkin_{_event}` | [hooks.py:340](../avinashgroup_app/hooks.py#L340) | Registers `checkin_after_insert` / `checkin_on_update` / `checkin_after_delete` on Employee Checkin. | — |
+| 1.12 | `checkin_{_event}` | [hooks.py:342](../avinashgroup_app/hooks.py#L342) | Registers `checkin_after_insert` / `checkin_on_update` / `checkin_after_delete` on Employee Checkin. | — |
 | 1.13 | `checkin_after_insert` | [attendance_sync.py:305](../avinashgroup_app/biometric/attendance_sync.py#L305) | A checkin made on the desk or by API: relabel the day and `sync_day`. Skipped while the device pipeline inserts (`in_biometric_day_reconcile`). | — |
 | 1.14 | `checkin_on_update` | [attendance_sync.py:319](../avinashgroup_app/biometric/attendance_sync.py#L319) | Time or log type edited: relabel and sync the old and the new day. | — |
 | 1.15 | `checkin_after_delete` | [attendance_sync.py:339](../avinashgroup_app/biometric/attendance_sync.py#L339) | Checkin deleted: relabel and sync its day. | — |
@@ -69,7 +69,7 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 | 2.9 | `ShiftType.mark_absent_for_dates_with_no_attendance` | [shift_type.py:218](../../hrms/hrms/hr/doctype/shift_type/shift_type.py#L218) | Marks Absent on this shift's days that have no attendance. | Holiday List, Shift Assignment |
 | 2.10 | `Attendance.validate` | [attendance.py:41](../../hrms/hrms/hr/doctype/attendance/attendance.py#L41) | HRMS checks (status, joining date, duplicates, overlapping shift, employee status), then `check_leave_record`. | — |
 | 2.11 | `Attendance.check_leave_record` | [attendance.py:154](../../hrms/hrms/hr/doctype/attendance/attendance.py#L154) | An approved Leave Application on the date sets leave type and status On Leave (Half Day on its half-day date). | Leave Application |
-| 2.12 | `attendance_events` | [hooks.py:229](../avinashgroup_app/hooks.py#L229) | Our Attendance `validate` hooks, run in this order (on `validate`, so they also fire for attendance submitted on insert). | — |
+| 2.12 | `attendance_events` | [hooks.py:231](../avinashgroup_app/hooks.py#L231) | Our Attendance `validate` hooks, run in this order (on `validate`, so they also fire for attendance submitted on insert). | — |
 | 2.13 | `set_holiday_flag` | [attendance_allowance.py:478](../avinashgroup_app/payroll/attendance_allowance.py#L478) | Ticks `custom_worked_on_holiday` when the date is in the employee's Holiday List (or the company default). | Employee `holiday_list`, Company `default_holiday_list` |
 | 2.14 | `set_shift_deviation_fields` | [attendance_override.py:8](../avinashgroup_app/biometric/attendance_override.py#L8) | Fills a missing shift from the roster (`get_shift_window`), then writes the four `custom_*` deviation fields. | Shift Type |
 | 2.15 | `compute_shift_deviations` | [attendance_sync.py:135](../avinashgroup_app/biometric/attendance_sync.py#L135) | Seconds of late/early entry and early/late exit against shift start and end, rounded to the minute. | Shift Type `start_time`, `end_time` |
@@ -190,24 +190,24 @@ Run after the controller's `validate` (stages 6–7), in the order `hooks.py` re
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 8.1 | `add_employee_allowances` | [hooks.py:358](../avinashgroup_app/hooks.py#L358) | Registration (first). | — |
+| 8.1 | `add_employee_allowances` | [hooks.py:360](../avinashgroup_app/hooks.py#L360) | Registration (first). | — |
 | 8.2 | `add_employee_allowances` | [salary_slip.py:33](../avinashgroup_app/payroll/salary_slip.py#L33) | Draft slips: adds, updates or drops the Monthly and % of Initial Basic allowance rows, then reruns `calculate_net_pay`. | Assignment Allowance; Salary Component `custom_allowance_kind` |
 | 8.3 | `fixed_allowance_amounts` | [allowance.py:320](../avinashgroup_app/payroll/allowance.py#L320) | Full-month amount per fixed allowance: the Rate, or Rate % of the assignment's Initial Basic. | Assignment `custom_initial_basic` |
 | 8.4 | `current_assignment` | [allowance.py:258](../avinashgroup_app/payroll/allowance.py#L258) | The submitted assignment in force on the date (cached per request). | Salary Structure Assignment |
-| 8.5 | `apply_tax_reliefs` | [hooks.py:365](../avinashgroup_app/hooks.py#L365) | Registration (second). | — |
+| 8.5 | `apply_tax_reliefs` | [hooks.py:367](../avinashgroup_app/hooks.py#L367) | Registration (second). | — |
 | 8.6 | `apply_tax_reliefs` | [tax_relief.py:77](../avinashgroup_app/payroll/tax_relief.py#L77) | When a retirement excess or women's rebate applies, recomputes the tax row from HRMS's figures and resets net pay; otherwise leaves the slip alone. | — |
 | 8.7 | `retirement_excess` | [tax_relief.py:124](../avinashgroup_app/payroll/tax_relief.py#L124) | Retirement contributions for the year above the lower cap, put back into taxable income. | Employee Tax Exemption Category `custom_is_retirement_contribution`, `max_amount`, `custom_cap_percent_of_income` |
 | 8.8 | `women_rebate_fraction` | [tax_relief.py:182](../avinashgroup_app/payroll/tax_relief.py#L182) | The slab's rebate percent for a woman ticked Women's Tax Rebate, else 0. | Income Tax Slab `custom_women_rebate_percent`; Employee `gender`, `custom_womens_tax_rebate` |
-| 8.9 | `apply_income_tax_override` | [hooks.py:369](../avinashgroup_app/hooks.py#L369) | Registration (third). | — |
+| 8.9 | `apply_income_tax_override` | [hooks.py:371](../avinashgroup_app/hooks.py#L371) | Registration (third). | — |
 | 8.10 | `apply_income_tax_override` | [income_tax.py:154](../avinashgroup_app/payroll/income_tax.py#L154) | Stores the computed tax in `custom_income_tax_computed`; with Override ticked, sets the tax row to the typed amount and resets net pay. | Salary Slip `custom_override_income_tax`, `custom_income_tax_override` |
 | 8.11 | `get_tax_row` | [income_tax.py:146](../avinashgroup_app/payroll/income_tax.py#L146) | The deduction row with `variable_based_on_taxable_salary`. | — |
 | 8.12 | `FY_8384_SLABS` | [income_tax.py:31](../avinashgroup_app/payroll/income_tax.py#L31) | The 83/84 rate table. Not read by the slip: `hr/year_setup.py` uses it to create the Income Tax Slab record, which the slip reads (6.18). | — |
-| 8.13 | `validate_salary_slip` | [hooks.py:376](../avinashgroup_app/hooks.py#L376) | Registration (fourth). | — |
+| 8.13 | `validate_salary_slip` | [hooks.py:378](../avinashgroup_app/hooks.py#L378) | Registration (fourth). | — |
 | 8.14 | `validate_salary_slip` | [bs_period_guard.py:70](../avinashgroup_app/payroll/bs_period_guard.py#L70) | Refuses a slip whose start date differs from its Payroll Entry's. | Payroll Entry `start_date` |
-| 8.15 | `build_daily_breakdown` | [hooks.py:379](../avinashgroup_app/hooks.py#L379) | Registration (fifth). | — |
+| 8.15 | `build_daily_breakdown` | [hooks.py:381](../avinashgroup_app/hooks.py#L381) | Registration (fifth). | — |
 | 8.16 | `build_daily_breakdown` | [daily_breakdown.py:64](../avinashgroup_app/payroll/daily_breakdown.py#L64) | Fills the Daily Breakdown table; logs and carries on if it fails. | — |
 | 8.17 | `breakdown_rows` | [daily_breakdown.py:76](../avinashgroup_app/payroll/daily_breakdown.py#L76) | Per day: paid weight × daily rate, attendance items spread by `evaluate_rule`, running balance; month-end rows and a Rounding / Adjustment row to reach net pay. | Attendance, Holiday List |
-| 8.18 | `set_bs_dates` | [hooks.py:462](../avinashgroup_app/hooks.py#L462) | Registration (sixth, from a loop further down `hooks.py`). | — |
+| 8.18 | `set_bs_dates` | [hooks.py:464](../avinashgroup_app/hooks.py#L464) | Registration (sixth, from a loop further down `hooks.py`). | — |
 | 8.19 | `set_bs_dates` | [bs_dates.py:75](../avinashgroup_app/hr/bs_dates.py#L75) | Writes the miti fields and `custom_bs_month` from the slip's dates; changes no amount. | — |
 
 ## 9. Journal on submit
@@ -223,7 +223,7 @@ Run after the controller's `validate` (stages 6–7), in the order `hooks.py` re
 | 9.7 | `AvinashPayrollEntry.get_account` | [payroll_entry.py:133](../avinashgroup_app/payroll/payroll_entry.py#L133) | Turns component keys into (account, cost centre) amounts using `section_account`, else HRMS's account. | — |
 | 9.8 | `section_account` | [allowance.py:129](../avinashgroup_app/payroll/allowance.py#L129) | The component's account for the section on the company row; blank S/D or F/P falls back to the row's own (O/O) account. | Salary Component Account `account`, `custom_account_marketing`, `custom_account_plant` |
 | 9.9 | `PayrollEntry.make_journal_entry` | [payroll_entry.py:607](../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L607) | Saves (and optionally submits) the Journal Entry and links it on the slips. | — |
-| 9.10 | `default_jv_type` | [hooks.py:323](../avinashgroup_app/hooks.py#L323) | Registered first in Journal Entry `before_insert`. | — |
+| 9.10 | `default_jv_type` | [hooks.py:325](../avinashgroup_app/hooks.py#L325) | Registered first in Journal Entry `before_insert`. | — |
 | 9.11 | `default_jv_type` | [hr_journal.py:30](../avinashgroup_app/payroll/hr_journal.py#L30) | A journal referencing a Payroll Entry or Employee Advance gets a JV Type and, for a hand-numbered series, the next Document No. | JV Type; numbering series |
 | 9.12 | `AvinashPayrollEntry.make_bank_entry` | [payroll_entry.py:55](../avinashgroup_app/payroll/payroll_entry.py#L55) | Refuses a missing or non-Bank/Cash Payment Account, then HRMS's bank entry. | Payroll Entry `payment_account` |
 | 9.13 | `PayrollEntry.make_bank_entry` | [payroll_entry.py:876](../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L876) | Bank Entry for the submitted slips' net pay against the payable account. | — |
@@ -233,9 +233,9 @@ Run after the controller's `validate` (stages 6–7), in the order `hooks.py` re
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
 | 10.1 | `validate_salary_component` | [allowance.py:356](../avinashgroup_app/payroll/allowance.py#L356) | Allowance kind sets the attendance condition; attendance-driven components get no payment-days proration and Remove if Zero; S/D and F/P accounts must be the row's company's. | Salary Component |
-| 10.2 | `validate_salary_structure` | [allowance.py:418](../avinashgroup_app/payroll/allowance.py#L418) | Refuses allowances in Earnings / Deductions; blanks the amount and formula of attendance-driven rows (late fine tag); checks Allowance Rates. | Salary Structure |
-| 10.3 | `guard_structure_rates` | [allowance.py:447](../avinashgroup_app/payroll/allowance.py#L447) | After submit, a listed rate changes only through a Salary Revision. | — |
-| 10.4 | `validate_assignment_allowances` | [allowance.py:473](../avinashgroup_app/payroll/allowance.py#L473) | Allowances on an assignment: allowances only, once each; a blank rate takes the structure's; still 0 is refused. | Structure Allowance Rate |
+| 10.2 | `validate_salary_structure` | [allowance.py:425](../avinashgroup_app/payroll/allowance.py#L425) | Refuses allowances in Earnings / Deductions; blanks the amount and formula of attendance-driven rows (late fine tag); checks Allowance Rates. | Salary Structure |
+| 10.3 | `guard_structure_rates` | [allowance.py:454](../avinashgroup_app/payroll/allowance.py#L454) | After submit, a listed rate changes only through a Salary Revision. | — |
+| 10.4 | `validate_assignment_allowances` | [allowance.py:480](../avinashgroup_app/payroll/allowance.py#L480) | Allowances on an assignment: allowances only, once each; a blank rate takes the structure's; still 0 is refused. | Structure Allowance Rate |
 | 10.5 | `get_rate_for_assignment` | [allowance.py:209](../avinashgroup_app/payroll/allowance.py#L209) | Form call: the structure's rate and unit for a picked allowance (0 for computed rates). | Structure Allowance Rate |
 | 10.6 | `SalaryRevision.on_submit` | [salary_revision.py:301](../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L301) | For each listed employee a new assignment and the arrears; then moves raised structure rates. | — |
 | 10.7 | `SalaryRevision.assign_new_salary` | [salary_revision.py:350](../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L350) | New submitted assignment from the effective date: new base, planned allowances, Initial Basic, SSF Applicable, that year's tax slab. | Income Tax Slab |

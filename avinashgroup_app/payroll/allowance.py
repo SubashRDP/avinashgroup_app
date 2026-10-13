@@ -356,16 +356,23 @@ def allowance_rate(assignment, allowance: str) -> float:
 def validate_salary_component(doc, method=None):
 	"""An allowance's kind decides its attendance settings; accounts are the company's.
 
-	Hook: doc_events → Salary Component → validate. Throws for an S/D or F/P
-	account of another company. An attendance kind turns the component into an
+	Hook: doc_events → Salary Component → validate. Throws for an O/O, S/D or
+	F/P account of another company, or a group account. An attendance kind turns the component into an
 	attendance-driven one with the matching condition, no Depends on Payment
 	Days (the count already leaves out absences) and Remove if Zero Valued.
 	"""
 	for row in doc.get("accounts") or []:
-		for field in ("custom_account_marketing", "custom_account_plant"):
+		for field in SECTION_ACCOUNT_FIELD.values():
 			account = row.get(field)
-			if account and frappe.db.get_value("Account", account, "company") != row.company:
-				frappe.throw(_("Accounts row {0}: {1} is not an account of {2}").format(row.idx, account, row.company))
+			if not account:
+				continue
+			company, is_group = frappe.db.get_value("Account", account, ["company", "is_group"]) or (None, 0)
+			if company != row.company:
+				frappe.throw(
+					_("Accounts row {0}: {1} is not an account of {2}").format(row.idx, account, row.company or _("(no company)"))
+				)
+			if is_group:
+				frappe.throw(_("Accounts row {0}: {1} is a group account; pick a ledger account").format(row.idx, account))
 
 	if doc.get("custom_is_allowance"):
 		kind = doc.get("custom_allowance_kind")
