@@ -221,7 +221,7 @@ def get_structure_allowances(salary_structure: str) -> list[dict]:
 
 	One row per allowance on the structure's Allowance Rates, in its order, at
 	the usual rate (0 where it lists none, or where `computed`: worked out from basic).
-	The form offers them as a starting list: HR removes the ones this person
+	The form puts them in as a starting list: HR removes the ones this person
 	does not get and types the 0 rates — the assignment's validate refuses a row
 	still at 0. Disabled allowances and Entered by Hand / Yearly ones are left out.
 	Called only from the form (public/js/salary_structure_assignment.js); a
@@ -247,7 +247,6 @@ def get_structure_allowances(salary_structure: str) -> list[dict]:
 				"allowance": row.allowance,
 				"rate": 0 if computed else flt(row.rate),
 				"unit": unit_for(row.allowance),
-				"computed": int(computed),
 			}
 		)
 	return out

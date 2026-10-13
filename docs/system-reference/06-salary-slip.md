@@ -151,7 +151,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 **What.** Puts the employee's **Monthly** and **% of Initial Basic** allowances on the slip as ordinary (non-additional) earning rows, adds/updates/drops them to match the assignment, then reruns HRMS's `calculate_net_pay`.
 
-**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L321), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L274), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L259); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L72).
+**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L320), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L273), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L258); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L72).
 
 **Why** (module docstring, [../allowances.md](../allowances.md)):
 - Every person has their own mix (27 combinations across 195 people, October 2026), so allowances are rows on the person's Salary Structure Assignment, not structure formulas. No row → not paid.

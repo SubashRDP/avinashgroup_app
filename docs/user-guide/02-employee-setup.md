@@ -137,7 +137,7 @@ A person's pay is a **dated** record: the **Salary Structure Assignment**. It ho
 
 **To create one:**
 1. Open **Salary Structure Assignment** → **New**.
-2. Fill the fields above. When you pick the **Salary Structure**, the **Allowances** table fills with every allowance on the structure's **Allowance Rates**, at the usual rate. If the table already has rows, you are asked first whether to replace them (the rates typed for this person would be lost).
+2. Fill the fields above. When you pick the **Salary Structure**, the **Allowances** table fills with every allowance on the structure's **Allowance Rates**, at the usual rate. Rows already in the table are replaced, so rates typed for this person are lost.
 3. Go through the allowance rows: **remove** each allowance this person does not get, and type the rate wherever it is 0 (Dearness, Other, Fixed… — the message after filling lists them). Overtime stays at 0: its rate is worked out from basic.
 4. Save, check, then **Submit**. Only a submitted assignment is used.
 
