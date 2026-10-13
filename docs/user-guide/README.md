@@ -54,8 +54,6 @@ of next month       — figures from Salary Tax and SSF Deposit
 
 These appear in some older documents or in conversations, but they **do not work yet**. Do not look for them on the screen:
 
-- **Dashain Bonus button** on the Payroll Entry. Not built. (An older "Dashain Bonus" screen was removed on purpose.) Until it is built, see Chapter 8 for the temporary way to pay it.
-- **Leave Encashment button** on the Payroll Entry. Not built. See Chapter 8.
 - **Automatic monthly shift rotation.** There is no automatic swap. HR moves people by hand (Chapter 3).
 - **Payroll for GLMI, GEPL and SGU.** These three companies have no salary structure yet. Only NGI, NGN, NGG and NGK run payroll.
 - **Daily-wage labour** is paid in cash, outside payroll.

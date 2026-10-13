@@ -54,7 +54,7 @@ Overtime cannot be raised here: it is worked out from each person's Basic, so ra
 
 ## 8.2 One-off amounts in a month — Payroll Adjustment
 
-Use **Payroll Adjustment** for amounts that are for one month only: load/unload allowance, an extra deduction, a correction, a festival payment.
+Use **Payroll Adjustment** for amounts that are for one month only: load/unload allowance, an extra deduction, a correction. (The Dashain allowance also arrives here, as a draft made by a button: section 8.4.)
 
 1. Open **Payroll Adjustment** → **New**.
 2. Choose the **Company**.
@@ -67,7 +67,7 @@ Each row becomes an **Additional Salary** that the month's slip picks up. **Canc
 
 - Tea, meal, overtime and late fine **cannot** be chosen here; Prepare Payroll Inputs pays those.
 - One-off earnings are taxed in the month they are paid.
-- Submit it **before** Create Salary Slips. If the slips already exist as drafts, open and save each affected slip, or press Prepare Payroll Inputs (which also refreshes draft slips).
+- Submitting (or cancelling) it updates the listed people's draft salary slips for that month by itself.
 
 | Message | Fix |
 |---|---|
@@ -90,19 +90,104 @@ Each month, **Prepare Payroll Inputs** deducts the smaller of the instalment and
 
 > **Accountant, please check:** the system refuses an advance whose account is not **Receivable** ("Employee advance account … should be of type Receivable"). On 9 October 2026 the 148003 Staff Advance account is typed **Payable** at NGN, NGG, NGK and GLMI, and has no type at NGI, GEPL and SGU.
 
-## 8.4 Dashain bonus — not built yet
+## 8.4 Dashain allowance (Dashain bonus)
 
-The Labour Act requires a festival allowance: one month's pay for a full year of service, a share of it for less.
+**The rule** (decided by the company, 13 October 2026):
 
-- The planned **Dashain Bonus button on the Payroll Entry is not built yet.**
-- The older "Dashain Bonus" screen was **removed on purpose** in September 2026.
-- The **Dashain Bonus** and **Dashain Allowance** salary components still exist.
+- The base is **one month's basic salary**, nothing else: no allowance, overtime or grade added, no SSF, tax or advance taken off. It is the **Base** on the person's Salary Structure Assignment on the cut-off date (the figure the Basic line pays).
+- Someone who has worked **one full year or more** by the cut-off date gets **100 %** of it.
+- Someone with less than a year gets **days of service ÷ days in the year × basic**. Days of service = cut-off date − joining date. Days in the year = 365 (366 when the year before the cut-off has 29 February).
+- Nobody ever gets more than one month's basic.
+- Someone who joins on or after the cut-off date gets nothing.
 
-Until the button is built, the only way in the system is to work out each person's amount outside the system and enter it on a **Payroll Adjustment** (section 8.2) with the **Dashain Bonus** component, in the month it is paid (before Fulpati). Confirm with the HR manager and the accountant before doing this.
+Example (cut-off Ghatasthapana, 11 October 2026): Ram joined 11 April 2026, basic 30,000. Days of service 183, factor 183 ÷ 365 = 0.5014, Dashain allowance **15,041.10**. Sita joined in 2019: **30,000**.
 
-## 8.5 Leave encashment — not built yet
+The allowance is taxable. It is taxed in full in the month it is paid (one month's tax on it, not spread over the year).
 
-Leave left at the end of the fiscal year is to be **encashed**, not carried forward. The **Leave Encashment button on the Payroll Entry is not built yet.** Casual and Sick leave allocations expire at the end of Ashadh, so ask IT **before the end of Ashadh** how the year's encashment will be paid.
+### Where the settings are
+
+**Salary Component → Dashain Allowance → Festival Allowance** section (HR Manager can change these; IT is not needed):
+
+| Setting | Now | Meaning |
+|---|---|---|
+| Festival Allowance | ✓ | This component is paid by the Dashain Allowance button |
+| Pay Month | 06 - Ashwin | The button works only on that month's Payroll Entry. Blank = any month |
+| Minimum Service Days | 0 | Fewer days of service than this → nothing |
+| Prorate for Under a Year | ✓ | Off = anyone who joined before the cut-off gets a full month |
+| Include Daily-Wage Staff | ✗ | Daily-wage labour is paid in cash, outside payroll |
+| Include Staff Leaving Before the Cut-off | ✗ | On = they are paid, counting service to their relieving date |
+
+The rule itself (basic, 100 % cap) is not a setting.
+
+### Paying it
+
+1. Make the **Payroll Entry** for the pay month (Ashwin) as usual and press **Get Employees**. Save it.
+2. Press **Nepal HRMS → Dashain Allowance**.
+3. In the dialog, set **Count Service To (Cut-off)**: Ghatasthapana, or the payment date. It starts as the month's last day.
+4. Press **Make Draft**. A message shows how many people, the total, and anyone **not included** with the reason (joined after the cut-off, no salary assignment, already paid this year, …).
+5. Open the draft **Payroll Adjustment** from the link. Each row shows **Basic**, **Service Days** and **Factor**; open a row for **Date of Joining** and **Days in Year**. The **Note** says "Full year" or "183 of 365 days".
+6. Check it. You may lower an amount; you cannot raise it above the row's **Basic**.
+7. **Submit** it. Each row becomes an Additional Salary for the month, and the month's draft salary slips are updated.
+
+**Pressing the button again** rebuilds the same draft (use it after correcting a joining date or a salary assignment). After the Payroll Adjustment is submitted, pressing it again pays nobody twice: everyone already paid this year is listed as "already paid". To undo, **Cancel** the Payroll Adjustment.
+
+| Message | Fix |
+|---|---|
+| "Dashain Allowance is paid in 06 - Ashwin …; this entry is for …" | Use the Ashwin Payroll Entry, or change **Pay Month** on the component |
+| "Draft … already holds Dashain Allowance for this year" | Another month's entry made a draft. Delete that draft, or submit it |
+| "The Payroll Entry has no employees yet" | Press **Get Employees** and save first |
+| "Row …: … is more than …'s basic …; it is capped at 100 %" | Type an amount up to the Basic |
+
+The component **Dashain Bonus** also exists. It is not used by the button; use **Dashain Allowance**.
+
+## 8.5 Leave encashment at year end
+
+**The rule** (decided by the company, 13 October 2026; policy minute 3.7): in the last month of the fiscal year (**Ashadh**), the leave each person has **left** on every **encashable** leave type is worked out and paid on the **Ashadh salary slip**. Nothing is carried into the new year.
+
+- **Days encashed** = the balance on the year's last day, less **Non-Encashable Leaves**, capped at **Maximum Encashable Leaves** (both on the Leave Type; 0 = no limit).
+- **Rate per day** = monthly basic (Base on the salary assignment) ÷ **Encashment Days per Month** on the Leave Type. Blank = the number of days in the BS month (Ashadh: 31 or 32), the same as overtime uses.
+- **Amount** = days × rate per day. Taxable, taxed in full in Ashadh.
+
+### Where the settings are
+
+**Leave Type → Encashment** section, for each type:
+
+| Setting | Casual Leave | Sick Leave | Others |
+|---|---|---|---|
+| Allow Encashment | ✓ | ✓ | ✗ (Maternity, Paternity, Replacement, Leave Without Pay are never encashed) |
+| Earning Component | Leave Encashment | Leave Encashment | |
+| Maximum Encashable Leaves | 0 (whole balance) | 0 (whole balance) | |
+| Non-Encashable Leaves | 0 | 0 | |
+| Encash at Year End | ✓ | ✓ | |
+| Encash at Separation | ✓ | ✓ | |
+| Encashment Days per Month | blank (BS month's days) | blank | |
+
+Untick **Allow Encashment** and that type is left out completely.
+
+### Paying it (once a year, in Ashadh)
+
+1. Wait until the last day of Ashadh has been credited (the monthly leave credit runs on the month's last day).
+2. Open **HR Dashboard → Leave → Leave Encashment** (the same screen as before: the Leave Encashment list).
+3. Press **Encash Year-End Balances**. Choose the **Company** and the **Fiscal Year** (for example 83/84), and press **Make Drafts**. It only works from the first day of Ashadh.
+4. A table shows, per person and leave type: **Balance**, **Days Encashed**, **Rate/Day** and **Amount**, then anyone **not included** with the reason (no salary assignment, no balance, already encashed).
+5. Check the drafts. Each one also shows **Monthly Basic**, **Days per Month** and **Rate per Day**.
+6. In the list, select the drafts → **Actions → Submit**. Each submitted encashment becomes an Additional Salary dated the year's last day, and the person's draft Ashadh slip is updated.
+
+Pressing the button again rebuilds the drafts and never touches a submitted encashment. The system refuses a second encashment of the same allocation, even typed by hand. To undo one, **Cancel** it: its payment is cancelled with it.
+
+### Someone leaving during the year
+
+1. Set the **Relieving Date** on the Employee. Keep the status **Active** until the encashment is submitted (the system refuses an encashment for an employee who has Left).
+2. **Leave Encashment → New**: Employee, Leave Type, **Encashment Date = the relieving date**. The days and amount fill themselves at the same rate as above.
+3. Submit it. It is paid on that month's slip (the last one).
+
+| Message | Fix |
+|---|---|
+| "Leave is encashed at year end … or at separation …" | The date must be the allocation's last day, or the relieving date |
+| "… is not encashed at year end / separation (Leave Type setting)" | Tick **Encash at Year End** / **Encash at Separation** on the Leave Type, if that is the policy |
+| "… already encashes this allocation" | It has been paid. Cancel the old one first if it was wrong |
+| "No Leave Period for … covers …" | IT runs the year setup, which makes the leave period |
+| "Year-end encashment for … opens on …" | Wait for Ashadh |
 
 ## 8.6 Tax: insurance, CIT and manual tax
 
@@ -141,7 +226,7 @@ The year's setup is mostly done in one step by IT, but it needs information that
 | 4 | Shift Types, and each employee's Overtime Eligible / Replacement Leave tick, still correct | HR | Ashadh |
 | 5 | IT runs the **year setup**: holiday lists (all Saturdays), leave period, payroll period, new salary assignments on the new tax slab, leave policy assignments | IT | Ashadh |
 | 6 | **Festivals** added to the new holiday lists with **Holiday Bulk Update**; Teej and Women's Day on the Women lists only | HR | Right after step 5, before the first festival |
-| 7 | **Leave encashment** for the closing year | HR + IT | Before 31 Ashadh (not built yet, see 8.5) |
+| 7 | **Leave encashment** for the closing year: Leave Encashment list → **Encash Year-End Balances**, check, submit | HR | In Ashadh, before the Ashadh payroll (see 8.5) |
 | 8 | On 1 Shrawan the companies and the women move to the new holiday lists | Automatic | Nothing to do. If a list was missing, IT sees it in the Error Log |
 
 > **Check after step 5.** The year setup gives everyone a new salary assignment from 1 Shrawan so that the new tax rates apply. It copies the Basic, **Initial Basic**, **SSF Applicable** and the whole **Allowances** table from the old assignment. Open two or three of the new assignments and compare them with the old ones before the first payroll of the new year.

@@ -57,7 +57,7 @@ No new field and no new structure are needed.
 | Per Meal ⏱ | Meal | the same (see **Meal** below) |
 | Per Overtime Hour ⏱ | Overtime | the same (Overtime Sheets × basic per hour × 1.5) |
 | Entered by Hand | Load/Unload | Additional Salary typed by HR |
-| Yearly | Dashain Bonus, Leave Encashment | their own Payroll Entry buttons (not built yet) |
+| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → **Dashain Allowance** (draft Payroll Adjustment, basic × service factor ≤ basic). Leave: Leave Encashment list → **Encash Year-End Balances** (Ashadh) |
 
 "Fixed per Person" and "Fixed Company Rate" were one kind with the rate kept in
 two places; both are **Monthly** since 2026-10-12.
@@ -191,5 +191,4 @@ BS Month (as on the Payroll Entry), optionally one Payroll Entry.
 - Accounts: no tea account exists yet (O/O, S/D, F/P), and other components have no accounts per company.
 - Falgun parity on avinas1 has dropped since 2026-10-08 (NGI 83 → 71 matching, NGN 61 → 26) — before the 2026-10-12 change, which leaves it exactly as it found it. Not yet investigated.
 - Unpaid absence: allowances are currently prorated like Basic. Confirm, or make them full.
-- Dashain Bonus and Leave Encashment buttons.
 - `docs/payroll-manual.html`, `docs/hr-payroll-handbook.html` and `docs/payroll-documentation.html` still describe the old setup.

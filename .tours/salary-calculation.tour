@@ -78,7 +78,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 337,
+      "line": 340,
       "title": "1.12 checkin_{_event}",
       "description": "Registers `checkin_after_insert` / `checkin_on_update` / `checkin_after_delete` on Employee Checkin."
     },
@@ -174,13 +174,13 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 226,
+      "line": 229,
       "title": "2.12 attendance_events",
       "description": "Our Attendance `validate` hooks, run in this order (on `validate`, so they also fire for attendance submitted on insert)."
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 451,
+      "line": 478,
       "title": "2.13 set_holiday_flag",
       "description": "Ticks `custom_worked_on_holiday` when the date is in the employee's Holiday List (or the company default).\n\nReads: Employee `holiday_list`, Company `default_holiday_list`"
     },
@@ -306,7 +306,7 @@
     },
     {
       "file": "avinashgroup_app/public/js/payroll_entry.js",
-      "line": 248,
+      "line": 310,
       "title": "4.1 Prepare Payroll Inputs",
       "description": "The button; after a confirm it calls `trigger_for_payroll_entry`."
     },
@@ -318,13 +318,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 109,
+      "line": 136,
       "title": "4.3 create_additional_salaries",
       "description": "For each employee × attendance component: skip if not paid, price it, count it, write `qty × rate` as an Additional Salary under a savepoint.\n\nReads: Payroll Entry `start_date`, `end_date`, `employees`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 541,
+      "line": 568,
       "title": "4.4 get_attendance_driven_components",
       "description": "Enabled Salary Components with `custom_is_attendance_driven`.\n\nReads: Salary Component"
     },
@@ -336,79 +336,79 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 581,
+      "line": 608,
       "title": "4.6 _gets",
       "description": "An allowance is paid only with a row on the assignment; a non-allowance (late fine) only when the structure lists it.\n\nReads: Salary Component `custom_is_allowance`; Salary Structure rows"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 517,
+      "line": 544,
       "title": "4.7 _skip_for_eligibility",
       "description": "Skips OT-only components for staff not OT eligible, and late components for staff marked late-fine exempt.\n\nReads: Salary Component `custom_ot_eligible_only`; Employee `custom_ot_eligibility`, `custom_late_fine_exempt`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 593,
+      "line": 620,
       "title": "4.8 _resolve_rate",
       "description": "`Hourly Basic × Multiplier` components: hourly basic × multiplier; otherwise the Rate on the person's row; None if neither.\n\nReads: Salary Component `custom_rate_basis`, `custom_rate_multiplier`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 413,
+      "line": 440,
       "title": "4.9 _hourly_basic",
       "description": "Assignment `base` ÷ days per month ÷ hours per day. Days: the actual length of the BS month being priced (29–32) unless the component fixes it; hours: 8 when blank.\n\nReads: Salary Component `custom_rate_days_per_month`, `custom_rate_hours_per_day`; assignment `base`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 530,
+      "line": 557,
       "title": "4.10 _attendance_period",
       "description": "The payroll's own dates, or the previous BS month when the component's Attendance Month is Previous Month.\n\nReads: Salary Component `custom_attendance_month`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 205,
+      "line": 232,
       "title": "4.11 _qty_for_employee",
       "description": "Sums `evaluate_rule` over the period's submitted Attendance; `Flat per Period` gives 1 if any day matched.\n\nReads: Salary Component `custom_unit`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 550,
+      "line": 577,
       "title": "4.12 _attendance_rows",
       "description": "The employee's submitted Attendance rows in the period, with the deviation and holiday fields.\n\nReads: Attendance"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 223,
+      "line": 250,
       "title": "4.13 evaluate_rule",
       "description": "One day's quantity by the component's condition: Present, Half Day, Worked on Holiday, Meal Entitlement, Authorised Overtime, Late Time, Early Entry / Late Stay / Late Arrival.\n\nReads: Salary Component `custom_condition_type`, `custom_unit`, `custom_pay_on_holiday`, `custom_half_day_counts`, `custom_time_offset_hours`; Attendance `custom_late_excused`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 304,
+      "line": 331,
       "title": "4.14 _meals_for_day",
       "description": "OT-eligible and on an Overtime Sheet that day: 2 on a holiday, else 1 each for coming early / staying late by the offset; capped at max per day.\n\nReads: Employee `custom_ot_eligibility`; Salary Component `custom_time_offset_hours`, `custom_max_per_day`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 345,
+      "line": 372,
       "title": "4.15 _on_overtime_sheet",
       "description": "Whether a submitted Overtime Sheet names the employee on the date with the Overtime entitlement.\n\nReads: Overtime Sheet"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 371,
+      "line": 398,
       "title": "4.16 _authorised_overtime_hours",
       "description": "Sum of `worked_hours` on submitted Overtime Sheet rows for the employee and date (the hours from 3.9).\n\nReads: Overtime Sheet Employee `worked_hours`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 621,
+      "line": 648,
       "title": "4.17 _delete_existing_draft",
       "description": "Cancels and deletes this calculator's earlier row for the same employee, component and date; hand-made rows are left.\n\nReads: Additional Salary `custom_source`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 649,
+      "line": 676,
       "title": "4.18 _make_additional_salary",
       "description": "Inserts and submits the Additional Salary with qty and rate kept; earnings get `deduct_full_tax_on_selected_payroll_date`.\n\nReads: Salary Component `type`"
     },
@@ -660,7 +660,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 355,
+      "line": 358,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -684,7 +684,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 362,
+      "line": 365,
       "title": "8.5 apply_tax_reliefs",
       "description": "Registration (second)."
     },
@@ -708,7 +708,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 366,
+      "line": 369,
       "title": "8.9 apply_income_tax_override",
       "description": "Registration (third)."
     },
@@ -732,7 +732,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 373,
+      "line": 376,
       "title": "8.13 validate_salary_slip",
       "description": "Registration (fourth)."
     },
@@ -744,7 +744,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 376,
+      "line": 379,
       "title": "8.15 build_daily_breakdown",
       "description": "Registration (fifth)."
     },
@@ -762,7 +762,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 463,
+      "line": 466,
       "title": "8.18 set_bs_dates",
       "description": "Registration (sixth, from a loop further down `hooks.py`)."
     },
@@ -828,7 +828,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 320,
+      "line": 323,
       "title": "9.10 default_jv_type",
       "description": "Registered first in Journal Entry `before_insert`."
     },
@@ -915,6 +915,114 @@
       "line": 50,
       "title": "10.11 roll_salary_assignments",
       "description": "New-year assignment for each active employee: same pay and allowances, the new year's slab; refuses without a slab from the year's first day.\n\nReads: Salary Structure Assignment"
+    },
+    {
+      "file": "avinashgroup_app/public/js/payroll_entry.js",
+      "line": 224,
+      "title": "11.1 dashain_allowance",
+      "description": "Payroll Entry → Nepal HRMS → **Dashain Allowance**: asks for the component and the cut-off date, calls `make_festival_adjustment`, shows the total and who was left out."
+    },
+    {
+      "file": "avinashgroup_app/payroll/festival_allowance.py",
+      "line": 234,
+      "title": "11.2 make_festival_adjustment",
+      "description": "Refuses another BS month than the component's Pay Month, or a second draft for the year; builds (or rebuilds) the entry's draft Payroll Adjustment from `compute_rows`.\n\nReads: Salary Component `custom_festival_pay_month`; Payroll Adjustment `source`, `payroll_entry`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/festival_allowance.py",
+      "line": 121,
+      "title": "11.3 compute_rows",
+      "description": "Per employee on the entry: leaves out joiners on/after the cut-off, leavers (unless included), short service, daily wage (unless included), no assignment, already paid; else one row with basic, service days, factor and amount.\n\nReads: Salary Component `custom_festival_*`; Employee `date_of_joining`, `relieving_date`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/festival_allowance.py",
+      "line": 74,
+      "title": "11.4 service_factor",
+      "description": "Service days = cut-off − joining; year days = the year ending on the cut-off (365/366); 1 for a full year, else service ÷ year, clamped 0..1."
+    },
+    {
+      "file": "avinashgroup_app/payroll/festival_allowance.py",
+      "line": 102,
+      "title": "11.5 monthly_basic",
+      "description": "The assignment `base` on the cut-off (a daily wage × the BS month's days).\n\nReads: Salary Structure Assignment `base`; Salary Structure `custom_daily_wage`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/festival_allowance.py",
+      "line": 94,
+      "title": "11.6 festival_amount",
+      "description": "basic × factor, never above basic; proration off pays a full month for any service.\n\nReads: Salary Component `custom_festival_prorate`"
+    },
+    {
+      "file": "avinashgroup_app/avinash_group_app/doctype/payroll_adjustment/payroll_adjustment.py",
+      "line": 34,
+      "title": "11.7 PayrollAdjustment.validate_rows",
+      "description": "Refuses a row above its `base_amount` (the 100 % cap survives hand edits).\n\nReads: Payroll Adjustment Row `base_amount`"
+    },
+    {
+      "file": "avinashgroup_app/avinash_group_app/doctype/payroll_adjustment/payroll_adjustment.py",
+      "line": 81,
+      "title": "11.8 PayrollAdjustment.on_submit",
+      "description": "One submitted Additional Salary per row, full tax in the month; then re-saves the people's draft slips."
+    },
+    {
+      "file": "avinashgroup_app/public/js/leave_encashment_list.js",
+      "line": 15,
+      "title": "11.9 encash_year_end",
+      "description": "Leave Encashment list → **Encash Year-End Balances**: company + fiscal year, then the review table."
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 211,
+      "title": "11.10 leave_encashment.encash_year_end",
+      "description": "From the first day of the year's last BS month: active employees with an assignment → `encash_month` for that month, year-end occasion only.\n\nReads: Fiscal Year `year_end_date`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 253,
+      "title": "11.11 encash_month",
+      "description": "Per due (employee, type, allocation): skips one already submitted, rebuilds a draft, inserts a Leave Encashment dated the allocation's end.\n\nReads: Leave Period; Leave Encashment"
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 185,
+      "title": "11.12 due_encashments",
+      "description": "Allocations of Allow Encashment types ending in the month (year end) or covering a relieving date in it (separation).\n\nReads: Leave Type `allow_encashment`, `custom_encash_at_year_end`, `custom_encash_at_separation`; Leave Allocation"
+    },
+    {
+      "file": "../hrms/hrms/hr/doctype/leave_encashment/leave_encashment.py",
+      "line": 79,
+      "title": "11.13 LeaveEncashment.get_leave_details_for_encashment",
+      "description": "HRMS: balance = allocated − carried + leaves taken; days capped by Non-Encashable / Maximum Encashable Leaves.\n\nReads: Leave Type `non_encashable_leaves`, `max_encashable_leaves`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 93,
+      "title": "11.14 price_encashment",
+      "description": "After HRMS's validate: refuses a second encashment of the allocation, a date that is neither year end nor relieving date, an occasion the type does not allow; amount = days × `per_day_rate`.\n\nReads: Leave Type `custom_encash_at_*`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 72,
+      "title": "11.15 per_day_rate",
+      "description": "Assignment `base` ÷ Leave Type `custom_encashment_days_per_month` (blank = the BS month's days).\n\nReads: Salary Structure Assignment `base`"
+    },
+    {
+      "file": "../hrms/hrms/hr/doctype/leave_encashment/leave_encashment.py",
+      "line": 155,
+      "title": "11.16 LeaveEncashment.create_additional_salary",
+      "description": "HRMS on submit: Additional Salary on the type's Earning Component, dated the encashment date.\n\nReads: Leave Type `earning_component`"
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 135,
+      "title": "11.17 mark_additional_salary",
+      "description": "Additional Salary validate: an encashment's row is taxed in full in its month and tagged."
+    },
+    {
+      "file": "avinashgroup_app/payroll/leave_encashment.py",
+      "line": 147,
+      "title": "11.18 link_additional_salary",
+      "description": "Additional Salary on_submit: writes it back to the encashment so cancelling one cancels the other."
     }
   ]
 }

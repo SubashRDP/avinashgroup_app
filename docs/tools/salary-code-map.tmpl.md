@@ -29,7 +29,7 @@ Three apps take part. Only this one is edited here:
                          stage 9
 ```
 
-Stage 10 is the setup data (components, structures, assignments, revisions) that every stage above reads.
+Stage 10 is the setup data (components, structures, assignments, revisions) that every stage above reads. Stage 11 is the two once-a-year payments (Dashain allowance, leave encashment), which reach the slip as Additional Salary like stage 4.
 
 ## 1. Punch → Employee Checkin
 
@@ -244,6 +244,31 @@ Run after the controller's `validate` (stages 6–7), in the order `hooks.py` re
 | 10.10 | `tax_slab_for` | @@avinashgroup_app/payroll/year_rollover.py::tax_slab_for@@ | The submitted, enabled Income Tax Slab in force for a company on a date. | Income Tax Slab |
 | 10.11 | `roll_salary_assignments` | @@avinashgroup_app/payroll/year_rollover.py::roll_salary_assignments@@ | New-year assignment for each active employee: same pay and allowances, the new year's slab; refuses without a slab from the year's first day. | Salary Structure Assignment |
 
+## 11. Yearly payments: Dashain allowance and leave encashment
+
+Both end as an Additional Salary that stage 6 adds to the slip, taxed in full in its month (`deduct_full_tax_on_selected_payroll_date`). Each is pressed once a year by HR and only writes drafts; HR submits after review.
+
+| # | Function | File | What it does | Settings / data it reads |
+|---|---|---|---|---|
+| 11.1 | `dashain_allowance` | @@avinashgroup_app/public/js/payroll_entry.js::=function dashain_allowance(@@ | Payroll Entry → Nepal HRMS → **Dashain Allowance**: asks for the component and the cut-off date, calls `make_festival_adjustment`, shows the total and who was left out. | — |
+| 11.2 | `make_festival_adjustment` | @@avinashgroup_app/payroll/festival_allowance.py::make_festival_adjustment@@ | Refuses another BS month than the component's Pay Month, or a second draft for the year; builds (or rebuilds) the entry's draft Payroll Adjustment from `compute_rows`. | Salary Component `custom_festival_pay_month`; Payroll Adjustment `source`, `payroll_entry` |
+| 11.3 | `compute_rows` | @@avinashgroup_app/payroll/festival_allowance.py::compute_rows@@ | Per employee on the entry: leaves out joiners on/after the cut-off, leavers (unless included), short service, daily wage (unless included), no assignment, already paid; else one row with basic, service days, factor and amount. | Salary Component `custom_festival_*`; Employee `date_of_joining`, `relieving_date` |
+| 11.4 | `service_factor` | @@avinashgroup_app/payroll/festival_allowance.py::service_factor@@ | Service days = cut-off − joining; year days = the year ending on the cut-off (365/366); 1 for a full year, else service ÷ year, clamped 0..1. | — |
+| 11.5 | `monthly_basic` | @@avinashgroup_app/payroll/festival_allowance.py::monthly_basic@@ | The assignment `base` on the cut-off (a daily wage × the BS month's days). | Salary Structure Assignment `base`; Salary Structure `custom_daily_wage` |
+| 11.6 | `festival_amount` | @@avinashgroup_app/payroll/festival_allowance.py::festival_amount@@ | basic × factor, never above basic; proration off pays a full month for any service. | Salary Component `custom_festival_prorate` |
+| 11.7 | `PayrollAdjustment.validate_rows` | @@avinashgroup_app/avinash_group_app/doctype/payroll_adjustment/payroll_adjustment.py::validate_rows@@ | Refuses a row above its `base_amount` (the 100 % cap survives hand edits). | Payroll Adjustment Row `base_amount` |
+| 11.8 | `PayrollAdjustment.on_submit` | @@avinashgroup_app/avinash_group_app/doctype/payroll_adjustment/payroll_adjustment.py::on_submit@@ | One submitted Additional Salary per row, full tax in the month; then re-saves the people's draft slips. | — |
+| 11.9 | `encash_year_end` | @@avinashgroup_app/public/js/leave_encashment_list.js::=function encash_year_end(@@ | Leave Encashment list → **Encash Year-End Balances**: company + fiscal year, then the review table. | — |
+| 11.10 | `leave_encashment.encash_year_end` | @@avinashgroup_app/payroll/leave_encashment.py::encash_year_end@@ | From the first day of the year's last BS month: active employees with an assignment → `encash_month` for that month, year-end occasion only. | Fiscal Year `year_end_date` |
+| 11.11 | `encash_month` | @@avinashgroup_app/payroll/leave_encashment.py::encash_month@@ | Per due (employee, type, allocation): skips one already submitted, rebuilds a draft, inserts a Leave Encashment dated the allocation's end. | Leave Period; Leave Encashment |
+| 11.12 | `due_encashments` | @@avinashgroup_app/payroll/leave_encashment.py::due_encashments@@ | Allocations of Allow Encashment types ending in the month (year end) or covering a relieving date in it (separation). | Leave Type `allow_encashment`, `custom_encash_at_year_end`, `custom_encash_at_separation`; Leave Allocation |
+| 11.13 | `LeaveEncashment.get_leave_details_for_encashment` | @@../hrms/hrms/hr/doctype/leave_encashment/leave_encashment.py::get_leave_details_for_encashment@@ | HRMS: balance = allocated − carried + leaves taken; days capped by Non-Encashable / Maximum Encashable Leaves. | Leave Type `non_encashable_leaves`, `max_encashable_leaves` |
+| 11.14 | `price_encashment` | @@avinashgroup_app/payroll/leave_encashment.py::price_encashment@@ | After HRMS's validate: refuses a second encashment of the allocation, a date that is neither year end nor relieving date, an occasion the type does not allow; amount = days × `per_day_rate`. | Leave Type `custom_encash_at_*` |
+| 11.15 | `per_day_rate` | @@avinashgroup_app/payroll/leave_encashment.py::per_day_rate@@ | Assignment `base` ÷ Leave Type `custom_encashment_days_per_month` (blank = the BS month's days). | Salary Structure Assignment `base` |
+| 11.16 | `LeaveEncashment.create_additional_salary` | @@../hrms/hrms/hr/doctype/leave_encashment/leave_encashment.py::create_additional_salary@@ | HRMS on submit: Additional Salary on the type's Earning Component, dated the encashment date. | Leave Type `earning_component` |
+| 11.17 | `mark_additional_salary` | @@avinashgroup_app/payroll/leave_encashment.py::mark_additional_salary@@ | Additional Salary validate: an encashment's row is taxed in full in its month and tagged. | — |
+| 11.18 | `link_additional_salary` | @@avinashgroup_app/payroll/leave_encashment.py::link_additional_salary@@ | Additional Salary on_submit: writes it back to the encashment so cancelling one cancels the other. | — |
+
 ## Settings that change the result
 
 Values read from `avinas1` on 2026-10-12.
@@ -272,6 +297,9 @@ Values read from `avinas1` on 2026-10-12.
 | `custom_time_offset_hours` | Salary Component | Meal 1.5; others 0 | [`_meals_for_day`](@@avinashgroup_app/payroll/attendance_allowance.py::_meals_for_day@@), [`evaluate_rule`](@@avinashgroup_app/payroll/attendance_allowance.py::evaluate_rule@@) | Early / late minutes needed for a meal (or for Early Entry / Late Stay / Late Arrival components) |
 | `custom_max_per_day` | Salary Component | Meal 2; others 0 (no cap) | [`_meals_for_day`](@@avinashgroup_app/payroll/attendance_allowance.py::_meals_for_day@@) | Cap on meals per day |
 | `custom_ot_eligible_only` | Salary Component | Meal 1, Overtime 1; others 0 | [`_skip_for_eligibility`](@@avinashgroup_app/payroll/attendance_allowance.py::_skip_for_eligibility@@) | Paid only to employees with `custom_ot_eligibility` |
+| `custom_is_festival_allowance`, `custom_festival_pay_month`, `custom_festival_min_service_days`, `custom_festival_prorate`, `custom_festival_include_daily_wage`, `custom_festival_include_leavers` | Salary Component | Dashain Allowance only: ✓, 06 - Ashwin, 0, 1, 0, 0 (2026-10-13) | [`compute_rows`](@@avinashgroup_app/payroll/festival_allowance.py::compute_rows@@) | Who gets the Dashain allowance, and on which month's entry |
+| `allow_encashment`, `max_encashable_leaves`, `non_encashable_leaves`, `earning_component` | Leave Type | Casual, Sick: 1, 0, 0, Leave Encashment; others not encashable | [`due_encashments`](@@avinashgroup_app/payroll/leave_encashment.py::due_encashments@@) | Which balances are encashed, and how many days |
+| `custom_encash_at_year_end`, `custom_encash_at_separation`, `custom_encashment_days_per_month` | Leave Type | Casual, Sick: 1, 1, blank (BS month's days) | [`price_encashment`](@@avinashgroup_app/payroll/leave_encashment.py::price_encashment@@), [`per_day_rate`](@@avinashgroup_app/payroll/leave_encashment.py::per_day_rate@@) | When encashment is allowed, and the per-day divisor |
 | `custom_condition_type` / `custom_unit` | Salary Component | Tea & Conveyance: Status = Present, Per Day. Meal: Meal Entitlement. Overtime: Authorised Overtime, Per Hour. Late Fine: Late Time, Per Hour | [`evaluate_rule`](@@avinashgroup_app/payroll/attendance_allowance.py::evaluate_rule@@) | Which rule counts the quantity, and in what unit |
 
 ## Checking the links

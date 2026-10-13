@@ -91,6 +91,8 @@ applications are allowed to do.
 | `earning_component` | Salary Component the payout books against | Leave Encashment throws without it |
 | `max_encashable_leaves` | hard cap per encashment | Leave Encashment |
 | `non_encashable_leaves` | days held back from the balance | Leave Encashment: balance 10, non-encashable 4 → 6 encashable |
+| `custom_encash_at_year_end`, `custom_encash_at_separation` (ours) | the two moments encashment is allowed | `payroll/leave_encashment.py` refuses any other date |
+| `custom_encashment_days_per_month` (ours) | rate per day = monthly basic ÷ this; blank = the BS month's days | `payroll/leave_encashment.py`; replaces the structure's `leave_encashment_amount_per_day` |
 | `is_earned_leave` | days **accrue** over the year instead of arriving upfront | balance starts at 0 and the daily scheduler tops it up. Requires a Leave Policy — without one there is no annual figure to divide, and the balance stays 0 forever with no error |
 | `earned_leave_frequency` | Monthly / Quarterly / Half-Yearly / Yearly — the divisor (12/4/2/1) | scheduler |
 | `rounding` | blank / 0.25 / 0.5 / 1.0 — tidies each instalment | scheduler. Rounds to **nearest**, so instalments may not sum to the annual figure; accrual then stops early at the cap |

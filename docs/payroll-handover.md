@@ -81,7 +81,7 @@ on ng-group.
 | `payroll/advance_recovery.py` | Instalments: min(instalment, outstanding), referenced back to the Employee Advance. |
 | `payroll/onboarding.py` | Reads a company's own Excel salary sheet and builds components, structure, employee pay inputs and assignments. PROFILES per company; the 21-component catalogue lives here. |
 | `payroll/hr_journal.py` | JV Type + Document No on HR journals, and the cost-centre → expense-account routing (547101 O/O, 547102 S/D, 547103 F/P). |
-| Doctypes | Dashain Bonus, Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category, Employee Category (label only since 2026-10-13). |
+| Doctypes | Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category, Employee Category (label only since 2026-10-13). |
 | Reports | Monthly Attendance BS, Yearly Leave Details BS, Salary Tax and SSF Deposit (SSF 31% / SST / remuneration tax per BS month, with deadlines). |
 | `hr/shift_backdate.py` | *(2026-09-27)* Backdated Shift Request / Shift Assignment: past days re-marked on the new shift, OT re-measured, refused into a paid month. A worked day never flips to Absent because its punches miss the new shift; it is kept and flagged. |
 | `hr/replacement_leave.py` | *(2026-09-27)* Officer / admin holiday work on an Overtime Sheet → Compensatory Leave Request (leave type **Replacement Leave**) once attendance shows the day; daily job catches late attendance. |
@@ -276,8 +276,10 @@ the 7 companies and 22 women moved to the new lists.
    calendar, Teej on the Women list alone. `setup_year` builds Saturdays only, and
    its warnings name every list still waiting for them — do this before the first
    festival falls.
-6. **Before 31 Ashadh:** encash the closing year's casual leave (policy: encashed
-   at year end) — the allocation expires the day after.
+6. **In Ashadh, before the Ashadh payroll:** Leave Encashment list → **Encash
+   Year-End Balances** (company, fiscal year), check the drafts, submit. Every
+   encashable type's remaining balance is paid on the Ashadh slip at basic ÷
+   the BS month's days per day (`payroll/leave_encashment.py`, user-guide 8.5).
 7. **On 1 Shrawan:** nothing by hand. `hr.holiday_year_switch` (daily) repoints
    holiday lists; check its Error Log entry if a list was missing.
 
@@ -297,4 +299,7 @@ the 7 companies and 22 women moved to the new lists.
 Policy decisions of record: 33 days leave a year, sandwich leave on, encashment
 at FY end, Teej women-only, no optional holidays, per-company calendars
 (2026-09-15); the leave year's total is a ceiling but the monthly shape is free,
-Dashain 5 days and Tihar 3 (2026-09-22).
+Dashain 5 days and Tihar 3 (2026-09-22); Dashain allowance = one month's basic,
+100 % after a year by the cut-off, else days ÷ days in the year, never more
+(2026-10-13, `payroll/festival_allowance.py`); leave encashment = the remaining
+balance of encashable types in Ashadh, at basic per day (2026-10-13).
