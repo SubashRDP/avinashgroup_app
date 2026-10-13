@@ -22,6 +22,9 @@ Idempotent: an existing type is updated in place, so a site that already has
 
 import frappe
 
+#: Settings HR changes in the desk; only seeded on a new type.
+HR_OWNED = ("allow_encashment",)
+
 # Sandwich rule (minute 3.5): a holiday between two leave days counts as leave.
 INCLUDE_HOLIDAY = 1
 
@@ -87,6 +90,10 @@ def execute():
 	for name, values in LEAVE_TYPES.items():
 		if frappe.db.exists("Leave Type", name):
 			doc = frappe.get_doc("Leave Type", name)
+			# Whether a type is encashed is HR's switch (policy minute 7.2): seeded
+			# when the type is created, never reset by a later run (year_setup
+			# re-runs this every year).
+			values = {k: v for k, v in values.items() if k not in HR_OWNED}
 		else:
 			doc = frappe.new_doc("Leave Type")
 			doc.leave_type_name = name

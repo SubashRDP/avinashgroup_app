@@ -206,6 +206,65 @@ function render_month_calendar(frm, cal) {
 	});
 }
 
+// Dashain Allowance (payroll/festival_allowance.py): the button only writes a
+// draft Payroll Adjustment for HR to read and submit; pressing again rebuilds it.
+// (Leave encashment is on the Leave Encashment list: leave_encashment_list.js.)
+const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
+const money = (v) => format_currency(v || 0);
+
+function left_out_table(rows) {
+	if (!rows || !rows.length) return "";
+	const body = rows
+		.map((r) => `<tr><td>${esc(r.employee_name || r.employee)}</td><td>${esc(r.leave_type || "")}</td><td>${esc(r.reason)}</td></tr>`)
+		.join("");
+	return `<p class="mt-3"><b>${__("Not included")} (${rows.length})</b></p>
+		<div style="max-height:220px;overflow:auto"><table class="table table-sm table-bordered">${body}</table></div>`;
+}
+
+function dashain_allowance(frm) {
+	frappe.call({
+		method: "avinashgroup_app.payroll.festival_allowance.get_defaults",
+		args: { payroll_entry: frm.doc.name },
+	}).then(({ message: d }) => {
+		if (!d || !d.components.length) {
+			frappe.msgprint(__("No Salary Component is ticked as a Festival Allowance."));
+			return;
+		}
+		const dlg = new frappe.ui.Dialog({
+			title: __("Dashain Allowance"),
+			fields: [
+				{ fieldname: "component", fieldtype: "Select", label: __("Component"), reqd: 1,
+				  options: d.components.map((c) => c.name), default: d.components[0].name },
+				{ fieldname: "cutoff", fieldtype: "Date", label: __("Count Service To (Cut-off)"), reqd: 1, default: d.cutoff,
+				  description: __("Ghatasthapana, or the payment date. A full year of service by this date = one month's basic; less = service days ÷ days in the year × basic.") },
+			],
+			primary_action_label: __("Make Draft"),
+			primary_action(v) {
+				dlg.hide();
+				frappe.dom.freeze(__("Working out the Dashain allowance..."));
+				frappe.call({
+					method: "avinashgroup_app.payroll.festival_allowance.make_festival_adjustment",
+					args: { payroll_entry: frm.doc.name, component: v.component, cutoff: v.cutoff },
+				}).then(({ message: r }) => {
+					frappe.dom.unfreeze();
+					if (!r) return;
+					const link = r.payroll_adjustment
+						? `<a href="/app/payroll-adjustment/${encodeURIComponent(r.payroll_adjustment)}">${esc(r.payroll_adjustment)}</a>`
+						: __("none — nobody is due");
+					frappe.msgprint({
+						title: __("Dashain Allowance: draft ready"),
+						indicator: r.count ? "green" : "orange",
+						message: `<p>${__("{0} people, total {1}. Draft Payroll Adjustment: {2}", [r.count, money(r.total), link])}</p>
+							<p class="text-muted">${__("Open it, check each row's Basic, Service Days and Factor, then Submit. Submitting puts it on this month's slips.")}</p>
+							${left_out_table(r.left_out)}`,
+					});
+				}).catch(() => frappe.dom.unfreeze());
+			},
+		});
+		dlg.show();
+	});
+}
+
 frappe.ui.form.on("Payroll Entry", {
 	setup: hide_month_fields,
 	onload(frm) {
@@ -241,6 +300,9 @@ frappe.ui.form.on("Payroll Entry", {
 		lock_bs_dates(frm);
 		draw_month_calendar(frm, frm.doc.custom_fiscal_year);
 		if (frm.doc.docstatus === 2) return;
+		if (!frm.is_new() && frappe.model.can_create("Payroll Adjustment")) {
+			frm.add_custom_button(__("Dashain Allowance"), () => dashain_allowance(frm), __("Nepal HRMS"));
+		}
 		// It writes Additional Salary; the server refuses anyone who cannot.
 		if (!frappe.model.can_create("Additional Salary")) return;
 

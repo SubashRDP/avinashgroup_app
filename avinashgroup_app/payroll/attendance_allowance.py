@@ -106,6 +106,33 @@ def refresh_draft_slips(pe) -> int:
 	return refreshed
 
 
+def refresh_slips_covering(employees, on_date) -> int:
+	"""Re-save these employees' draft salary slips whose period covers `on_date`.
+
+	For documents that post one Additional Salary after the slips exist
+	(Payroll Adjustment, Leave Encashment): without it the draft slip shows the
+	payment only when someone next saves it. Submitted slips are never touched.
+	"""
+	if not employees:
+		return 0
+	refreshed = 0
+	for name in frappe.get_all(
+		"Salary Slip",
+		filters={
+			"employee": ("in", list(employees)),
+			"docstatus": 0,
+			"start_date": ("<=", getdate(on_date)),
+			"end_date": (">=", getdate(on_date)),
+		},
+		pluck="name",
+	):
+		slip = frappe.get_doc("Salary Slip", name)
+		slip.flags.ignore_permissions = True
+		slip.save()
+		refreshed += 1
+	return refreshed
+
+
 def create_additional_salaries(payroll_entry) -> dict:
 	if isinstance(payroll_entry, str):
 		payroll_entry = frappe.get_doc("Payroll Entry", payroll_entry)

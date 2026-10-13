@@ -11,6 +11,12 @@ cancelling takes them back, so the month can be undone in one place.
 
 Nothing is calculated here. What each person owes or is owed is a decision — the
 sheet types it too — and the amounts sit where they can be read back later.
+The one exception is a draft made by a Payroll Entry button (Dashain Allowance,
+payroll/festival_allowance.py): its rows carry the Basic, service days and
+factor they were worked out from, and a row may not exceed its Basic — the
+festival allowance is capped at 100 % of one month's basic, hand edits included.
+Submitting or cancelling any adjustment re-saves the listed people's draft
+slips covering the payroll date, so the review shows the change.
 """
 
 import frappe
@@ -44,6 +50,12 @@ class PayrollAdjustment(Document):
 				)
 			if flt(row.amount) <= 0:
 				frappe.throw(_("Row {0}: amount must be more than zero").format(row.idx))
+			if flt(row.get("base_amount")) and flt(row.amount) > flt(row.base_amount):
+				frappe.throw(
+					_("Row {0}: {1} is more than {2}'s basic of {3}; it is capped at 100 %").format(
+						row.idx, row.amount, row.employee_name or row.employee, row.base_amount
+					)
+				)
 
 	def set_bs_month(self):
 		"""Name the Nepali month, so the document says which month it belongs to."""
@@ -89,6 +101,12 @@ class PayrollAdjustment(Document):
 			doc.insert()
 			doc.submit()
 			row.db_set("additional_salary", doc.name, update_modified=False)
+		self.refresh_slips()
+
+	def refresh_slips(self):
+		from avinashgroup_app.payroll.attendance_allowance import refresh_slips_covering
+
+		refresh_slips_covering({row.employee for row in self.adjustments}, self.payroll_date)
 
 	def on_cancel(self):
 		for row in self.adjustments:
@@ -98,3 +116,4 @@ class PayrollAdjustment(Document):
 			if doc.docstatus == 1:
 				doc.flags.ignore_permissions = True
 				doc.cancel()
+		self.refresh_slips()

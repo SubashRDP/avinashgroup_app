@@ -85,6 +85,9 @@ app_include_css = [
     "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
 ]
 
+# Leave Encashment list: "Encash Year-End Balances". See payroll/leave_encashment.py.
+doctype_list_js = {"Leave Encashment": "public/js/leave_encashment_list.js"}
+
 doctype_js = {
     # Approval-workflow UI (banner + reject dialog) is now generic — see
     # approval_workflow_auto.js in app_include_js. No per-doctype file needed;
@@ -467,6 +470,15 @@ for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):
 # Salary Revision once submitted); the assignment's Allowances say which
 # allowances each person gets, and their rate.
 _add_doc_event("Salary Component", "validate", "avinashgroup_app.payroll.allowance.validate_salary_component")
+# Leave encashment (payroll/leave_encashment.py): HRMS's Leave Encashment priced
+# at the person's own basic per day, only at year end or separation as the
+# Leave Type allows; its Additional Salary taxed in its own month, linked back
+# so a cancel takes it with it; the person's draft slip refreshed.
+_add_doc_event("Leave Encashment", "validate", "avinashgroup_app.payroll.leave_encashment.price_encashment")
+_add_doc_event("Leave Encashment", "on_submit", "avinashgroup_app.payroll.leave_encashment.refresh_slip")
+_add_doc_event("Leave Encashment", "on_cancel", "avinashgroup_app.payroll.leave_encashment.refresh_slip")
+_add_doc_event("Additional Salary", "validate", "avinashgroup_app.payroll.leave_encashment.mark_additional_salary")
+_add_doc_event("Additional Salary", "on_submit", "avinashgroup_app.payroll.leave_encashment.link_additional_salary")
 _add_doc_event("Salary Structure", "validate", "avinashgroup_app.payroll.allowance.validate_salary_structure")
 _add_doc_event("Salary Structure", "before_update_after_submit", "avinashgroup_app.payroll.allowance.guard_structure_rates")
 _add_doc_event("Salary Structure Assignment", "validate", "avinashgroup_app.payroll.allowance.validate_assignment_allowances")
