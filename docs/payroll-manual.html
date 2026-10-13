@@ -158,7 +158,7 @@ h3.grp{margin-top:26px}
     <li><a href="#s-shift">Shift types</a></li>
     <li><a href="#s-settings">Payroll settings</a></li>
     <li><a href="#s-employee">The Employee record</a></li>
-    <li><a href="#s-categories">The two categories</a></li>
+    <li><a href="#s-categories">Overtime ticks and allowance category</a></li>
     <li><a href="#s-leave">Leave setup</a></li>
     <li><a href="#s-component">Salary components</a></li>
     <li><a href="#s-structure">Salary structure</a></li>
@@ -261,7 +261,7 @@ h3.grp{margin-top:26px}
     <tr><td><b>Shift Type</b></td><td>A working time, e.g. 9 AM – 6 PM, with its own late and half-day rules</td><td>Late, early, overtime and meals are all measured <i>against the shift</i>, so the shift must be known for every day</td></tr>
     <tr><td><b>Shift Assignment</b></td><td>A dated row saying this person was on that shift from this date</td><td>Keeps history: a change next month must not alter last month's payslip</td></tr>
     <tr><td><b>Attendance</b></td><td>One row per person per day</td><td>The single source for how much of the month is paid</td></tr>
-    <tr><td><b>Employee Category</b></td><td>Operation or Admin &amp; Officer</td><td>Decides overtime money versus replacement leave — the client's rule 2.2</td></tr>
+    <tr><td><b>Overtime Eligible / Replacement Leave for Holiday Work</b></td><td>Two ticks on the Employee — one, never both</td><td>Decides overtime money versus replacement leave — the client's rule 2.2</td></tr>
     <tr><td><b>Allowance Category</b></td><td>A tea/meal rate group, per company</td><td>The same company pays different tea rates to different groups; the rate lives in one place</td></tr>
     <tr><td><b>Salary Component</b></td><td>One line on a payslip — Basic, Tea, SSF, Income Tax</td><td>Each carries its own rule: how it is worked out, whether it is taxable, which account it posts to</td></tr>
     <tr><td><b>Salary Structure</b></td><td>The company's formula: which components, computed how</td><td>One per company; every employee of that company is on it</td></tr>
@@ -370,7 +370,7 @@ h3.grp{margin-top:26px}
   <h3>Salary tab — Nepal HRMS</h3>
   <div class="tablewrap"><table>
     <tr><th>Field</th><th>Value</th><th>What it decides</th></tr>
-    <tr><td><span class="field">Employee Category</span></td><td>Operation / Admin &amp; Officer</td><td>Overtime money versus replacement leave</td></tr>
+    <tr><td><span class="field">Overtime Eligible</span> <i>or</i> <span class="field">Replacement Leave for Holiday Work</span></td><td>tick one, never both</td><td>Overtime money versus replacement leave. Neither ticked ⇒ cannot go on an Overtime Sheet for holiday work. Many at once: Employee list → select → Edit</td></tr>
     <tr><td><span class="field">Allowance Category</span></td><td>e.g. NGI OLD</td><td>Their tea and meal rate. <b>Blank ⇒ no tea and no meals, quietly</b></td></tr>
     <tr><td><span class="field">Payroll Cost Center</span></td><td>Office / Sales &amp; Distribution / Filling Plant</td><td>Which expense account their pay lands in</td></tr>
   </table></div>
@@ -383,19 +383,18 @@ h3.grp{margin-top:26px}
     <tr><td><span class="field">SSF Applicable</span></td><td>tick if in the fund</td><td>Unticked ⇒ no 20% addition, no 31% deduction — <b>and they pay the 1% SST instead</b></td></tr>
     <tr><td><span class="field">Dearness / Other / Fixed / Fuel / Maintenance Allowance</span></td><td>monthly amounts from the sheet</td><td>Paid as typed, prorated by days worked</td></tr>
     <tr><td><span class="field">Late Fine Exempt</span></td><td>managers only</td><td>Their late minutes are recorded but never charged</td></tr>
-    <tr><td><span class="field">OT Eligible</span></td><td>read-only</td><td>Filled from the Employee Category — do not try to type it</td></tr>
-  </table></div>
+      </table></div>
 </section>
 
 <section id="s-categories">
-  <h2>2.7 · The two categories, and why there are two</h2>
-  <p>They answer different questions and must not be confused.</p>
+  <h2>2.7 · Overtime ticks and allowance category</h2>
+  <p>They answer different questions and must not be confused. (Employee Category still exists but is a label only; it decides nothing.)</p>
   <div class="tablewrap"><table>
-    <tr><th></th><th>Employee Category</th><th>Allowance Category</th></tr>
+    <tr><th></th><th>Overtime Eligible / Replacement Leave (Employee ticks)</th><th>Allowance Category</th></tr>
     <tr><td>Answers</td><td>Is extra work paid, or given back as leave?</td><td>What rate of tea and meals?</td></tr>
-    <tr><td>Values</td><td>Operation · Admin &amp; Officer</td><td>NGI OLD / NEW / NO, NGN OLD / NEW / NO, NGG STAFF</td></tr>
-    <tr><td>Per company?</td><td>No — the same two for the group</td><td><b>Yes</b> — rates differ, so a group belongs to one company</td></tr>
-    <tr><td>Effect</td><td>Operation: overtime money and meals. Admin &amp; Officer: replacement leave, no overtime</td><td>Tea per day and meal per meal; a rate of 0 means the group does not get it</td></tr>
+    <tr><td>Values</td><td>Overtime Eligible · Replacement Leave for Holiday Work (one, never both)</td><td>NGI OLD / NEW / NO, NGN OLD / NEW / NO, NGG STAFF</td></tr>
+    <tr><td>Per company?</td><td>No — set per person</td><td><b>Yes</b> — rates differ, so a group belongs to one company</td></tr>
+    <tr><td>Effect</td><td>Overtime Eligible: overtime money and meals. Replacement Leave: a leave day for holiday work, no overtime</td><td>Tea per day and meal per meal; a rate of 0 means the group does not get it</td></tr>
   </table></div>
   <p><b>How many allowance groups can a company have?</b> Any number. Three today at NGI; add a fourth at 300 a day tomorrow and tag five people — nothing else changes. Each group lists only the components it pays.</p>
   <p><b>Where the rate is found</b>, in order: the employee's own override row → their allowance category → the component's default. The first one found wins, and a category rate of <b>0</b> stops the search: it means "this group gets none", not "look elsewhere".</p>
@@ -509,7 +508,7 @@ h3.grp{margin-top:26px}
     <tr><td>Worked 1 hour</td><td>Absent</td><td>nothing</td><td>Under the 2-hour threshold</td></tr>
     <tr><td>No punch at all</td><td>Absent</td><td>nothing</td><td>Unless nothing was marked, which is paid — see 2.5</td></tr>
     <tr><td>Came in while on approved leave</td><td>Half Day</td><td>0.5 worked + 0.5 leave</td><td>Policy 3.4</td></tr>
-    <tr><td>Worked on a holiday</td><td>Present, flagged</td><td>1 day + overtime or replacement leave</td><td>Which one depends on the Employee Category</td></tr>
+    <tr><td>Worked on a holiday</td><td>Present, flagged</td><td>1 day + overtime or replacement leave</td><td>Which one depends on the Overtime Eligible / Replacement Leave tick on the Employee</td></tr>
   </table></div>
   <h3>How payment days become money</h3>
   <p>A payslip's fixed pay is <b>prorated</b>: <span class="field">amount × payment days ÷ total working days</span>.</p>
@@ -624,7 +623,7 @@ h3.grp{margin-top:26px}
   <h2>4.3 · When something happens</h2>
   <div class="tablewrap"><table>
     <tr><th>Event</th><th>What to do</th><th>Why that way</th></tr>
-    <tr><td>Somebody joins</td><td>Employee → categories and payroll inputs → shift → leave policy → salary assignment from the first day of their BS month</td><td>The structure reads those fields; assign salary last, once they are filled</td></tr>
+    <tr><td>Somebody joins</td><td>Employee → overtime tick, allowance category and payroll inputs → shift → leave policy → salary assignment from the first day of their BS month</td><td>The structure reads those fields; assign salary last, once they are filled</td></tr>
     <tr><td>Somebody changes shift</td><td><span class="screen">Shift Request</span>: To Date for a few days, empty for a permanent move</td><td>The standing assignment is split around it, so history stays true and attendance is measured against the right shift</td></tr>
     <tr><td>Somebody takes leave</td><td><span class="screen">Leave Application</span>, status Approved, Submit</td><td>Reduces the balance and marks those days On Leave; unpaid leave reduces pay</td></tr>
     <tr><td>Extra work is needed</td><td><span class="screen">Overtime Sheet</span> on the day, measure after</td><td>Policy 5.1: the sheet authorises; the punches measure</td></tr>

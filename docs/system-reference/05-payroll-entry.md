@@ -24,7 +24,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 
 **HRMS vs us.** HRMS owns the Payroll Entry doctype, slip creation, the accrual journal and the bank entry. We add the following:
 
-* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L506);
+* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L509);
 * the **BS month** fields and calendar;
 * one **doc_event** guard;
 * the whole **attendance engine**. HRMS has no attendance-driven pay at all, only proration by payment days (stage [06](06-salary-slip.md)).
@@ -57,7 +57,7 @@ The patch also back-filled `custom_fiscal_year` / `custom_bs_month` on existing 
 
 ### `default_month`
 
-[`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121) returns the month after the company's last non-cancelled Payroll Entry, but never later than the month now running. If the company has no payroll yet, it returns the last finished month ([`last_closed_month`](../../avinashgroup_app/hr/bs_calendar.py#L140)). Why: "the last finished month alone … opened a new entry on Bhadra after Bhadra had been paid" (October 2026 audit, commit 705e671; test [`test_month_after_the_last_payroll`](../../avinashgroup_app/payroll/test_payroll_checks.py#L39)).
+[`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121) returns the month after the company's last non-cancelled Payroll Entry, but never later than the month now running. If the company has no payroll yet, it returns the last finished month ([`last_closed_month`](../../avinashgroup_app/hr/bs_calendar.py#L140)). Why: "the last finished month alone … opened a new entry on Bhadra after Bhadra had been paid" (October 2026 audit, commit 705e671; test [`test_month_after_the_last_payroll`](../../avinashgroup_app/payroll/test_payroll_checks.py#L41)).
 
 ### The form script (ours)
 
@@ -102,7 +102,7 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 [`warn_missing_attendance`](../../avinashgroup_app/payroll/payroll_month.py#L77)
 
 * **What:** "{n} of {m} employees have no submitted attendance between … Their unmarked days count as **Present**, and they get no tea, meal, overtime or late fine." It is a warning and blocks nothing.
-* **Why:** both Bhadra 2083 payrolls (NGI-PAYR-83/84-00002 with 87 employees, NGN-PAYR-83/84-00001 with 63) ran with no attendance and paid everyone in full with no attendance pay, and nothing said so (docstring; commit 705e671; test [`test_warns_with_the_count`](../../avinashgroup_app/payroll/test_payroll_checks.py#L90)).
+* **Why:** both Bhadra 2083 payrolls (NGI-PAYR-83/84-00002 with 87 employees, NGN-PAYR-83/84-00001 with 63) ran with no attendance and paid everyone in full with no attendance pay, and nothing said so (docstring; commit 705e671; test [`test_warns_with_the_count`](../../avinashgroup_app/payroll/test_payroll_checks.py#L92)).
 * **When:** only when Payroll Settings `payroll_based_on` = Attendance, which it is on avinas1.
 * **Gotcha:** it checks for *any* attendance in the month per employee, not for complete attendance. One marked day silences it.
 
@@ -110,7 +110,7 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 ## 5.3 The BS period guard (Payroll Entry side)
 
-[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L369).
+[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L372).
 
 | | |
 |---|---|
@@ -129,11 +129,11 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 | Guard | Code | Test |
 |---|---|---|
-| Sheet import matches by name; the code is only a cross-check | `payroll/onboarding.EmployeeMatcher` ([08](08-changes-over-time.md)) | [`test_code_is_taken_only_with_the_name`](../../avinashgroup_app/payroll/test_payroll_checks.py#L24) |
-| New entry opens on the month after the last payroll | `default_month` (5.1) | [`test_month_after_the_last_payroll`](../../avinashgroup_app/payroll/test_payroll_checks.py#L39), [`test_never_past_the_running_month`](../../avinashgroup_app/payroll/test_payroll_checks.py#L52) |
-| Bank entry refuses an unsaved or non-bank Payment Account | `make_bank_entry` | [`test_no_payment_account`](../../avinashgroup_app/payroll/test_payroll_checks.py#L73), [`test_not_a_bank_account`](../../avinashgroup_app/payroll/test_payroll_checks.py#L79) |
-| A month without attendance is announced | `warn_missing_attendance` | [`test_warns_with_the_count`](../../avinashgroup_app/payroll/test_payroll_checks.py#L90) |
-| Salary sheet names an account set for two sections | Avinas Salary Statement report ([07](07-after-the-slip.md)) | [`test_account_in_two_sections_is_named`](../../avinashgroup_app/payroll/test_payroll_checks.py#L109) |
+| Sheet import matches by name; the code is only a cross-check | `payroll/onboarding.EmployeeMatcher` ([08](08-changes-over-time.md)) | [`test_code_is_taken_only_with_the_name`](../../avinashgroup_app/payroll/test_payroll_checks.py#L26) |
+| New entry opens on the month after the last payroll | `default_month` (5.1) | [`test_month_after_the_last_payroll`](../../avinashgroup_app/payroll/test_payroll_checks.py#L41), [`test_never_past_the_running_month`](../../avinashgroup_app/payroll/test_payroll_checks.py#L54) |
+| Bank entry refuses an unsaved or non-bank Payment Account | `make_bank_entry` | [`test_no_payment_account`](../../avinashgroup_app/payroll/test_payroll_checks.py#L75), [`test_not_a_bank_account`](../../avinashgroup_app/payroll/test_payroll_checks.py#L81) |
+| A month without attendance is announced | `warn_missing_attendance` | [`test_warns_with_the_count`](../../avinashgroup_app/payroll/test_payroll_checks.py#L92) |
+| Salary sheet names an account set for two sections | Avinas Salary Statement report ([07](07-after-the-slip.md)) | [`test_account_in_two_sections_is_named`](../../avinashgroup_app/payroll/test_payroll_checks.py#L111) |
 
 Other guards on the way to slips: the BS period guard (5.3); HRMS's duplicate-slip check and payable-account check (5.2); and the "Set Payroll Section on the Department" refusal when the journal is made ([07](07-after-the-slip.md)).
 
@@ -211,7 +211,7 @@ Errors in steps i–j roll back to a savepoint whose name is made SQL-safe ([`_s
 | `Worked on Holiday` | holiday flag and present or Half Day | 1 day / hours | none on avinas1 (Overtime used this before 2026-09-21) |
 | `Meal Entitlement` | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L304) | see [04 §4.6](04-overtime.md#46-how-the-sheet-reaches-payroll): OT eligible **and** on a submitted Overtime Sheet with Overtime entitlement that day; holiday = 2; working day = 1 per early or late ≥ offset; capped at max/day | Meal |
 | `Authorised Overtime` | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L371) | Σ `worked_hours` of submitted Overtime-entitlement rows for that date (already rounded to ½ h) | Overtime |
-| `Late Time` | not `custom_late_excused`; [`measure_day`](../../avinashgroup_app/hr/shift_day.py#L112) | (late minutes + early-exit minutes) ÷ 60 hours. Counted only on a **full working day**: no holidays, no Half Day ([03](03-shift-measurement.md)) | Late Fine |
+| `Late Time` | not `custom_late_excused`; [`measure_day`](../../avinashgroup_app/hr/shift_day.py#L111) | (late minutes + early-exit minutes) ÷ 60 hours. Counted only on a **full working day**: no holidays, no Half Day ([03](03-shift-measurement.md)) | Late Fine |
 | `Early Entry Before` / `Late Stay After` / `Late Arrival After` | seconds from `custom_early_entry` / `custom_late_exit` / `custom_late_entry` ≥ the offset; Late Arrival is skipped if excused or Half Day (policy 1.2: no double charge) | day / hours | none on avinas1 |
 
 Reads Attendance `status`, `working_hours`, `custom_worked_on_holiday`, `custom_late_entry`, `custom_early_entry`, `custom_early_exit`, `custom_late_exit`, `custom_late_excused`, `in_time` and `out_time`. All of these are written by the Attendance hooks in [02](02-checkin-to-attendance.md).

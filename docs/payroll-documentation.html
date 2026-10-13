@@ -111,7 +111,7 @@ details summary{cursor:pointer;font-weight:600}
 <a href="#setup-holidays" data-id="setup-holidays" data-grp="Plan and set up">Build the holiday lists</a>
 <a href="#setup-shifts" data-id="setup-shifts" data-grp="Plan and set up">Define shift types</a>
 <a href="#setup-cost-centres" data-id="setup-cost-centres" data-grp="Plan and set up">Cost centres and company defaults</a>
-<a href="#setup-categories" data-id="setup-categories" data-grp="Plan and set up">Employee and allowance categories</a>
+<a href="#setup-categories" data-id="setup-categories" data-grp="Plan and set up">Overtime ticks and allowance categories</a>
 <a href="#setup-leave" data-id="setup-leave" data-grp="Plan and set up">Configure leave</a>
 <a href="#setup-components" data-id="setup-components" data-grp="Plan and set up">Salary components</a>
 <a href="#setup-structure" data-id="setup-structure" data-grp="Plan and set up">Salary structures</a>
@@ -313,7 +313,7 @@ bar) to open its list.</p>
 <h2>People and time</h2>
 <div class="tablewrap"><table>
 <tr><th>Document</th><th>What it is</th><th>One per…</th></tr>
-<tr><td>Employee</td><td>The person: joining date, company, shift, category, pay inputs, SSF flag.</td><td>person</td></tr>
+<tr><td>Employee</td><td>The person: joining date, company, shift, overtime / replacement-leave tick, pay inputs, SSF flag.</td><td>person</td></tr>
 <tr><td>Employee Checkin</td><td>A single punch, with its time and device.</td><td>punch</td></tr>
 <tr><td>Attendance</td><td>The verdict on one day: status, shift, hours, late minutes.</td><td>person per day</td></tr>
 <tr><td>Shift Type</td><td>Working hours and the rules that turn punches into attendance.</td><td>set of hours, per company</td></tr>
@@ -337,7 +337,7 @@ bar) to open its list.</p>
 <tr><td>Salary Component</td><td>One line that can appear on a payslip: Basic, HRA, SSF, Income Tax, Late Fine.</td></tr>
 <tr><td>Salary Structure</td><td>The template: which components, and the formula for each. One per company (plus Daily Wage at NGK).</td></tr>
 <tr><td>Salary Structure Assignment</td><td>Puts one person on a structure from a date, with their base figure and tax slab. <b>This is the pay record.</b></td></tr>
-<tr><td>Employee Category</td><td>Plant or Officer &amp; Admin — decides whether holiday work is paid or earns leave.</td></tr>
+<tr><td>Overtime Eligible / Replacement Leave for Holiday Work</td><td>Two ticks on the Employee, one never both — decide whether holiday work is paid or earns leave. (Employee Category is now a label only.)</td></tr>
 <tr><td>Allowance Category</td><td>The tea group (OLD / NEW / NO) and the rate it carries, per company.</td></tr>
 <tr><td>Overtime Sheet</td><td>Authorised overtime hours for a month, approved before they can be paid.</td></tr>
 <tr><td>Payroll Adjustment</td><td>The month's attendance-driven amounts, computed and reviewable before slips.</td></tr>
@@ -379,14 +379,14 @@ dependency order and confirm each step before moving on.</p>
 <tr><td class="num">2</td><td>Holiday Lists (common + women's)</td><td>1</td><td>Each has ~52 Saturdays + festivals</td><td><a data-go="setup-holidays">Holidays</a></td></tr>
 <tr><td class="num">3</td><td>Shift Types</td><td>2</td><td>Auto-attendance on, <b>Holiday List left blank</b></td><td><a data-go="setup-shifts">Shifts</a></td></tr>
 <tr><td class="num">4</td><td>Cost Centres and company defaults</td><td>—</td><td>O/O, S/D, F/P exist under each company</td><td><a data-go="setup-cost-centres">Cost centres</a></td></tr>
-<tr><td class="num">5</td><td>Employee Category, Allowance Category</td><td>—</td><td>2 categories; 1 allowance category per tea rate per company</td><td><a data-go="setup-categories">Categories</a></td></tr>
+<tr><td class="num">5</td><td>Overtime ticks, Allowance Category</td><td>—</td><td>Overtime Eligible or Replacement Leave ticked per person; 1 allowance category per tea rate per company</td><td><a data-go="setup-categories">Categories</a></td></tr>
 <tr><td class="num">6</td><td>Leave Types, Policies, Assignments</td><td>1</td><td>Every active employee has an allocation</td><td><a data-go="setup-leave">Leave</a></td></tr>
 <tr><td class="num">7</td><td>Salary Components</td><td>—</td><td>21 components exist with the right flags</td><td><a data-go="setup-components">Components</a></td></tr>
 <tr><td class="num">8</td><td>Income Tax Slab</td><td>1</td><td>One slab per company for the payroll period</td><td><a data-go="setup-tax">Tax slab</a></td></tr>
 <tr><td class="num">9</td><td>Salary Structure</td><td>7, 8</td><td>One submitted structure per company</td><td><a data-go="setup-structure">Structures</a></td></tr>
 <tr><td class="num">10</td><td>Salary Structure Assignments</td><td>9</td><td>Every paid employee has one from the year start</td><td><a data-go="setup-assignment">Assignments</a></td></tr>
 <tr><td class="num">11</td><td>Component &rarr; GL account mapping</td><td>7</td><td>Every component has an account for every company</td><td><a data-go="setup-accounts">Accounts</a></td></tr>
-<tr><td class="num">12</td><td>Employee records completed</td><td>5, 10</td><td>Device ID, shift, categories, pay inputs all filled</td><td><a data-go="setup-employee">Employee</a></td></tr>
+<tr><td class="num">12</td><td>Employee records completed</td><td>5, 10</td><td>Device ID, shift, overtime tick, allowance category, pay inputs all filled</td><td><a data-go="setup-employee">Employee</a></td></tr>
 </table></div>
 
 <h2>Verify the whole year in one pass</h2>
@@ -396,7 +396,7 @@ dependency order and confirm each step before moving on.</p>
 <li><b>Leave Allocation</b> for the period — should be <i>2N</i> (casual + sick).</li>
 <li><b>Salary Structure Assignment</b> from the year start — should be <i>N</i>, less anyone genuinely unpaid.</li>
 <li><b>Employee</b> with <span class="field">Attendance Device ID</span> empty — should be zero.</li>
-<li><b>Employee</b> with <span class="field">Employee Category</span> empty — should be zero.</li>
+<li><b>Employee</b> with both <span class="field">Overtime Eligible</span> and <span class="field">Replacement Leave for Holiday Work</span> unticked — should be zero.</li>
 </ul>
 <div class="note tip"><b class="t">Tip</b><p>On any list, use <span class="btn">Filter</span> &rsaquo; the field &rsaquo;
 <b>is</b> &rsaquo; <b>not set</b> to find the blanks. That single filter finds most of what a setup misses.</p></div>
@@ -677,38 +677,34 @@ they were F/P 1,729,975.70, O/O 998,139.46 and S/D 468,053.33 — adding to the 
 <div class="note info"><b class="t">Open item</b><p>The account named "547101 O/O" is ambiguous to read on a
 report. Accounts may wish to rename it to "Salary — Office". That is a naming decision, not a system one.</p></div>
 <div class="seealso"><b>See also</b><a href="#setup-accounts" data-go="setup-accounts">Map components to accounts</a><a href="#run-posting" data-go="run-posting">Post to the books and pay</a></div>
-<div class="pager"><a href="#setup-shifts" data-go="setup-shifts">&larr; Define shift types</a><a href="#setup-categories" data-go="setup-categories">Employee and allowance categories &rarr;</a></div>
+<div class="pager"><a href="#setup-shifts" data-go="setup-shifts">&larr; Define shift types</a><a href="#setup-categories" data-go="setup-categories">Overtime ticks and allowance categories &rarr;</a></div>
 </article>
 <article id="setup-categories">
 <div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
-<h1>Employee and allowance categories</h1>
+<h1>Overtime ticks and allowance categories</h1>
 <div class="meta"><span>Applies to: Per company</span><span>Audience: HR Manager</span></div>
-<div class="applies"><b>In this article</b>Two tags on the Employee record that decide whether holiday work is paid, and what a day&#x27;s tea is worth.</div>
-<p>Two small records carry two large policy decisions. Neither is optional: an employee missing either one
-quietly loses money on the payslip.</p>
+<div class="applies"><b>In this article</b>The Employee settings that decide whether holiday work is paid, and what a day&#x27;s tea is worth.</div>
+<p>Two policy decisions sit on every employee. Neither is optional: an employee missing either one
+quietly loses money or leave.</p>
 
-<h2>Employee Category — paid overtime, or leave instead</h2>
+<h2>Overtime Eligible or Replacement Leave — paid overtime, or leave instead</h2>
 <p>The client's rule is that plant staff are paid for extra hours, and office staff are not — they earn a day
-off instead. That single distinction is the Employee Category.</p>
+off instead. That distinction is two ticks on the Employee record (Nepal HRMS section): tick one, never both —
+the save refuses both. With neither, the person cannot go on an Overtime Sheet for holiday work.</p>
 <div class="tablewrap"><table>
-<tr><th>Category</th><th>Overtime eligible</th><th>Compensatory leave</th><th>Who</th></tr>
-<tr><td><b>Operation</b> (called <b>Plant</b> on some sites)</td><td>Yes — extra hours and holiday work are paid</td><td>No</td><td>Filling plant, labour, drivers, helpers</td></tr>
-<tr><td><b>Admin &amp; Officer</b> (called <b>Officer &amp; Admin</b> on some sites)</td><td>No</td><td>Yes — a holiday worked becomes a day of leave</td><td>Managers, accounts, admin, sales officers</td></tr>
+<tr><th>Tick on the Employee</th><th>Overtime eligible</th><th>Compensatory leave</th><th>Who</th></tr>
+<tr><td><b>Overtime Eligible</b></td><td>Yes — extra hours and holiday work are paid</td><td>No</td><td>Filling plant, labour, drivers, helpers</td></tr>
+<tr><td><b>Replacement Leave for Holiday Work</b></td><td>No</td><td>Yes — a holiday worked becomes a day of leave</td><td>Managers, accounts, admin, sales officers</td></tr>
 </table></div>
 <ol class="steps">
-<li>Search for <span class="screen">Employee Category</span>. Confirm <b>exactly two</b> records exist, one with
-<span class="field">Overtime Eligible</span> ticked and one with <span class="field">Compensatory Leave</span> ticked.
-Read the ticks, not the names — see the note below.</li>
-<li>Open the <span class="screen">Employee</span> list &rsaquo; <span class="btn">Report</span> view.</li>
-<li>Add the <span class="field">Employee Category</span> column, sort by designation, and fill it for everyone.</li>
+<li>Open the <span class="screen">Employee</span> list and filter (Company, Department, Designation).</li>
+<li>Select the people, then <span class="btn">Edit</span> &rsaquo; <span class="field">Overtime Eligible</span> (or <span class="field">Replacement Leave for Holiday Work</span>) = Yes.</li>
+<li>Filter on both ticks unset to find anyone missed.</li>
 </ol>
-<div class="note imp"><b class="t">Important — two names for the same two things</b>
-<p>The categories are named differently on different sites: <b>Operation</b> and <b>Admin &amp; Officer</b> on avinas1,
-<b>Plant</b> and <b>Officer &amp; Admin</b> on nepalgas. They mean the same two things, and what decides pay is the
-<i>ticks</i> on the record, not the name.</p>
-<p>The group has not yet chosen which vocabulary to keep. Until it does, do not "tidy up" by creating the other
-pair: a second record with the same ticks splits the staff across two categories, and the ones left on the old
-record silently stop being found.</p></div>
+<div class="note info"><b class="t">Note</b>
+<p>This used to be the <span class="screen">Employee Category</span> (Operation / Admin &amp; Officer, or Plant / Officer &amp; Admin).
+Each person's answer was copied onto the ticks on 13 October 2026. The category and the Employee Category Tool still
+exist but are a label only and decide nothing.</p></div>
 
 <div class="note imp"><b class="t">Important</b><p>When this data was first imported at NGI, <b>63 of 80</b> people
 carried the opposite category to the client's own workbook. It was corrected from the sheet. Before the first
@@ -823,7 +819,7 @@ filtered to the period, should hold exactly twice your active headcount.</p>
 their absences become unpaid. This is the single most common omission when a new joiner is added mid-year — see
 <a data-go="ops-lifecycle">Joiners and leavers</a>.</p></div>
 <div class="seealso"><b>See also</b><a href="#ops-leave" data-go="ops-leave">Leave applications and balances</a><a href="#ops-lifecycle" data-go="ops-lifecycle">Joiners and leavers</a><a href="#setup-fiscal-year" data-go="setup-fiscal-year">Create the year&#x27;s periods</a></div>
-<div class="pager"><a href="#setup-categories" data-go="setup-categories">&larr; Employee and allowance categories</a><a href="#setup-components" data-go="setup-components">Salary components &rarr;</a></div>
+<div class="pager"><a href="#setup-categories" data-go="setup-categories">&larr; Overtime ticks and allowance categories</a><a href="#setup-components" data-go="setup-components">Salary components &rarr;</a></div>
 </article>
 <article id="setup-components">
 <div class="crumb">Avinash Payroll &rsaquo; Plan and set up</div>
@@ -1144,7 +1140,7 @@ it reads them from here. A blank field is therefore not neutral — it is a zero
 <tr><td><span class="field">Attendance Device ID</span></td><td>Matches the punch on the device to the person.</td><td><b>No punches, no attendance, no tea, no overtime.</b></td></tr>
 <tr><td><span class="field">Default Shift</span></td><td>The shift used when no dated assignment covers the day.</td><td>Punches cannot be judged late or early.</td></tr>
 <tr><td><span class="field">Holiday List</span></td><td>Which days are holidays for this person.</td><td>Falls back to the company's; women lose Teej.</td></tr>
-<tr><td><span class="field">Employee Category</span></td><td>Paid overtime, or compensatory leave.</td><td>No overtime is ever paid to them.</td></tr>
+<tr><td><span class="field">Overtime Eligible</span> / <span class="field">Replacement Leave for Holiday Work</span></td><td>Paid overtime, or compensatory leave — tick one, never both.</td><td>Neither: no overtime is ever paid, and holiday work cannot go on an Overtime Sheet.</td></tr>
 <tr><td><span class="field">Allowance Category</span></td><td>The tea rate.</td><td>No tea is paid.</td></tr>
 <tr><td><span class="field">Late Fine Exempt</span></td><td>Managers exempted from the fine (7 people at NGI).</td><td>They are fined like everyone else.</td></tr>
 </table></div>
@@ -1177,7 +1173,7 @@ Structure Assignment, because it is a dated fact — see <a data-go="setup-assig
 <li>Confirm two <b>Leave Allocations</b> for the period.</li>
 <li>Press <span class="btn">Preview Salary Slip</span> from their structure and check the figures.</li>
 </ol>
-<div class="seealso"><b>See also</b><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people</a><a href="#setup-categories" data-go="setup-categories">Employee and allowance categories</a><a href="#ops-lifecycle" data-go="ops-lifecycle">Joiners and leavers</a></div>
+<div class="seealso"><b>See also</b><a href="#setup-assignment" data-go="setup-assignment">Assign salaries to people</a><a href="#setup-categories" data-go="setup-categories">Overtime ticks and allowance categories</a><a href="#ops-lifecycle" data-go="ops-lifecycle">Joiners and leavers</a></div>
 <div class="pager"><a href="#setup-accounts" data-go="setup-accounts">&larr; Map components to accounts</a><a href="#ops-attendance" data-go="ops-attendance">Manage attendance &rarr;</a></div>
 </article>
 <article id="ops-attendance">
@@ -1365,9 +1361,9 @@ would generate a claim on the company. The punches remain the evidence; the shee
 
 <h2>Who is eligible</h2>
 <div class="tablewrap"><table>
-<tr><th>Employee Category</th><th>Extra hours</th><th>Holiday work</th></tr>
-<tr><td>Plant</td><td>Paid at 1.5× the hourly basic</td><td>Paid</td></tr>
-<tr><td>Officer &amp; Admin</td><td>Not paid</td><td>Earns compensatory leave</td></tr>
+<tr><th>Tick on the Employee</th><th>Extra hours</th><th>Holiday work</th></tr>
+<tr><td>Overtime Eligible</td><td>Paid at 1.5× the hourly basic</td><td>Paid</td></tr>
+<tr><td>Replacement Leave for Holiday Work</td><td>Not paid</td><td>Earns compensatory leave</td></tr>
 </table></div>
 
 <h2>Raise the month's sheet</h2>
@@ -1611,7 +1607,7 @@ its own.</p>
 <li>Create the <span class="screen">Employee</span>: name, company, <b>date of joining</b>, gender, status Active.</li>
 <li>Set <span class="field">Attendance Device ID</span> and enrol the finger on the device.</li>
 <li>Set <span class="field">Default Shift</span> and <span class="field">Holiday List</span> (the women's list where it applies).</li>
-<li>Set <span class="field">Employee Category</span> — Plant or Officer &amp; Admin.</li>
+<li>Tick <span class="field">Overtime Eligible</span> (plant) or <span class="field">Replacement Leave for Holiday Work</span> (officer &amp; admin) — one, never both.</li>
 <li>Set <span class="field">Allowance Category</span> if they get tea.</li>
 <li>Set <span class="field">Payroll Cost Center</span>.</li>
 <li>Fill the pay inputs: initial basic, dearness, other, fuel, the gas and education ticks, the SSF tick.</li>
@@ -1740,7 +1736,7 @@ The list will look empty for a minute or two. Wait and refresh rather than press
 <tr><td>Fewer slips than employees</td><td>Missing salary assignment, or a blank payroll payable account on it.</td></tr>
 <tr><td>Someone's pay much lower</td><td>Absences, or leave without pay, reducing payment days.</td></tr>
 <tr><td>No tea for someone who was present</td><td>No allowance category on their Employee record.</td></tr>
-<tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or their category is Officer &amp; Admin.</td></tr>
+<tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or they are not ticked Overtime Eligible.</td></tr>
 <tr><td>Tax much higher for one person</td><td>A bonus or arrears taxed in full this month — correct.</td></tr>
 <tr><td>Everyone's tax higher than last month</td><td>Check the slab and the payroll period dates.</td></tr>
 </table></div>
@@ -2066,7 +2062,7 @@ take-home when basic changes.</p>
 <tr><td>A whole company turns Half Day</td><td><span class="field">Late Arrival Cutoff Time</span> filled with a clock time. It once turned 2,423 of 2,808 days into half days.</td><td>Blank the field on the shift, then rebuild those attendance days.</td></tr>
 <tr><td>Saturday work produces nothing</td><td>Auto-attendance skips holidays.</td><td>Build those days with the attendance repair tool, which does not skip them.</td></tr>
 <tr><td>No tea for someone who was present</td><td>No allowance category, or a rate of 0.</td><td>Set the category on the Employee.</td></tr>
-<tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or their Employee Category is wrong.</td><td>Submit the sheet; check the category against the manager's list.</td></tr>
+<tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or their Overtime Eligible tick is wrong.</td><td>Submit the sheet; check the tick against the manager's list.</td></tr>
 <tr><td>Late reads zero for everybody</td><td>An old report read a flag the import never set.</td><td>Use Monthly Attendance BS, which measures from the punch.</td></tr>
 <tr><td>Tax on a bonus month looks far too small</td><td><span class="field">Deduct Full Tax on Selected Payroll Date</span> was not ticked, so the tax is spread.</td><td>Tick it, cancel and recreate the slip.</td></tr>
 <tr><td>A structure change had no effect</td><td>Pay flows through the assignment, which still points at the old structure.</td><td>Reassign the employees.</td></tr>
@@ -2097,7 +2093,7 @@ live site yet.</p></div>
 <div class="tablewrap"><table>
 <tr><th>Gap</th><th>Effect</th><th>Owner</th></tr>
 <tr><td><b>0 of 292 employees have an Attendance Device ID</b></td><td>No punch can reach a person. Nothing downstream works.</td><td>HR</td></tr>
-<tr><td>179 employees have no Employee Category</td><td>No overtime is ever paid to them.</td><td>HR with the managers</td></tr>
+<tr><td>179 employees have neither Overtime Eligible nor Replacement Leave ticked</td><td>No overtime is ever paid to them.</td><td>HR with the managers</td></tr>
 <tr><td>21 NGI/NGN employees have no Allowance Category</td><td>No tea is paid.</td><td>HR</td></tr>
 <tr><td>87 active staff have no salary assignment</td><td>They will not appear in a payroll run.</td><td>HR Manager</td></tr>
 <tr><td>Cost centres unset at NGN, NGG, GLMI, GEPL</td><td>The journal cannot split the cost by section.</td><td>Accounts</td></tr>
@@ -2127,8 +2123,8 @@ live site yet.</p></div>
 <h2>Things to do before go-live</h2>
 <ol class="steps">
 <li>Fill every gap in the table above.</li>
-<li>Have the managers sign the Employee Category list — 63 of 80 were wrong at NGI on the first import.</li>
-<li>Check the overtime categories on the live site; they were inverted on one site and had to be rebuilt from the workbook.</li>
+<li>Have the managers sign the Overtime Eligible / Replacement Leave list — 63 of 80 were wrong at NGI on the first import.</li>
+<li>Check the Overtime Eligible / Replacement Leave ticks on the live site; the categories they were copied from were inverted on one site and had to be rebuilt from the workbook.</li>
 <li>Clear the test data from the test site: the tagged test punches, the Bhadra attendance, the submitted slips and the journal.</li>
 <li>Run the acceptance tests — see <a data-go="test-plan">Test cases</a> — and record the result of each.</li>
 <li>Deploy the code, migrate and restart.</li>
@@ -2154,13 +2150,13 @@ a BS month with complete attendance. Have the company's Excel salary sheet besid
 <div class="case"><h4>A5 · Shifts exist</h4><p>Open Shift Type. <b>Expect:</b> three NGI shifts, two NGN, one each elsewhere; auto-attendance ticked and <b>Holiday List blank</b> on every one.</p></div>
 <div class="case"><h4>A6 · Cutoff is blank</h4><p>Open each shift. <b>Expect:</b> Late Arrival Cutoff Time empty, grace 0, half day if late by 2 hours.</p></div>
 <div class="case"><h4>A7 · Cost centres</h4><p>Filter Cost Center by company. <b>Expect:</b> Office, Sales &amp; Distribution, Filling Plant.</p></div>
-<div class="case"><h4>A8 · Employee categories</h4><p><b>Expect:</b> exactly two records — one with Overtime Eligible ticked (Operation, or Plant), one with Compensatory Leave ticked (Admin &amp; Officer, or Officer &amp; Admin). Two records with the same ticks is a failure.</p></div>
+<div class="case"><h4>A8 · Overtime ticks</h4><p>Filter Employee on Overtime Eligible = Yes and Replacement Leave for Holiday Work = Yes. <b>Expect:</b> zero rows (the save refuses both).</p></div>
 <div class="case"><h4>A9 · Allowance categories</h4><p><b>Expect:</b> NGI Tea OLD 235, NGI Tea NEW 40, NGN Tea OLD 265, NGN Tea NEW 40.</p></div>
 <div class="case"><h4>A10 · Components</h4><p><b>Expect:</b> 21 components; SSF and SSF Addition both with <i>depends on payment days</i> off.</p></div>
 
 <h2>B · Employees (11–17)</h2>
 <div class="case"><h4>B11 · No missing device IDs</h4><p>Filter Employee &rsaquo; Attendance Device ID &rsaquo; not set. <b>Expect:</b> zero rows.</p></div>
-<div class="case"><h4>B12 · No missing categories</h4><p>Same filter on Employee Category. <b>Expect:</b> zero rows.</p></div>
+<div class="case"><h4>B12 · No missing overtime ticks</h4><p>Filter on Overtime Eligible and Replacement Leave for Holiday Work both unticked. <b>Expect:</b> zero rows.</p></div>
 <div class="case"><h4>B13 · Everyone has a shift</h4><p>Filter on Default Shift not set. <b>Expect:</b> zero rows.</p></div>
 <div class="case"><h4>B14 · Everyone has an assignment</h4><p>Count submitted assignments from 2026-07-17. <b>Expect:</b> the active headcount.</p></div>
 <div class="case"><h4>B15 · Payable account filled</h4><p>Assignment report view, Payroll Payable Account column. <b>Expect:</b> no blanks.</p></div>

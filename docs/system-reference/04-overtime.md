@@ -3,7 +3,7 @@
 Extra work — a festival holiday, a Saturday, or staying past the shift on a normal day — is paid only when the company *asked for it*. The **Overtime Sheet** records that request, and attendance supplies the hours. A plant (OT-eligible) worker's row turns into overtime hours and meals in payroll (stage [05](05-payroll-entry.md)). An officer or admin row becomes a day of **Replacement Leave**, through HRMS's Compensatory Leave Request.
 
 ```
- Overtime Sheet (draft) ──validate──► hr/overtime.evaluate()  day type × Employee Category → entitlement
+ Overtime Sheet (draft) ──validate──► hr/overtime.evaluate()  day type × Employee ticks → entitlement
         │ submit (no approval rule on avinas1, so a plain submit)
         ├──► overtime_settlement.on_sheet_submit ─► measure_row() ─► row.worked_hours / attendance / settlement_note
         │       (+ daily job measure_pending, + "Measure from Attendance" button)
@@ -28,7 +28,7 @@ Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-1
 | **Why** | Policy 5.1: "a punch outside normal hours proves presence, not that the company asked". The module docstring ([`Overtime Sheet`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L1)) says that backdated sheets are allowed on purpose, because extra work is often arranged by phone. The doctype replaced an earlier holiday-only "Holiday Duty Sheet", which patch `setup_overtime_sheet` deletes. |
 | **Where** | Controller [`OvertimeSheet`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L33); form script [`OVERTIME_PREVIEW`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L4); JSON [`is_submittable`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.json#L8) |
 | **Triggered by** | HR (roles HR Manager, HR User, System Manager) creating the sheet. |
-| **Reads / Writes** | Writes its own rows. Reads Employee, Holiday List, Shift Assignment, Shift Type and Employee Category through `evaluate`. |
+| **Reads / Writes** | Writes its own rows. Reads Employee (incl. the Overtime Eligible / Replacement Leave ticks), Holiday List, Shift Assignment and Shift Type through `evaluate`. |
 | **Impacts downstream** | Payroll pays Overtime and Meal **only** for rows on *submitted* sheets with entitlement `Overtime` (see 4.6). The attendance reports show an OT day only when a sheet authorises it (`get_overtime_days`). Replacement leave is credited from `Replacement Leave` rows. |
 | **Config on avinas1** (2026-10-12) | 3 sheets, all NGI, all submitted, 3 rows, all entitlement `Overtime`, 14.0 measured hours in total (2026-07-21 … 07-25). No `Replacement Leave` row has ever been made. |
 | **Gotchas** | No **Dynamic Approval Setting** exists for Overtime Sheet on avinas1: the only settings are for Leave Application and Purchase Order. Anyone with submit permission therefore authorises overtime directly. The docstring's "approval runs through Dynamic Approval" is only true once a setting is created (see [09-cross-cutting.md](09-cross-cutting.md)). Patch `setup_overtime_sheet` adds the audit field `custom_created_by` so that a rule *could* match. |
@@ -52,11 +52,12 @@ Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-1
 | [`work_type`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L43) (`Work on Holiday` / `Overtime`) | HR, or pre-filled from the day by `preview` | `evaluate`, `measure_row` |
 | [`day_type`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L57) (Holiday / Weekly Off / Working Day) | `apply_rules` | replacement-leave reason text |
 | [`entitlement`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L66) (`Overtime` / `Replacement Leave`) | `apply_rules`, never HR | settlement, replacement leave, **payroll** (`_on_overtime_sheet`, `_authorised_overtime_hours`), reports (`get_overtime_days`) |
-| [`employee_category`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L75), [`shift`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L84) | `apply_rules` (snapshot) | display only |
-| [`worked_hours`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L96) | settlement (`db_set`). **Read only**: HR cannot type it | **payroll**: OT quantity |
-| [`attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L106) | settlement | `_is_unmeasured` |
-| [`settlement_note`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L113) | settlement and replacement leave (both write it) | `_is_unmeasured` (the "already measured" marker) |
-| [`compensatory_leave_request`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L119) | `grant_row` | `on_sheet_cancel`, `grant_pending` |
+| [`shift`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L85) | `apply_rules` (snapshot) | display only |
+| [`employee_category`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L76) | Nothing since 2026-10-13 (hidden; older rows keep their value) | nothing |
+| [`worked_hours`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L97) | settlement (`db_set`). **Read only**: HR cannot type it | **payroll**: OT quantity |
+| [`attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L107) | settlement | `_is_unmeasured` |
+| [`settlement_note`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L114) | settlement and replacement leave (both write it) | `_is_unmeasured` (the "already measured" marker) |
+| [`compensatory_leave_request`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L120) | `grant_row` | `on_sheet_cancel`, `grant_pending` |
 
 **Contradiction.** The `shift_day` docstring ([`put it through the`](../../avinashgroup_app/hr/shift_day.py#L29)) says a one-off agreement such as "after 5pm counts as 2 hours" should go "through the Overtime Sheet, where authorised hours can be typed over". In fact `worked_hours` is `read_only` and not allow-on-submit, so the desk cannot type over it. Only a script or a `db_set` can.
 
@@ -67,34 +68,34 @@ Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-1
 | Step | Function | What it does |
 |---|---|---|
 | 1 | [`validate_rows`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L40) | Refuses an employee listed twice, or an employee of another company. |
-| 2 | [`apply_rules`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L55) | Runs `evaluate` on every row, writes back work type, day type, entitlement, category and shift, and reports **all** refused rows in one message. |
-| 3 | [`validate_not_already_authorised`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L78) | Nobody may be on two live (draft or submitted) sheets for the same date, because the work would be paid twice. |
-| 4 | [`set_totals`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L100) | Fills the counts and `day_summary`. |
+| 2 | [`apply_rules`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L55) | Runs `evaluate` on every row, writes back work type, day type, entitlement and shift, and reports **all** refused rows in one message. |
+| 3 | [`validate_not_already_authorised`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L77) | Nobody may be on two live (draft or submitted) sheets for the same date, because the work would be paid twice. |
+| 4 | [`set_totals`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L99) | Fills the counts and `day_summary`. |
 
-The form evaluates each row live through [`preview`](../../avinashgroup_app/hr/overtime.py#L216) (called by [`preview_row`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L59)). The script fills `work_type` only when HR has left it blank, and clears a stale entitlement when a row is refused.
+The form evaluates each row live through [`preview`](../../avinashgroup_app/hr/overtime.py#L223) (called by [`preview_row`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L59)). The script fills `work_type` only when HR has left it blank, and clears a stale entitlement when a row is refused.
 
 ---
 
 ## 4.3 The rules: `hr/overtime.py`
 
-The module docstring ([`Overtime rules`](../../avinashgroup_app/hr/overtime.py#L1)) separates **policy** (Employee Category), **authorisation** (Overtime Sheet) and **rules** (this module). "This module is the only place the rules live." It deliberately contains no attendance and no money.
+The module docstring ([`Overtime rules`](../../avinashgroup_app/hr/overtime.py#L1)) separates **policy** (the two ticks on the Employee), **authorisation** (Overtime Sheet) and **rules** (this module). "This module is the only place the rules live." It deliberately contains no attendance and no money.
 
-### `evaluate(employee, work_date, work_type)`: day type × category
+### `evaluate(employee, work_date, work_type)`: day type × Employee ticks
 
-[`evaluate`](../../avinashgroup_app/hr/overtime.py#L145)
+[`evaluate`](../../avinashgroup_app/hr/overtime.py#L150)
 
-| Work type | Day for *this* employee | Category `ot_eligible` | Category `compensatory_leave` | Result |
+| Work type | Day for *this* employee | Employee `custom_ot_eligibility` | Employee `custom_compensatory_leave` | Result |
 |---|---|---|---|---|
 | Work on Holiday | Holiday or Weekly Off | 1 | – | entitlement **Overtime** |
 | Work on Holiday | Holiday or Weekly Off | 0 | 1 | entitlement **Replacement Leave** |
-| Work on Holiday | Holiday or Weekly Off | 0 | 0 | refused: "earns nothing for holiday work" |
+| Work on Holiday | Holiday or Weekly Off | 0 | 0 | refused: "has neither Overtime Eligible nor Replacement Leave … ticked" |
 | Work on Holiday | Working Day | any | any | refused: "choose Overtime" |
 | Overtime | Working Day | 1, and a shift exists | – | entitlement **Overtime** |
 | Overtime | Working Day | 1, no shift | – | refused: "no shift … cannot be measured" |
-| Overtime | Working Day | 0 | – | refused: "not eligible for overtime on a working day" |
+| Overtime | Working Day | 0 | – | refused: "is not ticked Overtime Eligible, so cannot be given overtime on a working day" |
 | Overtime | Holiday or Weekly Off | any | any | refused: "choose Work on Holiday" |
 
-A blank work type defaults through [`default_work_type`](../../avinashgroup_app/hr/overtime.py#L140): a holiday or Saturday becomes holiday work, any other day overtime.
+A blank work type defaults through [`default_work_type`](../../avinashgroup_app/hr/overtime.py#L145): a holiday or Saturday becomes holiday work, any other day overtime.
 
 ### Helpers
 
@@ -102,19 +103,23 @@ A blank work type defaults through [`default_work_type`](../../avinashgroup_app/
 |---|---|---|---|
 | [`get_day_type`](../../avinashgroup_app/hr/overtime.py#L60) | `Holiday`, `Weekly Off` or `Working Day` from the employee's **own** holiday list (`get_holiday_list_for_employee`: the Employee's list first, then the company default). | Holiday (`weekly_off`, `description`) | Resolved per employee because the lists differ: Teej is a holiday only on the "(Women)" lists. See [01-masters.md](01-masters.md). |
 | [`get_shift_window`](../../avinashgroup_app/hr/overtime.py#L91) | `(shift_type, start_dt, end_dt)`: the latest active, submitted Shift Assignment covering the date, otherwise Employee `default_shift`. Handles overnight shifts. | Shift Assignment, Employee, Shift Type `start_time`/`end_time` | Also used by settlement and by the attendance hooks ([02](02-checkin-to-attendance.md)). |
-| [`get_category_rule`](../../avinashgroup_app/hr/overtime.py#L121) | `(category, ot_eligible, compensatory_leave)`; **raises** if the employee has no `custom_employee_category`. | Employee `custom_employee_category`; Employee Category | "A wrong default pays money or grants leave." |
-| [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L289) | Hours of `[in, out]` before the shift start or after its end. A window that does not overlap the shift counts in full. | – | The working-day OT measure, rounded to 2 decimals here (half-hour rounding is applied by the caller). |
-| [`get_overtime_days`](../../avinashgroup_app/hr/overtime.py#L256) | `{(employee, date)}` with a submitted Overtime row over a period. | sheets | Used by the Monthly Attendance (BS) report and its summary. |
-| [`get_authorised`](../../avinashgroup_app/hr/overtime.py#L229), [`was_authorised`](../../avinashgroup_app/hr/overtime.py#L278) | The "read API" the docstring names. | sheets | **Dead code**: nothing in the app calls either one. Payroll queries the sheet tables directly. |
+| [`get_holiday_work_rule`](../../avinashgroup_app/hr/overtime.py#L121) | `(ot_eligible, compensatory_leave)` from the Employee's two ticks. | Employee `custom_ot_eligibility`, `custom_compensatory_leave` | Neither ticked → `evaluate` refuses holiday work: "a wrong default pays money or grants leave." |
+| [`validate_employee_holiday_rule`](../../avinashgroup_app/hr/overtime.py#L136) | Employee `validate` hook: refuses both ticks at once. | – | Replaces the either/or check that lived on Employee Category. |
+| [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L296) | Hours of `[in, out]` before the shift start or after its end. A window that does not overlap the shift counts in full. | – | The working-day OT measure, rounded to 2 decimals here (half-hour rounding is applied by the caller). |
+| [`get_overtime_days`](../../avinashgroup_app/hr/overtime.py#L263) | `{(employee, date)}` with a submitted Overtime row over a period. | sheets | Used by the Monthly Attendance (BS) report and its summary. |
+| [`get_authorised`](../../avinashgroup_app/hr/overtime.py#L236), [`was_authorised`](../../avinashgroup_app/hr/overtime.py#L285) | The "read API" the docstring names. | sheets | **Dead code**: nothing in the app calls either one. Payroll queries the sheet tables directly. |
 
-### Config on avinas1 (2026-10-12)
+### Config on avinas1 (2026-10-13)
 
-| Employee Category | `ot_eligible` | `compensatory_leave` |
+Until 2026-10-13 the two answers came from the Employee Category the person was linked to (`Operation`: overtime; `Officer & Admin`: replacement leave). Patch `holiday_work_rule_on_employee` ([`execute`](../../avinashgroup_app/patches/holiday_work_rule_on_employee.py#L26)) copied each member's answer onto the Employee ticks:
+
+| Active employees | `custom_ot_eligibility` | `custom_compensatory_leave` |
 |---|---|---|
-| Operation | 1 | 0 |
-| Officer & Admin | 0 | 1 |
+| 2 (NGI, were `Operation`) | 1 | 0 |
+| 2 (NGI, were `Officer & Admin`) | 0 | 1 |
+| 261 (96 more at NGI, and every employee at NGG, NGK and NGN) | 0 | 0 |
 
-Active employees with a category: **4 of 265**. NGI has 2 Operation and 2 Officer & Admin; the other 261 (96 more at NGI, and every employee at NGG, NGK and NGN) have **none**. Today any Overtime Sheet row for those 261 people is refused with "has no Employee Category". `Employee.custom_ot_eligibility` is fetched from the category ([`custom_ot_eligibility`](../../avinashgroup_app/avinash_group_app/doctype/employee_category/employee_category.py#L11)), so it is 0 for the same 261 people, and they also get no Overtime or Meal in payroll. See [01-masters.md](01-masters.md).
+A holiday-work Overtime Sheet row for any of the 261 is refused ("has neither … ticked"), and they get no Overtime or Meal in payroll. See [01-masters.md](01-masters.md).
 
 ---
 
@@ -124,7 +129,7 @@ Active employees with a category: **4 of 265**. NGI has 2 Operation and 2 Office
 |---|---|
 | **What** | For each row with entitlement **Overtime** on a submitted sheet, reads that day's submitted Attendance and writes `worked_hours`, `attendance` and `settlement_note`, then the sheet's `total_worked_hours`. |
 | **Why** | Docstring ([`Measure authorised overtime`](../../avinashgroup_app/hr/overtime_settlement.py#L1)): the sheet says the company asked; attendance says how long the work lasted. "Measuring used to be a button only, so overtime paid 0 for any sheet nobody thought to press it on." Commits 240ea3c (2026-09-21) and 297ebbd (2026-09-27). |
-| **Triggered by** | (a) the hook on Overtime Sheet `on_submit` [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L447), only when the work date is already past; (b) the daily job [`measure_pending`](../../avinashgroup_app/hooks.py#L537) in `daily_long`; (c) the **Measure from Attendance** button [`Measure from Attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L23), shown on a submitted sheet. |
+| **Triggered by** | (a) the hook on Overtime Sheet `on_submit` [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L450), only when the work date is already past; (b) the daily job [`measure_pending`](../../avinashgroup_app/hooks.py#L540) in `daily_long`; (c) the **Measure from Attendance** button [`Measure from Attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L23), shown on a submitted sheet. |
 | **Reads** | Attendance (`status`, `in_time`, `out_time`, `working_hours`), Shift Assignment and Shift Type through `get_shift_window`. |
 | **Writes** | Overtime Sheet Employee `worked_hours`, `attendance`, `settlement_note`; Overtime Sheet `total_worked_hours`. All via `db_set(update_modified=False)` on a submitted doc, so there is no version history. |
 | **Impacts downstream** | `worked_hours` is the **quantity of the Overtime component** in payroll (4.6). Re-measuring after Prepare Payroll Inputs changes nothing on the slip until Prepare Payroll Inputs is pressed again. |
@@ -169,7 +174,7 @@ Note that a Half Day attendance still measures in full here: only `Absent` is ze
 |---|---|
 | **What** | Turns each `Replacement Leave` row whose attendance shows the person worked into a submitted **Compensatory Leave Request** (HRMS). That request creates or tops up a **Leave Allocation** of type *Replacement Leave*. |
 | **Why** | Docstring ([`Credit replacement leave`](../../avinashgroup_app/hr/replacement_leave.py#L1)): "Until now nothing turned that row into leave, so the day was promised on paper and never reached a balance." HRMS's own document is used for its audit trail and checks. Commit 297ebbd (2026-09-27). |
-| **Triggered by** | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L447) (dates already past), the daily job [`grant_pending`](../../avinashgroup_app/hooks.py#L521) (`daily_long`, 62-day lookback), and [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L448). |
+| **Triggered by** | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L450) (dates already past), the daily job [`grant_pending`](../../avinashgroup_app/hooks.py#L524) (`daily_long`, 62-day lookback), and [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L451). |
 | **Reads** | Attendance `status` for the date. |
 | **Writes** | Compensatory Leave Request (inserted and submitted with `ignore_permissions`), which through HRMS creates a Leave Allocation or Leave Ledger Entry. Row `compensatory_leave_request` and `settlement_note`. On failure, an Error Log. |
 | **Impacts downstream** | The Replacement Leave balance shown in Leave Application and in the Yearly Leave Details (BS) report. Pay is not affected: the type has `allow_encashment` 0, and taking the day is ordinary paid leave. |
@@ -197,7 +202,7 @@ Leave type: [`REPLACEMENT_LEAVE_TYPE`](../../avinashgroup_app/hr/replacement_lea
 | **Leave Period** records | **0** for every company |
 | Replacement Leave rows ever | 0 |
 
-**Open issue:** with no Leave Period on avinas1, every replacement-leave grant would fail with "No Leave Period Found". That would be logged on the row and in the Error Log, and retried daily for 62 days. `hr/year_setup.py` can create Leave Periods ([`Leave Period`](../../avinashgroup_app/hr/year_setup.py#L306)), but none exist on avinas1. See [08-changes-over-time.md](08-changes-over-time.md).
+**Open issue:** with no Leave Period on avinas1, every replacement-leave grant would fail with "No Leave Period Found". That would be logged on the row and in the Error Log, and retried daily for 62 days. `hr/year_setup.py` can create Leave Periods ([`Leave Period`](../../avinashgroup_app/hr/year_setup.py#L307)), but none exist on avinas1. See [08-changes-over-time.md](08-changes-over-time.md).
 
 ---
 
@@ -233,14 +238,14 @@ Ramhari: 3.5 + 8.5 = **12 OT hours**. Meals: the Saturday gives 2; on 07-21 he w
 
 | Hook / job | Handler | Order note |
 |---|---|---|
-| Overtime Sheet `on_submit` | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L447) then [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L447) | Independent: each handles its own entitlement. |
-| Overtime Sheet `on_cancel` | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L448) | Hours and Additional Salary are left as they are. |
+| Overtime Sheet `on_submit` | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L450) then [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L450) | Independent: each handles its own entitlement. |
+| Overtime Sheet `on_cancel` | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L451) | Hours and Additional Salary are left as they are. |
 | `daily_long` | `grant_pending`, `measure_pending` | Both use a 62-day lookback. |
 | `*` validate / before_save / on_update | Dynamic Approval, Numbering engine, SMS | No-op for Overtime Sheet on avinas1 (no settings). See [hooks-inventory.md](hooks-inventory.md). |
 
 ## 4.8 What to check if overtime looks wrong
 
-1. The employee has a **Employee Category**, so `custom_ot_eligibility` is fetched (4.3).
+1. The employee is ticked **Overtime Eligible** (`custom_ot_eligibility`) on the Employee (4.3).
 2. The sheet is **submitted**, not draft, and the row's entitlement is *Overtime*.
 3. The row's `settlement_note`, and whether `worked_hours` were measured. If attendance came late, press **Measure from Attendance**.
 4. A submitted Attendance with both in and out times exists for the date.

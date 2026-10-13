@@ -619,7 +619,11 @@
 				if (g.field === "salary_structure_assignment") return frappe.set_route("List", "Salary Structure Assignment");
 				const opts = { status: "Active" };
 				if (this.company) opts.company = this.company;
-				if (g.field !== "date_of_joining") opts[g.field] = ["is", "not set"];
+				if (g.field === "custom_ot_eligibility") {
+					// Two ticks, neither set: a Check is 0, never "not set".
+					opts.custom_ot_eligibility = 0;
+					opts.custom_compensatory_leave = 0;
+				} else if (g.field !== "date_of_joining") opts[g.field] = ["is", "not set"];
 				frappe.route_options = opts;
 				frappe.set_route("List", "Employee", "Report");
 			});

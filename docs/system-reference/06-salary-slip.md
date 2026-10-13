@@ -23,13 +23,13 @@ A slip save runs `Document.validate` → the controller's `validate()` → the d
 | 1 | `BSSalarySlip.validate` | [`validate`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L235) | Calls HRMS's `validate` and only logs afterwards |
 | 2 | HRMS `SalarySlip.validate` | [`validate`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L152) | Dates, structure, working days, `calculate_net_pay`, YTD (6.1–6.4) |
 | 3 | Audit fields | [`AuditEventMapper`](../../avinashgroup_app/hooks.py#L254) | `doc_events` starts as the audit mapper's dict, so its `validate` handler is first in the list (Salary Slip is in its doctype list) |
-| 4 | `add_employee_allowances` | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L352) | 6.5 |
-| 5 | `apply_tax_reliefs` | [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L359) | 6.8 |
-| 6 | `apply_income_tax_override` | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L363) | 6.9 |
-| 7 | `bs_period_guard.validate_salary_slip` | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L370) | 6.10 |
-| 8 | `build_daily_breakdown` | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L373) | 6.11. The hooks.py comment calls it "last of the slip's validate hooks"; it is not: step 9 is appended later in the file |
-| 9 | `set_bs_dates` | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L460) | 6.12, registered by a loop further down `hooks.py` |
-| 10 | `"*"` validate | erpnext's [`service_level_agreement.apply`](../../../erpnext/erpnext/hooks.py#L329) etc., then our [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L419) and [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L478) | No Dynamic Approval Setting exists for Salary Slip, so the approval hook exits; numbering is covered in [09-cross-cutting.md](09-cross-cutting.md) |
+| 4 | `add_employee_allowances` | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L355) | 6.5 |
+| 5 | `apply_tax_reliefs` | [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L362) | 6.8 |
+| 6 | `apply_income_tax_override` | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L366) | 6.9 |
+| 7 | `bs_period_guard.validate_salary_slip` | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L373) | 6.10 |
+| 8 | `build_daily_breakdown` | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L376) | 6.11. The hooks.py comment calls it "last of the slip's validate hooks"; it is not: step 9 is appended later in the file |
+| 9 | `set_bs_dates` | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L463) | 6.12, registered by a loop further down `hooks.py` |
+| 10 | `"*"` validate | erpnext's [`service_level_agreement.apply`](../../../erpnext/erpnext/hooks.py#L329) etc., then our [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L422) and [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L477) | No Dynamic Approval Setting exists for Salary Slip, so the approval hook exits; numbering is covered in [09-cross-cutting.md](09-cross-cutting.md) |
 
 No Server Script, Client Script or Notification exists for Salary Slip on avinas1 (checked 2026-10-12), so nothing else changes amounts.
 
@@ -215,9 +215,9 @@ this month                         = (year's tax − tax already deducted this p
 | 25,00,001 | 40,00,000 | 27 | |
 | 40,00,001 | — | 29 | |
 
-The first band is the 1% Social Security Tax, waived for SSF contributors; HRMS skips a band whose condition is false, so one Income Tax component yields either the SST or the progressive tax (`payroll/income_tax.py` module docstring, [../payroll-ngi.md](../payroll-ngi.md)). The seed table is [`FY_8384_SLABS`](../../avinashgroup_app/payroll/income_tax.py#L31) in [`TAX_SLABS_BY_YEAR`](../../avinashgroup_app/payroll/income_tax.py#L45); the slip reads the **record**, created by [`ensure_income_tax_slab`](../../avinashgroup_app/hr/year_setup.py#L360). Changing `FY_8384_SLABS` changes nothing on a slip until a new slab record is built.
+The first band is the 1% Social Security Tax, waived for SSF contributors; HRMS skips a band whose condition is false, so one Income Tax component yields either the SST or the progressive tax (`payroll/income_tax.py` module docstring, [../payroll-ngi.md](../payroll-ngi.md)). The seed table is [`FY_8384_SLABS`](../../avinashgroup_app/payroll/income_tax.py#L31) in [`TAX_SLABS_BY_YEAR`](../../avinashgroup_app/payroll/income_tax.py#L45); the slip reads the **record**, created by [`ensure_income_tax_slab`](../../avinashgroup_app/hr/year_setup.py#L355). Changing `FY_8384_SLABS` changes nothing on a slip until a new slab record is built.
 
-**Payroll Period.** One per company, `83/84 - <abbr>`, 2026-07-17 → 2027-07-16 (made by [`ensure_payroll_period`](../../avinashgroup_app/hr/year_setup.py#L340)). A slip outside any Payroll Period gets no tax and a message.
+**Payroll Period.** One per company, `83/84 - <abbr>`, 2026-07-17 → 2027-07-16 (made by [`ensure_payroll_period`](../../avinashgroup_app/hr/year_setup.py#L335)). A slip outside any Payroll Period gets no tax and a message.
 
 **Exemptions on avinas1.** Categories: *Insurance Premium* (max 70,000; sub-categories Life 40,000, Health 20,000, Private Building 10,000) and *Retirement Contribution* (max 5,00,000, `custom_is_retirement_contribution` = 1, `custom_cap_percent_of_income` = 33.333333; sub-categories "CIT paid directly", "Provident Fund paid directly"). Entered as documented in commit `4d6af9a` ([../user-guide/08-raises-advances-bonuses-year-end.md](../user-guide/08-raises-advances-bonuses-year-end.md)). **0** Employee Tax Exemption Declarations, **0** Proof Submissions and **0** Employee Other Income rows exist, so `total_exemption_amount` is 0 on every slip today. HRMS switches from declaration to proof in the Payroll Period's last month (`deduct_tax_for_unsubmitted_tax_exemption_proof`).
 

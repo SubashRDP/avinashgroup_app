@@ -9,9 +9,9 @@ Policy (client meeting 2026-09-15, `docs/hr-decisions/00-policy-minutes-2026-09-
 
 The design keeps three concerns apart so each can change without the others:
 
-    POLICY          Employee Category    who is OT-eligible / gets replacement leave
+    POLICY          Employee (2 ticks)   who is OT-eligible / gets replacement leave
     AUTHORISATION   Overtime Sheet       the company's approved request, per date
-    RULES           this module          day type x category -> entitlement, hours
+    RULES           this module          day type x employee ticks -> entitlement, hours
 
 This module is the only place the rules live. The Overtime Sheet form calls
 `evaluate()` for every row; downstream steps (attendance matching, payroll) call
@@ -118,23 +118,28 @@ def get_shift_window(employee, work_date):
 # ─────────────────────────────────────────────────────────────── the rules ──
 
 
-def get_category_rule(employee):
-	"""(category, ot_eligible, compensatory_leave) — raises if the employee has none.
+def get_holiday_work_rule(employee):
+	"""(ot_eligible, compensatory_leave) — the two ticks on the Employee.
 
-	No category means the policy cannot say what the person earns, so the row is
-	refused rather than defaulted: a wrong default pays money or grants leave.
+	`custom_ot_eligibility` ("Overtime Eligible") and `custom_compensatory_leave`
+	("Replacement Leave for Holiday Work"). They are either/or —
+	`validate_employee_holiday_rule` refuses both. Neither ticked means the policy
+	cannot say what the person earns, so `evaluate()` refuses holiday work rather
+	than default: a wrong default pays money or grants leave.
 	"""
-	category = frappe.db.get_value("Employee", employee, "custom_employee_category")
-	if not category:
-		raise OvertimeRuleError(
-			_("{0} has no Employee Category — set it with the Employee Category Tool first").format(
-				employee_label(employee)
-			)
-		)
 	ot_eligible, compensatory_leave = frappe.db.get_value(
-		"Employee Category", category, ["ot_eligible", "compensatory_leave"]
-	)
-	return category, bool(ot_eligible), bool(compensatory_leave)
+		"Employee", employee, ["custom_ot_eligibility", "custom_compensatory_leave"]
+	) or (0, 0)
+	return bool(ot_eligible), bool(compensatory_leave)
+
+
+def validate_employee_holiday_rule(doc, method=None):
+	"""Employee validate hook: a holiday worked is paid OR given back as leave."""
+	if doc.get("custom_ot_eligibility") and doc.get("custom_compensatory_leave"):
+		frappe.throw(
+			_("Tick either Overtime Eligible or Replacement Leave for Holiday Work, not both"),
+			title=_("Overtime or replacement leave"),
+		)
 
 
 def default_work_type(day_type):
@@ -149,14 +154,14 @@ def evaluate(employee, work_date, work_type=None):
 	`work_type` defaults to what the day implies for this employee.
 
 	    Work on Holiday   day must be a Holiday / Weekly Off for this person
-	                        Plant (OT-eligible)      -> Overtime
-	                        Officer & Admin (leave)  -> Replacement Leave
+	                        Overtime Eligible ticked             -> Overtime
+	                        Replacement Leave ticked (officers)  -> Replacement Leave
 	    Overtime          day must be a Working Day for this person
 	                        OT-eligible only, and a shift must exist — settlement
 	                        measures hours outside it -> Overtime
 	"""
 	day_type, day_name = get_day_type(employee, work_date)
-	category, ot_eligible, compensatory_leave = get_category_rule(employee)
+	ot_eligible, compensatory_leave = get_holiday_work_rule(employee)
 	shift = get_shift_window(employee, work_date)[0]
 	work_type = work_type or default_work_type(day_type)
 	on_holiday = day_type in (DAY_HOLIDAY, DAY_WEEKLY_OFF)
@@ -166,7 +171,6 @@ def evaluate(employee, work_date, work_type=None):
 		"work_type": work_type,
 		"day_type": day_type,
 		"day_name": day_name,
-		"employee_category": category,
 		"shift": shift,
 	}
 
@@ -183,7 +187,10 @@ def evaluate(employee, work_date, work_type=None):
 			result["entitlement"] = ENTITLEMENT_REPLACEMENT_LEAVE
 		else:
 			raise OvertimeRuleError(
-				_("{0}: category {1} earns nothing for holiday work").format(employee_label(employee), category)
+				_(
+					"{0} has neither Overtime Eligible nor Replacement Leave for Holiday Work ticked "
+					"on their Employee record, so holiday work earns nothing"
+				).format(employee_label(employee))
 			)
 		return result
 
@@ -198,8 +205,8 @@ def evaluate(employee, work_date, work_type=None):
 		)
 	if not ot_eligible:
 		raise OvertimeRuleError(
-			_("{0} ({1}) is not eligible for overtime on a working day").format(
-				employee_label(employee), category
+			_("{0} is not ticked Overtime Eligible, so cannot be given overtime on a working day").format(
+				employee_label(employee)
 			)
 		)
 	if not shift:
@@ -259,7 +266,7 @@ def get_overtime_days(employees, start, end):
 	The period form of `get_authorised`, for the attendance reports: a day shows
 	overtime only when a submitted Overtime Sheet names that person on that date
 	with the Overtime entitlement. A Replacement Leave row earns a leave day, not
-	hours, and a category's OT eligibility alone authorises nothing (policy 5.1).
+	hours, and an employee's OT eligibility alone authorises nothing (policy 5.1).
 	"""
 	names = [e if isinstance(e, str) else e.name for e in employees]
 	if not names:

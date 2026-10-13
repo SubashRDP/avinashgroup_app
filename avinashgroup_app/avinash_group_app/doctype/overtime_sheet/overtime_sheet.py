@@ -7,8 +7,8 @@ settlement, so nothing typed here can disagree with the punches.
 
 The work type is pre-chosen from the person's own day, and what they earn is never
 chosen at all: `avinashgroup_app.hr.overtime` works it out from their holiday list,
-shift and Employee Category, and refuses a work type that does not fit the day. A
-sheet can mix a holiday for some and a working day for others.
+shift and the Overtime Eligible / Replacement Leave ticks on their Employee, and
+refuses a work type that does not fit the day. A sheet can mix a holiday for some and a working day for others.
 
 Approval runs through Dynamic Approval; a sheet authorises nothing until it is
 submitted. Backdated sheets are allowed on purpose: extra work is often arranged
@@ -68,7 +68,6 @@ class OvertimeSheet(Document):
 			row.work_type = result["work_type"]
 			row.day_type = result["day_type"]
 			row.entitlement = result["entitlement"]
-			row.employee_category = result["employee_category"]
 			row.shift = result["shift"]
 			row._day_name = result["day_name"]
 

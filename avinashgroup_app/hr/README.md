@@ -74,12 +74,17 @@ with no punches removed, employees whose month is already paid skipped and
 named, approved Overtime Sheets for the date listed for HR to amend. Removing a
 holiday (on the Holiday List itself) does not re-mark anything; use Attendance Fix.
 
-## Employee Category — who gets OT, who gets replacement leave
+## Who gets OT, who gets replacement leave — two ticks on the Employee
 
-Doctypes `Employee Category` and `Employee Category Tool`
-(`avinash_group_app/doctype/`), plus the patch `setup_employee_category`, which
-adds `Employee.custom_employee_category` and makes `custom_ot_eligibility` fetch
-from it. Full write-up: `docs/employee-category.md`.
+`Employee.custom_ot_eligibility` ("Overtime Eligible") and
+`Employee.custom_compensatory_leave` ("Replacement Leave for Holiday Work"), set
+per person; never both (`overtime.validate_employee_holiday_rule`, an Employee
+validate hook). `overtime.get_holiday_work_rule` reads them. Until 2026-10-13 this
+came from the Employee Category the person was linked to; patch
+`holiday_work_rule_on_employee` copied each person's answer across. The
+`Employee Category` doctype, `custom_employee_category` link and `Employee
+Category Tool` remain as labels only — nothing reads them. History:
+`docs/employee-category.md`.
 
 
 ## overtime.py — the overtime rules

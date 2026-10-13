@@ -19,7 +19,7 @@
 | **CIT** | Citizen Investment Trust contribution; reduces taxable income |
 | **Daily Breakdown** | The table on every salary slip that shows each day's attendance, pay and fines, adding up to the net pay |
 | **DA** | Dearness Allowance, a person's own fixed monthly allowance |
-| **Employee Category** | **Operation** (paid overtime) or **Officer & Admin** (replacement leave). Decides what holiday and extra work earns |
+| **Employee Category** | A label (Operation / Officer & Admin). Since 13 October 2026 it decides nothing — see Overtime Eligible and Replacement Leave for Holiday Work |
 | **F/P** | Filling Plant. The **Plant** payroll section, and its salary expense account |
 | **Fiscal Year** | Shrawan 1 to the end of Ashadh. "83/84" = Shrawan 2083 to Ashadh 2084 |
 | **Gross** | Total earnings on the slip, before deductions |
@@ -40,7 +40,8 @@
 | **Net Pay / Net Payable** | What the employee receives: gross minus deductions |
 | **O/O** | Office. The **Admin & Accounts** payroll section, and its salary expense account |
 | **OT** | Overtime. Paid at Basic ÷ days in the BS month ÷ 8 × 1.5 per hour, only on an approved Overtime Sheet |
-| **OT Eligible** | A tick on the Employee, filled from the Employee Category. Only OT-eligible staff get overtime and meals |
+| **Overtime Eligible** (OT Eligible) | A tick on the Employee. Only staff ticked here get overtime and meals |
+| **Replacement Leave for Holiday Work** | A tick on the Employee. A holiday or Saturday worked earns a replacement (compensatory) leave day instead of overtime. Never ticked together with Overtime Eligible |
 | **Overtime Sheet** | The document that authorises extra work for a date. Without it, no overtime or meal is paid |
 | **Payment Days** | Days paid in the month. Holidays are paid; absent and unpaid days are not |
 | **Payroll Adjustment** | A screen to enter one-off amounts for many people in one month |

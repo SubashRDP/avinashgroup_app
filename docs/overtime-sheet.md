@@ -6,14 +6,15 @@ Saturday, or staying beyond the shift on a normal day.
 ## Design
 
 ```
-POLICY          Employee Category     who is OT-eligible / gets replacement leave   (data, HR edits)
+POLICY          Employee (2 ticks)    who is OT-eligible / gets replacement leave   (data, HR edits)
 AUTHORISATION   Overtime Sheet        the company's approved request for a date      (document, Dynamic Approval)
-RULES           hr/overtime.py        work type × day × category → entitlement       (service, one place)
+RULES           hr/overtime.py        work type × day × employee ticks → entitlement (service, one place)
 READ API        get_authorised(date)  the one question settlement asks               (submitted sheets only)
 SETTLEMENT      next step             attendance match → Additional Salary / Compensatory Leave Request
 ```
 
-Each layer changes without the others: a new group is a Category record, a new
+Each layer changes without the others: who earns what is a tick on the Employee
+(Overtime Eligible, or Replacement Leave for Holiday Work — never both), a new
 approver is a Dynamic Approval Setting, a policy change is one function.
 
 ## Policy
@@ -32,8 +33,8 @@ on 2026-09-16, and 2.5:
    why the extra work was needed.
 2. Add the employees who were asked in. **No times** — each row fills itself:
    **Work Type** (pre-chosen from the person's day; change it if needed), **Day**
-   (Holiday / Weekly Off / Working Day from their own holiday list), **Earns**,
-   **Category**, **Shift**.
+   (Holiday / Weekly Off / Working Day from their own holiday list), **Earns**
+   (from the person's Employee ticks), **Shift**.
 3. Save. Every row the policy refuses is listed in one message.
 4. Approve through Dynamic Approval. Only a **submitted** sheet authorises anything.
 
@@ -56,9 +57,9 @@ The shift is the dated Shift Assignment for that date, else the Default Shift.
 
 - a work type that does not fit the person's day (Work on Holiday on their working
   day, Overtime on their holiday) — the message says which to choose;
-- an employee with no Employee Category (a default would pay money or grant leave
-  wrongly);
-- Officer & Admin with Overtime on a working day;
+- holiday work for an employee with neither Overtime Eligible nor Replacement Leave
+  for Holiday Work ticked (a default would pay money or grant leave wrongly);
+- Overtime on a working day for anyone not ticked Overtime Eligible;
 - Overtime for someone with no shift that day (it could not be measured);
 - an employee of another company, listed twice, or already on another live sheet
   for the same date.

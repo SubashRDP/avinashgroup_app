@@ -244,7 +244,7 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
     <tr><td><b>BS month</b></td><td>The Nepali month — Shrawan, Bhadra, Ashwin… Salary is always for one BS month. The year runs Shrawan to Ashadh.</td></tr>
     <tr><td><b>Shift</b></td><td>Office time. We have three: <b>6 AM – 2 PM</b>, <b>9 AM – 6 PM</b>, <b>12 PM – 8 PM</b>.</td></tr>
     <tr><td><b>Attendance</b></td><td>One line per person per day: Present, Half Day, Absent or On Leave. The fingerprint machine makes most of these.</td></tr>
-    <tr><td><b>Employee Category</b></td><td><b>Plant</b> = gets overtime money. <b>Officer &amp; Admin</b> = gets replacement leave instead.</td></tr>
+    <tr><td><b>Overtime Eligible / Replacement Leave</b></td><td>Two ticks on the Employee — tick one, never both. <b>Overtime Eligible</b> = gets overtime money. <b>Replacement Leave for Holiday Work</b> (officers, admin) = gets a replacement leave day instead.</td></tr>
     <tr><td><b>Allowance Category</b></td><td>The tea group: <b>OLD</b>, <b>NEW</b> or <b>NO</b>. It decides how much tea money a person gets per day.</td></tr>
     <tr><td><b>Salary Structure</b></td><td>The company's salary formula (Basic, HRA, SSF…). Already set up — you do not touch it.</td></tr>
     <tr><td><b>Salary Structure Assignment</b></td><td>Joins one person to the formula, with their <b>Basic</b> salary.</td></tr>
@@ -367,12 +367,8 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
 </section>
 
 <section id="s7" class="stage">
-  <h3 class="st"><span class="n">7</span> The two kinds of category</h3>
-  <p><b>Open</b> <span class="screen">Employee Category</span>. It should have exactly two:</p>
-  <div class="tablewrap"><table><tr><th>Category Name</th><th>Overtime Eligible</th><th>Replacement Leave for Holiday Work</th></tr>
-    <tr><td>Plant</td><td>Ticked</td><td>—</td></tr>
-    <tr><td>Officer &amp; Admin</td><td>—</td><td>Ticked</td></tr>
-  </table></div>
+  <h3 class="st"><span class="n">7</span> Tea groups</h3>
+  <p>Overtime or replacement leave is no longer set here: it is two ticks on each Employee (stage 8). <span class="screen">Employee Category</span> still exists but decides nothing.</p>
   <p><b>Open</b> <span class="screen">Allowance Category</span>. Each company has its own tea groups:</p>
   <div class="tablewrap"><table><tr><th>Category</th><th>Company</th><th>Rates table</th></tr>
     <tr><td>NGI OLD / NGI NEW / NGI NO</td><td>NGI</td><td>Tea &amp; Conveyance 235 / 40 / 0 · Meal 75</td></tr>
@@ -389,14 +385,14 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
     <tr><td>Overview</td><td><span class="field">Gender</span>, <span class="field">Date of Joining</span>, <span class="field">Company</span>, <span class="field">Status</span></td><td>Gender decides maternity/paternity leave. Status = Active.</td></tr>
     <tr><td>Attendance</td><td><span class="field">Attendance Device ID</span></td><td>The number on the fingerprint machine — must match exactly.</td></tr>
     <tr><td>Attendance</td><td><span class="field">Default Shift</span>, <span class="field">Holiday List</span></td><td>Their shift. Holiday list only for women (the Teej list); others use the company's.</td></tr>
-    <tr><td>Nepal HRMS</td><td><span class="field">Employee Category</span></td><td>Plant or Officer &amp; Admin.</td></tr>
+    <tr><td>Nepal HRMS</td><td><span class="field">Overtime Eligible</span> <i>or</i> <span class="field">Replacement Leave for Holiday Work</span></td><td>Tick one, never both: Overtime Eligible for staff below officer level, Replacement Leave for officers and admin. With neither, the person cannot go on an Overtime Sheet for holiday work.</td></tr>
     <tr><td>Nepal HRMS</td><td><span class="field">Allowance Category</span></td><td>Their tea group (OLD / NEW / NO).</td></tr>
     <tr><td>Payroll Inputs</td><td><span class="field">SSF Applicable</span></td><td>Ticked if in the Social Security Fund.</td></tr>
     <tr><td>Payroll Inputs</td><td><span class="field">Initial Basic</span>, <span class="field">HRA Eligible</span>, <span class="field">Gas Allowance</span>, <span class="field">Education Allowance</span></td><td>NGI and NGN only, from the salary sheet.</td></tr>
     <tr><td>Payroll Inputs</td><td><span class="field">Dearness Allowance</span>, <span class="field">Other Allowance</span>, <span class="field">Fixed Allowance</span>, <span class="field">Fuel Allowance</span>, <span class="field">Maintenance Allowance</span></td><td>Monthly amounts from the salary sheet (fixed and maintenance: NGG, NGK).</td></tr>
     <tr><td>Payroll Inputs</td><td><span class="field">Late Fine Exempt</span></td><td>Only managers (CEO, AGM, managers, assistant managers, company secretary).</td></tr>
   </table></div>
-  <div class="note tip"><b class="t">Many people at once</b><p>Use <span class="screen">Employee Category Tool</span> to set the category for a whole department in one go. For a whole company's salary sheet, the system team can load it in one step (it matches people by code or name).</p></div>
+  <div class="note tip"><b class="t">Many people at once</b><p>In the <span class="screen">Employee</span> list, filter (for example by Department), select the people, then <span class="btn">Edit</span> → <span class="field">Overtime Eligible</span> (or <span class="field">Replacement Leave for Holiday Work</span>) to set the tick for all of them in one go. For a whole company's salary sheet, the system team can load it in one step (it matches people by code or name).</p></div>
 </section>
 
 <section id="s9" class="stage">
@@ -505,7 +501,7 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
   <ul class="plain">
     <li>The fingerprint machine is sending punches: <span class="screen">Employee Checkin</span> shows today's punches.</li>
     <li><span class="screen">Monthly Attendance BS</span> shows attendance, with Late and Shift filled in.</li>
-    <li>Every person who should be paid has an Employee Category, an Allowance Category (if they get tea) and a submitted Salary Structure Assignment.</li>
+    <li>Every person who should be paid has Overtime Eligible or Replacement Leave for Holiday Work ticked, an Allowance Category (if they get tea) and a submitted Salary Structure Assignment.</li>
     <li>The accountant has filled the Accounts rows (stage 16) and set Staff Advance to Receivable (stage 2).</li>
   </ul>
 </section>
@@ -624,17 +620,18 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
 
 <section id="category">
   <h2>Who gets overtime</h2>
-  <p class="sub">Each person has an <b>Employee Category</b>. It decides overtime money or replacement leave.</p>
+  <p class="sub">Each person has two ticks on their <b>Employee</b> record (Nepal HRMS section): <b>Overtime Eligible</b> or <b>Replacement Leave for Holiday Work</b>. Tick one, never both — the save refuses both.</p>
   <div class="tablewrap"><table>
-    <tr><th>Category</th><th>Works on a holiday →</th><th>Extra hours →</th></tr>
-    <tr><td><b>Plant</b></td><td>Overtime money</td><td>Overtime money + meals</td></tr>
-    <tr><td><b>Officer &amp; Admin</b></td><td>Replacement leave day</td><td>Nothing extra</td></tr>
+    <tr><th>Tick</th><th>Works on a holiday →</th><th>Extra hours →</th></tr>
+    <tr><td><b>Overtime Eligible</b></td><td>Overtime money</td><td>Overtime money + meals</td></tr>
+    <tr><td><b>Replacement Leave for Holiday Work</b></td><td>Replacement leave day</td><td>Nothing extra</td></tr>
   </table></div>
+  <p>With neither ticked, the person cannot go on an Overtime Sheet for holiday work.</p>
   <h3>Change many people at once</h3>
   <ol class="steps">
-    <li>Open <span class="screen">Employee Category Tool</span>.</li>
-    <li>Pick <span class="field">Company</span>, then <span class="field">Assign Category</span>. Use Department or Designation to narrow the list.</li>
-    <li>Tick the people and click <span class="btn">Assign Category</span>.</li>
+    <li>Open the <span class="screen">Employee</span> list. Filter by Company, Department or Designation.</li>
+    <li>Select the people, then <span class="btn">Edit</span>.</li>
+    <li>Choose <span class="field">Overtime Eligible</span> (or <span class="field">Replacement Leave for Holiday Work</span>) and set it to Yes.</li>
   </ol>
 </section>
 
@@ -643,7 +640,7 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
   <p class="sub">Do these in order. If one is missed, the person will be missing from salary.</p>
   <ol class="steps">
     <li><span class="screen">Employee</span> — name, <span class="field">Gender</span>, <span class="field">Date of Joining</span>, <span class="field">Company</span>, Department, Designation.</li>
-    <li>On the same Employee, in <b>Payroll Inputs</b>: <span class="field">Employee Category</span>, <span class="field">Allowance Category</span> (tea group), <span class="field">SSF Applicable</span>, and their Dearness / Other / Fixed allowance amounts. Tick HRA, Gas or Education if they get it. Tick <span class="field">Late Fine Exempt</span> only for managers.</li>
+    <li>On the same Employee, in <b>Payroll Inputs</b>: tick <span class="field">Overtime Eligible</span> or <span class="field">Replacement Leave for Holiday Work</span>, <span class="field">Allowance Category</span> (tea group), <span class="field">SSF Applicable</span>, and their Dearness / Other / Fixed allowance amounts. Tick HRA, Gas or Education if they get it. Tick <span class="field">Late Fine Exempt</span> only for managers.</li>
     <li><span class="screen">Shift Assignment Tool</span> — give them a shift.</li>
     <li><span class="screen">Leave Policy Assignment</span> — give them their company's leave policy (probation policy if on probation).</li>
     <li><span class="screen">Salary Structure Assignment</span> — choose the company structure (for example <b>NGN Staff 83/84</b>), <span class="field">From Date</span> = first day of the BS month, <span class="field">Base</span> = their <b>Basic</b>. Labourers use the <b>Daily Wage</b> structure with Base = day rate. <span class="btn">Submit</span>.</li>
@@ -910,29 +907,29 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
 </article>
 </div></section>
 <section class="refgroup" id="c-people"><h3 class="grp">People</h3><div class="reflist">
-<article class="scr" data-name="employee people one person: company, gender, joining date, shift, device id, categories and pay inputs.">
+<article class="scr" data-name="employee people one person: company, gender, joining date, shift, device id, overtime tick, tea group and pay inputs.">
   <header><h4>Employee</h4><span class="pill p-use">In use</span></header>
   <dl>
-    <dt>What it is</dt><dd>One person: company, gender, joining date, shift, device ID, categories and pay inputs.</dd>
+    <dt>What it is</dt><dd>One person: company, gender, joining date, shift, device ID, overtime / replacement-leave tick, tea group and pay inputs.</dd>
     <dt>When to use</dt><dd>When someone joins, changes, or leaves (Part A stage 8).</dd>
     <dt>Buttons</dt><dd><span class="btn">Create › User</span> <span class="btn">Salary Structure Assignment and more under Connections</span></dd>
     <dt>Comes from → Leads to</dt><dd>Job Offer (optional) <b class="arrow">→</b> Attendance · Leave · Salary</dd>
   </dl>
 </article>
-<article class="scr" data-name="employee category people plant (paid overtime) or officer &amp; admin (replacement leave).">
-  <header><h4>Employee Category</h4><span class="pill p-use">In use</span></header>
+<article class="scr" data-name="employee category people no longer used: a label only. overtime or replacement leave is ticked on the employee.">
+  <header><h4>Employee Category</h4><span class="pill p-no">No longer used</span></header>
   <dl>
-    <dt>What it is</dt><dd>Plant (paid overtime) or Officer &amp; Admin (replacement leave).</dd>
-    <dt>When to use</dt><dd>At setup; the two categories rarely change.</dd>
+    <dt>What it is</dt><dd>A label only. Overtime or replacement leave is now ticked on the Employee (Overtime Eligible / Replacement Leave for Holiday Work).</dd>
+    <dt>When to use</dt><dd>Not needed.</dd>
     <dt>Buttons</dt><dd><span class="btn">Save</span></dd>
-    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> Employee · Overtime Sheet · reports</dd>
+    <dt>Comes from → Leads to</dt><dd>— <b class="arrow">→</b> nothing</dd>
   </dl>
 </article>
-<article class="scr" data-name="employee category tool people sets the employee category for many people at once.">
-  <header><h4>Employee Category Tool</h4><span class="pill p-use">In use</span></header>
+<article class="scr" data-name="employee category tool people no longer used: sets the employee category label for many people at once.">
+  <header><h4>Employee Category Tool</h4><span class="pill p-no">No longer used</span></header>
   <dl>
-    <dt>What it is</dt><dd>Sets the Employee Category for many people at once.</dd>
-    <dt>When to use</dt><dd>When a department&#x27;s rule changes, or at setup.</dd>
+    <dt>What it is</dt><dd>Sets the Employee Category label for many people at once. The label decides nothing; use Employee list → Edit for the overtime / replacement-leave ticks.</dd>
+    <dt>When to use</dt><dd>Not needed.</dd>
     <dt>Buttons</dt><dd><span class="btn">Assign Category</span></dd>
     <dt>Comes from → Leads to</dt><dd>Employee Category <b class="arrow">→</b> Employee</dd>
   </dl>
@@ -1255,7 +1252,7 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
     <dt>What it is</dt><dd>The day&#x27;s approved extra work: who, why. After the day, measures hours from punches.</dd>
     <dt>When to use</dt><dd>On or before the day of extra work.</dd>
     <dt>Buttons</dt><dd><span class="btn">Measure from Attendance</span> <span class="btn">Submit</span></dd>
-    <dt>Comes from → Leads to</dt><dd>Employee Category <b class="arrow">→</b> Prepare Payroll Inputs → Overtime on the slip</dd>
+    <dt>Comes from → Leads to</dt><dd>Employee (Overtime Eligible / Replacement Leave tick) <b class="arrow">→</b> Prepare Payroll Inputs → Overtime on the slip</dd>
   </dl>
 </article>
 </div></section>

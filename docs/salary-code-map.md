@@ -79,22 +79,22 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 | 2.19 | `heal_unlinked_checkins` | [attendance_self_heal.py:58](../avinashgroup_app/biometric/attendance_self_heal.py#L58) | Daily (`daily_long`, midnight): every (employee, day) of the last 45 days with unlinked checkins, whose shift has auto attendance on and has ended, goes through `reconcile_employee_day`. | Shift Type `enable_auto_attendance`, `last_sync_of_checkin`, `process_attendance_after` |
 | 2.20 | `reconcile_employee_day` | [attendance_fix.py:266](../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L266) | A non-Absent day: link orphan punches and refresh values. An Absent or empty day with punches: replace it with attendance built by `get_attendance` + `mark_attendance_and_link_log`. | Employee Checkin, Attendance |
 | 2.21 | `AttendanceFix.on_submit` | [attendance_fix.py:90](../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L90) | HR's Attendance Fix: queues the same per-day reconcile over a date range for one shift. | Attendance Fix |
-| 2.22 | `measure_day` | [shift_day.py:112](../avinashgroup_app/hr/shift_day.py#L112) | Late and early-exit minutes (full working days only) and overtime hours to the half hour (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13). | Attendance `custom_*` deviation fields |
+| 2.22 | `measure_day` | [shift_day.py:111](../avinashgroup_app/hr/shift_day.py#L111) | Late and early-exit minutes (full working days only) and overtime hours to the half hour (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13). | Attendance `custom_*` deviation fields |
 
 ## 3. Overtime Sheet and settlement
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 3.1 | `OvertimeSheet.apply_rules` | [overtime_sheet.py:55](../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L55) | Sheet validate: runs `evaluate` on every row, writes back work type, day type, entitlement, category, shift; lists all refused rows at once. | — |
-| 3.2 | `evaluate` | [overtime.py:145](../avinashgroup_app/hr/overtime.py#L145) | Day type × employee category → entitlement Overtime or Replacement Leave; refuses rows the policy does not allow. | Employee Category `ot_eligible`, `compensatory_leave` |
+| 3.1 | `OvertimeSheet.apply_rules` | [overtime_sheet.py:55](../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py#L55) | Sheet validate: runs `evaluate` on every row, writes back work type, day type, entitlement, shift; lists all refused rows at once. | — |
+| 3.2 | `evaluate` | [overtime.py:150](../avinashgroup_app/hr/overtime.py#L150) | Day type × the employee's two ticks → entitlement Overtime or Replacement Leave; refuses rows the policy does not allow. | Employee `custom_ot_eligibility`, `custom_compensatory_leave` |
 | 3.3 | `get_day_type` | [overtime.py:60](../avinashgroup_app/hr/overtime.py#L60) | Holiday, Weekly Off or Working Day from the employee's own holiday list. | Holiday List |
 | 3.4 | `get_shift_window` | [overtime.py:91](../avinashgroup_app/hr/overtime.py#L91) | The shift rostered on a date (dated Shift Assignment, else Default Shift) with its start and end datetimes. | Shift Assignment, Employee `default_shift`, Shift Type |
-| 3.5 | `get_category_rule` | [overtime.py:121](../avinashgroup_app/hr/overtime.py#L121) | Employee's category and its OT / replacement-leave flags; throws when the employee has no category. | Employee `custom_employee_category` |
+| 3.5 | `get_holiday_work_rule` | [overtime.py:121](../avinashgroup_app/hr/overtime.py#L121) | The Employee's Overtime Eligible / Replacement Leave for Holiday Work ticks (either/or, enforced by `validate_employee_holiday_rule`). | Employee `custom_ot_eligibility`, `custom_compensatory_leave` |
 | 3.6 | `on_sheet_submit` | [overtime_settlement.py:189](../avinashgroup_app/hr/overtime_settlement.py#L189) | Sheet submit: measures the never-measured rows if the work date is already past. | — |
 | 3.7 | `measure_pending` | [overtime_settlement.py:200](../avinashgroup_app/hr/overtime_settlement.py#L200) | Daily job: measures never-measured rows of submitted sheets from the last 62 days. | — |
 | 3.8 | `measure` | [overtime_settlement.py:126](../avinashgroup_app/hr/overtime_settlement.py#L126) | The sheet's Measure button: re-measures every row (`measure_sheet`). | — |
 | 3.9 | `measure_row` | [overtime_settlement.py:70](../avinashgroup_app/hr/overtime_settlement.py#L70) | Holiday work: hours worked; overtime: hours outside the shift; both rounded to the half hour. 0 hours with a note when there is no attendance, it is Absent, or there is one punch. | Attendance, Shift Type |
-| 3.10 | `hours_outside_shift` | [overtime.py:289](../avinashgroup_app/hr/overtime.py#L289) | Hours of the in–out window that fall before shift start or after shift end. | — |
+| 3.10 | `hours_outside_shift` | [overtime.py:296](../avinashgroup_app/hr/overtime.py#L296) | Hours of the in–out window that fall before shift start or after shift end. | — |
 | 3.11 | `round_to_half_hour` | [shift_day.py:42](../avinashgroup_app/hr/shift_day.py#L42) | Nearest half hour, halves rounding up. | — |
 
 The measured hours stay on the sheet rows (`worked_hours`); payroll reads them in 4.16.
@@ -190,24 +190,24 @@ Run after the controller's `validate` (stages 6–7), in the order `hooks.py` re
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 8.1 | `add_employee_allowances` | [hooks.py:352](../avinashgroup_app/hooks.py#L352) | Registration (first). | — |
+| 8.1 | `add_employee_allowances` | [hooks.py:355](../avinashgroup_app/hooks.py#L355) | Registration (first). | — |
 | 8.2 | `add_employee_allowances` | [salary_slip.py:33](../avinashgroup_app/payroll/salary_slip.py#L33) | Draft slips: adds, updates or drops the Monthly and % of Initial Basic allowance rows, then reruns `calculate_net_pay`. | Assignment Allowance; Salary Component `custom_allowance_kind` |
 | 8.3 | `fixed_allowance_amounts` | [allowance.py:283](../avinashgroup_app/payroll/allowance.py#L283) | Full-month amount per fixed allowance: the Rate, or Rate % of the assignment's Initial Basic. | Assignment `custom_initial_basic` |
 | 8.4 | `current_assignment` | [allowance.py:221](../avinashgroup_app/payroll/allowance.py#L221) | The submitted assignment in force on the date (cached per request). | Salary Structure Assignment |
-| 8.5 | `apply_tax_reliefs` | [hooks.py:359](../avinashgroup_app/hooks.py#L359) | Registration (second). | — |
+| 8.5 | `apply_tax_reliefs` | [hooks.py:362](../avinashgroup_app/hooks.py#L362) | Registration (second). | — |
 | 8.6 | `apply_tax_reliefs` | [tax_relief.py:77](../avinashgroup_app/payroll/tax_relief.py#L77) | When a retirement excess or women's rebate applies, recomputes the tax row from HRMS's figures and resets net pay; otherwise leaves the slip alone. | — |
 | 8.7 | `retirement_excess` | [tax_relief.py:124](../avinashgroup_app/payroll/tax_relief.py#L124) | Retirement contributions for the year above the lower cap, put back into taxable income. | Employee Tax Exemption Category `custom_is_retirement_contribution`, `max_amount`, `custom_cap_percent_of_income` |
 | 8.8 | `women_rebate_fraction` | [tax_relief.py:182](../avinashgroup_app/payroll/tax_relief.py#L182) | The slab's rebate percent for a woman ticked Women's Tax Rebate, else 0. | Income Tax Slab `custom_women_rebate_percent`; Employee `gender`, `custom_womens_tax_rebate` |
-| 8.9 | `apply_income_tax_override` | [hooks.py:363](../avinashgroup_app/hooks.py#L363) | Registration (third). | — |
+| 8.9 | `apply_income_tax_override` | [hooks.py:366](../avinashgroup_app/hooks.py#L366) | Registration (third). | — |
 | 8.10 | `apply_income_tax_override` | [income_tax.py:154](../avinashgroup_app/payroll/income_tax.py#L154) | Stores the computed tax in `custom_income_tax_computed`; with Override ticked, sets the tax row to the typed amount and resets net pay. | Salary Slip `custom_override_income_tax`, `custom_income_tax_override` |
 | 8.11 | `get_tax_row` | [income_tax.py:146](../avinashgroup_app/payroll/income_tax.py#L146) | The deduction row with `variable_based_on_taxable_salary`. | — |
 | 8.12 | `FY_8384_SLABS` | [income_tax.py:31](../avinashgroup_app/payroll/income_tax.py#L31) | The 83/84 rate table. Not read by the slip: `hr/year_setup.py` uses it to create the Income Tax Slab record, which the slip reads (6.18). | — |
-| 8.13 | `validate_salary_slip` | [hooks.py:370](../avinashgroup_app/hooks.py#L370) | Registration (fourth). | — |
+| 8.13 | `validate_salary_slip` | [hooks.py:373](../avinashgroup_app/hooks.py#L373) | Registration (fourth). | — |
 | 8.14 | `validate_salary_slip` | [bs_period_guard.py:70](../avinashgroup_app/payroll/bs_period_guard.py#L70) | Refuses a slip whose start date differs from its Payroll Entry's. | Payroll Entry `start_date` |
-| 8.15 | `build_daily_breakdown` | [hooks.py:373](../avinashgroup_app/hooks.py#L373) | Registration (fifth). | — |
+| 8.15 | `build_daily_breakdown` | [hooks.py:376](../avinashgroup_app/hooks.py#L376) | Registration (fifth). | — |
 | 8.16 | `build_daily_breakdown` | [daily_breakdown.py:64](../avinashgroup_app/payroll/daily_breakdown.py#L64) | Fills the Daily Breakdown table; logs and carries on if it fails. | — |
 | 8.17 | `breakdown_rows` | [daily_breakdown.py:76](../avinashgroup_app/payroll/daily_breakdown.py#L76) | Per day: paid weight × daily rate, attendance items spread by `evaluate_rule`, running balance; month-end rows and a Rounding / Adjustment row to reach net pay. | Attendance, Holiday List |
-| 8.18 | `set_bs_dates` | [hooks.py:460](../avinashgroup_app/hooks.py#L460) | Registration (sixth, from a loop further down `hooks.py`). | — |
+| 8.18 | `set_bs_dates` | [hooks.py:463](../avinashgroup_app/hooks.py#L463) | Registration (sixth, from a loop further down `hooks.py`). | — |
 | 8.19 | `set_bs_dates` | [bs_dates.py:75](../avinashgroup_app/hr/bs_dates.py#L75) | Writes the miti fields and `custom_bs_month` from the slip's dates; changes no amount. | — |
 
 ## 9. Journal on submit

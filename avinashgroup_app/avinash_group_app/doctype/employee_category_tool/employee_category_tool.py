@@ -1,19 +1,18 @@
 """Put many employees into an Employee Category at once.
 
-Setting the category employee by employee is the job this replaces: 295 staff
-across seven companies, where the one person missed is paid overtime they are not
-owed, or denied the replacement leave they are. It works the way the HRMS Shift
-Assignment Tool does — filters on top, a checkbox grid of the employees they
+Since 2026-10-13 the category is a label only: overtime versus replacement leave
+is ticked on each Employee (`custom_ot_eligibility`, `custom_compensatory_leave`),
+so assigning a category here changes nobody's pay or leave. It works the way the
+HRMS Shift Assignment Tool does — filters on top, a checkbox grid of the employees they
 match, one button — and reuses the same `hrms.*` front-end helpers, so it looks
 and behaves like the tools HR already uses.
 
 The list leaves out anyone already in the chosen category, so what is shown is
 only who would actually change.
 
-Each employee is saved through the ORM, not written with SQL: `fetch_from` then
-sets `custom_ot_eligibility` from the category, and the change lands in the
-employee's history. One employee failing validation is reported and skipped; it
-does not stop the rest.
+Each employee is saved through the ORM, not written with SQL, so the change lands
+in the employee's history. One employee failing validation is reported and
+skipped; it does not stop the rest.
 """
 
 import frappe

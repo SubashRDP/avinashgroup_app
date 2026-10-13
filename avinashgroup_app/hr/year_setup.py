@@ -15,8 +15,7 @@ pointing at the new year's tax slab, because HRMS reads the slab from the
 assignment and would otherwise tax the new year at last year's rates.
 
 It creates only what belongs to the YEAR. The standing setup a year rests on —
-the hours each company works, what an employee category entitles someone to, how
-many leave days a year is worth — is the client's answer, not this module's, and
+the hours each company works, how many leave days a year is worth — is the client's answer, not this module's, and
 `require_standing_setup` refuses the run with the whole list of what is absent
 rather than inventing any of it. This module used to hold those answers as tables
 in code, and they were wrong in the ways guesses are wrong: four of the seven
@@ -32,13 +31,15 @@ So before it will run, these must exist:
     the year in `payroll.income_tax.TAX_SLABS_BY_YEAR`. Last year's rates are
     never copied;
   * per company: a Shift Type, and submitted Leave Policies titled
-    `<ABBR> Regular <year>` and `<ABBR> Probation <year>`;
-  * group-wide: an Employee Category for paid overtime and one for replacement
-    leave.
+    `<ABBR> Regular <year>` and `<ABBR> Probation <year>`.
+
+Overtime versus replacement leave is not year setup: it is two ticks on each
+Employee (Overtime Eligible, Replacement Leave for Holiday Work), carried from
+year to year.
 
 What it deliberately does NOT do:
 
-  * Invent a shift, a category or a leave entitlement — see above.
+  * Invent a shift or a leave entitlement — see above.
   * Put festivals on a holiday list. It builds the Saturdays; four of the five
     festivals move with the moon, so the dates are HR's to enter with Holiday
     Bulk Update, and every list it creates comes back with a warning saying so.
@@ -127,8 +128,8 @@ def setup_year(fiscal_year, companies=None, assign_leave=True, roll_pay=True):
 def require_standing_setup(fiscal_year, companies):
 	"""Refuse to start a year until the standing setup it rests on exists.
 
-	None of this is year data, so none of it is invented here. A shift's hours, a
-	category's policy and a leave entitlement are the client's answers, and this
+	None of this is year data, so none of it is invented here. A shift's hours and a
+	leave entitlement are the client's answers, and this
 	module used to hold guesses at them: four of the seven companies got a 9-to-5
 	nobody had confirmed, and a Leave Policy was submitted from a table in code.
 	A wrong shift or entitlement is worse than a missing one, because it looks
@@ -138,12 +139,6 @@ def require_standing_setup(fiscal_year, companies):
 	for HR to work through, rather than a refusal per run.
 	"""
 	missing = []
-
-	for policy, label in (("ot_eligible", "paid overtime"), ("compensatory_leave", "replacement leave")):
-		if not frappe.db.exists("Employee Category", {policy: 1}):
-			missing.append(
-				_("No Employee Category for {0} — one record per answer is needed").format(label)
-			)
 
 	for company in companies:
 		abbr = frappe.db.get_value("Company", company, "abbr")

@@ -90,7 +90,7 @@ A meal is part of **overtime the company asked for** (rule of 2026-10-09):
 
 | Check, per attendance day | Meals |
 |---|---|
-| Employee not **OT Eligible** | 0 |
+| Employee not ticked **Overtime Eligible** | 0 |
 | Not on a **submitted Overtime Sheet** for that date with entitlement **Overtime** (stayed late on their own, replacement-leave staff) | 0 |
 | Working day: punched in **≥ 1.5 h before** the shift start | +1 |
 | Working day: punched out **≥ 1.5 h after** the shift end | +1 |

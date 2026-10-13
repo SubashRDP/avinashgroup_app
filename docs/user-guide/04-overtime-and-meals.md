@@ -8,12 +8,14 @@
 
 If someone did work extra but nobody made a sheet, make the sheet afterwards (past dates are allowed) and get it approved before payroll.
 
-## 4.2 What each category earns
+## 4.2 What each person earns
 
-| Employee Category | Worked on a holiday or Saturday | Worked before / after the shift on a working day |
+Set by one of two ticks on the Employee (Chapter 2, section 2.2):
+
+| Tick on the Employee | Worked on a holiday or Saturday | Worked before / after the shift on a working day |
 |---|---|---|
-| **Operation** (OT-eligible) | Overtime for every hour worked + 2 meals | Overtime for the hours outside the shift + up to 2 meals |
-| **Officer & Admin** | 1 day of **Replacement Leave** (½ day if the attendance is a Half Day) | Not allowed — the sheet refuses it |
+| **Overtime Eligible** (staff below officer level) | Overtime for every hour worked + 2 meals | Overtime for the hours outside the shift + up to 2 meals |
+| **Replacement Leave for Holiday Work** (officer and admin level) | 1 day of **Replacement Leave** (½ day if the attendance is a Half Day) | Not allowed — the sheet refuses it |
 
 A person never gets both overtime and replacement leave for the same day.
 
@@ -28,8 +30,8 @@ A person never gets both overtime and replacement leave for the same day.
 3. In **Employees**, add each person who was asked to work. **Do not type any times.** Each row fills itself:
    - **Work Type** — "Work on Holiday" or "Overtime", chosen from the person's day. Change it only if it is wrong.
    - **Day** — Holiday, Weekly Off or Working Day, from the person's own holiday list.
-   - **Earns** — Overtime or Replacement Leave, from the person's category.
-   - **Category** and **Shift**.
+   - **Earns** — Overtime or Replacement Leave, from the tick on the person's Employee record.
+   - **Shift**.
 4. Save. If any row breaks the policy, all the problems are listed together under "**Rows the policy does not allow**". Fix or remove those rows and save again.
 5. Submit (or send for approval, if an approval chain is set up for Overtime Sheets in your company). **Only a submitted sheet counts.**
 
@@ -39,12 +41,11 @@ One sheet can mix people: on Teej, a woman can be on "Work on Holiday" and a man
 
 | Message | Meaning and fix |
 |---|---|
-| "… has no Employee Category — set it with the Employee Category Tool first" | Set the person's category (Chapter 2) |
 | "…: … is a working day for them — choose Overtime, not Work on Holiday" | The date is not a holiday for this person. Change Work Type to Overtime |
 | "…: … is … for them — choose Work on Holiday, not Overtime" | The date is a holiday or Saturday for this person. Change Work Type to Work on Holiday |
-| "… (…) is not eligible for overtime on a working day" | An Officer & Admin person cannot get overtime on a working day. Remove the row |
+| "… is not ticked Overtime Eligible, so cannot be given overtime on a working day" | A person on Replacement Leave (officer / admin) cannot get overtime on a working day. Remove the row |
 | "… has no shift on …, so overtime beyond it cannot be measured" | Give the person a shift (Chapter 2) |
-| "…: category … earns nothing for holiday work" | The category has neither overtime nor replacement leave ticked. Ask the HR manager |
+| "… has neither Overtime Eligible nor Replacement Leave for Holiday Work ticked on their Employee record, so holiday work earns nothing" | Tick one of the two on the Employee (Chapter 2, section 2.2) |
 | "Row …: … belongs to …, not …" | The person is in another company. Use that company's sheet |
 | "Row …: … is listed twice" | Remove the second row |
 | "Already on another Overtime Sheet for this date: …" (Authorised Twice) | The person is already on another sheet for that date. Use that sheet |
@@ -91,7 +92,7 @@ A meal is part of overtime the company asked for. For each day, the meals are co
 
 | Check | Meals |
 |---|---|
-| Employee is not **OT Eligible** (not in an overtime category) | 0 |
+| Employee is not ticked **Overtime Eligible** | 0 |
 | Not on a **submitted Overtime Sheet** for that date with Earns = **Overtime** | 0 |
 | Working day: punched in **1.5 hours or more before** the shift start | +1 |
 | Working day: punched out **1.5 hours or more after** the shift end | +1 |

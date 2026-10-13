@@ -22,7 +22,7 @@ Facts about configuration come from the working site **avinas1**, read on 2026-1
 ```mermaid
 flowchart TD
     subgraph S1["01 · Masters (read by every stage)"]
-        EMP["Employee<br/>category, OT eligible, late-fine exempt,<br/>women's rebate, device ID, holiday list, shift"]
+        EMP["Employee<br/>OT eligible / replacement leave, late-fine exempt,<br/>women's rebate, device ID, holiday list, shift"]
         PAY["Salary Component / Structure / Assignment<br/>allowance rates, initial basic, SSF, tax slab"]
         CAL["Fiscal Year (BS) · Nepal BS Period<br/>Holiday Lists · Shift Types · Leave Policy"]
     end
@@ -31,7 +31,7 @@ flowchart TD
     CHK -->|"HRMS auto attendance (OFF on avinas1)<br/>Attendance Fix · Repair from Check-ins · self-heal"| ATT["Attendance<br/>status, working hours, in/out"]
     ATT -->|"validate hooks: holiday flag, deviation minutes,<br/>> 2 h late = Half Day, worked on leave = Half Day"| ATT2["Attendance (final)<br/>custom_worked_on_holiday, custom_* deviations,<br/>custom_late_excused"]
     LEAVE["Leave Application"] --> ATT
-    OTS["Overtime Sheet<br/>day type x category -> OT or Replacement Leave"] -->|"measure_row (on submit / Measure)"| OTH["worked_hours per row"]
+    OTS["Overtime Sheet<br/>day type x employee ticks -> OT or Replacement Leave"] -->|"measure_row (on submit / Measure)"| OTH["worked_hours per row"]
     ATT2 --> OTS
     OTS -->|"officer / admin on holiday"| CLR["Compensatory Leave Request"]
 
@@ -57,7 +57,7 @@ flowchart TD
 
 | # | Page | Covers |
 |---|---|---|
-| 01 | [Masters: people, time, calendar](01-masters.md) | Employee custom fields, Employee Category, Department section, Holiday Lists, Shift Types / Assignment / rotation, Leave Types and BS earned leave, Fiscal Year (BS), BS calendar, yearly setup, onboarding |
+| 01 | [Masters: people, time, calendar](01-masters.md) | Employee custom fields (incl. Overtime Eligible / Replacement Leave), Department section, Holiday Lists, Shift Types / Assignment / rotation, Leave Types and BS earned leave, Fiscal Year (BS), BS calendar, yearly setup, onboarding |
 | 01b | [Masters: pay](01b-pay-masters.md) | Payroll Settings, Nepal HRMS Settings, Payroll Period, Income Tax Slab, exemption categories, Salary Components and their rule fields, Salary Structures with Allowance Rates, Salary Structure Assignment (Allowances, Initial Basic, SSF), accounts; **appendix: every HR/payroll patch** |
 | 02 | [Check-in → Attendance](02-checkin-to-attendance.md) | Devices, ADMS and bridge intake, Employee Checkin, IN/OUT alternation, HRMS auto attendance (and that it is off), self-heal, Attendance Fix, Attendance validate hooks, leaves, holidays, unmarked = Present, backdated shifts |
 | 03 | [Shift measurement](03-shift-measurement.md) | `measure_day`, late / early minutes, Late Excused, half-day and holiday treatment, the BS attendance reports |

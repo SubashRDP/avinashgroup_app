@@ -5,7 +5,9 @@
   * a new Payroll Entry opens on the month after the last payroll;
   * Make Bank Entry refuses an unsaved or non-bank Payment Account;
   * a payroll month with no attendance is announced before slips are made;
-  * the salary sheet names an account set for two sections.
+  * the salary sheet names an account set for two sections;
+  * overtime or replacement leave is read from the Employee's own ticks, and
+    never both.
 
 Run against avinas1's own data, as the other payroll suites do; a case whose
 data is missing is skipped, never faked.
@@ -271,3 +273,68 @@ class TestNewYearSlab(FrappeTestCase):
 				year_setup.require_tax_table("99/00", year, [NGI])
 				name = year_setup.ensure_income_tax_slab(NGI, "NGI", "99/00", year)
 		self.assertEqual(frappe.db.get_value("Income Tax Slab", name, "custom_women_rebate_percent"), 10)
+
+
+class TestHolidayWorkRuleOnEmployee(FrappeTestCase):
+	"""Overtime or replacement leave is two ticks on the Employee (2026-10-13),
+	not the Employee Category — and a holiday worked earns one, never both."""
+
+	def setUp(self):
+		self.employee = frappe.db.get_value("Employee", {"status": "Active"}, "name")
+		if not self.employee:
+			self.skipTest("no active employee on this site")
+
+	def _tick(self, ot, leave):
+		frappe.db.set_value(
+			"Employee",
+			self.employee,
+			{"custom_ot_eligibility": ot, "custom_compensatory_leave": leave},
+			update_modified=False,
+		)
+
+	def _evaluate_on(self, day_type, work_type=None):
+		from avinashgroup_app.hr import overtime
+
+		with patch.object(overtime, "get_day_type", return_value=(day_type, None)), patch.object(
+			overtime, "get_shift_window", return_value=("Test Shift", None, None)
+		):
+			return overtime.evaluate(self.employee, "2026-10-03", work_type)
+
+	def test_both_ticks_are_refused(self):
+		doc = frappe.get_doc("Employee", self.employee)
+		doc.custom_ot_eligibility = 1
+		doc.custom_compensatory_leave = 1
+		with self.assertRaisesRegex(frappe.ValidationError, "not both"):
+			doc.run_method("validate")
+
+	def test_entitlement_follows_the_employee_ticks(self):
+		from avinashgroup_app.hr import overtime
+
+		self._tick(1, 0)
+		self.assertEqual(self._evaluate_on(overtime.DAY_HOLIDAY)["entitlement"], overtime.ENTITLEMENT_OVERTIME)
+		self.assertEqual(self._evaluate_on(overtime.DAY_WORKING)["entitlement"], overtime.ENTITLEMENT_OVERTIME)
+
+		self._tick(0, 1)
+		self.assertEqual(
+			self._evaluate_on(overtime.DAY_WEEKLY_OFF)["entitlement"], overtime.ENTITLEMENT_REPLACEMENT_LEAVE
+		)
+		with self.assertRaisesRegex(overtime.OvertimeRuleError, "not ticked Overtime Eligible"):
+			self._evaluate_on(overtime.DAY_WORKING)
+
+		self._tick(0, 0)
+		with self.assertRaisesRegex(overtime.OvertimeRuleError, "neither"):
+			self._evaluate_on(overtime.DAY_HOLIDAY)
+
+	def test_category_no_longer_decides(self):
+		"""A category saying the opposite changes nothing."""
+		from avinashgroup_app.hr import overtime
+		from avinashgroup_app.hr.shift_day import overtime_eligibility
+
+		leave_category = frappe.db.get_value("Employee Category", {"compensatory_leave": 1}, "name")
+		if leave_category:
+			frappe.db.set_value(
+				"Employee", self.employee, "custom_employee_category", leave_category, update_modified=False
+			)
+		self._tick(1, 0)
+		self.assertEqual(overtime.get_holiday_work_rule(self.employee), (True, False))
+		self.assertEqual(overtime_eligibility([self.employee]), {self.employee: True})

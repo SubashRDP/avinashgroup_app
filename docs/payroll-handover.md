@@ -45,8 +45,9 @@ Gotchas that cost time before:
   `publish_realtime` and `publish_progress` before running a Payroll Entry in a
   script, then call `create_salary_slips_for_employees` directly — submitting the
   entry alone creates 0 slips when the queue is stubbed.
-- The employee category field is `custom_employee_category`, not
-  `employee_category`. Same for `custom_allowance_category`.
+- Overtime vs replacement leave is two ticks on the Employee since 2026-10-13:
+  `custom_ot_eligibility` and `custom_compensatory_leave`. The old
+  `custom_employee_category` link is a label only.
 
 ---
 
@@ -71,7 +72,7 @@ on ng-group.
 
 | File | What it is |
 |---|---|
-| `hr/year_setup.py` | One call puts a whole fiscal year in place per company: holiday lists (Saturdays), leave period, payroll period, tax slab, leave policy assignments. Safe to re-run. Creates only year data — `require_standing_setup` refuses the run, listing everything absent, rather than inventing shifts, categories or entitlements. |
+| `hr/year_setup.py` | One call puts a whole fiscal year in place per company: holiday lists (Saturdays), leave period, payroll period, tax slab, leave policy assignments. Safe to re-run. Creates only year data — `require_standing_setup` refuses the run, listing everything absent, rather than inventing shifts or entitlements. |
 | `hr/shift_day.py` | The single measurement of a working day — per-day shift resolution, late minutes, OT to the nearest half hour, eligibility. Both reports and the OT settlement use it, which is why they cannot disagree. |
 | `hr/leave_ceiling.py` | Refuses an allocation that would take the year past the policy's figure. Carry-forward excluded. |
 | `hr/overtime*.py`, `shift_change.py`, `statutory_leave.py`, `holiday_lists.py` | Overtime Sheet, shift requests splitting standing assignments, maternity/paternity, holiday bulk update. |
@@ -80,7 +81,7 @@ on ng-group.
 | `payroll/advance_recovery.py` | Instalments: min(instalment, outstanding), referenced back to the Employee Advance. |
 | `payroll/onboarding.py` | Reads a company's own Excel salary sheet and builds components, structure, employee pay inputs and assignments. PROFILES per company; the 21-component catalogue lives here. |
 | `payroll/hr_journal.py` | JV Type + Document No on HR journals, and the cost-centre → expense-account routing (547101 O/O, 547102 S/D, 547103 F/P). |
-| Doctypes | Dashain Bonus, Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category, Employee Category. |
+| Doctypes | Dashain Bonus, Salary Revision, Overtime Sheet, Payroll Adjustment, Allowance Category, Employee Category (label only since 2026-10-13). |
 | Reports | Monthly Attendance BS, Yearly Leave Details BS, Salary Tax and SSF Deposit (SSF 31% / SST / remuneration tax per BS month, with deadlines). |
 | `hr/shift_backdate.py` | *(2026-09-27)* Backdated Shift Request / Shift Assignment: past days re-marked on the new shift, OT re-measured, refused into a paid month. A worked day never flips to Absent because its punches miss the new shift; it is kept and flagged. |
 | `hr/replacement_leave.py` | *(2026-09-27)* Officer / admin holiday work on an Overtime Sheet → Compensatory Leave Request (leave type **Replacement Leave**) once attendance shows the day; daily job catches late attendance. |
@@ -98,7 +99,7 @@ Run this first; the numbers move as HR fills data in.
 ```sql
 select 'active employees' k, count(*) v from tabEmployee where status='Active'
 union all select 'no device id', count(*) from tabEmployee where status='Active' and ifnull(attendance_device_id,'')=''
-union all select 'no employee category', count(*) from tabEmployee where status='Active' and ifnull(custom_employee_category,'')=''
+union all select 'neither OT nor replacement-leave tick', count(*) from tabEmployee where status='Active' and ifnull(custom_ot_eligibility,0)=0 and ifnull(custom_compensatory_leave,0)=0
 union all select 'no default shift', count(*) from tabEmployee where status='Active' and ifnull(default_shift,'')=''
 union all select 'no cost centre', count(*) from tabEmployee where status='Active' and ifnull(payroll_cost_center,'')=''
 union all select 'salary assignments 83/84', count(*) from `tabSalary Structure Assignment` where docstatus=1 and from_date='2026-07-17'
@@ -184,7 +185,7 @@ every delete — a blanket DELETE once cost 357k rows on another site.
 | Gap | Count | Consequence |
 |---|---|---|
 | Attendance Device ID | **292 of 292** | No punch reaches a person. Nothing works. |
-| Employee Category | 179 | Never paid overtime |
+| Overtime Eligible / Replacement Leave tick (was Employee Category until 2026-10-13) | 179 | Holiday work earns neither overtime nor leave |
 | Payroll Cost Center | 171 | Journal can't split O/O · S/D · F/P |
 | Allowance Category (NGI + NGN only) | 42 | No tea |
 | Default Shift | 77 | Lateness unmeasurable |
@@ -208,8 +209,8 @@ expects it filed.
 - **Which employee-category vocabulary to keep.** avinas1 uses *Operation* (78 staff, overtime) and
   *Admin & Officer* (35, compensatory leave); nepalgas uses *Plant* (238) and *Officer & Admin* (57) for the
   same two things. The flags are right on both. Renaming touches live Employee records, so it was not done —
-  `setup_year` no longer creates categories at all — it refuses until one exists for each policy — so it can no
-  longer make a second pair whatever they are called.
+  `setup_year` no longer creates categories at all. Since 2026-10-13 the categories are labels only — the rule
+  is the two ticks on each Employee — so the vocabulary question no longer affects pay.
 
 - Tick `mark_auto_attendance_on_holidays` on the shifts? It makes holiday punches
   produce Present automatically (proven in `test_shift_type.py:356`) — but a
@@ -242,8 +243,9 @@ expects it filed.
 2. Get the accountant's sign-off on the account mapping and the Staff Advance type.
 3. On ng-group: `git pull`, `bench migrate`, restart. (Watch memory — that box
    OOMs on over-provisioned gunicorn workers; 4 workers + `--max-requests 500`.)
-4. **Verify the Employee Category data on live.** It was inverted for 63 of 80
-   NGI staff on the first import and had to be rebuilt from the client's workbook.
+4. **Verify the Overtime Eligible / Replacement Leave ticks on live.** The category
+   data they were copied from was inverted for 63 of 80 NGI staff on the first
+   import and had to be rebuilt from the client's workbook.
 5. Re-enable the scheduled jobs stopped since 2026-07-28 (attendance marking
    among them) — infra checks stay green because they filter `stopped=0`.
 6. Run one company for one month in draft, compare against their Excel sheet
@@ -264,8 +266,7 @@ the 7 companies and 22 women moved to the new lists.
    `TAX_SLABS_BY_YEAR` in `payroll/income_tax.py`, or submit an Income Tax Slab
    per company effective the year's first day. `setup_year` refuses without one.
 3. **Standing setup**, or `setup_year` refuses and lists what is absent: a Shift
-   Type per company (with its punch windows), an Employee Category for paid
-   overtime and one for replacement leave, and submitted Leave Policies titled
+   Type per company (with its punch windows), and submitted Leave Policies titled
    `<ABBR> Regular <year>` / `<ABBR> Probation <year>` carrying that company's
    entitlement. None of it is invented any more — a wrong shift or entitlement is
    worse than a missing one.

@@ -85,11 +85,11 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 3.1 | `OvertimeSheet.apply_rules` | @@avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py::apply_rules@@ | Sheet validate: runs `evaluate` on every row, writes back work type, day type, entitlement, category, shift; lists all refused rows at once. | — |
-| 3.2 | `evaluate` | @@avinashgroup_app/hr/overtime.py::evaluate@@ | Day type × employee category → entitlement Overtime or Replacement Leave; refuses rows the policy does not allow. | Employee Category `ot_eligible`, `compensatory_leave` |
+| 3.1 | `OvertimeSheet.apply_rules` | @@avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py::apply_rules@@ | Sheet validate: runs `evaluate` on every row, writes back work type, day type, entitlement, shift; lists all refused rows at once. | — |
+| 3.2 | `evaluate` | @@avinashgroup_app/hr/overtime.py::evaluate@@ | Day type × the employee's two ticks → entitlement Overtime or Replacement Leave; refuses rows the policy does not allow. | Employee `custom_ot_eligibility`, `custom_compensatory_leave` |
 | 3.3 | `get_day_type` | @@avinashgroup_app/hr/overtime.py::get_day_type@@ | Holiday, Weekly Off or Working Day from the employee's own holiday list. | Holiday List |
 | 3.4 | `get_shift_window` | @@avinashgroup_app/hr/overtime.py::get_shift_window@@ | The shift rostered on a date (dated Shift Assignment, else Default Shift) with its start and end datetimes. | Shift Assignment, Employee `default_shift`, Shift Type |
-| 3.5 | `get_category_rule` | @@avinashgroup_app/hr/overtime.py::get_category_rule@@ | Employee's category and its OT / replacement-leave flags; throws when the employee has no category. | Employee `custom_employee_category` |
+| 3.5 | `get_holiday_work_rule` | @@avinashgroup_app/hr/overtime.py::get_holiday_work_rule@@ | The Employee's Overtime Eligible / Replacement Leave for Holiday Work ticks (either/or, enforced by `validate_employee_holiday_rule`). | Employee `custom_ot_eligibility`, `custom_compensatory_leave` |
 | 3.6 | `on_sheet_submit` | @@avinashgroup_app/hr/overtime_settlement.py::on_sheet_submit@@ | Sheet submit: measures the never-measured rows if the work date is already past. | — |
 | 3.7 | `measure_pending` | @@avinashgroup_app/hr/overtime_settlement.py::measure_pending@@ | Daily job: measures never-measured rows of submitted sheets from the last 62 days. | — |
 | 3.8 | `measure` | @@avinashgroup_app/hr/overtime_settlement.py::measure@@ | The sheet's Measure button: re-measures every row (`measure_sheet`). | — |

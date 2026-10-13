@@ -21,8 +21,8 @@ What the Chaitra 2082 attendance cards show, and what is reproduced here:
   O.T.            on a working day, the hours before the shift starts and after
                   it ends; on a holiday, every hour worked. Rounded to the nearest
                   half hour — 7:53 is 8, 7:34 is 7.5, 5:59 is 6. Only for staff
-                  whose category is overtime-eligible; everyone else is paid for
-                  holiday work in replacement leave instead.
+                  ticked Overtime Eligible on their Employee; everyone else is
+                  paid for holiday work in replacement leave instead.
 
 The one thing the sheet has that this does not is a hand-kept exception written
 at the foot of the Chaitra summary ("up to 12.18, after 5pm counts as 2 hours").
@@ -45,18 +45,17 @@ def round_to_half_hour(hours):
 
 
 def overtime_eligibility(employees):
-	"""{employee: bool} from each person's Employee Category.
+	"""{employee: bool} from the Overtime Eligible tick on each Employee.
 
-	No category means no overtime: eligibility is something a category grants,
-	not something an unfilled field should hand out.
+	Unticked means no overtime: eligibility is something HR grants, not
+	something an unfilled field should hand out.
 	"""
 	names = [e if isinstance(e, str) else e.name for e in employees]
 	if not names:
 		return {}
 	rows = frappe.db.sql(
-		"""select e.name, ifnull(c.ot_eligible, 0)
+		"""select e.name, ifnull(e.custom_ot_eligibility, 0)
 		from `tabEmployee` e
-		left join `tabEmployee Category` c on c.name = e.custom_employee_category
 		where e.name in %(names)s""",
 		{"names": names},
 	)

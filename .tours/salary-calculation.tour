@@ -234,7 +234,7 @@
     },
     {
       "file": "avinashgroup_app/hr/shift_day.py",
-      "line": 112,
+      "line": 111,
       "title": "2.22 measure_day",
       "description": "Late and early-exit minutes (full working days only) and overtime hours to the half hour (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13).\n\nReads: Attendance `custom_*` deviation fields"
     },
@@ -242,13 +242,13 @@
       "file": "avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py",
       "line": 55,
       "title": "3.1 OvertimeSheet.apply_rules",
-      "description": "Sheet validate: runs `evaluate` on every row, writes back work type, day type, entitlement, category, shift; lists all refused rows at once."
+      "description": "Sheet validate: runs `evaluate` on every row, writes back work type, day type, entitlement, shift; lists all refused rows at once."
     },
     {
       "file": "avinashgroup_app/hr/overtime.py",
-      "line": 145,
+      "line": 150,
       "title": "3.2 evaluate",
-      "description": "Day type × employee category → entitlement Overtime or Replacement Leave; refuses rows the policy does not allow.\n\nReads: Employee Category `ot_eligible`, `compensatory_leave`"
+      "description": "Day type × the employee's two ticks → entitlement Overtime or Replacement Leave; refuses rows the policy does not allow.\n\nReads: Employee `custom_ot_eligibility`, `custom_compensatory_leave`"
     },
     {
       "file": "avinashgroup_app/hr/overtime.py",
@@ -265,8 +265,8 @@
     {
       "file": "avinashgroup_app/hr/overtime.py",
       "line": 121,
-      "title": "3.5 get_category_rule",
-      "description": "Employee's category and its OT / replacement-leave flags; throws when the employee has no category.\n\nReads: Employee `custom_employee_category`"
+      "title": "3.5 get_holiday_work_rule",
+      "description": "The Employee's Overtime Eligible / Replacement Leave for Holiday Work ticks (either/or, enforced by `validate_employee_holiday_rule`).\n\nReads: Employee `custom_ot_eligibility`, `custom_compensatory_leave`"
     },
     {
       "file": "avinashgroup_app/hr/overtime_settlement.py",
@@ -294,7 +294,7 @@
     },
     {
       "file": "avinashgroup_app/hr/overtime.py",
-      "line": 289,
+      "line": 296,
       "title": "3.10 hours_outside_shift",
       "description": "Hours of the in–out window that fall before shift start or after shift end."
     },
@@ -660,7 +660,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 352,
+      "line": 355,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -684,7 +684,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 359,
+      "line": 362,
       "title": "8.5 apply_tax_reliefs",
       "description": "Registration (second)."
     },
@@ -708,7 +708,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 363,
+      "line": 366,
       "title": "8.9 apply_income_tax_override",
       "description": "Registration (third)."
     },
@@ -732,7 +732,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 370,
+      "line": 373,
       "title": "8.13 validate_salary_slip",
       "description": "Registration (fourth)."
     },
@@ -744,7 +744,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 373,
+      "line": 376,
       "title": "8.15 build_daily_breakdown",
       "description": "Registration (fifth)."
     },
@@ -762,7 +762,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 460,
+      "line": 463,
       "title": "8.18 set_bs_dates",
       "description": "Registration (sixth, from a loop further down `hooks.py`)."
     },

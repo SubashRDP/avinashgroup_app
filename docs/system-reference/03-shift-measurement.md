@@ -12,9 +12,9 @@ Values from avinas1 dated **2026-10-12**.
 
 | Layer | Code | Stored? | Who reads it |
 |---|---|---|---|
-| 1. Which shift on which date | [`get_shift_window`](../../avinashgroup_app/hr/overtime.py#L91) (one day) and [`ShiftRoster`](../../avinashgroup_app/hr/shift_day.py#L66) (a period) | Shift written to `Attendance.shift` | Attendance hooks, OT settlement, reports, Shift Roster page |
+| 1. Which shift on which date | [`get_shift_window`](../../avinashgroup_app/hr/overtime.py#L91) (one day) and [`ShiftRoster`](../../avinashgroup_app/hr/shift_day.py#L65) (a period) | Shift written to `Attendance.shift` | Attendance hooks, OT settlement, reports, Shift Roster page |
 | 2. Raw deviations in seconds | [`compute_shift_deviations`](../../avinashgroup_app/biometric/attendance_sync.py#L135) | **Yes**: `custom_late_entry`, `custom_early_entry`, `custom_early_exit`, `custom_late_exit` on Attendance | layer 3, meals, Early Entry / Late Stay / Late Arrival components |
-| 3. Which deviations count on which day | [`measure_day`](../../avinashgroup_app/hr/shift_day.py#L112) | No — computed on read | Late Fine (via `evaluate_rule` "Late Time"), attendance reports, slip daily breakdown |
+| 3. Which deviations count on which day | [`measure_day`](../../avinashgroup_app/hr/shift_day.py#L111) | No — computed on read | Late Fine (via `evaluate_rule` "Late Time"), attendance reports, slip daily breakdown |
 
 The **>2 h late = Half Day** rule is not here: it is an Attendance validate hook that changes the status ([02 §5](02-checkin-to-attendance.md#5-attendance-validate-hrms-first-then-our-four-hooks)). Layer 3 then *reads* the Half Day status and stops charging late minutes for it.
 
@@ -24,7 +24,7 @@ The **>2 h late = Half Day** rule is not here: it is an Attendance validate hook
 
 | | |
 |---|---|
-| **What** | `get_shift_window(employee, date)` → `(shift_type, start_dt, end_dt)`: the latest-starting **submitted, Active Shift Assignment** covering the date, else the Employee's **Default Shift**; end moves to the next day if ≤ start (overnight). `(None, None, None)` if unrostered. `ShiftRoster(employees, start, end).shift_on(employee, day)` answers the same question for a whole period with one query ([`shift_on`](../../avinashgroup_app/hr/shift_day.py#L102)). |
+| **What** | `get_shift_window(employee, date)` → `(shift_type, start_dt, end_dt)`: the latest-starting **submitted, Active Shift Assignment** covering the date, else the Employee's **Default Shift**; end moves to the next day if ≤ start (overnight). `(None, None, None)` if unrostered. `ShiftRoster(employees, start, end).shift_on(employee, day)` answers the same question for a whole period with one query ([`shift_on`](../../avinashgroup_app/hr/shift_day.py#L101)). |
 | **Why** | `ShiftRoster` docstring: shift changes split an assignment in two (`hr/shift_change.py`), so one month can hold two shifts; resolving once per employee "shows whichever assignment happened to sort last for the whole month". Same precedence as HRMS. |
 | **Triggered by** | `set_shift_deviation_fields` fills a blank `Attendance.shift` from `get_shift_window` ([`get_shift_window(doc.employee`](../../avinashgroup_app/biometric/attendance_override.py#L38)); OT settlement; Monthly Attendance BS ([`ShiftRoster(employees`](../../avinashgroup_app/avinash_group_app/report/monthly_attendance_bs/monthly_attendance_bs.py#L100)); the Shift Roster page ([`roster`](../../avinashgroup_app/hr/shift_roster.py#L30)); shift rotation. |
 | **Config on avinas1** | 0 Shift Assignments; 4 employees have `default_shift` (all `NGI 9:00 AM to 5:00 PM`); both Shift Types run 09:00–17:00, `custom_in_rotation = 0`. Everyone else has **no shift** → no deviations, no late rule, no late fine, no meals. |
@@ -53,11 +53,11 @@ measure_day(att, is_holiday=False, ot_eligible=False) -> {late_minutes, early_ex
 | Only **worked** statuses count: Present, Work From Home, Half Day ([`WORKED_STATUSES`](../../avinashgroup_app/hr/shift_day.py#L39)). Absent / On Leave → all zero. | line 119 | Nothing to measure on a day not worked. |
 | **Late minutes** = `custom_late_entry` / 60; **early-exit minutes** = `custom_early_exit` / 60 — only on a **non-holiday, non-Half-Day** row. | lines 124–126 | "A holiday has no start time to be late for, and a half day is already its own penalty." 09:08 on a 9 AM shift is 8 minutes — no grace. |
 | Holiday = `is_holiday` argument **or** the row's `custom_worked_on_holiday`. | line 122 | — |
-| **OT hours** only when `ot_eligible` is passed True. Working day: (`custom_early_entry` + `custom_late_exit`) / 3600. Holiday: `working_hours`, or in→out punched hours when hours are 0 ([`_punched_hours`](../../avinashgroup_app/hr/shift_day.py#L138)). Rounded by [`round_to_half_hour`](../../avinashgroup_app/hr/shift_day.py#L42) (nearest half hour, halves up: 7:53 → 8, 7:34 → 7.5). | lines 128–133 | "on a working day, the hours before the shift starts and after it ends; on a holiday, every hour worked … Only for staff whose category is overtime-eligible." |
+| **OT hours** only when `ot_eligible` is passed True. Working day: (`custom_early_entry` + `custom_late_exit`) / 3600. Holiday: `working_hours`, or in→out punched hours when hours are 0 ([`_punched_hours`](../../avinashgroup_app/hr/shift_day.py#L137)). Rounded by [`round_to_half_hour`](../../avinashgroup_app/hr/shift_day.py#L42) (nearest half hour, halves up: 7:53 → 8, 7:34 → 7.5). | lines 128–133 | "on a working day, the hours before the shift starts and after it ends; on a holiday, every hour worked … Only for staff whose category is overtime-eligible." |
 
-**What `ot_eligible` means depends on the caller.** The reports pass "a submitted Overtime Sheet authorises Overtime for this person on this date" ([`get_overtime_days`](../../avinashgroup_app/hr/overtime.py#L256), policy 5.1) — not the employee's category or the Employee's `custom_ot_eligibility` tick. `evaluate_rule`'s Late Time call passes nothing, so `ot_hours` is always 0 there (it only needs the minutes).
+**What `ot_eligible` means depends on the caller.** The reports pass "a submitted Overtime Sheet authorises Overtime for this person on this date" ([`get_overtime_days`](../../avinashgroup_app/hr/overtime.py#L263), policy 5.1) — not the employee's category or the Employee's `custom_ot_eligibility` tick. `evaluate_rule`'s Late Time call passes nothing, so `ot_hours` is always 0 there (it only needs the minutes).
 
-**Dead code**: [`overtime_eligibility`](../../avinashgroup_app/hr/shift_day.py#L47) (eligibility from Employee Category `ot_eligible`) is defined here and called nowhere in the app.
+**Dead code**: [`overtime_eligibility`](../../avinashgroup_app/hr/shift_day.py#L47) (eligibility from the Employee's Overtime Eligible tick, `custom_ot_eligibility`) is defined here and called nowhere in the app.
 
 ### Late Excused
 
@@ -87,7 +87,7 @@ measure_day(att, is_holiday=False, ot_eligible=False) -> {late_minutes, early_ex
 
 ## 4. Report OT vs paid OT — two measurements
 
-Paid overtime does **not** come from `measure_day`. It comes from the Overtime Sheet row's `worked_hours`, measured by [`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L70) with [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L289) (in/out window minus overlap with the shift), rounded to the half hour, and HR may type over it ([04-overtime.md](04-overtime.md)). The comment there says "pay and the report must never disagree", and for an ordinary day (in before start, out after end) the two agree. They can differ when:
+Paid overtime does **not** come from `measure_day`. It comes from the Overtime Sheet row's `worked_hours`, measured by [`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L70) with [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L296) (in/out window minus overlap with the shift), rounded to the half hour, and HR may type over it ([04-overtime.md](04-overtime.md)). The comment there says "pay and the report must never disagree", and for an ordinary day (in before start, out after end) the two agree. They can differ when:
 
 | Case | `measure_day` (reports) | `measure_row` (pay) |
 |---|---|---|
@@ -143,7 +143,7 @@ So the "O.T." column in Monthly Attendance BS is an indicator; the paid figure i
 | **What** | Per employee per BS fiscal year: approved leave days per BS month, Total Leave Days, Total Yearly Leave (sum of `new_leaves_allocated` of submitted allocations), Total Worked on Holiday, **Leave Remaining = min(allocated, allocated − taken + worked-on-holiday)**. Mirrors the Excel "Yearly Leave Details F/Y 2082/083". |
 | **Where** | [`execute`](../../avinashgroup_app/avinash_group_app/report/yearly_leave_details_bs/yearly_leave_details_bs.py#L36), [`_count_worked_on_holiday`](../../avinashgroup_app/avinash_group_app/report/yearly_leave_details_bs/yearly_leave_details_bs.py#L237). |
 | **Why** | Comment at [`worked_holiday`](../../avinashgroup_app/avinash_group_app/report/yearly_leave_details_bs/yearly_leave_details_bs.py#L70): only non-OT staff earn leave back for holiday work; OT-eligible staff are paid instead. |
-| **Gotchas** | Same status-blind count as Work On Holiday (Absent-on-holiday rows add leave back). OT eligibility here is the Employee tick `custom_ot_eligibility`, while the Overtime Sheet decides Overtime vs Replacement Leave from **Employee Category** `ot_eligible` / `compensatory_leave` ([`get_category_rule`](../../avinashgroup_app/hr/overtime.py#L121)) — two sources of truth that can disagree. On avinas1 they agree for the 4 test employees (Officer & Admin → 0, Operation → 1). The add-back is the report's own arithmetic; whether it double-counts the Compensatory Leave allocation that replacement leave credits ([04-overtime.md](04-overtime.md)) is unverified. |
+| **Gotchas** | Same status-blind count as Work On Holiday (Absent-on-holiday rows add leave back). OT eligibility here is the Employee tick `custom_ot_eligibility`, the same tick the Overtime Sheet reads to decide Overtime vs Replacement Leave ([`get_holiday_work_rule`](../../avinashgroup_app/hr/overtime.py#L121)) — one source of truth since 2026-10-13. The add-back counts every non-OT-eligible employee, including those with neither tick, as before. The add-back is the report's own arithmetic; whether it double-counts the Compensatory Leave allocation that replacement leave credits ([04-overtime.md](04-overtime.md)) is unverified. |
 
 ---
 

@@ -132,3 +132,4 @@ avinashgroup_app.patches.allowance_rate_list
 avinashgroup_app.patches.rate_on_actual_month_days
 avinashgroup_app.patches.women_rebate_on_employee
 avinashgroup_app.patches.drop_orphan_allowance_category_field
+avinashgroup_app.patches.holiday_work_rule_on_employee

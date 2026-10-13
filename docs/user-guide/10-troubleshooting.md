@@ -26,7 +26,7 @@ Fix the cause, then on the draft Payroll Entry click **Get Employees**. If the e
 
 ### Overtime is 0 (or less than expected) for someone
 Check in this order:
-1. Is the person in an overtime category (**Operation**)? Officer & Admin get replacement leave instead.
+1. Is the person ticked **Overtime Eligible** on their Employee record? People ticked Replacement Leave for Holiday Work get leave instead.
 2. Is there a **submitted** Overtime Sheet for that date with the person on it and **Earns = Overtime**?
 3. Open the sheet: what do **Worked Hours** and **Note** say? "No attendance", "Marked absent", "Only one punch" all give 0. Fix the attendance, then click **Measure from Attendance**.
 4. On a working day only the hours **outside** the shift count. Check the person's shift for that day.
@@ -35,7 +35,7 @@ Check in this order:
 Punches without a sheet are never paid. Make the sheet for that date (past dates are fine) and get it approved.
 
 ### Meals are 0 for someone
-Meals need **all** of: OT-eligible category, a submitted Overtime Sheet for that day with Earns = Overtime, and on a working day a punch at least **1.5 hours** before the shift start or after the shift end. On a holiday on the sheet, 2 meals. See Chapter 4, section 4.6.
+Meals need **all** of: the **Overtime Eligible** tick on the Employee, a submitted Overtime Sheet for that day with Earns = Overtime, and on a working day a punch at least **1.5 hours** before the shift start or after the shift end. On a holiday on the sheet, 2 meals. See Chapter 4, section 4.6.
 
 ### Tea is less than the days present
 Tea is not paid on **holidays and Saturdays**, even if the person worked. A Half Day earns a full day of tea. Check also that the person has no inactive Tea & Conveyance row (or a lower rate) on their assignment.
@@ -141,17 +141,16 @@ The Leave Allocation is still a **draft**. Open it and **Submit** it.
 | Message | What to do |
 |---|---|
 | **Rows the policy does not allow** (list) | Read each line; the fixes are in Chapter 4, section 4.3 |
-| **… has no Employee Category — set it with the Employee Category Tool first** | Set the category (Chapter 2) |
 | **…: … is a working day for them — choose Overtime, not Work on Holiday** | Change Work Type to Overtime |
 | **…: … is … for them — choose Work on Holiday, not Overtime** | Change Work Type to Work on Holiday |
-| **… (…) is not eligible for overtime on a working day** | Officer & Admin cannot get working-day overtime; remove the row |
+| **… is not ticked Overtime Eligible, so cannot be given overtime on a working day** | Replacement-leave staff cannot get working-day overtime; remove the row |
 | **… has no shift on …, so overtime beyond it cannot be measured** | Give the person a shift |
-| **…: category … earns nothing for holiday work** | The category has neither box ticked; HR manager fixes the Employee Category |
+| **… has neither Overtime Eligible nor Replacement Leave for Holiday Work ticked …** | Tick one of the two on the Employee (Chapter 2, section 2.2) |
 | **Row …: … belongs to …, not …** | Use the person's own company's sheet |
 | **Row …: … is listed twice** | Remove the duplicate |
 | **Authorised Twice** — "Already on another Overtime Sheet for this date: …" | Use the existing sheet, or cancel it first |
 | **… is not approved yet, so there is nothing to settle** | Submit/approve the sheet before Measure from Attendance |
-| **A category gets either overtime or replacement leave for holiday work, not both** (Employee Category) | Tick only one of the two boxes |
+| **Tick either Overtime Eligible or Replacement Leave for Holiday Work, not both** (Employee) | Untick one of the two on the Employee |
 
 ## 10.6 Attendance, device and holiday messages
 

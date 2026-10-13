@@ -17,7 +17,7 @@ Last checked against the system: 9 October 2026 (23 Ashwin 2083).
 | # | Chapter | Read it when |
 |---|---|---|
 | 1 | [Overview, the Nepali calendar and the fiscal year](01-overview-and-calendar.md) | You are new, or you want to know how BS months and dates work here |
-| 2 | [Setting up an employee for payroll](02-employee-setup.md) | A new person joins, or someone's department, category, shift or pay changes |
+| 2 | [Setting up an employee for payroll](02-employee-setup.md) | A new person joins, or someone's department, overtime / replacement-leave tick, shift or pay changes |
 | 3 | [Attendance, biometric devices, leave and holidays](03-attendance-leave-holidays.md) | Every day: punches, half days, lateness, leave, holiday lists |
 | 4 | [Overtime Sheets and meals](04-overtime-and-meals.md) | Staff are asked to work late, early, on a Saturday or a holiday |
 | 5 | [Running the monthly payroll, step by step](05-monthly-payroll.md) | At the end of every BS month |

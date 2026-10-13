@@ -138,7 +138,7 @@ The year's setup is mostly done in one step by IT, but it needs information that
 | 1 | **Fiscal Year** record for the new year (for example 84/85) with **all seven companies** | Accountant / IT | Before 1 Shrawan. Without it no document can be numbered in the new year. (On 9 October 2026, 84/85 does not exist yet.) |
 | 2 | **Income tax rates** for the new year, from the Finance Act (budget speech, 15 Jestha): an **Income Tax Slab** per company, effective 1 Shrawan | Accountant | Jestha–Ashadh. The year setup refuses to run without it; last year's rates are never copied |
 | 3 | Leave Policies for the new year per company ("Regular" and "Probation"), submitted | HR | Ashadh |
-| 4 | Shift Types and Employee Categories still correct | HR | Ashadh |
+| 4 | Shift Types, and each employee's Overtime Eligible / Replacement Leave tick, still correct | HR | Ashadh |
 | 5 | IT runs the **year setup**: holiday lists (all Saturdays), leave period, payroll period, new salary assignments on the new tax slab, leave policy assignments | IT | Ashadh |
 | 6 | **Festivals** added to the new holiday lists with **Holiday Bulk Update**; Teej and Women's Day on the Women lists only | HR | Right after step 5, before the first festival |
 | 7 | **Leave encashment** for the closing year | HR + IT | Before 31 Ashadh (not built yet, see 8.5) |

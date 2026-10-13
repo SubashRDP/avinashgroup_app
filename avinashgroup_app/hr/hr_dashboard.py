@@ -508,8 +508,9 @@ SETUP_GAPS = [
 		_("No punch reaches this person")),
 	("default_shift", _("Default Shift"), "ifnull(e.default_shift,'')=''",
 		_("Lateness cannot be measured")),
-	("custom_employee_category", _("Employee Category"), "ifnull(e.custom_employee_category,'')=''",
-		_("Never paid overtime")),
+	("custom_ot_eligibility", _("Overtime Eligible / Replacement Leave"),
+		"ifnull(e.custom_ot_eligibility,0)=0 and ifnull(e.custom_compensatory_leave,0)=0",
+		_("Holiday work earns neither overtime nor leave")),
 	("payroll_cost_center", _("Payroll Cost Center"), "ifnull(e.payroll_cost_center,'')=''",
 		_("Journal cannot split by cost centre")),
 	# 71 on avinas1 (2026-09-24): an import copied the birth date into both fields.

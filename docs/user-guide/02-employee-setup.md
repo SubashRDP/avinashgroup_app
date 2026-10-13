@@ -7,7 +7,7 @@ An employee is paid correctly only when **all** of the items below are filled. W
 | # | What | Where | If it is missing |
 |---|---|---|---|
 | 1 | Department, with a Payroll Section | Employee → Department; Department → Payroll Section | Payroll submission stops with "Set Payroll Section on the Department…" |
-| 2 | Employee Category | Employee Category Tool | Cannot be put on an Overtime Sheet; never paid overtime or meals |
+| 2 | Overtime Eligible **or** Replacement Leave for Holiday Work | Employee → Nepal HRMS section | Cannot be put on an Overtime Sheet; holiday work earns neither overtime nor leave |
 | 3 | Shift | Employee → Default Shift, or a Shift Assignment | Lateness and overtime cannot be measured |
 | 4 | Attendance Device ID | Employee → Attendance Device ID | Punches never reach this person; no attendance |
 | 5 | Holiday List (women only) | Employee → Holiday List | Women do not get Teej / Women's Day off |
@@ -45,27 +45,22 @@ The section is set **once on the Department**, not on each person.
 
 The salary sheet and the journal always use the **current** department of the employee. If you move someone to another department, the next payroll books them to the new section.
 
-## 2.2 Employee Category — overtime or replacement leave
+## 2.2 Overtime or replacement leave — two ticks on the Employee
 
-The category decides what a person gets for working on a holiday or a Saturday. There are two on the system:
+What a person gets for working on a holiday or a Saturday is set **on the Employee itself**, in the **Nepal HRMS** section. Tick **one** of the two:
 
-| Category | Worked a holiday / Saturday | Worked extra on a normal day |
-|---|---|---|
-| **Operation** (staff below officer level) | Paid **overtime** + meals | Paid overtime + meals, if on an Overtime Sheet |
-| **Officer & Admin** | One day of **Replacement Leave** (compensatory leave) | Nothing — not overtime-eligible |
+| Tick on the Employee | Who | Worked a holiday / Saturday | Worked extra on a normal day |
+|---|---|---|---|
+| **Overtime Eligible** | Staff below officer level | Paid **overtime** + meals | Paid overtime + meals, if on an Overtime Sheet |
+| **Replacement Leave for Holiday Work** | Officer and admin level | One day of **Replacement Leave** (compensatory leave) | Nothing — not overtime-eligible |
 
-The **OT Eligible** tick on the Employee is filled from the category. You cannot tick it by hand.
+You cannot tick both: the save stops with "Tick either Overtime Eligible or Replacement Leave for Holiday Work, not both". With **neither** ticked, the person cannot be put on an Overtime Sheet for holiday work.
 
-**To set categories for many people at once:**
-1. Open **Employee Category Tool**.
-2. In **Assign Category**, choose the category.
-3. Narrow the list with Company, Branch, Department, Designation, or tick **Only Employees Without a Category**.
-4. The list shows only people **not** already in that category. Tick the people.
-5. Click **Assign Category** and confirm.
+**For one person:** open the Employee, tick the right box in **Nepal HRMS**, Save.
 
-If one person cannot be saved (for example a required field is empty), they are listed and skipped. The others are still done.
+**For many people at once:** Employee list → filter (Company, Department, Designation) → tick the rows → **Edit** → choose **Overtime Eligible** (or **Replacement Leave for Holiday Work**) → Yes. Do not set one tick on someone who already has the other: the save stops for them.
 
-**For one person:** open the Employee, set **Employee Category**, Save.
+> **Changed 13 October 2026.** This used to be decided by the **Employee Category** (Operation / Officer & Admin) the person was linked to. Each person's answer was copied from their category onto the two ticks, so nobody's pay or leave changed. The **Employee Category** field and the **Employee Category Tool** are still there, but they no longer decide anything.
 
 **Late Fine Exempt:** on the Employee, tick **Late Fine Exempt** for staff who are never fined for lateness (for example CEO, managers, company secretary). Their lateness is still shown in reports.
 
@@ -243,7 +238,7 @@ No new field and no new structure is needed.
 ## 2.8 Checklist for a new joiner
 
 1. Create the **Employee**: company, name, gender, date of joining, department, designation, PAN, SSF ID No., email.
-2. Set the **Employee Category** and, if needed, **Late Fine Exempt**.
+2. Tick **Overtime Eligible** or **Replacement Leave for Holiday Work**, and, if needed, **Late Fine Exempt**.
 3. Set the **Default Shift** (or a Shift Assignment from the joining date).
 4. Type the **Attendance Device ID** after enrolling the person on the device.
 5. For a woman, set the **Holiday List** to the company's Women list.

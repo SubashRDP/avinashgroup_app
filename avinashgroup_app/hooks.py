@@ -344,6 +344,9 @@ _add_doc_event(
 )
 # Women's Tax Rebate is ticked by HR for a woman whose only income is salary.
 _add_doc_event("Employee", "validate", "avinashgroup_app.payroll.tax_relief.validate_womens_tax_rebate")
+# A holiday worked earns overtime OR a replacement leave day, never both
+# (policy 2.2/2.5) — the two ticks on the Employee. See hr/overtime.py.
+_add_doc_event("Employee", "validate", "avinashgroup_app.hr.overtime.validate_employee_holiday_rule")
 
 # Fixed allowances from the employee's Allowances table, then the slip is
 # recalculated so gross, tax and net include them. Ahead of the tax hooks below,

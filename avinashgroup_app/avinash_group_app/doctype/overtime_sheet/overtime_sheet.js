@@ -77,7 +77,6 @@ function preview_row(frm, cdt, cdn) {
 			const values = {
 				day_type: r.day_type,
 				entitlement: r.entitlement,
-				employee_category: r.employee_category,
 				shift: r.shift,
 			};
 			// Only fill the work type when HR has not chosen one — never overwrite a choice.
