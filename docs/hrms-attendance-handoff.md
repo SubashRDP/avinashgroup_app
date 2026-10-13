@@ -226,8 +226,10 @@ shift's own start. On 6 AM - 2 PM: in at 07:59 stays Present, in at 08:01 become
 a Half Day with Leave Without Pay against it, whatever the hours add up to. 0
 turns the rule off for a shift.
 
+*(2026-10-13: the absolute cutoff below was removed entirely — `patches/drop_late_arrival_cutoff.py`. Only the hours rule remains.)*
+
 This replaces having to type an absolute cutoff per shift. The old
-`custom_late_arrival_cutoff_time` still applies where it is set and the earlier
+`custom_late_arrival_cutoff_time` still applied where it is set and the earlier
 of the two wins, but two shifts here had been saved with a stray 11:24:33 — on
 12 PM - 8 PM that would have made **every** attendance a half day, since the
 shift starts at 12:00. The patch clears cutoffs that can only be accidents (one

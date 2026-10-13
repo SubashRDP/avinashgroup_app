@@ -164,7 +164,7 @@ every delete — a blanket DELETE once cost 357k rows on another site.
 | Trap | What happens | Source |
 |---|---|---|
 | **Shift Type → Holiday List** | The shift's list *overrides* the employee's. Filling it deletes Teej for all 22 women, who carry it on their own list alone. Ours are all blank; keep them blank. | `hrms/hr/doctype/shift_type/shift_type.py:333` |
-| **Late Arrival Cutoff Time** | Self-filled with a clock time once and turned 2,423 of 2,808 days into Half Day. The rule now ignores a cutoff ≤ shift start and the field is cleared on create, but the root cause in Frappe was never pinned. A wave of half days is always this. | `biometric/attendance_override.py` |
+| **Late Arrival Cutoff Time** | *Removed 2026-10-13* (`patches/drop_late_arrival_cutoff.py`). It self-filled with a clock time once and turned 2,423 of 2,808 days into Half Day. Only Half Day If Late By (Hours) remains. | `biometric/attendance_override.py` |
 | **Blank payroll payable account on an assignment** | HRMS drops the employee from the run. No error, just fewer slips. | — |
 | **`depends_on_payment_days` on a structure row** | Refills from the component when the row is written. Set it on the component, not the row. Both SSF components must carry 0 or the amount prorates twice and HRMS refuses. | `payroll/onboarding.py` COMPONENTS |
 | **Auto-attendance skips holidays** | 48 Saturday punches at NGI produced nothing; for Plant staff that is paid overtime lost. Build those days with the repair tool, or see the decision in §8. | `shift_type.py:336` |

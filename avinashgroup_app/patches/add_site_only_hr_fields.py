@@ -10,9 +10,9 @@ fixture creates them. On ng-group or any fresh site:
   Attendance.custom_late_entry …  biometric/attendance_override.py writes all four
                                   on every Attendance validate — every auto
                                   attendance and every manual save would fail.
-  Shift Type.custom_late_arrival_cutoff_time
-                                  read by attendance_override, cleared by
-                                  year_setup via db_set.
+
+(It also used to create Shift Type.custom_late_arrival_cutoff_time. That rule was
+removed on 2026-10-13 — see drop_late_arrival_cutoff — so a new site never gets it.)
 
 Definitions are copied from avinas1 as they stood that day, so on the sites that
 already have them this is a no-op (`update=True` rewrites identical values).
@@ -80,21 +80,8 @@ def execute():
 					"description": "How late the employee punched out after shift end",
 				},
 			],
-			"Shift Type": [
-				{
-					"fieldname": "custom_late_arrival_cutoff_time",
-					"label": "Late Arrival Cutoff (forces Half Day)",
-					"fieldtype": "Time",
-					"insert_after": "late_entry_grace_period",
-					"description": (
-						"If the employee's first check-in is after this time, Attendance is forced "
-						"to Half Day regardless of hours worked. Leave blank to disable this rule "
-						"for this shift."
-					),
-				}
-			],
 		},
 		update=True,
 	)
-	for dt in ("Holiday List", "Attendance", "Shift Type"):
+	for dt in ("Holiday List", "Attendance"):
 		frappe.clear_cache(doctype=dt)

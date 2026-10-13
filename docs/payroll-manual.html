@@ -329,10 +329,9 @@ h3.grp{margin-top:26px}
     <tr><td><span class="field">Enable Late Entry Marking</span></td><td>ticked</td><td>Records lateness on the attendance row</td></tr>
     <tr><td><span class="field">Late Entry Grace Period</span></td><td><b>0</b></td><td>Client policy 1.2: there is no grace. 09:08 on a 9 AM shift is eight minutes late</td></tr>
     <tr><td><span class="field">Half Day If Late By (Hours)</span></td><td><b>2</b></td><td>Policy 1.2: more than two hours late is a half day regardless of hours worked</td></tr>
-    <tr><td><span class="field">Late Arrival Cutoff</span></td><td><b>EMPTY</b></td><td>An older absolute rule. If it holds a time, anyone arriving after that time is half-dayed</td></tr>
   </table></div>
-  <div class="note careful"><b class="t">The cutoff field, and why it is called out twice</b>
-    <p>Saving a Shift Type once left this field holding the clock time of the save — 08:29 — which nobody typed and nobody saw. Because the rule takes the <b>earlier</b> of the two cutoffs, every person arriving after 08:29 became a half day: <b>2,423 of 2,808 days</b> in one test month, which in real money is roughly half the month's wages for everyone. The rule now ignores a cutoff at or before the shift start, but whenever you open a Shift Type, check that this field is empty.</p></div>
+  <div class="note careful"><b class="t">One late rule</b>
+    <p><b>Half Day If Late By (Hours)</b> is the only late cutoff: more than that after the shift starts is a half day, exactly that is not. The older Late Arrival Cutoff field once filled itself with the time of the save and half-dayed <b>2,423 of 2,808 days</b>; it was removed on 2026-10-13.</p></div>
   <p><b>Shifts are per company</b> and named with the company: <span class="field">NGI 9 AM - 6 PM</span>, <span class="field">NGN 7 AM - 3 PM</span>. That way Karnali's hours can change without touching Narayani's.</p>
 </section>
 
@@ -667,8 +666,8 @@ h3.grp{margin-top:26px}
 
   <article class="case"><header><h4>A3 · Shift settings</h4></header>
     <p><b>Do:</b> open every Shift Type.</p>
-    <p><b>Expect:</b> auto attendance on; alternating IN/OUT; first-in/last-out; 120 before and after; half day under 5 h; absent under 2 h; grace <b>0</b>; half day if late by <b>2</b> hours; <span class="field">Late Arrival Cutoff</span> <b>empty</b>.</p>
-    <p><b>Why it matters:</b> a stray cutoff turned 2,423 of 2,808 days into half days once. If that field has a time nobody typed, fail this case.</p></article>
+    <p><b>Expect:</b> auto attendance on; alternating IN/OUT; first-in/last-out; 120 before and after; half day under 5 h; absent under 2 h; grace <b>0</b>; half day if late by <b>2</b> hours.</p>
+    <p><b>Why it matters:</b> the late rule half-days anyone in more than that many hours after the start. A wrong number there moves everyone's pay.</p></article>
 
   <article class="case"><header><h4>A4 · Components</h4></header>
     <p><b>Do:</b> <span class="screen">Salary Component</span> — check Income Tax, SSF, SSF Addition, Tea, Overtime.</p>
@@ -780,8 +779,8 @@ h3.grp{margin-top:26px}
     <details><summary>No tea for one person only</summary>
       <p><b>Cause:</b> their Allowance Category is empty, or it is the NO group.</p></details>
     <details><summary>Everybody is on Half Day</summary>
-      <p><b>Cause:</b> the shift's <span class="field">Late Arrival Cutoff</span> holds a stray time.</p>
-      <p><b>Fix:</b> clear it, then rebuild the month's attendance.</p></details>
+      <p><b>Cause:</b> the shift's <span class="field">Half Day If Late By (Hours)</span> is too small.</p>
+      <p><b>Fix:</b> set it to 2, then rebuild the month's attendance.</p></details>
     <details><summary>Overtime is not paid</summary>
       <p><b>Cause:</b> no submitted Overtime Sheet, the sheet was not measured, or the person is Admin &amp; Officer (who earn leave instead).</p></details>
     <details><summary>A manager was fined for lateness</summary>

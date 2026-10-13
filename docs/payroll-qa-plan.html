@@ -216,8 +216,8 @@ footer{grid-column:1/-1;color:var(--muted);font-size:15px;border-top:2px solid v
 
   <article class="case"><header><h4>A3 · Shifts</h4></header>
     <p><b>Do:</b> open <span class="screen">Shift Type</span>, then any one of them.</p>
-    <p><b>Expect, on every shift:</b> <span class="field">Enable Auto Attendance</span> ticked · <span class="field">Determine Check-in and Check-out</span> = Alternating entries · <span class="field">Working Hours Calculation</span> = First Check-in and Last Check-out · begin check-in before <b>120</b> · allow check-out after <b>120</b> · half day under <b>5</b> h · absent under <b>2</b> h · <span class="field">Late Entry Grace Period</span> = <b>0</b> · <span class="field">Half Day If Late By (Hours)</span> = <b>2</b> · <span class="field">Late Arrival Cutoff</span> <b>empty</b>.</p>
-    <div class="note careful"><b class="t">Watch this one</b><p>If <span class="field">Late Arrival Cutoff</span> holds a time nobody typed, <b>fail A3</b>. It once filled itself with the time the shift was saved and turned 2,423 of 2,808 days into half days.</p></div></article>
+    <p><b>Expect, on every shift:</b> <span class="field">Enable Auto Attendance</span> ticked · <span class="field">Determine Check-in and Check-out</span> = Alternating entries · <span class="field">Working Hours Calculation</span> = First Check-in and Last Check-out · begin check-in before <b>120</b> · allow check-out after <b>120</b> · half day under <b>5</b> h · absent under <b>2</b> h · <span class="field">Late Entry Grace Period</span> = <b>0</b> · <span class="field">Half Day If Late By (Hours)</span> = <b>2</b>.</p>
+    <div class="note careful"><b class="t">Watch this one</b><p>If <span class="field">Half Day If Late By (Hours)</span> is not <b>2</b>, <b>fail A3</b>. It is the only late cutoff (the old Late Arrival Cutoff field was removed on 2026-10-13).</p></div></article>
 
   <article class="case"><header><h4>A4 · Payroll settings</h4></header>
     <p><b>Do:</b> open <span class="screen">Payroll Settings</span> and <span class="screen">Nepal HRMS Settings</span>.</p>

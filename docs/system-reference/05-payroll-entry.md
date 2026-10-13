@@ -24,7 +24,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 
 **HRMS vs us.** HRMS owns the Payroll Entry doctype, slip creation, the accrual journal and the bank entry. We add the following:
 
-* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L521);
+* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L517);
 * the **BS month** fields and calendar;
 * one **doc_event** guard;
 * the whole **attendance engine**. HRMS has no attendance-driven pay at all, only proration by payment days (stage [06](06-salary-slip.md)).

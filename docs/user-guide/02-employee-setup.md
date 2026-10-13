@@ -81,8 +81,7 @@ Settings on each **Shift Type** that HR should check:
 |---|---|---|
 | Begin check-in before shift start time | **180** minutes | An early arrival for overtime must still be counted |
 | Allow check-out after shift end time | **240** minutes | A late check-out for overtime must still be counted. At 120, a long overtime day is marked Absent |
-| Half Day If Late By (Hours) | **2** | More than 2 hours late = half day (policy) |
-| Late Arrival Cutoff (forces Half Day) | **leave blank** | Older rule; a wrong time here turns many days into half days |
+| Half Day If Late By (Hours) | **2** | More than 2 hours late = half day (policy). This is the only late cutoff; 0 turns it off |
 | Holiday List | **leave blank** | If filled, it replaces every employee's own holiday list (women would lose Teej) |
 | Takes Part in Rotation | tick only for shifts that rotate monthly | See Chapter 3 |
 

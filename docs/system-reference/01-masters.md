@@ -99,7 +99,7 @@ Fields that **used to** be on Employee and were moved: the per-person allowance 
 
 ### 1.6 BS dates on Employee
 
-[`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) (Employee validate, registered with Leave Application, Payroll Entry and Salary Slip at [`set_bs_dates`](../../avinashgroup_app/hooks.py#L466)) writes `custom_birth_miti`, `custom_joining_miti` and `custom_relieving_miti` from the AD dates. **AD is authoritative**: a typed miti that disagrees is overwritten. Dates outside the converter's range (about 1913–2043 AD; avinas1 has 1900-01-01 placeholder birth dates) get a blank miti instead of an error ([`to_miti`](../../avinashgroup_app/hr/bs_dates.py#L53)). The hook never blocks a save; a failure is logged. Why: HR and staff speak BS (docstring of [`BS (miti) dates beside the AD dates`](../../avinashgroup_app/hr/bs_dates.py#L1)). On avinas1, 269 employees carry a joining miti. Nothing in pay reads these fields; they are for display and printing only.
+[`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) (Employee validate, registered with Leave Application, Payroll Entry and Salary Slip at [`set_bs_dates`](../../avinashgroup_app/hooks.py#L462)) writes `custom_birth_miti`, `custom_joining_miti` and `custom_relieving_miti` from the AD dates. **AD is authoritative**: a typed miti that disagrees is overwritten. Dates outside the converter's range (about 1913–2043 AD; avinas1 has 1900-01-01 placeholder birth dates) get a blank miti instead of an error ([`to_miti`](../../avinashgroup_app/hr/bs_dates.py#L53)). The hook never blocks a save; a failure is logged. Why: HR and staff speak BS (docstring of [`BS (miti) dates beside the AD dates`](../../avinashgroup_app/hr/bs_dates.py#L1)). On avinas1, 269 employees carry a joining miti. Nothing in pay reads these fields; they are for display and printing only.
 
 ### 1.7 Holiday list, default shift, department, payroll cost center
 
@@ -183,7 +183,7 @@ NGG and NGK carry 5 fewer festival days than NGI and NGN. Whether that is a deli
 |---|---|
 | **What** | Each day, any Company default or active Employee `holiday_list` that **no longer covers today** is repointed to the same kind of list (common or Women, detected by "Women" in the title) for the fiscal year that does. A missing target list is logged as an error ("Holiday lists missing for the new fiscal year"). |
 | **Why** | HRMS v15.49 keeps one list per person, not one per year. On 1 Shrawan everyone would still point at last year's list, so no Saturday or festival would be a holiday, and attendance would mark those days Absent without saying why. The switch cannot happen early, because that would take away the rest of the old year's holidays. Docstring of [`On a fiscal year's first day`](../../avinashgroup_app/hr/holiday_year_switch.py#L1); commit `24b12af`. |
-| **Where / Triggered by** | [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30), scheduled `daily_long` at [`switch_to_current_year_lists`](../../avinashgroup_app/hooks.py#L548). Scheduled Job Type enabled on avinas1. |
+| **Where / Triggered by** | [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30), scheduled `daily_long` at [`switch_to_current_year_lists`](../../avinashgroup_app/hooks.py#L544). Scheduled Job Type enabled on avinas1. |
 | **Reads / Writes** | Fiscal Year spanning today; `Company.default_holiday_list`; `Employee.holiday_list` (`update_modified=False`); Holiday List titles `"<ABBR> [Women ]<FY>"` ([`_list_for`](../../avinashgroup_app/hr/holiday_year_switch.py#L87)). |
 | **Impacts downstream** | Everything in §4.1 from the first day of the year. If the new year's lists are not built (`setup_year`) **before** 1 Shrawan, everyone has no holidays from that day. |
 | **Gotchas** | (1) It matches lists **by title**, so a renamed list breaks the switch. (2) It acts only on Active employees; a Left employee keeps the old list. (3) Its docstring says it is scheduled `daily`; hooks.py registers it as `daily_long`. Same effect. (4) For GLMI, GEPL and SGU it does nothing today: their company default is blank, and the code treats a blank as "doesn't cover", then looks for `GLMI 83/84` and logs it missing. Unverified whether that error log is firing daily on avinas1. |
@@ -192,25 +192,24 @@ NGG and NGK carry 5 fewer festival days than NGI and NGN. Whether that is a deli
 
 ## 5. Shift Types
 
-Stock HRMS owns Shift Type and its auto-attendance engine. We add four fields and one validate guard.
+Stock HRMS owns Shift Type and its auto-attendance engine. We add three fields (plus `custom_naming_series` and the audit fields).
 
 | Field | Created by | What / why | Read by |
 |---|---|---|---|
 | `custom_company` (Link, reqd) | [`custom_company`](../../avinashgroup_app/patches/add_company_to_shift_type.py#L20) | Naming `NAMING_CONFIG["Shift Type"]` (`SHIFT`) needs a company abbreviation. Without the field, **every Shift Type insert failed**, which is why the site could never create a shift and therefore never marked auto attendance (patch docstring). Also scopes rotation and `year_setup`. | Naming override; [`rotational_shifts`](../../avinashgroup_app/hr/shift_rotation.py#L87); [`require_standing_setup`](../../avinashgroup_app/hr/year_setup.py#L128) |
 | `custom_half_day_if_late_by_hours` (Float, default 2) | [`custom_half_day_if_late_by_hours`](../../avinashgroup_app/patches/setup_late_half_day_rule.py#L25) | Policy 1.2: more than 2 h late is a half day, measured from **each shift's own start**, so it does not need re-typing when the hours change. 0 turns it off. | [`enforce_late_arrival_half_day`](../../avinashgroup_app/biometric/attendance_override.py#L55) ([02](02-checkin-to-attendance.md)) |
-| `custom_late_arrival_cutoff_time` (Time, optional) | [`custom_late_arrival_cutoff_time`](../../avinashgroup_app/patches/add_site_only_hr_fields.py#L85) (site-only at first) | The older absolute-clock form of the same rule. The earlier of the two cutoffs wins. | Same function |
 | `custom_in_rotation` (Check "Takes Part in Rotation") | [`ROTATION_FIELD`](../../avinashgroup_app/patches/setup_shift_rotation.py#L34) | Which shifts staff may be rotated between, month by month. HR's data, not code. The seed ticks NGI's 6–14 and 12–20 shifts ([`SEED_HOURS`](../../avinashgroup_app/patches/setup_shift_rotation.py#L26)). | [`rotational_shifts`](../../avinashgroup_app/hr/shift_rotation.py#L87), Shift Type form button |
 
-**`shift_type_guard.clear_invented_late_cutoff`** ([`clear_invented_late_cutoff`](../../avinashgroup_app/hr/shift_type_guard.py#L37), registered at [`clear_invented_late_cutoff`](../../avinashgroup_app/hooks.py#L461)). The desk Time control fills a blank cutoff with the clock time of the save, so a shift saved at 09:49 would half-day everyone in from 09:49. On the first test run this cost **2,423 of 2,808 days** a half day. The guard blanks a cutoff that changed in this save and lies within [`INVENTED_WITHIN_SECONDS`](../../avinashgroup_app/hr/shift_type_guard.py#L32) (90 s) of now. The trade-off is deliberate: a cutoff someone really typed at that exact minute gets blanked, which is visible and easy to retype. The earlier defence was clearing it in `year_setup`; [`More than 2 hours late is a half day`](../../avinashgroup_app/patches/setup_late_half_day_rule.py#L1) also cleared existing accidental cutoffs (ones carrying seconds, or at/before the shift start). `attendance_override` keeps its own check, "cutoff ≤ start is not lateness".
+**Removed 2026-10-13: Late Arrival Cutoff.** `custom_late_arrival_cutoff_time`, an absolute clock-time cutoff beside the hours rule, is gone, and so is its save guard `hr/shift_type_guard.py`. The desk Time control filled a blank cutoff with the clock time of the save; on the first test run that half-dayed **2,423 of 2,808 days**. patch `drop_late_arrival_cutoff` ([`execute`](../../avinashgroup_app/patches/drop_late_arrival_cutoff.py#L24)) deletes the Custom Field and leaves the column (and any stray values in it, e.g. on the demo server) unread. `custom_half_day_if_late_by_hours` is now the only lateness cutoff.
 
 **Stock fields that matter downstream** (owned by HRMS, explained in [02](02-checkin-to-attendance.md)): `start_time`/`end_time`, `enable_auto_attendance`, `process_attendance_after`, `last_sync_of_checkin`, `begin_check_in_before_shift_start_time`, `allow_check_out_after_shift_end_time`, `determine_check_in_and_check_out`, `working_hours_calculation_based_on`, `working_hours_threshold_for_half_day/absent`, `late_entry_grace_period`, `early_exit_grace_period`.
 
 **Config on avinas1:**
 
-| Shift | Company | Hours | Auto attendance | Late → half day | Cutoff | Grace | Window before/after (min) | Process after | Rotation |
-|---|---|---|---|---|---|---|---|---|---|
-| NGI 9:00 AM to 5:00 PM | NGI | 09:00–17:00 | **0** | 2.00 h | blank | 0 | 180 / 240 | 2026-10-09 | 0 |
-| NGK 9:00 AM to 5:00 PM | NGK | 09:00–17:00 | **0** | 2.00 h | blank | 0 | 60 / 60 | 2026-06-29 | 0 |
+| Shift | Company | Hours | Auto attendance | Late → half day | Grace | Window before/after (min) | Process after | Rotation |
+|---|---|---|---|---|---|---|---|---|
+| NGI 9:00 AM to 5:00 PM | NGI | 09:00–17:00 | **0** | 2.00 h | 0 | 180 / 240 | 2026-10-09 | 0 |
+| NGK 9:00 AM to 5:00 PM | NGK | 09:00–17:00 | **0** | 2.00 h | 0 | 60 / 60 | 2026-06-29 | 0 |
 
 The rotation seed found nothing to tick, because avinas1 has no 6–14 or 12–20 shift. [../shift-rotation.md](../shift-rotation.md) describes a rotation that does not exist on this site yet.
 
@@ -249,11 +248,11 @@ Late half days are **not** leave. Earlier versions put a Leave Without Pay type 
 
 ### 7.2 Gender gate: `statutory_leave.validate_gender`
 
-[`validate_gender`](../../avinashgroup_app/hr/statutory_leave.py#L27), registered for Leave Allocation and Leave Application at [`validate_gender`](../../avinashgroup_app/hooks.py#L489). Maternity only for Female, Paternity only for Male ([`GENDER_RESTRICTED_LEAVE`](../../avinashgroup_app/hr/statutory_leave.py#L21)). It deliberately enforces nothing else: the Labour Act day limits (98, of which 60 paid; 15) are guidance for HR.
+[`validate_gender`](../../avinashgroup_app/hr/statutory_leave.py#L27), registered for Leave Allocation and Leave Application at [`validate_gender`](../../avinashgroup_app/hooks.py#L485). Maternity only for Female, Paternity only for Male ([`GENDER_RESTRICTED_LEAVE`](../../avinashgroup_app/hr/statutory_leave.py#L21)). It deliberately enforces nothing else: the Labour Act day limits (98, of which 60 paid; 15) are guidance for HR.
 
 ### 7.3 Annual ceiling: `leave_ceiling.validate_within_policy`
 
-[`validate_within_policy`](../../avinashgroup_app/hr/leave_ceiling.py#L27) (Leave Allocation validate, [`validate_within_policy`](../../avinashgroup_app/hooks.py#L493)). It refuses an allocation that would take the year's **new** leaves for that type past the `annual_allocation` on the employee's own submitted Leave Policy ([`policy_allocation`](../../avinashgroup_app/hr/leave_ceiling.py#L52)). Carry-forward does not count. Why: client rule 2026-09-22, "the month's credit may be any size, the year's total may not". It reads the person's own policy, so Karnali's 8 casual days are enforced as 8 (commit `61a4c5f`). No policy means no check.
+[`validate_within_policy`](../../avinashgroup_app/hr/leave_ceiling.py#L27) (Leave Allocation validate, [`validate_within_policy`](../../avinashgroup_app/hooks.py#L489)). It refuses an allocation that would take the year's **new** leaves for that type past the `annual_allocation` on the employee's own submitted Leave Policy ([`policy_allocation`](../../avinashgroup_app/hr/leave_ceiling.py#L52)). Carry-forward does not count. Why: client rule 2026-09-22, "the month's credit may be any size, the year's total may not". It reads the person's own policy, so Karnali's 8 casual days are enforced as 8 (commit `61a4c5f`). No policy means no check.
 
 ### 7.4 BS earned-leave accrual: `hr/utils.allocate_earned_leaves_bs`
 
@@ -262,14 +261,14 @@ Late half days are **not** leave. Earlier versions put a Leave Without Pay type 
 | **What** | It **replaces** HRMS's `allocate_earned_leaves`. Every day it checks whether today is a leave type's BS credit day (first or last day of the BS month) and, if so, credits one instalment to each live allocation through HRMS's own `update_previous_leave_allocation`. Only the calendar test changes; the instalment size, caps, pro-rating and ledger are HRMS's. |
 | **Why** | Stock HRMS credits on AD month ends: (W1) every credit lands 14–17 days late, and (W2) the Ashad instalment **never** happens, because the leave year has already expired by 31 July, so everyone silently gets 11 of 12 instalments. Docstring of [`Monthly earned-leave accrual on Bikram Sambat months`](../../avinashgroup_app/hr/utils.py#L10). |
 | **Where** | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hr/utils.py#L81), [`_is_accrual_day`](../../avinashgroup_app/hr/utils.py#L192), [`_credit_instalment`](../../avinashgroup_app/hr/utils.py#L128); helper [`preview_accrual_dates`](../../avinashgroup_app/hr/utils.py#L237). Stock job stopped by [`STOCK_JOB_METHOD`](../../avinashgroup_app/patches/setup_bs_leave_accrual.py#L19). Stock function: [`allocate_earned_leaves`](../../../hrms/hrms/hr/utils.py#L341). |
-| **Triggered by** | `daily_long` scheduler ([`allocate_earned_leaves_bs`](../../avinashgroup_app/hooks.py#L545)). |
+| **Triggered by** | `daily_long` scheduler ([`allocate_earned_leaves_bs`](../../avinashgroup_app/hooks.py#L541)). |
 | **Scope limits** | Monthly frequency with First Day / Last Day only. "Date of Joining" is excluded (BS day 31/32 does not exist in every month). Quarterly and other frequencies are refused, because the stock check reads inverted in 15.49.2. |
 | **Config on avinas1** | Scheduled Job Types: `utils.allocate_earned_leaves` **stopped = 1**, `utils.allocate_earned_leaves_bs` stopped = 0. With 0 allocations on the site, it credits nothing. |
 | **Gotcha** | If someone re-enables the stock job, every credit lands twice. |
 
 ### 7.5 Mid-year policy assignment: `BSLeavePolicyAssignment`
 
-[`BSLeavePolicyAssignment`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L40) (class override registered at [`BSLeavePolicyAssignment`](../../avinashgroup_app/hooks.py#L519)) overrides HRMS's [`get_leaves_for_passed_months`](../../../hrms/hrms/hr/doctype/leave_policy_assignment/leave_policy_assignment.py#L175). The back-fill for months already gone is counted in **BS** months ([`bs_months_backfill`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L58)), matching what the BS job would have credited. Why: assigned on 24 Ashwin, HRMS counts 3 AD months where BS has completed 2, and the BS job then adds Ashwin, so the employee holds one month too many for the whole year (commit `24b12af`). Other configurations fall back to stock.
+[`BSLeavePolicyAssignment`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L40) (class override registered at [`BSLeavePolicyAssignment`](../../avinashgroup_app/hooks.py#L515)) overrides HRMS's [`get_leaves_for_passed_months`](../../../hrms/hrms/hr/doctype/leave_policy_assignment/leave_policy_assignment.py#L175). The back-fill for months already gone is counted in **BS** months ([`bs_months_backfill`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L58)), matching what the BS job would have credited. Why: assigned on 24 Ashwin, HRMS counts 3 AD months where BS has completed 2, and the BS job then adds Ashwin, so the employee holds one month too many for the whole year (commit `24b12af`). Other configurations fall back to stock.
 
 ### 7.6 Replacement leave type
 

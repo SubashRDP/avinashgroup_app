@@ -456,10 +456,6 @@ _add_doc_event("Overtime Sheet", "on_cancel", "avinashgroup_app.hr.replacement_l
 # measuring runs on submit too. Only rows never measured — see overtime_settlement.
 _add_doc_event("Overtime Sheet", "on_submit", "avinashgroup_app.hr.overtime_settlement.on_sheet_submit")
 
-# Saving a Shift Type fills a blank Late Arrival Cutoff with the clock time of
-# the save, which then half-days everybody from that minute. See hr/shift_type_guard.
-_add_doc_event("Shift Type", "validate", "avinashgroup_app.hr.shift_type_guard.clear_invented_late_cutoff")
-
 # BS (miti) dates beside the AD dates on the HR forms, filled server-side so
 # slips and bulk-made documents carry them too. See hr/bs_dates.py.
 for _dt in ("Leave Application", "Payroll Entry", "Employee", "Salary Slip"):

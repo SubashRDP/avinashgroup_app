@@ -567,7 +567,7 @@ records, so that one company's hours can change without touching the other's.</p
 <li>Fill the fields in the table below.</li>
 <li><span class="btn">Save</span>.</li>
 <li>Reopen the record and confirm <span class="field">Late Entry Grace Period</span> is <b>0</b> and
-<span class="field">Late Arrival Cutoff Time</span> is <b>empty</b>. See the warning below.</li>
+<span class="field">Half Day If Late By (Hours)</span> is <b>2</b>.</li>
 </ol>
 
 <h2>Field reference</h2>
@@ -586,7 +586,6 @@ records, so that one company's hours can change without touching the other's.</p
 <tr><td><span class="field">Working Hours Threshold for Absent</span></td><td>1</td><td>Below this, the day is absent.</td><td>A single stray punch counts as a day worked.</td></tr>
 <tr><td><span class="field">Late Entry Grace Period</span></td><td><b>0</b></td><td>Minutes of lateness forgiven. Client policy: none.</td><td>Late fines silently under-charge.</td></tr>
 <tr><td><span class="field">Half Day If Late By (Hours)</span></td><td><b>2</b></td><td>More than two hours late is a half day (policy 1.2).</td><td>Chronic lateness costs nothing.</td></tr>
-<tr><td><span class="field">Late Arrival Cutoff Time</span></td><td><b>Empty</b></td><td>An absolute clock time after which arrival is late. Not used here — lateness is measured against the shift start.</td><td>See below.</td></tr>
 </table></div>
 
 <div class="note imp"><b class="t">Important — leave Holiday List blank</b>
@@ -603,11 +602,10 @@ all — 48 Saturday punches at NGI produced no attendance, and for Plant staff t
 by themselves. The trade-off: a Present row on a holiday also earns a day of Tea &amp; Conveyance, which the Excel
 sheet never paid. Decide it with the client per company, rather than leaving it to whoever runs the month.</p></div>
 
-<div class="note imp"><b class="t">Important — the cutoff-time trap</b>
-<p>During testing this field filled itself with a clock time, and because that time sat after the shift start,
-<b>2,423 of 2,808 days turned into Half Day</b>. The rule now ignores any cutoff at or before the shift start,
-and the field is cleared when a shift is created — but after you save a shift, check it. An unexplained wave of
-half days across a whole company is this field, every time.</p></div>
+<div class="note imp"><b class="t">Late arrival — one rule only</b>
+<p>More than <span class="field">Half Day If Late By (Hours)</span> after the shift starts is a Half Day; exactly that late is not.
+The older <span class="field">Late Arrival Cutoff Time</span> field (an absolute clock time that once filled itself in and turned
+<b>2,423 of 2,808 days</b> into Half Day) was removed on 2026-10-13.</p></div>
 
 <h3>Result</h3>
 <p>Ten shift types on the site. Confirm each has auto-attendance ticked and Holiday List blank. Then assign people
@@ -1233,7 +1231,7 @@ Plant grade, holiday work is paid overtime.</p></div>
 <li>Yesterday's <b>Absent</b> list — is each one real?</li>
 <li>Anyone with punches but no attendance row — usually a shift or device-ID problem.</li>
 <li>Anyone with a single punch — they forgot to punch out; hours will be wrong.</li>
-<li>A sudden wave of Half Days — check the shift's <span class="field">Late Arrival Cutoff Time</span>.</li>
+<li>A sudden wave of Half Days — check the shift's <span class="field">Half Day If Late By (Hours)</span> (should be 2).</li>
 </ul>
 <div class="seealso"><b>See also</b><a href="#ops-shift-change" data-go="ops-shift-change">Change someone&#x27;s shift</a><a href="#ops-leave" data-go="ops-leave">Leave applications and balances</a><a href="#run-monthly" data-go="run-monthly">Monthly payroll run</a><a href="#reports" data-go="reports">Report reference</a></div>
 <div class="pager"><a href="#setup-employee" data-go="setup-employee">&larr; The Employee record</a><a href="#ops-shift-change" data-go="ops-shift-change">Change someone&#x27;s shift &rarr;</a></div>
@@ -2059,7 +2057,7 @@ take-home when basic changes.</p>
 <div class="tablewrap"><table>
 <tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr>
 <tr><td>The run produces fewer slips than you have staff</td><td>A blank <span class="field">Payroll Payable Account</span> on the assignment — the employee is dropped silently.</td><td>Fill it on every assignment.</td></tr>
-<tr><td>A whole company turns Half Day</td><td><span class="field">Late Arrival Cutoff Time</span> filled with a clock time. It once turned 2,423 of 2,808 days into half days.</td><td>Blank the field on the shift, then rebuild those attendance days.</td></tr>
+<tr><td>A whole company turns Half Day</td><td><span class="field">Half Day If Late By (Hours)</span> on the shift is too small (e.g. 0.2 for 2).</td><td>Set it to 2, then rebuild those attendance days.</td></tr>
 <tr><td>Saturday work produces nothing</td><td>Auto-attendance skips holidays.</td><td>Build those days with the attendance repair tool, which does not skip them.</td></tr>
 <tr><td>No tea for someone who was present</td><td>No allowance category, or a rate of 0.</td><td>Set the category on the Employee.</td></tr>
 <tr><td>No overtime for a plant worker</td><td>The sheet was not submitted, or their Overtime Eligible tick is wrong.</td><td>Submit the sheet; check the tick against the manager's list.</td></tr>
@@ -2148,7 +2146,7 @@ a BS month with complete attendance. Have the company's Excel salary sheet besid
 <div class="case"><h4>A3 · Holiday list complete</h4><p>Open NGI 83/84. <b>Expect:</b> ~52 Saturdays plus 10 festivals.</p></div>
 <div class="case"><h4>A4 · Teej is women-only</h4><p>Compare both lists. <b>Expect:</b> 2026-09-14 on the women's list alone, and every female employee's Employee record pointing at it.</p></div>
 <div class="case"><h4>A5 · Shifts exist</h4><p>Open Shift Type. <b>Expect:</b> three NGI shifts, two NGN, one each elsewhere; auto-attendance ticked and <b>Holiday List blank</b> on every one.</p></div>
-<div class="case"><h4>A6 · Cutoff is blank</h4><p>Open each shift. <b>Expect:</b> Late Arrival Cutoff Time empty, grace 0, half day if late by 2 hours.</p></div>
+<div class="case"><h4>A6 · Late rule</h4><p>Open each shift. <b>Expect:</b> grace 0, half day if late by 2 hours, and no Late Arrival Cutoff field on the form.</p></div>
 <div class="case"><h4>A7 · Cost centres</h4><p>Filter Cost Center by company. <b>Expect:</b> Office, Sales &amp; Distribution, Filling Plant.</p></div>
 <div class="case"><h4>A8 · Overtime ticks</h4><p>Filter Employee on Overtime Eligible = Yes and Replacement Leave for Holiday Work = Yes. <b>Expect:</b> zero rows (the save refuses both).</p></div>
 <div class="case"><h4>A9 · Allowance categories</h4><p><b>Expect:</b> NGI Tea OLD 235, NGI Tea NEW 40, NGN Tea OLD 265, NGN Tea NEW 40.</p></div>

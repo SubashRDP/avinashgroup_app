@@ -12,7 +12,8 @@ Covers:
   (hook path via process_attendance_records, and the self-heal path via
   reconcile_employee_day)
 - duplicate attendance_device_id within one company is blocked
-- Attendance hooks: shift deviation fields and late-arrival Half Day rule
+- Attendance hooks: shift deviation fields and the late-arrival Half Day rule
+  (more than Half Day If Late By hours after shift start; exactly that is not)
 
 process_attendance_records() commits, so this suite cleans up its own
 records explicitly in tearDownClass instead of relying on rollback.
@@ -466,26 +467,39 @@ class TestAttendancePipeline(FrappeTestCase):
                 "Shift Type", self.shift.name, "enable_auto_attendance", 0
             )
 
-    def test_late_arrival_cutoff_forces_half_day(self):
-        frappe.db.set_value(
-            "Shift Type", self.shift.name, "custom_late_arrival_cutoff_time", "10:30:00"
+    def _late_attendance(self, day, in_clock):
+        att = frappe.new_doc("Attendance")
+        att.employee = self.emp_a.name
+        att.company = self.company_a
+        att.attendance_date = day
+        att.status = "Present"
+        att.shift = self.shift.name
+        att.in_time = f"{day} {in_clock}"
+        att.out_time = f"{day} 17:00:00"
+        att.insert(ignore_permissions=True)
+        return att
+
+    def test_more_than_two_hours_late_is_half_day(self):
+        # 09:00 shift, Half Day If Late By 2 h (the field's default): 11:01 is past it.
+        self.assertEqual(
+            frappe.db.get_value("Shift Type", self.shift.name, "custom_half_day_if_late_by_hours"), 2
         )
+        att = self._late_attendance("2026-06-05", "11:01:00")
+        self.assertEqual(att.status, "Half Day")
+        self.assertEqual(att.half_day_status, "Absent")
+        self.assertFalse(att.leave_type)
+
+    def test_exactly_two_hours_late_is_not_half_day(self):
+        att = self._late_attendance("2026-06-15", "11:00:00")
+        self.assertEqual(att.status, "Present")
+        self.assertEqual(att.custom_late_entry, 2 * 60 * 60)
+
+    def test_late_rule_off_when_hours_zero(self):
+        frappe.db.set_value("Shift Type", self.shift.name, "custom_half_day_if_late_by_hours", 0)
         frappe.clear_cache(doctype="Shift Type")
         try:
-            att = frappe.new_doc("Attendance")
-            att.employee = self.emp_a.name
-            att.company = self.company_a
-            att.attendance_date = "2026-06-05"
-            att.status = "Present"
-            att.shift = self.shift.name
-            att.in_time = "2026-06-05 10:40:00"  # after cutoff
-            att.out_time = "2026-06-05 17:00:00"
-            att.insert(ignore_permissions=True)
-            self.assertEqual(att.status, "Half Day")
-            self.assertEqual(att.half_day_status, "Absent")
-            self.assertFalse(att.leave_type)
+            att = self._late_attendance("2026-06-16", "13:00:00")
+            self.assertEqual(att.status, "Present")
         finally:
-            frappe.db.set_value(
-                "Shift Type", self.shift.name, "custom_late_arrival_cutoff_time", None
-            )
+            frappe.db.set_value("Shift Type", self.shift.name, "custom_half_day_if_late_by_hours", 2)
             frappe.clear_cache(doctype="Shift Type")

@@ -61,11 +61,13 @@ def enforce_late_arrival_half_day(doc, method=None):
     and there is no grace period. The limit is `custom_half_day_if_late_by_hours`
     on the Shift Type — hours after that shift's own start, so it keeps meaning
     the same thing if the shift times change, and it does not have to be re-typed
-    for every shift.
+    for every shift. Exactly that late is not a half day; any later is. 0 or
+    blank switches the rule off for the shift.
 
-    `custom_late_arrival_cutoff_time`, the older absolute cutoff, still applies
-    where it is set; the earlier of the two wins. Blank the hours (0) and clear
-    the cutoff to switch the rule off for a shift.
+    This is the only lateness cutoff. The older absolute clock-time cutoff
+    (`custom_late_arrival_cutoff_time`) was removed on 2026-10-13: the form kept
+    filling it with the time of the save, and a stray value half-dayed whole
+    companies (patches/drop_late_arrival_cutoff.py).
 
     HR can waive one day with `custom_late_excused` — the traffic, the funeral,
     the thing the rule cannot know. The lateness stays recorded and visible in
@@ -86,22 +88,12 @@ def enforce_late_arrival_half_day(doc, method=None):
         attendance_date = getdate(doc.attendance_date)
         midnight = datetime.combine(attendance_date, datetime.min.time())
 
-        cutoffs = []
-        late_by_hours = shift.get("custom_half_day_if_late_by_hours")
-        if late_by_hours and shift.start_time is not None:
-            cutoffs.append(midnight + shift.start_time + timedelta(hours=float(late_by_hours)))
-        absolute = shift.get("custom_late_arrival_cutoff_time")
-        # A cutoff at or before the shift starts cannot mean "late": it would
-        # make a half day of everybody who turned up on time. Saving a Shift
-        # Type leaves this field holding the clock time of the save unless it
-        # is cleared, and that quietly cost 2,423 of 2,808 days a half day on
-        # the first run of test attendance.
-        if absolute and shift.start_time is not None and absolute > shift.start_time:
-            cutoffs.append(midnight + absolute)
-        if not cutoffs:
+        late_by_hours = flt(shift.get("custom_half_day_if_late_by_hours"))
+        if late_by_hours <= 0 or shift.start_time is None:
             return
+        cutoff = midnight + shift.start_time + timedelta(hours=late_by_hours)
 
-        if get_datetime(doc.in_time) > min(cutoffs):
+        if get_datetime(doc.in_time) > cutoff:
             # Paid, but half: HRMS's own half-absent. Half Day Status "Absent"
             # with no leave type is counted as half a day absent by the salary
             # slip (get_half_absent_days), so nothing reads as leave.

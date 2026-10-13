@@ -44,7 +44,7 @@ What HR must have in place:
 
 ## 3.3 The attendance rules from the policy
 
-**More than 2 hours late = Half Day.** If the first punch is more than 2 hours after the shift starts (the shift's **Half Day If Late By (Hours)**), the day becomes a Half Day, half absent. Example: on a 9 AM shift, in at 10:59 stays Present; in at 11:01 becomes Half Day. There is no grace period.
+**More than 2 hours late = Half Day.** If the first punch is more than 2 hours after the shift starts (the shift's **Half Day If Late By (Hours)**), the day becomes a Half Day, half absent. Example: on a 9 AM shift, in at 11:00 (exactly 2 hours) stays Present; in at 11:01 becomes Half Day. There is no grace period.
 
 **Coming to work while on approved leave = Half Day.** If a person has approved leave for a day but also punched in, the day becomes a Half Day: half leave, half present.
 

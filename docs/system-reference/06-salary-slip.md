@@ -28,8 +28,8 @@ A slip save runs `Document.validate` → the controller's `validate()` → the d
 | 6 | `apply_income_tax_override` | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L369) | 6.9 |
 | 7 | `bs_period_guard.validate_salary_slip` | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L376) | 6.10 |
 | 8 | `build_daily_breakdown` | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L379) | 6.11. The hooks.py comment calls it "last of the slip's validate hooks"; it is not: step 9 is appended later in the file |
-| 9 | `set_bs_dates` | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L466) | 6.12, registered by a loop further down `hooks.py` |
-| 10 | `"*"` validate | erpnext's [`service_level_agreement.apply`](../../../erpnext/erpnext/hooks.py#L329) etc., then our [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L425) and [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L477) | No Dynamic Approval Setting exists for Salary Slip, so the approval hook exits; numbering is covered in [09-cross-cutting.md](09-cross-cutting.md) |
+| 9 | `set_bs_dates` | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L462) | 6.12, registered by a loop further down `hooks.py` |
+| 10 | `"*"` validate | erpnext's [`service_level_agreement.apply`](../../../erpnext/erpnext/hooks.py#L329) etc., then our [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L425) and [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L476) | No Dynamic Approval Setting exists for Salary Slip, so the approval hook exits; numbering is covered in [09-cross-cutting.md](09-cross-cutting.md) |
 
 No Server Script, Client Script or Notification exists for Salary Slip on avinas1 (checked 2026-10-12), so nothing else changes amounts.
 

@@ -44,7 +44,7 @@ Tea is not paid on **holidays and Saturdays**, even if the person worked. A Half
 Payroll Settings → **Include holidays in total working days** has been turned off. It must be **on** (holidays are paid). Tell IT or the HR manager.
 
 ### Many days suddenly became Half Day
-Usually a **Late Arrival Cutoff (forces Half Day)** time was saved on a Shift Type by mistake. Open the Shift Type, clear that field, save, then run **Attendance Fix** for the affected dates.
+Check the Shift Type's **Half Day If Late By (Hours)**: it should be **2**. A smaller number (for example 0.2 typed for 2) makes most people "late". Correct it, save, then run **Attendance Fix** for the affected dates. (The old **Late Arrival Cutoff** field, which used to cause this, has been removed.)
 
 ### A long overtime day is marked Absent
 The Shift Type's **Allow check-out after shift end time** is too short (it should be 240 minutes), so the late check-out was ignored. Correct it, then run **Attendance Fix**.
