@@ -104,9 +104,9 @@ A blank work type defaults through [`default_work_type`](../../avinashgroup_app/
 | [`get_shift_window`](../../avinashgroup_app/hr/overtime.py#L91) | `(shift_type, start_dt, end_dt)`: the latest active, submitted Shift Assignment covering the date, otherwise Employee `default_shift`. Handles overnight shifts. | Shift Assignment, Employee, Shift Type `start_time`/`end_time` | Also used by settlement and by the attendance hooks ([02](02-checkin-to-attendance.md)). |
 | [`get_holiday_work_rule`](../../avinashgroup_app/hr/overtime.py#L121) | `(ot_eligible, compensatory_leave)` from the Employee's two ticks. | Employee `custom_ot_eligibility`, `custom_compensatory_leave` | Neither ticked → `evaluate` refuses holiday work: "a wrong default pays money or grants leave." |
 | [`validate_employee_holiday_rule`](../../avinashgroup_app/hr/overtime.py#L136) | Employee `validate` hook: refuses both ticks at once. | – | Replaces the either/or check that lived on Employee Category. |
-| [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L296) | Hours of `[in, out]` before the shift start or after its end. A window that does not overlap the shift counts in full. | – | The working-day OT measure, rounded to 2 decimals here (half-hour rounding is applied by the caller). |
+| [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L320) | Hours of `[in, out]` before the shift start or after its end. A window that does not overlap the shift counts in full. | – | The working-day OT measure, rounded to 2 decimals here (half-hour rounding is applied by the caller). |
 | [`get_overtime_days`](../../avinashgroup_app/hr/overtime.py#L263) | `{(employee, date)}` with a submitted Overtime row over a period. | sheets | Used by the Monthly Attendance (BS) report and its summary. |
-| [`get_authorised`](../../avinashgroup_app/hr/overtime.py#L236), [`was_authorised`](../../avinashgroup_app/hr/overtime.py#L285) | The "read API" the docstring names. | sheets | **Dead code**: nothing in the app calls either one. Payroll queries the sheet tables directly. |
+| [`get_authorised`](../../avinashgroup_app/hr/overtime.py#L236), [`was_authorised`](../../avinashgroup_app/hr/overtime.py#L309) | The "read API" the docstring names. | sheets | **Dead code**: nothing in the app calls either one. Payroll queries the sheet tables directly. |
 
 ### Config on avinas1 (2026-10-13)
 
@@ -211,8 +211,8 @@ Two components in `payroll/attendance_allowance.py` read the sheet directly. Bot
 
 | Component (condition) | Function | Reads | Quantity |
 |---|---|---|---|
-| Overtime (`Authorised Overtime`, Per Hour) | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L405) | `SUM(worked_hours)` for the employee and date | hours; rate = hourly basic × 1.5 |
-| Meal (`Meal Entitlement`) | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L338) via [`_on_overtime_sheet`](../../avinashgroup_app/payroll/attendance_allowance.py#L379) | *existence* of the row (not its hours) | holiday: [`HOLIDAY_MEALS`](../../avinashgroup_app/payroll/attendance_allowance.py#L376) = 2; working day: 1 if `custom_early_entry` ≥ 1.5 h, plus 1 if `custom_late_exit` ≥ 1.5 h; capped at `custom_max_per_day` (2) |
+| Overtime (`Authorised Overtime`, Per Hour) | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L415) | `SUM(worked_hours)` for the employee and date | hours; rate = hourly basic × 1.5 |
+| Meal (`Meal Entitlement`) | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L348) via [`_on_overtime_sheet`](../../avinashgroup_app/payroll/attendance_allowance.py#L389) | *existence* of the row (not its hours) | holiday: [`HOLIDAY_MEALS`](../../avinashgroup_app/payroll/attendance_allowance.py#L386) = 2; working day: 1 if `custom_early_entry` ≥ 1.5 h, plus 1 if `custom_late_exit` ≥ 1.5 h; capped at `custom_max_per_day` (2) |
 
 Consequences:
 

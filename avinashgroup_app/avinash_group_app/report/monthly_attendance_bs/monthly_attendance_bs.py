@@ -25,9 +25,14 @@ Columns:
   • Status
   • Shift — the shift rostered on THAT date (hr.shift_day.ShiftRoster), so a
     mid-month shift change shows on the day it happened
-  • Late (min), Before ofc. Time, O.T. — measured against that shift by
-    hr.shift_day.measure_day. O.T. only on a day a submitted Overtime Sheet
-    authorises for that employee (hr.overtime.get_overtime_days); blank otherwise
+  • Late (min), Before ofc. Time — measured against that shift by
+    hr.shift_day.measure_day.
+  • O.T. (hrs), O.T. Rate, O.T. Amount — the hours a submitted Overtime Sheet
+    measured for that employee that day (hr.overtime.get_overtime_hours), the
+    same hours pay reads; the rate is the person's hourly basic × 1.5
+    (attendance_allowance.overtime_rate, the one pay uses). Blank otherwise.
+    Not re-measured from the Attendance row: its stored deviations can lag a
+    shift changed after the punches, and showed 0 against the sheet's 4.5.
   • Leave (1/blank)
   • Work In Holiday (1/blank)
   • One dynamic column per attendance-driven Salary Component, with the qty
@@ -39,17 +44,19 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
-from avinashgroup_app.hr.overtime import get_overtime_days
+from avinashgroup_app.hr.overtime import get_overtime_hours
 from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
+	get_bs_month_days,
 	get_bs_month_name,
 )
 from avinashgroup_app.hr.bs_calendar import bs_year_of, month_period, parse_bs_month
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
 	get_attendance_driven_components,
+	overtime_rate,
 )
 
 
@@ -98,13 +105,14 @@ def execute(filters=None):
 	# exactly the days someone is asking about. Per day, not per month: a shift
 	# change splits the assignment, and a month can hold two shifts.
 	roster = ShiftRoster(employees, ad_start, ad_end)
-	# Overtime shows only on a day a submitted Overtime Sheet names the person.
-	# Going by OT eligibility alone counted every early arrival and late
-	# stay of OT-eligible staff, asked for or not.
-	ot_days = get_overtime_days(employees, ad_start, ad_end)
+	# Overtime shows only on a day a submitted Overtime Sheet names the person,
+	# at the hours that sheet measured — what pay reads. Going by OT eligibility
+	# alone counted every early arrival and late stay, asked for or not.
+	ot_hours = get_overtime_hours(employees, ad_start, ad_end)
+	ot_rates = _ot_rates(ot_hours, components)
 
 	data = []
-	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0, "ot_hours": 0.0}
+	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0, "ot_hours": 0.0, "ot_amount": 0.0}
 
 	# Per-date values (BS label + weekday) are identical for every employee, and
 	# ad_to_bs is expensive, so compute them once per distinct date up front.
@@ -128,10 +136,14 @@ def execute(filters=None):
 			day_label, weekday = date_info[ad_date]
 			row = _build_row(
 				emp, ad_date, day_label, weekday, att_map, emp_holidays, leave_map,
-				components, roster, (emp.name, ad_date) in ot_days, punch_map,
+				components, roster, punch_map,
+				ot_hours.get((emp.name, ad_date), 0.0), ot_rates.get((emp.name, ad_date), 0.0),
 			)
 			data.append(row)
 			_accumulate(totals, row)
+			# Unrounded per day, rounded once at the end, as pay does: summing the
+			# rounded daily amounts drifted a paisa from the slip.
+			totals["ot_amount"] += ot_hours.get((emp.name, ad_date), 0.0) * ot_rates.get((emp.name, ad_date), 0.0)
 
 	return (
 		_columns(components),
@@ -146,6 +158,7 @@ def execute(filters=None):
 			totals["late_min"],
 			totals["ot_hours"],
 			bs_label,
+			totals["ot_amount"],
 		),
 	)
 
@@ -493,7 +506,7 @@ def _fetch_leaves(employees, ad_start, ad_end, company=None):
 
 def _build_row(
 	emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, roster,
-	ot_eligible=False, punch_map=None,
+	punch_map=None, ot_hours=0.0, ot_rate=0.0,
 ):
 	holiday = emp_holidays.get(ad_date)
 	leave_type = leave_map.get((emp.name, ad_date))
@@ -542,7 +555,7 @@ def _build_row(
 			work_in_holiday = 1
 		# Against the shift of the day. This used to need HRMS's `late_entry`
 		# flag, which nothing on this site sets — so Late read 0 for everyone.
-		measured = measure_day(att, is_holiday=bool(holiday), ot_eligible=ot_eligible)
+		measured = measure_day(att, is_holiday=bool(holiday))
 		# Holiday-aware status: tag holiday name on both worked and absent rows
 		if holiday:
 			if status in ("Present", "Half Day"):
@@ -587,7 +600,9 @@ def _build_row(
 		"status": status,
 		"late_minutes": measured.late_minutes,
 		"before_office_minutes": measured.early_exit_minutes,
-		"ot_hours": measured.ot_hours,
+		"ot_hours": flt(ot_hours),
+		"ot_rate": flt(ot_rate, 2) if ot_hours else 0,
+		"ot_amount": flt(flt(ot_hours) * flt(ot_rate), 2),
 		"leave_count": leave_flag,
 		"work_in_holiday": work_in_holiday,
 		"remarks": remarks,
@@ -595,6 +610,29 @@ def _build_row(
 	}
 	row.update(component_values)
 	return row
+
+
+def _ot_rates(ot_hours, components):
+	"""{(employee, date): one overtime hour's pay} for the days that have overtime.
+
+	The rate pay uses (attendance_allowance.overtime_rate): the person's basic ÷
+	the BS month's days ÷ 8 × 1.5, with the Overtime component's own "Rate: Days
+	/ Hours" overrides. Worked out once per person per BS month. 0 for someone
+	with no salary assignment — the hours still show, priced at nothing.
+	"""
+	sc = next((c for c in components if c.get("custom_condition_type") == "Authorised Overtime"), None)
+	cache, out = {}, {}
+	for employee, ad_date in ot_hours:
+		bs = ad_to_bs(ad_date)
+		key = (employee, bs.year, bs.month)
+		if key not in cache:
+			try:
+				cache[key] = overtime_rate(employee, ad_date, get_bs_month_days(bs.year, bs.month), sc)
+			except Exception:
+				frappe.log_error(title=f"Monthly Attendance BS: overtime rate for {employee}", message=frappe.get_traceback())
+				cache[key] = 0.0
+		out[(employee, ad_date)] = cache[key]
+	return out
 
 
 def _accumulate(totals, row):
@@ -670,6 +708,8 @@ def _columns(components):
 		{"label": _("Late (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
 		{"label": _("Before ofc. Time"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 110},
 		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 1},
+		{"label": _("O.T. Rate"), "fieldname": "ot_rate", "fieldtype": "Currency", "width": 90},
+		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 100},
 		{"label": _("Leave"), "fieldname": "leave_count", "fieldtype": "Check", "width": 65},
 		{"label": _("Work In Holiday"), "fieldname": "work_in_holiday", "fieldtype": "Check", "width": 110},
 	]
@@ -688,7 +728,7 @@ def _columns(components):
 	return base
 
 
-def _summary(office_days, holiday_days, total_worked, leave_days, late_min, ot_hours, bs_label):
+def _summary(office_days, holiday_days, total_worked, leave_days, late_min, ot_hours, bs_label, ot_amount=0.0):
 	# "Late Time" is late arrival plus leaving early, as on the sheet's card
 	# (Late Time = Late + Before ofc. Time).
 	return [
@@ -699,6 +739,7 @@ def _summary(office_days, holiday_days, total_worked, leave_days, late_min, ot_h
 		{"value": leave_days, "label": _("Leave Days"), "datatype": "Int"},
 		{"value": late_min, "label": _("Late Time (min)"), "datatype": "Int"},
 		{"value": ot_hours, "label": _("O.T. (hrs)"), "datatype": "Float"},
+		{"value": flt(ot_amount, 2), "label": _("O.T. Amount"), "datatype": "Currency"},
 	]
 
 

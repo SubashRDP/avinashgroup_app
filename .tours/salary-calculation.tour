@@ -180,7 +180,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 485,
+      "line": 506,
       "title": "2.13 set_holiday_flag",
       "description": "Ticks `custom_worked_on_holiday` when the date is in the employee's Holiday List (or the company default).\n\nReads: Employee `holiday_list`, Company `default_holiday_list`"
     },
@@ -294,7 +294,7 @@
     },
     {
       "file": "avinashgroup_app/hr/overtime.py",
-      "line": 296,
+      "line": 320,
       "title": "3.10 hours_outside_shift",
       "description": "Hours of the in–out window that fall before shift start or after shift end."
     },
@@ -312,19 +312,19 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 68,
+      "line": 78,
       "title": "4.2 trigger_for_payroll_entry",
       "description": "Runs `create_additional_salaries`, then `post_recoveries`, then `refresh_draft_slips`, and commits.\n\nReads: Payroll Entry"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 142,
+      "line": 152,
       "title": "4.3 create_additional_salaries",
       "description": "For each employee × attendance component: skip if not paid, price it, count it, write `qty × rate` as an Additional Salary under a savepoint.\n\nReads: Payroll Entry `start_date`, `end_date`, `employees`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 575,
+      "line": 597,
       "title": "4.4 get_attendance_driven_components",
       "description": "Enabled Salary Components with `custom_is_attendance_driven`.\n\nReads: Salary Component"
     },
@@ -336,79 +336,79 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 615,
+      "line": 637,
       "title": "4.6 _gets",
       "description": "An allowance is paid only with a row on the assignment; a non-allowance (late fine) only when the structure lists it.\n\nReads: Salary Component `custom_is_allowance`; Salary Structure rows"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 551,
+      "line": 572,
       "title": "4.7 _skip_for_eligibility",
       "description": "Skips OT-only components for staff not OT eligible, and late components for staff marked late-fine exempt.\n\nReads: Salary Component `custom_ot_eligible_only`; Employee `custom_ot_eligibility`, `custom_late_fine_exempt`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 631,
+      "line": 655,
       "title": "4.8 _resolve_rate",
       "description": "`Hourly Basic × Multiplier` components: hourly basic × multiplier; otherwise the Rate on the person's row; None if neither.\n\nReads: Salary Component `custom_rate_basis`, `custom_rate_multiplier`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 447,
+      "line": 457,
       "title": "4.9 _hourly_basic",
       "description": "Assignment `base` ÷ days per month ÷ hours per day. Days: the actual length of the BS month being priced (29–32) unless the component fixes it; hours: 8 when blank.\n\nReads: Salary Component `custom_rate_days_per_month`, `custom_rate_hours_per_day`; assignment `base`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 564,
+      "line": 586,
       "title": "4.10 _attendance_period",
       "description": "The payroll's own dates, or the previous BS month when the component's Attendance Month is Previous Month.\n\nReads: Salary Component `custom_attendance_month`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 238,
+      "line": 248,
       "title": "4.11 _qty_for_employee",
       "description": "Sums `evaluate_rule` over the period's submitted Attendance; `Flat per Period` gives 1 if any day matched.\n\nReads: Salary Component `custom_unit`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 584,
+      "line": 606,
       "title": "4.12 _attendance_rows",
       "description": "The employee's submitted Attendance rows in the period, with the deviation and holiday fields.\n\nReads: Attendance"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 256,
+      "line": 266,
       "title": "4.13 evaluate_rule",
       "description": "One day's quantity by the component's condition: Present, Half Day, Worked on Holiday, Meal Entitlement, Authorised Overtime, Late Time, Early Entry / Late Stay / Late Arrival.\n\nReads: Salary Component `custom_condition_type`, `custom_unit`, `custom_pay_on_holiday`, `custom_half_day_counts`, `custom_time_offset_hours`; Attendance `custom_late_excused`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 338,
+      "line": 348,
       "title": "4.14 _meals_for_day",
       "description": "OT-eligible and on an Overtime Sheet that day: 2 on a holiday, else 1 each for coming early / staying late by the offset; capped at max per day.\n\nReads: Employee `custom_ot_eligibility`; Salary Component `custom_time_offset_hours`, `custom_max_per_day`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 379,
+      "line": 389,
       "title": "4.15 _on_overtime_sheet",
       "description": "Whether a submitted Overtime Sheet names the employee on the date with the Overtime entitlement.\n\nReads: Overtime Sheet"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 405,
+      "line": 415,
       "title": "4.16 _authorised_overtime_hours",
       "description": "Sum of `worked_hours` on submitted Overtime Sheet rows for the employee and date (the hours from 3.9).\n\nReads: Overtime Sheet Employee `worked_hours`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 664,
+      "line": 692,
       "title": "4.17 _delete_existing_draft",
       "description": "Cancels and deletes this calculator's earlier row for the same employee, component and date; hand-made rows are left.\n\nReads: Additional Salary `custom_source`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 692,
+      "line": 720,
       "title": "4.18 _make_additional_salary",
       "description": "Inserts and submits the Additional Salary with qty and rate kept; earnings get `deduct_full_tax_on_selected_payroll_date`.\n\nReads: Salary Component `type`"
     },
@@ -426,7 +426,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 98,
+      "line": 108,
       "title": "4.21 refresh_draft_slips",
       "description": "Re-saves the entry's draft salary slips so they pick up what was just posted.\n\nReads: Salary Slip (draft)"
     },

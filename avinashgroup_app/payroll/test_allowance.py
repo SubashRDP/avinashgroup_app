@@ -33,7 +33,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import getdate
+from frappe.utils import flt, getdate
 
 from avinashgroup_app.payroll import attendance_allowance
 
@@ -362,6 +362,37 @@ class TestAllowance(FrappeTestCase):
 			attendance_allowance.create_additional_salaries(entry)
 		ot = dict(made)[self.ot]
 		self.assertAlmostEqual(ot, 30000 / 31 / 8 * 1.5, places=6)  # Shrawan 2083 has 31 days
+
+	def test_overtime_needs_eligibility_not_a_row(self):
+		"""Overtime goes to anyone OT eligible, at hourly basic × 1.5, with or without
+		an Overtime row on their assignment — whatever the component's Rate Basis."""
+		eligible = self._employee(structure=self.structure, custom_ot_eligibility=1)  # base 30,000
+		not_eligible = self._employee(structure=self.structure, custom_ot_eligibility=0)
+		made = []
+
+		def capture(employee, salary_component, amount, **kwargs):
+			made.append((employee, salary_component.name, amount))
+			return frappe._dict(name="x")
+
+		entry = frappe._dict(
+			company=COMPANY, start_date=PERIOD_START, end_date=PERIOD_END,
+			employees=[frappe._dict(employee=e) for e in (eligible, not_eligible)],
+		)
+		_clear_request_caches()
+		frappe.db.set_value("Salary Component", self.ot, "custom_rate_basis", "Fixed Rate")
+		self.addCleanup(
+			frappe.db.set_value, "Salary Component", self.ot, "custom_rate_basis", "Hourly Basic × Multiplier"
+		)
+		with (
+			patch.object(attendance_allowance, "_qty_for_employee", return_value=9),
+			patch.object(attendance_allowance, "_make_additional_salary", side_effect=capture),
+			patch.object(attendance_allowance, "_delete_existing_draft"),
+			patch.object(attendance_allowance, "refresh_draft_slips", return_value=0),
+			patch.object(frappe.db, "commit"),
+		):
+			attendance_allowance.create_additional_salaries(entry)
+		paid = {(e, c): a for e, c, a in made if c == self.ot}
+		self.assertEqual(paid, {(eligible, self.ot): flt(9 * 30000 / 31 / 8 * 1.5, 2)})  # Shrawan: 31 days
 
 	def _overtime_sheet(self, employee, work_date, entitlement="Overtime"):
 		"""A submitted Overtime Sheet calling the employee in on that date."""

@@ -76,7 +76,7 @@ You cannot type the hours by hand. To change them, correct the attendance, then 
 
 ## 4.5 How overtime is paid
 
-At payroll time, **Prepare Payroll Inputs** (Chapter 5) adds up each OT-eligible person's measured hours for the month and pays:
+At payroll time, **Prepare Payroll Inputs** (Chapter 5) adds up each OT-eligible person's measured hours for the month and pays them. Nothing else has to be set: no Overtime row on the salary assignment, no Rate Basis. The only conditions are **OT Eligible** on the Employee and a submitted Overtime Sheet; the person needs a salary assignment for their Basic.
 
 > **Overtime per hour = Basic ÷ days in that BS month ÷ 8 hours × 1.5**
 
@@ -84,7 +84,9 @@ The days are the real length of the Nepali month whose overtime is paid (29 to 3
 
 Example: Basic 30,000 in Bhadra (31 days) → 30,000 ÷ 31 ÷ 8 = 120.97 an hour × 1.5 = **181.45 per overtime hour**. In a 30-day month the same person gets 30,000 ÷ 30 ÷ 8 × 1.5 = **187.50**.
 
-The 8 and 1.5 are settings on the **Overtime** salary component ("Rate: Hours per Day", "Multiplier"). "Rate: Days per Month" is **blank**, which means the month's real days; typing a number (for example 30, as the old Excel sheets used) fixes it. Change these only with management approval.
+The 1.5 is fixed (the Labour Act's overtime rate). The 8 and the days are settings on the **Overtime** salary component ("Rate: Hours per Day", "Rate: Days per Month"); "Rate: Days per Month" is **blank**, which means the month's real days, and typing a number (for example 30, as the old Excel sheets used) fixes it. Change these only with management approval.
+
+The **Monthly Attendance BS** report shows the same figures: per day **O.T. (hrs)** (the hours the Overtime Sheet measured), **O.T. Rate** and **O.T. Amount**, and the month's **O.T. Amount** card; the Summary view has **O.T. Amount** per person. They are what Prepare Payroll Inputs pays.
 
 ## 4.6 Meals
 

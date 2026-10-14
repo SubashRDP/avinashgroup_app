@@ -13,9 +13,11 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
   • Meal              = sum(Food qty + Late Food qty)
   • Tea & Conveyance  = sum(Tea qty + Commute qty)
   • Tihar             = sum(Tihar component qty, when component exists)
-  • O.T. (hrs)        = hr.shift_day.measure_day, summed: hours outside the day's
-                        shift (all hours on a holiday), to the half hour, only on
-                        days a submitted Overtime Sheet authorises for the employee
+  • O.T. (hrs)        = the hours submitted Overtime Sheets measured for the
+                        employee in the period (hr.overtime.get_overtime_hours) —
+                        the same hours overtime pay reads
+  • O.T. Amount       = each day's hours × that person's hourly basic × 1.5
+                        (attendance_allowance.overtime_rate, as pay prices it)
   • Late Time (min)   = late arrival + leaving early, against the day's shift,
                         as the sheet's card adds them (Late + Before ofc. Time)
   • Present Days      = count(Present + WFH) + 0.5 × count(Half Day)
@@ -39,7 +41,7 @@ from rdp_common_app.utils.bs_boundaries import (
 	get_bs_month_range,
 	get_bs_month_name,
 )
-from avinashgroup_app.hr.overtime import get_overtime_days
+from avinashgroup_app.hr.overtime import get_overtime_hours
 from avinashgroup_app.hr.shift_day import measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from avinashgroup_app.payroll.attendance_allowance import (
@@ -54,6 +56,7 @@ from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_att
 	_fetch_attendance,
 	_fetch_holidays,
 	_fetch_leaves,
+	_ot_rates,
 )
 
 
@@ -144,15 +147,16 @@ def execute_summary(filters):
 		"upto":     (upto_leave_dates,  fy_start, ad_end),
 	}
 
-	# Overtime counts only on days a submitted Overtime Sheet names the person.
-	ot_days = get_overtime_days(employees, ad_start, ad_end)
+	# Overtime: the hours submitted Overtime Sheets measured, as pay reads them.
+	ot_hours = get_overtime_hours(employees, ad_start, ad_end)
+	ot_rates = _ot_rates(ot_hours, components)
 
 	data = []
 	for idx, emp in enumerate(employees, start=1):
 		row = _build_summary_row(
 			idx, emp, ad_start, ad_end,
 			att_map, holiday_map, holiday_list_of, leave_windows,
-			components, groups, standalone_components, ot_days,
+			components, groups, standalone_components, ot_hours, ot_rates,
 		)
 		data.append(row)
 
@@ -166,7 +170,7 @@ def execute_summary(filters):
 def _build_summary_row(
 	idx, emp, ad_start, ad_end,
 	att_map, holiday_map, holiday_list_of, leave_windows,
-	components, groups, standalone_components, ot_days=frozenset(),
+	components, groups, standalone_components, ot_hours=None, ot_rates=None,
 ):
 	emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
 
@@ -174,7 +178,10 @@ def _build_summary_row(
 	component_totals = {sc.name: 0.0 for sc in components}
 
 	late_min_total = 0
+	ot_hours = ot_hours or {}
+	ot_rates = ot_rates or {}
 	ot_hours_total = 0.0
+	ot_amount_total = 0.0
 	present_days = 0.0
 	worked_on_holiday = 0
 
@@ -183,6 +190,11 @@ def _build_summary_row(
 	day_count = (ad_end - ad_start).days + 1
 	for offset in range(day_count):
 		ad_date = getdate(add_days(ad_start, offset))
+		# Overtime comes off the sheet, so it counts even on a day whose
+		# Attendance row is missing or stale.
+		day_ot = flt(ot_hours.get((emp.name, ad_date)))
+		ot_hours_total += day_ot
+		ot_amount_total += day_ot * flt(ot_rates.get((emp.name, ad_date)))
 		att = att_map.get((emp.name, ad_date))
 		if not att:
 			continue
@@ -201,11 +213,8 @@ def _build_summary_row(
 		# Against the day's shift, by the same measure as the per-day grid and
 		# overtime pay. This used to need HRMS's `late_entry` flag, which nothing
 		# here sets, and counted every minute anyone stayed late as overtime.
-		measured = measure_day(
-			att, is_holiday=ad_date in emp_holidays, ot_eligible=(emp.name, ad_date) in ot_days
-		)
+		measured = measure_day(att, is_holiday=ad_date in emp_holidays)
 		late_min_total += measured.late_minutes + measured.early_exit_minutes
-		ot_hours_total += measured.ot_hours
 
 		# Sum each attendance-driven component's per-day qty
 		for sc in components:
@@ -242,6 +251,7 @@ def _build_summary_row(
 		"employee_name": emp.employee_name,
 		"department": emp.department or "",
 		"ot_hours": flt(ot_hours_total, 1),
+		"ot_amount": flt(ot_amount_total, 2),
 		"late_minutes": int(late_min_total),
 		"present_days": flt(present_days, 1),
 		"worked_on_holiday": worked_on_holiday,
@@ -347,6 +357,7 @@ def _columns(groups, standalone_components):
 		})
 	cols.extend([
 		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 90, "precision": 2},
+		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 110},
 		{"label": _("Late Time (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 110},
 		{"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Float", "width": 100, "precision": 1},
 		{"label": _("Worked on Holiday"), "fieldname": "worked_on_holiday", "fieldtype": "Int", "width": 130},
@@ -369,6 +380,7 @@ def _summary(data, bs_label):
 		{"value": sum(r["present_days"] for r in data), "label": _("Total Present Days"), "datatype": "Float"},
 		{"value": sum(r["worked_on_holiday"] for r in data), "label": _("Total Worked on Holiday"), "datatype": "Int"},
 		{"value": sum(r["ot_hours"] for r in data), "label": _("Total O.T. (hrs)"), "datatype": "Float"},
+		{"value": flt(sum(r["ot_amount"] for r in data), 2), "label": _("Total O.T. Amount"), "datatype": "Currency"},
 		{"value": sum(r["late_minutes"] for r in data), "label": _("Total Late (min)"), "datatype": "Int"},
 	]
 

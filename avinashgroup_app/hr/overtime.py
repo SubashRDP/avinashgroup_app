@@ -33,7 +33,7 @@ from datetime import datetime, timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import get_time, getdate
+from frappe.utils import flt, get_time, getdate
 
 # ── Day types — resolved per EMPLOYEE, never per company: holiday lists differ
 #    (Teej is a holiday only on the (Women) lists).
@@ -280,6 +280,30 @@ def get_overtime_days(employees, start, end):
 		{"entitlement": ENTITLEMENT_OVERTIME, "names": names, "start": getdate(start), "end": getdate(end)},
 	)
 	return {(employee, getdate(work_date)) for employee, work_date in rows}
+
+
+def get_overtime_hours(employees, start, end):
+	"""{(employee, date): hours} measured on submitted Overtime Sheets, over a period.
+
+	The hours pay reads (payroll/attendance_allowance.py `_authorised_overtime_hours`):
+	the sheet row's Worked Hours, measured against the shift rostered when it was
+	settled. The attendance reports show these rather than re-measuring the
+	Attendance row, whose stored deviations can lag a shift changed afterwards —
+	which showed 0 O.T. on days the sheet, and pay, counted 4.5 hours.
+	"""
+	names = [e if isinstance(e, str) else e.name for e in employees]
+	if not names:
+		return {}
+	rows = frappe.db.sql(
+		"""select r.employee, s.work_date, sum(r.worked_hours)
+		from `tabOvertime Sheet Employee` r
+		join `tabOvertime Sheet` s on s.name = r.parent
+		where s.docstatus = 1 and r.entitlement = %(entitlement)s
+		  and r.employee in %(names)s and s.work_date between %(start)s and %(end)s
+		group by r.employee, s.work_date""",
+		{"entitlement": ENTITLEMENT_OVERTIME, "names": names, "start": getdate(start), "end": getdate(end)},
+	)
+	return {(employee, getdate(work_date)): flt(hours) for employee, work_date, hours in rows}
 
 
 def was_authorised(employee, work_date):

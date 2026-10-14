@@ -5,8 +5,10 @@ Per Payroll Entry:
 2. For each (employee, component), skip anyone who does not get it — an
    allowance needs a row on their salary assignment (payroll/allowance.py); any
    other component a row in their salary structure. The late fine (Late Time)
-   needs neither: everyone is fined except those ticked Late Fine Exempt. And,
-   for an "Only OT-Eligible Staff" component, anyone not OT eligible.
+   needs neither: everyone is fined except those ticked Late Fine Exempt.
+   Overtime (Authorised Overtime) needs neither either: anyone OT eligible on a
+   submitted Overtime Sheet is paid. And, for an "Only OT-Eligible Staff"
+   component, anyone not OT eligible.
 3. Evaluate the component's condition against the employee's submitted
    Attendance rows in the period — the payroll's BS month, or the one before
    it when the component's Attendance Month says so — and sum the qty.
@@ -14,6 +16,8 @@ Per Payroll Entry:
    component priced Hourly Basic × Multiplier (overtime), the person's own
    basic per hour times the multiplier. The late fine is always priced that
    way, whatever its Unit and Rate Basis say: minutes late × basic per minute.
+   Overtime always is too: sheet hours × hourly basic × 1.5 (`overtime_rate`,
+   which the Monthly Attendance BS report shows beside the hours).
 5. Create and submit an Additional Salary per (employee, component,
    payroll_date), tagged with `custom_source = "Nepal HRMS Attendance
    Allowance"`. Idempotent: earlier rows with the same tag are replaced.
@@ -36,6 +40,12 @@ SOURCE_TAG = "Nepal HRMS Attendance Allowance"
 #: The late-fine condition: late arrival plus leaving early, fined per minute
 #: off the person's basic, for everyone not Late Fine Exempt.
 LATE_TIME = "Late Time"
+
+#: The overtime condition: hours on a submitted Overtime Sheet, paid to anyone
+#: OT eligible at 1.5 times their hourly basic (user, 2026-10-14; the Labour
+#: Act's rate). No row on the assignment, Rate Basis or Multiplier to set.
+AUTHORISED_OVERTIME = "Authorised Overtime"
+OVERTIME_MULTIPLIER = 1.5
 
 # Statuses that are *not* "present" full-day. Half Day is excluded because it's
 # weighted at 0.5 separately; Absent/On Leave aren't worked days at all.
@@ -295,7 +305,7 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	if condition == "Meal Entitlement":
 		return _meals_for_day(row, sc, present_statuses, employee)
 
-	if condition == "Authorised Overtime":
+	if condition == AUTHORISED_OVERTIME:
 		# Policy 5.1: the per-day Overtime Sheet decides who is paid overtime and
 		# for which day; the punches decide how many hours. Hours already rounded
 		# to the half hour by settlement.
@@ -464,6 +474,17 @@ def _hourly_basic(employee: str, on_date, sc=None, month_days: int | None = None
 	return flt(_assignment(employee, on_date).base) / days / hours
 
 
+def overtime_rate(employee: str, on_date, month_days: int, sc=None) -> float:
+	"""One overtime hour: the person's hourly basic × 1.5. 0 without a salary assignment.
+
+	The one place overtime is priced, read by `_resolve_rate` for pay and by the
+	Monthly Attendance BS report for its O.T. Rate and O.T. Amount columns, so
+	the two never disagree. `month_days` is the BS month's length (29–32); the
+	component's "Rate: Days / Hours" still override 30-odd days and 8 hours.
+	"""
+	return _hourly_basic(employee, on_date, sc, month_days) * OVERTIME_MULTIPLIER
+
+
 def _per_unit(unit: str, day: float, hours: float) -> float:
 	if unit == "Per Hour":
 		return flt(hours)
@@ -549,7 +570,8 @@ def recompute_holiday_flags(start_date=None, end_date=None) -> dict:
 
 
 def _skip_for_eligibility(emp_doc, sc) -> bool:
-	if sc.get("custom_ot_eligible_only") and not emp_doc.get("custom_ot_eligibility"):
+	ot_only = sc.get("custom_ot_eligible_only") or sc.get("custom_condition_type") == AUTHORISED_OVERTIME
+	if ot_only and not emp_doc.get("custom_ot_eligibility"):
 		# Policy 2.2: overtime money and meals are for OT-eligible staff; admin
 		# and officers take replacement leave instead.
 		return True
@@ -621,7 +643,9 @@ def _gets(employee: str, sc, row, on_date) -> bool:
 	assignment — no row, not paid. Any other attendance component: a row in
 	their salary structure's Deductions tags it.
 	"""
-	if sc.get("custom_condition_type") == LATE_TIME:
+	if sc.get("custom_condition_type") in (LATE_TIME, AUTHORISED_OVERTIME):
+		# Overtime's own gate is OT eligibility (`_skip_for_eligibility`) and the
+		# Overtime Sheet (the quantity is 0 without one).
 		return True
 	if sc.get("custom_is_allowance"):
 		return row is not None
@@ -640,6 +664,10 @@ def _resolve_rate(row, sc, employee=None, on_date=None, month_days=None):
 	so a component left on Fixed Rate still charges what lateness costs: an
 	hour's basic per hour late, i.e. basic ÷ month days ÷ 8 ÷ 60 per minute.
 	"""
+	if sc.get("custom_condition_type") == AUTHORISED_OVERTIME and employee:
+		rate = overtime_rate(employee, on_date, month_days, sc)
+		return rate if rate else None
+
 	computed = sc.get("custom_rate_basis") == COMPUTED_RATE_BASIS or sc.get("custom_condition_type") == LATE_TIME
 	if computed and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,
