@@ -78,7 +78,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 342,
+      "line": 339,
       "title": "1.12 checkin_{_event}",
       "description": "Registers `checkin_after_insert` / `checkin_on_update` / `checkin_after_delete` on Employee Checkin."
     },
@@ -174,7 +174,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 231,
+      "line": 228,
       "title": "2.12 attendance_events",
       "description": "Our Attendance `validate` hooks, run in this order (on `validate`, so they also fire for attendance submitted on insert)."
     },
@@ -306,7 +306,7 @@
     },
     {
       "file": "avinashgroup_app/public/js/payroll_entry.js",
-      "line": 310,
+      "line": 358,
       "title": "4.1 Prepare Payroll Inputs",
       "description": "The button; after a confirm it calls `trigger_for_payroll_entry`."
     },
@@ -660,7 +660,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 360,
+      "line": 357,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -684,7 +684,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 367,
+      "line": 364,
       "title": "8.5 apply_tax_reliefs",
       "description": "Registration (second)."
     },
@@ -708,7 +708,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 371,
+      "line": 368,
       "title": "8.9 apply_income_tax_override",
       "description": "Registration (third)."
     },
@@ -732,7 +732,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 378,
+      "line": 375,
       "title": "8.13 validate_salary_slip",
       "description": "Registration (fourth)."
     },
@@ -744,7 +744,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 381,
+      "line": 378,
       "title": "8.15 build_daily_breakdown",
       "description": "Registration (fifth)."
     },
@@ -762,7 +762,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 464,
+      "line": 461,
       "title": "8.18 set_bs_dates",
       "description": "Registration (sixth, from a loop further down `hooks.py`)."
     },
@@ -828,7 +828,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 325,
+      "line": 322,
       "title": "9.10 default_jv_type",
       "description": "Registered first in Journal Entry `before_insert`."
     },
@@ -918,7 +918,7 @@
     },
     {
       "file": "avinashgroup_app/public/js/payroll_entry.js",
-      "line": 224,
+      "line": 226,
       "title": "11.1 dashain_allowance",
       "description": "Payroll Entry → Nepal HRMS → **Dashain Allowance**: asks for the component and the cut-off date, calls `make_festival_adjustment`, shows the total and who was left out."
     },
@@ -965,26 +965,26 @@
       "description": "One submitted Additional Salary per row, full tax in the month; then re-saves the people's draft slips."
     },
     {
-      "file": "avinashgroup_app/public/js/leave_encashment_list.js",
-      "line": 15,
-      "title": "11.9 encash_year_end",
-      "description": "Leave Encashment list → **Encash Year-End Balances**: company + fiscal year, then the review table."
+      "file": "avinashgroup_app/public/js/payroll_entry.js",
+      "line": 270,
+      "title": "11.9 leave_encashment",
+      "description": "Payroll Entry → **Nepal HRMS → Leave Encashment**: confirm, then the review table (occasion, balance, days, rate, amount) and who was left out."
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 211,
-      "title": "11.10 leave_encashment.encash_year_end",
-      "description": "From the first day of the year's last BS month: active employees with an assignment → `encash_month` for that month, year-end occasion only.\n\nReads: Fiscal Year `year_end_date`"
+      "line": 210,
+      "title": "11.10 leave_encashment.encash_for_payroll_entry",
+      "description": "From the payroll month's first day: the entry's employees → `encash_month` for its dates — Year End when an allocation ends in the month (Ashadh), Separation for anyone relieved in it.\n\nReads: Payroll Entry `start_date` / `end_date`"
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 253,
+      "line": 244,
       "title": "11.11 encash_month",
       "description": "Per due (employee, type, allocation): skips one already submitted, rebuilds a draft, inserts a Leave Encashment dated the allocation's end.\n\nReads: Leave Period; Leave Encashment"
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 185,
+      "line": 184,
       "title": "11.12 due_encashments",
       "description": "Allocations of Allow Encashment types ending in the month (year end) or covering a relieving date in it (separation).\n\nReads: Leave Type `allow_encashment`, `custom_encash_at_year_end`, `custom_encash_at_separation`; Leave Allocation"
     },
@@ -996,13 +996,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 93,
+      "line": 92,
       "title": "11.14 price_encashment",
       "description": "After HRMS's validate: refuses a second encashment of the allocation, a date that is neither year end nor relieving date, an occasion the type does not allow; amount = days × `per_day_rate`.\n\nReads: Leave Type `custom_encash_at_*`"
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 72,
+      "line": 71,
       "title": "11.15 per_day_rate",
       "description": "Assignment `base` ÷ Leave Type `custom_encashment_days_per_month` (blank = the BS month's days).\n\nReads: Salary Structure Assignment `base`"
     },
@@ -1014,13 +1014,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 135,
+      "line": 134,
       "title": "11.17 mark_additional_salary",
       "description": "Additional Salary validate: an encashment's row is taxed in full in its month and tagged."
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 147,
+      "line": 146,
       "title": "11.18 link_additional_salary",
       "description": "Additional Salary on_submit: writes it back to the encashment so cancelling one cancels the other."
     }

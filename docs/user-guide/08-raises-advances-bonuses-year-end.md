@@ -166,20 +166,24 @@ Untick **Allow Encashment** and that type is left out completely.
 
 ### Paying it (once a year, in Ashadh)
 
+Leave encashment starts from the payroll that pays it, the same as the Dashain allowance.
+
 1. Wait until the last day of Ashadh has been credited (the monthly leave credit runs on the month's last day).
-2. Open **HR Dashboard → Leave → Leave Encashment** (the same screen as before: the Leave Encashment list).
-3. Press **Encash Year-End Balances**. Choose the **Company** and the **Fiscal Year** (for example 83/84), and press **Make Drafts**. It only works from the first day of Ashadh.
-4. A table shows, per person and leave type: **Balance**, **Days Encashed**, **Rate/Day** and **Amount**, then anyone **not included** with the reason (no salary assignment, no balance, already encashed).
-5. Check the drafts. Each one also shows **Monthly Basic**, **Days per Month** and **Rate per Day**.
-6. In the list, select the drafts → **Actions → Submit**. Each submitted encashment becomes an Additional Salary dated the year's last day, and the person's draft Ashadh slip is updated.
+2. Open the **Ashadh Payroll Entry**, save it and press **Get Employees**.
+3. Press **Nepal HRMS → Leave Encashment**, and confirm. It only works from the first day of the payroll month.
+4. A table shows, per person and leave type: **Occasion** (Year End or Separation), **Balance**, **Days Encashed**, **Rate/Day** and **Amount**, then anyone **not included** with the reason (no salary assignment, no balance, already encashed).
+5. Check the drafts (each name in the table opens it). Each one also shows **Monthly Basic**, **Days per Month** and **Rate per Day**.
+6. Open the **Leave Encashment list** (link in the message), select the drafts → **Actions → Submit**. Each submitted encashment becomes an Additional Salary dated the year's last day, and the person's draft Ashadh slip is updated.
 
 Pressing the button again rebuilds the drafts and never touches a submitted encashment. The system refuses a second encashment of the same allocation, even typed by hand. To undo one, **Cancel** it: its payment is cancelled with it.
 
 ### Someone leaving during the year
 
 1. Set the **Relieving Date** on the Employee. Keep the status **Active** until the encashment is submitted (the system refuses an encashment for an employee who has Left).
-2. **Leave Encashment → New**: Employee, Leave Type, **Encashment Date = the relieving date**. The days and amount fill themselves at the same rate as above.
-3. Submit it. It is paid on that month's slip (the last one).
+2. In the Payroll Entry of the month they leave, press **Nepal HRMS → Leave Encashment**. Everyone whose relieving date falls in the month is drafted at Separation, dated that day, at the same rate as above.
+3. Submit the drafts from the Leave Encashment list. They are paid on that month's slip (the last one).
+
+A single leaver can also be done by hand: **Leave Encashment → New**, Employee, Leave Type, **Encashment Date = the relieving date**; the days and amount fill themselves.
 
 | Message | Fix |
 |---|---|
@@ -187,7 +191,7 @@ Pressing the button again rebuilds the drafts and never touches a submitted enca
 | "… is not encashed at year end / separation (Leave Type setting)" | Tick **Encash at Year End** / **Encash at Separation** on the Leave Type, if that is the policy |
 | "… already encashes this allocation" | It has been paid. Cancel the old one first if it was wrong |
 | "No Leave Period for … covers …" | IT runs the year setup, which makes the leave period |
-| "Year-end encashment for … opens on …" | Wait for Ashadh |
+| "Leave encashment for this month opens on …" | Wait for the payroll month to start |
 
 ## 8.6 Tax: insurance, CIT and manual tax
 
@@ -226,7 +230,7 @@ The year's setup is mostly done in one step by IT, but it needs information that
 | 4 | Shift Types, and each employee's Overtime Eligible / Replacement Leave tick, still correct | HR | Ashadh |
 | 5 | IT runs the **year setup**: holiday lists (all Saturdays), leave period, payroll period, new salary assignments on the new tax slab, leave policy assignments | IT | Ashadh |
 | 6 | **Festivals** added to the new holiday lists with **Holiday Bulk Update**; Teej and Women's Day on the Women lists only | HR | Right after step 5, before the first festival |
-| 7 | **Leave encashment** for the closing year: Leave Encashment list → **Encash Year-End Balances**, check, submit | HR | In Ashadh, before the Ashadh payroll (see 8.5) |
+| 7 | **Leave encashment** for the closing year: Ashadh Payroll Entry → **Nepal HRMS → Leave Encashment**, check, submit | HR | In Ashadh, before the Ashadh payroll (see 8.5) |
 | 8 | On 1 Shrawan the companies and the women move to the new holiday lists | Automatic | Nothing to do. If a list was missing, IT sees it in the Error Log |
 
 > **Check after step 5.** The year setup gives everyone a new salary assignment from 1 Shrawan so that the new tax rates apply. It copies the Basic, **Initial Basic**, **SSF Applicable** and the whole **Allowances** table from the old assignment. Open two or three of the new assignments and compare them with the old ones before the first payroll of the new year.

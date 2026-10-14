@@ -24,7 +24,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 
 **HRMS vs us.** HRMS owns the Payroll Entry doctype, slip creation, the accrual journal and the bank entry. We add the following:
 
-* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L519);
+* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L516);
 * the **BS month** fields and calendar;
 * one **doc_event** guard;
 * the whole **attendance engine**. HRMS has no attendance-driven pay at all, only proration by payment days (stage [06](06-salary-slip.md)).
@@ -69,7 +69,7 @@ Registered at [`payroll_entry.js`](../../avinashgroup_app/hooks.py#L107).
 | [`show_bs_month`](../../avinashgroup_app/public/js/payroll_entry.js#L16) | Calls `bs_calendar.get_month` and writes start, end, posting date and the mitis **directly on `frm.doc`**, "so HRMS's own start/end/posting handlers would [not] recompute the dates from the AD calendar". |
 | [`lock_bs_dates`](../../avinashgroup_app/public/js/payroll_entry.js#L11) | Makes `posting_date`, `start_date`, `end_date` and `payroll_frequency` read-only once a month is picked. |
 | [`fill_company_defaults`](../../avinashgroup_app/public/js/payroll_entry.js#L50) | Fills a blank payable account, cost centre and currency on the client. HRMS only does this when the company is *changed*, and the form would otherwise refuse Save before the server could fill them. |
-| [`Prepare Payroll Inputs`](../../avinashgroup_app/public/js/payroll_entry.js#L310) | The button, in group **Nepal HRMS**, on any non-cancelled entry. It shows a confirm, then calls `trigger_for_payroll_entry` (5.5) and shows "{n} allowance and fine records, {m} advance instalments. {k} draft salary slips updated." |
+| [`Prepare Payroll Inputs`](../../avinashgroup_app/public/js/payroll_entry.js#L358) | The button, in group **Nepal HRMS**, on any non-cancelled entry. It shows a confirm, then calls `trigger_for_payroll_entry` (5.5) and shows "{n} allowance and fine records, {m} advance instalments. {k} draft salary slips updated." |
 
 ### Coexisting script from rdp_common_app
 
@@ -110,7 +110,7 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 ## 5.3 The BS period guard (Payroll Entry side)
 
-[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L377).
+[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L374).
 
 | | |
 |---|---|

@@ -206,9 +206,11 @@ function render_month_calendar(frm, cal) {
 	});
 }
 
-// Dashain Allowance (payroll/festival_allowance.py): the button only writes a
-// draft Payroll Adjustment for HR to read and submit; pressing again rebuilds it.
-// (Leave encashment is on the Leave Encashment list: leave_encashment_list.js.)
+// The two yearly payments, under Nepal HRMS. Both only write drafts for HR to
+// read and submit; pressing again rebuilds them.
+//   Dashain Allowance (payroll/festival_allowance.py): a draft Payroll Adjustment.
+//   Leave Encashment (payroll/leave_encashment.py): draft Leave Encashments for
+//   the month — year-end balances in Ashadh, and anyone relieved in the month.
 const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
 const money = (v) => format_currency(v || 0);
 
@@ -265,6 +267,49 @@ function dashain_allowance(frm) {
 	});
 }
 
+function leave_encashment(frm) {
+	frappe.confirm(
+		__(
+			"Draft the leave encashments due in this payroll month: year-end balances (in Ashadh) and anyone relieved this month? Drafts made earlier are rebuilt; submitted ones are left alone."
+		),
+		() => {
+			frappe.dom.freeze(__("Working out leave balances..."));
+			frappe
+				.call({
+					method: "avinashgroup_app.payroll.leave_encashment.encash_for_payroll_entry",
+					args: { payroll_entry: frm.doc.name },
+				})
+				.then(({ message: r }) => {
+					frappe.dom.unfreeze();
+					if (!r) return;
+					const rows = r.created
+						.map(
+							(c) => `<tr><td><a href="/app/leave-encashment/${encodeURIComponent(c.name)}">${esc(c.employee_name || c.employee)}</a></td>
+							<td>${esc(c.leave_type)}</td><td>${esc(c.occasion)}</td><td class="text-right">${esc(c.balance)}</td>
+							<td class="text-right">${esc(c.days)}</td><td class="text-right">${money(c.rate)}</td><td class="text-right">${money(c.amount)}</td></tr>`
+						)
+						.join("");
+					frappe.msgprint({
+						title: __("Leave Encashment: {0} drafts, total {1}", [r.created.length, money(r.total)]),
+						indicator: r.created.length ? "green" : "orange",
+						wide: true,
+						message:
+							(rows
+								? `<div style="max-height:340px;overflow:auto"><table class="table table-sm table-bordered">
+								<tr><th>${__("Employee")}</th><th>${__("Leave Type")}</th><th>${__("Occasion")}</th><th>${__("Balance")}</th>
+								<th>${__("Days Encashed")}</th><th>${__("Rate/Day")}</th><th>${__("Amount")}</th></tr>${rows}</table></div>
+								<p class="text-muted">${__(
+									"Check them, then submit them from the {0} (Actions → Submit). Submitting puts them on this month's slips.",
+									[`<a href="/app/leave-encashment?docstatus=0">${__("Leave Encashment list")}</a>`]
+								)}</p>`
+								: `<p>${__("Nothing to encash this month.")}</p>`) + left_out_table(r.left_out),
+					});
+				})
+				.catch(() => frappe.dom.unfreeze());
+		}
+	);
+}
+
 frappe.ui.form.on("Payroll Entry", {
 	setup: hide_month_fields,
 	onload(frm) {
@@ -302,6 +347,9 @@ frappe.ui.form.on("Payroll Entry", {
 		if (frm.doc.docstatus === 2) return;
 		if (!frm.is_new() && frappe.model.can_create("Payroll Adjustment")) {
 			frm.add_custom_button(__("Dashain Allowance"), () => dashain_allowance(frm), __("Nepal HRMS"));
+		}
+		if (!frm.is_new() && frappe.model.can_create("Leave Encashment")) {
+			frm.add_custom_button(__("Leave Encashment"), () => leave_encashment(frm), __("Nepal HRMS"));
 		}
 		// It writes Additional Salary; the server refuses anyone who cannot.
 		if (!frappe.model.can_create("Additional Salary")) return;

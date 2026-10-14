@@ -207,7 +207,7 @@ Each allowance has a **kind**, set on its Salary Component. The kind decides how
 | Per Meal | Meal | Meals counted from attendance and Overtime Sheets × Rate, by **Prepare Payroll Inputs** |
 | Per Overtime Hour | Overtime | Hours from approved Overtime Sheets × the person's basic per hour × 1.5, by **Prepare Payroll Inputs** |
 | Entered by Hand | Load/Unload Allowance | Typed each month on a **Payroll Adjustment** (Chapter 8) |
-| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → **Dashain Allowance** button (8.4). Leave: Leave Encashment list → **Encash Year-End Balances** (8.5) |
+| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → **Dashain Allowance** button (8.4). Leave: Payroll Entry → **Leave Encashment** button (8.5) |
 
 "Entered by Hand" and "Yearly" allowances cannot be put on an Allowances table or a structure's Allowance Rates.
 

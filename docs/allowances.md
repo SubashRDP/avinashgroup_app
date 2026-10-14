@@ -57,7 +57,7 @@ No new field and no new structure are needed.
 | Per Meal ⏱ | Meal | the same (see **Meal** below) |
 | Per Overtime Hour ⏱ | Overtime | the same (Overtime Sheets × basic per hour × 1.5) |
 | Entered by Hand | Load/Unload | Additional Salary typed by HR |
-| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → **Dashain Allowance** (draft Payroll Adjustment, basic × service factor ≤ basic). Leave: Leave Encashment list → **Encash Year-End Balances** (Ashadh) |
+| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → **Dashain Allowance** (draft Payroll Adjustment, basic × service factor ≤ basic). Leave: Payroll Entry → **Leave Encashment** (year-end balances in Ashadh, leavers in their last month) |
 
 "Fixed per Person" and "Fixed Company Rate" were one kind with the rate kept in
 two places; both are **Monthly** since 2026-10-12.

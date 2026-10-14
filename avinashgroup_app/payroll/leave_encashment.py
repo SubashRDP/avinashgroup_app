@@ -24,20 +24,19 @@ Leave Type's Earning Component — but three things in stock HRMS do not fit her
      cancelling the encashment left the payment standing). `mark_additional_salary`
      and `link_additional_salary` fix both.
 
-HR's entry point is the one it already had: the HR dashboard's / Leaves
-workspace's "Leave Encashment" link, which opens HRMS's Leave Encashment list.
-That list gets one button, "Encash Year-End Balances" (`encash_year_end`, form
-script public/js/leave_encashment_list.js): pick company and fiscal year, and
-every active employee's remaining balance on each encashable type is drafted as
-a Leave Encashment dated the allocation's last day (end of Ashadh), with a
-review table of balance, days, rate and amount. HR submits them from the list;
-submitting writes the Additional Salary for the Ashadh slip and re-saves the
-person's draft slip. Pressing it again rebuilds drafts and leaves submitted ones
-alone, and `price_encashment` refuses a second encashment of an allocation.
+HR's entry point is the Payroll Entry that pays it, the same as the Dashain
+allowance: Nepal HRMS → "Leave Encashment" (`encash_for_payroll_entry`). For the
+entry's employees it drafts what falls in that month — the remaining balance on
+each encashable type, dated the allocation's last day, when the month is the
+year's last (Ashadh); and for anyone relieved in the month, their balance dated
+the relieving date — with a review table of balance, days, rate and amount. HR
+submits the drafts from the Leave Encashment list; submitting writes the
+Additional Salary for the month's slip and re-saves the person's draft slip.
+Pressing it again rebuilds drafts and leaves submitted ones alone, and
+`price_encashment` refuses a second encashment of an allocation.
 
-Separation needs no button: HR makes a Leave Encashment on the stock form
-(New, as before), dated the relieving date; this module prices it and checks
-the type allows it. It rides the last slip.
+A one-off separation can still be made on the stock form (New, dated the
+relieving date); this module prices it and checks the type allows it the same way.
 
 Every rule is data: which types (Allow Encashment), the earning component, the
 day cap (Maximum / Non-Encashable Leaves), the divisor, and the two occasions
@@ -53,7 +52,7 @@ relieving date is enough). Payment through a Payment Entry instead of the slip
 
 import frappe
 from frappe import _
-from frappe.utils import flt, getdate
+from frappe.utils import flt, getdate, strip_html
 
 from avinashgroup_app.payroll.allowance import current_assignment
 
@@ -208,45 +207,37 @@ def due_encashments(employees: list, start_date, end_date) -> list:
 
 
 @frappe.whitelist()
-def encash_year_end(company: str, fiscal_year: str) -> dict:
-	"""Draft a Leave Encashment for every encashable leave balance at the fiscal year's end.
+def encash_for_payroll_entry(payroll_entry: str) -> dict:
+	"""Draft the Leave Encashments that fall in this Payroll Entry's month, for its employees.
 
-	The list-view button on Leave Encashment ("Encash Year-End Balances"). For
-	the company's active employees with a salary assignment, every allocation of
-	an Allow Encashment type that ends in the year's last BS month (Ashadh) is
-	encashed, dated its last day, so the Additional Salary rides the Ashadh
-	slip. Explicit action, pressed by HR; drafts made earlier are rebuilt,
-	submitted ones are left alone. Refused before the last month starts: the
-	month's final leave credit is not in yet.
+	The "Leave Encashment" button on the Payroll Entry (public/js/payroll_entry.js),
+	beside "Dashain Allowance": both yearly payments start from the payroll that
+	pays them. In Ashadh, every allocation of an Allow Encashment type that ends
+	in the month is encashed at Year End, dated its last day; in any month,
+	someone whose relieving date falls in it is encashed at Separation, dated
+	that day. So the Additional Salary rides this entry's slips.
+
+	Explicit action, pressed by HR; drafts made earlier are rebuilt, submitted
+	ones are left alone. Refused before the month starts: its final leave credit
+	is not in yet. Throws for a cancelled entry or one without employees.
 	"""
+	pe = frappe.get_doc("Payroll Entry", payroll_entry)
+	pe.check_permission("read")
 	frappe.has_permission("Leave Encashment", "create", throw=True)
-	from rdp_common_app.utils.bs_boundaries import get_bs_month_start
+	if pe.docstatus == 2:
+		frappe.throw(_("This Payroll Entry is cancelled."))
 
-	year_end = getdate(frappe.db.get_value("Fiscal Year", fiscal_year, "year_end_date"))
-	if not year_end:
-		frappe.throw(_("Fiscal Year {0} not found").format(fiscal_year))
-	last_month_start = getdate(get_bs_month_start(year_end))
-	if getdate() < last_month_start:
-		frappe.throw(
-			_("Year-end encashment for {0} opens on {1}, the first day of the year's last month.").format(
-				fiscal_year, last_month_start
-			)
-		)
+	start_date, end_date = getdate(pe.start_date), getdate(pe.end_date)
+	if getdate() < start_date:
+		frappe.throw(_("Leave encashment for this month opens on {0}, its first day.").format(start_date))
 
-	employees, no_pay = [], []
-	for emp in frappe.get_all(
-		"Employee", filters={"company": company, "status": "Active"}, fields=["name", "employee_name"]
-	):
-		if current_assignment(emp.name, year_end):
-			employees.append(emp.name)
-		else:
-			no_pay.append({"employee": emp.name, "employee_name": emp.employee_name, "leave_type": "",
-				"reason": _("no salary assignment, so no basic to price the days at")})
+	employees = [r.employee for r in pe.employees]
+	if not employees:
+		frappe.throw(_("The Payroll Entry has no employees yet: press Get Employees first."))
 
-	currency = frappe.get_cached_value("Company", company, "default_currency")
-	result = encash_month(company, currency, employees, last_month_start, year_end, occasions=(YEAR_END,))
-	result["left_out"] += no_pay
-	result["period"] = {"from": last_month_start, "to": year_end}
+	currency = frappe.get_cached_value("Company", pe.company, "default_currency")
+	result = encash_month(pe.company, currency, employees, start_date, end_date)
+	result["period"] = {"from": start_date, "to": end_date}
 	return result
 
 
@@ -310,7 +301,7 @@ def encash_month(company: str, currency: str, employees: list, start_date, end_d
 		except Exception as e:
 			frappe.db.rollback(save_point=savepoint)
 			frappe.clear_last_message()
-			left_out.append({"employee": employee, "leave_type": leave_type, "reason": str(e)})
+			left_out.append({"employee": employee, "leave_type": leave_type, "reason": strip_html(str(e))})
 			frappe.log_error(title=f"Leave encashment for {employee}/{leave_type}", message=frappe.get_traceback())
 
 	frappe.clear_messages()

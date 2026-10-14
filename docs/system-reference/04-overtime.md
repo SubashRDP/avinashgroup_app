@@ -128,7 +128,7 @@ A holiday-work Overtime Sheet row for any of the 261 is refused ("has neither â€
 |---|---|
 | **What** | For each row with entitlement **Overtime** on a submitted sheet, reads that day's submitted Attendance and writes `worked_hours`, `attendance` and `settlement_note`, then the sheet's `total_worked_hours`. |
 | **Why** | Docstring ([`Measure authorised overtime`](../../avinashgroup_app/hr/overtime_settlement.py#L1)): the sheet says the company asked; attendance says how long the work lasted. "Measuring used to be a button only, so overtime paid 0 for any sheet nobody thought to press it on." Commits 240ea3c (2026-09-21) and 297ebbd (2026-09-27). |
-| **Triggered by** | (a) the hook on Overtime Sheet `on_submit` [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L455), only when the work date is already past; (b) the daily job [`measure_pending`](../../avinashgroup_app/hooks.py#L534) in `daily_long`; (c) the **Measure from Attendance** button [`Measure from Attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L23), shown on a submitted sheet. |
+| **Triggered by** | (a) the hook on Overtime Sheet `on_submit` [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L456), only when the work date is already past; (b) the daily job [`measure_pending`](../../avinashgroup_app/hooks.py#L531) in `daily_long`; (c) the **Measure from Attendance** button [`Measure from Attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L23), shown on a submitted sheet. |
 | **Reads** | Attendance (`status`, `in_time`, `out_time`, `working_hours`), Shift Assignment and Shift Type through `get_shift_window`. |
 | **Writes** | Overtime Sheet Employee `worked_hours`, `attendance`, `settlement_note`; Overtime Sheet `total_worked_hours`. All via `db_set(update_modified=False)` on a submitted doc, so there is no version history. |
 | **Impacts downstream** | `worked_hours` is the **quantity of the Overtime component** in payroll (4.6). Re-measuring after Prepare Payroll Inputs changes nothing on the slip until Prepare Payroll Inputs is pressed again. |
@@ -173,7 +173,7 @@ Note that a Half Day attendance still measures in full here: only `Absent` is ze
 |---|---|
 | **What** | Turns each `Replacement Leave` row whose attendance shows the person worked into a submitted **Compensatory Leave Request** (HRMS). That request creates or tops up a **Leave Allocation** of type *Replacement Leave*. |
 | **Why** | Docstring ([`Credit replacement leave`](../../avinashgroup_app/hr/replacement_leave.py#L1)): "Until now nothing turned that row into leave, so the day was promised on paper and never reached a balance." HRMS's own document is used for its audit trail and checks. Commit 297ebbd (2026-09-27). |
-| **Triggered by** | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L455) (dates already past), the daily job [`grant_pending`](../../avinashgroup_app/hooks.py#L534) (`daily_long`, 62-day lookback), and [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L456). |
+| **Triggered by** | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L456) (dates already past), the daily job [`grant_pending`](../../avinashgroup_app/hooks.py#L531) (`daily_long`, 62-day lookback), and [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L453). |
 | **Reads** | Attendance `status` for the date. |
 | **Writes** | Compensatory Leave Request (inserted and submitted with `ignore_permissions`), which through HRMS creates a Leave Allocation or Leave Ledger Entry. Row `compensatory_leave_request` and `settlement_note`. On failure, an Error Log. |
 | **Impacts downstream** | The Replacement Leave balance shown in Leave Application and in the Yearly Leave Details (BS) report. Pay is not affected: the type has `allow_encashment` 0, and taking the day is ordinary paid leave. |
@@ -237,8 +237,8 @@ Ramhari: 3.5 + 8.5 = **12 OT hours**. Meals: the Saturday gives 2; on 07-21 he w
 
 | Hook / job | Handler | Order note |
 |---|---|---|
-| Overtime Sheet `on_submit` | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L455) then [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L455) | Independent: each handles its own entitlement. |
-| Overtime Sheet `on_cancel` | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L456) | Hours and Additional Salary are left as they are. |
+| Overtime Sheet `on_submit` | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L456) then [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L456) | Independent: each handles its own entitlement. |
+| Overtime Sheet `on_cancel` | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L453) | Hours and Additional Salary are left as they are. |
 | `daily_long` | `grant_pending`, `measure_pending` | Both use a 62-day lookback. |
 | `*` validate / before_save / on_update | Dynamic Approval, Numbering engine, SMS | No-op for Overtime Sheet on avinas1 (no settings). See [hooks-inventory.md](hooks-inventory.md). |
 

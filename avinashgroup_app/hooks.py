@@ -85,9 +85,6 @@ app_include_css = [
     "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
 ]
 
-# Leave Encashment list: "Encash Year-End Balances". See payroll/leave_encashment.py.
-doctype_list_js = {"Leave Encashment": "public/js/leave_encashment_list.js"}
-
 doctype_js = {
     # Approval-workflow UI (banner + reject dialog) is now generic — see
     # approval_workflow_auto.js in app_include_js. No per-doctype file needed;
