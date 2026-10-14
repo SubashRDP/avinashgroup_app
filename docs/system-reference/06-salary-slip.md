@@ -151,7 +151,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 **What.** Puts the employee's **Monthly** and **% of Initial Basic** allowances on the slip as ordinary (non-additional) earning rows, adds/updates/drops them to match the assignment, then reruns HRMS's `calculate_net_pay`.
 
-**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L320), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L273), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L258); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L72).
+**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L321), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L274), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L259); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L73).
 
 **Why** (module docstring, [../allowances.md](../allowances.md)):
 - Every person has their own mix (27 combinations across 195 people, October 2026), so allowances are rows on the person's Salary Structure Assignment, not structure formulas. No row → not paid.
@@ -182,7 +182,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 Tea & Conveyance, Meal, Overtime (earnings) and Late Fine, Salary Advance recovery (deductions) arrive as submitted **Additional Salary** created by *Prepare Payroll Inputs* ([05-payroll-entry.md](05-payroll-entry.md)); arrears by Salary Revision ([08-changes-over-time.md](08-changes-over-time.md)). HRMS picks them up in `add_additional_salary_components`. On the slip they have `default_amount = 0`, `additional_amount = amount`, and are not prorated.
 
-Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L676) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L697) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
+Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L692) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L713) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
 
 On avinas1 there are 10 Additional Salary rows, all from Prepare Payroll Inputs, all dated 2026-08-16 (NGI Shrawan, 4 employees). **The Bhadra runs at NGI and NGN carry none**: no tea, meal, overtime or late fine was paid in Bhadra (see the worked example's notes).
 
@@ -293,7 +293,7 @@ It writes the tax row (`amount`, `default_amount`), `custom_retirement_excess`, 
 
 **How it reconciles.**
 - Fixed pay per day = (Σ non-additional, non-statistical earning `amount`s ÷ `payment_days`) × the day's weight: Absent 0, Half Day 0.5 (1 if the other half is paid leave), LWP 0, holiday and paid leave 1, unmarked 1 when Payroll Settings says Present.
-- Each Additional Salary posted by Prepare Payroll Inputs (`custom_source` = [`SOURCE_TAG`](../../avinashgroup_app/payroll/attendance_allowance.py#L32)) is spread over the days by the same [`evaluate_rule`](../../avinashgroup_app/payroll/attendance_allowance.py#L250) that counted it; a line that counted another month (Attendance Month = Previous Month) or hand-made Additional Salary goes to month end.
+- Each Additional Salary posted by Prepare Payroll Inputs (`custom_source` = [`SOURCE_TAG`](../../avinashgroup_app/payroll/attendance_allowance.py#L34)) is spread over the days by the same [`evaluate_rule`](../../avinashgroup_app/payroll/attendance_allowance.py#L256) that counted it; a line that counted another month (Attendance Month = Previous Month) or hand-made Additional Salary goes to month end.
 - A difference under 1 rupee becomes a *Rounding* row; anything larger an *Adjustment: attendance differs from the slip's payment days* row.
 
 **Triggered by.** Every validate except on cancelled slips; frozen at submit. Failures are logged (`Daily breakdown failed for …` in Error Log) and never block the save.

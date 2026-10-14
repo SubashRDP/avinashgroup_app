@@ -28,7 +28,7 @@
 | **Initial Basic** | A person's starting basic, kept on their assignment. HRA is worked out from it, not from the current Basic |
 | **IRD** | Inland Revenue Department, where salary tax (SST and remuneration tax) is deposited |
 | **Late Excused** | A tick on one day's Attendance that stops the late fine for that day (with a reason) |
-| **Late Fine** | A deduction for minutes late in and minutes left early: Basic ÷ days in the BS month ÷ 8 per hour |
+| **Late Fine** | A deduction for minutes late in and minutes left early: Basic ÷ days in the BS month ÷ 8 ÷ 60 per minute. Everyone except Late Fine Exempt staff |
 | **Late Fine Exempt** | A tick on the Employee for staff never fined for lateness |
 | **Late Time** | Minutes late in + minutes left early, on a full working day |
 | **Leave Without Pay (LWP)** | Unpaid leave. The day is not paid |
@@ -61,7 +61,7 @@
 | **SSF Addition** | The employer's **20%** share, added to the employee's gross as an earning (so the employee's own cost is 11%) |
 | **SSF Applicable** | A tick on the assignment. Unticked: no SSF, and the person pays 1% SST instead |
 | **SST** | Social Security Tax: the 1% first band of income tax, paid only by staff **not** in SSF |
-| **Tag** | A tea, meal, overtime or late fine line in a Salary Structure. It means "applies to everyone on this structure"; the amount comes from attendance |
+| **Tag** | A tea, meal or overtime line in a Salary Structure. It means "applies to everyone on this structure"; the amount comes from attendance. The late fine needs no tag: it applies to everyone not Late Fine Exempt |
 | **Tea & Conveyance** | Paid per day present on working days (not on holidays); NGI 235, NGN 265 per day, or the person's own rate |
 | **TDS** | Tax deducted at source. Salary TDS is booked to TDS-Remuneration |
 | **Worked on Holiday** | A tick on Attendance when the day is a holiday on the person's own list |

@@ -38,7 +38,8 @@ Where each kind is paid:
     an assignment or in a rate list.
 
 The structure's Earnings and Deductions keep only what HRMS calculates by
-formula (Basic, SSF Addition, SSF, Income Tax) and the Late Fine tag;
+formula (Basic, SSF Addition, SSF, Income Tax) and, optionally, the Late Fine
+row (no longer needed: the late fine applies to everyone not exempt);
 `validate_salary_structure` refuses an allowance there.
 
 Hooks: doc_events → Salary Component / Salary Structure / Salary Structure

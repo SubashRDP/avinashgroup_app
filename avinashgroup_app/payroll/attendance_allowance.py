@@ -3,15 +3,17 @@
 Per Payroll Entry:
 1. List Salary Components where `custom_is_attendance_driven = 1` and not disabled.
 2. For each (employee, component), skip anyone who does not get it — an
-   allowance needs a row on their salary assignment (payroll/allowance.py); the
-   late fine, which is not an allowance, a row in their salary structure — and,
+   allowance needs a row on their salary assignment (payroll/allowance.py); any
+   other component a row in their salary structure. The late fine (Late Time)
+   needs neither: everyone is fined except those ticked Late Fine Exempt. And,
    for an "Only OT-Eligible Staff" component, anyone not OT eligible.
 3. Evaluate the component's condition against the employee's submitted
    Attendance rows in the period — the payroll's BS month, or the one before
    it when the component's Attendance Month says so — and sum the qty.
 4. Multiply qty × rate: the Rate on the person's assignment row, or, for a
-   component priced Hourly Basic × Multiplier (overtime, late fine), the
-   person's own basic per hour times the multiplier.
+   component priced Hourly Basic × Multiplier (overtime), the person's own
+   basic per hour times the multiplier. The late fine is always priced that
+   way, whatever its Unit and Rate Basis say: minutes late × basic per minute.
 5. Create and submit an Additional Salary per (employee, component,
    payroll_date), tagged with `custom_source = "Nepal HRMS Attendance
    Allowance"`. Idempotent: earlier rows with the same tag are replaced.
@@ -30,6 +32,10 @@ from avinashgroup_app.payroll.allowance import (
 )
 
 SOURCE_TAG = "Nepal HRMS Attendance Allowance"
+
+#: The late-fine condition: late arrival plus leaving early, fined per minute
+#: off the person's basic, for everyone not Late Fine Exempt.
+LATE_TIME = "Late Time"
 
 # Statuses that are *not* "present" full-day. Half Day is excluded because it's
 # weighted at 0.5 separately; Absent/On Leave aren't worked days at all.
@@ -295,7 +301,7 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		# to the half hour by settlement.
 		return _authorised_overtime_hours(employee, row.attendance_date)
 
-	if condition == "Late Time":
+	if condition == LATE_TIME:
 		# Late arrival plus leaving early, against the day's shift — the sheet's
 		# "Late Time", and exactly the minutes the attendance report shows.
 		if row.get("custom_late_excused"):
@@ -303,8 +309,9 @@ def evaluate_rule(row, sc, employee: str) -> float:
 			# they simply stop being charged.
 			return 0.0
 		measured = measure_day(row, is_holiday=bool(row.custom_worked_on_holiday))
-		minutes = measured.late_minutes + measured.early_exit_minutes
-		return _per_unit(unit, day=1.0 if minutes else 0.0, hours=minutes / 60)
+		# Always in hours, minute for minute — never a whole day for any
+		# lateness — whatever the component's Unit says (user, 2026-10-14).
+		return (measured.late_minutes + measured.early_exit_minutes) / 60
 
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
 		if condition == "Late Arrival After" and row.get("custom_late_excused"):
@@ -608,10 +615,14 @@ def _savepoint_name(employee: str, component: str) -> str:
 def _gets(employee: str, sc, row, on_date) -> bool:
 	"""Whether this person is paid the component at all.
 
-	An allowance: a row on their salary assignment — no row, not paid. The late
-	fine is not an allowance; a row in their salary structure's Deductions
-	tags it.
+	The late fine (Late Time): everyone. Its only exception is Late Fine Exempt
+	on the Employee, checked in `_skip_for_eligibility` (user, 2026-10-14: no
+	tag to forget on a structure). An allowance: a row on their salary
+	assignment — no row, not paid. Any other attendance component: a row in
+	their salary structure's Deductions tags it.
 	"""
+	if sc.get("custom_condition_type") == LATE_TIME:
+		return True
 	if sc.get("custom_is_allowance"):
 		return row is not None
 	return sc.name in structure_components(employee, on_date)
@@ -624,8 +635,13 @@ def _resolve_rate(row, sc, employee=None, on_date=None, month_days=None):
 	40 for new staff). Overtime and the late fine are priced off each person's
 	own basic instead — `Hourly Basic × Multiplier` — so they follow a pay rise
 	without anyone retyping a rate. None when there is nothing to price by.
+
+	The late fine is always priced off the basic, at its multiplier (blank = 1),
+	so a component left on Fixed Rate still charges what lateness costs: an
+	hour's basic per hour late, i.e. basic ÷ month days ÷ 8 ÷ 60 per minute.
 	"""
-	if sc.get("custom_rate_basis") == COMPUTED_RATE_BASIS and employee:
+	computed = sc.get("custom_rate_basis") == COMPUTED_RATE_BASIS or sc.get("custom_condition_type") == LATE_TIME
+	if computed and employee:
 		# Unrounded: the sheet multiplies the full-precision rate by the hours,
 		# and rounding the rate first drifts the amount by a paisa.
 		rate = _hourly_basic(employee, on_date, sc, month_days) * flt(sc.get("custom_rate_multiplier") or 1)
