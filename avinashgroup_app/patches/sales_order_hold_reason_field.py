@@ -3,15 +3,15 @@
 
 """Sales Order: "Reason" (custom_hold_reason).
 
-Holds the reason typed when the order was last put On Hold, Closed or
-Cancelled, as "Hold: ...", "Close: ..." or "Cancel: ...". Stock ERPNext keeps
+Holds the reasons typed when the order was put On Hold, Closed or
+Cancelled, one per line, as "Hold: ... (date)", "Close: ..." or "Cancel: ...". Stock ERPNext keeps
 a hold reason only as a timeline Comment and asks none on Close / Cancel.
 Written by custom_code/sales_order_status_reason.record_status_reason, from
 public/js/sales_order_status_reason.js.
 
 Kept after Resume / Re-open, on purpose: the client wants to see that the
-order was stopped once and why. Each action overwrites it; the full history
-stays in the timeline comments.
+order was stopped once and why. Each action adds a new line, so it holds
+every reason, oldest first.
 
 Read-only (filled only by those popups), allow_on_submit (holding happens on
 a submitted order), shown only once it has a value. Sits under Order Type.
