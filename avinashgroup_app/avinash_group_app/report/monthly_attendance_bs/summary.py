@@ -21,7 +21,9 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
   • Late Time (min)   = late arrival + leaving early, against the day's shift,
                         as the sheet's card adds them (Late + Before ofc. Time)
   • Present Days      = count(Present + WFH) + 0.5 × count(Half Day)
-  • Worked on Holiday = count(custom_worked_on_holiday=1 AND status in Present/Half Day)
+  • Worked on Holiday = days came in (Present / Half Day / WFH) on a date of the
+                        employee's holiday list — the Detail view's rule
+                        (monthly_attendance_bs.worked_on_holiday)
   • Leave Current     = approved Leave Application days within the BS month
   • Leave Previous    = approved Leave Application days within the previous BS month
   • Leave Upto Month  = cumulative approved leave from BS fiscal year start (Shrawan) → end of selected month
@@ -59,6 +61,7 @@ from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_att
 	_ot_rates,
 	employed_dates,
 	per_scope,
+	worked_on_holiday,
 	working_days_card,
 )
 
@@ -189,7 +192,7 @@ def _build_summary_row(
 	ot_hours_total = 0.0
 	ot_amount_total = 0.0
 	present_days = 0.0
-	worked_on_holiday = 0
+	holiday_worked = 0
 
 	present_statuses = get_present_statuses()
 
@@ -213,8 +216,8 @@ def _build_summary_row(
 			present_days += 0.5
 
 		# Worked on holiday count
-		if att.custom_worked_on_holiday and status in present_statuses + ("Half Day",):
-			worked_on_holiday += 1
+		if worked_on_holiday(att, ad_date in emp_holidays):
+			holiday_worked += 1
 
 		# Against the day's shift, by the same measure as the per-day grid and
 		# overtime pay. This used to need HRMS's `late_entry` flag, which nothing
@@ -260,7 +263,7 @@ def _build_summary_row(
 		"ot_amount": flt(ot_amount_total, 2),
 		"late_minutes": int(late_min_total),
 		"present_days": flt(present_days, 1),
-		"worked_on_holiday": worked_on_holiday,
+		"worked_on_holiday": holiday_worked,
 		"leave_current": leave_current,
 		"leave_previous": leave_previous,
 		"leave_upto": leave_upto,

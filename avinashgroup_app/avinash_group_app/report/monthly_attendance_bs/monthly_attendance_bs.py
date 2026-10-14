@@ -59,6 +59,7 @@ from rdp_common_app.utils.bs_boundaries import (
 	get_bs_month_days,
 	get_bs_month_name,
 )
+from avinashgroup_app.hr.holiday_backdate import WORKED_STATUSES
 from avinashgroup_app.hr.bs_calendar import bs_year_of, month_period, parse_bs_month
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
@@ -560,10 +561,7 @@ def _build_row(
 			# Attendance keyed in by hand has times but no punches behind them.
 			in_time_str = _fmt_time(att.in_time)
 			out_time_str = _fmt_time(att.out_time)
-		if (holiday or work_in_holiday) and status in ("Present", "Half Day"):
-			work_in_holiday = 1
-		if att.custom_worked_on_holiday and status in ("Present", "Half Day"):
-			work_in_holiday = 1
+		work_in_holiday = 1 if worked_on_holiday(att, bool(holiday)) else 0
 		# Against the shift of the day. This used to need HRMS's `late_entry`
 		# flag, which nothing on this site sets — so Late read 0 for everyone.
 		measured = measure_day(att, is_holiday=bool(holiday))
@@ -655,6 +653,21 @@ def _ot_rates(ot_hours, components):
 				cache[key] = 0.0
 		out[(employee, ad_date)] = cache[key]
 	return out
+
+
+def worked_on_holiday(att, is_holiday):
+	"""Worked on a holiday: came in (Present, Half Day, WFH) on a date the
+	employee's holiday list (own, else company default) carries. Both views.
+
+	The holiday list, not Attendance.custom_worked_on_holiday. The flag is a
+	copy taken when the row was saved, and goes stale when the list is edited
+	later: on demo Bheshraj worked Janai Purnima and Janmasthami, both on his
+	list, with the flag 0 on both rows. The Detail view counted them from the
+	list and the Summary view missed them from the flag, so the two said 2 and
+	0. The list is what the day was; payroll's flag is now kept to it by
+	attendance_allowance.resync_holiday_flags on every Holiday List save.
+	"""
+	return bool(att and is_holiday and att.status in WORKED_STATUSES)
 
 
 def _new_totals():

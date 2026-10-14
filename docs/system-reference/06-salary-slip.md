@@ -23,13 +23,13 @@ A slip save runs `Document.validate` → the controller's `validate()` → the d
 | 1 | `BSSalarySlip.validate` | [`validate`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L265) | Calls HRMS's `validate` and only logs afterwards |
 | 2 | HRMS `SalarySlip.validate` | [`validate`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L152) | Dates, structure, working days, `calculate_net_pay`, YTD (6.1–6.4) |
 | 3 | Audit fields | [`AuditEventMapper`](../../avinashgroup_app/hooks.py#L256) | `doc_events` starts as the audit mapper's dict, so its `validate` handler is first in the list (Salary Slip is in its doctype list) |
-| 4 | `add_employee_allowances` | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L357) | 6.5 |
-| 5 | `apply_tax_reliefs` | [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L364) | 6.8 |
-| 6 | `apply_income_tax_override` | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L368) | 6.9 |
-| 7 | `bs_period_guard.validate_salary_slip` | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L375) | 6.10 |
-| 8 | `build_daily_breakdown` | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L378) | 6.11. The hooks.py comment calls it "last of the slip's validate hooks"; it is not: step 9 is appended later in the file |
-| 9 | `set_bs_dates` | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L461) | 6.12, registered by a loop further down `hooks.py` |
-| 10 | `"*"` validate | erpnext's [`service_level_agreement.apply`](../../../erpnext/erpnext/hooks.py#L329) etc., then our [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L425) and [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L477) | No Dynamic Approval Setting exists for Salary Slip, so the approval hook exits; numbering is covered in [09-cross-cutting.md](09-cross-cutting.md) |
+| 4 | `add_employee_allowances` | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L362) | 6.5 |
+| 5 | `apply_tax_reliefs` | [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L369) | 6.8 |
+| 6 | `apply_income_tax_override` | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L373) | 6.9 |
+| 7 | `bs_period_guard.validate_salary_slip` | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L380) | 6.10 |
+| 8 | `build_daily_breakdown` | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L383) | 6.11. The hooks.py comment calls it "last of the slip's validate hooks"; it is not: step 9 is appended later in the file |
+| 9 | `set_bs_dates` | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L466) | 6.12, registered by a loop further down `hooks.py` |
+| 10 | `"*"` validate | erpnext's [`service_level_agreement.apply`](../../../erpnext/erpnext/hooks.py#L329) etc., then our [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L429) and [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L477) | No Dynamic Approval Setting exists for Salary Slip, so the approval hook exits; numbering is covered in [09-cross-cutting.md](09-cross-cutting.md) |
 
 No Server Script, Client Script or Notification exists for Salary Slip on avinas1 (checked 2026-10-12), so nothing else changes amounts.
 
@@ -182,7 +182,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 Tea & Conveyance, Meal, Overtime (earnings) and Late Fine, Salary Advance recovery (deductions) arrive as submitted **Additional Salary** created by *Prepare Payroll Inputs* ([05-payroll-entry.md](05-payroll-entry.md)); arrears by Salary Revision ([08-changes-over-time.md](08-changes-over-time.md)). HRMS picks them up in `add_additional_salary_components`. On the slip they have `default_amount = 0`, `additional_amount = amount`, and are not prorated.
 
-Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L720) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L741) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
+Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L767) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L788) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
 
 On avinas1 there are 10 Additional Salary rows, all from Prepare Payroll Inputs, all dated 2026-08-16 (NGI Shrawan, 4 employees). **The Bhadra runs at NGI and NGN carry none**: no tea, meal, overtime or late fine was paid in Bhadra (see the worked example's notes).
 
@@ -231,7 +231,7 @@ The first band is the 1% Social Security Tax, waived for SSF contributors; HRMS 
 
 **What.** Recomputes the tax row when either Nepal relief applies, using HRMS's own intermediate figures; leaves the slip untouched otherwise.
 
-**Where.** [`apply_tax_reliefs`](../../avinashgroup_app/payroll/tax_relief.py#L77), [`retirement_excess`](../../avinashgroup_app/payroll/tax_relief.py#L124), [`retirement_cap`](../../avinashgroup_app/payroll/tax_relief.py#L66), [`retirement_categories`](../../avinashgroup_app/payroll/tax_relief.py#L57), [`declared_retirement`](../../avinashgroup_app/payroll/tax_relief.py#L163), [`women_rebate_fraction`](../../avinashgroup_app/payroll/tax_relief.py#L182); Employee guard [`validate_womens_tax_rebate`](../../avinashgroup_app/payroll/tax_relief.py#L195) (hooked at [`validate_womens_tax_rebate`](../../avinashgroup_app/hooks.py#L348)).
+**Where.** [`apply_tax_reliefs`](../../avinashgroup_app/payroll/tax_relief.py#L77), [`retirement_excess`](../../avinashgroup_app/payroll/tax_relief.py#L124), [`retirement_cap`](../../avinashgroup_app/payroll/tax_relief.py#L66), [`retirement_categories`](../../avinashgroup_app/payroll/tax_relief.py#L57), [`declared_retirement`](../../avinashgroup_app/payroll/tax_relief.py#L163), [`women_rebate_fraction`](../../avinashgroup_app/payroll/tax_relief.py#L182); Employee guard [`validate_womens_tax_rebate`](../../avinashgroup_app/payroll/tax_relief.py#L195) (hooked at [`validate_womens_tax_rebate`](../../avinashgroup_app/hooks.py#L350)).
 
 **Why** (module docstring):
 1. *Retirement cap (Income Tax Act 2058 s.63).* Contributions to SSF/CIT/PF are deductible only up to the lower of a share of assessable income and a fixed yearly amount. HRMS exempts every rupee of an exempt deduction, so high earners were under-taxed. The excess over the cap is put back into taxable income.

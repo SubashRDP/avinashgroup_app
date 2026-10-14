@@ -54,7 +54,7 @@ Then [`make_journal_entry`](../../../hrms/hrms/payroll/doctype/payroll_entry/pay
 
 ### 7.2.1 Section accounts (O/O · S/D · F/P) — our override
 
-**What.** `AvinashPayrollEntry` (registered in `override_doctype_class` as [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L516)) replaces two HRMS methods:
+**What.** `AvinashPayrollEntry` (registered in `override_doctype_class` as [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L521)) replaces two HRMS methods:
 
 | Method | HRMS behaviour | Ours |
 |---|---|---|

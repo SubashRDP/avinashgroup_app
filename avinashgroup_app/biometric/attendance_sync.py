@@ -19,9 +19,12 @@ Two primitives, plus the Employee Checkin doc-event handlers that apply them:
       Attendance and refresh the row's computed values (working hours, in/out
       times, late/early flags, shift-deviation fields) from the full punch set.
 
-Status is NEVER changed here. Absent→Present transitions, row creation and
-deletion stay in Attendance Fix and the daily self-heal, so HR keeps an
-auditable trail of every status decision.
+sync_day never changes status. A hand change to a PAST day's punches (form,
+API) goes further and re-marks the whole day through hr/punch_correction —
+status included — because a person editing a punch is making exactly the
+decision Attendance Fix exists for; the punch is stamped and the Attendance
+gets a comment, so the trail stays auditable. Device pushes never do: they
+keep to sync_day and the self-heal.
 """
 
 from collections import Counter
@@ -301,29 +304,75 @@ def _resolve_shift_doc(shift_name, checkins, employee):
 # ---------------------------------------------------------------------------
 # Employee Checkin doc-event handlers
 # ---------------------------------------------------------------------------
+#
+# A punch entered, moved or deleted by hand on a PAST day re-marks that day the
+# way the Monthly Attendance BS correction does (hr/punch_correction): punches
+# pinned to the rostered shift, attendance rebuilt, overtime re-measured, and
+# the punch stamped for the report's highlight. Before this, only a Present /
+# Half Day row had its values refreshed (sync_day): a punch added to an Absent
+# day changed nothing, and one HRMS gave to the default shift was ignored.
+# Today, and days the correction refuses (paid, leave, no or overnight shift),
+# keep the value-only sync_day.
+#
+# Never per punch during ingest: the device pipeline sets
+# frappe.flags.in_biometric_day_reconcile and reconciles each day once itself,
+# and HRMS auto attendance links punches with a query, firing no doc events.
+
+
+def _manual(doc):
+    return not frappe.flags.in_biometric_day_reconcile and doc.employee and doc.time
+
+
+def _remark_or_sync(employee, day, note):
+    from avinashgroup_app.hr.punch_correction import remark_from_form
+
+    if not remark_from_form(employee, day, note):
+        sync_day(employee, day)
+
+
+def checkin_before_validate(doc, method=None):
+    """Let a linked punch on a past day be moved. HRMS refuses any time change
+    on a punch linked to an attendance ("cancel the attendance first"); the day
+    is rebuilt in on_update anyway, so drop the link here when it will be. On a
+    paid or leave day the link stays and HRMS's refusal stands."""
+    if not _manual(doc) or doc.is_new() or not doc.attendance:
+        return
+    if not doc.has_value_changed("time"):
+        return
+    from avinashgroup_app.hr.punch_correction import can_detach
+
+    before = doc.get_doc_before_save()
+    days = {getdate(doc.time)} | ({getdate(before.time)} if before and before.time else set())
+    if can_detach(doc.employee, days):
+        doc.attendance = None
+
 
 def checkin_after_insert(doc, method=None):
-    """A checkin created outside the device pipeline (desk form, API, mobile):
-    re-apply the day's alternation and sync the day's attendance. Pipeline
-    inserts set frappe.flags.in_biometric_day_reconcile and are handled once
-    per (employee, day) by the pipeline itself."""
-    if frappe.flags.in_biometric_day_reconcile:
-        return
-    if not doc.employee or not doc.time:
+    """A checkin created outside the device pipeline (desk form, API, mobile).
+    Pipeline inserts set frappe.flags.in_biometric_day_reconcile and are handled
+    once per (employee, day) by the pipeline itself. A punch carrying a device
+    id came from a device through some other door (HRMS's own checkin API);
+    it is synced, not treated as a hand correction."""
+    if not _manual(doc):
         return
     day = getdate(doc.time)
     relabel_day_checkins(doc.employee, day)
-    sync_day(doc.employee, day)
+    if doc.device_id or day >= getdate(today()):
+        sync_day(doc.employee, day)
+        return
+    from avinashgroup_app.hr.punch_correction import FORM_ADD_REASON, stamp_form_change
+
+    stamp_form_change(doc.name, None, FORM_ADD_REASON)
+    _remark_or_sync(
+        doc.employee, day, f"Punch {get_datetime(doc.time).strftime('%H:%M:%S')} added on Employee Checkin {doc.name}."
+    )
 
 
 def checkin_on_update(doc, method=None):
-    """A checkin's time or log_type was edited on the form. Stock HRMS blocks
-    time edits on checkins already linked to an attendance, so only unlinked
-    rows can move — but a move can still affect two days (old and new)."""
-    if frappe.flags.in_biometric_day_reconcile:
-        return
-    if not doc.employee or not doc.time:
-        return
+    """A checkin's time or log_type was edited on the form. A move can affect
+    two days (old and new), and both are re-marked."""
+    if not _manual(doc) or doc.flags.in_insert:
+        return  # an insert is after_insert's
     if not doc.has_value_changed("time") and not doc.has_value_changed("log_type"):
         return
 
@@ -331,16 +380,29 @@ def checkin_on_update(doc, method=None):
     before = doc.get_doc_before_save()
     if before and before.time:
         days.add(getdate(before.time))
+
+    if not doc.has_value_changed("time"):
+        # log_type only: the day's alternation decides it, nothing was moved.
+        for day in sorted(days):
+            relabel_day_checkins(doc.employee, day)
+            sync_day(doc.employee, day)
+        return
+
+    from avinashgroup_app.hr.punch_correction import FORM_EDIT_REASON, stamp_form_change
+
+    stamp_form_change(doc.name, before.time if before else None, FORM_EDIT_REASON)
+    was = get_datetime(before.time).strftime("%Y-%m-%d %H:%M:%S") if before and before.time else "—"
+    note = f"Punch {doc.name} moved on the Employee Checkin form: {was} → {get_datetime(doc.time).strftime('%Y-%m-%d %H:%M:%S')}."
     for day in sorted(days):
         relabel_day_checkins(doc.employee, day)
-        sync_day(doc.employee, day)
+        _remark_or_sync(doc.employee, day, note)
 
 
 def checkin_after_delete(doc, method=None):
-    if frappe.flags.in_biometric_day_reconcile:
-        return
-    if not doc.employee or not doc.time:
+    if not _manual(doc):
         return
     day = getdate(doc.time)
     relabel_day_checkins(doc.employee, day)
-    sync_day(doc.employee, day)
+    _remark_or_sync(
+        doc.employee, day, f"Punch {get_datetime(doc.time).strftime('%H:%M:%S')} ({doc.name}) deleted on the Employee Checkin form."
+    )

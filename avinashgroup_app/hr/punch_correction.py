@@ -88,6 +88,20 @@ from avinashgroup_app.hr.shift_backdate import LEAVE_STATUSES, _remeasure_overti
 CORRECTION_ROLES = ("HR Manager", "System Manager")
 
 
+class Refused(Exception):
+	"""A day this module will not re-mark. `title` and `message` are for the user.
+
+	Raised by the guards so the two callers can answer differently: the edit
+	dialog throws it at the user, the Employee Checkin hooks only warn, because
+	the punch itself has been saved and must stay saved.
+	"""
+
+	def __init__(self, title, message):
+		super().__init__(message)
+		self.title = title
+		self.message = message
+
+
 @frappe.whitelist(methods=["POST"])
 def correct_day(employee, attendance_date, in_time, out_time, reason):
 	"""Set one day's first IN and last OUT, and re-mark its attendance.
@@ -107,20 +121,16 @@ def correct_day(employee, attendance_date, in_time, out_time, reason):
 		frappe.throw(_("Give a reason for the correction. It is kept on the punches."))
 	if not frappe.db.exists("Employee", employee):
 		frappe.throw(_("Employee {0} not found.").format(employee))
-	if day >= getdate(today()):
-		frappe.throw(
-			_("Only past days can be corrected. Today's attendance is marked automatically once the shift ends."),
-			title=_("Not Yet"),
-		)
 
 	new_in = datetime.combine(day, get_time(in_time))
 	new_out = datetime.combine(day, get_time(out_time))
 	if new_out <= new_in:
 		frappe.throw(_("OUT ({0}) must be after IN ({1}).").format(_clock(new_out), _clock(new_in)))
 
-	_guard_paid(employee, day)
-	existing = _guard_leave(employee, day)
-	shift_doc = _shift_for(employee, day, existing)
+	try:
+		existing, shift_doc = day_context(employee, day)
+	except Refused as refused:
+		frappe.throw(refused.message, title=refused.title)
 	window = _check_in_window(shift_doc, day)
 
 	changes = _apply_punches(employee, day, new_in, new_out, reason)
@@ -130,23 +140,46 @@ def correct_day(employee, attendance_date, in_time, out_time, reason):
 		# unchanged times is how HR asks for the day to be re-marked from them.
 		changes = [_("punches already {0} → {1}; attendance re-marked from them").format(_clock(new_in), _clock(new_out))]
 
-	after = _rebuild(employee, day, shift_doc, existing)
-	frappe.get_doc("Attendance", after.name).add_comment(
-		"Info",
+	result = remark_day(
+		employee, day, existing, shift_doc,
 		_("First IN / last OUT corrected from Monthly Attendance BS: {0}. Reason: {1}").format(
 			"; ".join(changes), frappe.utils.escape_html(reason)
 		),
 	)
-	overtime = _remeasure_overtime(employee, day, day)
-
-	warnings = _draft_slip_warning(employee, day)
 	outside = [_clock(t) for t in (new_in, new_out) if not window[0] <= t <= window[1]]
 	if outside:
-		warnings.append(
+		result["warnings"].append(
 			_("{0} is outside {1}'s check-in window ({2} to {3}); it is counted because HR set it.").format(
 				", ".join(outside), shift_doc.name, _clock(window[0]), _clock(window[1])
 			)
 		)
+	result["changes"] = changes
+	return result
+
+
+def day_context(employee, day):
+	"""(existing Attendance or None, rostered Shift Type doc) for a day that may
+	be re-marked. Raises Refused for every day this module leaves alone."""
+	day = getdate(day)
+	if day >= getdate(today()):
+		raise Refused(
+			_("Not Yet"),
+			_("Only past days can be corrected. Today's attendance is marked automatically once the shift ends."),
+		)
+	_guard_paid(employee, day)
+	existing = _guard_leave(employee, day)
+	return existing, _shift_for(employee, day, existing)
+
+
+def remark_day(employee, day, existing, shift_doc, note):
+	"""Rebuild the day's attendance from its punches, re-measure its overtime,
+	and leave `note` on the new Attendance. The guards (day_context) must have
+	passed. Returns the day as it now reads, with warnings for the user."""
+	after = _rebuild(employee, day, shift_doc, existing)
+	frappe.get_doc("Attendance", after.name).add_comment("Info", note)
+	overtime = _remeasure_overtime(employee, day, day)
+
+	warnings = _draft_slip_warning(employee, day)
 	if existing and existing.shift and existing.shift != shift_doc.name:
 		# The roster moved after the day was first marked (a rotation, a
 		# backdated change). Rebuilding follows the roster, which can turn the
@@ -156,17 +189,157 @@ def correct_day(employee, attendance_date, in_time, out_time, reason):
 				shift_doc.name, existing.shift
 			)
 		)
-
 	return {
 		"attendance": after.name,
 		"status": after.status,
 		"working_hours": after.working_hours,
 		"in_time": _clock(after.in_time),
 		"out_time": _clock(after.out_time),
-		"changes": changes,
 		"overtime": overtime,
 		"warnings": warnings,
 	}
+
+
+# ────────────────────────────────────────────── Employee Checkin form ──
+#
+# The same correction, reached by editing punches directly: a time changed,
+# a punch added by hand or deleted on the Employee Checkin form (or through
+# the REST API). biometric/attendance_sync's doc-event handlers call these
+# for past days; the device pipeline, HRMS auto attendance and the edit dialog
+# above never reach them (the first and last set
+# frappe.flags.in_biometric_day_reconcile, HRMS writes the link with a query).
+#
+# The punch is already saved when these run, so a refusal is a warning, not an
+# error: the day keeps its attendance and the old value-only sync applies.
+
+FORM_EDIT_REASON = "Edited on Employee Checkin form"
+FORM_ADD_REASON = "Added on Employee Checkin form"
+
+
+def stamp_form_change(checkin_name, original_time, reason):
+	"""Mark a hand-edited or hand-added punch for the report's highlight.
+
+	`original_time` is the device's reading for an edit (kept from the first
+	edit if there was one) and None for a punch added by hand.
+	"""
+	if not _fields_installed():
+		return
+	frappe.db.set_value(
+		"Employee Checkin",
+		checkin_name,
+		{
+			"custom_time_edited": 1,
+			"custom_original_time": _device_reading(checkin_name, original_time),
+			"custom_edit_reason": reason,
+			"custom_edited_by": frappe.session.user,
+			"custom_edited_on": now_datetime(),
+		},
+		update_modified=False,
+	)
+
+
+def can_detach(employee, days):
+	"""True when every day may be re-marked, so a linked punch may be moved.
+
+	HRMS's validate refuses a time change on a punch linked to an attendance;
+	the before_validate hook drops the link first when this says the day will
+	be rebuilt straight after. On a leave or today's day the link stays and
+	HRMS's own refusal stands; on a paid day the refusal says why, which
+	HRMS's ("cancel the attendance first") does not — cancelling it would be
+	the wrong advice under a paid slip.
+	"""
+	try:
+		for day in days:
+			day_context(employee, day)
+	except Refused as refused:
+		if refused.title == _("Payroll Already Submitted"):
+			frappe.throw(refused.message, title=refused.title)
+		return False
+	return True
+
+
+def remark_from_form(employee, day, note):
+	"""Re-mark one day after a punch changed on the form.
+
+	Returns False when the day is not this module's to re-mark (today, paid,
+	leave, no or overnight shift), so the caller falls back to the value-only
+	sync it always did. True otherwise, including when the rebuild failed —
+	that is logged and the user told, but the punch save stands.
+	"""
+	day = getdate(day)
+	try:
+		existing, shift_doc = day_context(employee, day)
+	except Refused as refused:
+		if day < getdate(today()):
+			frappe.msgprint(
+				refused.message, title=_("Attendance for {0} not re-marked").format(day), indicator="orange"
+			)
+		return False
+
+	if not get_day_checkins(employee, day):
+		if existing:
+			frappe.msgprint(
+				_("No punches are left on {0}, so its attendance {1} ({2}) was left as it is. Correct it by hand if it is wrong.").format(
+					day, existing.name, existing.status
+				),
+				indicator="orange",
+			)
+		return True
+
+	if _defer():
+		frappe.enqueue(
+			"avinashgroup_app.hr.punch_correction.remark_day_job",
+			queue="short",
+			job_id=f"remark_day::{employee}::{day}",
+			deduplicate=True,
+			enqueue_after_commit=True,
+			employee=employee,
+			day=str(day),
+			note=note,
+		)
+		return True
+
+	savepoint = "punch_form_remark"
+	frappe.db.savepoint(savepoint)
+	try:
+		result = remark_day(employee, day, existing, shift_doc, note)
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		frappe.log_error(
+			title=f"Re-marking {employee} {day} after a punch edit failed",
+			message=frappe.get_traceback(),
+		)
+		frappe.msgprint(
+			_("The punch was saved, but the attendance for {0} could not be re-marked (see Error Log). Use Correct First IN / Last OUT in Monthly Attendance BS.").format(day),
+			indicator="orange",
+		)
+		return True
+
+	lines = [
+		_("Attendance for {0} re-marked: {1}, {2} → {3}.").format(
+			day, result["status"], result["in_time"], result["out_time"]
+		)
+	] + result["warnings"] + result["overtime"]
+	frappe.msgprint("<br>".join(lines), indicator="green", alert=not result["warnings"])
+	return True
+
+
+def remark_day_job(employee, day, note):
+	"""Background re-mark for punches edited in bulk (Data Import). Deduplicated
+	per (employee, day), so an import of ten punches for one day rebuilds it once."""
+	day = getdate(day)
+	try:
+		existing, shift_doc = day_context(employee, day)
+	except Refused:
+		return
+	if get_day_checkins(employee, day):
+		remark_day(employee, day, existing, shift_doc, note)
+
+
+def _defer():
+	"""Bulk writes rebuild in the background; a single form save does it inline,
+	so the report shows the change as soon as the save returns."""
+	return bool(frappe.flags.in_import or frappe.flags.in_patch or frappe.flags.in_migrate)
 
 
 # ─────────────────────────────────────────────────────────────── guards ──
@@ -179,12 +352,12 @@ def _guard_paid(employee, day):
 		"name",
 	)
 	if slip:
-		frappe.throw(
+		raise Refused(
+			_("Payroll Already Submitted"),
 			_(
 				"{0} is inside submitted salary slip {1}. Correcting attendance there would "
 				"disagree with what was paid. Cancel the slip first."
 			).format(frappe.bold(str(day)), frappe.bold(slip)),
-			title=_("Payroll Already Submitted"),
 		)
 
 
@@ -200,11 +373,11 @@ def _guard_leave(employee, day):
 		as_dict=True,
 	)
 	if existing and (existing.status in LEAVE_STATUSES or existing.leave_application or existing.leave_type):
-		frappe.throw(
+		raise Refused(
+			_("Leave Day"),
 			_("{0} is {1} through leave. Change the leave, not the punches.").format(
 				frappe.bold(str(day)), existing.status
 			),
-			title=_("Leave Day"),
 		)
 	return existing
 
@@ -213,19 +386,19 @@ def _shift_for(employee, day, existing):
 	"""The rostered shift (what fetch_shift will resolve the punches to)."""
 	shift_name = get_shift_window(employee, day)[0] or (existing and existing.shift)
 	if not shift_name:
-		frappe.throw(
+		raise Refused(
+			_("No Shift"),
 			_("{0} has no shift on {1}. Assign one first, so there are rules to mark the day against.").format(
 				employee, day
 			),
-			title=_("No Shift"),
 		)
 	shift_doc = frappe.get_doc("Shift Type", shift_name)
 	if get_time(shift_doc.end_time) <= get_time(shift_doc.start_time):
-		frappe.throw(
+		raise Refused(
+			_("Overnight Shift"),
 			_("{0} runs overnight. Punches are grouped by calendar day, so correct this day through Employee Checkin and Attendance Fix.").format(
 				shift_name
 			),
-			title=_("Overnight Shift"),
 		)
 	return shift_doc
 
@@ -293,6 +466,7 @@ def _apply_punches(employee, day, new_in, new_out, reason):
 	changes = []
 	# The attendance_sync hooks would relabel and sync after every single write;
 	# the rebuild below does that once, for the finished day.
+	previous = frappe.flags.in_biometric_day_reconcile
 	frappe.flags.in_biometric_day_reconcile = True
 	try:
 		for label, punch, target, log_type in (("IN", first, new_in, "IN"), ("OUT", last, new_out, "OUT")):
@@ -303,7 +477,7 @@ def _apply_punches(employee, day, new_in, new_out, reason):
 				_move_punch(punch, target, stamp)
 				changes.append(_("{0} {1} → {2}").format(label, _clock(punch.time), _clock(target)))
 	finally:
-		frappe.flags.in_biometric_day_reconcile = False
+		frappe.flags.in_biometric_day_reconcile = previous
 
 	if changes:
 		relabel_day_checkins(employee, day)
@@ -314,12 +488,24 @@ def _move_punch(punch, target, stamp):
 	"""Move a punch, keeping the device's first reading. db.set_value, because
 	HRMS's validate refuses a time change on a linked punch — the link is
 	dropped in _rebuild anyway."""
-	original = frappe.db.get_value("Employee Checkin", punch.name, "custom_original_time") or punch.time
 	frappe.db.set_value(
 		"Employee Checkin",
 		punch.name,
-		{"time": target, "custom_original_time": original, **stamp},
+		{"time": target, "custom_original_time": _device_reading(punch.name, punch.time), **stamp},
 	)
+
+
+def _device_reading(checkin_name, time_before):
+	"""What the device recorded for this punch, if it ever did.
+
+	A punch already corrected keeps the reading its first correction saved —
+	None for one added by hand — so a second edit cannot pass a typed time off
+	as the device's. An untouched punch's time before this edit IS the reading.
+	"""
+	edited, original = frappe.db.get_value(
+		"Employee Checkin", checkin_name, ["custom_time_edited", "custom_original_time"]
+	)
+	return original if edited else time_before
 
 
 def _add_punch(employee, target, log_type, stamp):

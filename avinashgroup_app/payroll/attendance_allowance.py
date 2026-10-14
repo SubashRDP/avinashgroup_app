@@ -528,6 +528,53 @@ def set_holiday_flag(doc, _method=None):
 	) else 0
 
 
+def resync_holiday_flags(doc, method=None):
+	"""doc_event hook on Holiday List.on_update: keep `custom_worked_on_holiday`
+	true to the list after the list itself is edited.
+
+	The flag is written once, when the Attendance is saved, and copies whether
+	the date was a holiday THEN. Adding a festival to the list afterwards, or
+	moving it, left every row on that date describing a working day — so the
+	holiday tea/meal rules, holiday OT and the Work On Holiday report missed the
+	people who came in (Bheshraj NGI-EMP-00009: Janai Purnima and Janmasthami
+	worked, flags 0, because the list was edited after his Bhadra attendance).
+	Holiday Bulk Update already follows up a past date (hr/holiday_backdate.py);
+	this covers an edit made on the list itself, in either direction.
+
+	Only the dates that changed, only up to today (later dates have no
+	attendance yet), only employees this list applies to (their own list, else
+	their company's default). A flag write, nothing else: status and absences on
+	those days stay holiday_backdate's and Attendance Fix's business. A submitted
+	salary slip is not recalculated by this; it is what was paid.
+	"""
+	before = doc.get_doc_before_save()
+	old = {getdate(h.holiday_date) for h in (before.holidays if before else [])}
+	new = {getdate(h.holiday_date) for h in doc.holidays}
+	changed = sorted(d for d in old ^ new if d <= getdate())
+	if not changed:
+		return
+
+	companies = frappe.get_all("Company", filters={"default_holiday_list": doc.name}, pluck="name")
+	employees = frappe.get_all(
+		"Employee",
+		or_filters=[["holiday_list", "=", doc.name]]
+		+ ([["company", "in", companies]] if companies else []),
+		fields=["name", "holiday_list"],
+	)
+	names = [e.name for e in employees if not e.holiday_list or e.holiday_list == doc.name]
+	if not names:
+		return
+	rows = frappe.get_all(
+		"Attendance",
+		filters={"employee": ("in", names), "attendance_date": ("in", changed), "docstatus": ("<", 2)},
+		fields=["name", "attendance_date", "custom_worked_on_holiday"],
+	)
+	for r in rows:
+		flag = 1 if getdate(r.attendance_date) in new else 0
+		if cint(r.custom_worked_on_holiday) != flag:
+			frappe.db.set_value("Attendance", r.name, "custom_worked_on_holiday", flag, update_modified=False)
+
+
 @frappe.whitelist()
 def recompute_holiday_flags(start_date=None, end_date=None) -> dict:
 	"""Re-evaluate `custom_worked_on_holiday` on existing Attendance rows.

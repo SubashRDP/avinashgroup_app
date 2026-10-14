@@ -9,6 +9,9 @@ Covers:
 - a time outside the shift's check-in window still counts (the day's punches
   are pinned to the rostered shift), with a warning
 - the report reads the stamps back (get_edited_days)
+- the same re-mark from the Employee Checkin form (attendance_sync hooks):
+  a punch added by hand marks the day and is stamped; a linked punch can be
+  moved and the day follows; a deleted punch re-marks what is left
 
 Runs inside the test transaction (no commits), so FrappeTestCase's rollback
 cleans up.
@@ -51,14 +54,25 @@ class TestPunchCorrection(FrappeTestCase):
 		emp.default_shift = shift.name
 		emp.insert(ignore_permissions=True)
 		cls.employee = emp.name
-		cls.day = getdate(add_days(today(), -3))
+		cls.days_used = 0
 
-	def _punch(self, clock):
+	def setUp(self):
+		# FrappeTestCase rolls back once per class, not per test, so every test
+		# takes a day of its own.
+		type(self).days_used += 1
+		self.day = getdate(add_days(today(), -2 - self.days_used))
+
+	def _punch(self, clock, by_hand=False):
+		"""A punch as the device pipeline stores it, or (by_hand) as the form does."""
 		ck = frappe.new_doc("Employee Checkin")
 		ck.employee = self.employee
 		ck.time = datetime.combine(self.day, datetime.strptime(clock, "%H:%M").time())
 		ck.log_type = "IN"
-		ck.insert(ignore_permissions=True)
+		frappe.flags.in_biometric_day_reconcile = not by_hand
+		try:
+			ck.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.in_biometric_day_reconcile = False
 		return ck.name
 
 	def _punches(self):
@@ -137,3 +151,53 @@ class TestPunchCorrection(FrappeTestCase):
 		note = next(iter(notes.values()))
 		self.assertIn("09:20", note)
 		self.assertIn("Device clock was slow", note)
+
+	# ── the Employee Checkin form (biometric/attendance_sync hooks) ──
+
+	def _attendance(self):
+		return frappe.db.get_value(
+			"Attendance",
+			{"employee": self.employee, "attendance_date": self.day, "docstatus": 1},
+			["name", "status", "in_time", "out_time", "working_hours"],
+			as_dict=True,
+		)
+
+	def test_form_add_marks_the_day_and_stamps(self):
+		self._punch("09:00", by_hand=True)
+		self._punch("17:00", by_hand=True)
+		att = self._attendance()
+		self.assertEqual(att.status, "Present")
+		self.assertEqual(att.out_time.strftime("%H:%M"), "17:00")
+		for p in self._punches():
+			self.assertTrue(p.custom_time_edited)
+			self.assertIsNone(p.custom_original_time)
+
+	def test_form_move_of_linked_punch_follows(self):
+		self._punch("09:00", by_hand=True)
+		out = self._punch("16:00", by_hand=True)
+		self.assertEqual(self._attendance().out_time.strftime("%H:%M"), "16:00")
+
+		ck = frappe.get_doc("Employee Checkin", out)
+		self.assertTrue(ck.attendance)  # linked: HRMS alone would refuse the move
+		ck.time = datetime.combine(self.day, datetime.strptime("17:30", "%H:%M").time())
+		ck.save(ignore_permissions=True)
+
+		att = self._attendance()
+		self.assertEqual(att.out_time.strftime("%H:%M"), "17:30")
+		moved = frappe.get_doc("Employee Checkin", out)
+		self.assertEqual(moved.attendance, att.name)
+		# Added by hand, so there was never a device reading to keep.
+		self.assertIsNone(moved.custom_original_time)
+		self.assertEqual(moved.custom_edit_reason, "Edited on Employee Checkin form")
+
+	def test_form_delete_remarks_what_is_left(self):
+		self._punch("09:00", by_hand=True)
+		self._punch("12:00", by_hand=True)
+		last = self._punch("17:00", by_hand=True)
+		frappe.delete_doc("Employee Checkin", last, ignore_permissions=True)
+		self.assertEqual(self._attendance().out_time.strftime("%H:%M"), "12:00")
+
+	def test_device_ingest_is_not_treated_as_a_correction(self):
+		self._punch("09:00")
+		self.assertFalse(self._punches()[0].custom_time_edited)
+		self.assertIsNone(self._attendance())

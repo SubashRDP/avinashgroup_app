@@ -68,7 +68,9 @@ ZKTeco / Hikvision / HTMS  ──▶  K40 Bridge (Windows, on site)
 change a **status**. Look at `refresh_attendance_values` — it unpacks HRMS's
 `get_attendance()` into `_status, working_hours, ...` and **throws the status
 away**. Decisions live only in `reconcile_employee_day()`, shared by Attendance
-Fix and the self-heal job.
+Fix, the self-heal job, and `hr/punch_correction.py` — which a hand change to a
+past day's punches (the Monthly Attendance BS edit dialog, or the Employee
+Checkin form) goes through. A device push never does.
 
 ---
 

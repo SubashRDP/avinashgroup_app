@@ -327,12 +327,14 @@ _je["before_insert"] = [
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
 
-# Employee Checkin lifecycle: keep the day's IN/OUT alternation and any
-# existing Present/Half Day Attendance's computed values consistent when
-# punches are entered, edited or deleted via desk/API, or arrive late for an
-# already-marked day. Status is never changed by these hooks — status
-# transitions stay in Attendance Fix / the daily self-heal.
-for _event in ("after_insert", "on_update", "after_delete"):
+# Employee Checkin lifecycle: keep the day's IN/OUT alternation consistent when
+# punches are entered, edited or deleted via desk/API. On a past day the hand
+# change re-marks the day's attendance (hr/punch_correction: rebuilt from the
+# punches, overtime re-measured, punch stamped for the report's highlight);
+# today, and paid / leave days, keep the value-only refresh of a Present/Half
+# Day row. before_validate drops a moved punch's attendance link so HRMS lets
+# it move. Device ingest sets in_biometric_day_reconcile and is never per punch.
+for _event in ("before_validate", "after_insert", "on_update", "after_delete"):
     _add_doc_event(
         "Employee Checkin",
         _event,
@@ -349,6 +351,9 @@ _add_doc_event("Employee", "validate", "avinashgroup_app.payroll.tax_relief.vali
 # A holiday worked earns overtime OR a replacement leave day, never both
 # (policy 2.2/2.5) — the two ticks on the Employee. See hr/overtime.py.
 _add_doc_event("Employee", "validate", "avinashgroup_app.hr.overtime.validate_employee_holiday_rule")
+# Editing a Holiday List re-ticks Worked on Holiday on the attendance of the
+# dates that changed; the flag otherwise keeps the list as it was on save.
+_add_doc_event("Holiday List", "on_update", "avinashgroup_app.payroll.attendance_allowance.resync_holiday_flags")
 
 # Fixed allowances from the employee's Allowances table, then the slip is
 # recalculated so gross, tax and net include them. Ahead of the tax hooks below,
