@@ -137,3 +137,4 @@ avinashgroup_app.patches.setup_festival_allowance
 avinashgroup_app.patches.setup_leave_encashment
 avinashgroup_app.patches.drop_late_arrival_cutoff
 avinashgroup_app.patches.drop_employee_category
+avinashgroup_app.patches.setup_punch_correction_fields

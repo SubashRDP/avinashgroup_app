@@ -57,6 +57,9 @@ from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_att
 	_fetch_holidays,
 	_fetch_leaves,
 	_ot_rates,
+	employed_dates,
+	per_scope,
+	working_days_card,
 )
 
 
@@ -117,7 +120,7 @@ def execute_summary(filters):
 	columns = _columns(groups, standalone_components)
 
 	if not employees:
-		return columns, [], _note_html(note), None, _summary([], bs_label)
+		return columns, [], _note_html(note), None, _summary([], bs_label, [])
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
@@ -151,7 +154,8 @@ def execute_summary(filters):
 	ot_hours = get_overtime_hours(employees, ad_start, ad_end)
 	ot_rates = _ot_rates(ot_hours, components)
 
-	data = []
+	dates = [getdate(add_days(ad_start, i)) for i in range((ad_end - ad_start).days + 1)]
+	data, working_days = [], []
 	for idx, emp in enumerate(employees, start=1):
 		row = _build_summary_row(
 			idx, emp, ad_start, ad_end,
@@ -159,8 +163,10 @@ def execute_summary(filters):
 			components, groups, standalone_components, ot_hours, ot_rates,
 		)
 		data.append(row)
+		emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
+		working_days.append(sum(1 for d in employed_dates(emp, dates) if d not in emp_holidays))
 
-	return columns, data, _note_html(note), _chart(data), _summary(data, bs_label)
+	return columns, data, _note_html(note), _chart(data), _summary(data, bs_label, working_days)
 
 
 # ---------------------------------------------------------------------------
@@ -368,21 +374,29 @@ def _columns(groups, standalone_components):
 	return cols
 
 
-def _summary(data, bs_label):
-	if not data:
-		return [
-			{"value": bs_label, "label": _("BS Period"), "datatype": "Data"},
-			{"value": 0, "label": _("Employees"), "datatype": "Int"},
-		]
-	return [
-		{"value": bs_label, "label": _("BS Period"), "datatype": "Data"},
-		{"value": len(data), "label": _("Employees"), "datatype": "Int"},
-		{"value": sum(r["present_days"] for r in data), "label": _("Total Present Days"), "datatype": "Float"},
-		{"value": sum(r["worked_on_holiday"] for r in data), "label": _("Total Worked on Holiday"), "datatype": "Int"},
-		{"value": sum(r["ot_hours"] for r in data), "label": _("Total O.T. (hrs)"), "datatype": "Float"},
-		{"value": flt(sum(r["ot_amount"] for r in data), 2), "label": _("Total O.T. Amount"), "datatype": "Currency"},
-		{"value": sum(r["late_minutes"] for r in data), "label": _("Total Late (min)"), "datatype": "Int"},
-	]
+def _summary(data, bs_label, working_days):
+	"""Cards worded like the Detail view's (monthly_attendance_bs._summary): a
+	roster's sums name the people they cover, Working Days in Month is shown
+	once, and Present Days gets an average per employee beside the sum."""
+	n = len(data)
+	cards = [{"value": bs_label, "label": _("BS Period"), "datatype": "Data"}]
+	if n != 1:
+		cards.append({"value": n, "label": _("Employees"), "datatype": "Int"})
+	if not n:
+		return cards
+
+	present = sum(r["present_days"] for r in data)
+	cards.append(working_days_card(working_days))
+	cards.append({"value": flt(present, 1), "label": per_scope(_("Present Days"), n), "datatype": "Float"})
+	if n > 1:
+		cards.append({"value": flt(present / n, 1), "label": _("Present Days per Employee (avg)"), "datatype": "Float"})
+	cards.extend([
+		{"value": sum(r["worked_on_holiday"] for r in data), "label": per_scope(_("Worked on Holiday"), n), "datatype": "Int"},
+		{"value": flt(sum(r["ot_hours"] for r in data), 2), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
+		{"value": flt(sum(r["ot_amount"] for r in data), 2), "label": per_scope(_("O.T. Amount"), n), "datatype": "Currency"},
+		{"value": sum(r["late_minutes"] for r in data), "label": per_scope(_("Late Time (min)"), n), "datatype": "Int"},
+	])
+	return cards
 
 
 def _chart(data):

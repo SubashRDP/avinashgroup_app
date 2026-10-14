@@ -15,17 +15,20 @@ Columns:
   • Date (BS day + month name)
   • AD Date, Day-of-week
   • Employee + Name + Department
-  • IN / OUT — the day's first and last Employee Checkin, whatever the shift's
+  • First IN / Last OUT — the day's first and last Employee Checkin, whatever the shift's
     check-in window. NOT Attendance.in_time / out_time: HRMS leaves a punch
     outside the window out of the attendance, so those read the second punch
     as IN or the second-last as OUT. Hours, Late, O.T. and the allowance
     columns still come from the Attendance row, which is what salary uses — so
     OUT minus IN need not equal Hours.
-  • Hours — Attendance.working_hours (decimal) rendered as HH:MM
+    HR Manager can correct either from the cell (hr/punch_correction.py);
+    a corrected time is highlighted, its tooltip saying what the device read,
+    who changed it and why.
+  • Hours Worked — Attendance.working_hours (decimal) rendered as HH:MM
   • Status
   • Shift — the shift rostered on THAT date (hr.shift_day.ShiftRoster), so a
     mid-month shift change shows on the day it happened
-  • Late (min), Before ofc. Time — measured against that shift by
+  • Late In (min), Before ofc. Time (min) — measured against that shift by
     hr.shift_day.measure_day.
   • O.T. (hrs), O.T. Rate, O.T. Amount — the hours a submitted Overtime Sheet
     measured for that employee that day (hr.overtime.get_overtime_hours), the
@@ -33,11 +36,14 @@ Columns:
     (attendance_allowance.overtime_rate, the one pay uses). Blank otherwise.
     Not re-measured from the Attendance row: its stored deviations can lag a
     shift changed after the punches, and showed 0 against the sheet's 4.5.
-  • Leave (1/blank)
-  • Work In Holiday (1/blank)
+  • On Leave (1/blank)
+  • Worked on Holiday (1/blank)
   • One dynamic column per attendance-driven Salary Component, with the qty
     computed by the SAME rule the allowance engine uses (evaluate_rule).
   • Remarks (festival/leave text)  +  Holidays (weekly-off label only)
+
+Summary cards are worded for the headcount (see _summary): one person's month
+for a single employee, sums that name the people they cover for a roster.
 """
 
 import frappe
@@ -45,6 +51,7 @@ from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
 from avinashgroup_app.hr.overtime import get_overtime_hours
+from avinashgroup_app.hr.punch_correction import get_edited_days
 from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
@@ -56,6 +63,7 @@ from avinashgroup_app.hr.bs_calendar import bs_year_of, month_period, parse_bs_m
 from avinashgroup_app.payroll.attendance_allowance import (
 	evaluate_rule,
 	get_attendance_driven_components,
+	get_present_statuses,
 	overtime_rate,
 )
 
@@ -90,7 +98,7 @@ def execute(filters=None):
 	components = get_attendance_driven_components()
 
 	if not employees:
-		return _columns(components), [], _note_html(note), None, _summary(0, 0, 0, 0, 0, 0, bs_label)
+		return _columns(components), [], _note_html(note), None, _summary(_new_totals(), 0, bs_label, [])
 
 	company = filters.get("company")
 	att_map = _fetch_attendance(employees, ad_start, ad_end, company)
@@ -110,9 +118,15 @@ def execute(filters=None):
 	# alone counted every early arrival and late stay, asked for or not.
 	ot_hours = get_overtime_hours(employees, ad_start, ad_end)
 	ot_rates = _ot_rates(ot_hours, components)
+	# Days whose first IN or last OUT HR set by hand (hr/punch_correction.py),
+	# highlighted in the grid so a typed time never passes for a device reading.
+	edited = get_edited_days([e.name for e in employees], ad_start, ad_end)
 
 	data = []
-	totals = {"office": 0, "holiday": 0, "leave": 0, "late_min": 0, "ot_hours": 0.0, "ot_amount": 0.0}
+	totals = _new_totals()
+	working_days = []
+	present_statuses = get_present_statuses()
+	today_date = getdate(today())
 
 	# Per-date values (BS label + weekday) are identical for every employee, and
 	# ad_to_bs is expensive, so compute them once per distinct date up front.
@@ -132,15 +146,21 @@ def execute(filters=None):
 
 	for emp in employees:
 		emp_holidays = holiday_map.get(holiday_list_of.get(emp.name), {})
+		employed = employed_dates(emp, dates)
+		working_days.append(sum(1 for d in employed if d not in emp_holidays))
 		for ad_date in dates:
 			day_label, weekday = date_info[ad_date]
 			row = _build_row(
 				emp, ad_date, day_label, weekday, att_map, emp_holidays, leave_map,
 				components, roster, punch_map,
 				ot_hours.get((emp.name, ad_date), 0.0), ot_rates.get((emp.name, ad_date), 0.0),
+				edited.get((emp.name, ad_date)),
 			)
 			data.append(row)
-			_accumulate(totals, row)
+			_accumulate(
+				totals, row, present_statuses,
+				counts_as_missing=ad_date in employed and ad_date < today_date,
+			)
 			# Unrounded per day, rounded once at the end, as pay does: summing the
 			# rounded daily amounts drifted a paisa from the slip.
 			totals["ot_amount"] += ot_hours.get((emp.name, ad_date), 0.0) * ot_rates.get((emp.name, ad_date), 0.0)
@@ -150,16 +170,7 @@ def execute(filters=None):
 		data,
 		_note_html(note),
 		_chart(data, len(employees)),
-		_summary(
-			totals["office"],
-			totals["holiday"],
-			totals["office"] + totals["holiday"],
-			totals["leave"],
-			totals["late_min"],
-			totals["ot_hours"],
-			bs_label,
-			totals["ot_amount"],
-		),
+		_summary(totals, len(employees), bs_label, working_days),
 	)
 
 
@@ -506,7 +517,7 @@ def _fetch_leaves(employees, ad_start, ad_end, company=None):
 
 def _build_row(
 	emp, ad_date, bs_label, weekday, att_map, emp_holidays, leave_map, components, roster,
-	punch_map=None, ot_hours=0.0, ot_rate=0.0,
+	punch_map=None, ot_hours=0.0, ot_rate=0.0, edited=None,
 ):
 	holiday = emp_holidays.get(ad_date)
 	leave_type = leave_map.get((emp.name, ad_date))
@@ -570,11 +581,15 @@ def _build_row(
 		else:
 			status = "Not Marked"
 
+	in_note = out_note = None
 	if punches:
 		# The punches themselves, on every kind of day — also one with no
 		# Attendance row yet, or marked Absent.
 		in_time_str = _fmt_time(punches[0])
 		out_time_str = _fmt_time(punches[1])
+		if edited:
+			in_note = edited.get(punches[0])
+			out_note = edited.get(punches[1]) if punches[1] else None
 
 	# Dynamic allowance columns — per-day qty (days/hours per the component's unit).
 	component_values = {}
@@ -607,6 +622,13 @@ def _build_row(
 		"work_in_holiday": work_in_holiday,
 		"remarks": remarks,
 		"holidays_col": holidays_col,
+		# Not columns. The edit notes drive the highlight and its tooltip; the
+		# raw status and holiday flag let the summary count without re-parsing
+		# the display status ("Worked on Holiday (DASHAIN)").
+		"in_edit_note": in_note,
+		"out_edit_note": out_note,
+		"att_status": att.status if att else None,
+		"is_holiday": 1 if holiday else 0,
 	}
 	row.update(component_values)
 	return row
@@ -635,16 +657,42 @@ def _ot_rates(ot_hours, components):
 	return out
 
 
-def _accumulate(totals, row):
+def _new_totals():
+	return {
+		"present": 0.0, "half_day": 0, "absent": 0, "not_marked": 0, "holiday": 0,
+		"leave": 0, "late_min": 0, "ot_hours": 0.0, "ot_amount": 0.0,
+	}
+
+
+def employed_dates(emp, dates):
+	"""The dates the employee was on the books: from joining, until relieving."""
+	joined = getdate(emp.date_of_joining) if emp.get("date_of_joining") else None
+	left = getdate(emp.relieving_date) if emp.get("relieving_date") else None
+	return {d for d in dates if (not joined or d >= joined) and (not left or d <= left)}
+
+
+def _accumulate(totals, row, present_statuses, counts_as_missing):
+	"""Add one day to the totals.
+
+	Present Days counts a Half Day as half, the way the Summary view and the
+	salary slip do; it used to count it as a whole day.
+	"""
 	totals["late_min"] += row["late_minutes"] + row["before_office_minutes"]
 	totals["ot_hours"] += row["ot_hours"]
-	status = row["status"]
+	att_status = row.get("att_status")
+	if att_status in present_statuses:
+		totals["present"] += 1
+	elif att_status == "Half Day":
+		totals["present"] += 0.5
+		totals["half_day"] += 1
+	elif att_status == "Absent" and not row.get("is_holiday"):
+		totals["absent"] += 1
 	if row["work_in_holiday"]:
 		totals["holiday"] += 1
-	elif status in ("Present", "Half Day"):
-		totals["office"] += 1
 	if row["leave_count"]:
 		totals["leave"] += 1
+	if row["status"] == "Not Marked" and counts_as_missing:
+		totals["not_marked"] += 1
 
 
 # ---------------------------------------------------------------------------
@@ -701,17 +749,17 @@ def _columns(components):
 		{"label": _("Day"), "fieldname": "day", "fieldtype": "Data", "width": 60},
 		{"label": _("Shift"), "fieldname": "shift", "fieldtype": "Link", "options": "Shift Type", "width": 120},
 		{"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 130},
-		{"label": _("IN"), "fieldname": "in_time", "fieldtype": "Data", "width": 85},
-		{"label": _("OUT"), "fieldname": "out_time", "fieldtype": "Data", "width": 85},
-		{"label": _("Hours"), "fieldname": "working_hours", "fieldtype": "Data", "width": 65, "align": "right"},
+		{"label": _("First IN"), "fieldname": "in_time", "fieldtype": "Data", "width": 95},
+		{"label": _("Last OUT"), "fieldname": "out_time", "fieldtype": "Data", "width": 95},
+		{"label": _("Hours Worked"), "fieldname": "working_hours", "fieldtype": "Data", "width": 80, "align": "right"},
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 95},
-		{"label": _("Late (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
-		{"label": _("Before ofc. Time"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 110},
+		{"label": _("Late In (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
+		{"label": _("Before ofc. Time (min)"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 130},
 		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 1},
 		{"label": _("O.T. Rate"), "fieldname": "ot_rate", "fieldtype": "Currency", "width": 90},
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 100},
-		{"label": _("Leave"), "fieldname": "leave_count", "fieldtype": "Check", "width": 65},
-		{"label": _("Work In Holiday"), "fieldname": "work_in_holiday", "fieldtype": "Check", "width": 110},
+		{"label": _("On Leave"), "fieldname": "leave_count", "fieldtype": "Check", "width": 65},
+		{"label": _("Worked on Holiday"), "fieldname": "work_in_holiday", "fieldtype": "Check", "width": 110},
 	]
 	# Dynamic allowance columns — one per attendance-driven Salary Component.
 	# Value is the per-day qty (days/hours per the component's unit).
@@ -728,19 +776,75 @@ def _columns(components):
 	return base
 
 
-def _summary(office_days, holiday_days, total_worked, leave_days, late_min, ot_hours, bs_label, ot_amount=0.0):
-	# "Late Time" is late arrival plus leaving early, as on the sheet's card
-	# (Late Time = Late + Before ofc. Time).
-	return [
-		{"value": bs_label, "label": _("BS Period"), "datatype": "Data"},
-		{"value": total_worked, "label": _("Total Days Worked"), "datatype": "Int"},
-		{"value": office_days, "label": _("Worked on Office Day"), "datatype": "Int"},
-		{"value": holiday_days, "label": _("Worked on Holiday"), "datatype": "Int"},
-		{"value": leave_days, "label": _("Leave Days"), "datatype": "Int"},
-		{"value": late_min, "label": _("Late Time (min)"), "datatype": "Int"},
-		{"value": ot_hours, "label": _("O.T. (hrs)"), "datatype": "Float"},
-		{"value": flt(ot_amount, 2), "label": _("O.T. Amount"), "datatype": "Currency"},
-	]
+def _summary(totals, employee_count, bs_label, working_days):
+	"""The cards above the grid, worded for how many people they add up.
+
+	For one employee they read as that person's month: "Present Days 24". For a
+	roster the same numbers are sums over everybody, and "Total Days Worked 2,410"
+	read as if one person had worked it — so every summed card names the people
+	it adds up, an average per employee sits beside Present Days, and Working
+	Days in Month, which is the same for everyone, is shown once rather than
+	multiplied by the headcount.
+
+	"Late Time" is late arrival plus leaving early, as on the sheet's card
+	(Late Time = Late + Before ofc. Time).
+	"""
+	n = employee_count
+	cards = [{"value": bs_label, "label": _("BS Period"), "datatype": "Data"}]
+	if n != 1:
+		cards.append({"value": n, "label": _("Employees"), "datatype": "Int"})
+	if not n:
+		return cards
+
+	cards.append(working_days_card(working_days))
+	cards.append({"value": flt(totals["present"], 1), "label": per_scope(_("Present Days"), n), "datatype": "Float"})
+	if n > 1:
+		cards.append({
+			"value": flt(totals["present"] / n, 1),
+			"label": _("Present Days per Employee (avg)"),
+			"datatype": "Float",
+		})
+	if totals["half_day"]:
+		cards.append({"value": totals["half_day"], "label": per_scope(_("Half Days (counted ½)"), n), "datatype": "Int"})
+	cards.extend([
+		{"value": totals["absent"], "label": per_scope(_("Absent Days"), n), "datatype": "Int"},
+		{"value": totals["leave"], "label": per_scope(_("Leave Days"), n), "datatype": "Int"},
+		{"value": totals["holiday"], "label": per_scope(_("Worked on Holiday"), n), "datatype": "Int"},
+	])
+	if totals["not_marked"]:
+		cards.append({"value": totals["not_marked"], "label": per_scope(_("Not Marked Days"), n), "datatype": "Int"})
+	cards.extend([
+		{"value": totals["late_min"], "label": per_scope(_("Late Time (min)"), n), "datatype": "Int"},
+		{"value": flt(totals["ot_hours"], 2), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
+		{"value": flt(totals["ot_amount"], 2), "label": per_scope(_("O.T. Amount"), n), "datatype": "Currency"},
+	])
+	return cards
+
+
+def per_scope(label, employee_count):
+	"""A card label that says whose figure it is. Shared with the Summary view."""
+	if employee_count == 1:
+		return label
+	return _("{0} — all {1} employees").format(label, employee_count)
+
+
+def working_days_card(working_days):
+	"""Days in the period less each person's holidays, shown once.
+
+	Almost always one number for everybody. Women carry their own holiday list
+	(Teej), and someone who joined or left mid-month has fewer, so a roster can
+	hold a spread — shown as "26-27" rather than averaged into a fraction.
+	"""
+	distinct = sorted(set(working_days))
+	if len(working_days) == 1:
+		return {"value": distinct[0], "label": _("Working Days in Month"), "datatype": "Int"}
+	if len(distinct) == 1:
+		return {"value": distinct[0], "label": _("Working Days in Month (each)"), "datatype": "Int"}
+	return {
+		"value": f"{distinct[0]}–{distinct[-1]}",
+		"label": _("Working Days in Month (each)"),
+		"datatype": "Data",
+	}
 
 
 def _chart(rows, employee_count=None):

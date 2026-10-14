@@ -1,0 +1,139 @@
+"""Tests for hr/punch_correction.py — First IN / Last OUT from Monthly Attendance BS.
+
+Covers:
+- a one-punch day gets its missing OUT added, and the attendance is re-marked
+  from both punches (hours, deviations), stamped as corrected
+- moving a device punch keeps the device's reading, and a second correction
+  keeps the FIRST reading rather than the corrected one
+- refusals: today, OUT before IN, a punch left outside the new IN/OUT, no reason
+- a time outside the shift's check-in window still counts (the day's punches
+  are pinned to the rostered shift), with a warning
+- the report reads the stamps back (get_edited_days)
+
+Runs inside the test transaction (no commits), so FrappeTestCase's rollback
+cleans up.
+
+Run:
+    bench --site avinas1 run-tests --app avinashgroup_app \
+        --module avinashgroup_app.hr.test_punch_correction
+"""
+
+from datetime import datetime
+
+import frappe
+from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, getdate, today
+
+from avinashgroup_app.hr.punch_correction import correct_day, get_edited_days
+
+
+class TestPunchCorrection(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		company = frappe.get_all("Company", pluck="name", order_by="creation", limit=1)[0]
+		shift = frappe.new_doc("Shift Type")
+		shift.custom_company = company
+		shift.start_time = "09:00:00"
+		shift.end_time = "17:00:00"
+		shift.begin_check_in_before_shift_start_time = 60
+		shift.allow_check_out_after_shift_end_time = 60
+		shift.insert(ignore_permissions=True)
+		cls.shift = shift
+
+		emp = frappe.new_doc("Employee")
+		emp.first_name = "Punch Correction Test"
+		emp.gender = "Male"
+		emp.date_of_birth = "1990-01-01"
+		emp.date_of_joining = "2024-01-01"
+		emp.company = company
+		emp.status = "Active"
+		emp.default_shift = shift.name
+		emp.insert(ignore_permissions=True)
+		cls.employee = emp.name
+		cls.day = getdate(add_days(today(), -3))
+
+	def _punch(self, clock):
+		ck = frappe.new_doc("Employee Checkin")
+		ck.employee = self.employee
+		ck.time = datetime.combine(self.day, datetime.strptime(clock, "%H:%M").time())
+		ck.log_type = "IN"
+		ck.insert(ignore_permissions=True)
+		return ck.name
+
+	def _punches(self):
+		return frappe.get_all(
+			"Employee Checkin",
+			filters={"employee": self.employee, "time": ("between", [f"{self.day} 00:00:00", f"{self.day} 23:59:59"])},
+			fields=["name", "time", "log_type", "custom_time_edited", "custom_original_time", "custom_edit_reason"],
+			order_by="time asc",
+		)
+
+	def test_missing_out_is_added_and_day_remarked(self):
+		self._punch("09:05")
+		result = correct_day(self.employee, self.day, "09:05", "17:00", "Forgot to punch out")
+
+		punches = self._punches()
+		self.assertEqual([(p.time.strftime("%H:%M"), p.log_type) for p in punches], [("09:05", "IN"), ("17:00", "OUT")])
+		added = punches[1]
+		self.assertTrue(added.custom_time_edited)
+		self.assertIsNone(added.custom_original_time)  # no device reading behind it
+		self.assertEqual(added.custom_edit_reason, "Forgot to punch out")
+		self.assertFalse(punches[0].custom_time_edited)  # untouched device punch
+
+		att = frappe.get_doc("Attendance", result["attendance"])
+		self.assertEqual(att.docstatus, 1)
+		self.assertAlmostEqual(att.working_hours, 7.9, places=1)
+		self.assertEqual(att.custom_late_entry, 300)  # 5 minutes late, in seconds
+
+	def test_second_correction_keeps_the_device_reading(self):
+		self._punch("09:00")
+		self._punch("16:10")
+		correct_day(self.employee, self.day, "09:00", "16:40", "first")
+		correct_day(self.employee, self.day, "09:00", "17:00", "second")
+
+		out = self._punches()[-1]
+		self.assertEqual(out.time.strftime("%H:%M"), "17:00")
+		self.assertEqual(out.custom_original_time.strftime("%H:%M"), "16:10")
+		self.assertEqual(out.custom_edit_reason, "second")
+		self.assertEqual(len(self._punches()), 2)  # moved, not added beside
+
+	def test_single_late_punch_is_taken_as_out(self):
+		self._punch("17:05")
+		correct_day(self.employee, self.day, "09:00", "17:05", "Missed IN at the gate")
+		punches = self._punches()
+		self.assertEqual([p.time.strftime("%H:%M") for p in punches], ["09:00", "17:05"])
+		self.assertFalse(punches[1].custom_time_edited)  # the device's 17:05 kept as is
+
+	def test_refusals(self):
+		self._punch("09:00")
+		self._punch("12:00")
+		self._punch("17:00")
+		cases = [
+			(getdate(today()), "09:00", "17:00", "r"),  # today
+			(self.day, "17:00", "09:00", "r"),  # OUT before IN
+			(self.day, "12:30", "17:00", "r"),  # the 12:00 punch would stay first
+			(self.day, "09:00", "17:30", " "),  # no reason
+		]
+		for day, in_time, out_time, reason in cases:
+			with self.subTest(in_time=in_time, out_time=out_time, day=day):
+				self.assertRaises(frappe.ValidationError, correct_day, self.employee, day, in_time, out_time, reason)
+
+	def test_time_outside_window_counts(self):
+		self._punch("09:00")
+		self._punch("17:00")
+		result = correct_day(self.employee, self.day, "07:00", "17:00", "Came early for stock count")
+		att = frappe.get_doc("Attendance", result["attendance"])
+		self.assertEqual(att.in_time.strftime("%H:%M"), "07:00")
+		self.assertAlmostEqual(att.working_hours, 10.0, places=1)
+		self.assertTrue(any("07:00" in w for w in result["warnings"]))
+
+	def test_report_reads_the_stamps(self):
+		self._punch("09:20")
+		self._punch("17:00")
+		correct_day(self.employee, self.day, "09:00", "17:00", "Device clock was slow")
+		notes = get_edited_days([self.employee], self.day, self.day)[(self.employee, self.day)]
+		self.assertEqual(len(notes), 1)
+		note = next(iter(notes.values()))
+		self.assertIn("09:20", note)
+		self.assertIn("Device clock was slow", note)

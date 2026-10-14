@@ -3,9 +3,15 @@
 const REPORT_MODULE =
 	"avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_attendance_bs";
 
+// Server side of the First IN / Last OUT correction. The roles mirror its
+// CORRECTION_ROLES; the server checks them again, this only hides the pencil.
+const CORRECT_DAY_METHOD = "avinashgroup_app.hr.punch_correction.correct_day";
+const CORRECTION_ROLES = ["HR Manager", "System Manager"];
+
 frappe.query_reports["Monthly Attendance BS"] = {
 	onload: async function (report) {
 		_apply_theme(report);
+		_bind_punch_correction(report);
 		_make_full_width(report);
 		_setup_fiscal_year_visibility(report);
 		await _init_default_fiscal_year(report);
@@ -154,11 +160,7 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		}
 
 		if (f === "in_time" || f === "out_time") {
-			if (!data[f]) {
-				// A missing OUT is the single most common data fault — name it.
-				return `<span style="color:#A64E5B" title="${__("No punch recorded")}">— —</span>`;
-			}
-			return value;
+			return _punch_cell(f, value, data);
 		}
 
 		if (f === "work_in_holiday" && cint(data.work_in_holiday)) {
@@ -358,6 +360,154 @@ function _default_bs_month() {
 		"Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra",
 	];
 	return `${String(bs).padStart(2, "0")} - ${names[bs - 1]}`;
+}
+
+
+// ---------------------------------------------------------------------------
+// First IN / Last OUT correction
+// ---------------------------------------------------------------------------
+//
+// HR fixes a missed or wrong punch from the cell it shows up in. The server
+// (hr/punch_correction.py) moves or adds the punches and re-marks the day's
+// attendance in one transaction; this side only collects the two times and a
+// reason, and refreshes the grid so the new hours, status and allowances show.
+//
+// A corrected time is never allowed to look like a device reading: its cell
+// is tinted amber with a pencil mark, and the tooltip says what the device
+// read, who changed it, when and why. The marker lives on the punch, so it
+// survives a refresh and any later rebuild of the attendance.
+
+const EDITED_CELL_STYLE =
+	"background:#FCF3DC;box-shadow:inset 3px 0 0 #C9A227;border-radius:3px;padding:2px 6px;";
+
+function _can_correct(data) {
+	if (!data || !data.employee || !data.ad_date) return false;
+	if (!frappe.user.has_role(CORRECTION_ROLES)) return false;
+	// Today's attendance is still being marked; the server refuses it too.
+	return String(data.ad_date) < frappe.datetime.get_today();
+}
+
+function _punch_cell(f, value, data) {
+	const note = f === "in_time" ? data.in_edit_note : data.out_edit_note;
+	const editable = _can_correct(data);
+	const attrs = editable
+		? `class="mab-punch-edit" data-employee="${frappe.utils.escape_html(data.employee)}"
+			data-date="${data.ad_date}" style="cursor:pointer"`
+		: "";
+	const pencil = editable
+		? `<span class="mab-pencil" style="color:var(--text-light);margin-left:6px;font-size:.8em">✎</span>`
+		: "";
+
+	if (!data[f]) {
+		// A missing OUT is the single most common data fault — name it.
+		const hint = editable ? __("No punch recorded. Click to add it.") : __("No punch recorded");
+		return `<span ${attrs} title="${hint}"><span style="color:#A64E5B">— —</span>${pencil}</span>`;
+	}
+	if (note) {
+		return `<span ${attrs} title="${frappe.utils.escape_html(note)}"
+			style="${EDITED_CELL_STYLE}${editable ? "cursor:pointer;" : ""}"
+			><span style="font-weight:600;color:#7A5B12">${value}</span>
+			<span style="color:#A07A1C;margin-left:4px;font-size:.8em">✎ ${__("edited")}</span></span>`;
+	}
+	return editable
+		? `<span ${attrs} title="${__("Click to correct First IN / Last OUT")}">${value}${pencil}</span>`
+		: value;
+}
+
+function _bind_punch_correction(report) {
+	// Delegated, so it outlives every datatable rebuild without re-binding.
+	report.page.wrapper.off("click.mab-punch").on("click.mab-punch", ".mab-punch-edit", (e) => {
+		const $cell = $(e.currentTarget);
+		const employee = $cell.attr("data-employee");
+		const date = $cell.attr("data-date");
+		const row = (frappe.query_report.data || []).find(
+			(r) => r.employee === employee && String(r.ad_date) === date
+		);
+		if (row) _open_correction_dialog(row);
+	});
+}
+
+function _open_correction_dialog(row) {
+	const name = row.employee_name || row.employee;
+	const shown = (v) => v || __("none");
+	const d = new frappe.ui.Dialog({
+		title: __("Correct First IN / Last OUT"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "intro",
+				options: `<div style="margin-bottom:10px">
+					<div style="font-weight:600">${frappe.utils.escape_html(name)} · ${row.bs_date} (${row.ad_date})</div>
+					<div class="text-muted" style="margin-top:4px">
+						${__("Now")}: ${__("IN")} ${shown(row.in_time)}, ${__("OUT")} ${shown(row.out_time)},
+						${frappe.utils.escape_html(row.status || "")}
+					</div>
+					<div style="margin-top:8px;padding:8px 10px;background:#FAF6EC;border-left:3px solid #C9A227;font-size:.92em">
+						${__("Saving moves the day's first and last punch to these times (or adds a missing one), then re-marks this day's attendance and any approved overtime from them. The device's original time and your reason are kept on the punch, and the cell stays highlighted as edited.")}
+					</div>
+				</div>`,
+			},
+			{
+				fieldtype: "Time",
+				fieldname: "in_time",
+				label: __("First IN"),
+				reqd: 1,
+				default: row.in_time || "",
+			},
+			{ fieldtype: "Column Break" },
+			{
+				fieldtype: "Time",
+				fieldname: "out_time",
+				label: __("Last OUT"),
+				reqd: 1,
+				default: row.out_time || "",
+			},
+			{ fieldtype: "Section Break" },
+			{
+				fieldtype: "Small Text",
+				fieldname: "reason",
+				label: __("Reason"),
+				reqd: 1,
+				description: __("e.g. Forgot to punch out; confirmed by supervisor."),
+			},
+		],
+		primary_action_label: __("Save Correction"),
+		primary_action(values) {
+			if (values.out_time <= values.in_time) {
+				frappe.msgprint(__("Last OUT must be after First IN."));
+				return;
+			}
+			d.disable_primary_action();
+			frappe
+				.call({
+					method: CORRECT_DAY_METHOD,
+					type: "POST",
+					args: {
+						employee: row.employee,
+						attendance_date: row.ad_date,
+						in_time: values.in_time,
+						out_time: values.out_time,
+						reason: values.reason,
+					},
+					freeze: true,
+					freeze_message: __("Correcting punches and re-marking attendance..."),
+				})
+				.then((r) => {
+					d.hide();
+					const m = r.message || {};
+					const lines = [
+						`<b>${__("Attendance")}:</b> ${frappe.utils.get_form_link("Attendance", m.attendance, true)} — ${m.status}, ${m.in_time} → ${m.out_time}`,
+						`<b>${__("Changed")}:</b> ${(m.changes || []).join("; ")}`,
+					];
+					(m.overtime || []).forEach((l) => lines.push(`<b>${__("Overtime")}:</b> ${l}`));
+					(m.warnings || []).forEach((l) => lines.push(`<span style="color:#96662A">⚠ ${l}</span>`));
+					frappe.msgprint({ title: __("Day Corrected"), message: lines.join("<br>"), indicator: "green" });
+					frappe.query_report.refresh();
+				})
+				.always(() => d.enable_primary_action());
+		},
+	});
+	d.show();
 }
 
 
