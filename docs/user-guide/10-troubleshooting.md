@@ -79,6 +79,12 @@ That month has not started yet. You can only pay a month that has started (usual
 ### Leave balance shows 0 although days were allocated
 The Leave Allocation is still a **draft**. Open it and **Submit** it.
 
+### Leave balance is below zero
+Normal: Casual and Sick Leave may be taken before they are credited, so a balance can be −5 in Bhadra and catch up as the monthly credit arrives. HRMS shows an orange "Insufficient leave balance" warning on the application; it is only a warning. If the person leaves while still below zero, the days are deducted as **Leave Recovery** on the last slip (8.5).
+
+### A leaver's last slip will not submit: net pay below zero
+The Leave Recovery (or another deduction) is larger than the month's pay. Lower the Leave Recovery Additional Salary to what the slip can carry and collect the rest outside payroll.
+
 ---
 
 ## 10.2 Payroll Entry and salary slip messages
@@ -169,6 +175,7 @@ The Leave Allocation is still a **draft**. Open it and **Submit** it.
 | Message | What to do |
 |---|---|
 | **Over the year's leave** — "… is allowed N days of … this year, and this would make M." | The allocation would pass the yearly limit in the person's Leave Policy. Reduce the days |
+| **Over the year's leave** — "… is allowed N days of … this year and has T already, so D more would make M." | The leave application would take the year's leave of that type past its figure. Give the rest as Leave Without Pay |
 | **Not Eligible** — "… is only for employees whose gender is …. … is recorded as …." | Maternity is for women, Paternity for men. Check the Gender on the Employee |
 
 ## 10.8 Shift messages

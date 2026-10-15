@@ -17,6 +17,15 @@ typed on the Leave Type itself would be one number for the whole group.
 
 Leave carried in from last year is not part of it. It was earned under last
 year's ceiling, and counting it here would quietly shrink this year's.
+
+The same ceiling holds for leave TAKEN (user, 2026-10-15: "they can take leave
+but what is calculated is in the end of the year it does not pass the
+allocated days other wise deduction"). Casual and Sick Leave allow a negative
+balance, so someone may take leave before the monthly credit has caught up,
+but `validate_application_within_year` refuses any application that would make
+the year's leave of that type pass the year's figure. What was taken beyond
+what was earned by the time they leave is deducted from the last slip
+(payroll/leave_encashment.py `recover_month`).
 """
 
 import frappe
@@ -83,5 +92,71 @@ def already_granted(doc):
 		where employee = %s and leave_type = %s and docstatus = 1
 		  and name != %s and from_date <= %s and to_date >= %s""",
 		(doc.employee, doc.leave_type, doc.name or "", getdate(doc.to_date), getdate(doc.from_date)),
+	)
+	return flt(rows[0][0]) if rows else 0.0
+
+
+def validate_application_within_year(doc, method=None):
+	"""Refuse leave that would take the year's leave of this type past its figure.
+
+	Hook: doc_events → Leave Application → validate. Only for leave types that
+	allow a negative balance: for the others HRMS's own balance check already
+	stops at what has been credited. The year is the allocation covering the
+	application; its figure is the employee's Leave Policy, or what was
+	allocated by hand when there is no policy behind it.
+	"""
+	if doc.status in ("Rejected", "Cancelled") or not doc.from_date:
+		return
+	if not frappe.get_cached_value("Leave Type", doc.leave_type, "allow_negative"):
+		return
+	year = frappe.db.get_value(
+		"Leave Allocation",
+		{"employee": doc.employee, "leave_type": doc.leave_type, "docstatus": 1,
+			"from_date": ("<=", getdate(doc.from_date)), "to_date": (">=", getdate(doc.from_date))},
+		["from_date", "to_date"],
+		as_dict=True,
+	)
+	if not year:
+		return  # HRMS refuses leave outside an allocation itself
+	annual = policy_allocation(doc.employee, doc.leave_type, year.from_date, year.to_date) or _allocated_by_hand(
+		doc.employee, doc.leave_type, year
+	)
+	if not annual:
+		return
+
+	taken = frappe.db.sql(
+		"""select sum(total_leave_days) from `tabLeave Application`
+		where employee = %s and leave_type = %s and docstatus < 2
+		  and status not in ('Rejected', 'Cancelled') and name != %s
+		  and from_date between %s and %s""",
+		(doc.employee, doc.leave_type, doc.name or "", year.from_date, year.to_date),
+	)[0][0]
+	total = flt(taken) + flt(doc.total_leave_days)
+	if total <= annual + 0.001:
+		return
+
+	frappe.throw(
+		_(
+			"{0} is allowed {1} days of {2} this year and has {3} already, so {4} more would make {5}.<br><br>"
+			"Leave may be taken before it is credited, but never past the year's figure. "
+			"Give the rest as Leave Without Pay."
+		).format(
+			frappe.bold(doc.employee_name or doc.employee),
+			frappe.bold(f"{annual:g}"),
+			frappe.bold(doc.leave_type),
+			f"{flt(taken):g}",
+			f"{flt(doc.total_leave_days):g}",
+			frappe.bold(f"{total:g}"),
+		),
+		title=_("Over the year's leave"),
+	)
+
+
+def _allocated_by_hand(employee, leave_type, year):
+	rows = frappe.db.sql(
+		"""select sum(new_leaves_allocated) from `tabLeave Allocation`
+		where employee = %s and leave_type = %s and docstatus = 1
+		  and from_date <= %s and to_date >= %s""",
+		(employee, leave_type, getdate(year.to_date), getdate(year.from_date)),
 	)
 	return flt(rows[0][0]) if rows else 0.0

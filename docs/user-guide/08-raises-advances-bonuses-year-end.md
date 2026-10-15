@@ -175,8 +175,13 @@ A later run never touches a submitted encashment, and the system refuses a secon
 ### Someone leaving during the year
 
 1. Set the **Relieving Date** on the Employee. Keep the status **Active** until the encashment is submitted (the system refuses an encashment for an employee who has Left).
-2. In the Payroll Entry of the month they leave, tick **Pay Leave Encashment**. Everyone whose relieving date falls in the month is encashed at Separation, dated that day, at the same rate as above, when the slips are made.
-3. It is paid on that month's slip (the last one).
+2. In the Payroll Entry of the month they leave, tick **Settle Leave (encash or recover)** (it was called Pay Leave Encashment). Everyone whose relieving date falls in the month is settled at Separation, dated that day, at the same rate as above, when the slips are made.
+3. It is on that month's slip (the last one):
+   - **Leave left** (balance above 0) is paid as **Leave Encashment**.
+   - **Leave taken beyond what was earned** (balance below 0, because leave can be taken before it is credited) is deducted as **Leave Recovery**: the days short × the same per-day rate. Example: basic 20,000, Ashwin (30 days), 21 Casual + 12 Sick taken in Shrawan, relieved at Ashwin end with 6 Casual + 3.5 Sick earned → 15 + 8.5 = **23.5 days × 666.67 = 15,666.67 deducted**.
+   - The earned figure counts the month's own credit when the person leaves on the BS month's last day, even if the month-end credit has not run yet.
+
+The same check runs at year end: a year can only end below zero for someone who joined mid-year and took the full year's leave. If a recovery is larger than the last month's pay, the slip cannot be submitted (net pay below zero): collect the rest outside payroll and reduce the deduction.
 
 A single leaver can also be done by hand: **Leave Encashment → New**, Employee, Leave Type, **Encashment Date = the relieving date**; the days and amount fill themselves.
 

@@ -24,7 +24,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 
 **HRMS vs us.** HRMS owns the Payroll Entry doctype, slip creation, the accrual journal and the bank entry. We add the following:
 
-* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L524);
+* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L528);
 * the **BS month** fields and calendar;
 * one **doc_event** guard;
 * the whole **attendance engine**. HRMS has no attendance-driven pay at all, only proration by payment days (stage [06](06-salary-slip.md)).
@@ -38,7 +38,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 | **What** | The entry is made by choosing **Fiscal Year + Month (BS)**. Everything else (start, end, posting date, frequency, currency, payable account, cost centre, employees) is derived from them. |
 | **Why** | Module docstring ([`Payroll Entry`](../../avinashgroup_app/payroll/payroll_month.py#L1)): "HR runs 'Bhadra's salary', not '17 August to 16 September'". Typing an AD posting date was the root of the Bhadra-paid-on-2-Ashwin mistake that `bs_period_guard` refuses. Commits df53710 and 714edfc (2026-10-09). |
 | **Where** | [`fill_from_bs_month`](../../avinashgroup_app/payroll/payroll_month.py#L45), [`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121), [`month_calendar`](../../avinashgroup_app/payroll/payroll_month.py#L148); BS calendar [`month_period`](../../avinashgroup_app/hr/bs_calendar.py#L88), [`month_of_date`](../../avinashgroup_app/hr/bs_calendar.py#L127), [`get_month`](../../avinashgroup_app/hr/bs_calendar.py#L148) |
-| **Triggered by** | `fill_from_bs_month` runs from [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L204) (drafts only). `default_month` runs from the form's `onload` on a new entry. `month_calendar` runs whenever the form draws the calendar. |
+| **Triggered by** | `fill_from_bs_month` runs from [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L208) (drafts only). `default_month` runs from the form's `onload` on a new entry. `month_calendar` runs whenever the form draws the calendar. |
 | **Reads** | Company `default_currency`, `default_payroll_payable_account`, `cost_center`; Nepal BS Period / Nepal BS Period Month (company first, then global), falling back to the Nepali calendar (`get_bs_month_range`); existing Payroll Entries. |
 | **Writes** | Payroll Entry `start_date`, `end_date`, `posting_date` (= month end), `payroll_frequency` = Monthly, `currency`, `exchange_rate` = 1, `payroll_payable_account` and `cost_center` (only when blank), `employees` (HRMS `fill_employee_details`, when empty or when the month changed). |
 | **Impacts downstream** | `posting_date` decides the slip's month (the BS slip derives its period from posting date, [06](06-salary-slip.md)); `start_date`/`end_date` bound the attendance engine and the Additional Salary `payroll_date`; the payable account is credited by the accrual journal ([07](07-after-the-slip.md)). |
@@ -69,7 +69,7 @@ Registered at [`payroll_entry.js`](../../avinashgroup_app/hooks.py#L107).
 | [`show_bs_month`](../../avinashgroup_app/public/js/payroll_entry.js#L16) | Calls `bs_calendar.get_month` and writes start, end, posting date and the mitis **directly on `frm.doc`**, "so HRMS's own start/end/posting handlers would [not] recompute the dates from the AD calendar". |
 | [`lock_bs_dates`](../../avinashgroup_app/public/js/payroll_entry.js#L11) | Makes `posting_date`, `start_date`, `end_date` and `payroll_frequency` read-only once a month is picked. |
 | [`fill_company_defaults`](../../avinashgroup_app/public/js/payroll_entry.js#L50) | Fills a blank payable account, cost centre and currency on the client. HRMS only does this when the company is *changed*, and the form would otherwise refuse Save before the server could fill them. |
-| **Yearly Payments** section | No buttons. The entry carries **Pay Dashain Allowance** (with Festival Component and cut-off) and **Pay Leave Encashment**; making and submitting the slips posts tea, meals, overtime, late fines, advances and the ticked payments in one run ([`prepare_payroll_inputs`](../../avinashgroup_app/payroll/payroll_entry.py#L36)), and appends to the read-only **Payroll Inputs Log**. The festival component picker lists only festival allowances. |
+| **Yearly Payments** section | No buttons. The entry carries **Pay Dashain Allowance** (with Festival Component and cut-off) and **Settle Leave (encash or recover)** (`custom_pay_leave_encashment`; relabelled by patch `setup_leave_recovery`: a positive balance is encashed, a negative one recovered by [`recover_month`](../../avinashgroup_app/payroll/leave_encashment.py#L332) as a "Leave Recovery" deduction); making and submitting the slips posts tea, meals, overtime, late fines, advances and the ticked payments in one run ([`prepare_payroll_inputs`](../../avinashgroup_app/payroll/payroll_entry.py#L36)), and appends to the read-only **Payroll Inputs Log**. The festival component picker lists only festival allowances. |
 
 ### Coexisting script from rdp_common_app
 
@@ -85,15 +85,15 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 ## 5.2 The class override: `AvinashPayrollEntry` (payroll/payroll_entry.py)
 
-[`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L203) subclasses HRMS [`PayrollEntry`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L35).
+[`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L207) subclasses HRMS [`PayrollEntry`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L35).
 
 | Method | Ours / HRMS | What |
 |---|---|---|
-| [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L204) | ours, then `super()` | `fill_from_bs_month` → HRMS [`validate`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L45) (sets `number_of_employees`, status) → `warn_missing_attendance` on a new entry or a changed `start_date`. |
-| [`before_submit`](../../avinashgroup_app/payroll/payroll_entry.py#L212) | ours, then `super()` | `warn_missing_attendance` again, then HRMS [`before_submit`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L58): [`validate_existing_salary_slips`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L68) (refuses if a slip already exists for an employee for the same dates), [`validate_payroll_payable_account`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L99) (the payable account must have **no** account type; patch `clear_payroll_payable_account_type` blanked it), and the unmarked-attendance refusal, which applies only when **Validate Attendance** is ticked ([`get_employees_with_unmarked_attendance`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L1109)). |
+| [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L208) | ours, then `super()` | `fill_from_bs_month` → HRMS [`validate`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L45) (sets `number_of_employees`, status) → `warn_missing_attendance` on a new entry or a changed `start_date`. |
+| [`before_submit`](../../avinashgroup_app/payroll/payroll_entry.py#L216) | ours, then `super()` | `warn_missing_attendance` again, then HRMS [`before_submit`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L58): [`validate_existing_salary_slips`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L68) (refuses if a slip already exists for an employee for the same dates), [`validate_payroll_payable_account`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L99) (the payable account must have **no** account type; patch `clear_payroll_payable_account_type` blanked it), and the unmarked-attendance refusal, which applies only when **Validate Attendance** is ticked ([`get_employees_with_unmarked_attendance`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L1109)). |
 | HRMS [`on_submit`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L64) | HRMS | Status Submitted, then `create_salary_slips` (5.8). |
-| [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L249) | ours, then `super()` | Refuses a missing or non-Bank/Cash Payment Account. See [07](07-after-the-slip.md). |
-| [`get_salary_component_total`](../../avinashgroup_app/payroll/payroll_entry.py#L270), [`section_for`](../../avinashgroup_app/payroll/payroll_entry.py#L318), [`get_account`](../../avinashgroup_app/payroll/payroll_entry.py#L327) | ours, replacing HRMS | Section accounts (O/O, S/D, F/P) on the accrual journal. See [07](07-after-the-slip.md). |
+| [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L253) | ours, then `super()` | Refuses a missing or non-Bank/Cash Payment Account. See [07](07-after-the-slip.md). |
+| [`get_salary_component_total`](../../avinashgroup_app/payroll/payroll_entry.py#L274), [`section_for`](../../avinashgroup_app/payroll/payroll_entry.py#L322), [`get_account`](../../avinashgroup_app/payroll/payroll_entry.py#L331) | ours, replacing HRMS | Section accounts (O/O, S/D, F/P) on the accrual journal. See [07](07-after-the-slip.md). |
 
 **Config on avinas1:** `validate_attendance` is 0 on all three entries, so HRMS never refuses for unmarked attendance. Our orange warning is the only signal.
 

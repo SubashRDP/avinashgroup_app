@@ -494,6 +494,10 @@ for _dt in ("Leave Allocation", "Leave Application"):
 # The month's credit may be any size, but a year cannot grant more days than the
 # employee's own Leave Policy allows — 21 + 12, or 8 + 12 at Karnali.
 _add_doc_event("Leave Allocation", "validate", "avinashgroup_app.hr.leave_ceiling.validate_within_policy")
+# Leave may be taken ahead of the monthly credit (Casual / Sick allow a
+# negative balance) but never past the year's figure; the excess of a leaver is
+# recovered on the last slip (payroll/leave_encashment.recover_month).
+_add_doc_event("Leave Application", "validate", "avinashgroup_app.hr.leave_ceiling.validate_application_within_year")
 
 _add_doc_event("*", "validate", "avinashgroup_app.custom_code.dynamic_approval.validate")
 _add_doc_event("*", "before_save", "avinashgroup_app.custom_code.dynamic_approval.before_save")

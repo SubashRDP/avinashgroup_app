@@ -300,7 +300,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 220,
+      "line": 224,
       "title": "4.1 create_salary_slips",
       "description": "Making the slips posts the month's inputs first (`prepare_payroll_inputs`); **Submit Salary Slip** posts them again and recalculates the drafts. Each run is logged on the entry (Payroll Inputs Log). No button.\n\nReads: Payroll Entry `custom_payroll_inputs_log`"
     },
@@ -432,7 +432,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 204,
+      "line": 208,
       "title": "5.2 AvinashPayrollEntry.validate",
       "description": "`fill_from_bs_month`, then HRMS's validate, then `warn_missing_attendance` on a new entry or changed month."
     },
@@ -462,7 +462,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 212,
+      "line": 216,
       "title": "5.7 AvinashPayrollEntry.before_submit",
       "description": "Warns about missing attendance again, then HRMS's before_submit."
     },
@@ -786,13 +786,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 270,
+      "line": 274,
       "title": "9.4 AvinashPayrollEntry.get_salary_component_total",
       "description": "HRMS's loop keyed by (component, cost centre, section); throws when an employee's department has no section but the component posts by section.\n\nReads: Payroll cost centres"
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 318,
+      "line": 322,
       "title": "9.5 AvinashPayrollEntry.section_for",
       "description": "The employee's section, only if the component has S/D or F/P accounts for the company."
     },
@@ -804,7 +804,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 327,
+      "line": 331,
       "title": "9.7 AvinashPayrollEntry.get_account",
       "description": "Turns component keys into (account, cost centre) amounts using `section_account`, else HRMS's account."
     },
@@ -834,7 +834,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 249,
+      "line": 253,
       "title": "9.12 AvinashPayrollEntry.make_bank_entry",
       "description": "Refuses a missing or non-Bank/Cash Payment Account, then HRMS's bank entry.\n\nReads: Payroll Entry `payment_account`"
     },
@@ -966,19 +966,19 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 211,
+      "line": 227,
       "title": "11.10 leave_encashment.encash_for_payroll_entry",
       "description": "From the payroll month's first day: the entry's employees → `encash_month` for its dates — Year End when an allocation ends in the month (Ashadh), Separation for anyone relieved in it.\n\nReads: Payroll Entry `start_date` / `end_date`"
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 245,
+      "line": 261,
       "title": "11.11 encash_month",
       "description": "Per due (employee, type, allocation): skips one already submitted, rebuilds a draft, inserts a Leave Encashment dated the allocation's end.\n\nReads: Leave Period; Leave Encashment"
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 185,
+      "line": 201,
       "title": "11.12 due_encashments",
       "description": "Allocations of Allow Encashment types ending in the month (year end) or covering a relieving date in it (separation).\n\nReads: Leave Type `allow_encashment`, `custom_encash_at_year_end`, `custom_encash_at_separation`; Leave Allocation"
     },
@@ -990,13 +990,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 93,
+      "line": 109,
       "title": "11.14 price_encashment",
       "description": "After HRMS's validate: refuses a second encashment of the allocation, a date that is neither year end nor relieving date, an occasion the type does not allow; amount = days × `per_day_rate`.\n\nReads: Leave Type `custom_encash_at_*`"
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 72,
+      "line": 88,
       "title": "11.15 per_day_rate",
       "description": "Assignment `base` ÷ Leave Type `custom_encashment_days_per_month` (blank = the BS month's days).\n\nReads: Salary Structure Assignment `base`"
     },
@@ -1008,13 +1008,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 135,
+      "line": 151,
       "title": "11.17 mark_additional_salary",
       "description": "Additional Salary validate: an encashment's row is taxed in full in its month and tagged."
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 147,
+      "line": 163,
       "title": "11.18 link_additional_salary",
       "description": "Additional Salary on_submit: writes it back to the encashment so cancelling one cancels the other."
     }

@@ -95,19 +95,23 @@ def _pay_dashain(entry):
 
 
 def _pay_leave_encashment(entry):
-	"""Make and submit the month's Leave Encashments; returns its log text."""
-	from avinashgroup_app.payroll.leave_encashment import encash_month
+	"""Make and submit the month's Leave Encashments, and recover leave taken beyond
+	what was earned; returns its log text."""
+	from avinashgroup_app.payroll.leave_encashment import encash_month, recover_month
 
 	if frappe.utils.getdate() < frappe.utils.getdate(entry.start_date):
 		return _("Leave encashment: not before {0}, the month's first day").format(entry.start_date)
 	currency = frappe.get_cached_value("Company", entry.company, "default_currency")
-	result = encash_month(entry.company, currency, [r.employee for r in entry.employees], entry.start_date, entry.end_date)
+	employees = [r.employee for r in entry.employees]
+	result = encash_month(entry.company, currency, employees, entry.start_date, entry.end_date)
 	for row in result["created"]:
 		doc = frappe.get_doc("Leave Encashment", row["name"])
 		doc.flags.ignore_permissions = True
 		doc.submit()
-	return _("Leave encashment: {0} people, total {1}; {2} left out").format(
-		len(result["created"]), _money(result["total"]), len(result["left_out"])
+	recovered = recover_month(entry.company, employees, entry.start_date, entry.end_date)
+	return _("Leave encashment: {0} people, total {1}; {2} left out. Leave recovery: {3} people, total {4}").format(
+		len(result["created"]), _money(result["total"]), len(result["left_out"]),
+		len({m["employee"] for m in recovered["made"]}), _money(recovered["total"]),
 	)
 
 

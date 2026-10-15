@@ -102,6 +102,8 @@ If the person forgot to punch, the device cannot know. Create or edit the **Atte
 
 Policy (client meeting, September 2026): 33 days a year in total — Casual 21 + Sick 12 (Karnali: Casual 8 + Sick 12). Staff on probation get 1 day a month. **Holidays that fall between two leave days count as leave** ("sandwich" rule). Leave left at the end of the fiscal year is **encashed**, not carried forward.
 
+**Leave may be taken before it is credited, but never past the year** (decided 15 Oct 2026). Casual and Sick Leave allow a negative balance: someone with 5.25 days credited can still take 10. What is refused is a year past its figure: "**… is allowed 21 days of Casual Leave this year and has 21 already …**". Give the rest as Leave Without Pay. If the person leaves (or the year ends) having taken more than they had earned by then, the difference is **deducted** from their last slip as **Leave Recovery**, at the same per-day rate as encashment (Chapter 8.5).
+
 ### Monthly credit
 Leave is credited on the **last day of each BS month** (not the English month end), from the person's Leave Policy. A person who joins mid-month gets a share for that BS month.
 

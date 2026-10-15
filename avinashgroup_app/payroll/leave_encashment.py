@@ -45,6 +45,18 @@ are Leave Type fields (patch setup_leave_encashment). HR Settings' Auto Leave
 Encashment stays off: it would make drafts on allocation expiry for every type
 without these checks.
 
+The other direction is recovery (user, 2026-10-15: leave may be taken before
+it is credited, "what is calculated is in the end of the year it does not pass
+the allocated days other wise deduction"). Casual and Sick Leave allow a
+negative balance, capped at the year's figure by hr/leave_ceiling.py. At the
+same two moments, a balance below zero — someone who took 33 days in three
+months and left with 8.25 earned — is days paid as leave but never earned:
+`recover_month` deducts them, at the same per-day rate, as a submitted
+"Leave Recovery" Additional Salary on that month's slip. The balance counts the
+month's credit still due on that day when the BS-month-end accrual has not run
+yet (the Ashadh payroll is usually made before the last day), so a year that
+ends square is never charged.
+
 Boundary: HRMS refuses an encashment for an employee who is no longer Active, so
 a leaver's encashment must be made before their status is set to Left (the
 relieving date is enough). Payment through a Payment Entry instead of the slip
@@ -55,9 +67,13 @@ import frappe
 from frappe import _
 from frappe.utils import flt, getdate, strip_html
 
+from hrms.hr.doctype.leave_application.leave_application import get_leave_balance_on
+
 from avinashgroup_app.payroll.allowance import current_assignment
 
 SOURCE_TAG = "Leave Encashment"
+RECOVERY_COMPONENT = "Leave Recovery"
+RECOVERY_SOURCE = "Leave Recovery"
 YEAR_END = "Year End"
 SEPARATION = "Separation"
 
@@ -311,3 +327,120 @@ def encash_month(company: str, currency: str, employees: list, start_date, end_d
 		"left_out": left_out,
 		"total": flt(sum(c["amount"] for c in created), 2),
 	}
+
+
+def recover_month(company: str, employees: list, start_date, end_date) -> dict:
+	"""Deduct leave taken beyond what was earned, for settlements falling in the month.
+
+	Same occasions as `encash_month` (relieving date or the allocation's last day
+	in the month). For each one whose balance is below zero, posts and submits a
+	"Leave Recovery" Additional Salary for the days short × the per-day rate.
+	Re-running replaces this month's own rows; a person whose slip for the month
+	is already submitted is left alone. Returns {"made", "left_out", "total"}.
+	"""
+	made, left_out = [], []
+	if not frappe.db.exists("Salary Component", RECOVERY_COMPONENT):
+		return {"made": made, "left_out": left_out, "total": 0}
+	for employee, leave_type, allocation, date, occasion in due_encashments(employees, start_date, end_date):
+		if _slip_submitted(employee, date):
+			left_out.append({"employee": employee, "leave_type": leave_type, "reason": _("salary slip already submitted")})
+			continue
+		_clear_recovery(employee, allocation, date)
+		short = -settlement_balance(employee, leave_type, allocation, date)
+		if short <= 0:
+			continue
+		basic, divisor, rate = per_day_rate(employee, leave_type, date)
+		if not rate:
+			left_out.append({"employee": employee, "leave_type": leave_type, "reason": _("no salary assignment to price the days")})
+			continue
+		doc = frappe.get_doc(
+			{
+				"doctype": "Additional Salary",
+				"employee": employee,
+				"company": company,
+				"salary_component": RECOVERY_COMPONENT,
+				"type": "Deduction",
+				"amount": flt(short * rate, 2),
+				"payroll_date": date,
+				"overwrite_salary_structure_amount": 0,
+				"ref_doctype": "Leave Allocation",
+				"ref_docname": allocation,
+				"custom_source": RECOVERY_SOURCE,
+				"custom_quantity": short,
+				"custom_rate": rate,
+			}
+		)
+		doc.flags.ignore_permissions = True
+		doc.insert()
+		doc.submit()
+		made.append(
+			{"name": doc.name, "employee": employee, "leave_type": leave_type, "occasion": occasion,
+				"days": short, "rate": flt(rate, 2), "amount": doc.amount}
+		)
+	return {"made": made, "left_out": left_out, "total": flt(sum(m["amount"] for m in made), 2)}
+
+
+def settlement_balance(employee: str, leave_type: str, allocation: str, on_date) -> float:
+	"""Leave left on the settlement day: HRMS's balance plus the month's credit still due."""
+	balance = flt(get_leave_balance_on(employee, leave_type, getdate(on_date)))
+	return balance + _credit_still_due(allocation, leave_type, on_date)
+
+
+def _credit_still_due(allocation: str, leave_type: str, on_date) -> float:
+	"""The BS-month-end instalment for `on_date`'s month, when that is today's credit day and it has not run.
+
+	Worked out by the accrual itself (hr/utils `_credit_instalment`, dry run), so
+	the figure is exactly what the job would credit that night.
+	"""
+	from avinashgroup_app.hr.utils import _credit_instalment, _get_policy_details, _is_accrual_day
+	from rdp_common_app.utils.bs_boundaries import get_bs_month_start
+
+	on_date = getdate(on_date)
+	lt = frappe.get_cached_doc("Leave Type", leave_type)
+	if not lt.is_earned_leave or not _is_accrual_day(lt, on_date):
+		return 0.0
+	alloc = frappe.get_doc("Leave Allocation", allocation)
+	# A month-end credit is a ledger entry dated inside the month; the
+	# allocation's own opening entry (dated its first day) is not one.
+	month_start = max(getdate(get_bs_month_start(on_date)), getdate(frappe.utils.add_days(alloc.from_date, 1)))
+	if frappe.db.exists(
+		"Leave Ledger Entry",
+		{"transaction_name": allocation, "transaction_type": "Leave Allocation", "docstatus": 1, "leaves": (">", 0),
+			"from_date": ("between", [month_start, on_date])},
+	):
+		return 0.0
+	annual, joined = _get_policy_details(alloc, leave_type)
+	if annual is None:
+		return 0.0
+	row = _credit_instalment(alloc, annual, lt, joined, on_date, dry_run=True)
+	return flt(row["credited"]) if row else 0.0
+
+
+def _slip_submitted(employee: str, on_date) -> bool:
+	return bool(
+		frappe.db.exists(
+			"Salary Slip",
+			{"employee": employee, "docstatus": 1, "start_date": ("<=", on_date), "end_date": (">=", on_date)},
+		)
+	)
+
+
+def _clear_recovery(employee: str, allocation: str, on_date):
+	"""Cancel and delete this settlement's earlier recovery, dropping its line from a draft slip."""
+	for row in frappe.get_all(
+		"Additional Salary",
+		filters={"employee": employee, "ref_doctype": "Leave Allocation", "ref_docname": allocation,
+			"payroll_date": on_date, "custom_source": RECOVERY_SOURCE, "docstatus": ("<", 2)},
+		fields=["name", "docstatus"],
+	):
+		frappe.db.sql(
+			"""delete sd from `tabSalary Detail` sd
+			join `tabSalary Slip` ss on ss.name = sd.parent and sd.parenttype = 'Salary Slip'
+			where sd.additional_salary = %s and ss.docstatus = 0""",
+			row.name,
+		)
+		if row.docstatus == 1:
+			doc = frappe.get_doc("Additional Salary", row.name)
+			doc.flags.ignore_permissions = True
+			doc.cancel()
+		frappe.delete_doc("Additional Salary", row.name, force=True, ignore_permissions=True)

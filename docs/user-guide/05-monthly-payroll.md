@@ -54,7 +54,7 @@ Nothing is pressed for tea, meals, overtime, late fines or advance instalments. 
 In the **Yearly Payments** section of the Payroll Entry (first tab), before **Create Salary Slips**:
 
 - **Pay Dashain Allowance** — tick it in the Dashain month, pick the **Festival Component** and the **Count Service To (Cut-off)** date (Chapter 8.4).
-- **Pay Leave Encashment** — tick it in Ashadh, or in a month someone leaves (Chapter 8.5).
+- **Settle Leave (encash or recover)** — tick it in Ashadh, or in a month someone leaves: leave left is paid, leave taken beyond what was earned is deducted (Chapter 8.5).
 
 Both are paid in the same run as everything else. The read-only **Payroll Inputs Log** on the form records every run: when, by whom, the tea / meal / overtime and late-fine totals, advance instalments, the Dashain adjustment and the encashment total, for example "**2026-10-15 12:26 Slips created by hr@…: 212 attendance lines: tea / meal / overtime 1,04,960.00, late fines 5,375.40; 3 advance instalments; Dashain PADJ-2026-00001: 96 people, total 18,40,000.00**". **Dashain Payroll Adjustment** links the adjustment that paid the allowance.
 
