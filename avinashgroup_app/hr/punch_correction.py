@@ -68,8 +68,11 @@ Refused, and why:
   * today or later — today's attendance is marked by HRMS after the shift ends;
   * a day inside a submitted Salary Slip — attendance under paid salary would
     silently disagree with the money (same rule as shift_backdate.guard_paid_period);
-  * leave days (On Leave, Work From Home, anything with a Leave Application) —
-    a leave decision is not a punch correction;
+  * a shift change on a leave day (On Leave, Work From Home, anything with a
+    Leave Application) — a leave decision is not a shift correction. Punches on
+    a leave day ARE corrected: the row is kept, not rebuilt, and a punch makes
+    it a Half Day with the leave kept (policy 3.4,
+    biometric.attendance_override.half_day_if_came_in);
   * no shift rostered, or an overnight shift (as the day's or as the new one) —
     punches are grouped by calendar day everywhere in this app (attendance_sync),
     which an overnight shift breaks;
@@ -178,7 +181,10 @@ def correct_day(
 			_guard_past(d)
 			_guard_paid(employee, d)
 		existing = {d: _attendance_on(employee, d) for d in days}
-		_refuse_leave(existing[day], day)  # the day HR clicked; leave days later in a range keep their leave
+		if shift:
+			# A leave day's shift is not corrected: change the leave. Its punches
+			# are — coming in on leave is a Half Day (policy 3.4).
+			_refuse_leave(existing[day], day)
 		entries = []
 		if shift:
 			entries += _apply_shift(employee, day, last, shift, reason)
@@ -235,8 +241,9 @@ def correct_day(
 
 def _remark_after_correction(employee, day, existing, note):
 	"""Re-mark one day of a correction. A day with punches is rebuilt; a day
-	without keeps its row (Absent, hand-entered, leave) with only the shift
-	corrected, as hr/shift_backdate does — punches are what a rebuild needs."""
+	without keeps its row (Absent, hand-entered) with only the shift corrected,
+	as hr/shift_backdate does — punches are what a rebuild needs. A leave day
+	keeps its row too, and its punches make it a Half Day (policy 3.4)."""
 	shift_doc = _shift_for(employee, day, existing)
 	is_leave = existing and _is_leave(existing)
 	if get_day_checkins(employee, day) and not is_leave:
@@ -247,6 +254,13 @@ def _remark_after_correction(employee, day, existing, note):
 	if existing:
 		frappe.db.set_value("Attendance", existing.name, "shift", shift_doc.name, update_modified=False)
 		frappe.get_doc("Attendance", existing.name).add_comment("Info", note)
+		if is_leave:
+			# Not rebuilt — that would drop the leave. Policy 3.4 instead: punched
+			# → Half Day, leave kept; then the row's times follow the punches.
+			from avinashgroup_app.biometric.attendance_sync import sync_day
+
+			sync_day(employee, day)
+			existing = _attendance_on(employee, day)
 	return {
 		"attendance": existing.name if existing else None,
 		"status": existing.status if existing else _("Not Marked"),
@@ -455,7 +469,9 @@ def remark_from_form(employee, day, note):
 	try:
 		existing, shift_doc = day_context(employee, day)
 	except Refused as refused:
-		if day < getdate(today()):
+		if refused.title == _("Leave Day"):
+			_came_in_on_leave(employee, day)
+		elif day < getdate(today()):
 			frappe.msgprint(
 				refused.message, title=_("Attendance for {0} not re-marked").format(day), indicator="orange"
 			)
@@ -507,6 +523,24 @@ def remark_from_form(employee, day, note):
 	] + result["warnings"] + result["overtime"]
 	frappe.msgprint("<br>".join(lines), indicator="green", alert=not result["warnings"])
 	return True
+
+
+def _came_in_on_leave(employee, day):
+	"""A punch on a leave day is not re-marked like a working day: policy 3.4
+	makes it a Half Day with the leave kept. Say that, not "not re-marked" — the
+	old warning read as a refusal although the punch was saved and counted."""
+	from avinashgroup_app.biometric.attendance_override import half_day_if_came_in
+
+	half_day_if_came_in(employee, day)
+	att = _attendance_on(employee, day)
+	if att and att.status == "Half Day" and att.leave_type:
+		frappe.msgprint(
+			_("Came in while on leave: {0} is a Half Day, the other half Present, {1} kept (policy 3.4).").format(
+				frappe.bold(str(day)), att.leave_type
+			),
+			title=_("Punch saved"),
+			indicator="green",
+		)
 
 
 def remark_day_job(employee, day, note):
@@ -574,7 +608,7 @@ def _refuse_leave(existing, day):
 	if existing and _is_leave(existing):
 		raise Refused(
 			_("Leave Day"),
-			_("{0} is {1} through leave. Change the leave, not the punches.").format(
+			_("{0} is {1} through leave. Its shift is not corrected here: change the leave itself.").format(
 				frappe.bold(str(day)), existing.status
 			),
 		)
