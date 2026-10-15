@@ -192,7 +192,9 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		if (f === "ot_hours") {
 			const n = flt(data.ot_hours);
 			if (!n) return muteZero();
-			return `<span style="color:#3E7290;font-weight:600">${format_number(n, null, 2)}</span>`;
+			// Four decimals, as the column and the salary statement: overtime is
+			// exact to the second, and hours × rate must reproduce the amount.
+			return `<span style="color:#3E7290;font-weight:600">${format_number(n, null, 4)}</span>`;
 		}
 
 		if (f === "present_days") {
