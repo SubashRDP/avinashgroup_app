@@ -44,6 +44,7 @@
 		bank: '<path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
 		gift: '<rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M12 9v11M3.5 13h17M12 9c-2-4-6-4-6-1.5S10 9 12 9c2 0 6 0 6-1.5S14 5 12 9"/>',
 		user_check: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5 1.6 0 3 .4 4.2 1.2"/><path d="m15 18 2 2 4-4"/>',
+		chart: '<path d="M4 20V4M4 20h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/>',
 		away: '<path d="M4 20h16M6 20V9l6-5 6 5v11"/><path d="M10 20v-5h4v5"/>',
 	};
 	const icon = (name, cls = "") =>
@@ -153,7 +154,7 @@
 			this.$nav.on("input", "input[type=search]", (e) => this.filter_menu(e.target.value));
 		}
 
-		// A bar of the six groups, each opening its list below it — the desk's
+		// A bar of the menu groups, each opening its list below it — the desk's
 		// own sidebar is already on screen in the workspace, so a second column
 		// would only squeeze the dashboard.
 		render_top_menu() {

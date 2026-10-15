@@ -690,6 +690,26 @@ MENU = [
 		("doctype", "Salary Revision", "Salary Revisions"),
 		("doctype", "Salary Structure Assignment", "Structure Assignments"),
 	]),
+	# Every HR and payroll report in one place, ours first. The attendance,
+	# leave and payroll groups keep their own main report as well, so the
+	# usual path from those groups still works.
+	("Reports", "chart", [
+		("report", "Monthly Attendance BS", "Monthly Attendance (BS)"),
+		("report", "Work On Holiday BS", "Work on Holiday (BS)"),
+		("report", "Yearly Leave Details BS", "Yearly Leave (BS)"),
+		("report", "Avinas Salary Statement", "Salary Statement"),
+		("report", "Salary Tax and SSF Deposit", "Salary Tax & SSF Deposit"),
+		("doctype", "Attendance Correction Log", "Attendance Correction Log"),
+		("report", "Employee Leave Balance", "Leave Balance"),
+		("report", "Employee Leave Balance Summary", "Leave Balance Summary"),
+		("report", "Leave Ledger", "Leave Ledger"),
+		("report", "Shift Attendance", "Shift Attendance"),
+		("report", "Salary Register", "Salary Register"),
+		("report", "Bank Remittance", "Bank Remittance"),
+		("report", "Employee Advance Summary", "Employee Advance Summary"),
+		("report", "Employee Birthday", "Employee Birthdays"),
+		("report", "Employee Analytics", "Employee Analytics"),
+	]),
 	("Setup", "gear", [
 		("doctype", "Salary Structure", "Salary Structures"),
 		("doctype", "Salary Component", "Salary Components"),
