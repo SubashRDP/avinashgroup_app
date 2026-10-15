@@ -858,19 +858,19 @@
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 437,
+      "line": 455,
       "title": "10.2 validate_salary_structure",
       "description": "Refuses allowances in Earnings / Deductions; blanks the amount and formula of attendance-driven rows (late fine tag); checks Allowance Rates.\n\nReads: Salary Structure"
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 466,
+      "line": 484,
       "title": "10.3 guard_structure_rates",
       "description": "After submit, a listed rate changes only through a Salary Revision."
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 492,
+      "line": 510,
       "title": "10.4 validate_assignment_allowances",
       "description": "Allowances on an assignment: allowances only, once each; a blank rate takes the structure's; still 0 is refused.\n\nReads: Structure Allowance Rate"
     },

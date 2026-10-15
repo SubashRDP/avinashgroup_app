@@ -406,6 +406,24 @@ def validate_salary_component(doc, method=None):
 		# only through Additional Salary, so a 0 must not print on the slip.
 		doc.depends_on_payment_days = 0
 		doc.remove_if_zero_valued = 1
+		_check_type_for_condition(doc)
+
+
+#: The slip section a condition's amount belongs in. HRMS files a component's
+#: Additional Salary under the component's Type, so "Overtime" created by hand
+#: as a Deduction (demo-nggroup, 2026-10-13) took every OT hour off the pay.
+TYPE_FOR_CONDITION = {"Authorised Overtime": "Earning", "Late Time": "Deduction"}
+
+
+def _check_type_for_condition(doc):
+	expected = TYPE_FOR_CONDITION.get(doc.get("custom_condition_type"))
+	if expected and doc.type != expected:
+		frappe.throw(
+			_("{0} is paid for {1}, so its Type must be {2}, not {3}. As {3} it would go on the wrong side of the slip.").format(
+				frappe.bold(doc.name), doc.custom_condition_type, frappe.bold(expected), doc.type
+			),
+			title=_("Wrong Type"),
+		)
 
 
 def _check_allowance_row(row, label: str):

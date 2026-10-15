@@ -120,9 +120,9 @@ The sheet's own controller (`OvertimeSheet.apply_rules`) runs on validate. See [
 | Doctype | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|---|
 | Salary Component | validate | [`validate_salary_component`](../../avinashgroup_app/hooks.py#L475) | [`validate_salary_component`](../../avinashgroup_app/payroll/allowance.py#L368) | The allowance kind decides the attendance rule. Attendance-driven components get no payment-days proration and are removed if zero. Section (S/D, F/P) accounts must belong to the row's company. |
-| Salary Structure | validate | [`validate_salary_structure`](../../avinashgroup_app/hooks.py#L485) | [`validate_salary_structure`](../../avinashgroup_app/payroll/allowance.py#L437) | No allowances in Earnings/Deductions (they live in Allowance Rates). Attendance-driven rows are tags with no amount. |
-| Salary Structure | before_update_after_submit | [`guard_structure_rates`](../../avinashgroup_app/hooks.py#L486) | [`guard_structure_rates`](../../avinashgroup_app/payroll/allowance.py#L466) | On a submitted structure, a listed rate changes only through a Salary Revision. |
-| Salary Structure Assignment | validate | [`validate_assignment_allowances`](../../avinashgroup_app/hooks.py#L487) | [`validate_assignment_allowances`](../../avinashgroup_app/payroll/allowance.py#L492) | The Allowances table takes allowances only, once each. A blank rate takes the structure's; a rate still 0 is refused. |
+| Salary Structure | validate | [`validate_salary_structure`](../../avinashgroup_app/hooks.py#L485) | [`validate_salary_structure`](../../avinashgroup_app/payroll/allowance.py#L455) | No allowances in Earnings/Deductions (they live in Allowance Rates). Attendance-driven rows are tags with no amount. |
+| Salary Structure | before_update_after_submit | [`guard_structure_rates`](../../avinashgroup_app/hooks.py#L486) | [`guard_structure_rates`](../../avinashgroup_app/payroll/allowance.py#L484) | On a submitted structure, a listed rate changes only through a Salary Revision. |
+| Salary Structure Assignment | validate | [`validate_assignment_allowances`](../../avinashgroup_app/hooks.py#L487) | [`validate_assignment_allowances`](../../avinashgroup_app/payroll/allowance.py#L510) | The Allowances table takes allowances only, once each. A blank rate takes the structure's; a rate still 0 is refused. |
 
 Salary Structure is audited. Salary Structure Assignment is fiscal-year filtered. See [01b-pay-masters.md](01b-pay-masters.md).
 
