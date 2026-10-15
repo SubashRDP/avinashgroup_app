@@ -167,6 +167,10 @@ def create_additional_salaries(payroll_entry, commit: bool = True) -> dict:
 	employees = [row.employee for row in (payroll_entry.employees or [])]
 	if not employees:
 		employees = _employees_in_payroll_entry(payroll_entry)
+	# Their month is paid: the lines on the submitted slip cannot be replaced,
+	# and trying only filled the Error Log with "Cannot delete or cancel".
+	already_paid = paid_employees(employees, payroll_date)
+	employees = [e for e in employees if e not in already_paid]
 
 	created: list[dict] = []
 	skipped: list[dict] = []
@@ -231,7 +235,25 @@ def create_additional_salaries(payroll_entry, commit: bool = True) -> dict:
 			indicator="orange",
 			alert=True,
 		)
-	return {"created": created, "skipped": skipped, "cleared": cleared}
+	return {"created": created, "skipped": skipped, "cleared": cleared, "already_paid": sorted(already_paid)}
+
+
+def paid_employees(employees, on_date) -> set:
+	"""Those of `employees` whose submitted salary slip covers `on_date`."""
+	if not employees:
+		return set()
+	return set(
+		frappe.get_all(
+			"Salary Slip",
+			filters={
+				"employee": ("in", list(employees)),
+				"docstatus": 1,
+				"start_date": ("<=", getdate(on_date)),
+				"end_date": (">=", getdate(on_date)),
+			},
+			pluck="employee",
+		)
+	)
 
 
 def _priced(employee: str, emp_doc, sc, row, start_date, end_date) -> tuple:

@@ -31,6 +31,7 @@ from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
 from avinashgroup_app.payroll.allowance import get_section, has_section_accounts, section_account
 from avinashgroup_app.payroll.income_tax import warn_missing_tax_history
 from avinashgroup_app.payroll.payroll_month import fill_from_bs_month, warn_missing_attendance
+from avinashgroup_app.payroll.recovery_cap import cap_recoveries
 
 
 def prepare_payroll_inputs(entry, stage):
@@ -63,13 +64,27 @@ def prepare_payroll_inputs(entry, stage):
 	]
 	if attendance["skipped"]:
 		parts.append(_("{0} skipped (Error Log)").format(len(attendance["skipped"])))
+	if attendance.get("already_paid"):
+		parts.append(_("{0} already paid, left as they are").format(len(attendance["already_paid"])))
 	if entry.get("custom_pay_dashain"):
 		parts.append(_pay_dashain(entry))
 	if entry.get("custom_pay_leave_encashment"):
 		parts.append(_pay_leave_encashment(entry))
+	append_inputs_log(entry, stage, "; ".join(parts))
 
+
+def append_inputs_log(entry, stage, text):
+	"""Add a dated line to the entry's Payroll Inputs Log.
+
+	A site not yet migrated to the Yearly Payments fields (patch
+	payroll_entry_yearly_payments) has no log field: the line goes to the
+	entry's comments instead, so posting never fails on a missing column.
+	"""
 	when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "yyyy-MM-dd HH:mm")
-	line = f"{when} {stage} by {frappe.session.user}: " + "; ".join(parts)
+	line = f"{when} {stage} by {frappe.session.user}: {text}"
+	if not entry.meta.has_field("custom_payroll_inputs_log"):
+		entry.add_comment("Info", line)
+		return
 	log = (entry.get("custom_payroll_inputs_log") or "").strip()
 	entry.db_set("custom_payroll_inputs_log", f"{log}\n{line}".strip(), update_modified=False)
 
@@ -88,7 +103,8 @@ def _pay_dashain(entry):
 		adjustment = frappe.get_doc("Payroll Adjustment", name)
 		adjustment.flags.ignore_permissions = True
 		adjustment.submit()
-		entry.db_set("custom_festival_adjustment", name, update_modified=False)
+		if entry.meta.has_field("custom_festival_adjustment"):
+			entry.db_set("custom_festival_adjustment", name, update_modified=False)
 		return _("Dashain {0}: {1} people, total {2}").format(name, result["count"], _money(result["total"]))
 	# Nothing due: everyone already paid by an earlier run, or nobody qualifies.
 	return _("Dashain: nothing new to pay ({0} left out)").format(len(result.get("left_out") or []))
@@ -112,6 +128,23 @@ def _pay_leave_encashment(entry):
 	return _("Leave encashment: {0} people, total {1}; {2} left out. Leave recovery: {3} people, total {4}").format(
 		len(result["created"]), _money(result["total"]), len(result["left_out"]),
 		len({m["employee"] for m in recovered["made"]}), _money(recovered["total"]),
+	)
+
+
+def warn_shortfalls(entry, shortfalls):
+	"""Log and show what recoveries could not be taken from the last slips (payroll/recovery_cap.py)."""
+	if not shortfalls:
+		return
+	lines = [
+		_("{0} ({1}): {2} of {3}").format(s["employee_name"], s["employee"], _money(s["amount"]), s["component"])
+		for s in shortfalls
+	]
+	append_inputs_log(entry, _("Recoveries cut to the pay"), _("collect outside payroll: ") + "; ".join(lines))
+	frappe.msgprint(
+		_("These recoveries were more than the slip could pay, so the slip takes what it can. Collect the rest outside payroll:")
+		+ "<br>" + "<br>".join(frappe.utils.escape_html(line) for line in lines),
+		title=_("Collect Outside Payroll"),
+		indicator="orange",
 	)
 
 
@@ -247,6 +280,7 @@ class AvinashPayrollEntry(PayrollEntry):
 		check_ready_for_slips(self)
 		prepare_payroll_inputs(self, _("Slips submitted"))
 		refresh_draft_slips(self)
+		warn_shortfalls(self, cap_recoveries(self))
 		return super().submit_salary_slips()
 
 	@frappe.whitelist()

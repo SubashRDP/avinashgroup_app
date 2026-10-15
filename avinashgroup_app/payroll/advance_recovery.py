@@ -14,7 +14,13 @@ payroll month, as a submitted `Salary Advance` deduction.
 
 Re-running a month replaces that month's recoveries — it cancels the ones it
 made before, which hands the amount back to the balance, and posts again — so
-the button can be pressed as often as the attendance changes.
+the button can be pressed as often as the attendance changes. A person whose
+slip for the month is already submitted is left alone.
+
+In the month an employee leaves (relieving date inside it) the whole balance is
+taken, not one instalment: there is no later salary to take the rest from. More
+than the last slip can bear is cut back to what it can (payroll/recovery_cap.py)
+and the rest named on the Payroll Entry for HR to collect.
 """
 
 import frappe
@@ -63,14 +69,26 @@ def post_recoveries(payroll_entry):
 	if isinstance(payroll_entry, str):
 		payroll_entry = frappe.get_doc("Payroll Entry", payroll_entry)
 
+	from avinashgroup_app.payroll.attendance_allowance import paid_employees
+
+	if not frappe.db.exists("Salary Component", COMPONENT):
+		return []  # patches/setup_salary_advance_component.py makes it
 	payroll_date = getdate(payroll_entry.end_date)
+	start_date = getdate(payroll_entry.start_date)
 	employees = [row.employee for row in payroll_entry.employees or []]
+	# A submitted slip's recovery is final: neither cancelled nor posted again.
+	paid = paid_employees(employees, payroll_date)
+	employees = [e for e in employees if e not in paid]
+	leaving = _leaving_in(employees, start_date, payroll_date)
 
 	clear_month(employees, payroll_date)
 
 	posted = []
 	for advance in open_advances(employees, payroll_date):
-		if advance.custom_recover_from and getdate(advance.custom_recover_from) > payroll_date:
+		# Someone leaving this month repays now or never: the start date and
+		# the instalment no longer apply.
+		last_month = advance.employee in leaving
+		if not last_month and advance.custom_recover_from and getdate(advance.custom_recover_from) > payroll_date:
 			continue
 
 		# Read again: clearing the month just handed earlier recoveries back.
@@ -79,7 +97,7 @@ def post_recoveries(payroll_entry):
 		if owed <= 0:
 			continue
 
-		amount = min(flt(advance.custom_monthly_instalment) or owed, owed)
+		amount = owed if last_month else min(flt(advance.custom_monthly_instalment) or owed, owed)
 		doc = frappe.new_doc("Additional Salary")
 		doc.update(
 			{
@@ -93,8 +111,10 @@ def post_recoveries(payroll_entry):
 				"ref_doctype": "Employee Advance",
 				"ref_docname": advance.name,
 				"custom_source": SOURCE_TAG,
-				"notes": _("Instalment on {0}: {1} of {2} outstanding").format(
-					advance.name, flt(amount, 2), flt(owed, 2)
+				"notes": (
+					_("Leaving this month: the whole {0} outstanding on {1}").format(flt(owed, 2), advance.name)
+					if last_month
+					else _("Instalment on {0}: {1} of {2} outstanding").format(advance.name, flt(amount, 2), flt(owed, 2))
 				),
 			}
 		)
@@ -112,6 +132,19 @@ def post_recoveries(payroll_entry):
 		)
 
 	return posted
+
+
+def _leaving_in(employees, start_date, end_date) -> set:
+	"""Those of `employees` whose relieving date falls in the payroll month."""
+	if not employees:
+		return set()
+	return set(
+		frappe.get_all(
+			"Employee",
+			filters={"name": ("in", employees), "relieving_date": ("between", [start_date, end_date])},
+			pluck="name",
+		)
+	)
 
 
 def clear_month(employees, payroll_date):

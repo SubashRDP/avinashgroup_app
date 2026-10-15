@@ -88,6 +88,8 @@ An advance is a loan. Record it **once**, when the money is given, with the mont
 
 Each month, the payroll run deducts the smaller of the instalment and what is still owed, as **Salary Advance**. When the balance reaches zero, the advance becomes **Returned**. If **Monthly Instalment** is blank, the whole balance is taken in one month.
 
+**Someone leaving:** in the month of their **Relieving Date**, the **whole** remaining balance is deducted, not one instalment (there is no later salary). If that is more than the last slip can pay, the slip takes what it can and the Payroll Entry names the rest to **collect outside payroll**; it stays owed on the advance.
+
 > **Accountant, please check:** the system refuses an advance whose account is not **Receivable** ("Employee advance account … should be of type Receivable"). On 9 October 2026 the 148003 Staff Advance account is typed **Payable** at NGN, NGG, NGK and GLMI, and has no type at NGI, GEPL and SGU.
 
 ## 8.4 Dashain allowance (Dashain bonus)

@@ -424,6 +424,16 @@ def _check_type_for_condition(doc):
 			),
 			title=_("Wrong Type"),
 		)
+	if expected and doc.get("exempted_from_income_tax"):
+		# Overtime is pay and a fine is pay withheld; neither is tax-free. On a
+		# deduction the tick lowers taxable pay, and tax_relief counts every
+		# exempt deduction as a retirement contribution.
+		frappe.throw(
+			_("{0} is paid for {1}, so it cannot be Exempted from Income Tax. Untick it.").format(
+				frappe.bold(doc.name), doc.custom_condition_type
+			),
+			title=_("Not Tax-Exempt"),
+		)
 
 
 def _check_allowance_row(row, label: str):

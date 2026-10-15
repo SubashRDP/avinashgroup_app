@@ -66,7 +66,7 @@ What it works out, per person, for the month:
 | **Meal** | Chapter 4, section 4.6 | The Rate on the person's Meal row |
 | **Overtime** | Measured hours on submitted Overtime Sheets | Basic ÷ days in the BS month ÷ 8 × 1.5 per hour |
 | **Late Fine** (deduction) | Minutes late in + minutes left early, on working days worked in full. Not on a Half Day (already a penalty), not on a day marked **Late Excused**, never for **Late Fine Exempt** staff | Per minute: Basic ÷ days in the BS month ÷ 8 ÷ 60. One minute late is charged |
-| **Salary Advance** (deduction) | Each open Employee Advance set to be recovered from salary | The smaller of the monthly instalment and what is still owed |
+| **Salary Advance** (deduction) | Each open Employee Advance set to be recovered from salary | The smaller of the monthly instalment and what is still owed; in the month the person leaves, all of it (cut to what the slip can pay) |
 
 Who gets tea and meal: anyone with a row for it on their salary assignment; no row, none. Overtime: anyone **OT eligible** who is on a submitted Overtime Sheet — no row on the assignment is needed. Late fine: everyone, except staff ticked **Late Fine Exempt** on the Employee — no line in the structure is needed, and the component's Unit and Rate Basis do not change it. Meals and overtime are only for OT-eligible staff.
 
