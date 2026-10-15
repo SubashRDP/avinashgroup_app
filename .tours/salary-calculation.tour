@@ -96,7 +96,7 @@
     },
     {
       "file": "avinashgroup_app/biometric/attendance_sync.py",
-      "line": 401,
+      "line": 405,
       "title": "1.15 checkin_after_delete",
       "description": "Checkin deleted: relabel and sync its day."
     },

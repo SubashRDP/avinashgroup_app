@@ -48,7 +48,7 @@ HRMS and rdp_common_app register no Salary Slip `doc_events`. Details are in [06
 
 | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|
-| after_insert, on_update, after_delete | [`checkin_{_event}`](../../avinashgroup_app/hooks.py#L341) | [`checkin_after_insert`](../../avinashgroup_app/biometric/attendance_sync.py#L350), [`checkin_on_update`](../../avinashgroup_app/biometric/attendance_sync.py#L371), [`checkin_after_delete`](../../avinashgroup_app/biometric/attendance_sync.py#L401) | Keep the day's IN/OUT alternation (last punch OUT). Refresh the computed values of an existing Present or Half Day Attendance when punches are added, edited, deleted or arrive late. **Never changes status.** The device pipeline sets `in_biometric_day_reconcile` so these skip during bulk intake. See [02-checkin-to-attendance.md](02-checkin-to-attendance.md). |
+| after_insert, on_update, after_delete | [`checkin_{_event}`](../../avinashgroup_app/hooks.py#L341) | [`checkin_after_insert`](../../avinashgroup_app/biometric/attendance_sync.py#L350), [`checkin_on_update`](../../avinashgroup_app/biometric/attendance_sync.py#L371), [`checkin_after_delete`](../../avinashgroup_app/biometric/attendance_sync.py#L405) | Keep the day's IN/OUT alternation (last punch OUT). Refresh the computed values of an existing Present or Half Day Attendance when punches are added, edited, deleted or arrive late. **Never changes status.** The device pipeline sets `in_biometric_day_reconcile` so these skip during bulk intake. See [02-checkin-to-attendance.md](02-checkin-to-attendance.md). |
 
 ### Attendance
 

@@ -9,6 +9,9 @@ Covers:
 - a time outside the shift's check-in window still counts (the day's punches
   are pinned to the rostered shift), with a warning
 - the report reads the stamps back (get_edited_days)
+- a shift correction: one Shift Assignment covering exactly the chosen days,
+  the day re-marked on it, nothing outside the range changed
+- every correction writes an Attendance Correction Log entry
 - the same re-mark from the Employee Checkin form (attendance_sync hooks):
   a punch added by hand marks the day and is stamped; a linked punch can be
   moved and the day follows; a deleted punch re-marks what is left
@@ -43,6 +46,15 @@ class TestPunchCorrection(FrappeTestCase):
 		shift.allow_check_out_after_shift_end_time = 60
 		shift.insert(ignore_permissions=True)
 		cls.shift = shift
+
+		late = frappe.new_doc("Shift Type")
+		late.custom_company = company
+		late.start_time = "12:00:00"
+		late.end_time = "20:00:00"
+		late.begin_check_in_before_shift_start_time = 60
+		late.allow_check_out_after_shift_end_time = 60
+		late.insert(ignore_permissions=True)
+		cls.late_shift = late
 
 		emp = frappe.new_doc("Employee")
 		emp.first_name = "Punch Correction Test"
@@ -201,3 +213,51 @@ class TestPunchCorrection(FrappeTestCase):
 		self._punch("09:00")
 		self.assertFalse(self._punches()[0].custom_time_edited)
 		self.assertIsNone(self._attendance())
+
+	# ── shift correction and the log ──
+
+	def test_shift_correction_covers_only_the_day(self):
+		self._punch("12:00")
+		self._punch("20:00")
+		result = correct_day(self.employee, self.day, reason="Rostered wrongly", shift=self.late_shift.name)
+
+		att = frappe.get_doc("Attendance", result["attendance"])
+		self.assertEqual(att.shift, self.late_shift.name)
+		self.assertEqual(att.custom_late_entry, 0)  # on time for 12-8, 3 h late for 9-5
+
+		covering = frappe.get_all(
+			"Shift Assignment",
+			filters={"employee": self.employee, "docstatus": 1, "shift_type": self.late_shift.name},
+			fields=["start_date", "end_date", "custom_shift_corrected", "custom_corrected_from_shift"],
+		)
+		self.assertEqual(len(covering), 1)
+		self.assertEqual((getdate(covering[0].start_date), getdate(covering[0].end_date)), (self.day, self.day))
+		self.assertTrue(covering[0].custom_shift_corrected)
+		self.assertEqual(covering[0].custom_corrected_from_shift, self.shift.name)
+		# the day before keeps the default shift
+		from avinashgroup_app.hr.overtime import get_shift_window
+
+		self.assertEqual(get_shift_window(self.employee, add_days(self.day, -1))[0], self.shift.name)
+
+	def test_shift_correction_needs_a_reason(self):
+		self._punch("12:00")
+		self.assertRaises(
+			frappe.ValidationError, correct_day, self.employee, self.day, reason=" ", shift=self.late_shift.name
+		)
+
+	def test_every_correction_is_logged(self):
+		self._punch("09:10")
+		correct_day(self.employee, self.day, "09:10", "17:00", "Forgot to punch out")
+		entries = frappe.get_all(
+			"Attendance Correction Log",
+			filters={"employee": self.employee, "attendance_date": self.day},
+			fields=["correction_type", "source", "old_value", "new_value", "reason", "done_by", "attendance"],
+		)
+		self.assertEqual(len(entries), 1)
+		entry = entries[0]
+		self.assertEqual(entry.correction_type, "Punch Added")
+		self.assertEqual(entry.source, "Monthly Attendance BS")
+		self.assertEqual(entry.new_value, "OUT 17:00")
+		self.assertEqual(entry.reason, "Forgot to punch out")
+		self.assertEqual(entry.done_by, frappe.session.user)
+		self.assertTrue(entry.attendance)

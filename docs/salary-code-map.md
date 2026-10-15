@@ -49,7 +49,7 @@ Stage 10 is the setup data (components, structures, assignments, revisions) that
 | 1.12 | `checkin_{_event}` | [hooks.py:341](../avinashgroup_app/hooks.py#L341) | Registers `checkin_after_insert` / `checkin_on_update` / `checkin_after_delete` on Employee Checkin. | — |
 | 1.13 | `checkin_after_insert` | [attendance_sync.py:350](../avinashgroup_app/biometric/attendance_sync.py#L350) | A checkin made on the desk or by API: relabel the day and `sync_day`. Skipped while the device pipeline inserts (`in_biometric_day_reconcile`). | — |
 | 1.14 | `checkin_on_update` | [attendance_sync.py:371](../avinashgroup_app/biometric/attendance_sync.py#L371) | Time or log type edited: relabel and sync the old and the new day. | — |
-| 1.15 | `checkin_after_delete` | [attendance_sync.py:401](../avinashgroup_app/biometric/attendance_sync.py#L401) | Checkin deleted: relabel and sync its day. | — |
+| 1.15 | `checkin_after_delete` | [attendance_sync.py:405](../avinashgroup_app/biometric/attendance_sync.py#L405) | Checkin deleted: relabel and sync its day. | — |
 | 1.16 | `validate_unique_device_id` | [employee.py:13](../avinashgroup_app/biometric/employee.py#L13) | Employee validate: refuses two employees of one company with the same Attendance Device ID, so a punch maps to one person. | Employee `attendance_device_id`, `company` |
 
 ## 2. Checkin → Attendance

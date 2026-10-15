@@ -51,7 +51,7 @@ from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
 from avinashgroup_app.hr.overtime import get_overtime_hours
-from avinashgroup_app.hr.punch_correction import get_edited_days
+from avinashgroup_app.hr.punch_correction import get_edited_days, get_shift_corrections
 from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
@@ -122,6 +122,7 @@ def execute(filters=None):
 	# Days whose first IN or last OUT HR set by hand (hr/punch_correction.py),
 	# highlighted in the grid so a typed time never passes for a device reading.
 	edited = get_edited_days([e.name for e in employees], ad_start, ad_end)
+	shift_edits = get_shift_corrections([e.name for e in employees], ad_start, ad_end)
 
 	data = []
 	totals = _new_totals()
@@ -157,6 +158,7 @@ def execute(filters=None):
 				ot_hours.get((emp.name, ad_date), 0.0), ot_rates.get((emp.name, ad_date), 0.0),
 				edited.get((emp.name, ad_date)),
 			)
+			row["shift_edit_note"] = shift_edits.get((emp.name, ad_date))
 			data.append(row)
 			_accumulate(
 				totals, row, present_statuses,

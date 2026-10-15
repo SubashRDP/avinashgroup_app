@@ -12,6 +12,7 @@ frappe.query_reports["Monthly Attendance BS"] = {
 	onload: async function (report) {
 		_apply_theme(report);
 		_bind_punch_correction(report);
+		report.page.add_inner_button(__("Correction Log"), () => _open_correction_log());
 		_make_full_width(report);
 		_setup_fiscal_year_visibility(report);
 		await _init_default_fiscal_year(report);
@@ -161,6 +162,10 @@ frappe.query_reports["Monthly Attendance BS"] = {
 
 		if (f === "in_time" || f === "out_time") {
 			return _punch_cell(f, value, data);
+		}
+
+		if (f === "shift") {
+			return _shift_cell(value, data);
 		}
 
 		if (f === "work_in_holiday" && cint(data.work_in_holiday)) {
@@ -414,6 +419,38 @@ function _punch_cell(f, value, data) {
 		: value;
 }
 
+function _shift_cell(value, data) {
+	const editable = _can_correct(data);
+	const attrs = editable
+		? `class="mab-punch-edit" data-employee="${frappe.utils.escape_html(data.employee)}"
+			data-date="${data.ad_date}"`
+		: "";
+	const label = frappe.utils.escape_html(data.shift || "");
+	if (data.shift_edit_note) {
+		return `<span ${attrs} title="${frappe.utils.escape_html(data.shift_edit_note)}"
+			style="${EDITED_CELL_STYLE}${editable ? "cursor:pointer;" : ""}"
+			><span style="font-weight:600;color:#7A5B12">${label}</span>
+			<span style="color:#A07A1C;margin-left:4px;font-size:.8em">✎ ${__("changed")}</span></span>`;
+	}
+	if (!editable) return value;
+	return `<span ${attrs} style="cursor:pointer" title="${__("Click to correct this day's shift")}">${label || "—"}<span
+		style="color:var(--text-light);margin-left:6px;font-size:.8em">✎</span></span>`;
+}
+
+// The Attendance Correction Log, narrowed to what the report shows.
+function _open_correction_log(employee, date) {
+	const value = (fn) => frappe.query_report.get_filter_value(fn);
+	const filters = {};
+	const who = employee || value("employee");
+	if (who) filters.employee = who;
+	if (date) {
+		filters.attendance_date = date;
+	} else if (value("from_date") && value("to_date")) {
+		filters.attendance_date = ["between", [value("from_date"), value("to_date")]];
+	}
+	frappe.set_route("List", "Attendance Correction Log", filters);
+}
+
 function _bind_punch_correction(report) {
 	// Delegated, so it outlives every datatable rebuild without re-binding.
 	report.page.wrapper.off("click.mab-punch").on("click.mab-punch", ".mab-punch-edit", (e) => {
@@ -431,7 +468,7 @@ function _open_correction_dialog(row) {
 	const name = row.employee_name || row.employee;
 	const shown = (v) => v || __("none");
 	const d = new frappe.ui.Dialog({
-		title: __("Correct First IN / Last OUT"),
+		title: __("Correct Attendance"),
 		fields: [
 			{
 				fieldtype: "HTML",
@@ -443,15 +480,16 @@ function _open_correction_dialog(row) {
 						${frappe.utils.escape_html(row.status || "")}
 					</div>
 					<div style="margin-top:8px;padding:8px 10px;background:#FAF6EC;border-left:3px solid #C9A227;font-size:.92em">
-						${__("Saving moves the day's first and last punch to these times (or adds a missing one), then re-marks this day's attendance and any approved overtime from them. The device's original time and your reason are kept on the punch, and the cell stays highlighted as edited.")}
+						${__("Change the punch times, the shift, or both. Saving moves the day's first and last punch (or adds a missing one) and/or puts the day on the chosen shift, then re-marks the attendance and any approved overtime. Every change is recorded with your reason in the Attendance Correction Log, and the cells stay highlighted.")}
+						<a href="#" class="mab-log-link" style="margin-left:4px">${__("View this day's log")}</a>
 					</div>
 				</div>`,
 			},
+			{ fieldtype: "Section Break", label: __("Punches") },
 			{
 				fieldtype: "Time",
 				fieldname: "in_time",
 				label: __("First IN"),
-				reqd: 1,
 				default: row.in_time || "",
 			},
 			{ fieldtype: "Column Break" },
@@ -459,8 +497,27 @@ function _open_correction_dialog(row) {
 				fieldtype: "Time",
 				fieldname: "out_time",
 				label: __("Last OUT"),
-				reqd: 1,
 				default: row.out_time || "",
+			},
+			{ fieldtype: "Section Break", label: __("Shift") },
+			{
+				fieldtype: "Link",
+				fieldname: "shift",
+				label: __("Shift"),
+				options: "Shift Type",
+				default: row.shift || "",
+				get_query: () => {
+					const company = frappe.query_report.get_filter_value("company");
+					return company ? { filters: { custom_company: company } } : {};
+				},
+			},
+			{ fieldtype: "Column Break" },
+			{
+				fieldtype: "Date",
+				fieldname: "shift_to_date",
+				label: __("Same Shift Until"),
+				default: row.ad_date,
+				description: __("Leave as this day for one day; up to 31 days."),
 			},
 			{ fieldtype: "Section Break" },
 			{
@@ -468,13 +525,30 @@ function _open_correction_dialog(row) {
 				fieldname: "reason",
 				label: __("Reason"),
 				reqd: 1,
-				description: __("e.g. Forgot to punch out; confirmed by supervisor."),
+				description: __("Required. Kept in the Attendance Correction Log, e.g. Forgot to punch out; confirmed by supervisor."),
 			},
 		],
 		primary_action_label: __("Save Correction"),
 		primary_action(values) {
-			if (values.out_time <= values.in_time) {
-				frappe.msgprint(__("Last OUT must be after First IN."));
+			// Only what was changed is sent: an untouched IN/OUT on a day with one
+			// punch must not block a shift-only correction.
+			const punchesChanged =
+				(values.in_time || "") !== (row.in_time || "") ||
+				(values.out_time || "") !== (row.out_time || "");
+			const shiftChanged =
+				values.shift && (values.shift !== row.shift || values.shift_to_date !== String(row.ad_date));
+			if (punchesChanged) {
+				if (!values.in_time || !values.out_time) {
+					frappe.msgprint(__("Enter both First IN and Last OUT."));
+					return;
+				}
+				if (values.out_time <= values.in_time) {
+					frappe.msgprint(__("Last OUT must be after First IN."));
+					return;
+				}
+			}
+			if (shiftChanged && values.shift_to_date < String(row.ad_date)) {
+				frappe.msgprint(__("Same Shift Until cannot be before this day."));
 				return;
 			}
 			d.disable_primary_action();
@@ -485,8 +559,10 @@ function _open_correction_dialog(row) {
 					args: {
 						employee: row.employee,
 						attendance_date: row.ad_date,
-						in_time: values.in_time,
-						out_time: values.out_time,
+						in_time: punchesChanged ? values.in_time : null,
+						out_time: punchesChanged ? values.out_time : null,
+						shift: shiftChanged ? values.shift : null,
+						shift_to_date: shiftChanged ? values.shift_to_date : null,
 						reason: values.reason,
 					},
 					freeze: true,
@@ -496,9 +572,10 @@ function _open_correction_dialog(row) {
 					d.hide();
 					const m = r.message || {};
 					const lines = [
-						`<b>${__("Attendance")}:</b> ${frappe.utils.get_form_link("Attendance", m.attendance, true)} — ${m.status}, ${m.in_time} → ${m.out_time}`,
+						`<b>${__("Attendance")}:</b> ${m.attendance ? frappe.utils.get_form_link("Attendance", m.attendance, true) : __("none")} — ${m.status}, ${m.in_time} → ${m.out_time}`,
 						`<b>${__("Changed")}:</b> ${(m.changes || []).join("; ")}`,
 					];
+					(m.other_days || []).forEach((l) => lines.push(`<b>${__("Also re-marked")}:</b> ${l}`));
 					(m.overtime || []).forEach((l) => lines.push(`<b>${__("Overtime")}:</b> ${l}`));
 					(m.warnings || []).forEach((l) => lines.push(`<span style="color:#96662A">⚠ ${l}</span>`));
 					frappe.msgprint({ title: __("Day Corrected"), message: lines.join("<br>"), indicator: "green" });
@@ -506,6 +583,11 @@ function _open_correction_dialog(row) {
 				})
 				.always(() => d.enable_primary_action());
 		},
+	});
+	d.$wrapper.find(".mab-log-link").on("click", (e) => {
+		e.preventDefault();
+		d.hide();
+		_open_correction_log(row.employee, String(row.ad_date));
 	});
 	d.show();
 }

@@ -1,4 +1,4 @@
-"""Correct one day's first IN / last OUT from the Monthly Attendance BS grid.
+"""Correct a day's first IN / last OUT, or its shift, from the Monthly Attendance BS grid.
 
 The commonest attendance fault here is a missing punch: somebody tapped in and
 forgot to tap out, or the device missed them at the door. The day then has one
@@ -46,6 +46,23 @@ hours-late half day), the deviation fields and the holiday flag are all decided
 by Attendance hooks that only run on a real insert. Approved Overtime Sheet rows
 for the day are re-measured, since their hours are read from the in/out times.
 
+A misplaced SHIFT is corrected the same way, for the day or up to
+MAX_SHIFT_DAYS from it. The roster is fixed as the app's roster tools fix it
+(hr/shift_rotation.make_room): the standing Shift Assignment ends the day before
+and resumes the day after, untouched outside the range, and one new assignment
+covers exactly the corrected days — stamped with the shift it replaced, who,
+when and why (`custom_shift_corrected` …, patches/setup_shift_correction_fields),
+which is what the report's amber Shift cell reads. Every day of the range is
+then re-marked on the new shift; a day without punches keeps its row with only
+the shift corrected, as a backdated shift change does. HRMS's own Shift Request
+cannot do this for staff who already hold an open-ended assignment (it refuses
+the overlap), which here is everybody.
+
+Every correction — punch moved, added or deleted, shift changed, from this
+dialog or from the Employee Checkin form — writes an Attendance Correction Log
+entry in the same transaction (`log_correction`): one list of who changed which
+day, from what to what, and why.
+
 Refused, and why:
 
   * today or later — today's attendance is marked by HRMS after the shift ends;
@@ -53,8 +70,12 @@ Refused, and why:
     silently disagree with the money (same rule as shift_backdate.guard_paid_period);
   * leave days (On Leave, Work From Home, anything with a Leave Application) —
     a leave decision is not a punch correction;
-  * no shift rostered, or an overnight shift — punches are grouped by calendar
-    day everywhere in this app (attendance_sync), which an overnight shift breaks;
+  * no shift rostered, or an overnight shift (as the day's or as the new one) —
+    punches are grouped by calendar day everywhere in this app (attendance_sync),
+    which an overnight shift breaks;
+  * a shift of another company, or a shift correction longer than
+    MAX_SHIFT_DAYS (that is a roster change: the Shift Roster page);
+  * no reason — it is kept on the punches, the assignment and the log;
   * HRMS declining to mark attendance from the corrected punches — everything is
     rolled back rather than leaving the day with no attendance.
 
@@ -102,72 +123,218 @@ class Refused(Exception):
 		self.message = message
 
 
-@frappe.whitelist(methods=["POST"])
-def correct_day(employee, attendance_date, in_time, out_time, reason):
-	"""Set one day's first IN and last OUT, and re-mark its attendance.
+# A shift correction is for a misplaced day or a few, not a roster change: a
+# month or more belongs on the Shift Roster page (hr/shift_rotation.set_periods).
+MAX_SHIFT_DAYS = 31
 
-	`in_time` / `out_time` are clock times ("09:00" or "09:00:00") on
-	`attendance_date`. Raises (and rolls everything back) on any refusal listed
-	in the module docstring. Returns what the day now looks like, plus warnings
-	the caller should show.
+
+@frappe.whitelist(methods=["POST"])
+def correct_day(
+	employee, attendance_date, in_time=None, out_time=None, reason=None, shift=None, shift_to_date=None
+):
+	"""Correct one day's first IN / last OUT and/or the shift of one or more days,
+	then re-mark the attendance. One transaction: any refusal rolls all of it back.
+
+	`in_time` / `out_time`: clock times ("09:00" or "09:00:00") on
+	`attendance_date`; both or neither. `shift`: the Shift Type the days should
+	have been on, from `attendance_date` to `shift_to_date` (inclusive; default
+	the same day). `reason` is required for either change and is kept on the
+	punches, the Shift Assignment and the Attendance comment.
+
+	Returns the clicked day as it now reads, the change lines, warnings, and one
+	line per other day the shift change re-marked.
 	"""
 	frappe.only_for(CORRECTION_ROLES)
-	if not _fields_installed():
-		frappe.throw(_("Punch correction is not set up on this site yet. Run bench migrate."))
+	if not _fields_installed() or (shift and not _shift_fields_installed()):
+		frappe.throw(_("Attendance correction is not set up on this site yet. Run bench migrate."))
 
 	day = getdate(attendance_date)
 	reason = strip_html(reason or "").strip()
 	if not reason:
-		frappe.throw(_("Give a reason for the correction. It is kept on the punches."))
+		frappe.throw(_("Give a reason for the correction. It is kept with the change."), title=_("Reason Required"))
 	if not frappe.db.exists("Employee", employee):
 		frappe.throw(_("Employee {0} not found.").format(employee))
 
-	new_in = datetime.combine(day, get_time(in_time))
-	new_out = datetime.combine(day, get_time(out_time))
-	if new_out <= new_in:
-		frappe.throw(_("OUT ({0}) must be after IN ({1}).").format(_clock(new_out), _clock(new_in)))
+	if bool(in_time) != bool(out_time):
+		frappe.throw(_("Enter both First IN and Last OUT, or neither."))
+	new_in = new_out = None
+	if in_time:
+		new_in = datetime.combine(day, get_time(in_time))
+		new_out = datetime.combine(day, get_time(out_time))
+		if new_out <= new_in:
+			frappe.throw(_("OUT ({0}) must be after IN ({1}).").format(_clock(new_out), _clock(new_in)))
+
+	last = getdate(shift_to_date) if (shift and shift_to_date) else day
+	if last < day:
+		frappe.throw(_("The shift change ends ({0}) before it starts ({1}).").format(last, day))
+	if (last - day).days + 1 > MAX_SHIFT_DAYS:
+		frappe.throw(
+			_("A shift correction covers at most {0} days. Use the Shift Roster for longer periods.").format(MAX_SHIFT_DAYS)
+		)
+	days = [getdate(frappe.utils.add_days(day, i)) for i in range((last - day).days + 1)]
 
 	try:
-		existing, shift_doc = day_context(employee, day)
+		for d in days:
+			_guard_past(d)
+			_guard_paid(employee, d)
+		existing = {d: _attendance_on(employee, d) for d in days}
+		_refuse_leave(existing[day], day)  # the day HR clicked; leave days later in a range keep their leave
+		entries = []
+		if shift:
+			entries += _apply_shift(employee, day, last, shift, reason)
+		shift_doc = _shift_for(employee, day, existing[day])
 	except Refused as refused:
 		frappe.throw(refused.message, title=refused.title)
+
 	window = _check_in_window(shift_doc, day)
-
-	changes = _apply_punches(employee, day, new_in, new_out, reason)
-	if not changes:
-		# The punches already read this way but the attendance does not agree
+	if new_in:
+		entries += _apply_punches(employee, day, new_in, new_out, reason)
+	if not entries:
+		# Nothing to move, but the attendance does not agree with the punches
 		# (a desk-added punch HRMS gave to another shift, a stale row). Saving
-		# unchanged times is how HR asks for the day to be re-marked from them.
-		changes = [_("punches already {0} → {1}; attendance re-marked from them").format(_clock(new_in), _clock(new_out))]
+		# unchanged values is how HR asks for the day to be re-marked from them.
+		entries = [{"line": _("nothing changed; attendance re-marked from the punches"), "type": "Re-marked"}]
+	changes = [e["line"] for e in entries]
 
-	result = remark_day(
-		employee, day, existing, shift_doc,
-		_("First IN / last OUT corrected from Monthly Attendance BS: {0}. Reason: {1}").format(
-			"; ".join(changes), frappe.utils.escape_html(reason)
-		),
+	note = _("Corrected from Monthly Attendance BS: {0}. Reason: {1}").format(
+		"; ".join(changes), frappe.utils.escape_html(reason)
 	)
-	outside = [_clock(t) for t in (new_in, new_out) if not window[0] <= t <= window[1]]
-	if outside:
-		result["warnings"].append(
-			_("{0} is outside {1}'s check-in window ({2} to {3}); it is counted because HR set it.").format(
-				", ".join(outside), shift_doc.name, _clock(window[0]), _clock(window[1])
+	result, other_days, attendance_of = None, [], {}
+	for d in days:
+		line = _remark_after_correction(employee, d, existing[d], note)
+		attendance_of[d] = line.get("attendance")
+		if d == day:
+			result = line
+		elif line.get("line"):
+			other_days.append(line["line"])
+
+	for entry in entries:
+		for d in entry.get("days") or [day]:
+			log_correction(
+				employee, d, entry["type"], SOURCE_REPORT, entry.get("old"), entry.get("new"), reason,
+				attendance=attendance_of.get(d), checkin=entry.get("checkin"),
+				shift_assignment=entry.get("shift_assignment"),
 			)
-		)
+
+	if new_in:
+		outside = [_clock(t) for t in (new_in, new_out) if not window[0] <= t <= window[1]]
+		if outside:
+			result["warnings"].append(
+				_("{0} is outside {1}'s check-in window ({2} to {3}); it is counted because HR set it.").format(
+					", ".join(outside), shift_doc.name, _clock(window[0]), _clock(window[1])
+				)
+			)
 	result["changes"] = changes
+	result["other_days"] = other_days
 	return result
+
+
+def _remark_after_correction(employee, day, existing, note):
+	"""Re-mark one day of a correction. A day with punches is rebuilt; a day
+	without keeps its row (Absent, hand-entered, leave) with only the shift
+	corrected, as hr/shift_backdate does — punches are what a rebuild needs."""
+	shift_doc = _shift_for(employee, day, existing)
+	is_leave = existing and _is_leave(existing)
+	if get_day_checkins(employee, day) and not is_leave:
+		result = remark_day(employee, day, existing, shift_doc, note)
+		result["line"] = _("{0}: {1}, {2} → {3}").format(day, result["status"], result["in_time"], result["out_time"])
+		return result
+
+	if existing:
+		frappe.db.set_value("Attendance", existing.name, "shift", shift_doc.name, update_modified=False)
+		frappe.get_doc("Attendance", existing.name).add_comment("Info", note)
+	return {
+		"attendance": existing.name if existing else None,
+		"status": existing.status if existing else _("Not Marked"),
+		"working_hours": existing.working_hours if existing else 0,
+		"in_time": _clock(existing.in_time) if existing else "—",
+		"out_time": _clock(existing.out_time) if existing else "—",
+		"overtime": _remeasure_overtime(employee, day, day),
+		"warnings": _draft_slip_warning(employee, day),
+		"line": _("{0}: {1} kept, shift set to {2}").format(
+			day, existing.status if existing else _("no attendance"), shift_doc.name
+		),
+	}
+
+
+def _apply_shift(employee, start, end, shift, reason):
+	"""Put the employee on `shift` for [start, end] only. Returns change lines.
+
+	The roster tools' own carving (shift_rotation.make_room) empties the range —
+	the standing assignment ends the day before and resumes the day after, so no
+	date outside the range changes — and one new assignment covers exactly the
+	range, stamped with what it replaced and why. Exactly, not merged into a
+	neighbour on the same shift, so the stamp marks only the corrected days.
+
+	The days are detached first (shift_backdate.detach_days): HRMS will not
+	cancel an assignment while attendance or punches still name its shift. They
+	are re-marked by the caller once the roster is whole.
+	"""
+	from hrms.hr.doctype.shift_assignment_tool.shift_assignment_tool import create_shift_assignment
+
+	from avinashgroup_app.hr import shift_rotation
+	from avinashgroup_app.hr.shift_backdate import detach_days
+
+	company = frappe.db.get_value("Employee", employee, "company")
+	target = frappe.db.get_value("Shift Type", shift, ["name", "start_time", "end_time", "custom_company"], as_dict=True)
+	if not target:
+		raise Refused(_("No Such Shift"), _("Shift {0} does not exist.").format(shift))
+	if target.custom_company and target.custom_company != company:
+		raise Refused(
+			_("Another Company's Shift"),
+			_("{0} is a shift of {1}; {2} works for {3}.").format(shift, target.custom_company, employee, company),
+		)
+	if get_time(target.end_time) <= get_time(target.start_time):
+		raise Refused(
+			_("Overnight Shift"),
+			_("{0} runs overnight. Punches are grouped by calendar day, so a day cannot be corrected onto it here.").format(shift),
+		)
+
+	held = shift_rotation._shifts_held(employee, start, end)
+	if all(current == shift for current, _first, _last in held):
+		return []
+	before = ", ".join(dict.fromkeys(current or _("no shift") for current, _first, _last in held))
+
+	detach_days(employee, start, end)
+	frappe.flags.in_shift_request = True  # the Shift Assignment hooks stand aside; the caller re-marks
+	try:
+		shift_rotation.make_room(employee, company, start, end)
+		assignment = create_shift_assignment(employee, company, shift, start, end, "Active")
+	finally:
+		frappe.flags.in_shift_request = False
+	frappe.db.set_value(
+		"Shift Assignment",
+		assignment.name,
+		{
+			"custom_shift_corrected": 1,
+			"custom_corrected_from_shift": before,
+			"custom_shift_correction_reason": reason,
+			"custom_shift_corrected_by": frappe.session.user,
+			"custom_shift_corrected_on": now_datetime(),
+		},
+		update_modified=False,
+	)
+	span = str(start) if start == end else f"{start} – {end}"
+	return [
+		{
+			"line": _("shift {0} → {1} for {2} ({3})").format(before, shift, span, assignment.name),
+			"type": "Shift Changed",
+			"old": before,
+			"new": shift,
+			"shift_assignment": assignment.name,
+			"days": [getdate(frappe.utils.add_days(start, i)) for i in range((end - start).days + 1)],
+		}
+	]
 
 
 def day_context(employee, day):
 	"""(existing Attendance or None, rostered Shift Type doc) for a day that may
 	be re-marked. Raises Refused for every day this module leaves alone."""
 	day = getdate(day)
-	if day >= getdate(today()):
-		raise Refused(
-			_("Not Yet"),
-			_("Only past days can be corrected. Today's attendance is marked automatically once the shift ends."),
-		)
+	_guard_past(day)
 	_guard_paid(employee, day)
-	existing = _guard_leave(employee, day)
+	existing = _attendance_on(employee, day)
+	_refuse_leave(existing, day)
 	return existing, _shift_for(employee, day, existing)
 
 
@@ -235,6 +402,19 @@ def stamp_form_change(checkin_name, original_time, reason):
 			"custom_edited_on": now_datetime(),
 		},
 		update_modified=False,
+	)
+
+
+FORM_DELETE_REASON = "Deleted on Employee Checkin form"
+
+
+def log_form_change(employee, day, correction_type, old, new, checkin, reason):
+	"""Log a punch changed on the Employee Checkin form, after the day was re-marked,
+	so the entry names the attendance the day now has."""
+	attendance = _attendance_on(employee, getdate(day))
+	log_correction(
+		employee, day, correction_type, SOURCE_FORM, old, new, reason,
+		attendance=attendance.name if attendance else None, checkin=checkin,
 	)
 
 
@@ -361,25 +541,38 @@ def _guard_paid(employee, day):
 		)
 
 
-def _guard_leave(employee, day):
-	"""The day's live Attendance (or None), refusing a leave day."""
-	existing = frappe.db.get_value(
+def _guard_past(day):
+	if getdate(day) >= getdate(today()):
+		raise Refused(
+			_("Not Yet"),
+			_("Only past days can be corrected. Today's attendance is marked automatically once the shift ends."),
+		)
+
+
+def _attendance_on(employee, day):
+	return frappe.db.get_value(
 		"Attendance",
 		{"employee": employee, "attendance_date": day, "docstatus": ("<", 2)},
 		[
 			"name", "status", "docstatus", "shift", "leave_application", "leave_type",
-			"custom_late_excused", "custom_late_excuse_reason",
+			"custom_late_excused", "custom_late_excuse_reason", "working_hours", "in_time", "out_time",
 		],
 		as_dict=True,
 	)
-	if existing and (existing.status in LEAVE_STATUSES or existing.leave_application or existing.leave_type):
+
+
+def _is_leave(existing):
+	return existing.status in LEAVE_STATUSES or existing.leave_application or existing.leave_type
+
+
+def _refuse_leave(existing, day):
+	if existing and _is_leave(existing):
 		raise Refused(
 			_("Leave Day"),
 			_("{0} is {1} through leave. Change the leave, not the punches.").format(
 				frappe.bold(str(day)), existing.status
 			),
 		)
-	return existing
 
 
 def _shift_for(employee, day, existing):
@@ -433,7 +626,8 @@ def _draft_slip_warning(employee, day):
 
 
 def _apply_punches(employee, day, new_in, new_out, reason):
-	"""Move / add punches so the day reads new_in → new_out. Returns change lines."""
+	"""Move / add punches so the day reads new_in → new_out. Returns one entry
+	per punch touched: {"line", "type", "old", "new", "checkin"}."""
 	punches = get_day_checkins(employee, day)
 
 	middle = punches[1:-1]
@@ -471,11 +665,18 @@ def _apply_punches(employee, day, new_in, new_out, reason):
 	try:
 		for label, punch, target, log_type in (("IN", first, new_in, "IN"), ("OUT", last, new_out, "OUT")):
 			if punch is None:
-				_add_punch(employee, target, log_type, stamp)
-				changes.append(_("{0} added at {1}").format(label, _clock(target)))
+				name = _add_punch(employee, target, log_type, stamp)
+				changes.append({
+					"line": _("{0} added at {1}").format(label, _clock(target)),
+					"type": "Punch Added", "old": None, "new": f"{label} {_clock(target)}", "checkin": name,
+				})
 			elif get_datetime(punch.time) != target:
 				_move_punch(punch, target, stamp)
-				changes.append(_("{0} {1} → {2}").format(label, _clock(punch.time), _clock(target)))
+				changes.append({
+					"line": _("{0} {1} → {2}").format(label, _clock(punch.time), _clock(target)),
+					"type": "Punch Time Edited",
+					"old": f"{label} {_clock(punch.time)}", "new": f"{label} {_clock(target)}", "checkin": punch.name,
+				})
 	finally:
 		frappe.flags.in_biometric_day_reconcile = previous
 
@@ -512,6 +713,7 @@ def _add_punch(employee, target, log_type, stamp):
 	checkin = frappe.new_doc("Employee Checkin")
 	checkin.update({"employee": employee, "time": target, "log_type": log_type, **stamp})
 	checkin.insert(ignore_permissions=True)
+	return checkin.name
 
 
 # ─────────────────────────────────────────────────────────────── rebuild ──
@@ -596,9 +798,50 @@ def _carry_late_excuse(after, existing):
 	after.update(values)
 
 
+SOURCE_REPORT = "Monthly Attendance BS"
+SOURCE_FORM = "Employee Checkin Form"
+
+
+def log_correction(
+	employee, day, correction_type, source, old, new, reason,
+	attendance=None, checkin=None, shift_assignment=None,
+):
+	"""One Attendance Correction Log row, in the caller's transaction. No-op
+	until the doctype is installed (bench migrate)."""
+	if not frappe.db.exists("DocType", "Attendance Correction Log"):
+		return None
+	person = frappe.db.get_value("Employee", employee, ["employee_name", "company"], as_dict=True) or {}
+	entry = frappe.get_doc(
+		{
+			"doctype": "Attendance Correction Log",
+			"employee": employee,
+			"employee_name": person.get("employee_name"),
+			"company": person.get("company"),
+			"attendance_date": getdate(day),
+			"correction_type": correction_type,
+			"source": source,
+			"old_value": old,
+			"new_value": new,
+			"reason": reason,
+			"done_by": frappe.session.user,
+			"done_by_name": frappe.utils.get_fullname(frappe.session.user),
+			"done_on": now_datetime(),
+			"attendance": attendance,
+			"employee_checkin": checkin,
+			"shift_assignment": shift_assignment,
+		}
+	)
+	entry.insert(ignore_permissions=True)
+	return entry.name
+
+
 def _fields_installed():
 	"""The stamps arrive with a migrate; until then there is nothing to read or write."""
 	return frappe.get_meta("Employee Checkin").has_field("custom_time_edited")
+
+
+def _shift_fields_installed():
+	return frappe.get_meta("Shift Assignment").has_field("custom_shift_corrected")
 
 
 def _clock(value):
@@ -652,4 +895,39 @@ def get_edited_days(employees, start, end):
 			r.custom_edit_reason or "—",
 		)
 		out.setdefault((r.employee, getdate(r.time)), {})[get_datetime(r.time)] = note
+	return out
+
+
+def get_shift_corrections(employees, start, end):
+	"""{(employee, date): note} for days a correction put on another shift.
+
+	Read by Monthly Attendance BS to highlight the Shift cell. From the stamped
+	Shift Assignments (custom_shift_corrected), which decide the day's shift and
+	outlive any rebuild of its attendance.
+	"""
+	if not employees or not frappe.get_meta("Shift Assignment").has_field("custom_shift_corrected"):
+		return {}
+	rows = frappe.db.sql(
+		"""select employee, shift_type, start_date, end_date, custom_corrected_from_shift,
+			custom_shift_correction_reason, custom_shift_corrected_by, custom_shift_corrected_on
+		from `tabShift Assignment`
+		where custom_shift_corrected = 1 and docstatus = 1 and employee in %(names)s
+		  and start_date <= %(end)s and (end_date is null or end_date >= %(start)s)""",
+		{"names": list(employees), "start": getdate(start), "end": getdate(end)},
+		as_dict=True,
+	)
+	out = {}
+	for r in rows:
+		note = _("Shift {0} → {1}. Changed by {2} on {3}. Reason: {4}").format(
+			r.custom_corrected_from_shift or "—",
+			r.shift_type,
+			frappe.utils.get_fullname(r.custom_shift_corrected_by) if r.custom_shift_corrected_by else _("unknown"),
+			frappe.utils.format_datetime(r.custom_shift_corrected_on, "yyyy-MM-dd HH:mm") if r.custom_shift_corrected_on else "—",
+			r.custom_shift_correction_reason or "—",
+		)
+		d = max(getdate(r.start_date), getdate(start))
+		last = min(getdate(r.end_date) if r.end_date else getdate(end), getdate(end))
+		while d <= last:
+			out[(r.employee, d)] = note
+			d = getdate(frappe.utils.add_days(d, 1))
 	return out

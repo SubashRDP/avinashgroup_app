@@ -360,12 +360,12 @@ def checkin_after_insert(doc, method=None):
     if doc.device_id or day >= getdate(today()):
         sync_day(doc.employee, day)
         return
-    from avinashgroup_app.hr.punch_correction import FORM_ADD_REASON, stamp_form_change
+    from avinashgroup_app.hr.punch_correction import FORM_ADD_REASON, log_form_change, stamp_form_change
 
+    clock = get_datetime(doc.time).strftime("%H:%M:%S")
     stamp_form_change(doc.name, None, FORM_ADD_REASON)
-    _remark_or_sync(
-        doc.employee, day, f"Punch {get_datetime(doc.time).strftime('%H:%M:%S')} added on Employee Checkin {doc.name}."
-    )
+    _remark_or_sync(doc.employee, day, f"Punch {clock} added on Employee Checkin {doc.name}.")
+    log_form_change(doc.employee, day, "Punch Added", None, clock, doc.name, FORM_ADD_REASON)
 
 
 def checkin_on_update(doc, method=None):
@@ -388,7 +388,7 @@ def checkin_on_update(doc, method=None):
             sync_day(doc.employee, day)
         return
 
-    from avinashgroup_app.hr.punch_correction import FORM_EDIT_REASON, stamp_form_change
+    from avinashgroup_app.hr.punch_correction import FORM_EDIT_REASON, log_form_change, stamp_form_change
 
     stamp_form_change(doc.name, before.time if before else None, FORM_EDIT_REASON)
     was = get_datetime(before.time).strftime("%Y-%m-%d %H:%M:%S") if before and before.time else "—"
@@ -396,13 +396,19 @@ def checkin_on_update(doc, method=None):
     for day in sorted(days):
         relabel_day_checkins(doc.employee, day)
         _remark_or_sync(doc.employee, day, note)
+    log_form_change(
+        doc.employee, getdate(doc.time), "Punch Time Edited", was,
+        get_datetime(doc.time).strftime("%Y-%m-%d %H:%M:%S"), doc.name, FORM_EDIT_REASON,
+    )
 
 
 def checkin_after_delete(doc, method=None):
     if not _manual(doc):
         return
+    from avinashgroup_app.hr.punch_correction import FORM_DELETE_REASON, log_form_change
+
     day = getdate(doc.time)
+    clock = get_datetime(doc.time).strftime("%H:%M:%S")
     relabel_day_checkins(doc.employee, day)
-    _remark_or_sync(
-        doc.employee, day, f"Punch {get_datetime(doc.time).strftime('%H:%M:%S')} ({doc.name}) deleted on the Employee Checkin form."
-    )
+    _remark_or_sync(doc.employee, day, f"Punch {clock} ({doc.name}) deleted on the Employee Checkin form.")
+    log_form_change(doc.employee, day, "Punch Deleted", clock, None, doc.name, FORM_DELETE_REASON)

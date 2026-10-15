@@ -340,15 +340,23 @@ def _shifts_held(employee, start, end):
 
 def _carve(employee, company, shift, start, end):
 	"""Make room for [start, end] in the person's assignments, then cover it with `shift`.
+	Returns the name of the assignment that covers the range."""
+	make_room(employee, company, start, end)
+	return _cover(employee, company, shift, start, end)
 
-	Every overlapping assignment keeps the days outside the range:
+
+def make_room(employee, company, start, end):
+	"""Empty [start, end] in the person's assignments; days outside it keep their shift.
+
+	Also used by hr/punch_correction.py to correct a misplaced shift on a few
+	days from Monthly Attendance BS. Every overlapping assignment keeps the days
+	outside the range:
 	  * starts before and runs past it  → ends the day before; a copy resumes the day after
 	  * starts before, ends inside      → ends the day before
 	  * starts inside, runs past it     → starts the day after
 	  * lies wholly inside              → cancelled (the record that it was replaced)
 	Dates move with set_value rather than cancel-and-recreate, so no assignment
 	outside the range is cancelled and HRMS never checks attendance outside it.
-	Returns the name of the assignment that covers the range.
 	"""
 	day_before, day_after = add_days(start, -1), add_days(end, 1)
 	for piece in _assignments_between(employee, start, end):
@@ -363,7 +371,6 @@ def _carve(employee, company, shift, start, end):
 			frappe.db.set_value("Shift Assignment", piece.name, "start_date", day_after, update_modified=False)
 		else:
 			frappe.get_doc("Shift Assignment", piece.name).cancel()
-	return _cover(employee, company, shift, start, end)
 
 
 def _cover(employee, company, shift, start, end):
