@@ -111,6 +111,69 @@ def _pay_leave_encashment(entry):
 	)
 
 
+def check_ready_for_slips(entry):
+	"""Refuse the run up front, naming every employee who would break it.
+
+	HRMS finds these one at a time, deep in the run: slip creation stops at the
+	first person with no salary assignment for the month, and slip submission
+	stops at the journal for the first person with no payroll section. By then
+	the month's tea, overtime and fines are already posted and the entry reads
+	"Failed" with one name. Checking first keeps the run all-or-nothing and
+	gives HR the whole list, with what to do for each.
+
+	Two checks, exactly HRMS's and the journal's own:
+	  * a submitted Salary Structure Assignment dated on or before the day the
+	    slip starts (the month's first day, or the joining day if later);
+	  * a Payroll Section on the person's Department, when any of the
+	    company's components posts by section.
+	"""
+	from frappe.utils import getdate
+
+	from avinashgroup_app.payroll.allowance import get_section, has_section_accounts
+
+	start, end = getdate(entry.start_date), getdate(entry.end_date)
+	posts_by_section = any(
+		has_section_accounts(entry.company, name)
+		for name in frappe.get_all("Salary Component", filters={"disabled": 0}, pluck="name")
+	)
+	problems = []
+	for row in entry.employees:
+		joined = frappe.get_cached_value("Employee", row.employee, "date_of_joining")
+		slip_start = getdate(joined) if joined and start < getdate(joined) <= end else start
+		if not frappe.db.exists(
+			"Salary Structure Assignment",
+			{"employee": row.employee, "docstatus": 1, "from_date": ("<=", slip_start)},
+		):
+			later = frappe.db.get_value(
+				"Salary Structure Assignment",
+				{"employee": row.employee, "docstatus": 1},
+				"from_date",
+				order_by="from_date asc",
+			)
+			problems.append(
+				_("{0}: salary assignment starts {1}; it must start on or before {2}").format(
+					row.employee_name or row.employee, later, slip_start
+				)
+				if later
+				else _("{0}: no submitted salary assignment").format(row.employee_name or row.employee)
+			)
+		if posts_by_section and not get_section(row.employee):
+			department = frappe.get_cached_value("Employee", row.employee, "department")
+			problems.append(
+				_("{0}: Department {1} has no Payroll Section").format(row.employee_name or row.employee, department)
+				if department
+				else _("{0}: no Department").format(row.employee_name or row.employee)
+			)
+	if problems:
+		frappe.throw(
+			_("Nothing was posted. Fix these, or remove the people from the Employees table, then try again:")
+			+ "<ul>"
+			+ "".join(f"<li>{frappe.utils.escape_html(p)}</li>" for p in problems)
+			+ "</ul>",
+			title=_("Payroll cannot run yet"),
+		)
+
+
 def check_yearly_payments(entry):
 	"""Refuse a Dashain tick the run would refuse later, while the entry can still be edited."""
 	if not entry.get("custom_pay_dashain"):
@@ -147,6 +210,8 @@ class AvinashPayrollEntry(PayrollEntry):
 			warn_missing_tax_history(self)
 
 	def before_submit(self):
+		# Submitting makes the slips (HRMS on_submit); refuse before the entry is submitted.
+		check_ready_for_slips(self)
 		warn_missing_attendance(self)
 		warn_missing_tax_history(self)
 		super().before_submit()
@@ -160,6 +225,7 @@ class AvinashPayrollEntry(PayrollEntry):
 		forgotten (NGI-SAL-83/84-00005 went out without its late fine and tea),
 		so making the slips posts them first, and the slips are born with them.
 		"""
+		check_ready_for_slips(self)
 		prepare_payroll_inputs(self, _("Slips created"))
 		return super().create_salary_slips()
 
@@ -174,6 +240,7 @@ class AvinashPayrollEntry(PayrollEntry):
 		"""
 		from avinashgroup_app.payroll.attendance_allowance import refresh_draft_slips
 
+		check_ready_for_slips(self)
 		prepare_payroll_inputs(self, _("Slips submitted"))
 		refresh_draft_slips(self)
 		return super().submit_salary_slips()

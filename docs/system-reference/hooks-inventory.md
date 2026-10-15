@@ -35,7 +35,7 @@ HRMS and rdp_common_app register no Salary Slip `doc_events`. Details are in [06
 
 | Doctype | Class | Registered | Defined | Why |
 |---|---|---|---|---|
-| Payroll Entry | `AvinashPayrollEntry` | [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L521) | [`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L140) | Fills the period from a BS month and warns about missing attendance. Splits the accrual journal by section (O/O, S/D, F/P accounts), and refuses a bank entry without a Bank/Cash account. See [05-payroll-entry.md](05-payroll-entry.md) and [07-after-the-slip.md](07-after-the-slip.md). |
+| Payroll Entry | `AvinashPayrollEntry` | [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L521) | [`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L203) | Fills the period from a BS month and warns about missing attendance. Splits the accrual journal by section (O/O, S/D, F/P accounts), and refuses a bank entry without a Bank/Cash account. See [05-payroll-entry.md](05-payroll-entry.md) and [07-after-the-slip.md](07-after-the-slip.md). |
 | Leave Policy Assignment | `BSLeavePolicyAssignment` | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hooks.py#L519) | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L40) | A mid-year assignment back-fills earned leave in BS months, matching the BS accrual job. See [01-masters.md](01-masters.md). |
 | Salary Slip | `BSSalarySlip` (rdp_common_app) | [`BSSalarySlip`](../../../rdp_common_app/rdp_common_app/hooks.py#L149) | [`BSSalarySlip`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L47) | Puts slips on BS months: the period, `total_working_days` = BS month length, the proration denominator, and the tax months left. See [06-salary-slip.md](06-salary-slip.md). |
 | Employee | `EmployeeMaster` (HRMS) | [`EmployeeMaster`](../../../hrms/hrms/hooks.py#L150) | [`EmployeeMaster`](../../../hrms/hrms/overrides/employee_master.py#L12) | Stock HRMS. Listed because our Employee `validate` hooks run alongside it. |
@@ -130,7 +130,7 @@ Salary Structure is audited. Salary Structure Assignment is fiscal-year filtered
 
 | Order | Event | Handler | Defined | Purpose |
 |---|---|---|---|---|
-| 0 | validate (class) | `AvinashPayrollEntry.validate` | [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L141) | Fills the period from the BS month, calls HRMS's validate, then warns about missing attendance. |
+| 0 | validate (class) | `AvinashPayrollEntry.validate` | [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L204) | Fills the period from the BS month, calls HRMS's validate, then warns about missing attendance. |
 | 1 | validate | audit | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | [`"Payroll Entry"`](../../avinashgroup_app/utils/audit_file_manager.py#L52) |
 | 2 | validate | [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L379) | [`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45) | Refuses an entry whose dates are not the BS month of its posting date. |
 | 3 | validate | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L466) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates. |
@@ -279,7 +279,7 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `get_dashboard`, `get_menu` | [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L728) | HR dashboard |
 | `Salary Revision.get_employees` | [`get_employees`](../../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L423) | Salary Revision form |
 | `Holiday Bulk Update.apply` | [`apply`](../../avinashgroup_app/avinash_group_app/doctype/holiday_bulk_update/holiday_bulk_update.py#L42) | Holiday Bulk Update |
-| `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L182) | Payroll Entry **Make Bank Entry** |
+| `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L249) | Payroll Entry **Make Bank Entry** |
 
 ## 8. Other hook types
 

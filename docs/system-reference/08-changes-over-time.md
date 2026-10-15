@@ -261,7 +261,7 @@ What survives a cancelled Payroll Entry: the month's **Additional Salary rows** 
 | [`validate_salary_slip`](../../avinashgroup_app/payroll/bs_period_guard.py#L70) | Salary Slip `validate` | An amended/re-made slip whose start date differs from its Payroll Entry's ([05-payroll-entry.md](05-payroll-entry.md)) |
 | Salary Revision | design | Never edits a paid slip; pays arrears instead |
 
-**Not guarded** (a paid month can still be changed underneath the money): editing or re-marking Attendance by hand or via Attendance Fix, submitting/cancelling an Overtime Sheet, a Leave Application for a paid date, and a later run of the payroll inputs on a submitted Payroll Entry ([`submit_salary_slips`](../../avinashgroup_app/payroll/payroll_entry.py#L167) runs them again). For the last one the engine's per-row savepoint catches a failed cancel and lists the row as skipped ([`savepoint`](../../avinashgroup_app/payroll/attendance_allowance.py#L183)); the expected failure reason (Frappe's linked-document check) is unverified.
+**Not guarded** (a paid month can still be changed underneath the money): editing or re-marking Attendance by hand or via Attendance Fix, submitting/cancelling an Overtime Sheet, a Leave Application for a paid date, and a later run of the payroll inputs on a submitted Payroll Entry ([`submit_salary_slips`](../../avinashgroup_app/payroll/payroll_entry.py#L233) runs them again). For the last one the engine's per-row savepoint catches a failed cancel and lists the row as skipped ([`savepoint`](../../avinashgroup_app/payroll/attendance_allowance.py#L183)); the expected failure reason (Frappe's linked-document check) is unverified.
 
 ---
 

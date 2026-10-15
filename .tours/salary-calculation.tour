@@ -306,7 +306,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 155,
+      "line": 220,
       "title": "4.1 create_salary_slips",
       "description": "Making the slips posts the month's inputs first (`prepare_payroll_inputs`); **Submit Salary Slip** posts them again and recalculates the drafts. Each run is logged on the entry (Payroll Inputs Log). No button.\n\nReads: Payroll Entry `custom_payroll_inputs_log`"
     },
@@ -438,7 +438,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 141,
+      "line": 204,
       "title": "5.2 AvinashPayrollEntry.validate",
       "description": "`fill_from_bs_month`, then HRMS's validate, then `warn_missing_attendance` on a new entry or changed month."
     },
@@ -468,7 +468,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 149,
+      "line": 212,
       "title": "5.7 AvinashPayrollEntry.before_submit",
       "description": "Warns about missing attendance again, then HRMS's before_submit."
     },
@@ -792,13 +792,13 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 203,
+      "line": 270,
       "title": "9.4 AvinashPayrollEntry.get_salary_component_total",
       "description": "HRMS's loop keyed by (component, cost centre, section); throws when an employee's department has no section but the component posts by section.\n\nReads: Payroll cost centres"
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 251,
+      "line": 318,
       "title": "9.5 AvinashPayrollEntry.section_for",
       "description": "The employee's section, only if the component has S/D or F/P accounts for the company."
     },
@@ -810,7 +810,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 260,
+      "line": 327,
       "title": "9.7 AvinashPayrollEntry.get_account",
       "description": "Turns component keys into (account, cost centre) amounts using `section_account`, else HRMS's account."
     },
@@ -840,7 +840,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 182,
+      "line": 249,
       "title": "9.12 AvinashPayrollEntry.make_bank_entry",
       "description": "Refuses a missing or non-Bank/Cash Payment Account, then HRMS's bank entry.\n\nReads: Payroll Entry `payment_account`"
     },
