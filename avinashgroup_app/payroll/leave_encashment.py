@@ -68,6 +68,7 @@ from frappe import _
 from frappe.utils import flt, getdate, strip_html
 
 from hrms.hr.doctype.leave_application.leave_application import get_leave_balance_on
+from hrms.hr.doctype.leave_encashment.leave_encashment import LeaveEncashment
 
 from avinashgroup_app.payroll.allowance import current_assignment
 
@@ -378,6 +379,27 @@ def recover_month(company: str, employees: list, start_date, end_date) -> dict:
 				"days": short, "rate": flt(rate, 2), "amount": doc.amount}
 		)
 	return {"made": made, "left_out": left_out, "total": flt(sum(m["amount"] for m in made), 2)}
+
+
+class SettlementLeaveEncashment(LeaveEncashment):
+	"""HRMS's Leave Encashment, whose balance counts the month's credit still due.
+
+	Settlement is dated the allocation's last day or the relieving date — the
+	BS month end, the very day the month's instalment is credited, at midnight.
+	A Payroll Entry run that afternoon saw the balance without it: the recovery
+	path added it (`settlement_balance`) and the encashment did not, so the two
+	disagreed by one month's credit. Done in `set_leave_balance`, which HRMS calls
+	on every validate, so actual encashable days and the submit-time check agree.
+	Registered in hooks.override_doctype_class.
+	"""
+
+	def set_leave_balance(self):
+		super().set_leave_balance()
+		allocation = self.leave_allocation or (self.get_leave_allocation() or {}).get("name")
+		if allocation and self.encashment_date:
+			self.leave_balance = flt(self.leave_balance) + _credit_still_due(
+				allocation, self.leave_type, self.encashment_date
+			)
 
 
 def settlement_balance(employee: str, leave_type: str, allocation: str, on_date) -> float:

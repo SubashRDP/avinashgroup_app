@@ -107,30 +107,10 @@ def validate_application_within_year(doc, method=None):
 	"""
 	if doc.status in ("Rejected", "Cancelled") or not doc.from_date:
 		return
-	if not frappe.get_cached_value("Leave Type", doc.leave_type, "allow_negative"):
-		return
-	year = frappe.db.get_value(
-		"Leave Allocation",
-		{"employee": doc.employee, "leave_type": doc.leave_type, "docstatus": 1,
-			"from_date": ("<=", getdate(doc.from_date)), "to_date": (">=", getdate(doc.from_date))},
-		["from_date", "to_date"],
-		as_dict=True,
-	)
+	year = year_leave(doc.employee, doc.leave_type, doc.from_date, exclude=doc.name)
 	if not year:
-		return  # HRMS refuses leave outside an allocation itself
-	annual = policy_allocation(doc.employee, doc.leave_type, year.from_date, year.to_date) or _allocated_by_hand(
-		doc.employee, doc.leave_type, year
-	)
-	if not annual:
 		return
-
-	taken = frappe.db.sql(
-		"""select sum(total_leave_days) from `tabLeave Application`
-		where employee = %s and leave_type = %s and docstatus < 2
-		  and status not in ('Rejected', 'Cancelled') and name != %s
-		  and from_date between %s and %s""",
-		(doc.employee, doc.leave_type, doc.name or "", year.from_date, year.to_date),
-	)[0][0]
+	annual, taken = year
 	total = flt(taken) + flt(doc.total_leave_days)
 	if total <= annual + 0.001:
 		return
@@ -150,6 +130,38 @@ def validate_application_within_year(doc, method=None):
 		),
 		title=_("Over the year's leave"),
 	)
+
+
+def year_leave(employee, leave_type, on_date, exclude=None):
+	"""(the year's figure, days already applied for in that year) for a leave
+	type that may be taken ahead of its credit, or None when no cap applies —
+	types without a negative balance (HRMS's own balance check stops those),
+	no allocation covering `on_date`, or no figure. Shared by the application
+	check above and the Give Leave preview (hr/leave_from_report.preview)."""
+	if not frappe.get_cached_value("Leave Type", leave_type, "allow_negative"):
+		return None
+	year = frappe.db.get_value(
+		"Leave Allocation",
+		{"employee": employee, "leave_type": leave_type, "docstatus": 1,
+			"from_date": ("<=", getdate(on_date)), "to_date": (">=", getdate(on_date))},
+		["from_date", "to_date"],
+		as_dict=True,
+	)
+	if not year:
+		return None  # HRMS refuses leave outside an allocation itself
+	annual = policy_allocation(employee, leave_type, year.from_date, year.to_date) or _allocated_by_hand(
+		employee, leave_type, year
+	)
+	if not annual:
+		return None
+	taken = frappe.db.sql(
+		"""select sum(total_leave_days) from `tabLeave Application`
+		where employee = %s and leave_type = %s and docstatus < 2
+		  and status not in ('Rejected', 'Cancelled') and name != %s
+		  and from_date between %s and %s""",
+		(employee, leave_type, exclude or "", year.from_date, year.to_date),
+	)[0][0]
+	return flt(annual), flt(taken)
 
 
 def _allocated_by_hand(employee, leave_type, year):

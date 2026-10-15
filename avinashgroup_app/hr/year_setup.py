@@ -408,10 +408,26 @@ def assign_leave_policies(company, leave_period, policies):
 		filters={"company": company, "status": "Active"},
 		fields=["name", "employment_type"],
 	):
-		if frappe.db.exists(
+		existing = frappe.db.get_value(
 			"Leave Policy Assignment",
 			{"employee": employee.name, "leave_period": leave_period, "docstatus": 1},
-		):
+			["name", "leaves_allocated"],
+			as_dict=True,
+		)
+		if existing:
+			# Deleting its allocations resets an assignment to "not allocated"
+			# (HRMS Leave Allocation on_cancel); skipping it left 100 NGI staff
+			# with a policy and no leave (5 Oct 2026). Grant it again.
+			if not existing.leaves_allocated:
+				try:
+					frappe.db.savepoint("lpa")
+					regrant = frappe.get_doc("Leave Policy Assignment", existing.name)
+					regrant.flags.ignore_permissions = True
+					regrant.grant_leave_alloc_for_employee()
+					assigned.append(employee.name)
+				except Exception as e:
+					frappe.db.rollback(save_point="lpa")
+					failed.append((employee.name, str(e)[:120]))
 			continue
 
 		on_probation = (employee.employment_type or "").lower().startswith("probation")

@@ -22,7 +22,11 @@ Deliberately narrow: Monthly earned leave with First Day / Last Day only,
 the same configurations the BS accrual job handles. Anything else keeps the
 stock calculation, exactly as that job leaves it alone.
 
-Registered in `hooks.py` → `override_doctype_class`.
+Registered in `hooks.py` → `override_doctype_class`. HRMS renamed the hook
+from `get_leaves_for_passed_months` to `get_leaves_for_passed_period` (v15
+`get_new_leaves`); only the new name was being called, so until 2026-10-15 the
+stock AD back-fill ran and the 5 Oct assignments were given three months
+(5.25 casual) where BS had completed two (3.5). Both names are kept.
 """
 
 import datetime
@@ -38,12 +42,12 @@ from rdp_common_app.utils.bs_boundaries import get_bs_month_end, get_bs_month_st
 
 
 class BSLeavePolicyAssignment(LeavePolicyAssignment):
-	def get_leaves_for_passed_months(self, annual_allocation, leave_details, date_of_joining):
+	def get_leaves_for_passed_period(self, annual_allocation, leave_details, date_of_joining):
 		if (
 			leave_details.earned_leave_frequency != SUPPORTED_FREQUENCY
 			or leave_details.allocate_on_day not in SUPPORTED_ALLOCATE_ON_DAY
 		):
-			return super().get_leaves_for_passed_months(annual_allocation, leave_details, date_of_joining)
+			return super().get_leaves_for_passed_period(annual_allocation, leave_details, date_of_joining)
 
 		return bs_months_backfill(
 			annual_allocation,
@@ -53,6 +57,8 @@ class BSLeavePolicyAssignment(LeavePolicyAssignment):
 			getdate(self.effective_to),
 			getdate(frappe.flags.current_date or getdate()),
 		)
+
+	get_leaves_for_passed_months = get_leaves_for_passed_period  # HRMS's name before v15.x
 
 
 def bs_months_backfill(annual_allocation, leave_details, date_of_joining, effective_from, effective_to, today):

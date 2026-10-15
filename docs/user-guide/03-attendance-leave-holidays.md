@@ -105,7 +105,9 @@ Policy (client meeting, September 2026): 33 days a year in total — Casual 21 +
 **Leave may be taken before it is credited, but never past the year** (decided 15 Oct 2026). Casual and Sick Leave allow a negative balance: someone with 5.25 days credited can still take 10. What is refused is a year past its figure: "**… is allowed 21 days of Casual Leave this year and has 21 already …**". Give the rest as Leave Without Pay. If the person leaves (or the year ends) having taken more than they had earned by then, the difference is **deducted** from their last slip as **Leave Recovery**, at the same per-day rate as encashment (Chapter 8.5).
 
 ### Monthly credit
-Leave is credited on the **last day of each BS month** (not the English month end), from the person's Leave Policy. A person who joins mid-month gets a share for that BS month.
+Leave is credited on the **last day of each BS month** (not the English month end), from the person's Leave Policy. A person who joins mid-month gets a share for that BS month. A policy assigned part-way through the year gives, at once, only the BS months already ended (by Ashwin 15: Shrawan and Bhadra, 3.5 casual + 2 sick), and the month-end credit never takes anyone past what the months so far are worth, so running it twice gives nothing extra.
+
+If someone has a Leave Policy Assignment but no Leave Allocation (their allocations were deleted), running the year setup again gives them their allocations; it no longer skips them.
 
 HR may give a different amount in a month (three days one month, four the next), but **the year's total cannot pass the policy**. If it would, you see "**… is allowed N days of … this year, and this would make M.**"
 

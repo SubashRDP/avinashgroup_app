@@ -101,8 +101,25 @@ def preview(employee, leave_type, dates, half_day_date=None):
 		"balance": balance,
 		"is_lwp": cint_bool(lwp),
 		"include_holiday": cint_bool(frappe.db.get_value("Leave Type", leave_type, "include_holiday")),
-		"notes": _notes(employee, days),
+		"notes": _year_cap_note(employee, leave_type, days, deduct) + _notes(employee, days),
 	}
+
+
+def _year_cap_note(employee, leave_type, days, deduct):
+	"""Warn before saving when these days would take the year past its figure
+	(hr/leave_ceiling: leave may be taken ahead of its credit, never past it)."""
+	from avinashgroup_app.hr.leave_ceiling import year_leave
+
+	year = year_leave(employee, leave_type, days[0])
+	if not year or year[1] + deduct <= year[0] + 0.001:
+		return []
+	annual, taken = year
+	return [
+		_("{0} allows {1} days a year; {2} already taken or applied for, so these {3} would make {4}. "
+			"Saving will be refused: give the days beyond {5} as Leave Without Pay.").format(
+			leave_type, f"{annual:g}", f"{taken:g}", f"{deduct:g}", f"{taken + deduct:g}", f"{max(annual - taken, 0):g}"
+		)
+	]
 
 
 @frappe.whitelist(methods=["POST"])

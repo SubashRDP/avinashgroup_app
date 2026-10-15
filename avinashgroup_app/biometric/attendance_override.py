@@ -213,6 +213,43 @@ def on_leave_submit(doc, method=None):
         day += timedelta(days=1)
 
 
+def on_leave_cancel(doc, method=None):
+    """Leave Application on_cancel, after HRMS's cancel_attendance: a past day of
+    the leave the person punched on is marked again from the punches.
+
+    HRMS cancels every On Leave and Half Day attendance in the leave's dates and
+    marks nothing in their place, so a day someone came in (a Half Day under
+    policy 3.4, or a late half day caught in the range) was left with no
+    attendance at all. Days with no punch stay unmarked — absence is HRMS's call
+    — and today or later is left to the day's own marking. Re-marked through
+    hr/punch_correction, whose guards skip paid and other refused days.
+    """
+    from frappe.utils import add_days, today
+
+    from avinashgroup_app.biometric.attendance_sync import get_day_checkins
+    from avinashgroup_app.hr.punch_correction import Refused, day_context, remark_day
+
+    day, last = getdate(doc.from_date), min(getdate(doc.to_date), getdate(add_days(today(), -1)))
+    note = frappe._("Marked again from the punches after leave {0} was cancelled.").format(doc.name)
+    while day <= last:
+        if get_day_checkins(doc.employee, day):
+            savepoint = f"leave_cancel_{day:%Y%m%d}"
+            frappe.db.savepoint(savepoint)
+            try:
+                existing, shift_doc = day_context(doc.employee, day)
+                if not existing:
+                    remark_day(doc.employee, day, None, shift_doc, note)
+            except Refused:
+                frappe.db.rollback(save_point=savepoint)
+            except Exception:
+                frappe.db.rollback(save_point=savepoint)
+                frappe.log_error(
+                    title=f"Re-marking after leave cancel failed: {doc.employee} {day}",
+                    message=frappe.get_traceback(),
+                )
+        day += timedelta(days=1)
+
+
 def _punched(employee, day):
     day = getdate(day)
     start = datetime.combine(day, datetime.min.time())

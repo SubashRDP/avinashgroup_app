@@ -153,6 +153,13 @@ def _credit_instalment(allocation, annual_allocation, leave_type, date_of_joinin
     # What the year has already given, ignoring leaves carried in from last year.
     credited = flt(allocation.get_existing_leave_count())
     room = flt(annual_allocation) - credited
+    # Never past what the BS months so far are worth: a second run on the same
+    # day, or a back-fill that already counted this month, credits nothing more
+    # (Ashwin 2083 was credited a day early on 15 Oct and would have been
+    # credited again on the real month end, 16 Oct).
+    due = _due_to_date(allocation, annual_allocation, leave_type, date_of_joining, today)
+    if due is not None:
+        room = min(room, due - credited)
     amount = min(flt(instalment), room)
     if leave_type.max_leaves_allowed:
         amount = min(amount, flt(leave_type.max_leaves_allowed) - credited)
@@ -204,6 +211,28 @@ def _is_accrual_day(leave_type, today) -> bool:
     if leave_type.allocate_on_day == "First Day":
         return today == getdate(get_bs_month_start(today))
     return today == getdate(get_bs_month_end(today))
+
+
+def _due_to_date(allocation, annual_allocation, leave_type, date_of_joining, today):
+    """What the BS months credited by `today` are worth for this allocation, or
+    None when it has no policy assignment to date it from."""
+    if not allocation.leave_policy_assignment:
+        return None
+    from avinashgroup_app.hr.leave_policy_assignment_bs import bs_months_backfill
+
+    effective_from, effective_to = frappe.db.get_value(
+        "Leave Policy Assignment", allocation.leave_policy_assignment, ["effective_from", "effective_to"]
+    )
+    return flt(
+        bs_months_backfill(
+            annual_allocation,
+            leave_type,
+            getdate(date_of_joining or effective_from),
+            getdate(effective_from),
+            getdate(effective_to),
+            getdate(today),
+        )
+    )
 
 
 def _get_policy_details(allocation, leave_type_name):

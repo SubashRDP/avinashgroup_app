@@ -329,6 +329,9 @@ for _event, _handler in attendance_events.items():
 # Leave approved for a day the person already punched on: HRMS updates an
 # existing row with db_set, so the validate hook above never sees it (policy 3.4).
 _add_doc_event("Leave Application", "on_submit", "avinashgroup_app.biometric.attendance_override.on_leave_submit")
+# Cancelled: HRMS cancels the leave's On Leave / Half Day rows and marks nothing
+# in their place; a past day with punches is marked again from them.
+_add_doc_event("Leave Application", "on_cancel", "avinashgroup_app.biometric.attendance_override.on_leave_cancel")
 
 # Employee Checkin lifecycle: keep the day's IN/OUT alternation consistent when
 # punches are entered, edited or deleted via desk/API. On a past day the hand
@@ -524,6 +527,8 @@ override_doctype_class = {
     # Mid-year policy assignments back-fill earned leave in BS months, matching
     # the BS accrual job (hr/leave_policy_assignment_bs.py).
     "Leave Policy Assignment": "avinashgroup_app.hr.leave_policy_assignment_bs.BSLeavePolicyAssignment",
+    # Settlement-day balance counts the month's credit still due (payroll/leave_encashment.py).
+    "Leave Encashment": "avinashgroup_app.payroll.leave_encashment.SettlementLeaveEncashment",
     # Each section's pay to its own account. See payroll/payroll_entry.py.
     "Payroll Entry": "avinashgroup_app.payroll.payroll_entry.AvinashPayrollEntry",
     # Holiday work earns a full replacement day for turning up at all; the
@@ -598,6 +603,8 @@ before_request = [
     # A check-in window of 0 on a day shift means the whole day (hr/shift_window.py):
     # the bridge's punches arrive by request, auto attendance in a job.
     "avinashgroup_app.hr.shift_window.patch_whole_day_window",
+    # Exact AD <-> BS conversion whatever hour the process started (utils/bs_converter.py).
+    "avinashgroup_app.utils.bs_converter.patch_converter",
 ]
 
 # The repost runs in a background job, so the get_recipients patch must also be
@@ -608,6 +615,7 @@ before_job = [
     "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
     "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
     "avinashgroup_app.hr.shift_window.patch_whole_day_window",
+    "avinashgroup_app.utils.bs_converter.patch_converter",
 ]
 
 # The distro's unpatched-Qt wkhtmltopdf shrinks every length by 0.7688x, which
