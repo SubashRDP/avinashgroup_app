@@ -36,7 +36,7 @@
   {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "in_standard_filter": 1, "read_only": 1},
   {"fieldname": "column_break_emp", "fieldtype": "Column Break"},
   {"fieldname": "attendance_date", "fieldtype": "Date", "label": "Attendance Date", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1, "search_index": 1},
-  {"fieldname": "correction_type", "fieldtype": "Select", "label": "Correction", "options": "Punch Time Edited\nPunch Added\nPunch Deleted\nShift Changed\nRe-marked", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1},
+  {"fieldname": "correction_type", "fieldtype": "Select", "label": "Correction", "options": "Punch Time Edited\nPunch Added\nPunch Deleted\nShift Changed\nRe-marked\nReplacement Leave", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1},
   {"fieldname": "source", "fieldtype": "Select", "label": "Made From", "options": "Monthly Attendance BS\nEmployee Checkin Form", "in_standard_filter": 1, "read_only": 1},
   {"fieldname": "change_section", "fieldtype": "Section Break", "label": "Change"},
   {"fieldname": "old_value", "fieldtype": "Data", "label": "Before", "in_list_view": 1, "read_only": 1},

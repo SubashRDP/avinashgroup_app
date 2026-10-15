@@ -77,6 +77,10 @@ def enforce_late_arrival_half_day(doc, method=None):
     """
     if not doc.shift or not doc.in_time:
         return
+    if doc.get("custom_worked_on_holiday"):
+        # Holiday work is not late: there is no shift start to arrive after
+        # (user, 2026-10-15). set_holiday_flag runs earlier in validate.
+        return
     if doc.get("custom_late_excused"):
         _undo_excused_late_half_day(doc)
         return

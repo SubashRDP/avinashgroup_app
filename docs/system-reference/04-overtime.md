@@ -128,14 +128,14 @@ A holiday-work Overtime Sheet row for any of the 261 is refused ("has neither �
 |---|---|
 | **What** | For each row with entitlement **Overtime** on a submitted sheet, reads that day's submitted Attendance and writes `worked_hours`, `attendance` and `settlement_note`, then the sheet's `total_worked_hours`. |
 | **Why** | Docstring ([`Measure authorised overtime`](../../avinashgroup_app/hr/overtime_settlement.py#L1)): the sheet says the company asked; attendance says how long the work lasted. "Measuring used to be a button only, so overtime paid 0 for any sheet nobody thought to press it on." Commits 240ea3c (2026-09-21) and 297ebbd (2026-09-27). |
-| **Triggered by** | (a) the hook on Overtime Sheet `on_submit` [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L457), only when the work date is already past; (b) the daily job [`measure_pending`](../../avinashgroup_app/hooks.py#L536) in `daily_long`; (c) the **Measure from Attendance** button [`Measure from Attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L23), shown on a submitted sheet. |
+| **Triggered by** | (a) the hook on Overtime Sheet `on_submit` [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L457), only when the work date is already past; (b) the daily job [`measure_pending`](../../avinashgroup_app/hooks.py#L539) in `daily_long`; (c) the **Measure from Attendance** button [`Measure from Attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.js#L23), shown on a submitted sheet. |
 | **Reads** | Attendance (`status`, `in_time`, `out_time`, `working_hours`), Shift Assignment and Shift Type through `get_shift_window`. |
 | **Writes** | Overtime Sheet Employee `worked_hours`, `attendance`, `settlement_note`; Overtime Sheet `total_worked_hours`. All via `db_set(update_modified=False)` on a submitted doc, so there is no version history. |
 | **Impacts downstream** | `worked_hours` is the **quantity of the Overtime component** in payroll (4.6). Re-measuring after Prepare Payroll Inputs changes nothing on the slip until Prepare Payroll Inputs is pressed again. |
 
 ### `measure_row`: the measuring rule
 
-[`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L70)
+[`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L80)
 
 | Situation | Hours | `settlement_note` |
 |---|---|---|
@@ -155,15 +155,15 @@ Note that a Half Day attendance still measures in full here: only `Absent` is ze
 
 | Function | Scope | Overwrites HR's work? |
 |---|---|---|
-| [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L126) → [`measure_sheet`](../../avinashgroup_app/hr/overtime_settlement.py#L51) (button) | **every** row, Replacement Leave rows included | Yes. It re-measures and overwrites. On a Replacement Leave row it replaces the note "1 day of replacement leave granted" with "Earns replacement leave, not overtime"; the link to the Compensatory Leave Request is kept. |
-| [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L189) → [`measure_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L171) | Overtime rows never measured | No |
-| [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L200) (daily) | submitted sheets with work date from today − [`LOOKBACK_DAYS`](../../avinashgroup_app/hr/overtime_settlement.py#L48) (62) to yesterday, unmeasured Overtime rows | No |
+| [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L140) → [`measure_sheet`](../../avinashgroup_app/hr/overtime_settlement.py#L59) (button) | **every** row, Replacement Leave rows included | Yes. It re-measures and overwrites. On a Replacement Leave row it replaces the note "1 day of replacement leave granted" with "Earns replacement leave, not overtime"; the link to the Compensatory Leave Request is kept. |
+| [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L203) → [`measure_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L185) | Overtime rows never measured | No |
+| [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L214) (daily) | submitted sheets with work date from today − [`LOOKBACK_DAYS`](../../avinashgroup_app/hr/overtime_settlement.py#L56) (62) to yesterday, unmeasured Overtime rows | No |
 
-"Unmeasured" is decided by [`_is_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L161): no note, no hours and no attendance. Every measurement writes a note, so a row measured as zero is not redone.
+"Unmeasured" is decided by [`_is_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L175): no note, no hours and no attendance. Every measurement writes a note, so a row measured as zero is not redone.
 
 **Gotcha (timing):** the daily job measures a row **once**. If attendance for a past date arrives after the job has run, the row is measured as 0 ("No attendance") and the next run skips it, because it now has a note. Re-measuring then needs the button. The 62-day retry window only helps for a sheet whose rows were never touched. The docstring's "for the sheets whose attendance arrived later" holds only when the sheet was submitted ahead of the day, or when the job had not yet seen the row.
 
-**Dead code:** [`get_measured_hours`](../../avinashgroup_app/hr/overtime_settlement.py#L132) ("what payroll pays") is not called anywhere. Payroll reads the rows itself in `_authorised_overtime_hours`.
+**Dead code:** [`get_measured_hours`](../../avinashgroup_app/hr/overtime_settlement.py#L146) ("what payroll pays") is not called anywhere. Payroll reads the rows itself in `_authorised_overtime_hours`.
 
 ---
 
@@ -173,25 +173,26 @@ Note that a Half Day attendance still measures in full here: only `Absent` is ze
 |---|---|
 | **What** | Turns each `Replacement Leave` row whose attendance shows the person worked into a submitted **Compensatory Leave Request** (HRMS). That request creates or tops up a **Leave Allocation** of type *Replacement Leave*. |
 | **Why** | Docstring ([`Credit replacement leave`](../../avinashgroup_app/hr/replacement_leave.py#L1)): "Until now nothing turned that row into leave, so the day was promised on paper and never reached a balance." HRMS's own document is used for its audit trail and checks. Commit 297ebbd (2026-09-27). |
-| **Triggered by** | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L457) (dates already past), the daily job [`grant_pending`](../../avinashgroup_app/hooks.py#L536) (`daily_long`, 62-day lookback), and [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L458). |
+| **Triggered by** | [`on_sheet_submit`](../../avinashgroup_app/hooks.py#L457) (dates already past), the daily job [`grant_pending`](../../avinashgroup_app/hooks.py#L539) (`daily_long`, 62-day lookback), and [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L458). |
 | **Reads** | Attendance `status` for the date. |
 | **Writes** | Compensatory Leave Request (inserted and submitted with `ignore_permissions`), which through HRMS creates a Leave Allocation or Leave Ledger Entry. Row `compensatory_leave_request` and `settlement_note`. On failure, an Error Log. |
 | **Impacts downstream** | The Replacement Leave balance shown in Leave Application and in the Yearly Leave Details (BS) report. Pay is not affected: the type has `allow_encashment` 0, and taking the day is ordinary paid leave. |
 
-[`grant_row`](../../avinashgroup_app/hr/replacement_leave.py#L86):
+[`grant_row`](../../avinashgroup_app/hr/replacement_leave.py#L140):
 
 | Attendance on the work date | Result |
 |---|---|
-| `Present` / `Work From Home` | 1 day (CLR `half_day` = 0) |
-| `Half Day` | ½ day (`half_day` = 1, `half_day_date` = work date) |
-| none / `Absent` / `On Leave` | nothing yet; the note says "waits for attendance" and the daily job retries |
+| shown up ([`shown_up`](../../avinashgroup_app/hr/replacement_leave.py#L81): any Employee Checkin that day, or a submitted Attendance with `in_time`) | 1 full day (CLR `half_day` = 0), whatever the status — Half Day, late, few hours (user, 2026-10-15) |
+| not shown up | nothing yet; the note says "waits: no punch" and the daily job retries |
+| an older ½-day grant | [`grant_pending`](../../avinashgroup_app/hr/replacement_leave.py#L118) cancels it and grants 1 day |
+| a corrected day ([`recheck_day`](../../avinashgroup_app/hr/replacement_leave.py#L194), from `punch_correction.remark_day`) | granted / topped up / taken back to match; a refused take-back keeps the grant, notes the row, warns, and is logged in the Attendance Correction Log |
 | HRMS refuses (ValidationError) | rolled back to a savepoint; the note says "Replacement leave not granted: …"; Error Log |
 
-HRMS's own checks then run inside the request: [`validate_holidays`](../../../hrms/hrms/hr/doctype/compensatory_leave_request/compensatory_leave_request.py#L60) (the date must be a holiday on the employee's list) and [`validate_attendance`](../../../hrms/hrms/hr/doctype/compensatory_leave_request/compensatory_leave_request.py#L36). Then [`on_submit`](../../../hrms/hrms/hr/doctype/compensatory_leave_request/compensatory_leave_request.py#L73) needs an **active Leave Period** covering the day after the work date, or it throws "No Leave Period Found".
+HRMS's own checks then run inside the request: [`validate_holidays`](../../../hrms/hrms/hr/doctype/compensatory_leave_request/compensatory_leave_request.py#L60) (the date must be a holiday on the employee's list) and [`validate_attendance`](../../../hrms/hrms/hr/doctype/compensatory_leave_request/compensatory_leave_request.py#L36) — which our own grants skip (`ReplacementLeaveRequest`, `override_doctype_class`, when `flags.shown_up_on_holiday` is set), because it wants Present and gives a Half Day ½. Grants set `frappe.flags.audit_user`, so the Leave Allocation HRMS creates gets the `custom_created_on` the naming engine needs for its fiscal year — without it the nightly job's grants failed with "Date field … is required for Leave Allocation". Then [`on_submit`](../../../hrms/hrms/hr/doctype/compensatory_leave_request/compensatory_leave_request.py#L73) needs an **active Leave Period** covering the day after the work date, or it throws "No Leave Period Found".
 
-[`on_sheet_cancel`](../../avinashgroup_app/hr/replacement_leave.py#L56) cancels each linked submitted request (HRMS then reverses the allocation) and clears the link.
+[`on_sheet_cancel`](../../avinashgroup_app/hr/replacement_leave.py#L106) cancels each linked submitted request (HRMS then reverses the allocation) and clears the link.
 
-Leave type: [`REPLACEMENT_LEAVE_TYPE`](../../avinashgroup_app/hr/replacement_leave.py#L38) = "Replacement Leave", created by patch `setup_leave_types` (`#2` re-run, [`Replacement Leave`](../../avinashgroup_app/patches/setup_leave_types.py#L68)).
+Leave type: [`REPLACEMENT_LEAVE_TYPE`](../../avinashgroup_app/hr/replacement_leave.py#L55) = "Replacement Leave", created by patch `setup_leave_types` (`#2` re-run, [`Replacement Leave`](../../avinashgroup_app/patches/setup_leave_types.py#L68)).
 
 ### Config on avinas1 (2026-10-12)
 
@@ -211,8 +212,8 @@ Two components in `payroll/attendance_allowance.py` read the sheet directly. Bot
 
 | Component (condition) | Function | Reads | Quantity |
 |---|---|---|---|
-| Overtime (`Authorised Overtime`, Per Hour) | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L415) | `SUM(worked_hours)` for the employee and date | hours; rate = hourly basic × 1.5 |
-| Meal (`Meal Entitlement`) | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L348) via [`_on_overtime_sheet`](../../avinashgroup_app/payroll/attendance_allowance.py#L389) | *existence* of the row (not its hours) | holiday: [`HOLIDAY_MEALS`](../../avinashgroup_app/payroll/attendance_allowance.py#L386) = 2; working day: 1 if `custom_early_entry` ≥ 1.5 h, plus 1 if `custom_late_exit` ≥ 1.5 h; capped at `custom_max_per_day` (2) |
+| Overtime (`Authorised Overtime`, Per Hour) | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L433) | `SUM(worked_hours)` for the employee and date | hours; rate = hourly basic × 1.5 |
+| Meal (`Meal Entitlement`) | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L352) via [`_on_overtime_sheet`](../../avinashgroup_app/payroll/attendance_allowance.py#L407) | *existence* of the row (not its hours) | holiday: by hours worked first IN to last OUT ([`holiday_hours_worked`](../../avinashgroup_app/hr/shift_day.py#L137), rounded to the half hour), [`HOLIDAY_MEAL_HOURS`](../../avinashgroup_app/payroll/attendance_allowance.py#L396) 8 h → 2, 6 h → 1; working day: 1 if `custom_early_entry` ≥ 1.5 h, plus 1 if `custom_late_exit` ≥ 1.5 h; capped at `custom_max_per_day` (2) |
 
 Consequences:
 

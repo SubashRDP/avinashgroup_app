@@ -23,6 +23,11 @@ Deliberately narrow:
     to see rather than have smoothed over.
   * re-measuring is safe: it overwrites the same fields from the same source.
 
+Holiday work is measured on the time actually worked, first IN to last OUT
+(shift_day.holiday_hours_worked), never against the shift — a holiday has none.
+Rows earning Replacement Leave are not measured at all; their note belongs to
+hr/replacement_leave.py and is left as it wrote it.
+
 Measuring used to be a button only, so overtime paid 0 for any sheet nobody
 thought to press it on. It now also runs by itself — on submit for a day already
 past, and daily for the sheets whose attendance arrived later — but only over
@@ -34,10 +39,13 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, flt, get_datetime, getdate, today
 
-from avinashgroup_app.hr.shift_day import round_to_half_hour
+from avinashgroup_app.hr.shift_day import holiday_hours_worked, round_to_half_hour
 from avinashgroup_app.hr.overtime import (
+	DAY_HOLIDAY,
+	DAY_WEEKLY_OFF,
 	ENTITLEMENT_OVERTIME,
 	WORK_ON_HOLIDAY,
+	get_day_type,
 	get_shift_window,
 	hours_outside_shift,
 )
@@ -56,6 +64,8 @@ def measure_sheet(sheet_name):
 
 	report = []
 	for row in sheet.employees:
+		if row.entitlement != ENTITLEMENT_OVERTIME:
+			continue  # replacement leave: hr/replacement_leave.py writes its note
 		measured = measure_row(row.employee, sheet.work_date, row.work_type, row.entitlement)
 		row.db_set("worked_hours", measured["hours"], update_modified=False)
 		row.db_set("attendance", measured["attendance"], update_modified=False)
@@ -84,7 +94,14 @@ def measure_row(employee, work_date, work_type, entitlement):
 	)
 	if not attendance:
 		return {"hours": 0.0, "attendance": None, "note": _("No attendance — called in but did not come")}
-	if attendance.status == "Absent":
+	# A holiday is told by the employee's own list as well as by the row, so a
+	# row typed as Overtime on what is a holiday for this person is still
+	# measured as holiday work.
+	on_holiday = work_type == WORK_ON_HOLIDAY or get_day_type(employee, work_date)[0] in (
+		DAY_HOLIDAY,
+		DAY_WEEKLY_OFF,
+	)
+	if attendance.status == "Absent" and not on_holiday:
 		return {"hours": 0.0, "attendance": attendance.name, "note": _("Marked absent")}
 	if not (attendance.in_time and attendance.out_time):
 		return {
@@ -93,9 +110,10 @@ def measure_row(employee, work_date, work_type, entitlement):
 			"note": _("Only one punch — the hours cannot be measured"),
 		}
 
-	if work_type == WORK_ON_HOLIDAY:
-		# A holiday has no shift to work beyond: every hour counts.
-		hours = flt(attendance.working_hours) or _punched_hours(attendance)
+	if on_holiday:
+		# A holiday has no shift to work beyond: every hour from first IN to
+		# last OUT counts, whatever status HRMS's hour thresholds gave the day.
+		hours = holiday_hours_worked(attendance)
 		return {
 			"hours": round_to_half_hour(hours),
 			"attendance": attendance.name,
@@ -116,10 +134,6 @@ def measure_row(employee, work_date, work_type, entitlement):
 		"attendance": attendance.name,
 		"note": _("Hours outside the {0} shift").format(shift),
 	}
-
-
-def _punched_hours(attendance):
-	return (get_datetime(attendance.out_time) - get_datetime(attendance.in_time)).total_seconds() / 3600
 
 
 @frappe.whitelist()

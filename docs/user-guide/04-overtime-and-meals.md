@@ -14,8 +14,8 @@ Set by one of two ticks on the Employee (Chapter 2, section 2.2):
 
 | Tick on the Employee | Worked on a holiday or Saturday | Worked before / after the shift on a working day |
 |---|---|---|
-| **Overtime Eligible** (staff below officer level) | Overtime for every hour worked + 2 meals | Overtime for the hours outside the shift + up to 2 meals |
-| **Replacement Leave for Holiday Work** (officer and admin level) | 1 day of **Replacement Leave** (½ day if the attendance is a Half Day) | Not allowed — the sheet refuses it |
+| **Overtime Eligible** (staff below officer level) | Overtime for every hour worked, first IN to last OUT (no shift) + meals by hours (6 h → 1, 8 h → 2) | Overtime for the hours outside the shift + up to 2 meals |
+| **Replacement Leave for Holiday Work** (officer and admin level) | 1 full day of **Replacement Leave** for turning up at all (one punch is enough) | Not allowed — the sheet refuses it |
 
 A person never gets both overtime and replacement leave for the same day.
 
@@ -98,21 +98,25 @@ A meal is part of overtime the company asked for. For each day, the meals are co
 | Not on a **submitted Overtime Sheet** for that date with Earns = **Overtime** | 0 |
 | Working day: punched in **1.5 hours or more before** the shift start | +1 |
 | Working day: punched out **1.5 hours or more after** the shift end | +1 |
-| Holiday or Saturday worked, on the Overtime Sheet | 2 |
+| Holiday or Saturday worked, on the Overtime Sheet: **6 hours** or more (first IN to last OUT, rounded to the half hour like the overtime) | 1 |
+| Holiday or Saturday worked, on the Overtime Sheet: **8 hours** or more | 2 |
 | Any day | never more than **2** |
 
 So 1.4 hours early earns nothing; 1.5 hours early earns one meal; early **and** late earns two.
 
 **Meal rate:** the person's own rate on their assignment if they have one, else the company's (NGI 75, NGN 75, NGG 100 as of 9 October 2026).
 
-The 1.5 hours and the maximum of 2 are settings on the **Meal** salary component (**Time Offset (Hours)** and **Max Meals per Day**).
+The 1.5 hours and the maximum of 2 are settings on the **Meal** salary component (**Time Offset (Hours)** and **Max Meals per Day**). The holiday 6 h / 8 h steps are fixed in the code (`HOLIDAY_MEAL_HOURS` in `payroll/attendance_allowance.py`), like the late fine and the 1.5 × overtime rate.
+
+Nobody is late on a holiday: no late minutes, no late fine, and arriving late does not make a holiday a Half Day.
 
 ## 4.7 Replacement leave for Officer & Admin
 
 When an Officer & Admin person is on a submitted Overtime Sheet for a holiday:
-- once their attendance for that day exists, the system creates and submits a **Compensatory Leave Request** for **Replacement Leave** by itself: 1 day, or ½ day if the attendance is a Half Day;
+- once they have turned up — one punch that day is enough, or attendance with an in-time — the system creates and submits a **Compensatory Leave Request** for **Replacement Leave** by itself: always **1 full day**, whatever the hours, Half Day or lateness;
 - the row shows the request in **Replacement Leave Granted** and a note "1 day of replacement leave granted";
-- if attendance is not there yet, the note says "Replacement leave waits for attendance…", and the system tries again every night (for about two months);
+- if there is no punch yet, the note says "Replacement leave waits: no punch on this day yet", and the system tries again every night (for about two months); a ½ day granted under the old rule is topped up to 1 day by the same nightly run;
+- if the day's punches are corrected later (Monthly Attendance BS or the Employee Checkin form), the leave follows: granted if they now turned up, taken back if they no longer did. If HRMS will not take it back (the leave has been used), it is kept, the row says so and the correction shows a warning;
 - if it fails, the note says "Replacement leave not granted: …" with the reason.
 
 Cancelling the Overtime Sheet takes the replacement leave back.

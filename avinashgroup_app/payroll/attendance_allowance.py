@@ -28,7 +28,7 @@ from frappe import _
 from frappe.utils import add_days, cint, date_diff, flt, getdate
 
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
-from avinashgroup_app.hr.shift_day import measure_day
+from avinashgroup_app.hr.shift_day import holiday_hours_worked, measure_day, round_to_half_hour
 from avinashgroup_app.payroll.allowance import (
 	COMPUTED_RATE_BASIS,
 	get_employee_allowance_rows,
@@ -326,6 +326,10 @@ def evaluate_rule(row, sc, employee: str) -> float:
 	if condition in ("Early Entry Before", "Late Stay After", "Late Arrival After"):
 		if condition == "Late Arrival After" and row.get("custom_late_excused"):
 			return 0.0
+		if condition == "Late Arrival After" and row.custom_worked_on_holiday:
+			# A holiday has no start time to be late for (shift_day.measure_day,
+			# the late fine, the half-day rule all agree).
+			return 0.0
 		if condition == "Late Arrival After" and status == "Half Day":
 			# Arriving more than two hours late already costs half the day's pay
 			# (policy 1.2). Fining the same minutes again would charge the one
@@ -356,7 +360,8 @@ def _meals_for_day(row, sc, present_statuses, employee: str) -> float:
 	    day a submitted Overtime Sheet names them with the Overtime entitlement;
 	  * a working day: called in Time Offset (1.5 h) or more before the shift →
 	    1 meal; kept that long after it → 1 meal;
-	  * a holiday worked on such a sheet: 2 meals;
+	  * a holiday worked on such a sheet: by the hours worked, first IN to last
+	    OUT — 8 h → 2 meals, 6 h → 1, less → none (HOLIDAY_MEAL_HOURS);
 	  * never more than Max Meals per Day (2).
 
 	Early and late are the day's own measures against its shift
@@ -370,7 +375,7 @@ def _meals_for_day(row, sc, present_statuses, employee: str) -> float:
 		return 0.0
 
 	if row.custom_worked_on_holiday:
-		meals = HOLIDAY_MEALS
+		meals = holiday_meals(round_to_half_hour(holiday_hours_worked(row)))
 	else:
 		offset = flt(sc.custom_time_offset_hours) * 3600.0
 		meals = 0
@@ -382,8 +387,21 @@ def _meals_for_day(row, sc, present_statuses, employee: str) -> float:
 	return float(min(meals, cap) if cap else meals)
 
 
-#: Meals for a holiday worked on an authorised Overtime Sheet (user, 2026-10-09).
-HOLIDAY_MEALS = 2
+#: Meals for a holiday worked on an authorised Overtime Sheet, by the hours
+#: actually worked, first IN to last OUT (user, 2026-10-15): 8 hours or more → 2,
+#: 6 or more → 1, less → none. Replaced a flat 2 (2026-10-09). Highest first.
+#: The hours are rounded to the half hour first, exactly as the overtime they come
+#: with is (shift_day.round_to_half_hour): a day the sheet pays as 8 h of
+#: overtime is an 8-hour day for meals too, never 7:53 and one meal.
+HOLIDAY_MEAL_HOURS = ((8, 2), (6, 1))
+
+
+def holiday_meals(hours: float) -> int:
+	"""Meals earned by `hours` worked on a holiday (HOLIDAY_MEAL_HOURS)."""
+	for threshold, meals in HOLIDAY_MEAL_HOURS:
+		if flt(hours) >= threshold:
+			return meals
+	return 0
 
 
 def _on_overtime_sheet(employee: str, work_date) -> bool:

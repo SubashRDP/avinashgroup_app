@@ -126,12 +126,26 @@ def measure_day(att, is_holiday=False, ot_eligible=False):
 
 	if ot_eligible:
 		if holiday:
-			hours = flt(att.get("working_hours")) or _punched_hours(att)
+			hours = holiday_hours_worked(att)
 		else:
 			hours = (flt(att.get("custom_early_entry")) + flt(att.get("custom_late_exit"))) / 3600
 		out.ot_hours = round_to_half_hour(hours)
 
 	return out
+
+
+def holiday_hours_worked(att):
+	"""Hours someone worked on a holiday: first IN to last OUT, no shift involved.
+
+	A holiday has no shift to be inside or outside of, so overtime, meals and
+	everything else holiday work earns are measured on the time actually spent
+	(user, 2026-10-15). From the row's in/out, which are the day's first and last
+	punch; HRMS's working_hours only when one of them is missing. Read whatever
+	the status: a short holiday visit that HRMS's hour thresholds call Absent
+	still has real hours. Shared by overtime settlement, the meal rule and the
+	attendance report, so all three count the same hours.
+	"""
+	return _punched_hours(att) or flt(att.get("working_hours"))
 
 
 def _punched_hours(att):

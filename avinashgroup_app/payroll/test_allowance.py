@@ -412,15 +412,16 @@ class TestAllowance(FrappeTestCase):
 		frappe.local._agp_on_ot_sheet = {}
 	def test_meal_rule(self):
 		"""A meal follows overtime the company authorised, for OT-eligible staff
-		only: 1.5 h early or late on a working day = 1 each, a holiday = 2, max 2."""
+		only: 1.5 h early or late on a working day = 1 each; a holiday by the hours
+		worked (6 h → 1, 8 h → 2, rounded to the half hour like the overtime); max 2."""
 		sc = frappe.get_doc("Salary Component", self.meal)
 		day, holiday = "2026-07-20", "2026-07-25"
 
-		def meals(employee, date, early=0, late=0, on_holiday=0):
+		def meals(employee, date, early=0, late=0, on_holiday=0, hours=11):
 			row = frappe._dict(
 				status="Present",
 				attendance_date=date,
-				working_hours=11,
+				working_hours=hours,
 				custom_worked_on_holiday=on_holiday,
 				custom_early_entry=early * 60,
 				custom_late_exit=late * 60,
@@ -433,7 +434,11 @@ class TestAllowance(FrappeTestCase):
 		self.assertEqual(meals(called, day, early=100, late=105), 2)  # IN 07:20, OUT 18:45
 		self.assertEqual(meals(called, day, early=100, late=30), 1)  # IN 07:20, OUT 17:30
 		self.assertEqual(meals(called, day, early=60, late=60), 0)  # neither side reaches 1.5 h
-		self.assertEqual(meals(called, holiday, on_holiday=1), 2)  # a holiday, any hours
+		self.assertEqual(meals(called, holiday, on_holiday=1), 2)  # 11 h on a holiday
+		self.assertEqual(meals(called, holiday, on_holiday=1, hours=7.8), 2)  # rounds to 8
+		self.assertEqual(meals(called, holiday, on_holiday=1, hours=7.6), 1)  # 7.5
+		self.assertEqual(meals(called, holiday, on_holiday=1, hours=6), 1)
+		self.assertEqual(meals(called, holiday, on_holiday=1, hours=5.5), 0)
 
 		on_own = self._employee(custom_ot_eligibility=1)  # same punches, nobody called them
 		self.assertEqual(meals(on_own, day, early=100, late=105), 0)

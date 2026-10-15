@@ -519,6 +519,9 @@ override_doctype_class = {
     "Leave Policy Assignment": "avinashgroup_app.hr.leave_policy_assignment_bs.BSLeavePolicyAssignment",
     # Each section's pay to its own account. See payroll/payroll_entry.py.
     "Payroll Entry": "avinashgroup_app.payroll.payroll_entry.AvinashPayrollEntry",
+    # Holiday work earns a full replacement day for turning up at all; the
+    # requests hr/replacement_leave files skip HRMS's Present / ½-day check.
+    "Compensatory Leave Request": "avinashgroup_app.hr.replacement_leave.ReplacementLeaveRequest",
 }
 
 scheduler_events = {

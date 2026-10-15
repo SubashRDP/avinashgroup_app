@@ -354,14 +354,20 @@ def _rebuild_day(employee, day, shift_doc):
 
 
 def _remeasure_overtime(employee, start, end):
-	"""Re-measure approved Overtime Sheet rows for these days: the shift moved."""
+	"""Re-measure approved Overtime Sheet rows for these days: the shift moved.
+
+	Overtime rows only. A Replacement Leave row has no hours, and its note says
+	whether the day was granted — hr/replacement_leave.recheck_day keeps that.
+	"""
+	from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
 	from avinashgroup_app.hr.overtime_settlement import measure_row
 
 	rows = frappe.db.sql(
 		"""select r.name, r.work_type, r.entitlement, s.work_date, s.name as sheet
 		from `tabOvertime Sheet Employee` r join `tabOvertime Sheet` s on s.name = r.parent
-		where s.docstatus = 1 and r.employee = %s and s.work_date between %s and %s""",
-		(employee, start, end),
+		where s.docstatus = 1 and r.employee = %s and s.work_date between %s and %s
+		  and r.entitlement = %s""",
+		(employee, start, end, ENTITLEMENT_OVERTIME),
 		as_dict=True,
 	)
 	log = []

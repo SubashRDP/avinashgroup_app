@@ -200,13 +200,17 @@ def correct_day(
 		"; ".join(changes), frappe.utils.escape_html(reason)
 	)
 	result, other_days, attendance_of = None, [], {}
-	for d in days:
-		line = _remark_after_correction(employee, d, existing[d], note)
-		attendance_of[d] = line.get("attendance")
-		if d == day:
-			result = line
-		elif line.get("line"):
-			other_days.append(line["line"])
+	frappe.flags.in_report_correction = True  # Correction Log source for follow-on entries
+	try:
+		for d in days:
+			line = _remark_after_correction(employee, d, existing[d], note)
+			attendance_of[d] = line.get("attendance")
+			if d == day:
+				result = line
+			elif line.get("line"):
+				other_days.append(line["line"])
+	finally:
+		frappe.flags.in_report_correction = False
 
 	for entry in entries:
 		for d in entry.get("days") or [day]:
@@ -249,7 +253,8 @@ def _remark_after_correction(employee, day, existing, note):
 		"working_hours": existing.working_hours if existing else 0,
 		"in_time": _clock(existing.in_time) if existing else "—",
 		"out_time": _clock(existing.out_time) if existing else "—",
-		"overtime": _remeasure_overtime(employee, day, day),
+		"overtime": _remeasure_overtime(employee, day, day)
+		+ _recheck_replacement_leave(employee, day, existing.name if existing else None),
 		"warnings": _draft_slip_warning(employee, day),
 		"line": _("{0}: {1} kept, shift set to {2}").format(
 			day, existing.status if existing else _("no attendance"), shift_doc.name
@@ -344,7 +349,7 @@ def remark_day(employee, day, existing, shift_doc, note):
 	passed. Returns the day as it now reads, with warnings for the user."""
 	after = _rebuild(employee, day, shift_doc, existing)
 	frappe.get_doc("Attendance", after.name).add_comment("Info", note)
-	overtime = _remeasure_overtime(employee, day, day)
+	overtime = _remeasure_overtime(employee, day, day) + _recheck_replacement_leave(employee, day, after.name)
 
 	warnings = _draft_slip_warning(employee, day)
 	if existing and existing.shift and existing.shift != shift_doc.name:
@@ -796,6 +801,23 @@ def _carry_late_excuse(after, existing):
 	}
 	frappe.db.set_value("Attendance", doc.name, values)
 	after.update(values)
+
+
+def _recheck_replacement_leave(employee, day, attendance):
+	"""Grant, top up or take back the day's replacement leave after a correction
+	(hr/replacement_leave.recheck_day), and put each outcome in the Correction Log.
+	A refusal to take leave back is a warning, never a failure of the correction."""
+	from avinashgroup_app.hr.replacement_leave import recheck_day
+
+	lines = recheck_day(employee, day)
+	for line in lines:
+		log_correction(
+			employee, day, "Replacement Leave", SOURCE_REPORT if frappe.flags.get("in_report_correction") else SOURCE_FORM,
+			None, line.lstrip("⚠ "), _("Follows the corrected punches"), attendance=attendance,
+		)
+		if line.startswith("⚠"):
+			frappe.msgprint(line, indicator="orange")
+	return lines
 
 
 SOURCE_REPORT = "Monthly Attendance BS"
