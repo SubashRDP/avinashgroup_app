@@ -54,9 +54,9 @@ Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-1
 | [`entitlement`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L65) (`Overtime` / `Replacement Leave`) | `apply_rules`, never HR | settlement, replacement leave, **payroll** (`_on_overtime_sheet`, `_authorised_overtime_hours`), reports (`get_overtime_days`) |
 | [`shift`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L93) | `apply_rules` (snapshot) | display only |
 | [`worked_hours`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L86) | settlement (`db_set`). **Read only**: HR cannot type it | **payroll**: OT quantity |
-| [`attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L115) | settlement | `_is_unmeasured` |
-| [`settlement_note`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L103) | settlement and replacement leave (both write it) | `_is_unmeasured` (the "already measured" marker) |
-| [`compensatory_leave_request`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L109) | `grant_row` | `on_sheet_cancel`, `grant_pending` |
+| [`attendance`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L118) | settlement | `_is_unmeasured` |
+| [`settlement_note`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L105) | settlement and replacement leave (both write it) | `_is_unmeasured` (the "already measured" marker) |
+| [`compensatory_leave_request`](../../avinashgroup_app/avinash_group_app/doctype/overtime_sheet_employee/overtime_sheet_employee.json#L112) | `grant_row` | `on_sheet_cancel`, `grant_pending` |
 
 **Contradiction.** The `shift_day` docstring ([`put it through the`](../../avinashgroup_app/hr/shift_day.py#L29)) says a one-off agreement such as "after 5pm counts as 2 hours" should go "through the Overtime Sheet, where authorised hours can be typed over". In fact `worked_hours` is `read_only` and not allow-on-submit, so the desk cannot type over it. Only a script or a `db_set` can.
 
@@ -135,7 +135,7 @@ A holiday-work Overtime Sheet row for any of the 261 is refused ("has neither �
 
 ### `measure_row`: the measuring rule
 
-[`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L80)
+[`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L81)
 
 | Situation | Hours | `settlement_note` |
 |---|---|---|
@@ -155,15 +155,15 @@ Note that a Half Day attendance still measures in full here: only `Absent` is ze
 
 | Function | Scope | Overwrites HR's work? |
 |---|---|---|
-| [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L140) → [`measure_sheet`](../../avinashgroup_app/hr/overtime_settlement.py#L59) (button) | **every** row, Replacement Leave rows included | Yes. It re-measures and overwrites. On a Replacement Leave row it replaces the note "1 day of replacement leave granted" with "Earns replacement leave, not overtime"; the link to the Compensatory Leave Request is kept. |
-| [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L203) → [`measure_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L185) | Overtime rows never measured | No |
-| [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L214) (daily) | submitted sheets with work date from today − [`LOOKBACK_DAYS`](../../avinashgroup_app/hr/overtime_settlement.py#L56) (62) to yesterday, unmeasured Overtime rows | No |
+| [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L141) → [`measure_sheet`](../../avinashgroup_app/hr/overtime_settlement.py#L60) (button) | **every** row, Replacement Leave rows included | Yes. It re-measures and overwrites. On a Replacement Leave row it replaces the note "1 day of replacement leave granted" with "Earns replacement leave, not overtime"; the link to the Compensatory Leave Request is kept. |
+| [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L215) → [`measure_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L197) | Overtime rows never measured | No |
+| [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L226) (daily) | submitted sheets with work date from today − [`LOOKBACK_DAYS`](../../avinashgroup_app/hr/overtime_settlement.py#L57) (62) to yesterday, unmeasured Overtime rows | No |
 
-"Unmeasured" is decided by [`_is_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L175): no note, no hours and no attendance. Every measurement writes a note, so a row measured as zero is not redone.
+"Unmeasured" is decided by [`_is_unmeasured`](../../avinashgroup_app/hr/overtime_settlement.py#L176): no note, no hours and no attendance, **or** an attendance that is not this employee's on the sheet's date. Every measurement writes a note, so a row measured as zero is not redone. The second test exists because Duplicate copied `worked_hours`, `attendance` and `settlement_note` with the row: Ashish Lama Tamang's OTS-2026-00005 to 00009 (copies of 00004) each carried 4 Sep's 9 h, 54 h in Bhadra instead of 40.5 h. The three fields are no-copy now; patch `remeasure_copied_overtime_rows` re-measured the sheets already submitted.
 
 **Gotcha (timing):** the daily job measures a row **once**. If attendance for a past date arrives after the job has run, the row is measured as 0 ("No attendance") and the next run skips it, because it now has a note. Re-measuring then needs the button. The 62-day retry window only helps for a sheet whose rows were never touched. The docstring's "for the sheets whose attendance arrived later" holds only when the sheet was submitted ahead of the day, or when the job had not yet seen the row.
 
-**Dead code:** [`get_measured_hours`](../../avinashgroup_app/hr/overtime_settlement.py#L146) ("what payroll pays") is not called anywhere. Payroll reads the rows itself in `_authorised_overtime_hours`.
+**Dead code:** [`get_measured_hours`](../../avinashgroup_app/hr/overtime_settlement.py#L147) ("what payroll pays") is not called anywhere. Payroll reads the rows itself in `_authorised_overtime_hours`.
 
 ---
 

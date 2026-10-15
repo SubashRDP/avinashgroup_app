@@ -90,7 +90,7 @@ measure_day(att, is_holiday=False, ot_eligible=False) -> {late_minutes, early_ex
 
 ## 4. Report OT vs paid OT — two measurements
 
-Paid overtime does **not** come from `measure_day`. It comes from the Overtime Sheet row's `worked_hours`, measured by [`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L80) with [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L320) (in/out window minus overlap with the shift), rounded to the half hour, and HR may type over it ([04-overtime.md](04-overtime.md)). The comment there says "pay and the report must never disagree", and for an ordinary day (in before start, out after end) the two agree. They can differ when:
+Paid overtime does **not** come from `measure_day`. It comes from the Overtime Sheet row's `worked_hours`, measured by [`measure_row`](../../avinashgroup_app/hr/overtime_settlement.py#L81) with [`hours_outside_shift`](../../avinashgroup_app/hr/overtime.py#L320) (in/out window minus overlap with the shift), rounded to the half hour, and HR may type over it ([04-overtime.md](04-overtime.md)). The comment there says "pay and the report must never disagree", and for an ordinary day (in before start, out after end) the two agree. They can differ when:
 
 | Case | `measure_day` (reports) | `measure_row` (pay) |
 |---|---|---|

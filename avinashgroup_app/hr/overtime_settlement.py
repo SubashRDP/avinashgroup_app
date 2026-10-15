@@ -31,8 +31,9 @@ hr/replacement_leave.py and is left as it wrote it.
 Measuring used to be a button only, so overtime paid 0 for any sheet nobody
 thought to press it on. It now also runs by itself — on submit for a day already
 past, and daily for the sheets whose attendance arrived later — but only over
-rows never measured before. A row HR has measured, by button or by hand, is left
-exactly as HR left it; correcting one stays a deliberate press.
+rows never measured before (or measured against another day's attendance, as a
+duplicated sheet's rows were). A row HR has measured, by button or by hand, is
+left exactly as HR left it; correcting one stays a deliberate press.
 """
 
 import frappe
@@ -172,13 +173,24 @@ def get_measured_hours(start_date, end_date, company=None):
 	return hours
 
 
-def _is_unmeasured(row) -> bool:
-	"""Never measured — no note, no hours, no attendance named.
+def _is_unmeasured(row, work_date) -> bool:
+	"""Never measured — no note, no hours, no attendance named — or measured
+	against some other day.
 
 	The note is the real marker: every measurement writes one, including the ones
 	that legitimately land on zero hours ("called in but did not come"), so a
 	measured-as-zero row is not mistaken for an untouched one and quietly redone.
+
+	A row whose attendance is not this employee's on the sheet's date was never
+	measured for this sheet: Duplicate copied another sheet's hours, attendance
+	and note with the row (OTS-2026-00005 to 00009, copies of 00004, each paid
+	4 Sep's 9 hours for a different day). Those fields are no-copy now; this
+	catches rows copied before that.
 	"""
+	if row.attendance and not frappe.db.exists(
+		"Attendance", {"name": row.attendance, "employee": row.employee, "attendance_date": getdate(work_date)}
+	):
+		return True
 	return not (row.settlement_note or flt(row.worked_hours) or row.attendance)
 
 
@@ -186,7 +198,7 @@ def measure_unmeasured(sheet) -> list:
 	"""Measure only this sheet's rows that nobody has measured yet."""
 	report = []
 	for row in sheet.employees:
-		if row.entitlement != ENTITLEMENT_OVERTIME or not _is_unmeasured(row):
+		if row.entitlement != ENTITLEMENT_OVERTIME or not _is_unmeasured(row, sheet.work_date):
 			continue
 		measured = measure_row(row.employee, sheet.work_date, row.work_type, row.entitlement)
 		row.db_set("worked_hours", measured["hours"], update_modified=False)

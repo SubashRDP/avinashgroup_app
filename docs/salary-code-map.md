@@ -90,10 +90,10 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 | 3.3 | `get_day_type` | [overtime.py:60](../avinashgroup_app/hr/overtime.py#L60) | Holiday, Weekly Off or Working Day from the employee's own holiday list. | Holiday List |
 | 3.4 | `get_shift_window` | [overtime.py:91](../avinashgroup_app/hr/overtime.py#L91) | The shift rostered on a date (dated Shift Assignment, else Default Shift) with its start and end datetimes. | Shift Assignment, Employee `default_shift`, Shift Type |
 | 3.5 | `get_holiday_work_rule` | [overtime.py:121](../avinashgroup_app/hr/overtime.py#L121) | The Employee's Overtime Eligible / Replacement Leave for Holiday Work ticks (either/or, enforced by `validate_employee_holiday_rule`). | Employee `custom_ot_eligibility`, `custom_compensatory_leave` |
-| 3.6 | `on_sheet_submit` | [overtime_settlement.py:203](../avinashgroup_app/hr/overtime_settlement.py#L203) | Sheet submit: measures the never-measured rows if the work date is already past. | — |
-| 3.7 | `measure_pending` | [overtime_settlement.py:214](../avinashgroup_app/hr/overtime_settlement.py#L214) | Daily job: measures never-measured rows of submitted sheets from the last 62 days. | — |
-| 3.8 | `measure` | [overtime_settlement.py:140](../avinashgroup_app/hr/overtime_settlement.py#L140) | The sheet's Measure button: re-measures every row (`measure_sheet`). | — |
-| 3.9 | `measure_row` | [overtime_settlement.py:80](../avinashgroup_app/hr/overtime_settlement.py#L80) | Holiday work: hours worked; overtime: hours outside the shift; both rounded to the half hour. 0 hours with a note when there is no attendance, it is Absent, or there is one punch. | Attendance, Shift Type |
+| 3.6 | `on_sheet_submit` | [overtime_settlement.py:215](../avinashgroup_app/hr/overtime_settlement.py#L215) | Sheet submit: measures the never-measured rows if the work date is already past. | — |
+| 3.7 | `measure_pending` | [overtime_settlement.py:226](../avinashgroup_app/hr/overtime_settlement.py#L226) | Daily job: measures never-measured rows of submitted sheets from the last 62 days. | — |
+| 3.8 | `measure` | [overtime_settlement.py:141](../avinashgroup_app/hr/overtime_settlement.py#L141) | The sheet's Measure button: re-measures every row (`measure_sheet`). | — |
+| 3.9 | `measure_row` | [overtime_settlement.py:81](../avinashgroup_app/hr/overtime_settlement.py#L81) | Holiday work: hours worked; overtime: hours outside the shift; both rounded to the half hour. 0 hours with a note when there is no attendance, it is Absent, or there is one punch. | Attendance, Shift Type |
 | 3.10 | `hours_outside_shift` | [overtime.py:320](../avinashgroup_app/hr/overtime.py#L320) | Hours of the in–out window that fall before shift start or after shift end. | — |
 | 3.11 | `round_to_half_hour` | [shift_day.py:42](../avinashgroup_app/hr/shift_day.py#L42) | Nearest half hour, halves rounding up. | — |
 
