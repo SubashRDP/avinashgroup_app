@@ -823,11 +823,16 @@ def _summary(totals, employee_count, bs_label, working_days):
 	if not n:
 		return cards
 
+	# Present Days is every day the person came: the working days they were
+	# present plus the holidays they came in on, shown split beside it.
+	came = totals["present"] + totals["holiday"]
 	cards.append(working_days_card(working_days))
-	cards.append({"value": flt(totals["present"], 1), "label": per_scope(_("Present Days"), n), "datatype": "Float"})
+	cards.append({"value": flt(came, 1), "label": per_scope(_("Present Days"), n), "datatype": "Float"})
+	cards.append({"value": flt(totals["present"], 1), "label": per_scope(_("Working Days Present"), n), "datatype": "Float"})
+	cards.append({"value": totals["holiday"], "label": per_scope(_("Worked on Holiday"), n), "datatype": "Int"})
 	if n > 1:
 		cards.append({
-			"value": flt(totals["present"] / n, 1),
+			"value": flt(came / n, 1),
 			"label": _("Present Days per Employee (avg)"),
 			"datatype": "Float",
 		})
@@ -836,7 +841,6 @@ def _summary(totals, employee_count, bs_label, working_days):
 	cards.extend([
 		{"value": totals["absent"], "label": per_scope(_("Absent Days"), n), "datatype": "Int"},
 		{"value": totals["leave"], "label": per_scope(_("Leave Days"), n), "datatype": "Int"},
-		{"value": totals["holiday"], "label": per_scope(_("Worked on Holiday"), n), "datatype": "Int"},
 	])
 	if totals["not_marked"]:
 		cards.append({"value": totals["not_marked"], "label": per_scope(_("Not Marked Days"), n), "datatype": "Int"})

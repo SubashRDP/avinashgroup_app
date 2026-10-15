@@ -20,8 +20,9 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
                         (attendance_allowance.overtime_rate, as pay prices it)
   • Late Time (min)   = late arrival + leaving early, against the day's shift,
                         as the sheet's card adds them (Late + Before ofc. Time)
-  • Present Days      = count(Present + WFH) + 0.5 × count(Half Day), on working days
-                        only (a holiday came in on is Worked on Holiday only)
+  • Present Days      = Working Days Present + Worked on Holiday (every day came)
+  • Working Days Present = count(Present + WFH) + 0.5 × count(Half Day), on working
+                        days only
   • Worked on Holiday = days came in (Present / Half Day / WFH) on a date of the
                         employee's holiday list — the Detail view's rule
                         (monthly_attendance_bs.worked_on_holiday)
@@ -266,7 +267,9 @@ def _build_summary_row(
 		"ot_hours": flt(ot_hours_total, 1),
 		"ot_amount": flt(ot_amount_total, 2),
 		"late_minutes": int(late_min_total),
-		"present_days": flt(present_days, 1),
+		# Present Days = every day came; split into working days and holidays.
+		"present_days": flt(present_days + holiday_worked, 1),
+		"working_present": flt(present_days, 1),
 		"worked_on_holiday": holiday_worked,
 		"leave_current": leave_current,
 		"leave_previous": leave_previous,
@@ -373,6 +376,7 @@ def _columns(groups, standalone_components):
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 110},
 		{"label": _("Late Time (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 110},
 		{"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Float", "width": 100, "precision": 1},
+		{"label": _("Working Days Present"), "fieldname": "working_present", "fieldtype": "Float", "width": 120, "precision": 1},
 		{"label": _("Worked on Holiday"), "fieldname": "worked_on_holiday", "fieldtype": "Int", "width": 130},
 		{"label": _("Leave (Current)"), "fieldname": "leave_current", "fieldtype": "Float", "width": 110, "precision": 1},
 		{"label": _("Leave (Prev Month)"), "fieldname": "leave_previous", "fieldtype": "Float", "width": 130, "precision": 1},
@@ -395,10 +399,11 @@ def _summary(data, bs_label, working_days):
 	present = sum(r["present_days"] for r in data)
 	cards.append(working_days_card(working_days))
 	cards.append({"value": flt(present, 1), "label": per_scope(_("Present Days"), n), "datatype": "Float"})
+	cards.append({"value": flt(sum(r["working_present"] for r in data), 1), "label": per_scope(_("Working Days Present"), n), "datatype": "Float"})
+	cards.append({"value": sum(r["worked_on_holiday"] for r in data), "label": per_scope(_("Worked on Holiday"), n), "datatype": "Int"})
 	if n > 1:
 		cards.append({"value": flt(present / n, 1), "label": _("Present Days per Employee (avg)"), "datatype": "Float"})
 	cards.extend([
-		{"value": sum(r["worked_on_holiday"] for r in data), "label": per_scope(_("Worked on Holiday"), n), "datatype": "Int"},
 		{"value": flt(sum(r["ot_hours"] for r in data), 2), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
 		{"value": flt(sum(r["ot_amount"] for r in data), 2), "label": per_scope(_("O.T. Amount"), n), "datatype": "Currency"},
 		{"value": sum(r["late_minutes"] for r in data), "label": per_scope(_("Late Time (min)"), n), "datatype": "Int"},
