@@ -63,6 +63,7 @@ from avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix im
 	cancel_and_delete_attendance,
 	reconcile_employee_day,
 )
+from avinashgroup_app.hr.shift_day import as_clock
 
 # A request spanning more days than this is rebuilt in the background. One day is
 # a handful of queries; a month inline stays well under a request timeout.
@@ -388,5 +389,5 @@ def _remeasure_overtime(employee, start, end):
 			row.sheet,
 		)[0][0]
 		frappe.db.set_value("Overtime Sheet", row.sheet, "total_worked_hours", total, update_modified=False)
-		log.append(f"{row.work_date}: {row.sheet} re-measured, {measured['hours']} h")
+		log.append(f"{row.work_date}: {row.sheet} re-measured, {as_clock(measured['hours'])}")
 	return log

@@ -37,11 +37,18 @@ class TestYearEndEncashment(FrappeTestCase):
 			"""select a.employee, a.base from `tabSalary Structure Assignment` a
 			join tabEmployee e on e.name = a.employee
 			where a.docstatus = 1 and e.status = 'Active' and e.company = %s and a.base > 0
-			  and a.from_date <= %s order by a.base limit 1""",
-			(COMPANY, YEAR_START),
+			  and a.from_date <= %s
+			  and not exists (
+				select 1 from `tabLeave Allocation` l
+				where l.employee = a.employee and l.docstatus = 1
+				  and l.leave_type in ('Casual Leave', 'Sick Leave')
+				  and l.from_date <= %s and l.to_date >= %s)
+			order by a.base limit 1""",
+			(COMPANY, YEAR_START, YEAR_END_DATE, YEAR_START),
 		)
 		if not row:
-			self.skipTest("no NGI employee with an assignment from the year's start")
+			# Someone with leave of their own already would overlap the allocations made here.
+			self.skipTest("no NGI employee with an assignment from the year's start and no leave allocated yet")
 		self.employee, self.basic = row[0][0], flt(row[0][1])
 		frappe.db.set_value("Employee", self.employee, "relieving_date", None)
 		self.ashadh = _bs_month(YEAR_END_DATE)
@@ -168,6 +175,9 @@ class TestYearEndEncashment(FrappeTestCase):
 				"employee": self.employee,
 				"posting_date": YEAR_END_DATE,
 				"start_date": self.ashadh[0],
+				# Explicit: with BS-month payroll off in Nepal HRMS Settings a bare
+				# slip runs to the English month end and misses the encashment.
+				"end_date": self.ashadh[1],
 				"salary_structure": structure,
 				"payroll_frequency": "Monthly",
 			}

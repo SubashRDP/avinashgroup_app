@@ -92,15 +92,25 @@ class TestWomensRebate(FrappeTestCase):
 		self.assertLess(_tax(slip), without)
 
 
+INSURANCE_CATEGORY = "Insurance Premium"
+
+
 class TestExemptionCaps(FrappeTestCase):
 	def test_insurance_is_cut_to_each_limit(self):
-		if not frappe.db.exists("Employee Tax Exemption Sub Category", "Life Insurance"):
+		# By category, not by name: sites call them "Life Insurance" or
+		# "Life Insurance Premium".
+		limits = dict(
+			frappe.get_all(
+				"Employee Tax Exemption Sub Category",
+				filters={"exemption_category": INSURANCE_CATEGORY},
+				fields=["name", "max_amount"],
+				as_list=True,
+			)
+		)
+		if not limits:
 			self.skipTest("insurance categories not set up")
+		limits = {s: flt(v) for s, v in limits.items()}
 		employee = frappe.db.get_value("Employee", {"status": "Active", "company": "Nepal Gas Udhyog Pvt. Ltd."})
-		limits = {
-			s: flt(frappe.db.get_value("Employee Tax Exemption Sub Category", s, "max_amount"))
-			for s in ("Life Insurance", "Health Insurance", "Private Building Insurance")
-		}
 		declaration = frappe.get_doc(
 			{
 				"doctype": "Employee Tax Exemption Declaration",

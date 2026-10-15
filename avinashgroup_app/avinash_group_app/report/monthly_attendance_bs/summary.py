@@ -264,7 +264,8 @@ def _build_summary_row(
 		"employee_number": emp.employee_number or "",
 		"employee_name": emp.employee_name,
 		"department": emp.department or "",
-		"ot_hours": flt(ot_hours_total, 1),
+		# Exact to the second, as the sheets and the salary statement hold it.
+		"ot_hours": flt(ot_hours_total, 4),
 		"ot_amount": flt(ot_amount_total, 2),
 		"late_minutes": int(late_min_total),
 		# Present Days = every day came; split into working days and holidays.
@@ -372,7 +373,7 @@ def _columns(groups, standalone_components):
 			"precision": 2,
 		})
 	cols.extend([
-		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 90, "precision": 2},
+		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 90, "precision": 4},
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 110},
 		{"label": _("Late Time (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 110},
 		{"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Float", "width": 100, "precision": 1},
@@ -404,7 +405,7 @@ def _summary(data, bs_label, working_days):
 	if n > 1:
 		cards.append({"value": flt(present / n, 1), "label": _("Present Days per Employee (avg)"), "datatype": "Float"})
 	cards.extend([
-		{"value": flt(sum(r["ot_hours"] for r in data), 2), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
+		{"value": flt(sum(r["ot_hours"] for r in data), 4), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
 		{"value": flt(sum(r["ot_amount"] for r in data), 2), "label": per_scope(_("O.T. Amount"), n), "datatype": "Currency"},
 		{"value": sum(r["late_minutes"] for r in data), "label": per_scope(_("Late Time (min)"), n), "datatype": "Int"},
 	])

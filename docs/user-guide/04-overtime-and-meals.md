@@ -118,10 +118,10 @@ When an Officer & Admin person is on a submitted Overtime Sheet for a holiday:
 - once they have turned up — one punch that day is enough, or attendance with an in-time — the system creates and submits a **Compensatory Leave Request** for **Replacement Leave** by itself: always **1 full day**, whatever the hours, Half Day or lateness;
 - the row shows the request in **Replacement Leave Granted** and a note "1 day of replacement leave granted";
 - if there is no punch yet, the note says "Replacement leave waits: no punch on this day yet", and the system tries again every night (for about two months); a ½ day granted under the old rule is topped up to 1 day by the same nightly run;
-- if the day's punches are corrected later (Monthly Attendance BS or the Employee Checkin form), the leave follows: granted if they now turned up, taken back if they no longer did. If HRMS will not take it back (the leave has been used), it is kept, the row says so and the correction shows a warning;
+- if the day's punches are corrected later (Monthly Attendance BS or the Employee Checkin form), the leave follows: granted if they now turned up, taken back if they no longer did. A day already taken as leave is never taken back: it is kept, the row says "Kept …: already used" and the correction shows a warning;
 - if it fails, the note says "Replacement leave not granted: …" with the reason.
 
-Cancelling the Overtime Sheet takes the replacement leave back.
+Cancelling the Overtime Sheet takes the replacement leave back, and the row says "Replacement leave taken back: sheet cancelled". A day the person has already taken as leave is kept (an orange message names them); cancel or change that leave first if the day should not count.
 
 ## 4.8 Changing a sheet
 

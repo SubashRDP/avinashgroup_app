@@ -5,6 +5,8 @@ suites do; everything written is rolled back. A case whose data is missing is
 skipped, never faked.
 """
 
+import unittest
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import flt
@@ -17,13 +19,22 @@ from avinashgroup_app.payroll.festival_allowance import (
 )
 
 COMPANY = "Nepal Gas Udhyog Pvt. Ltd."
-COMPONENT = "Dashain Allowance"
 CUTOFF = "2026-10-11"  # Ghatasthapana 2083
+SLIP_START, SLIP_END = "2026-09-17", "2026-10-16"  # Ashwin 2083, the month Dashain is paid in
+
+
+def festival_component():
+	"""The site's Dashain component, found by its flag: sites spell it
+	differently ("Dashain Allowance", "Dashain Alllowance")."""
+	name = frappe.db.get_value("Salary Component", {"custom_is_festival_allowance": 1, "disabled": 0}, "name")
+	if not name:
+		raise unittest.SkipTest("no festival allowance component on this site")
+	return name
 
 
 def _rules(**overrides):
 	rules = frappe._dict(
-		name=COMPONENT,
+		name=festival_component(),
 		custom_festival_min_service_days=0,
 		custom_festival_prorate=1,
 		custom_festival_include_daily_wage=0,
@@ -40,8 +51,9 @@ def _paid_employee():
 		"""select a.employee, a.base from `tabSalary Structure Assignment` a
 		join tabEmployee e on e.name = a.employee
 		where a.docstatus = 1 and e.status = 'Active' and e.company = %s and a.base > 0
+		  and a.from_date <= %s
 		order by a.from_date desc limit 1""",
-		COMPANY,
+		(COMPANY, CUTOFF),  # paid on the cut-off, or there is no basic to give
 	)
 	return (row[0][0], flt(row[0][1])) if row else (None, 0)
 
@@ -134,13 +146,20 @@ class TestComputeRows(FrappeTestCase):
 
 
 class TestAdjustmentRun(FrappeTestCase):
+	def setUp(self):
+		# The rule under test, whatever the site has typed on its component.
+		frappe.db.set_value("Salary Component", festival_component(), "custom_festival_pay_month", "06 - Ashwin")
+
 	def test_rerun_does_not_double_and_cap_holds(self):
 		pe = _ashwin_entry()
 		if not pe.employees:
 			self.skipTest("no NGI employees on an Ashwin entry")
-		first = make_festival_adjustment(pe.name, COMPONENT, CUTOFF)
+		first = make_festival_adjustment(pe.name, festival_component(), CUTOFF)
+		if not first["payroll_adjustment"]:
+			# A first run needs someone not yet paid this year's Dashain.
+			self.skipTest("everyone on the Ashwin entry is already paid this Dashain")
 		self.assertTrue(first["payroll_adjustment"])
-		second = make_festival_adjustment(pe.name, COMPONENT, CUTOFF)
+		second = make_festival_adjustment(pe.name, festival_component(), CUTOFF)
 		self.assertEqual(first["payroll_adjustment"], second["payroll_adjustment"])
 		self.assertEqual(first["count"], second["count"])
 		self.assertEqual(frappe.db.count("Payroll Adjustment", {"payroll_entry": pe.name}), 1)
@@ -152,14 +171,17 @@ class TestAdjustmentRun(FrappeTestCase):
 		doc.reload()
 		doc.submit()
 		self.assertEqual(
-			frappe.db.count("Additional Salary", {"salary_component": COMPONENT, "docstatus": 1, "employee": ("in", [r.employee for r in doc.adjustments])}),
+			frappe.db.count("Additional Salary", {"salary_component": festival_component(), "docstatus": 1, "employee": ("in", [r.employee for r in doc.adjustments])}),
 			len(doc.adjustments),
 		)
 
-		third = make_festival_adjustment(pe.name, COMPONENT, CUTOFF)
+		third = make_festival_adjustment(pe.name, festival_component(), CUTOFF)
 		self.assertEqual(third["count"], 0)
 		self.assertIsNone(third["payroll_adjustment"])
-		self.assertTrue(all("already paid" in x["reason"] for x in third["left_out"]))
+		# Everyone the first run paid is now left out as paid; others (no
+		# assignment on the cut-off, say) keep their own reason.
+		paid = {r.employee for r in doc.adjustments}
+		self.assertTrue(paid <= {x["employee"] for x in third["left_out"] if "already paid" in x["reason"]})
 
 	def test_wrong_month_is_refused(self):
 		pe = frappe.new_doc("Payroll Entry")
@@ -168,7 +190,7 @@ class TestAdjustmentRun(FrappeTestCase):
 			pe.insert(ignore_permissions=True)
 		except Exception as e:
 			self.skipTest(f"cannot make a Kartik entry: {e}")
-		self.assertRaises(frappe.ValidationError, make_festival_adjustment, pe.name, COMPONENT, CUTOFF)
+		self.assertRaises(frappe.ValidationError, make_festival_adjustment, pe.name, festival_component(), CUTOFF)
 
 
 class TestTaxOnSlip(FrappeTestCase):
@@ -180,8 +202,11 @@ class TestTaxOnSlip(FrappeTestCase):
 		slip.update(
 			{
 				"employee": employee,
-				"posting_date": "2026-10-17",
-				"start_date": "2026-09-17",
+				"posting_date": SLIP_END,
+				"start_date": SLIP_START,
+				# Explicit: with BS-month payroll off in Nepal HRMS Settings a bare
+				# slip runs to the English month end and misses the allowance.
+				"end_date": SLIP_END,
 				"salary_structure": structure,
 				"payroll_frequency": "Monthly",
 			}
@@ -198,8 +223,9 @@ class TestTaxOnSlip(FrappeTestCase):
 		row = frappe.db.sql(
 			"""select a.employee, a.base from `tabSalary Structure Assignment` a
 			join tabEmployee e on e.name = a.employee
-			where a.docstatus = 1 and e.status = 'Active' and e.company = %s order by a.base desc limit 1""",
-			COMPANY,
+			where a.docstatus = 1 and e.status = 'Active' and e.company = %s
+			  and a.from_date <= %s order by a.base desc limit 1""",
+			(COMPANY, SLIP_START),  # an assignment the Ashwin slip can use
 		)
 		if not row:
 			self.skipTest("no NGI assignment")
@@ -211,8 +237,8 @@ class TestTaxOnSlip(FrappeTestCase):
 			{
 				"doctype": "Payroll Adjustment",
 				"company": COMPANY,
-				"payroll_date": "2026-10-17",
-				"adjustments": [{"employee": employee, "salary_component": COMPONENT, "amount": basic}],
+				"payroll_date": SLIP_END,  # inside the slip, or the slip never reads it
+				"adjustments": [{"employee": employee, "salary_component": festival_component(), "amount": basic}],
 			}
 		)
 		adj.insert(ignore_permissions=True)
@@ -221,7 +247,7 @@ class TestTaxOnSlip(FrappeTestCase):
 		self.assertEqual(additional.deduct_full_tax_on_selected_payroll_date, 1)
 
 		with_dashain = self._slip(employee)
-		paid = [r for r in with_dashain.earnings if r.salary_component == COMPONENT]
+		paid = [r for r in with_dashain.earnings if r.salary_component == festival_component()]
 		self.assertEqual(len(paid), 1)
 		self.assertAlmostEqual(flt(paid[0].amount), basic, delta=0.01)  # not prorated by payment days
 

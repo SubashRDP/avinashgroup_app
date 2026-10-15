@@ -24,7 +24,10 @@ class TestLeaveFromReport(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
-		company = frappe.get_all("Company", pluck="name", order_by="creation", limit=1)[0]
+		# HRMS refuses leave for anyone with no holiday list, own or the company's.
+		company = frappe.get_all(
+			"Company", filters={"default_holiday_list": ("is", "set")}, pluck="name", order_by="creation", limit=1
+		)[0]
 		emp = frappe.new_doc("Employee")
 		emp.first_name = "Leave From Report Test"
 		emp.gender = "Male"
@@ -35,6 +38,7 @@ class TestLeaveFromReport(FrappeTestCase):
 		emp.holiday_list = None
 		emp.insert(ignore_permissions=True)
 		cls.employee = emp.name
+		cls.company = company
 		cls.lwp = frappe.get_all("Leave Type", filters={"is_lwp": 1}, pluck="name", limit=1)[0]
 
 	def _days(self, *offsets):
@@ -47,8 +51,26 @@ class TestLeaveFromReport(FrappeTestCase):
 			[("2026-10-01", "2026-10-02"), ("2026-10-06", "2026-10-07"), ("2026-10-09", "2026-10-09")],
 		)
 
+	def _working_runs(self):
+		"""Two consecutive working days and a third apart from them: HRMS marks
+		no leave attendance on a holiday for a type that excludes holidays, so
+		the days must miss the company's holiday list."""
+		holidays = {
+			getdate(d)
+			for d in frappe.get_all(
+				"Holiday", filters={"parent": frappe.db.get_value("Company", self.company, "default_holiday_list")},
+				pluck="holiday_date",
+			)
+		}
+		working = [getdate(add_days(today(), o)) for o in range(-40, -9) if getdate(add_days(today(), o)) not in holidays]
+		for first, second in zip(working, working[1:]):
+			if (second - first).days == 1:
+				third = next(d for d in working if (d - second).days >= 2)
+				return [str(first), str(second), str(third)]
+		self.skipTest("no two consecutive working days in the last 40")
+
 	def test_lwp_given_for_two_runs(self):
-		days = self._days(-20, -19, -16)
+		days = self._working_runs()
 		result = give_leave(self.employee, self.lwp, json.dumps(days), "Phoned in sick")
 		self.assertEqual(len(result["made"]), 2)
 		for made in result["made"]:

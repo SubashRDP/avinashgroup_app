@@ -25,14 +25,16 @@ it (ReplacementLeaveRequest); a request anybody files by hand keeps it.
 A day corrected afterwards (hr/punch_correction: a punch moved, added or
 deleted, a shift changed) is checked again by `recheck_day`: granted if the
 person now shows up, a ½ day from before this rule topped up to 1, taken back
-if they no longer show up. Taking back can be refused by HRMS when the leave
-has been used; the row keeps the grant, says so, and the caller warns.
+if they no longer show up. A day already taken as leave is never taken back
+(`used`: HRMS would let the balance go below zero): the row keeps the grant,
+says so, and the caller warns.
 
 When it runs:
   * Overtime Sheet on_submit, for dates already past;
   * the daily job `grant_pending`, for sheets approved ahead of the day and for
     attendance that arrived late (LOOKBACK_DAYS back);
-  * Overtime Sheet on_cancel takes every granted day back.
+  * Overtime Sheet on_cancel takes every granted day back, except one already
+    taken as leave.
 
 Deliberately narrow: it grants exactly what the sheet authorised, one row one
 day. It never decides who is entitled (hr.overtime does) and never creates a
@@ -43,7 +45,7 @@ from datetime import datetime, time
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, getdate, today
+from frappe.utils import add_days, date_diff, flt, getdate, strip_html, today
 
 from hrms.hr.doctype.compensatory_leave_request.compensatory_leave_request import (
 	CompensatoryLeaveRequest,
@@ -60,6 +62,7 @@ REPLACEMENT_LEAVE_TYPE = "Replacement Leave"
 LOOKBACK_DAYS = 62
 
 GRANTED_NOTE = "1 day of replacement leave granted"
+CANCELLED_NOTE = "Replacement leave taken back: sheet cancelled"
 
 
 class ReplacementLeaveRequest(CompensatoryLeaveRequest):
@@ -104,15 +107,50 @@ def on_sheet_submit(doc, method=None):
 
 
 def on_sheet_cancel(doc, method=None):
-	"""Take back every day this sheet granted. Hook: Overtime Sheet on_cancel."""
+	"""Take back every day this sheet granted. Hook: Overtime Sheet on_cancel.
+
+	A day already taken as leave is kept: taking it back would leave the person
+	owing leave they were given (a balance below zero, which HRMS lets through
+	here). The row says so and HR is warned.
+	"""
+	kept = []
 	for row in doc.employees:
 		if not row.compensatory_leave_request:
 			continue
 		request = frappe.get_doc("Compensatory Leave Request", row.compensatory_leave_request)
+		if request.docstatus == 1 and used(request):
+			row.db_set("settlement_note", _used_note(request.name), update_modified=False)
+			kept.append(f"{row.employee_name or row.employee} ({request.name})")
+			continue
 		if request.docstatus == 1:
 			request.flags.ignore_permissions = True
 			request.cancel()
 		row.db_set("compensatory_leave_request", None, update_modified=False)
+		row.db_set("settlement_note", _(CANCELLED_NOTE), update_modified=False)
+	if kept:
+		frappe.msgprint(
+			_("Replacement leave kept because it has already been taken: {0}. Cancel or change that leave first if the day should not count.").format(
+				", ".join(kept)
+			),
+			title=_("Leave already used"),
+			indicator="orange",
+		)
+
+
+def used(request):
+	"""Whether taking this grant back would put the Replacement Leave balance
+	below zero — the day (or part of it) has been taken, or is approved to be."""
+	from hrms.hr.doctype.leave_application.leave_application import get_leave_balance_on
+
+	days = 0.5 if request.half_day else date_diff(request.work_end_date, request.work_from_date) + 1
+	balance = get_leave_balance_on(
+		request.employee, request.leave_type, getdate(today()), consider_all_leaves_in_the_allocation_period=True
+	)
+	return flt(balance) < flt(days)
+
+
+def _used_note(request):
+	return _("Kept {0}: already used, so it was not taken back").format(request)
 
 
 def grant_pending():
@@ -177,7 +215,7 @@ def grant_row(sheet, row):
 		# holiday on their list, …). Keep it on the row and in the Error Log.
 		frappe.db.rollback(save_point=savepoint)
 		frappe.clear_last_message()
-		row.db_set("settlement_note", _("Replacement leave not granted: {0}").format(e), update_modified=False)
+		row.db_set("settlement_note", _("Replacement leave not granted: {0}").format(strip_html(str(e))), update_modified=False)
 		frappe.log_error(
 			title=f"Replacement leave not granted: {sheet.name} {row.employee}",
 			message=frappe.get_traceback(),
@@ -226,6 +264,9 @@ def _resync_row(sheet, row):
 		return None
 
 	# A ½ day from before the full-day rule, or a grant the day no longer backs.
+	if not present and used(frappe.get_doc("Compensatory Leave Request", request)):
+		row.db_set("settlement_note", _used_note(request), update_modified=False)
+		return "⚠ " + _("{0}: replacement leave {1} kept — it has already been taken").format(sheet.work_date, request)
 	savepoint = f"replacement_resync_{row.name}"[:60]
 	frappe.db.savepoint(savepoint)
 	try:

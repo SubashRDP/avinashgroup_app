@@ -129,6 +129,12 @@ def measure_day(att, is_holiday=False, ot_eligible=False):
 	return out
 
 
+def as_clock(hours):
+	"""Hours as h:mm:ss — how overtime, measured to the second, is shown to people."""
+	seconds = round(flt(hours) * 3600)
+	return "{0}:{1:02d}:{2:02d}".format(seconds // 3600, seconds % 3600 // 60, seconds % 60)
+
+
 def holiday_hours_worked(att):
 	"""Hours someone worked on a holiday: first IN to last OUT, no shift involved.
 

@@ -3,6 +3,13 @@
 // (avinashgroup_app.hr.overtime); this script just asks and shows the answer.
 const OVERTIME_PREVIEW = "avinashgroup_app.hr.overtime.preview";
 
+// Hours as h:mm:ss: overtime is measured to the second (hr/shift_day.as_clock).
+function as_clock(hours) {
+	const seconds = Math.round(flt(hours) * 3600);
+	const pad = (n) => String(n).padStart(2, "0");
+	return `${Math.floor(seconds / 3600)}:${pad(Math.floor((seconds % 3600) / 60))}:${pad(seconds % 60)}`;
+}
+
 frappe.ui.form.on("Overtime Sheet", {
 	setup(frm) {
 		frm.set_query("employee", "employees", () => ({
@@ -33,7 +40,7 @@ frappe.ui.form.on("Overtime Sheet", {
 						title: __("Measured"),
 						indicator: "green",
 						message: (rows || [])
-							.map((r) => `${r.employee_name || r.employee}: <b>${r.hours}</b> h — ${r.note}`)
+							.map((r) => `${r.employee_name || r.employee}: <b>${as_clock(r.hours)}</b> — ${r.note}`)
 							.join("<br>"),
 					});
 					frm.reload_doc();
