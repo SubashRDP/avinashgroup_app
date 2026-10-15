@@ -28,7 +28,7 @@ from frappe import _
 from frappe.utils import add_days, cint, date_diff, flt, getdate
 
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
-from avinashgroup_app.hr.shift_day import holiday_hours_worked, measure_day, round_to_half_hour
+from avinashgroup_app.hr.shift_day import holiday_hours_worked, measure_day
 from avinashgroup_app.payroll.allowance import (
 	COMPUTED_RATE_BASIS,
 	get_employee_allowance_rows,
@@ -314,8 +314,8 @@ def evaluate_rule(row, sc, employee: str) -> float:
 
 	if condition == AUTHORISED_OVERTIME:
 		# Policy 5.1: the per-day Overtime Sheet decides who is paid overtime and
-		# for which day; the punches decide how many hours. Hours already rounded
-		# to the half hour by settlement.
+		# for which day; the punches decide how many hours, exact to the
+		# second (settlement never rounds).
 		return _authorised_overtime_hours(employee, row.attendance_date)
 
 	if condition == LATE_TIME:
@@ -382,7 +382,7 @@ def _meals_for_day(row, sc, present_statuses, employee: str) -> float:
 		return 0.0
 
 	if row.custom_worked_on_holiday:
-		meals = holiday_meals(round_to_half_hour(holiday_hours_worked(row)))
+		meals = holiday_meals(holiday_hours_worked(row))
 	else:
 		offset = flt(sc.custom_time_offset_hours) * 3600.0
 		meals = 0
@@ -397,9 +397,8 @@ def _meals_for_day(row, sc, present_statuses, employee: str) -> float:
 #: Meals for a holiday worked on an authorised Overtime Sheet, by the hours
 #: actually worked, first IN to last OUT (user, 2026-10-15): 8 hours or more → 2,
 #: 6 or more → 1, less → none. Replaced a flat 2 (2026-10-09). Highest first.
-#: The hours are rounded to the half hour first, exactly as the overtime they come
-#: with is (shift_day.round_to_half_hour): a day the sheet pays as 8 h of
-#: overtime is an 8-hour day for meals too, never 7:53 and one meal.
+#: The hours are exact, as the overtime they come with is: 7:53 is under 8 hours,
+#: so one meal (user, 2026-10-15: overtime never rounds up or down).
 HOLIDAY_MEAL_HOURS = ((8, 2), (6, 1))
 
 

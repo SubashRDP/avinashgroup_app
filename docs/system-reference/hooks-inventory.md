@@ -57,7 +57,7 @@ Registered through `attendance_events` ([`attendance_events`](../../avinashgroup
 | Order | Handler (registration) | Defined | Purpose |
 |---|---|---|---|
 | 0 | audit `validate` (company lock and match) | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | Attendance is in [`"Attendance"`](../../avinashgroup_app/utils/audit_file_manager.py#L20) |
-| 1 | [`set_holiday_flag`](../../avinashgroup_app/hooks.py#L230) | [`set_holiday_flag`](../../avinashgroup_app/payroll/attendance_allowance.py#L531) | Ticks `custom_worked_on_holiday` when the date is in the employee's (or company's) holiday list. Feeds the tea / meal / holiday-pay rules. |
+| 1 | [`set_holiday_flag`](../../avinashgroup_app/hooks.py#L230) | [`set_holiday_flag`](../../avinashgroup_app/payroll/attendance_allowance.py#L530) | Ticks `custom_worked_on_holiday` when the date is in the employee's (or company's) holiday list. Feeds the tea / meal / holiday-pay rules. |
 | 2 | [`set_shift_deviation_fields`](../../avinashgroup_app/hooks.py#L231) | [`set_shift_deviation_fields`](../../avinashgroup_app/biometric/attendance_override.py#L8) | Fills a missing shift from the roster and writes the four late/early-entry/exit `custom_*` fields. |
 | 3 | [`enforce_late_arrival_half_day`](../../avinashgroup_app/hooks.py#L232) | [`enforce_late_arrival_half_day`](../../avinashgroup_app/biometric/attendance_override.py#L55) | In more than `custom_half_day_if_late_by_hours` (2 h) after shift start → Half Day, with the other half Absent. Late Excused undoes it. |
 | 4 | [`half_day_when_working_on_leave`](../../avinashgroup_app/hooks.py#L236) | [`half_day_when_working_on_leave`](../../avinashgroup_app/biometric/attendance_override.py#L141) | On approved leave but punched in (in-time or a punch that day) → Half Day, other half Present (policy 3.4). Leave Application `on_submit` → [`on_leave_submit`](../../avinashgroup_app/biometric/attendance_override.py#L205) does the same for rows HRMS updated with `db_set`. |
@@ -111,7 +111,7 @@ Both Leave Allocation and Leave Application are also audited and fiscal-year fil
 |---|---|---|---|---|
 | 1 | on_submit | [`replacement_leave.on_sheet_submit`](../../avinashgroup_app/hooks.py#L460) | [`on_sheet_submit`](../../avinashgroup_app/hr/replacement_leave.py#L98) | For officers and admin staff, holiday work becomes a Compensatory Leave Request once attendance shows the day was worked. |
 | 2 | on_cancel | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L461) | [`on_sheet_cancel`](../../avinashgroup_app/hr/replacement_leave.py#L106) | Withdraws the replacement leave. |
-| 3 | on_submit | [`overtime_settlement.on_sheet_submit`](../../avinashgroup_app/hooks.py#L460) | [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L215) | Measures the never-measured rows. Without this, overtime paid 0 on any sheet where nobody pressed "Measure from Attendance". |
+| 3 | on_submit | [`overtime_settlement.on_sheet_submit`](../../avinashgroup_app/hooks.py#L460) | [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L213) | Measures the never-measured rows. Without this, overtime paid 0 on any sheet where nobody pressed "Measure from Attendance". |
 
 The sheet's own controller (`OvertimeSheet.apply_rules`) runs on validate. See [04-overtime.md](04-overtime.md).
 
@@ -200,7 +200,7 @@ They run **before** every other handler of ours on the same event.
 | daily_long | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hooks.py#L551) | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hr/utils.py#L81) | no; never ran | Monthly earned leave on BS months. **Replaces** HRMS's `allocate_earned_leaves`, which is `stopped = 1` on avinas1, as required. |
 | daily_long | [`switch_to_current_year_lists`](../../avinashgroup_app/hooks.py#L554) | [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30) | no; never ran | On a fiscal year's first day, moves companies and employees onto that year's holiday lists. |
 | daily_long | [`grant_pending`](../../avinashgroup_app/hooks.py#L542) | [`grant_pending`](../../avinashgroup_app/hr/replacement_leave.py#L118) | no; never ran | Replacement leave for holiday work whose attendance arrived after the sheet was submitted. |
-| daily_long | [`measure_pending`](../../avinashgroup_app/hooks.py#L542) | [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L226) | no; never ran | Measures overtime rows whose attendance arrived after submission (62-day look-back). |
+| daily_long | [`measure_pending`](../../avinashgroup_app/hooks.py#L542) | [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L224) | no; never ran | Measures overtime rows whose attendance arrived after submission (62-day look-back). |
 | cron `10 13 * * *` | [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L580) | [`send_daily_attendance_digest`](../../avinashgroup_app/biometric/daily_digest.py#L76) | no; never ran | Midday mail of the day's attendance problems. Runs at :10 so it does not race HRMS's hourly auto attendance. |
 
 HRMS jobs that matter here:
@@ -269,9 +269,9 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `trigger_for_payroll_entry` | [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L78) | **Prepare Payroll Inputs** |
 | `get_defaults`, `make_festival_adjustment` | [`get_defaults`](../../avinashgroup_app/payroll/festival_allowance.py#L223), [`make_festival_adjustment`](../../avinashgroup_app/payroll/festival_allowance.py#L235) | Payroll Entry **Dashain Allowance** |
 | `encash_for_payroll_entry` | [`encash_for_payroll_entry`](../../avinashgroup_app/payroll/leave_encashment.py#L211) | Payroll Entry **Leave Encashment** |
-| `recompute_holiday_flags` | [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L604) | By hand, after a holiday list changes |
+| `recompute_holiday_flags` | [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L603) | By hand, after a holiday list changes |
 | `get_rate_for_assignment` | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L221) | Salary Structure Assignment form |
-| `measure` | [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L141) | Overtime Sheet **Measure from Attendance** |
+| `measure` | [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L139) | Overtime Sheet **Measure from Attendance** |
 | `preview` (overtime) | [`preview`](../../avinashgroup_app/hr/overtime.py#L223) | Overtime Sheet row preview |
 | `preview`, `rotate`, `set_periods` (rotation) | [`preview`](../../avinashgroup_app/hr/shift_rotation.py#L111), [`rotate`](../../avinashgroup_app/hr/shift_rotation.py#L152), [`set_periods`](../../avinashgroup_app/hr/shift_rotation.py#L197) | Shift Type form |
 | `roster` | [`roster`](../../avinashgroup_app/hr/shift_roster.py#L30) | shift roster view |

@@ -328,4 +328,5 @@ def hours_outside_shift(in_time, out_time, shift_start, shift_end):
 		return 0.0
 	worked = (out_time - in_time).total_seconds()
 	overlap = max((min(out_time, shift_end) - max(in_time, shift_start)).total_seconds(), 0)
-	return round((worked - overlap) / 3600, 2)
+	# Exact to the second: overtime is never rounded (shift_day, O.T.).
+	return (worked - overlap) / 3600

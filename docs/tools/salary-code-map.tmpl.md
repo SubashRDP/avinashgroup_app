@@ -79,7 +79,7 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 | 2.19 | `heal_unlinked_checkins` | @@avinashgroup_app/biometric/attendance_self_heal.py::heal_unlinked_checkins@@ | Daily (`daily_long`, midnight): every (employee, day) of the last 45 days with unlinked checkins, whose shift has auto attendance on and has ended, goes through `reconcile_employee_day`. | Shift Type `enable_auto_attendance`, `last_sync_of_checkin`, `process_attendance_after` |
 | 2.20 | `reconcile_employee_day` | @@avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py::reconcile_employee_day@@ | A non-Absent day: link orphan punches and refresh values. An Absent or empty day with punches: replace it with attendance built by `get_attendance` + `mark_attendance_and_link_log`. | Employee Checkin, Attendance |
 | 2.21 | `AttendanceFix.on_submit` | @@avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py::on_submit@@ | HR's Attendance Fix: queues the same per-day reconcile over a date range for one shift. | Attendance Fix |
-| 2.22 | `measure_day` | @@avinashgroup_app/hr/shift_day.py::measure_day@@ | Late and early-exit minutes (full working days only) and overtime hours to the half hour (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13). | Attendance `custom_*` deviation fields |
+| 2.22 | `measure_day` | @@avinashgroup_app/hr/shift_day.py::measure_day@@ | Late and early-exit minutes (full working days only) and overtime hours, exact (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13). | Attendance `custom_*` deviation fields |
 
 ## 3. Overtime Sheet and settlement
 
@@ -93,9 +93,8 @@ HRMS marks attendance from checkins every hour; our Attendance hooks then apply 
 | 3.6 | `on_sheet_submit` | @@avinashgroup_app/hr/overtime_settlement.py::on_sheet_submit@@ | Sheet submit: measures the never-measured rows if the work date is already past. | — |
 | 3.7 | `measure_pending` | @@avinashgroup_app/hr/overtime_settlement.py::measure_pending@@ | Daily job: measures never-measured rows of submitted sheets from the last 62 days. | — |
 | 3.8 | `measure` | @@avinashgroup_app/hr/overtime_settlement.py::measure@@ | The sheet's Measure button: re-measures every row (`measure_sheet`). | — |
-| 3.9 | `measure_row` | @@avinashgroup_app/hr/overtime_settlement.py::measure_row@@ | Holiday work: hours worked; overtime: hours outside the shift; both rounded to the half hour. 0 hours with a note when there is no attendance, it is Absent, or there is one punch. | Attendance, Shift Type |
+| 3.9 | `measure_row` | @@avinashgroup_app/hr/overtime_settlement.py::measure_row@@ | Holiday work: hours worked; overtime: hours outside the shift; both exact to the second. 0 hours with a note when there is no attendance, it is Absent, or there is one punch. | Attendance, Shift Type |
 | 3.10 | `hours_outside_shift` | @@avinashgroup_app/hr/overtime.py::hours_outside_shift@@ | Hours of the in–out window that fall before shift start or after shift end. | — |
-| 3.11 | `round_to_half_hour` | @@avinashgroup_app/hr/shift_day.py::round_to_half_hour@@ | Nearest half hour, halves rounding up. | — |
 
 The measured hours stay on the sheet rows (`worked_hours`); payroll reads them in 4.16.
 

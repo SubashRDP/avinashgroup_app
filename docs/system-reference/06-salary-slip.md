@@ -182,7 +182,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 Tea & Conveyance, Meal, Overtime (earnings) and Late Fine, Salary Advance recovery (deductions) arrive as submitted **Additional Salary** created by *Prepare Payroll Inputs* ([05-payroll-entry.md](05-payroll-entry.md)); arrears by Salary Revision ([08-changes-over-time.md](08-changes-over-time.md)). HRMS picks them up in `add_additional_salary_components`. On the slip they have `default_amount = 0`, `additional_amount = amount`, and are not prorated.
 
-Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L806) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L827) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
+Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L805) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L826) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
 
 On avinas1 there are 10 Additional Salary rows, all from Prepare Payroll Inputs, all dated 2026-08-16 (NGI Shrawan, 4 employees). **The Bhadra runs at NGI and NGN carry none**: no tea, meal, overtime or late fine was paid in Bhadra (see the worked example's notes).
 

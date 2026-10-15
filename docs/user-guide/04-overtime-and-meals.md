@@ -63,7 +63,7 @@ After the sheet is submitted, the system reads each person's attendance for that
 | Marked absent | 0, note "Marked absent" |
 | Only one punch | 0, note "Only one punch — the hours cannot be measured" |
 
-Hours are rounded to the **nearest half hour** (7:53 → 8, 7:34 → 7.5).
+Hours are paid **exactly, to the second**, never rounded up or down: 7 h 54 m 38 s is 7.9106 hours. (Before 15 Oct 2026 they were rounded to the nearest half hour.)
 
 Example on a 6 AM – 2 PM shift: in 06:00, out 18:00 → 4 h overtime. In 05:00, out 14:00 → 1 h. In 06:05, out 13:50 → 0 h.
 
@@ -98,7 +98,7 @@ A meal is part of overtime the company asked for. For each day, the meals are co
 | Not on a **submitted Overtime Sheet** for that date with Earns = **Overtime** | 0 |
 | Working day: punched in **1.5 hours or more before** the shift start | +1 |
 | Working day: punched out **1.5 hours or more after** the shift end | +1 |
-| Holiday or Saturday worked, on the Overtime Sheet: **6 hours** or more (first IN to last OUT, rounded to the half hour like the overtime) | 1 |
+| Holiday or Saturday worked, on the Overtime Sheet: **6 hours** or more (first IN to last OUT, exact like the overtime: 7 h 59 m is under 8 hours) | 1 |
 | Holiday or Saturday worked, on the Overtime Sheet: **8 hours** or more | 2 |
 | Any day | never more than **2** |
 

@@ -180,7 +180,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 531,
+      "line": 530,
       "title": "2.13 set_holiday_flag",
       "description": "Ticks `custom_worked_on_holiday` when the date is in the employee's Holiday List (or the company default).\n\nReads: Employee `holiday_list`, Company `default_holiday_list`"
     },
@@ -234,9 +234,9 @@
     },
     {
       "file": "avinashgroup_app/hr/shift_day.py",
-      "line": 111,
+      "line": 106,
       "title": "2.22 measure_day",
-      "description": "Late and early-exit minutes (full working days only) and overtime hours to the half hour (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13).\n\nReads: Attendance `custom_*` deviation fields"
+      "description": "Late and early-exit minutes (full working days only) and overtime hours, exact (OT-eligible only) for one Attendance row. Used by the attendance reports and the Late Time rule (4.13).\n\nReads: Attendance `custom_*` deviation fields"
     },
     {
       "file": "avinashgroup_app/avinash_group_app/doctype/overtime_sheet/overtime_sheet.py",
@@ -270,19 +270,19 @@
     },
     {
       "file": "avinashgroup_app/hr/overtime_settlement.py",
-      "line": 215,
+      "line": 213,
       "title": "3.6 on_sheet_submit",
       "description": "Sheet submit: measures the never-measured rows if the work date is already past."
     },
     {
       "file": "avinashgroup_app/hr/overtime_settlement.py",
-      "line": 226,
+      "line": 224,
       "title": "3.7 measure_pending",
       "description": "Daily job: measures never-measured rows of submitted sheets from the last 62 days."
     },
     {
       "file": "avinashgroup_app/hr/overtime_settlement.py",
-      "line": 141,
+      "line": 139,
       "title": "3.8 measure",
       "description": "The sheet's Measure button: re-measures every row (`measure_sheet`)."
     },
@@ -290,19 +290,13 @@
       "file": "avinashgroup_app/hr/overtime_settlement.py",
       "line": 81,
       "title": "3.9 measure_row",
-      "description": "Holiday work: hours worked; overtime: hours outside the shift; both rounded to the half hour. 0 hours with a note when there is no attendance, it is Absent, or there is one punch.\n\nReads: Attendance, Shift Type"
+      "description": "Holiday work: hours worked; overtime: hours outside the shift; both exact to the second. 0 hours with a note when there is no attendance, it is Absent, or there is one punch.\n\nReads: Attendance, Shift Type"
     },
     {
       "file": "avinashgroup_app/hr/overtime.py",
       "line": 320,
       "title": "3.10 hours_outside_shift",
       "description": "Hours of the in–out window that fall before shift start or after shift end."
-    },
-    {
-      "file": "avinashgroup_app/hr/shift_day.py",
-      "line": 42,
-      "title": "3.11 round_to_half_hour",
-      "description": "Nearest half hour, halves rounding up."
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
@@ -324,7 +318,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 674,
+      "line": 673,
       "title": "4.4 get_attendance_driven_components",
       "description": "Enabled Salary Components with `custom_is_attendance_driven`.\n\nReads: Salary Component"
     },
@@ -336,31 +330,31 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 714,
+      "line": 713,
       "title": "4.6 _gets",
       "description": "An allowance is paid only with a row on the assignment; a non-allowance (late fine) only when the structure lists it.\n\nReads: Salary Component `custom_is_allowance`; Salary Structure rows"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 644,
+      "line": 643,
       "title": "4.7 _skip_for_eligibility",
       "description": "Skips OT-only components for staff not OT eligible, and late components for staff marked late-fine exempt.\n\nReads: Salary Component `custom_ot_eligible_only`; Employee `custom_ot_eligibility`, `custom_late_fine_exempt`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 732,
+      "line": 731,
       "title": "4.8 _resolve_rate",
       "description": "`Hourly Basic × Multiplier` components: hourly basic × multiplier; otherwise the Rate on the person's row; None if neither.\n\nReads: Salary Component `custom_rate_basis`, `custom_rate_multiplier`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 482,
+      "line": 481,
       "title": "4.9 _hourly_basic",
       "description": "Assignment `base` ÷ days per month ÷ hours per day. Days: the actual length of the BS month being priced (29–32) unless the component fixes it; hours: 8 when blank.\n\nReads: Salary Component `custom_rate_days_per_month`, `custom_rate_hours_per_day`; assignment `base`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 663,
+      "line": 662,
       "title": "4.10 _attendance_period",
       "description": "The payroll's own dates, or the previous BS month when the component's Attendance Month is Previous Month.\n\nReads: Salary Component `custom_attendance_month`"
     },
@@ -372,7 +366,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 683,
+      "line": 682,
       "title": "4.12 _attendance_rows",
       "description": "The employee's submitted Attendance rows in the period, with the deviation and holiday fields.\n\nReads: Attendance"
     },
@@ -390,25 +384,25 @@
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 414,
+      "line": 413,
       "title": "4.15 _on_overtime_sheet",
       "description": "Whether a submitted Overtime Sheet names the employee on the date with the Overtime entitlement.\n\nReads: Overtime Sheet"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 440,
+      "line": 439,
       "title": "4.16 _authorised_overtime_hours",
       "description": "Sum of `worked_hours` on submitted Overtime Sheet rows for the employee and date (the hours from 3.9).\n\nReads: Overtime Sheet Employee `worked_hours`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 769,
+      "line": 768,
       "title": "4.17 _delete_existing_draft",
       "description": "Cancels and deletes this calculator's earlier row for the same employee, component and date; hand-made rows are left.\n\nReads: Additional Salary `custom_source`"
     },
     {
       "file": "avinashgroup_app/payroll/attendance_allowance.py",
-      "line": 806,
+      "line": 805,
       "title": "4.18 _make_additional_salary",
       "description": "Inserts and submits the Additional Salary with qty and rate kept; earnings get `deduct_full_tax_on_selected_payroll_date`.\n\nReads: Salary Component `type`"
     },
@@ -480,187 +474,187 @@
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 64,
+      "line": 58,
       "title": "5.9 PayrollEntry.on_submit",
       "description": "Sets status and calls `create_salary_slips`."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 218,
+      "line": 64,
       "title": "5.10 PayrollEntry.create_salary_slips",
       "description": "Builds the slip arguments (dates, posting date, entry); more than 30 employees are queued."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 1447,
+      "line": 218,
       "title": "5.11 create_salary_slips_for_employees",
       "description": "Inserts one Salary Slip per employee who has none for the period; each insert runs stages 6–8."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 152,
+      "line": 1447,
       "title": "6.1 SalarySlip.validate",
       "description": "Dates (`get_date_details`), then structure + working days on a new slip (or working days only), then `calculate_net_pay` and year-to-date totals."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 340,
+      "line": 152,
       "title": "6.2 SalarySlip.get_emp_and_working_day_details",
       "description": "First build: clears rows, works out days, finds the structure, pulls its rows."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 385,
+      "line": 340,
       "title": "6.3 SalarySlip.check_sal_struct",
       "description": "The latest submitted assignment on an active structure dated on or before the period (end date included).\n\nReads: Salary Structure Assignment, Salary Structure"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 427,
+      "line": 385,
       "title": "6.4 SalarySlip.pull_sal_struct",
       "description": "Fills the slip from the structure through HRMS's `make_salary_slip`.\n\nReads: Salary Structure"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 441,
+      "line": 427,
       "title": "6.5 SalarySlip.get_working_days_details",
       "description": "Total working days, LWP, absent days and payment days for the period.\n\nReads: Payroll Settings `payroll_based_on`, `include_holidays_in_total_working_days`, `consider_marked_attendance_on_holidays`, `daily_wages_fraction_for_half_day`, `consider_unmarked_attendance_as`"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 724,
+      "line": 441,
       "title": "6.6 SalarySlip.calculate_lwp_ppl_and_absent_days_based_on_attendance",
       "description": "LWP from leave-without-pay (and partial-pay) leave days and half days; Absent days counted separately.\n\nReads: Attendance, Leave Type `is_lwp`, `is_ppl`"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 544,
+      "line": 724,
       "title": "6.7 SalarySlip.get_half_absent_days",
       "description": "Count of Half Day rows with `half_day_status` Absent (the late rule in 2.16 produces these).\n\nReads: Attendance"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 529,
+      "line": 544,
       "title": "6.8 SalarySlip.get_unmarked_days",
       "description": "Days with no attendance; only deducted when unmarked counts as Absent.\n\nReads: Payroll Settings `consider_unmarked_attendance_as`"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 617,
+      "line": 529,
       "title": "6.9 SalarySlip.get_payment_days",
       "description": "Days between actual start and end (joining / relieving), less holidays unless holidays count.\n\nReads: Employee `date_of_joining`, `relieving_date`"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 822,
+      "line": 617,
       "title": "6.10 SalarySlip.calculate_net_pay",
       "description": "Earnings, gross, deductions (with tax), net pay, tax breakup."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1144,
+      "line": 822,
       "title": "6.11 SalarySlip.calculate_component_amounts",
       "description": "Structure rows, then Additional Salary rows; for deductions, then tax."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1164,
+      "line": 1144,
       "title": "6.12 SalarySlip.add_structure_components",
       "description": "Evaluates each structure row of the type and adds it (`add_structure_component`).\n\nReads: Salary Structure rows"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1248,
+      "line": 1164,
       "title": "6.13 SalarySlip.eval_condition_and_formula",
       "description": "Row condition and formula evaluated against the slip, assignment and employee fields.\n\nReads: Assignment `base`, Employee fields"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1329,
+      "line": 1248,
       "title": "6.14 SalarySlip.add_additional_salary_components",
       "description": "Puts each submitted Additional Salary of the period on the slip.\n\nReads: Additional Salary"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/additional_salary/additional_salary.py",
-      "line": 218,
+      "line": 1329,
       "title": "6.15 get_additional_salaries",
       "description": "Submitted, enabled Additional Salary of the type: recurring ones covering the end date, one-offs dated in the period.\n\nReads: Additional Salary"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1445,
+      "line": 218,
       "title": "6.16 SalarySlip.update_component_row",
       "description": "Finds or appends the row, sets default / additional amount, then prorates it by payment days.\n\nReads: Salary Component flags"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1795,
+      "line": 1445,
       "title": "6.17 SalarySlip.get_amount_based_on_payment_days",
       "description": "`amount × payment_days ÷ total_working_days` for components that depend on payment days; rounding if the component asks.\n\nReads: Salary Component `depends_on_payment_days`, `round_to_the_nearest_integer`"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1343,
+      "line": 1795,
       "title": "6.18 SalarySlip.add_tax_components",
       "description": "Finds the tax component(s), loads the slab, computes the year's taxable earnings, adds the tax row.\n\nReads: Assignment `income_tax_slab`"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 873,
+      "line": 1343,
       "title": "6.19 SalarySlip.compute_taxable_earnings_for_year",
       "description": "Previous + current + projected future taxable earnings, less exemptions.\n\nReads: Payroll Period, exemption declarations"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 1550,
+      "line": 873,
       "title": "6.20 SalarySlip.calculate_variable_tax",
       "description": "Year's slab tax less tax already paid, ÷ remaining months, plus full tax on one-off earnings.\n\nReads: Income Tax Slab"
     },
     {
       "file": "../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py",
-      "line": 856,
+      "line": 1550,
       "title": "6.21 SalarySlip.set_net_pay",
       "description": "Total deduction, net pay, rounded total, amount in words."
     },
     {
       "file": "../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py",
-      "line": 47,
+      "line": 856,
       "title": "7.1 BSSalarySlip",
       "description": "Subclass of HRMS `SalarySlip` used for every slip."
     },
     {
       "file": "../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py",
-      "line": 60,
+      "line": 47,
       "title": "7.2 BSSalarySlip.get_date_details",
       "description": "Start and end from the posting date's BS month: a Nepal BS Period record first, else `get_salary_period`.\n\nReads: Nepal HRMS Settings; Nepal BS Period"
     },
     {
       "file": "../rdp_common_app/rdp_common_app/utils/bs_boundaries.py",
-      "line": 162,
+      "line": 60,
       "title": "7.3 get_salary_period",
       "description": "The BS month containing a date, as AD start/end and its day count.\n\nReads: Nepali calendar"
     },
     {
       "file": "../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py",
-      "line": 122,
+      "line": 162,
       "title": "7.4 BSSalarySlip.get_working_days_details",
       "description": "Runs HRMS's version, then sets `total_working_days` to the BS month's length (payment days unchanged)."
     },
     {
       "file": "../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py",
-      "line": 191,
+      "line": 122,
       "title": "7.5 BSSalarySlip.get_amount_based_on_payment_days",
       "description": "HRMS's proration with the BS month length as the denominator."
     },
     {
       "file": "../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py",
-      "line": 225,
+      "line": 191,
       "title": "7.6 BSSalarySlip.compute_current_and_future_taxable_earnings",
       "description": "Replaces `remaining_sub_periods` with the BS months left in the payroll period, then HRMS's version.\n\nReads: Payroll Period `end_date`"
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 365,
+      "line": 225,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -780,19 +774,19 @@
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 1529,
+      "line": 282,
       "title": "9.2 submit_salary_slips_for_employees",
       "description": "Submits each slip with net pay ≥ 0, then makes the accrual journal from the submitted ones."
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 531,
+      "line": 1529,
       "title": "9.3 PayrollEntry.make_accrual_jv_entry",
       "description": "Earnings and deductions totals by account, advance deductions, payable line, then `make_journal_entry` (submitted).\n\nReads: Payroll Settings `process_payroll_accounting_entry_based_on_employee`"
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 270,
+      "line": 531,
       "title": "9.4 AvinashPayrollEntry.get_salary_component_total",
       "description": "HRMS's loop keyed by (component, cost centre, section); throws when an employee's department has no section but the component posts by section.\n\nReads: Payroll cost centres"
     },
@@ -822,13 +816,13 @@
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 607,
+      "line": 608,
       "title": "9.9 PayrollEntry.make_journal_entry",
       "description": "Saves (and optionally submits) the Journal Entry and links it on the slips."
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 322,
+      "line": 607,
       "title": "9.10 default_jv_type",
       "description": "Registered first in Journal Entry `before_insert`."
     },
@@ -846,13 +840,13 @@
     },
     {
       "file": "../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py",
-      "line": 876,
+      "line": 882,
       "title": "9.13 PayrollEntry.make_bank_entry",
       "description": "Bank Entry for the submitted slips' net pay against the payable account."
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 368,
+      "line": 876,
       "title": "10.1 validate_salary_component",
       "description": "Allowance kind sets the attendance condition; attendance-driven components get no payment-days proration and Remove if Zero; S/D and F/P accounts must be the row's company's.\n\nReads: Salary Component"
     },
@@ -996,7 +990,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 93,
+      "line": 79,
       "title": "11.14 price_encashment",
       "description": "After HRMS's validate: refuses a second encashment of the allocation, a date that is neither year end nor relieving date, an occasion the type does not allow; amount = days × `per_day_rate`.\n\nReads: Leave Type `custom_encash_at_*`"
     },
@@ -1014,7 +1008,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 135,
+      "line": 155,
       "title": "11.17 mark_additional_salary",
       "description": "Additional Salary validate: an encashment's row is taxed in full in its month and tagged."
     },

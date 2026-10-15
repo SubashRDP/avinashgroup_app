@@ -782,7 +782,7 @@ def _columns(components):
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 95},
 		{"label": _("Late In (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
 		{"label": _("Before ofc. Time (min)"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 130},
-		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 1},
+		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 2},
 		{"label": _("O.T. Rate"), "fieldname": "ot_rate", "fieldtype": "Currency", "width": 90},
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 100},
 		{"label": _("On Leave"), "fieldname": "leave_count", "fieldtype": "Check", "width": 65},

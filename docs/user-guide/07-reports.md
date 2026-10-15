@@ -111,7 +111,7 @@ Summary cards for **one employee** read as that person's month: BS Period, Worki
 
 **Summary view columns:** S.N., Employee, Department, the allowance columns, **O.T. (hrs)**, **Late Time (min)** (late + left early), **Present Days** (every day came), **Working Days Present**, **Worked on Holiday**, **Leave (Current)**, **Leave (Prev Month)**, **Leave (Upto Month)**.
 
-Rules used: late minutes count from the shift start with no grace (09:08 on a 9 AM shift = 8 minutes), only on working days worked in full. Overtime is rounded to the nearest half hour and shown only for OT-eligible staff.
+Rules used: late minutes count from the shift start with no grace (09:08 on a 9 AM shift = 8 minutes), only on working days worked in full. Overtime is exact to the second (never rounded) and shown only for OT-eligible staff.
 
 ## 7.3 Salary Tax and SSF Deposit
 

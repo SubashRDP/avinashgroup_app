@@ -9,7 +9,7 @@ The minutes themselves are already on the Attendance row. `custom_late_entry`,
 `custom_early_entry`, `custom_early_exit` and `custom_late_exit` are written on
 validate against that row's own shift (`biometric.attendance_override`), which
 is the shift HRMS rostered for that date. This module only decides which of them
-count on which kind of day, and rounds overtime the way the sheet does.
+count on which kind of day.
 
 What the Chaitra 2082 attendance cards show, and what is reproduced here:
 
@@ -19,10 +19,12 @@ What the Chaitra 2082 attendance cards show, and what is reproduced here:
   Before ofc.Time minutes before the shift ends, same days. The sheet adds the
                   two together as the month's "Late Time".
   O.T.            on a working day, the hours before the shift starts and after
-                  it ends; on a holiday, every hour worked. Rounded to the nearest
-                  half hour — 7:53 is 8, 7:34 is 7.5, 5:59 is 6. Only for staff
-                  ticked Overtime Eligible on their Employee; everyone else is
-                  paid for holiday work in replacement leave instead.
+                  it ends; on a holiday, every hour worked. Exact to the second,
+                  never rounded (user, 2026-10-15: "we don't go up or down") —
+                  7:54:38 is 7.9107 h. The Chaitra sheets rounded to the half
+                  hour; that was dropped. Only for staff ticked Overtime Eligible
+                  on their Employee; everyone else is paid for holiday work in
+                  replacement leave instead.
 
 The one thing the sheet has that this does not is a hand-kept exception written
 at the foot of the Chaitra summary ("up to 12.18, after 5pm counts as 2 hours").
@@ -30,18 +32,11 @@ That is a one-off agreement for a fortnight, not a rule; put it through the
 Overtime Sheet, where authorised hours can be typed over.
 """
 
-import math
-
 import frappe
 from frappe.utils import flt, get_datetime, getdate
 
 #: The statuses in which somebody actually came to work.
 WORKED_STATUSES = ("Present", "Work From Home", "Half Day")
-
-
-def round_to_half_hour(hours):
-	"""Nearest half hour, halves rounding up — never banker's rounding."""
-	return math.floor(flt(hours) * 2 + 0.5) / 2
 
 
 def overtime_eligibility(employees):
@@ -129,7 +124,7 @@ def measure_day(att, is_holiday=False, ot_eligible=False):
 			hours = holiday_hours_worked(att)
 		else:
 			hours = (flt(att.get("custom_early_entry")) + flt(att.get("custom_late_exit"))) / 3600
-		out.ot_hours = round_to_half_hour(hours)
+		out.ot_hours = hours
 
 	return out
 

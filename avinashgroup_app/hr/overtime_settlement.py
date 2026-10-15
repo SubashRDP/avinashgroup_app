@@ -40,7 +40,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, flt, get_datetime, getdate, today
 
-from avinashgroup_app.hr.shift_day import holiday_hours_worked, round_to_half_hour
+from avinashgroup_app.hr.shift_day import holiday_hours_worked
 from avinashgroup_app.hr.overtime import (
 	DAY_HOLIDAY,
 	DAY_WEEKLY_OFF,
@@ -114,9 +114,8 @@ def measure_row(employee, work_date, work_type, entitlement):
 	if on_holiday:
 		# A holiday has no shift to work beyond: every hour from first IN to
 		# last OUT counts, whatever status HRMS's hour thresholds gave the day.
-		hours = holiday_hours_worked(attendance)
 		return {
-			"hours": round_to_half_hour(hours),
+			"hours": holiday_hours_worked(attendance),
 			"attendance": attendance.name,
 			"note": _("Hours worked on a holiday"),
 		}
@@ -125,13 +124,12 @@ def measure_row(employee, work_date, work_type, entitlement):
 	if not shift:
 		return {"hours": 0.0, "attendance": attendance.name, "note": _("No shift on this date")}
 
-	hours = hours_outside_shift(
-		get_datetime(attendance.in_time), get_datetime(attendance.out_time), shift_start, shift_end
-	)
-	# To the half hour, as the attendance sheet and the report both count it —
+	# Exact to the second, as the report counts it too (shift_day.measure_day) —
 	# pay and the report must never disagree about the same day.
 	return {
-		"hours": round_to_half_hour(hours),
+		"hours": hours_outside_shift(
+			get_datetime(attendance.in_time), get_datetime(attendance.out_time), shift_start, shift_end
+		),
 		"attendance": attendance.name,
 		"note": _("Hours outside the {0} shift").format(shift),
 	}
