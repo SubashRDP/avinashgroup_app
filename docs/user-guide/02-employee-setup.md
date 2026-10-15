@@ -203,11 +203,11 @@ Each allowance has a **kind**, set on its Salary Component. The kind decides how
 |---|---|---|
 | Monthly | Dearness, Other, Fixed, Fuel, Maintenance, Transport, Gas, Education | The row's Rate every month, reduced for unpaid days |
 | % of Initial Basic | House Rent Allowance | Rate % × Initial Basic, reduced for unpaid days |
-| Per Day Present | Tea & Conveyance | Days counted from attendance × Rate, by **Prepare Payroll Inputs** |
-| Per Meal | Meal | Meals counted from attendance and Overtime Sheets × Rate, by **Prepare Payroll Inputs** |
-| Per Overtime Hour | Overtime | Hours from approved Overtime Sheets × the person's basic per hour × 1.5, by **Prepare Payroll Inputs** |
+| Per Day Present | Tea & Conveyance | Days counted from attendance × Rate, when the slips are made |
+| Per Meal | Meal | Meals counted from attendance and Overtime Sheets × Rate, when the slips are made |
+| Per Overtime Hour | Overtime | Hours from approved Overtime Sheets × the person's basic per hour × 1.5, when the slips are made |
 | Entered by Hand | Load/Unload Allowance | Typed each month on a **Payroll Adjustment** (Chapter 8) |
-| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → **Dashain Allowance** button (8.4). Leave: Payroll Entry → **Leave Encashment** button (8.5) |
+| Yearly | Dashain Allowance, Leave Encashment | Dashain: Payroll Entry → tick **Pay Dashain Allowance** (8.4). Leave: Payroll Entry → tick **Pay Leave Encashment** (8.5)utton (8.5) |
 
 "Entered by Hand" and "Yearly" allowances cannot be put on an Allowances table or a structure's Allowance Rates.
 

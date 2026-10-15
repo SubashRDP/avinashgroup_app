@@ -206,112 +206,11 @@ function render_month_calendar(frm, cal) {
 	});
 }
 
-// The two yearly payments, under Nepal HRMS. Both only write drafts for HR to
-// read and submit; pressing again rebuilds them.
-//   Dashain Allowance (payroll/festival_allowance.py): a draft Payroll Adjustment.
-//   Leave Encashment (payroll/leave_encashment.py): draft Leave Encashments for
-//   the month — year-end balances in Ashadh, and anyone relieved in the month.
-const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
-const money = (v) => format_currency(v || 0);
-
-function left_out_table(rows) {
-	if (!rows || !rows.length) return "";
-	const body = rows
-		.map((r) => `<tr><td>${esc(r.employee_name || r.employee)}</td><td>${esc(r.leave_type || "")}</td><td>${esc(r.reason)}</td></tr>`)
-		.join("");
-	return `<p class="mt-3"><b>${__("Not included")} (${rows.length})</b></p>
-		<div style="max-height:220px;overflow:auto"><table class="table table-sm table-bordered">${body}</table></div>`;
-}
-
-function dashain_allowance(frm) {
-	frappe.call({
-		method: "avinashgroup_app.payroll.festival_allowance.get_defaults",
-		args: { payroll_entry: frm.doc.name },
-	}).then(({ message: d }) => {
-		if (!d || !d.components.length) {
-			frappe.msgprint(__("No Salary Component is ticked as a Festival Allowance."));
-			return;
-		}
-		const dlg = new frappe.ui.Dialog({
-			title: __("Dashain Allowance"),
-			fields: [
-				{ fieldname: "component", fieldtype: "Select", label: __("Component"), reqd: 1,
-				  options: d.components.map((c) => c.name), default: d.components[0].name },
-				{ fieldname: "cutoff", fieldtype: "Date", label: __("Count Service To (Cut-off)"), reqd: 1, default: d.cutoff,
-				  description: __("Ghatasthapana, or the payment date. A full year of service by this date = one month's basic; less = service days ÷ days in the year × basic.") },
-			],
-			primary_action_label: __("Make Draft"),
-			primary_action(v) {
-				dlg.hide();
-				frappe.dom.freeze(__("Working out the Dashain allowance..."));
-				frappe.call({
-					method: "avinashgroup_app.payroll.festival_allowance.make_festival_adjustment",
-					args: { payroll_entry: frm.doc.name, component: v.component, cutoff: v.cutoff },
-				}).then(({ message: r }) => {
-					frappe.dom.unfreeze();
-					if (!r) return;
-					const link = r.payroll_adjustment
-						? `<a href="/app/payroll-adjustment/${encodeURIComponent(r.payroll_adjustment)}">${esc(r.payroll_adjustment)}</a>`
-						: __("none — nobody is due");
-					frappe.msgprint({
-						title: __("Dashain Allowance: draft ready"),
-						indicator: r.count ? "green" : "orange",
-						message: `<p>${__("{0} people, total {1}. Draft Payroll Adjustment: {2}", [r.count, money(r.total), link])}</p>
-							<p class="text-muted">${__("Open it, check each row's Basic, Service Days and Factor, then Submit. Submitting puts it on this month's slips.")}</p>
-							${left_out_table(r.left_out)}`,
-					});
-				}).catch(() => frappe.dom.unfreeze());
-			},
-		});
-		dlg.show();
-	});
-}
-
-function leave_encashment(frm) {
-	frappe.confirm(
-		__(
-			"Draft the leave encashments due in this payroll month: year-end balances (in Ashadh) and anyone relieved this month? Drafts made earlier are rebuilt; submitted ones are left alone."
-		),
-		() => {
-			frappe.dom.freeze(__("Working out leave balances..."));
-			frappe
-				.call({
-					method: "avinashgroup_app.payroll.leave_encashment.encash_for_payroll_entry",
-					args: { payroll_entry: frm.doc.name },
-				})
-				.then(({ message: r }) => {
-					frappe.dom.unfreeze();
-					if (!r) return;
-					const rows = r.created
-						.map(
-							(c) => `<tr><td><a href="/app/leave-encashment/${encodeURIComponent(c.name)}">${esc(c.employee_name || c.employee)}</a></td>
-							<td>${esc(c.leave_type)}</td><td>${esc(c.occasion)}</td><td class="text-right">${esc(c.balance)}</td>
-							<td class="text-right">${esc(c.days)}</td><td class="text-right">${money(c.rate)}</td><td class="text-right">${money(c.amount)}</td></tr>`
-						)
-						.join("");
-					frappe.msgprint({
-						title: __("Leave Encashment: {0} drafts, total {1}", [r.created.length, money(r.total)]),
-						indicator: r.created.length ? "green" : "orange",
-						wide: true,
-						message:
-							(rows
-								? `<div style="max-height:340px;overflow:auto"><table class="table table-sm table-bordered">
-								<tr><th>${__("Employee")}</th><th>${__("Leave Type")}</th><th>${__("Occasion")}</th><th>${__("Balance")}</th>
-								<th>${__("Days Encashed")}</th><th>${__("Rate/Day")}</th><th>${__("Amount")}</th></tr>${rows}</table></div>
-								<p class="text-muted">${__(
-									"Check them, then submit them from the {0} (Actions → Submit). Submitting puts them on this month's slips.",
-									[`<a href="/app/leave-encashment?docstatus=0">${__("Leave Encashment list")}</a>`]
-								)}</p>`
-								: `<p>${__("Nothing to encash this month.")}</p>`) + left_out_table(r.left_out),
-					});
-				})
-				.catch(() => frappe.dom.unfreeze());
-		}
-	);
-}
-
 frappe.ui.form.on("Payroll Entry", {
-	setup: hide_month_fields,
+	setup(frm) {
+		hide_month_fields(frm);
+		frm.set_query("custom_festival_component", () => ({ filters: { custom_is_festival_allowance: 1, disabled: 0 } }));
+	},
 	onload(frm) {
 		hide_month_fields(frm);
 		if (!frm.is_new() || frm.doc.custom_bs_month) return;
@@ -344,59 +243,9 @@ frappe.ui.form.on("Payroll Entry", {
 	refresh(frm) {
 		lock_bs_dates(frm);
 		draw_month_calendar(frm, frm.doc.custom_fiscal_year);
-		if (frm.doc.docstatus === 2) return;
-		if (!frm.is_new() && frappe.model.can_create("Payroll Adjustment")) {
-			frm.add_custom_button(__("Dashain Allowance"), () => dashain_allowance(frm), __("Nepal HRMS"));
-		}
-		if (!frm.is_new() && frappe.model.can_create("Leave Encashment")) {
-			frm.add_custom_button(__("Leave Encashment"), () => leave_encashment(frm), __("Nepal HRMS"));
-		}
-		// It writes Additional Salary; the server refuses anyone who cannot.
-		if (!frappe.model.can_create("Additional Salary")) return;
-
-		frm.add_custom_button(
-			__("Prepare Payroll Inputs"),
-			() => {
-				frappe.confirm(
-					__(
-						"Work out this month's tea, meals, overtime and late fines from attendance, and take this month's advance instalments? Anything this button posted before for the month is replaced."
-					),
-					() => {
-						frappe.dom.freeze(__("Preparing payroll inputs..."));
-						frappe
-							.call({
-								method: "avinashgroup_app.payroll.attendance_allowance.trigger_for_payroll_entry",
-								args: { payroll_entry: frm.doc.name },
-							})
-							.then((r) => {
-								frappe.dom.unfreeze();
-								if (!r || !r.message) return;
-								const created = r.message.created || 0;
-								const skipped = r.message.skipped || 0;
-								const recovered = r.message.advance_recoveries || 0;
-								const refreshed = r.message.slips_refreshed || 0;
-								const cleared = r.message.cleared || 0;
-								let msg = __("{0} allowance and fine records, {1} advance instalments.", [created, recovered]);
-								if (cleared) {
-									msg += " " + __("{0} earlier records removed: nothing is due for them now.", [cleared]);
-								}
-								if (refreshed) {
-									msg += " " + __("{0} draft salary slips updated.", [refreshed]);
-								}
-								if (skipped) {
-									msg += " " + __("{0} skipped — see Error Log.", [skipped]);
-								}
-								frm.reload_doc();
-								frappe.show_alert({
-									message: msg,
-									indicator: skipped ? "orange" : created ? "green" : "orange",
-								});
-							})
-							.catch(() => frappe.dom.unfreeze());
-					}
-				);
-			},
-			__("Nepal HRMS")
-		);
+		// Tea, meals, overtime, late fines, advances, and the ticked Dashain and
+		// leave encashment are posted when the slips are made and again when they
+		// are submitted (payroll/payroll_entry.py prepare_payroll_inputs); the
+		// Payroll Inputs Log on the form records each run.
 	},
 });

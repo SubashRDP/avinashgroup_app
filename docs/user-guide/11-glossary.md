@@ -5,7 +5,7 @@
 | Word | Meaning |
 |---|---|
 | **AD** | The English (Gregorian) calendar. ERPNext stores dates in AD |
-| **Additional Salary** | A one-month amount for one person (earning or deduction). Made by Prepare Payroll Inputs, Payroll Adjustment, Salary Revision (arrears) and advance recovery |
+| **Additional Salary** | A one-month amount for one person (earning or deduction). Made by the payroll run (tea, meals, overtime, late fines, advances), Payroll Adjustment, Salary Revision (arrears) and advance recovery |
 | **Allowance Kind** | How an allowance is counted: Monthly, % of Initial Basic, Per Day Present, Per Meal, Per Overtime Hour, Entered by Hand, Yearly (Chapter 2) |
 | **Allowance Rates** | The usual rate of each allowance on a salary structure (tea per day, meal per meal, gas per month, HRA %). Fills the Rate on an assignment; raised by a Salary Revision |
 | **Allowances table** | The table on a person's Salary Structure Assignment listing the allowances they get and the Rate they are paid. No row, not paid |
@@ -48,7 +48,7 @@
 | **Payroll Entry** | The document for one company's payroll for one BS month |
 | **Payroll Payable Account** | The liability account for salary owed: 347301 Salary Payable. Must have no Account Type |
 | **Payroll Section** | Admin & Accounts (O/O), Marketing (S/D) or Plant (F/P), set on each Department |
-| **Prepare Payroll Inputs** | The button on the Payroll Entry that works out tea, meals, overtime, late fines and advance instalments |
+| **Payroll inputs** | Tea, meals, overtime, late fines and advance instalments, worked out from attendance when the slips are made and again when they are submitted; recorded in the Payroll Entry's **Payroll Inputs Log** |
 | **Regular Salary** | On the salary sheet: Net Basic + SSF Addition + Total Allowance |
 | **Replacement Leave** | A day of leave (compensatory leave) earned by Officer & Admin staff for working a holiday on an Overtime Sheet |
 | **S/D** | Sales and Distribution. The **Marketing** payroll section, and its salary expense account |

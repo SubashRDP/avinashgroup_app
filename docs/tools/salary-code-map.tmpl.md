@@ -101,11 +101,11 @@ The measured hours stay on the sheet rows (`worked_hours`); payroll reads them i
 
 ## 4. Prepare Payroll Inputs → Additional Salary
 
-HR presses **Prepare Payroll Inputs** on the Payroll Entry. Each attendance-driven component becomes one submitted Additional Salary per employee, dated the month's last day.
+Making the salary slips posts the payroll inputs (no button). Each attendance-driven component becomes one submitted Additional Salary per employee, dated the month's last day.
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 4.1 | `Prepare Payroll Inputs` | @@avinashgroup_app/public/js/payroll_entry.js::=__("Prepare Payroll Inputs")@@ | The button; after a confirm it calls `trigger_for_payroll_entry`. | — |
+| 4.1 | `create_salary_slips` | @@avinashgroup_app/payroll/payroll_entry.py::=def create_salary_slips(@@ | Making the slips posts the month's inputs first (`prepare_payroll_inputs`); **Submit Salary Slip** posts them again and recalculates the drafts. Each run is logged on the entry (Payroll Inputs Log). No button. | Payroll Entry `custom_payroll_inputs_log` |
 | 4.2 | `trigger_for_payroll_entry` | @@avinashgroup_app/payroll/attendance_allowance.py::trigger_for_payroll_entry@@ | Runs `create_additional_salaries`, then `post_recoveries`, then `refresh_draft_slips`, and commits. | Payroll Entry |
 | 4.3 | `create_additional_salaries` | @@avinashgroup_app/payroll/attendance_allowance.py::create_additional_salaries@@ | For each employee × attendance component: skip if not paid, price it, count it, write `qty × rate` as an Additional Salary under a savepoint. | Payroll Entry `start_date`, `end_date`, `employees` |
 | 4.4 | `get_attendance_driven_components` | @@avinashgroup_app/payroll/attendance_allowance.py::get_attendance_driven_components@@ | Enabled Salary Components with `custom_is_attendance_driven`. | Salary Component |
@@ -250,7 +250,7 @@ Both end as an Additional Salary that stage 6 adds to the slip, taxed in full in
 
 | # | Function | File | What it does | Settings / data it reads |
 |---|---|---|---|---|
-| 11.1 | `dashain_allowance` | @@avinashgroup_app/public/js/payroll_entry.js::=function dashain_allowance(@@ | Payroll Entry → Nepal HRMS → **Dashain Allowance**: asks for the component and the cut-off date, calls `make_festival_adjustment`, shows the total and who was left out. | — |
+| 11.1 | `_pay_dashain` | @@avinashgroup_app/payroll/payroll_entry.py::=def _pay_dashain(@@ | Payroll Entry with **Pay Dashain Allowance** ticked: builds the Payroll Adjustment with `make_festival_adjustment` and submits it while the slips are made; links it on the entry. | Payroll Entry `custom_pay_dashain`, `custom_festival_component`, `custom_festival_cutoff` |
 | 11.2 | `make_festival_adjustment` | @@avinashgroup_app/payroll/festival_allowance.py::make_festival_adjustment@@ | Refuses another BS month than the component's Pay Month, or a second draft for the year; builds (or rebuilds) the entry's draft Payroll Adjustment from `compute_rows`. | Salary Component `custom_festival_pay_month`; Payroll Adjustment `source`, `payroll_entry` |
 | 11.3 | `compute_rows` | @@avinashgroup_app/payroll/festival_allowance.py::compute_rows@@ | Per employee on the entry: leaves out joiners on/after the cut-off, leavers (unless included), short service, daily wage (unless included), no assignment, already paid; else one row with basic, service days, factor and amount. | Salary Component `custom_festival_*`; Employee `date_of_joining`, `relieving_date` |
 | 11.4 | `service_factor` | @@avinashgroup_app/payroll/festival_allowance.py::service_factor@@ | Service days = cut-off − joining; year days = the year ending on the cut-off (365/366); 1 for a full year, else service ÷ year, clamped 0..1. | — |
@@ -258,7 +258,7 @@ Both end as an Additional Salary that stage 6 adds to the slip, taxed in full in
 | 11.6 | `festival_amount` | @@avinashgroup_app/payroll/festival_allowance.py::festival_amount@@ | basic × factor, never above basic; proration off pays a full month for any service. | Salary Component `custom_festival_prorate` |
 | 11.7 | `PayrollAdjustment.validate_rows` | @@avinashgroup_app/avinash_group_app/doctype/payroll_adjustment/payroll_adjustment.py::validate_rows@@ | Refuses a row above its `base_amount` (the 100 % cap survives hand edits). | Payroll Adjustment Row `base_amount` |
 | 11.8 | `PayrollAdjustment.on_submit` | @@avinashgroup_app/avinash_group_app/doctype/payroll_adjustment/payroll_adjustment.py::on_submit@@ | One submitted Additional Salary per row, full tax in the month; then re-saves the people's draft slips. | — |
-| 11.9 | `leave_encashment` | @@avinashgroup_app/public/js/payroll_entry.js::=function leave_encashment(@@ | Payroll Entry → **Nepal HRMS → Leave Encashment**: confirm, then the review table (occasion, balance, days, rate, amount) and who was left out. | — |
+| 11.9 | `_pay_leave_encashment` | @@avinashgroup_app/payroll/payroll_entry.py::=def _pay_leave_encashment(@@ | Payroll Entry with **Pay Leave Encashment** ticked: `encash_month` makes the month's encashments and each is submitted while the slips are made. | Payroll Entry `custom_pay_leave_encashment` |
 | 11.10 | `leave_encashment.encash_for_payroll_entry` | @@avinashgroup_app/payroll/leave_encashment.py::encash_for_payroll_entry@@ | From the payroll month's first day: the entry's employees → `encash_month` for its dates — Year End when an allocation ends in the month (Ashadh), Separation for anyone relieved in it. | Payroll Entry `start_date` / `end_date` |
 | 11.11 | `encash_month` | @@avinashgroup_app/payroll/leave_encashment.py::encash_month@@ | Per due (employee, type, allocation): skips one already submitted, rebuilds a draft, inserts a Leave Encashment dated the allocation's end. | Leave Period; Leave Encashment |
 | 11.12 | `due_encashments` | @@avinashgroup_app/payroll/leave_encashment.py::due_encashments@@ | Allocations of Allow Encashment types ending in the month (year end) or covering a relieving date in it (separation). | Leave Type `allow_encashment`, `custom_encash_at_year_end`, `custom_encash_at_separation`; Leave Allocation |

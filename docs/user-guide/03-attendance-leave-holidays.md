@@ -55,7 +55,7 @@ What HR must have in place:
 2. If it is submitted (the usual case), click **Cancel**, then **Amend**: Late Excused cannot be ticked on a submitted Attendance.
 3. Tick **Late Excused** and type the **Reason for Excusing**.
 4. Save and **Submit**.
-5. If the month's **Prepare Payroll Inputs** was already pressed, press it again.
+5. If the month's slips are drafts, **Submit Salary Slip** picks the change up.
 
 The lateness stays recorded in reports but is no longer fined. If lateness was the only reason the day became a Half Day, the day goes back to Present.
 

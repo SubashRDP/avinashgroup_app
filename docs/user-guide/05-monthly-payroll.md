@@ -47,13 +47,16 @@ The English date fields are locked, so the payroll cannot slip into another mont
 
 To pay only part of the company, set **Branch**, **Department** or **Designation** before saving, or click **Get Employees** after changing them.
 
-## 5.3 Step 2 — Prepare Payroll Inputs
+## 5.3 Step 2 — Yearly payments and payroll inputs (no button)
 
-**This now happens by itself.** Creating the salary slips (submitting the Payroll Entry) posts tea, meals, overtime, late fines and advance instalments first, so every slip is made with them. **Submit Salary Slip** posts them again just before submitting, so an attendance fix made in between is included. The button below is still there if you want to see the figures, or after fixing attendance on draft slips.
+Nothing is pressed for tea, meals, overtime, late fines or advance instalments. **Create Salary Slips** works them out from attendance and Overtime Sheets and posts them first, so every slip is made with them; **Submit Salary Slip** works them out again just before submitting, so an attendance fix made in between is paid.
 
-1. On the saved Payroll Entry, click **Nepal HRMS** → **Prepare Payroll Inputs**.
-2. Read the question ("Work out this month's tea, meals, overtime and late fines from attendance, and take this month's advance instalments? …") and click **Yes**.
-3. Wait. A green message tells you what was made, for example: "**312 allowance and fine records, 4 advance instalments.**" If slips already exist as drafts, it adds "**87 draft salary slips updated.**"
+In the **Yearly Payments** section of the Payroll Entry (first tab), before **Create Salary Slips**:
+
+- **Pay Dashain Allowance** — tick it in the Dashain month, pick the **Festival Component** and the **Count Service To (Cut-off)** date (Chapter 8.4).
+- **Pay Leave Encashment** — tick it in Ashadh, or in a month someone leaves (Chapter 8.5).
+
+Both are paid in the same run as everything else. The read-only **Payroll Inputs Log** on the form records every run: when, by whom, the tea / meal / overtime and late-fine totals, advance instalments, the Dashain adjustment and the encashment total, for example "**2026-10-15 12:26 Slips created by hr@…: 212 attendance lines: tea / meal / overtime 1,04,960.00, late fines 5,375.40; 3 advance instalments; Dashain PADJ-2026-00001: 96 people, total 18,40,000.00**". **Dashain Payroll Adjustment** links the adjustment that paid the allowance.
 
 What it works out, per person, for the month:
 
@@ -67,13 +70,9 @@ What it works out, per person, for the month:
 
 Who gets tea and meal: anyone with a row for it on their salary assignment; no row, none. Overtime: anyone **OT eligible** who is on a submitted Overtime Sheet — no row on the assignment is needed. Late fine: everyone, except staff ticked **Late Fine Exempt** on the Employee — no line in the structure is needed, and the component's Unit and Rate Basis do not change it. Meals and overtime are only for OT-eligible staff.
 
-**You can press the button again** whenever attendance or an Overtime Sheet changes. It replaces what it made last time for that month, and removes what is no longer due: if a correction leaves someone with no tea, meal, overtime or fine, last time's record is taken away and the message adds "**… earlier records removed: nothing is due for them now.**" It never touches amounts HR typed by hand. It cannot change a month whose slips are already **submitted**: those records are reported as skipped ("linked with Salary Slip"); cancel the slip first if it really must change.
+**Running again is safe.** Each run replaces the month's tea, meal, overtime and late-fine lines and removes what is no longer due; amounts HR typed by hand are never touched. A Dashain allowance or encashment already paid is not paid twice. Submitted slips are never changed: cancel the slip first if it really must change.
 
-Only users who may create **Additional Salary** see the button.
-
-If a line says "**… skipped — see Error Log**", some records could not be made. Ask IT to look at the Error Log; the usual causes are in Chapter 10.
-
-> Best practice: press **Prepare Payroll Inputs** before **Create Salary Slips**, and once more just before submitting the slips if anything changed.
+If the log says "**… skipped (Error Log)**", some records could not be made. Ask IT to look at the Error Log; the usual causes are in Chapter 10.
 
 ## 5.4 Step 3 — Create Salary Slips
 
@@ -96,7 +95,7 @@ Before submitting, check. Submitted slips are emailed to staff and posted to the
    - **Income Tax**. To change the tax for one person, tick **Override Income Tax** and type **Income Tax (manual)**. Zero is allowed and means "no tax this month". **Computed Income Tax** keeps what the system worked out, for comparison;
    - the **Daily Breakdown** table at the bottom (Chapter 6).
 3. If something is wrong:
-   - **attendance or overtime wrong** → fix it, press **Prepare Payroll Inputs** again (it updates the draft slips);
+   - **attendance or overtime wrong** → fix it; **Submit Salary Slip** works the month out again before submitting;
    - **pay or allowance wrong** → fix the person's Salary Structure Assignment (a new one if pay changed), then open the slip and **Save** it again;
    - **one-off amount missing** → add a Payroll Adjustment, then re-save the slip.
 

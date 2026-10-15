@@ -39,8 +39,9 @@ When extra work     HR makes an Overtime Sheet for that date and it is approved
 is needed
 End of BS month     1. Check attendance (Monthly Attendance BS report)
                     2. New Payroll Entry → Company → click the month → Save
-                    3. Prepare Payroll Inputs   (tea, meal, overtime, late fine, advances)
-                    4. Create Salary Slips → check a few slips
+                    3. Tick Dashain / Leave Encashment if due (Yearly Payments)
+                    4. Create Salary Slips → check a few slips  (tea, meal, overtime,
+                       late fine, advances are worked out by themselves)
                     5. Submit Salary Slip       (journal is posted, slips are emailed)
                     6. Avinas Salary Statement → must show "Matches Journal"
                     7. Make Bank Entry           (pay the staff)

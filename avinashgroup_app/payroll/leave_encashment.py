@@ -25,15 +25,16 @@ Leave Type's Earning Component — but three things in stock HRMS do not fit her
      and `link_additional_salary` fix both.
 
 HR's entry point is the Payroll Entry that pays it, the same as the Dashain
-allowance: Nepal HRMS → "Leave Encashment" (`encash_for_payroll_entry`). For the
-entry's employees it drafts what falls in that month — the remaining balance on
-each encashable type, dated the allocation's last day, when the month is the
-year's last (Ashadh); and for anyone relieved in the month, their balance dated
-the relieving date — with a review table of balance, days, rate and amount. HR
-submits the drafts from the Leave Encashment list; submitting writes the
-Additional Salary for the month's slip and re-saves the person's draft slip.
-Pressing it again rebuilds drafts and leaves submitted ones alone, and
-`price_encashment` refuses a second encashment of an allocation.
+allowance: tick "Pay Leave Encashment" on the entry. Making its slips
+(payroll/payroll_entry.py `prepare_payroll_inputs`) makes and submits, for the
+entry's employees, what falls in that month — the remaining balance on each
+encashable type, dated the allocation's last day, when the month is the year's
+last (Ashadh); and for anyone relieved in the month, their balance dated the
+relieving date — and writes the totals to the entry's Payroll Inputs Log.
+Submitting writes the Additional Salary the slip reads. Running again leaves
+submitted ones alone, and `price_encashment` refuses a second encashment of an
+allocation. `encash_for_payroll_entry` still drafts without submitting, for a
+look before the month is run.
 
 A one-off separation can still be made on the stock form (New, dated the
 relieving date); this module prices it and checks the type allows it the same way.

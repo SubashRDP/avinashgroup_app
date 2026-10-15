@@ -22,7 +22,7 @@ The Payroll Entry fills only people who have, for that month:
 Fix the cause, then on the draft Payroll Entry click **Get Employees**. If the entry is already submitted, make a second Payroll Entry for the same month with only the missing person (Chapter 5, section 5.11).
 
 ### The draft slips have no tea, meal or overtime
-**Prepare Payroll Inputs** was not pressed, or was pressed before the attendance or Overtime Sheets were finished. Press it again on the Payroll Entry. It updates the draft slips.
+The attendance or Overtime Sheets were finished after the slips were made. Nothing to press: **Submit Salary Slip** works the month out again before submitting. Check the **Payroll Inputs Log** on the Payroll Entry for skipped lines, and that the person has a Tea / Meal row on their salary assignment.
 
 ### Overtime is 0 (or less than expected) for someone
 Check in this order:
@@ -30,7 +30,7 @@ Check in this order:
 2. Is there a **submitted** Overtime Sheet for that date with the person on it and **Earns = Overtime**?
 3. Open the sheet: what do **Worked Hours** and **Note** say? "No attendance", "Marked absent", "Only one punch" all give 0. Fix the attendance, then click **Measure from Attendance**.
 4. On a working day only the hours **outside** the shift count. Check the person's shift for that day.
-5. Press **Prepare Payroll Inputs** again.
+5. **Submit Salary Slip** picks the new hours up when the slips are submitted.
 
 Punches without a sheet are never paid. Make the sheet for that date (past dates are fine) and get it approved.
 
@@ -92,17 +92,16 @@ The Leave Allocation is still a **draft**. Open it and **Submit** it.
 | **No employees found for the mentioned criteria: Company … Currency … Payroll Payable Account …** | Nobody matches: no submitted assignments for that month, or their payable account differs | Check the assignments (section 10.1, "Someone is missing") |
 | **Posting date is in another BS month** — "This entry pays … but is posted on …, which is in …. Every salary slip takes its month from the posting date…" | The posting date was changed to a date outside the month being paid | Choose the month again on the calendar (it resets the posting date to the month's last day), or set the posting date to the date the message suggests |
 | **Slip and payroll entry disagree on the month** — "Salary slip covers … but its payroll entry … pays …. Fix the entry's posting date." | A slip's month differs from its Payroll Entry | Tell IT. Usually the entry's dates were changed after slips were made: cancel and remake the slips |
-| **Attendance missing** — "… of … employees have no submitted attendance between … and …. Their unmarked days count as Present, and they get no tea, meal, overtime or late fine." | An orange warning on Save or Submit: the month has no attendance for these people | If attendance is still to come, stop: mark it, run **Prepare Payroll Inputs**, then submit. If paying a full month without attendance is intended, carry on |
+| **Attendance missing** — "… of … employees have no submitted attendance between … and …. Their unmarked days count as Present, and they get no tea, meal, overtime or late fine." | An orange warning on Save or Submit: the month has no attendance for these people | If attendance is still to come, stop: mark it, then submit (the slips pick it up). If paying a full month without attendance is intended, carry on |
 | **Tax history missing** — "… employees have earlier months of this tax year with no salary slip: …" | An orange warning on Save or Submit: those people's tax leaves out months paid outside the system, so too little is deducted | Get from accounts what each was paid and taxed in those months, and enter it on their Salary Structure Assignment as **Taxable Earnings Till Date** and **Tax Deducted Till Date** (Chapter 2.7). Then save the Payroll Entry again |
-| **Insufficient Permission for Additional Salary** (Prepare Payroll Inputs) | You may not create Additional Salary | Ask an HR Manager to press it |
+| **Insufficient Permission for Additional Salary** (Create / Submit Salary Slip) | You may not create Additional Salary, which the run posts | Ask an HR Manager to run the payroll |
 | **Choose the Payment Account and press Update to save it, then make the bank entry.** | **Make Bank Entry** was pressed before the Payment Account was saved on the submitted entry | Choose the bank account, press **Update**, then **Make Bank Entry** |
 | **Payment Account … is a … account. Salary is paid from a Bank or Cash account.** | The Payment Account is not a bank or cash account (for example a stock account) | Choose the bank or cash account the salary is paid from, press **Update**, try again |
 | **Cannot submit. Attendance is not marked for some employees.** | The entry has **Validate Attendance** ticked and some days have no attendance | Complete the attendance, or untick Validate Attendance |
 | **Salary Slip of employee … already created for this period** | The person already has a slip for this month | Do not pay them twice. Remove them from this entry, or cancel the other slip if it was wrong |
 | **No active or default Salary Structure found for employee … for the given dates** | The person has no submitted Salary Structure Assignment for the month | Create and submit one (Chapter 2) |
 | **Salary Slip creation failed. You can resolve the issue and retry creation.** (on the entry) | One or more slips could not be made | Click **issue** to read the reason, fix it, click **Create Salary Slips** again |
-| "… skipped — see Error Log" (after Prepare Payroll Inputs) | Some tea / meal / overtime / fine records could not be made | Tell IT; they will read the Error Log entries titled "Nepal HRMS Attendance Allowance: …" |
-| **Cannot calculate allowances for a cancelled Payroll Entry.** | You pressed Prepare Payroll Inputs on a cancelled entry | Use the live entry for that month |
+| "… skipped (Error Log)" (in the Payroll Inputs Log) | Some tea / meal / overtime / fine records could not be made | Tell IT; they will read the Error Log entries titled "Nepal HRMS Attendance Allowance: …" |
 | **No income tax Salary Component is set up, so it cannot be overridden.** | Override Income Tax was ticked on a slip with no Income Tax line | Untick it, or tell IT to check the salary structure |
 | **Please set Payroll based on in Payroll settings** | Payroll Settings are incomplete | Tell IT (it must be "Attendance") |
 | **Employee advance account … should be of type Receivable.** | The staff advance account has the wrong type | Accountant sets Account Type = Receivable (Chapter 9) |

@@ -65,7 +65,7 @@ Use **Payroll Adjustment** for amounts that are for one month only: load/unload 
 
 Each row becomes an **Additional Salary** that the month's slip picks up. **Cancelling** the Payroll Adjustment takes them all back.
 
-- Tea, meal, overtime and late fine **cannot** be chosen here; Prepare Payroll Inputs pays those.
+- Tea, meal, overtime and late fine **cannot** be chosen here; the payroll run pays those.
 - One-off earnings are taxed in the month they are paid.
 - Submitting (or cancelling) it updates the listed people's draft salary slips for that month by itself.
 
@@ -86,7 +86,7 @@ An advance is a loan. Record it **once**, when the money is given, with the mont
 5. In **Recovery from Salary**: type the **Monthly Instalment**, and **Recover From** (the first date recovery may start; leave blank to start with the next payroll).
 6. Save and **Submit**. Then pay the money (the accountant uses the **Payment** button on the advance).
 
-Each month, **Prepare Payroll Inputs** deducts the smaller of the instalment and what is still owed, as **Salary Advance**. When the balance reaches zero, the advance becomes **Returned**. If **Monthly Instalment** is blank, the whole balance is taken in one month.
+Each month, the payroll run deducts the smaller of the instalment and what is still owed, as **Salary Advance**. When the balance reaches zero, the advance becomes **Returned**. If **Monthly Instalment** is blank, the whole balance is taken in one month.
 
 > **Accountant, please check:** the system refuses an advance whose account is not **Receivable** ("Employee advance account … should be of type Receivable"). On 9 October 2026 the 148003 Staff Advance account is typed **Payable** at NGN, NGG, NGK and GLMI, and has no type at NGI, GEPL and SGU.
 
@@ -121,24 +121,21 @@ The rule itself (basic, 100 % cap) is not a setting.
 
 ### Paying it
 
-1. Make the **Payroll Entry** for the pay month (Ashwin) as usual and press **Get Employees**. Save it.
-2. Press **Nepal HRMS → Dashain Allowance**.
-3. In the dialog, set **Count Service To (Cut-off)**: Ghatasthapana, or the payment date. It starts as the month's last day.
-4. Press **Make Draft**. A message shows how many people, the total, and anyone **not included** with the reason (joined after the cut-off, no salary assignment, already paid this year, …).
-5. Open the draft **Payroll Adjustment** from the link. Each row shows **Basic**, **Service Days** and **Factor**; open a row for **Date of Joining** and **Days in Year**. The **Note** says "Full year" or "183 of 365 days".
-6. Check it. You may lower an amount; you cannot raise it above the row's **Basic**.
-7. **Submit** it. Each row becomes an Additional Salary for the month, and the month's draft salary slips are updated.
+1. Make the **Payroll Entry** for the pay month (Ashwin) as usual and press **Get Employees**.
+2. In **Yearly Payments**, tick **Pay Dashain Allowance**, pick the **Festival Component** (Dashain Allowance) and set **Count Service To (Cut-off)**: Ghatasthapana, or the payment date. Blank = the month's last day. Save.
+3. Press **Create Salary Slips**. The allowance is worked out and submitted as a **Payroll Adjustment** before the slips are made, so each slip carries it. The entry's **Dashain Payroll Adjustment** links it, and the **Payroll Inputs Log** shows how many people and the total.
+4. Open the Payroll Adjustment to check: each row shows **Basic**, **Service Days** and **Factor**; the **Note** says "Full year" or "183 of 365 days".
 
-**Pressing the button again** rebuilds the same draft (use it after correcting a joining date or a salary assignment). After the Payroll Adjustment is submitted, pressing it again pays nobody twice: everyone already paid this year is listed as "already paid". To undo, **Cancel** the Payroll Adjustment.
+Nobody is paid twice: someone already paid this year is left out of a later run. To undo, cancel the slips, then **Cancel** the Payroll Adjustment.
 
 | Message | Fix |
 |---|---|
 | "Dashain Allowance is paid in 06 - Ashwin …; this entry is for …" | Use the Ashwin Payroll Entry, or change **Pay Month** on the component |
-| "Draft … already holds Dashain Allowance for this year" | Another month's entry made a draft. Delete that draft, or submit it |
+| "Draft … already holds Dashain Allowance for this year" | A draft from another entry exists. Delete that draft, or submit it |
 | "The Payroll Entry has no employees yet" | Press **Get Employees** and save first |
 | "Row …: … is more than …'s basic …; it is capped at 100 %" | Type an amount up to the Basic |
 
-The component **Dashain Bonus** also exists. It is not used by the button; use **Dashain Allowance**.
+The component **Dashain Bonus** also exists. It is not a festival allowance; pick **Dashain Allowance**.
 
 ## 8.5 Leave encashment at year end
 
@@ -166,22 +163,20 @@ Untick **Allow Encashment** and that type is left out completely.
 
 ### Paying it (once a year, in Ashadh)
 
-Leave encashment starts from the payroll that pays it, the same as the Dashain allowance.
+Leave encashment is paid by the payroll that pays it, the same as the Dashain allowance.
 
 1. Wait until the last day of Ashadh has been credited (the monthly leave credit runs on the month's last day).
-2. Open the **Ashadh Payroll Entry**, save it and press **Get Employees**.
-3. Press **Nepal HRMS → Leave Encashment**, and confirm. It only works from the first day of the payroll month.
-4. A table shows, per person and leave type: **Occasion** (Year End or Separation), **Balance**, **Days Encashed**, **Rate/Day** and **Amount**, then anyone **not included** with the reason (no salary assignment, no balance, already encashed).
-5. Check the drafts (each name in the table opens it). Each one also shows **Monthly Basic**, **Days per Month** and **Rate per Day**.
-6. Open the **Leave Encashment list** (link in the message), select the drafts → **Actions → Submit**. Each submitted encashment becomes an Additional Salary dated the year's last day, and the person's draft Ashadh slip is updated.
+2. Open the **Ashadh Payroll Entry**, press **Get Employees**, tick **Pay Leave Encashment** in **Yearly Payments**, and save.
+3. Press **Create Salary Slips** (on or after the first day of the payroll month). Each person's remaining balance on every encashable type is encashed and submitted, dated the year's last day, before the slips are made, so the Ashadh slip carries it.
+4. The **Payroll Inputs Log** shows how many people, the total, and how many were left out (no salary assignment, no balance, already encashed). The encashments are in the **Leave Encashment** list; each shows **Balance**, **Days Encashed**, **Monthly Basic**, **Days per Month**, **Rate per Day** and **Amount**.
 
-Pressing the button again rebuilds the drafts and never touches a submitted encashment. The system refuses a second encashment of the same allocation, even typed by hand. To undo one, **Cancel** it: its payment is cancelled with it.
+A later run never touches a submitted encashment, and the system refuses a second encashment of the same allocation, even typed by hand. To undo one, cancel the slip, then **Cancel** the encashment: its payment is cancelled with it.
 
 ### Someone leaving during the year
 
 1. Set the **Relieving Date** on the Employee. Keep the status **Active** until the encashment is submitted (the system refuses an encashment for an employee who has Left).
-2. In the Payroll Entry of the month they leave, press **Nepal HRMS → Leave Encashment**. Everyone whose relieving date falls in the month is drafted at Separation, dated that day, at the same rate as above.
-3. Submit the drafts from the Leave Encashment list. They are paid on that month's slip (the last one).
+2. In the Payroll Entry of the month they leave, tick **Pay Leave Encashment**. Everyone whose relieving date falls in the month is encashed at Separation, dated that day, at the same rate as above, when the slips are made.
+3. It is paid on that month's slip (the last one).
 
 A single leaver can also be done by hand: **Leave Encashment → New**, Employee, Leave Type, **Encashment Date = the relieving date**; the days and amount fill themselves.
 

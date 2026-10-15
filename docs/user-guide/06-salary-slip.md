@@ -10,7 +10,7 @@ Open **Salary Slip** and open one slip. The main parts:
 |---|---|
 | Top | Employee, company, **Salary Month (BS)** (for example "Bhadra 2083"), **Start Date (BS)** and **End Date (BS)** with the English dates beside them, **Posting Date (BS)** |
 | **Working Days** / **Payment Days** | Days in the month, and the days paid. Holidays are paid and count as payment days. An Absent day, an unpaid leave day, or half of a Half Day is taken off |
-| **Earnings** | Basic, SSF Addition, the fixed allowances from the person's assignment (Dearness, HRA, Gas, Education…), and the lines from Prepare Payroll Inputs (Tea & Conveyance, Meal, Overtime) and from Payroll Adjustments |
+| **Earnings** | Basic, SSF Addition, the fixed allowances from the person's assignment (Dearness, HRA, Gas, Education…), and the lines the payroll run works out (Tea & Conveyance, Meal, Overtime) and from Payroll Adjustments |
 | **Deductions** | SSF (31% of Basic), Income Tax, Late Fine, Salary Advance, and any one-off deductions |
 | **Income Tax** section | **Computed Income Tax** (what the slab worked out), **Override Income Tax** and **Income Tax (manual)** (to type your own figure), **Women's Rebate Applied (%)**, **Retirement Contribution Over Cap (year)** |
 | **Net Pay** | What the employee receives |

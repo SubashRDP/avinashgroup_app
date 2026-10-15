@@ -33,18 +33,103 @@ from avinashgroup_app.payroll.income_tax import warn_missing_tax_history
 from avinashgroup_app.payroll.payroll_month import fill_from_bs_month, warn_missing_attendance
 
 
-def prepare_payroll_inputs(entry):
-	"""Post the entry's attendance-driven pay and advance instalments, without committing.
+def prepare_payroll_inputs(entry, stage):
+	"""Post everything this month's slips read, in one go, without committing.
 
-	The same work as the Prepare Payroll Inputs button, minus its commit and
-	its draft-slip refresh: it runs inside HRMS's own submit and slip calls,
-	which commit (or roll back) everything together.
+	Tea, meals, overtime and late fines (attendance), advance instalments, and,
+	when ticked on the entry, the Dashain allowance and leave encashment. Each
+	is posted as submitted Additional Salary, so the slips HRMS makes or submits
+	next carry it. Runs inside HRMS's own submit and slip calls, which commit
+	(or roll back) all of it together. Every run appends a line to the entry's
+	Payroll Inputs Log, so the entry records what was paid and when.
+
+	Re-running is safe: attendance lines are replaced, a Dashain or encashment
+	already submitted for the person is left alone and not paid twice.
 	"""
 	from avinashgroup_app.payroll.advance_recovery import post_recoveries
 	from avinashgroup_app.payroll.attendance_allowance import create_additional_salaries
 
-	create_additional_salaries(entry, commit=False)
-	post_recoveries(entry)
+	attendance = create_additional_salaries(entry, commit=False)
+	advances = post_recoveries(entry)
+	totals = {"Earning": 0.0, "Deduction": 0.0}
+	for row in attendance["created"]:
+		kind = frappe.get_cached_value("Salary Component", row["salary_component"], "type")
+		totals[kind] = totals.get(kind, 0.0) + flt(row["amount"])
+	parts = [
+		_("{0} attendance lines: tea / meal / overtime {1}, late fines {2}").format(
+			len(attendance["created"]), _money(totals["Earning"]), _money(totals["Deduction"])
+		),
+		_("{0} advance instalments").format(len(advances or [])),
+	]
+	if attendance["skipped"]:
+		parts.append(_("{0} skipped (Error Log)").format(len(attendance["skipped"])))
+	if entry.get("custom_pay_dashain"):
+		parts.append(_pay_dashain(entry))
+	if entry.get("custom_pay_leave_encashment"):
+		parts.append(_pay_leave_encashment(entry))
+
+	when = frappe.utils.format_datetime(frappe.utils.now_datetime(), "yyyy-MM-dd HH:mm")
+	line = f"{when} {stage} by {frappe.session.user}: " + "; ".join(parts)
+	log = (entry.get("custom_payroll_inputs_log") or "").strip()
+	entry.db_set("custom_payroll_inputs_log", f"{log}\n{line}".strip(), update_modified=False)
+
+
+def _money(amount):
+	return frappe.utils.fmt_money(flt(amount, 2))
+
+
+def _pay_dashain(entry):
+	"""Build and submit the entry's Dashain Payroll Adjustment; returns its log text."""
+	from avinashgroup_app.payroll.festival_allowance import make_festival_adjustment
+
+	result = make_festival_adjustment(entry.name, entry.custom_festival_component, entry.get("custom_festival_cutoff"))
+	name = result.get("payroll_adjustment")
+	if name:
+		adjustment = frappe.get_doc("Payroll Adjustment", name)
+		adjustment.flags.ignore_permissions = True
+		adjustment.submit()
+		entry.db_set("custom_festival_adjustment", name, update_modified=False)
+		return _("Dashain {0}: {1} people, total {2}").format(name, result["count"], _money(result["total"]))
+	# Nothing due: everyone already paid by an earlier run, or nobody qualifies.
+	return _("Dashain: nothing new to pay ({0} left out)").format(len(result.get("left_out") or []))
+
+
+def _pay_leave_encashment(entry):
+	"""Make and submit the month's Leave Encashments; returns its log text."""
+	from avinashgroup_app.payroll.leave_encashment import encash_month
+
+	if frappe.utils.getdate() < frappe.utils.getdate(entry.start_date):
+		return _("Leave encashment: not before {0}, the month's first day").format(entry.start_date)
+	currency = frappe.get_cached_value("Company", entry.company, "default_currency")
+	result = encash_month(entry.company, currency, [r.employee for r in entry.employees], entry.start_date, entry.end_date)
+	for row in result["created"]:
+		doc = frappe.get_doc("Leave Encashment", row["name"])
+		doc.flags.ignore_permissions = True
+		doc.submit()
+	return _("Leave encashment: {0} people, total {1}; {2} left out").format(
+		len(result["created"]), _money(result["total"]), len(result["left_out"])
+	)
+
+
+def check_yearly_payments(entry):
+	"""Refuse a Dashain tick the run would refuse later, while the entry can still be edited."""
+	if not entry.get("custom_pay_dashain"):
+		return
+	from avinashgroup_app.payroll.festival_allowance import festival_components
+
+	rules = next((c for c in festival_components() if c.name == entry.get("custom_festival_component")), None)
+	if not rules:
+		frappe.throw(
+			_("{0} is not a festival allowance (tick Festival Allowance on the Salary Component)").format(
+				entry.get("custom_festival_component") or _("No component")
+			)
+		)
+	if rules.custom_festival_pay_month and entry.get("custom_bs_month") and rules.custom_festival_pay_month != entry.custom_bs_month:
+		frappe.throw(
+			_("{0} is paid in {1}; this entry is for {2}. Untick Pay Dashain Allowance or change the month.").format(
+				rules.name, rules.custom_festival_pay_month, entry.custom_bs_month
+			)
+		)
 
 
 #: The account types a salary payment may be made from (HRMS's own filter on
@@ -56,6 +141,7 @@ class AvinashPayrollEntry(PayrollEntry):
 	def validate(self):
 		fill_from_bs_month(self)
 		super().validate()
+		check_yearly_payments(self)
 		if self.is_new() or self.has_value_changed("start_date"):
 			warn_missing_attendance(self)
 			warn_missing_tax_history(self)
@@ -69,13 +155,12 @@ class AvinashPayrollEntry(PayrollEntry):
 	def create_salary_slips(self):
 		"""HRMS's slip creation, with this month's payroll inputs posted first.
 
-		Late fine, tea, meals, overtime and advance instalments reach a slip only
-		as Additional Salary, which Prepare Payroll Inputs posts. Left to a
-		button, it was forgotten (NGI-SAL-83/84-00005 went out without its late
-		fine and tea), so making the slips now posts them first, and the slips
-		are born with them. The button stays, for after an attendance fix.
+		Late fine, tea, meals, overtime, advances and the ticked yearly payments
+		reach a slip only as Additional Salary. Left to buttons they were
+		forgotten (NGI-SAL-83/84-00005 went out without its late fine and tea),
+		so making the slips posts them first, and the slips are born with them.
 		"""
-		prepare_payroll_inputs(self)
+		prepare_payroll_inputs(self, _("Slips created"))
 		return super().create_salary_slips()
 
 	@frappe.whitelist()
@@ -89,7 +174,7 @@ class AvinashPayrollEntry(PayrollEntry):
 		"""
 		from avinashgroup_app.payroll.attendance_allowance import refresh_draft_slips
 
-		prepare_payroll_inputs(self)
+		prepare_payroll_inputs(self, _("Slips submitted"))
 		refresh_draft_slips(self)
 		return super().submit_salary_slips()
 

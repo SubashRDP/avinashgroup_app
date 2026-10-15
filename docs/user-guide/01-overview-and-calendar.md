@@ -8,7 +8,7 @@
 |---|---|
 | Count attendance from the device printout | Receives punches from the biometric device and marks each day Present, Absent, Half Day or On Leave |
 | Keep a list of who worked late or on a holiday | Keeps an **Overtime Sheet** for each date the company asked people to work extra |
-| Type tea, meal, overtime and late fine into the Excel sheet | Works them out from attendance and Overtime Sheets when you press **Prepare Payroll Inputs** |
+| Type tea, meal, overtime and late fine into the Excel sheet | Works them out from attendance and Overtime Sheets when the salary slips are made |
 | Type the salary sheet by hand | Makes a **salary slip** per person and prints the same salary sheet layout (**Avinas Salary Statement**) |
 | Ask accounts to post the salary voucher | Posts the salary journal itself, split into O/O, S/D and F/P accounts |
 
