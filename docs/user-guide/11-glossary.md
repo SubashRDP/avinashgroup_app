@@ -62,6 +62,6 @@
 | **SSF Applicable** | A tick on the assignment. Unticked: no SSF, and the person pays 1% SST instead |
 | **SST** | Social Security Tax: the 1% first band of income tax, paid only by staff **not** in SSF |
 | **Tag** | A tea, meal or overtime line in a Salary Structure. It means "applies to everyone on this structure"; the amount comes from attendance. The late fine needs no tag: it applies to everyone not Late Fine Exempt |
-| **Tea & Conveyance** | Paid per day present on working days (not on holidays); NGI 235, NGN 265 per day, or the person's own rate |
+| **Tea & Conveyance** | Paid per day the person came, holidays and Saturdays included; NGI 235, NGN 265 per day, or the person's own rate |
 | **TDS** | Tax deducted at source. Salary TDS is booked to TDS-Remuneration |
 | **Worked on Holiday** | A tick on Attendance when the day is a holiday on the person's own list |

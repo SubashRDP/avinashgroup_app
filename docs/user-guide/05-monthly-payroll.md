@@ -62,7 +62,7 @@ What it works out, per person, for the month:
 
 | Line | Counted from | Rate |
 |---|---|---|
-| **Tea & Conveyance** | Days present on **working days**. A Half Day counts as a full day. Holidays and Saturdays are **not** counted | The Rate on the person's Tea row (usually NGI 235, NGN 265 per day) |
+| **Tea & Conveyance** | Every day the person came, **holidays and Saturdays included** (Pay on Holiday = Pay on the Tea component). A Half Day counts as a full day | The Rate on the person's Tea row (usually NGI 235, NGN 265 per day) |
 | **Meal** | Chapter 4, section 4.6 | The Rate on the person's Meal row |
 | **Overtime** | Measured hours on submitted Overtime Sheets | Basic ÷ days in the BS month ÷ 8 × 1.5 per hour |
 | **Late Fine** (deduction) | Minutes late in + minutes left early, on working days worked in full. Not on a Half Day (already a penalty), not on a day marked **Late Excused**, never for **Late Fine Exempt** staff | Per minute: Basic ÷ days in the BS month ÷ 8 ÷ 60. One minute late is charged |

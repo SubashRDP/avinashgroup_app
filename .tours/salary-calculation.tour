@@ -654,7 +654,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 225,
+      "line": 365,
       "title": "8.1 add_employee_allowances",
       "description": "Registration (first)."
     },
@@ -786,7 +786,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/payroll_entry.py",
-      "line": 531,
+      "line": 270,
       "title": "9.4 AvinashPayrollEntry.get_salary_component_total",
       "description": "HRMS's loop keyed by (component, cost centre, section); throws when an employee's department has no section but the component posts by section.\n\nReads: Payroll cost centres"
     },
@@ -822,7 +822,7 @@
     },
     {
       "file": "avinashgroup_app/hooks.py",
-      "line": 607,
+      "line": 322,
       "title": "9.10 default_jv_type",
       "description": "Registered first in Journal Entry `before_insert`."
     },
@@ -846,7 +846,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/allowance.py",
-      "line": 876,
+      "line": 368,
       "title": "10.1 validate_salary_component",
       "description": "Allowance kind sets the attendance condition; attendance-driven components get no payment-days proration and Remove if Zero; S/D and F/P accounts must be the row's company's.\n\nReads: Salary Component"
     },
@@ -990,7 +990,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 79,
+      "line": 93,
       "title": "11.14 price_encashment",
       "description": "After HRMS's validate: refuses a second encashment of the allocation, a date that is neither year end nor relieving date, an occasion the type does not allow; amount = days × `per_day_rate`.\n\nReads: Leave Type `custom_encash_at_*`"
     },
@@ -1008,7 +1008,7 @@
     },
     {
       "file": "avinashgroup_app/payroll/leave_encashment.py",
-      "line": 155,
+      "line": 135,
       "title": "11.17 mark_additional_salary",
       "description": "Additional Salary validate: an encashment's row is taxed in full in its month and tagged."
     },

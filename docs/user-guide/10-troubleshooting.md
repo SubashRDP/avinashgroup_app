@@ -38,7 +38,7 @@ Punches without a sheet are never paid. Make the sheet for that date (past dates
 Meals need **all** of: the **Overtime Eligible** tick on the Employee, a submitted Overtime Sheet for that day with Earns = Overtime, and on a working day a punch at least **1.5 hours** before the shift start or after the shift end. On a holiday on the sheet, 1 meal for 6 hours worked and 2 for 8 (first IN to last OUT). See Chapter 4, section 4.6.
 
 ### Tea is less than the days present
-Tea is not paid on **holidays and Saturdays**, even if the person worked. A Half Day earns a full day of tea. Check also that the person has no inactive Tea & Conveyance row (or a lower rate) on their assignment.
+Tea is paid for every day the person came, holidays and Saturdays included, as long as **Pay on Holiday** on the Tea & Conveyance component is **Pay**. A day with no attendance, or Absent, earns none. A Half Day earns a full day of tea. Check also that the person has no inactive Tea & Conveyance row (or a lower rate) on their assignment.
 
 ### Everyone is paid for fewer days than the month has (for example 26 of 31)
 Payroll Settings → **Include holidays in total working days** has been turned off. It must be **on** (holidays are paid). Tell IT or the HR manager.

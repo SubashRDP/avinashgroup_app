@@ -33,7 +33,7 @@ What HR must have in place:
 
 | Status | Paid | Notes |
 |---|---|---|
-| Present | Full day | Earns tea (on a working day) |
+| Present | Full day | Earns tea (any day they come, holidays and Saturdays too) |
 | Work From Home | Full day | |
 | Half Day | Half day, unless the other half is paid leave | Still earns a **full** day of tea. Typed by hand: set **Status for Other Half** to **Absent** (or choose the leave type for the other half). Left blank, the day is paid in **full** |
 | On Leave (paid leave type) | Full day | |

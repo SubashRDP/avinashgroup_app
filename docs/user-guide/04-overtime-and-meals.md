@@ -63,6 +63,8 @@ After the sheet is submitted, the system reads each person's attendance for that
 | Marked absent | 0, note "Marked absent" |
 | Only one punch | 0, note "Only one punch — the hours cannot be measured" |
 
+**Coming in on a holiday or Saturday** (Overtime Eligible staff, on an Overtime Sheet) pays: overtime = hourly basic × 1.5 × the whole time from first IN to last OUT, plus meals by the hours worked (6 h = 1, 8 h = 2), plus that day's tea. Nothing else: there is no separate holiday pay, and the day adds no basic.
+
 Hours are paid **exactly, to the second**, never rounded up or down: 7 h 54 m 38 s is 7.9106 hours. (Before 15 Oct 2026 they were rounded to the nearest half hour.)
 
 Example on a 6 AM – 2 PM shift: in 06:00, out 18:00 → 4 h overtime. In 05:00, out 14:00 → 1 h. In 06:05, out 13:50 → 0 h.
