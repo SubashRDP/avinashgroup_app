@@ -46,9 +46,11 @@ Summary cards are worded for the headcount (see _summary): one person's month
 for a single employee, sums that name the people they cover for a roster.
 """
 
+from datetime import timedelta
+
 import frappe
 from frappe import _
-from frappe.utils import getdate, flt, strip_html_tags, today
+from frappe.utils import flt, get_datetime, getdate, strip_html_tags, today
 
 from avinashgroup_app.hr.overtime import get_overtime_hours
 from avinashgroup_app.hr.leave_from_report import get_leave_notes
@@ -565,7 +567,8 @@ def _build_row(
 
 	if att:
 		status = att.status or ""
-		working_hours = _fmt_hours(att.working_hours)
+		# A leave or holiday row with no time worked has no hours to show.
+		working_hours = _fmt_hours(att.working_hours) if flt(att.working_hours) or punches else ""
 		if not punches:
 			# Attendance keyed in by hand has times but no punches behind them.
 			in_time_str = _fmt_time(att.in_time)
@@ -597,6 +600,10 @@ def _build_row(
 		if edited:
 			in_note = edited.get(punches[0])
 			out_note = edited.get(punches[1]) if punches[1] else None
+
+	stale = _marked_off_punches(att, punches)
+	if stale:
+		remarks = f"{remarks} · {stale}" if remarks else stale
 
 	# Dynamic allowance columns — per-day qty (days/hours per the component's unit).
 	component_values = {}
@@ -635,10 +642,43 @@ def _build_row(
 		"in_edit_note": in_note,
 		"out_edit_note": out_note,
 		"att_status": att.status if att else None,
+		"marked_off_punches": 1 if stale else 0,
 		"is_holiday": 1 if holiday else 0,
 	}
 	row.update(component_values)
 	return row
+
+
+#: How far the attendance's in/out may sit from the day's first/last punch
+#: before the row says so. HRMS stores the punch time itself, so any real
+#: difference means a punch was left out when the day was marked.
+STALE_MARK_MINUTES = 1
+
+
+def _marked_off_punches(att, punches):
+	"""A remark when the attendance was marked from other times than the day's
+	first and last punch, or "".
+
+	First IN / Last OUT show the punches, but status, hours and late minutes
+	come from the attendance. Days bulk-marked while a shift's check-in window
+	was 0 dropped the early punch — Anesh Tandukar, 19 Aug: in 05:59, marked
+	from his 13:05 lunch punch, so a Half Day "4 h late" sat beside a 05:59
+	First IN with nothing to say why. Re-marking the day (✎ on First IN) fixes it.
+	"""
+	if not (att and punches and att.in_time) or att.get("leave_application"):
+		return ""
+	first, last = punches
+	slack = timedelta(minutes=STALE_MARK_MINUTES)
+	dropped_in = get_datetime(first) < get_datetime(att.in_time) - slack
+	# No out-time at all while a later punch exists drops the OUT just the same.
+	dropped_out = bool(last) and (
+		not att.out_time or get_datetime(last) > get_datetime(att.out_time) + slack
+	)
+	if not (dropped_in or dropped_out):
+		return ""
+	return _("Marked from {0} – {1}, not the first and last punch: re-mark the day").format(
+		_fmt_time(att.in_time)[:5], _fmt_time(att.out_time)[:5] or "—"
+	)
 
 
 def _ot_rates(ot_hours, components):

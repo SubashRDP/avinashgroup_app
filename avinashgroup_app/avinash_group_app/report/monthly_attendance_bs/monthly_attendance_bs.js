@@ -182,7 +182,10 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		}
 
 		if (f === "remarks" && data.remarks) {
-			return `<span style="color:var(--text-muted);font-size:.9em">${data.remarks}</span>`;
+			// Status, hours and late minutes come from an attendance that left a
+			// punch out; say so in the warning colour, not the muted one.
+			const color = cint(data.marked_off_punches) ? "#A64E5B" : "var(--text-muted)";
+			return `<span style="color:${color};font-size:.9em" title="${frappe.utils.escape_html(data.remarks)}">${data.remarks}</span>`;
 		}
 
 		// --- Summary view ------------------------------------------------
