@@ -55,17 +55,17 @@ CHECKIN_FIELDS = [
 
 
 def desired_log_type(idx, total):
-    """Alternation policy: IN, OUT, IN, ... with the day's LAST punch forced
-    to OUT whenever there are at least two punches.
+    """Alternation policy: IN, OUT, IN, OUT, ... by order, nothing forced.
 
-    With this site's calculation mode ("Strictly based on Log Type" + "First
-    Check-in and Last Check-out"), plain alternation makes an odd punch count
-    (someone forgot a midday punch) label the last punch IN, so the attendance
-    loses its real out-time. Forcing the last punch to OUT keeps
-    in_time = first punch and out_time = last punch for any count — the same
-    result stock HRMS computes in "Alternating entries" mode."""
-    if total >= 2 and idx == total - 1:
-        return "OUT"
+    An odd punch count (a forgotten punch) therefore ends on IN, which is the
+    point: the day shows at a glance that a punch is missing (user,
+    2026-10-15: "we do in out in"). Until then the last punch was forced to
+    OUT, because a shift in "Strictly based on Log Type" mode reads the labels
+    and would lose its out-time. Every Shift Type now uses "Alternating
+    entries as IN and OUT", where HRMS takes the first punch as in and the
+    last as out whatever the labels say (employee_checkin
+    calculate_working_hours), so the labels are only what people read.
+    `total` is kept for the callers."""
     return "IN" if idx % 2 == 0 else "OUT"
 
 

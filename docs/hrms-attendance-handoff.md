@@ -54,7 +54,7 @@ ZKTeco / Hikvision / HTMS  ──▶  K40 Bridge (Windows, on site)
                                      ▼
               process_attendance_records()   utils.py:48   ← group by (person, day), de-dup
                                      ▼
-                          Employee Checkin                 ← last punch of the day forced to OUT
+                          Employee Checkin                 ← IN, OUT, IN … by order; odd day ends IN
                                      ▼
               sync_day()                     attendance_sync.py:225
                                      ▼

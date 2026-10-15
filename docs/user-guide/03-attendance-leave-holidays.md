@@ -19,7 +19,8 @@ Salary slip        — payment days, tea, meals, overtime, late fine
 ```
 
 Things the system does by itself:
-- The **last punch of the day is always treated as the check-out** (OUT), and the punches in between alternate IN / OUT.
+- Punches are labelled **IN, OUT, IN, OUT …** in time order. A day that ends on **IN** has a missing punch (someone forgot to tap): fix it with First IN / Last OUT on Monthly Attendance BS. Hours are still counted from the first punch to the last.
+- Every day at 13:10 an email lists the missed punches (and anyone not seen today). It goes to **every email on the Biometric Device**, both Digest Recipients and Alert Recipients.
 - **Every night at midnight**, a repair job links punches that arrived late and refreshes the hours of past days. Today is never touched; a day repaired overnight looks right the next morning.
 - **Around midday** each day, an attendance summary email with an Excel file is sent per company to the people set up to receive it.
 - If a device bridge stops sending, an alert is raised.

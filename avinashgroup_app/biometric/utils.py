@@ -110,8 +110,8 @@ def process_attendance_records(attendance_data, device_identifier=None):
     new punches are merged with existing rows, de-duplicated within the sending
     device's Duplicate Threshold window (near-simultaneous repeats of one
     physical punch are dropped), sorted chronologically, and assigned
-    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ... with the day's
-    last punch forced to OUT (see attendance_sync.desired_log_type).
+    alternating log_types: 1st → IN, 2nd → OUT, 3rd → IN, ... (see
+    attendance_sync.desired_log_type; an odd day ends on IN).
 
     Re-running with the same batch is idempotent. A late-arriving punch slots
     in by time and downstream rows flip IN↔OUT if needed.

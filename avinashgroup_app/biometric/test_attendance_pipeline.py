@@ -3,7 +3,7 @@
 Covers:
 - punches map to the employee of the sending device's company, and every
   Employee Checkin gets `custom_company` stamped
-- IN/OUT alternation (day's last punch forced to OUT) and idempotent re-sync
+- IN/OUT alternation (an odd day ends on IN) and idempotent re-sync
   in process_attendance_records
 - manual/API-created checkins get company via fetch_from
 - manual checkins / edits / deletes re-apply the day's alternation
@@ -161,14 +161,14 @@ class TestAttendancePipeline(FrappeTestCase):
         self.assertEqual(len(self._checkins(self.emp_a.name, day)), 4)
 
         # a late-arriving earlier punch slots in and downstream rows flip;
-        # the day's last punch is always OUT so First-in/Last-out calculation
-        # keeps the real out-time even with an odd punch count
+        # an odd count ends on IN, showing a punch is missing (alternating
+        # shifts still take the last punch as the out-time)
         process_attendance_records(
             [{"user_id": DEVICE_USER_ID, "timestamp": f"{day} 08:30:00"}],
             device_identifier=SERIAL_A,
         )
         rows = self._checkins(self.emp_a.name, day)
-        self.assertEqual([r.log_type for r in rows], ["IN", "OUT", "IN", "OUT", "OUT"])
+        self.assertEqual([r.log_type for r in rows], ["IN", "OUT", "IN", "OUT", "IN"])
 
     def test_duplicate_punches_within_threshold_collapse(self):
         # SERIAL_A device uses the default Duplicate Threshold of 1 minute.
@@ -228,7 +228,7 @@ class TestAttendancePipeline(FrappeTestCase):
         rows = self._checkins(self.emp_a.name, day)
         self.assertEqual(
             [(r.time.strftime("%H:%M"), r.log_type) for r in rows],
-            [("09:00", "IN"), ("13:00", "OUT"), ("17:00", "OUT")],
+            [("09:00", "IN"), ("13:00", "OUT"), ("17:00", "IN")],
         )
 
     def test_late_punch_refreshes_existing_attendance(self):
@@ -351,7 +351,7 @@ class TestAttendancePipeline(FrappeTestCase):
             names.append(ck.name)
 
         rows = self._checkins(self.emp_a.name, day)
-        self.assertEqual([r.log_type for r in rows], ["IN", "OUT", "OUT"])
+        self.assertEqual([r.log_type for r in rows], ["IN", "OUT", "IN"])
 
         # move the midday punch to the morning: it becomes the day's first
         # punch (IN) and the 09:00 row flips to OUT
@@ -361,7 +361,7 @@ class TestAttendancePipeline(FrappeTestCase):
         rows = self._checkins(self.emp_a.name, day)
         self.assertEqual(
             [(r.time.strftime("%H:%M"), r.log_type) for r in rows],
-            [("08:00", "IN"), ("09:00", "OUT"), ("17:00", "OUT")],
+            [("08:00", "IN"), ("09:00", "OUT"), ("17:00", "IN")],
         )
 
         # deleting the first punch relabels what remains

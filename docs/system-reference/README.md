@@ -27,7 +27,7 @@ flowchart TD
         CAL["Fiscal Year (BS) · Nepal BS Period<br/>Holiday Lists · Shift Types · Leave Policy"]
     end
 
-    DEV["Biometric device<br/>ZKTeco ADMS /iclock · K40/HTMS bridge"] -->|process_attendance_records| CHK["Employee Checkin<br/>IN/OUT alternation, last punch OUT"]
+    DEV["Biometric device<br/>ZKTeco ADMS /iclock · K40/HTMS bridge"] -->|process_attendance_records| CHK["Employee Checkin<br/>IN/OUT alternation (odd day ends IN)"]
     CHK -->|"HRMS auto attendance (OFF on avinas1)<br/>Attendance Fix · Repair from Check-ins · self-heal"| ATT["Attendance<br/>status, working hours, in/out"]
     ATT -->|"validate hooks: holiday flag, deviation minutes,<br/>> 2 h late = Half Day, worked on leave = Half Day"| ATT2["Attendance (final)<br/>custom_worked_on_holiday, custom_* deviations,<br/>custom_late_excused"]
     LEAVE["Leave Application"] --> ATT

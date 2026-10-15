@@ -62,7 +62,7 @@
       "file": "avinashgroup_app/biometric/attendance_sync.py",
       "line": 57,
       "title": "1.9 desired_log_type",
-      "description": "IN, OUT, IN … in time order, with the day's last punch forced to OUT when there are two or more."
+      "description": "IN, OUT, IN … in time order; an odd day ends on IN."
     },
     {
       "file": "avinashgroup_app/biometric/attendance_sync.py",

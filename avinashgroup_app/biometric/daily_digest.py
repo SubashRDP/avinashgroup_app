@@ -9,10 +9,11 @@ Three sections, each answering a different question:
 
   A. Missed Punches (rolling window, every calendar day)
      Employees whose punch count for a day is ODD. An odd count means a
-     punch is missing — someone forgot to tap out, or tapped in twice. The
-     day still produces an Attendance row (desired_log_type forces the last
-     punch to OUT precisely so it does), but the hours are wrong, so these
-     are the rows worth correcting in Attendance Fix before payroll.
+     punch is missing — someone forgot to tap out, or tapped in twice; the
+     day's punches end on IN (desired_log_type). The day still produces an
+     Attendance row (first punch to last), but the hours are wrong, so these
+     are the rows worth correcting before payroll (the First IN / Last OUT
+     edit on Monthly Attendance BS).
 
      A WINDOW, not a single day, because we cannot know a day's data is
      complete: a bridge that was offline pushes its backlog whenever it
@@ -47,9 +48,11 @@ Sunday email carries Saturday and Friday. Section B is the part that follows
 the working calendar, since being "not seen" only means something on a day
 you were expected.
 
-Recipients come from each device's `digest_recipients`, pooled per company —
-one email per company, not per device. A company with no recipients
-configured is skipped silently; that is how you turn the digest off.
+Recipients are every email listed on the company's devices — Digest
+Recipients and Alert Recipients alike (user, 2026-10-15: everyone listed on
+the biometric device is told) — pooled per company, one email per company,
+not per device. A company with no emails on its devices is skipped silently;
+that is how you turn the digest off.
 """
 
 from collections import defaultdict
@@ -115,14 +118,14 @@ def send_daily_attendance_digest():
 
 
 def get_digest_recipients(company):
-	"""Pooled, de-duplicated recipient emails across the company's devices."""
+	"""Pooled, de-duplicated emails from both recipient lists of the company's devices."""
 	rows = frappe.db.sql(
 		"""
 		SELECT DISTINCT r.email
 		FROM `tabBiometric Device Alert Recipient` r
 		INNER JOIN `tabBiometric Device` d ON d.name = r.parent
 		WHERE r.parenttype = 'Biometric Device'
-		  AND r.parentfield = 'digest_recipients'
+		  AND r.parentfield IN ('digest_recipients', 'alert_recipients')
 		  AND d.company = %s
 		  AND d.enabled = 1
 		""",

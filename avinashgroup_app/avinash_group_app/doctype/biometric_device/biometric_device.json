@@ -47,7 +47,7 @@
    "unique": 1
   },
   {
-   "description": "Hardware serial number \u2014 must match the device_id sent by the bridge or SN sent via ADMS push. Punches from any other serial are rejected.",
+   "description": "Hardware serial number — must match the device_id sent by the bridge or SN sent via ADMS push. Punches from any other serial are rejected.",
    "fieldname": "device_serial",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -64,7 +64,7 @@
    "reqd": 1
   },
   {
-   "description": "Optional. IP address of the biometric device \u2014 informational only (the bridge holds the real address and identifies itself by serial). Leave blank for software/database sources like HTMS-86.",
+   "description": "Optional. IP address of the biometric device — informational only (the bridge holds the real address and identifies itself by serial). Leave blank for software/database sources like HTMS-86.",
    "fieldname": "device_ip",
    "fieldtype": "Data",
    "label": "Device IP"
@@ -167,7 +167,7 @@
    "label": "Daily Attendance Digest"
   },
   {
-   "description": "Leave empty to send no digest for this device.",
+   "description": "Get the daily 13:10 attendance digest (missed punches, not seen today, device status), together with the Alert Recipients. With both lists empty, no digest is sent.",
    "fieldname": "digest_recipients",
    "fieldtype": "Table",
    "label": "Digest Recipients",
@@ -189,7 +189,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-26 00:00:00.000000",
+ "modified": "2026-10-15 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Biometric Device",

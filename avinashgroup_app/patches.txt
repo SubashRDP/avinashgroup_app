@@ -145,3 +145,4 @@ avinashgroup_app.patches.payroll_entry_yearly_payments
 avinashgroup_app.patches.half_day_when_came_in_on_leave
 avinashgroup_app.patches.remeasure_copied_overtime_rows
 avinashgroup_app.patches.overtime_exact_to_the_second
+avinashgroup_app.patches.relabel_checkins_plain_alternation

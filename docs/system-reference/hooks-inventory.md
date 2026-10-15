@@ -48,7 +48,7 @@ HRMS and rdp_common_app register no Salary Slip `doc_events`. Details are in [06
 
 | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|
-| after_insert, on_update, after_delete | [`checkin_{_event}`](../../avinashgroup_app/hooks.py#L344) | [`checkin_after_insert`](../../avinashgroup_app/biometric/attendance_sync.py#L355), [`checkin_on_update`](../../avinashgroup_app/biometric/attendance_sync.py#L376), [`checkin_after_delete`](../../avinashgroup_app/biometric/attendance_sync.py#L410) | Keep the day's IN/OUT alternation (last punch OUT). Refresh the computed values of an existing Present or Half Day Attendance when punches are added, edited, deleted or arrive late. **Never changes status.** The device pipeline sets `in_biometric_day_reconcile` so these skip during bulk intake. See [02-checkin-to-attendance.md](02-checkin-to-attendance.md). |
+| after_insert, on_update, after_delete | [`checkin_{_event}`](../../avinashgroup_app/hooks.py#L344) | [`checkin_after_insert`](../../avinashgroup_app/biometric/attendance_sync.py#L355), [`checkin_on_update`](../../avinashgroup_app/biometric/attendance_sync.py#L376), [`checkin_after_delete`](../../avinashgroup_app/biometric/attendance_sync.py#L410) | Keep the day's IN/OUT alternation (odd day ends IN). Refresh the computed values of an existing Present or Half Day Attendance when punches are added, edited, deleted or arrive late. **Never changes status.** The device pipeline sets `in_biometric_day_reconcile` so these skip during bulk intake. See [02-checkin-to-attendance.md](02-checkin-to-attendance.md). |
 
 ### Attendance
 
@@ -201,7 +201,7 @@ They run **before** every other handler of ours on the same event.
 | daily_long | [`switch_to_current_year_lists`](../../avinashgroup_app/hooks.py#L554) | [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30) | no; never ran | On a fiscal year's first day, moves companies and employees onto that year's holiday lists. |
 | daily_long | [`grant_pending`](../../avinashgroup_app/hooks.py#L542) | [`grant_pending`](../../avinashgroup_app/hr/replacement_leave.py#L118) | no; never ran | Replacement leave for holiday work whose attendance arrived after the sheet was submitted. |
 | daily_long | [`measure_pending`](../../avinashgroup_app/hooks.py#L542) | [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L224) | no; never ran | Measures overtime rows whose attendance arrived after submission (62-day look-back). |
-| cron `10 13 * * *` | [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L580) | [`send_daily_attendance_digest`](../../avinashgroup_app/biometric/daily_digest.py#L76) | no; never ran | Midday mail of the day's attendance problems. Runs at :10 so it does not race HRMS's hourly auto attendance. |
+| cron `10 13 * * *` | [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L580) | [`send_daily_attendance_digest`](../../avinashgroup_app/biometric/daily_digest.py#L79) | no; never ran | Midday mail of the day's attendance problems. Runs at :10 so it does not race HRMS's hourly auto attendance. |
 
 HRMS jobs that matter here:
 
@@ -261,7 +261,7 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `receive_attendance` | [`receive_attendance`](../../avinashgroup_app/biometric/api.py#L10) | K40/HTMS bridge (push of punches) |
 | `ping` | [`ping`](../../avinashgroup_app/biometric/heartbeat.py#L101) | bridge heartbeat |
 | `poll_commands` / `report_command_result` / `enqueue_command` | [`poll_commands`](../../avinashgroup_app/biometric/bridge_commands.py#L31), [`report_command_result`](../../avinashgroup_app/biometric/bridge_commands.py#L80), [`enqueue_command`](../../avinashgroup_app/biometric/bridge_commands.py#L128) | bridge command channel |
-| `preview_digest` | [`preview_digest`](../../avinashgroup_app/biometric/daily_digest.py#L556) | HR, by hand |
+| `preview_digest` | [`preview_digest`](../../avinashgroup_app/biometric/daily_digest.py#L559) | HR, by hand |
 | `repair_attendance_day` | [`repair_attendance_day`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L534) | Attendance form button |
 | `get_shift_roster` | [`get_shift_roster`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L640) | Attendance Fix form |
 | `get_month`, `get_default_month` | [`get_month`](../../avinashgroup_app/hr/bs_calendar.py#L148), [`get_default_month`](../../avinashgroup_app/hr/bs_calendar.py#L165) | Payroll Entry calendar |
