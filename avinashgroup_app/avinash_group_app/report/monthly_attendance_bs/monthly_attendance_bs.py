@@ -51,6 +51,7 @@ from frappe import _
 from frappe.utils import getdate, flt, strip_html_tags, today
 
 from avinashgroup_app.hr.overtime import get_overtime_hours
+from avinashgroup_app.hr.leave_from_report import get_leave_notes
 from avinashgroup_app.hr.punch_correction import get_edited_days, get_shift_corrections
 from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.utils import resolve_holiday_lists
@@ -123,6 +124,9 @@ def execute(filters=None):
 	# highlighted in the grid so a typed time never passes for a device reading.
 	edited = get_edited_days([e.name for e in employees], ad_start, ad_end)
 	shift_edits = get_shift_corrections([e.name for e in employees], ad_start, ad_end)
+	# Leave HR gave from this report (hr/leave_from_report.py), told apart from
+	# leave the employee applied for.
+	leave_notes = get_leave_notes({a.leave_application for a in att_map.values() if a.get("leave_application")})
 
 	data = []
 	totals = _new_totals()
@@ -159,6 +163,8 @@ def execute(filters=None):
 				edited.get((emp.name, ad_date)),
 			)
 			row["shift_edit_note"] = shift_edits.get((emp.name, ad_date))
+			att = att_map.get((emp.name, ad_date))
+			row["leave_note"] = leave_notes.get(att.leave_application) if att and att.get("leave_application") else None
 			data.append(row)
 			_accumulate(
 				totals, row, present_statuses,
@@ -432,6 +438,7 @@ def _fetch_attendance(employees, ad_start, ad_end, company=None):
 			"custom_worked_on_holiday",
 			"custom_late_entry", "custom_early_entry",
 			"custom_early_exit", "custom_late_exit",
+			"leave_application",
 		],
 	)
 	out = {}

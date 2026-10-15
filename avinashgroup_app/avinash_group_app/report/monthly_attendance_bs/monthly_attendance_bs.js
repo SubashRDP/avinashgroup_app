@@ -13,6 +13,9 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		_apply_theme(report);
 		_bind_punch_correction(report);
 		report.page.add_inner_button(__("Correction Log"), () => _open_correction_log());
+		if (frappe.user.has_role(CORRECTION_ROLES)) {
+			report.page.add_inner_button(__("Give Leave"), () => _open_give_leave_dialog());
+		}
 		_make_full_width(report);
 		_setup_fiscal_year_visibility(report);
 		await _init_default_fiscal_year(report);
@@ -144,6 +147,12 @@ frappe.query_reports["Monthly Attendance BS"] = {
 
 		// --- Detail view -------------------------------------------------
 		if (f === "status") {
+			if (data.leave_note) {
+				// Leave HR gave from this report, set apart from leave applied for.
+				return `<span title="${frappe.utils.escape_html(data.leave_note)}"
+					style="${EDITED_CELL_STYLE}">${_chip(data.status)}
+					<span style="color:#A07A1C;margin-left:4px;font-size:.8em">✎ ${__("given")}</span></span>`;
+			}
 			return _chip(data.status);
 		}
 
@@ -435,6 +444,200 @@ function _shift_cell(value, data) {
 	if (!editable) return value;
 	return `<span ${attrs} style="cursor:pointer" title="${__("Click to correct this day's shift")}">${label || "—"}<span
 		style="color:var(--text-light);margin-left:6px;font-size:.8em">✎</span></span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Give Leave — approved Leave Applications for chosen days (hr/leave_from_report)
+// ---------------------------------------------------------------------------
+//
+// For leave nobody applied for: HR picks the employee, the days and the type,
+// sees the balance and what HRMS will deduct, and gives it. The server files
+// one approved Leave Application per run of consecutive days, so balance,
+// ledger and payroll follow HRMS's own rules.
+
+const LEAVE_METHOD = "avinashgroup_app.hr.leave_from_report";
+// A month and a bit: enough for a long absence, short enough to tick through.
+const MAX_LEAVE_RANGE_DAYS = 62;
+
+function _open_give_leave_dialog() {
+	const filter = (fn) => frappe.query_report.get_filter_value(fn);
+	let types = [];
+
+	const d = new frappe.ui.Dialog({
+		title: __("Give Leave"),
+		size: "large",
+		fields: [
+			{
+				fieldtype: "Link",
+				fieldname: "employee",
+				label: __("Employee"),
+				options: "Employee",
+				reqd: 1,
+				default: filter("employee") || "",
+				get_query: () => {
+					const company = filter("company");
+					return company ? { filters: { company, status: "Active" } } : {};
+				},
+				onchange: () => loadTypes(),
+			},
+			{ fieldtype: "Column Break" },
+			{
+				fieldtype: "Select",
+				fieldname: "leave_type",
+				label: __("Leave Type"),
+				reqd: 1,
+				options: [],
+				onchange: () => refreshPreview(),
+			},
+			{ fieldtype: "Section Break" },
+			{ fieldtype: "Date", fieldname: "from_date", label: __("From"), reqd: 1, onchange: () => buildDays() },
+			{ fieldtype: "Column Break" },
+			{ fieldtype: "Date", fieldname: "to_date", label: __("To"), reqd: 1, onchange: () => buildDays() },
+			{ fieldtype: "Section Break", label: __("Days") },
+			{
+				fieldtype: "MultiCheck",
+				fieldname: "days",
+				columns: 4,
+				options: [],
+				on_change: () => refreshPreview(),
+			},
+			{ fieldtype: "Section Break" },
+			{ fieldtype: "Check", fieldname: "half_day", label: __("Half Day"), onchange: () => refreshPreview() },
+			{ fieldtype: "Column Break" },
+			{
+				fieldtype: "Date",
+				fieldname: "half_day_date",
+				label: __("Half Day Date"),
+				depends_on: "half_day",
+				onchange: () => refreshPreview(),
+			},
+			{ fieldtype: "Section Break" },
+			{ fieldtype: "HTML", fieldname: "preview" },
+			{
+				fieldtype: "Small Text",
+				fieldname: "reason",
+				label: __("Reason"),
+				reqd: 1,
+				description: __("Required. Kept on the leave and in the Attendance Correction Log."),
+			},
+		],
+		primary_action_label: __("Give Leave"),
+		primary_action(values) {
+			const days = chosenDays();
+			if (!days.length) {
+				frappe.msgprint(__("Choose at least one day."));
+				return;
+			}
+			d.disable_primary_action();
+			frappe
+				.call({
+					method: `${LEAVE_METHOD}.give_leave`,
+					type: "POST",
+					args: {
+						employee: values.employee,
+						leave_type: values.leave_type,
+						dates: JSON.stringify(days),
+						half_day_date: values.half_day ? values.half_day_date : null,
+						reason: values.reason,
+					},
+					freeze: true,
+					freeze_message: __("Giving leave..."),
+				})
+				.then((r) => {
+					d.hide();
+					const m = r.message || {};
+					const lines = (m.made || []).map(
+						(x) =>
+							`${frappe.utils.get_form_link("Leave Application", x.leave_application, true)}: ${x.from}${
+								x.to !== x.from ? " → " + x.to : ""
+							}, ${x.days} ${__("day(s)")} (${__("was")} ${x.was})`
+					);
+					(m.warnings || []).forEach((w) => lines.push(`<span style="color:#96662A">⚠ ${w}</span>`));
+					frappe.msgprint({ title: __("Leave Given"), message: lines.join("<br>"), indicator: "green" });
+					frappe.query_report.refresh();
+				})
+				.always(() => d.enable_primary_action());
+		},
+	});
+
+	const chosenDays = () => d.fields_dict.days.get_checked_options();
+
+	function buildDays() {
+		const from = d.get_value("from_date");
+		const to = d.get_value("to_date");
+		let options = [];
+		if (from && to && to >= from) {
+			const span = frappe.datetime.get_day_diff(to, from) + 1;
+			if (span > MAX_LEAVE_RANGE_DAYS) {
+				frappe.msgprint(__("Choose at most {0} days at a time.", [MAX_LEAVE_RANGE_DAYS]));
+			} else {
+				for (let i = 0; i < span; i++) {
+					const day = frappe.datetime.add_days(from, i);
+					const weekday = moment(day).format("ddd");
+					options.push({ label: `${day} ${weekday}`, value: day, checked: 1 });
+				}
+			}
+		}
+		d.fields_dict.days.df.options = options;
+		d.fields_dict.days.refresh();
+		loadTypes();
+	}
+
+	function loadTypes() {
+		const employee = d.get_value("employee");
+		const from = d.get_value("from_date");
+		if (!employee || !from) return refreshPreview();
+		frappe.call({
+			method: `${LEAVE_METHOD}.leave_types_for`,
+			args: { employee, on_date: from },
+			callback: (r) => {
+				types = r.message || [];
+				const current = d.get_value("leave_type");
+				d.set_df_property("leave_type", "options", types.map((t) => t.leave_type));
+				if (current && types.some((t) => t.leave_type === current)) d.set_value("leave_type", current);
+				refreshPreview();
+			},
+		});
+	}
+
+	function refreshPreview() {
+		const wrapper = d.fields_dict.preview.$wrapper;
+		const employee = d.get_value("employee");
+		const leave_type = d.get_value("leave_type");
+		const days = chosenDays();
+		if (!employee || !leave_type || !days.length) {
+			wrapper.html(`<div class="text-muted">${__("Pick the employee, leave type and days to see the balance.")}</div>`);
+			return;
+		}
+		frappe.call({
+			method: `${LEAVE_METHOD}.preview`,
+			args: {
+				employee,
+				leave_type,
+				dates: JSON.stringify(days),
+				half_day_date: d.get_value("half_day") ? d.get_value("half_day_date") : null,
+			},
+			callback: (r) => {
+				const p = r.message || {};
+				const balance = p.is_lwp ? __("no balance needed (Leave Without Pay)") : `${p.balance}`;
+				const holidays = p.include_holiday
+					? __("holidays inside the days count as leave")
+					: __("holidays inside the days are not counted");
+				const after = p.is_lwp ? "" : ` · ${__("after")}: <b>${(p.balance - p.deduct).toFixed(2)}</b>`;
+				const runs = (p.runs || []).map((x) => (x.from === x.to ? x.from : `${x.from} → ${x.to}`)).join(", ");
+				const warn = p.deduct <= 0 ? `<li>${__("Every chosen day is a holiday for this type, so HRMS will refuse it.")}</li>` : "";
+				wrapper.html(`
+					<div style="padding:8px 10px;background:#FAF6EC;border-left:3px solid #C9A227;margin-bottom:10px">
+						<div>${__("Balance")}: <b>${balance}</b> · ${__("this uses")}: <b>${p.deduct}</b> ${__("day(s)")}${after}</div>
+						<div class="text-muted" style="font-size:.9em">${holidays}. ${__("One Leave Application per run")}: ${runs}</div>
+						<ul style="margin:6px 0 0 16px;color:#96662A">${warn}${(p.notes || []).map((n) => `<li>${n}</li>`).join("")}</ul>
+					</div>`);
+			},
+		});
+	}
+
+	d.show();
+	refreshPreview();
 }
 
 // The Attendance Correction Log, narrowed to what the report shows.

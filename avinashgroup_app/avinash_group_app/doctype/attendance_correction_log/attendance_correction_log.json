@@ -2,7 +2,7 @@
  "actions": [],
  "autoname": "ACL-.#####",
  "creation": "2026-10-15 00:00:00.000000",
- "description": "One row per hand correction of attendance: a punch moved, added or deleted, or a day's shift changed. Written by the system; nobody edits it.",
+ "description": "One row per hand correction of attendance: a punch moved, added or deleted, a day's shift changed, or leave given from Monthly Attendance BS. Written by the system; nobody edits it.",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -28,32 +28,163 @@
   "attendance",
   "employee_checkin",
   "column_break_ref",
-  "shift_assignment"
+  "shift_assignment",
+  "leave_application"
  ],
  "fields": [
-  {"fieldname": "employee", "fieldtype": "Link", "label": "Employee", "options": "Employee", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1, "search_index": 1},
-  {"fieldname": "employee_name", "fieldtype": "Data", "label": "Employee Name", "in_list_view": 1, "read_only": 1},
-  {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company", "in_standard_filter": 1, "read_only": 1},
-  {"fieldname": "column_break_emp", "fieldtype": "Column Break"},
-  {"fieldname": "attendance_date", "fieldtype": "Date", "label": "Attendance Date", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1, "search_index": 1},
-  {"fieldname": "correction_type", "fieldtype": "Select", "label": "Correction", "options": "Punch Time Edited\nPunch Added\nPunch Deleted\nShift Changed\nRe-marked\nReplacement Leave", "in_list_view": 1, "in_standard_filter": 1, "read_only": 1},
-  {"fieldname": "source", "fieldtype": "Select", "label": "Made From", "options": "Monthly Attendance BS\nEmployee Checkin Form", "in_standard_filter": 1, "read_only": 1},
-  {"fieldname": "change_section", "fieldtype": "Section Break", "label": "Change"},
-  {"fieldname": "old_value", "fieldtype": "Data", "label": "Before", "in_list_view": 1, "read_only": 1},
-  {"fieldname": "column_break_change", "fieldtype": "Column Break"},
-  {"fieldname": "new_value", "fieldtype": "Data", "label": "After", "in_list_view": 1, "read_only": 1},
-  {"fieldname": "reason_section", "fieldtype": "Section Break"},
-  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "read_only": 1},
-  {"fieldname": "who_section", "fieldtype": "Section Break", "label": "Done By"},
-  {"fieldname": "done_by", "fieldtype": "Link", "label": "User", "options": "User", "in_standard_filter": 1, "read_only": 1},
-  {"fieldname": "done_by_name", "fieldtype": "Data", "label": "Name", "read_only": 1},
-  {"fieldname": "column_break_who", "fieldtype": "Column Break"},
-  {"fieldname": "done_on", "fieldtype": "Datetime", "label": "On", "in_list_view": 1, "read_only": 1},
-  {"fieldname": "references_section", "fieldtype": "Section Break", "label": "Records", "collapsible": 1, "description": "Names as they were when the correction was made. Attendance is rebuilt by a correction, so an older entry may name a row that has since been replaced."},
-  {"fieldname": "attendance", "fieldtype": "Data", "label": "Attendance", "read_only": 1},
-  {"fieldname": "employee_checkin", "fieldtype": "Data", "label": "Employee Checkin", "read_only": 1},
-  {"fieldname": "column_break_ref", "fieldtype": "Column Break"},
-  {"fieldname": "shift_assignment", "fieldtype": "Data", "label": "Shift Assignment", "read_only": 1}
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Employee Name",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_emp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "attendance_date",
+   "fieldtype": "Date",
+   "label": "Attendance Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "correction_type",
+   "fieldtype": "Select",
+   "label": "Correction",
+   "options": "Punch Time Edited\nPunch Added\nPunch Deleted\nShift Changed\nRe-marked\nReplacement Leave\nLeave Given",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Made From",
+   "options": "Monthly Attendance BS\nEmployee Checkin Form",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "change_section",
+   "fieldtype": "Section Break",
+   "label": "Change"
+  },
+  {
+   "fieldname": "old_value",
+   "fieldtype": "Data",
+   "label": "Before",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_change",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "new_value",
+   "fieldtype": "Data",
+   "label": "After",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "reason_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "who_section",
+   "fieldtype": "Section Break",
+   "label": "Done By"
+  },
+  {
+   "fieldname": "done_by",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "done_by_name",
+   "fieldtype": "Data",
+   "label": "Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_who",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "done_on",
+   "fieldtype": "Datetime",
+   "label": "On",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "Records",
+   "collapsible": 1,
+   "description": "Names as they were when the correction was made. Attendance is rebuilt by a correction, so an older entry may name a row that has since been replaced."
+  },
+  {
+   "fieldname": "attendance",
+   "fieldtype": "Data",
+   "label": "Attendance",
+   "read_only": 1
+  },
+  {
+   "fieldname": "employee_checkin",
+   "fieldtype": "Data",
+   "label": "Employee Checkin",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ref",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "shift_assignment",
+   "fieldtype": "Data",
+   "label": "Shift Assignment",
+   "read_only": 1
+  },
+  {
+   "fieldname": "leave_application",
+   "fieldtype": "Data",
+   "label": "Leave Application",
+   "read_only": 1
+  }
  ],
  "in_create": 1,
  "links": [],
@@ -64,9 +195,28 @@
  "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
-  {"role": "System Manager", "read": 1, "report": 1, "export": 1, "print": 1, "delete": 1},
-  {"role": "HR Manager", "read": 1, "report": 1, "export": 1, "print": 1},
-  {"role": "HR User", "read": 1, "report": 1, "export": 1, "print": 1}
+  {
+   "role": "System Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1,
+   "delete": 1
+  },
+  {
+   "role": "HR Manager",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  },
+  {
+   "role": "HR User",
+   "read": 1,
+   "report": 1,
+   "export": 1,
+   "print": 1
+  }
  ],
  "sort_field": "done_on",
  "sort_order": "DESC",

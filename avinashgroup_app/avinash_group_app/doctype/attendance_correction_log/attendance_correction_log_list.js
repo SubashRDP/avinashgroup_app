@@ -7,6 +7,7 @@ frappe.listview_settings["Attendance Correction Log"] = {
 			"Shift Changed": "purple",
 			"Re-marked": "gray",
 			"Replacement Leave": "green",
+			"Leave Given": "cyan",
 		};
 		return [__(doc.correction_type), tones[doc.correction_type] || "gray", `correction_type,=,${doc.correction_type}`];
 	},

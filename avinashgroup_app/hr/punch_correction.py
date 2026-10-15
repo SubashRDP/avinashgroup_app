@@ -826,7 +826,7 @@ SOURCE_FORM = "Employee Checkin Form"
 
 def log_correction(
 	employee, day, correction_type, source, old, new, reason,
-	attendance=None, checkin=None, shift_assignment=None,
+	attendance=None, checkin=None, shift_assignment=None, leave_application=None,
 ):
 	"""One Attendance Correction Log row, in the caller's transaction. No-op
 	until the doctype is installed (bench migrate)."""
@@ -851,6 +851,7 @@ def log_correction(
 			"attendance": attendance,
 			"employee_checkin": checkin,
 			"shift_assignment": shift_assignment,
+			"leave_application": leave_application,
 		}
 	)
 	entry.insert(ignore_permissions=True)
