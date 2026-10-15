@@ -151,7 +151,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 **What.** Puts the employee's **Monthly** and **% of Initial Basic** allowances on the slip as ordinary (non-additional) earning rows, adds/updates/drops them to match the assignment, then reruns HRMS's `calculate_net_pay`.
 
-**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L321), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L274), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L259); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L73).
+**Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L332), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L285), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L270); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L73).
 
 **Why** (module docstring, [../allowances.md](../allowances.md)):
 - Every person has their own mix (27 combinations across 195 people, October 2026), so allowances are rows on the person's Salary Structure Assignment, not structure formulas. No row → not paid.
@@ -182,7 +182,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 Tea & Conveyance, Meal, Overtime (earnings) and Late Fine, Salary Advance recovery (deductions) arrive as submitted **Additional Salary** created by *Prepare Payroll Inputs* ([05-payroll-entry.md](05-payroll-entry.md)); arrears by Salary Revision ([08-changes-over-time.md](08-changes-over-time.md)). HRMS picks them up in `add_additional_salary_components`. On the slip they have `default_amount = 0`, `additional_amount = amount`, and are not prorated.
 
-Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L785) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L806) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
+Tax treatment: [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L794) sets [`deduct_full_tax_on_selected_payroll_date`](../../avinashgroup_app/payroll/attendance_allowance.py#L815) = 1 on earnings. HRMS therefore does **not** spread their tax over the remaining months: the extra tax they cause is charged in full in the month they are paid (`full_tax_on_additional_earnings`, 6.7). Salary Arrears (Salary Revision) is flagged the same way.
 
 On avinas1 there are 10 Additional Salary rows, all from Prepare Payroll Inputs, all dated 2026-08-16 (NGI Shrawan, 4 employees). **The Bhadra runs at NGI and NGN carry none**: no tea, meal, overtime or late fine was paid in Bhadra (see the worked example's notes).
 
@@ -287,7 +287,7 @@ It writes the tax row (`amount`, `default_amount`), `custom_retirement_excess`, 
 
 **What.** Fills `custom_daily_breakdown` (child doctype **Salary Slip Day**: `line_type` Day / Month End, `miti`, `date`, `weekday`, `attendance`, `paid_day`, `fixed_pay`, `earned`, `deducted`, `detail`, `day_total`, `balance`) with one row per day and month-end rows, ending exactly at `net_pay`.
 
-**Where.** [`build_daily_breakdown`](../../avinashgroup_app/payroll/daily_breakdown.py#L64), [`breakdown_rows`](../../avinashgroup_app/payroll/daily_breakdown.py#L76), [`paid_weight`](../../avinashgroup_app/payroll/daily_breakdown.py#L210), [`spread_over_days`](../../avinashgroup_app/payroll/daily_breakdown.py#L158), [`attendance_additional_salaries`](../../avinashgroup_app/payroll/daily_breakdown.py#L198), [`fetch_holidays`](../../avinashgroup_app/payroll/daily_breakdown.py#L268). Created by `patches/setup_salary_slip_daily_breakdown.py`.
+**Where.** [`build_daily_breakdown`](../../avinashgroup_app/payroll/daily_breakdown.py#L64), [`breakdown_rows`](../../avinashgroup_app/payroll/daily_breakdown.py#L76), [`paid_weight`](../../avinashgroup_app/payroll/daily_breakdown.py#L215), [`spread_over_days`](../../avinashgroup_app/payroll/daily_breakdown.py#L158), [`attendance_additional_salaries`](../../avinashgroup_app/payroll/daily_breakdown.py#L203), [`fetch_holidays`](../../avinashgroup_app/payroll/daily_breakdown.py#L273). Created by `patches/setup_salary_slip_daily_breakdown.py`.
 
 **Why.** Employees asked "why is my tea 2,115 and not 2,350?"; the slip only had monthly totals (module docstring, [../allowances.md](../allowances.md) "Daily breakdown on the salary slip").
 

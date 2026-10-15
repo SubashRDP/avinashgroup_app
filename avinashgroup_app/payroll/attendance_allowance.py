@@ -258,7 +258,11 @@ def _qty_for_employee(employee: str, sc, start_date, end_date) -> float:
 			matched_any = True
 			total += contribution
 
-	if (sc.custom_unit or "Per Day") == "Flat per Period":
+	# Overtime, the late fine and meals count hours or meals and hide Unit on
+	# the form; a Unit left over from before must not turn them into a flat 1.
+	if sc.custom_condition_type not in (AUTHORISED_OVERTIME, LATE_TIME, "Meal Entitlement") and (
+		sc.custom_unit or "Per Day"
+	) == "Flat per Period":
 		return 1.0 if matched_any else 0.0
 	return total
 
@@ -635,7 +639,12 @@ def recompute_holiday_flags(start_date=None, end_date=None) -> dict:
 
 
 def _skip_for_eligibility(emp_doc, sc) -> bool:
-	ot_only = sc.get("custom_ot_eligible_only") or sc.get("custom_condition_type") == AUTHORISED_OVERTIME
+	# The late fine is for everyone not exempt, so a tick left on it (the form
+	# no longer shows the box there) must not narrow it to OT-eligible staff.
+	condition = sc.get("custom_condition_type")
+	ot_only = condition == AUTHORISED_OVERTIME or (
+		condition != LATE_TIME and sc.get("custom_ot_eligible_only")
+	)
 	if ot_only and not emp_doc.get("custom_ot_eligibility"):
 		# Policy 2.2: overtime money and meals are for OT-eligible staff; admin
 		# and officers take replacement leave instead.

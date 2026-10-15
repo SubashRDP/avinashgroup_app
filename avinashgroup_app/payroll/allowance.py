@@ -173,18 +173,29 @@ def get_section(employee: str) -> str | None:
 # ── the allowance itself ────────────────────────────────────────────────────
 
 
+# Conditions always priced off the basic, whatever Rate Basis says (the form
+# hides it for them). Spelled out here because attendance_allowance, which
+# owns the names, imports this module.
+ALWAYS_FROM_BASIC = ("Authorised Overtime", "Late Time")
+
+
 def rate_is_computed(allowance: str) -> bool:
-	"""Priced off the person's basic (overtime), so no row carries a rate for it."""
-	return frappe.get_cached_value("Salary Component", allowance, "custom_rate_basis") == COMPUTED_RATE_BASIS
+	"""Priced off the person's basic (overtime, late fine), so no row carries a rate for it."""
+	basis, condition = frappe.get_cached_value(
+		"Salary Component", allowance, ["custom_rate_basis", "custom_condition_type"]
+	) or (None, None)
+	return basis == COMPUTED_RATE_BASIS or condition in ALWAYS_FROM_BASIC
 
 
 def unit_for(allowance: str) -> str:
 	"""The unit a Rate for this allowance is in, as the rate tables show it."""
 	if not allowance:
 		return ""
-	kind, multiplier = frappe.get_cached_value(
-		"Salary Component", allowance, ["custom_allowance_kind", "custom_rate_multiplier"]
-	) or (None, None)
+	kind, multiplier, condition = frappe.get_cached_value(
+		"Salary Component", allowance, ["custom_allowance_kind", "custom_rate_multiplier", "custom_condition_type"]
+	) or (None, None, None)
+	if condition == "Authorised Overtime":
+		multiplier = 1.5  # attendance_allowance.OVERTIME_MULTIPLIER; the field is hidden for overtime
 	if rate_is_computed(allowance):
 		return _("from basic × {0}").format(frappe.format(flt(multiplier) or 1, {"fieldtype": "Float"}))
 	return _(UNIT_BY_KIND.get(kind, ""))

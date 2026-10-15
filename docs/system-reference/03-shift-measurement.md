@@ -61,7 +61,7 @@ measure_day(att, is_holiday=False, ot_eligible=False) -> {late_minutes, early_ex
 
 ### Late Excused
 
-`custom_late_excused` on the Attendance ([02 §5](02-checkin-to-attendance.md#5-attendance-validate-hrms-first-then-our-four-hooks)) does **not** change `measure_day` — reports keep showing the minutes. It is checked by the consumers: `evaluate_rule` [`"Late Time"`](../../avinashgroup_app/payroll/attendance_allowance.py#L316) returns 0 (no fine) and the half-day hook restores Present. Patch `setup_late_excuse` ([`custom_late_excused`](../../avinashgroup_app/patches/setup_late_excuse.py#L27)): "The lateness stays recorded … but the fine is not charged."
+`custom_late_excused` on the Attendance ([02 §5](02-checkin-to-attendance.md#5-attendance-validate-hrms-first-then-our-four-hooks)) does **not** change `measure_day` — reports keep showing the minutes. It is checked by the consumers: `evaluate_rule` [`"Late Time"`](../../avinashgroup_app/payroll/attendance_allowance.py#L320) returns 0 (no fine) and the half-day hook restores Present. Patch `setup_late_excuse` ([`custom_late_excused`](../../avinashgroup_app/patches/setup_late_excuse.py#L27)): "The lateness stays recorded … but the fine is not charged."
 
 ### How day kinds are treated (summary)
 
@@ -77,11 +77,11 @@ measure_day(att, is_holiday=False, ot_eligible=False) -> {late_minutes, early_ex
 
 ### Late Fine end to end (worked example)
 
-`Late Fine` on avinas1: `custom_condition_type = Late Time`, `custom_unit = Per Hour`, `custom_rate_basis = Hourly Basic × Multiplier`, `custom_rate_multiplier = 1` (other attendance components: Daily Wage, Meal, Overtime 1.5×, Tea & Conveyance). For `NGI-ATT-83/84-00017` (NGI-EMP-00040, 2026-08-04, in 09:40): `custom_late_entry` = 2400 s → `measure_day` 40 late minutes → [`_per_unit`](../../avinashgroup_app/payroll/attendance_allowance.py#L506) Per Hour → 0.667 h → summed over the month by Prepare Payroll Inputs → `qty × (assignment base ÷ BS-month days ÷ 8 × 1)` as a Late Fine Additional Salary. Exempt staff (`custom_late_fine_exempt`) are skipped in [`_skip_for_eligibility`](../../avinashgroup_app/payroll/attendance_allowance.py#L637). Pricing details: [05-payroll-entry.md](05-payroll-entry.md).
+`Late Fine` on avinas1: `custom_condition_type = Late Time`, `custom_unit = Per Hour`, `custom_rate_basis = Hourly Basic × Multiplier`, `custom_rate_multiplier = 1` (other attendance components: Daily Wage, Meal, Overtime 1.5×, Tea & Conveyance). For `NGI-ATT-83/84-00017` (NGI-EMP-00040, 2026-08-04, in 09:40): `custom_late_entry` = 2400 s → `measure_day` 40 late minutes → [`_per_unit`](../../avinashgroup_app/payroll/attendance_allowance.py#L510) Per Hour → 0.667 h → summed over the month by Prepare Payroll Inputs → `qty × (assignment base ÷ BS-month days ÷ 8 × 1)` as a Late Fine Additional Salary. Exempt staff (`custom_late_fine_exempt`) are skipped in [`_skip_for_eligibility`](../../avinashgroup_app/payroll/attendance_allowance.py#L641). Pricing details: [05-payroll-entry.md](05-payroll-entry.md).
 
 ### The other time-based conditions (not `measure_day`)
 
-`Early Entry Before`, `Late Stay After`, `Late Arrival After` in `evaluate_rule` ([`"Late Arrival After"`](../../avinashgroup_app/payroll/attendance_allowance.py#L326)) read the raw seconds against `custom_time_offset_hours` directly. `Late Arrival After` skips excused and Half Day rows; **none of the three skips holidays** (unlike `measure_day`). No component on avinas1 uses them. Meals ([`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L352)) also use raw `custom_early_entry` / `custom_late_exit` ≥ 1.5 h on authorised OT days — see [04-overtime.md](04-overtime.md).
+`Early Entry Before`, `Late Stay After`, `Late Arrival After` in `evaluate_rule` ([`"Late Arrival After"`](../../avinashgroup_app/payroll/attendance_allowance.py#L330)) read the raw seconds against `custom_time_offset_hours` directly. `Late Arrival After` skips excused and Half Day rows; **none of the three skips holidays** (unlike `measure_day`). No component on avinas1 uses them. Meals ([`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L356)) also use raw `custom_early_entry` / `custom_late_exit` ≥ 1.5 h on authorised OT days — see [04-overtime.md](04-overtime.md).
 
 ---
 
@@ -105,8 +105,8 @@ So the "O.T." column in Monthly Attendance BS is an indicator; the paid figure i
 
 | Consumer | Uses | Link |
 |---|---|---|
-| Late Fine (payroll) | `measure_day` via `evaluate_rule` "Late Time" | [`measure_day(row`](../../avinashgroup_app/payroll/attendance_allowance.py#L321) |
-| Salary Slip **Daily Breakdown** | `evaluate_rule` per day to spread attendance components; [`paid_weight`](../../avinashgroup_app/payroll/daily_breakdown.py#L210) for the day's pay fraction | [`evaluate_rule(`](../../avinashgroup_app/payroll/daily_breakdown.py#L170) — see [06-salary-slip.md](06-salary-slip.md) |
+| Late Fine (payroll) | `measure_day` via `evaluate_rule` "Late Time" | [`measure_day(row`](../../avinashgroup_app/payroll/attendance_allowance.py#L325) |
+| Salary Slip **Daily Breakdown** | `evaluate_rule` per day to spread attendance components; [`paid_weight`](../../avinashgroup_app/payroll/daily_breakdown.py#L215) for the day's pay fraction | [`evaluate_rule(`](../../avinashgroup_app/payroll/daily_breakdown.py#L170) — see [06-salary-slip.md](06-salary-slip.md) |
 | Monthly Attendance BS — Detail | `ShiftRoster`, `measure_day` | below |
 | Monthly Attendance BS — Summary | `measure_day` | below |
 | Work On Holiday BS | `custom_worked_on_holiday` only | below |

@@ -188,7 +188,12 @@ def describe(sc, qty, unit, amount, sign) -> str:
 	money = f"{'−' if sign < 0 else ''}{flt(amount, 2):,.2f}".replace(".00", "")
 	if sc.get("custom_condition_type") in ("Late Time", "Late Arrival After"):
 		return f"{name} {round(qty * 60)} min {money}"
-	if (sc.get("custom_unit") or "Per Day") == "Per Hour":
+	# Overtime is always hours and meals always a count; their Unit is hidden
+	# on the form, so a leftover value must not decide the wording.
+	condition = sc.get("custom_condition_type")
+	if condition == "Authorised Overtime" or (
+		condition != "Meal Entitlement" and (sc.get("custom_unit") or "Per Day") == "Per Hour"
+	):
 		return f"{name} {flt(qty, 2):g} h = {money}"
 	if qty == 1:
 		return f"{name} {money}"
