@@ -38,10 +38,10 @@ A line under the filters says which dates were used, for example "Bhadra 2083: 2
 |---|---|
 | S. No., Employee, Employee Name, Section, Department, Designation | Who |
 | **Attendance** | Days at work in the month (a half day = ½) |
-| **OT Hr.**, **Meal Qty.**, **Late Hr.** | Overtime hours, meals and late hours that were paid or fined |
+| **OT Hr.**, **OT Time**, **Meal Qty.**, **Late Hr.** | Overtime hours (to 4 decimals, exact to the second) and the same as h:mm:ss, meals, and late hours that were paid or fined. OT Hr. × OT Rate = the OT column, to the paisa |
 | **Initial Basic** | From the person's assignment |
 | **Basic Salary** | Full-month Basic |
-| **OT Rate/ Hr.**, **Late Deduction Rate** | The person's rates |
+| **OT Rate/ Hr.**, **Late Deduction Rate** | The person's rates, to 4 decimals |
 | **Unpaid Leave** | Days not paid |
 | **Deduction** | What unpaid days took off Basic |
 | **Net Basic** | Basic actually paid |
@@ -49,9 +49,9 @@ A line under the filters says which dates were used, for example "Bhadra 2083: 2
 | HRA, Dearness Allowance, Other Allowance, Fixed, Fuel, Maintenance, Gas, Edu (and any other allowance) | Fixed allowances paid |
 | **Total Allowance** | Sum of the allowances |
 | **Regular Salary** | Net Basic + SSF Addition + Total Allowance |
-| **Tea Conveyance**, **OT**, **Meal** (and other earnings) | Attendance-based earnings |
+| **Tea Conveyance**, **OT**, **Meal** (and other earnings) | Attendance-based earnings. They are found by their Condition Type, so tea is here (not in Total Allowance) whatever the component is called, for example "Tea & Convience" |
 | **Gross Salary** | The slip's gross pay |
-| **SSF**, **Tax**, **Late Fine**, **Regular Advance**, **Dashain Advance** (and any other deduction) | Deductions |
+| **SSF**, **Tax**, **Late Fine**, **Regular Advance**, **Dashain Advance** (and any other deduction) | Deductions. Late Fine is the Late Time component, whatever its name (for example "late comers deduction") |
 | **Total Deduction**, **Net Payable** | From the slip |
 | **Last Month Net** | Net pay in the previous month, to spot big changes |
 
@@ -68,6 +68,8 @@ A component the sheet does not name still gets its own column, so the columns al
 | Orange **Payroll Journal: Not posted** | Slips are submitted but no payroll journal was found. Check that **Submit Salary Slip** finished on the Payroll Entry |
 | Orange **Payroll Journal: No payroll entry** | The slips were not made from a Payroll Entry |
 | Red cards, for example "**S/D expense: journal 4,57,000.00**" with "**-11,250.00 vs sheet**", and a red **Journal** card | The journal does **not** agree with the sheet (see below) |
+| Orange "**SSF Addition: not an expense**" | That earning is booked to an account that is not an expense (NGI: SSF Payable), so it can never appear in the journal's expense. It is left out of the gross comparison. If it should be a cost of each section, the accountant gives it expense accounts (Chapter 9) |
+| Red "**Cancelled after posting: …**" | A slip of the Payroll Entry was cancelled after the journal was posted, so the journal still pays it. The red differences are usually exactly that slip. The accountant reverses it in the journal |
 
 The journal check only runs when **Slips = 1 - Submitted**.
 

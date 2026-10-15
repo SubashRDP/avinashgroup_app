@@ -16,7 +16,14 @@ It reproduces the payroll, it never recomputes it:
   * Basic Salary is the full month (the row's default amount), Deduction what
     unpaid days took off it, Net Basic what was paid, as the sheet splits it;
   * OT hours, meals and late hours are the quantities Prepare Payroll Inputs
-    priced (Additional Salary → Quantity / Rate);
+    priced (Additional Salary → Quantity / Rate). OT is exact to the second,
+    so OT Hr. and its rate show four decimals and OT Time the h:mm:ss behind
+    them: hours × rate gives the OT column to the paisa;
+  * tea, OT, meal and the late fine are found by the Condition Type that
+    prices them, not by name: each site names them its own way ("Tea &
+    Convience", "late comers deduction"), and a name the layout did not know
+    put tea among the fixed allowances, inside Regular Salary, and left the
+    late fine without its hours or rate;
   * the section is the employee's Department → Payroll Section, the same one
     the payroll journal posts by (payroll/payroll_entry.py);
   * the summary checks the totals against the payroll journal: gross against
@@ -39,6 +46,7 @@ NO_SECTION = "No Section"
 
 #: The sheet's columns, in its order (Falgun 2082 sheets). Any other component
 #: on the slips is added after its group, so nothing is left out of a total.
+#: Fixed allowances are matched by name, ignoring case.
 FIXED_ALLOWANCES = (
 	("House Rent Allowance", "HRA"),
 	("Dearness Allowance", "Dearness Allowance"),
@@ -49,17 +57,15 @@ FIXED_ALLOWANCES = (
 	("Gas Allowance", "Gas"),
 	("Education Allowance", "Edu"),
 )
-ATTENDANCE_EARNINGS = (("Tea & Conveyance", "Tea Conveyance"), ("Overtime", "OT"), ("Meal", "Meal"))
-DEDUCTIONS = (
-	("SSF", "SSF"),
-	("Income Tax", "Tax"),
-	("Late Fine", "Late Fine"),
-	("Salary Advance", "Regular Advance"),
-	("Dashain Advance", "Dashain Advance"),
-)
+#: Attendance pay by the Condition Type that prices it (payroll/attendance_allowance.py),
+#: in the sheet's order, with the sheet's label. Tea is the per-day-present one.
+TEA, OT, MEAL, LATE = "Status = Present", "Authorised Overtime", "Meal Entitlement", "Late Time"
+ATTENDANCE_LABELS = {TEA: "Tea Conveyance", OT: "OT", MEAL: "Meal"}
+DEDUCTIONS_BEFORE_LATE = (("SSF", "SSF"), ("Income Tax", "Tax"))
+DEDUCTIONS_AFTER_LATE = (("Salary Advance", "Regular Advance"), ("Dashain Advance", "Dashain Advance"))
 BASIC, SSF_ADDITION = "Basic", "SSF Addition"
-#: Quantity columns: the component whose Additional Salary holds the count.
-QUANTITIES = (("ot_hours", "OT Hr.", "Overtime"), ("meal_qty", "Meal Qty.", "Meal"), ("late_hours", "Late Hr.", "Late Fine"))
+#: Quantity columns: (field, rate field, condition whose Additional Salary holds the count).
+QUANTITIES = (("ot_hours", "ot_rate", OT), ("meal_qty", None, MEAL), ("late_hours", "late_rate", LATE))
 
 
 def execute(filters=None):
@@ -76,8 +82,9 @@ def execute(filters=None):
 
 	names = [s.name for s in slips]
 	amounts, defaults, components = get_details(names)
-	layout = column_layout(components)
-	quantities = get_quantities(names)
+	roles = component_roles(components)
+	layout = column_layout(components, roles)
+	quantities = get_quantities(names, roles)
 	present = get_present_days(slips)
 	initial_basic = get_initial_basic(slips)
 	prev_net = get_prev_net(filters.company, period, [s.employee for s in slips])
@@ -85,6 +92,7 @@ def execute(filters=None):
 	rows = []
 	for s in slips:
 		row = sheet_row(s, layout, amounts.get(s.name, {}), defaults.get(s.name, {}))
+		row.slip = s.name
 		row.update(quantities.get(s.name, {}))
 		row["attendance"] = present.get(s.name, 0)
 		row["initial_basic"] = initial_basic.get(s.name, 0)
@@ -93,7 +101,7 @@ def execute(filters=None):
 
 	columns = base_columns() + layout_columns(layout)
 	data = grouped(rows, numeric_fields(columns))
-	summary = report_summary(rows, slips, docstatus)
+	summary = report_summary(rows, slips, docstatus, amounts)
 	message = _("{0}: {1} to {2} ({3}).").format(period.label, period.start_date, period.end_date, period.source)
 	return columns, data, message, None, summary
 
@@ -151,9 +159,21 @@ def get_details(slip_names):
 	return amounts, defaults, components
 
 
-def get_quantities(slip_names):
-	"""{slip: {ot_hours, meal_qty, late_hours, ot_rate, late_rate}} from the
-	Additional Salary each line came from."""
+def component_roles(components):
+	"""{component: Condition Type} for the attendance-driven ones on the slips."""
+	return {
+		c.name: c.custom_condition_type
+		for c in frappe.get_all(
+			"Salary Component",
+			filters={"name": ("in", list(components) or [""]), "custom_is_attendance_driven": 1},
+			fields=["name", "custom_condition_type"],
+		)
+	}
+
+
+def get_quantities(slip_names, roles):
+	"""{slip: {ot_hours, ot_time, meal_qty, late_hours, ot_rate, late_rate}}
+	from the Additional Salary each line came from."""
 	rows = frappe.db.sql(
 		"""
 		select d.parent, d.salary_component, a.custom_quantity qty, a.custom_rate rate
@@ -167,14 +187,21 @@ def get_quantities(slip_names):
 	out = {}
 	for r in rows:
 		q = out.setdefault(r.parent, {})
-		for field, _label, component in QUANTITIES:
-			if r.salary_component == component:
-				q[field] = q.get(field, 0) + flt(r.qty)
-		if r.salary_component == "Overtime":
-			q["ot_rate"] = flt(r.rate)
-		elif r.salary_component == "Late Fine":
-			q["late_rate"] = flt(r.rate)
+		for qty_field, rate_field, condition in QUANTITIES:
+			if roles.get(r.salary_component) == condition:
+				q[qty_field] = q.get(qty_field, 0) + flt(r.qty)
+				if rate_field:
+					q[rate_field] = flt(r.rate)
+	for q in out.values():
+		if q.get("ot_hours"):
+			q["ot_time"] = clock(q["ot_hours"])
 	return out
+
+
+def clock(hours):
+	"""Hours as h:mm:ss, to the second the overtime was measured to."""
+	seconds = round(flt(hours) * 3600)
+	return "{0}:{1:02d}:{2:02d}".format(seconds // 3600, seconds % 3600 // 60, seconds % 60)
 
 
 def get_present_days(slips):
@@ -236,24 +263,37 @@ def get_prev_net(company, period, employees):
 # ── layout ──────────────────────────────────────────────────────────────────
 
 
-def column_layout(components):
+def column_layout(components, roles):
 	"""The component columns in sheet order, each group followed by any
-	component on the slips the sheet did not name."""
+	component on the slips the sheet did not name.
+
+	Attendance pay (tea, OT, meal) is never a fixed allowance, whatever its
+	Is Allowance tick: it is paid by the days and hours, after Regular Salary.
+	"""
 	earnings = {c for c, field in components.items() if field == "earnings"}
 	deductions = {c for c, field in components.items() if field == "deductions"}
-	named = {c for c, _l in FIXED_ALLOWANCES + ATTENDANCE_EARNINGS + DEDUCTIONS} | {BASIC, SSF_ADDITION}
+	by_name = {c.lower(): c for c in components}
 
 	def present(group):
-		return [(c, label) for c, label in group if c in components]
+		return [(by_name[name.lower()], label) for name, label in group if name.lower() in by_name]
+
+	attendance = sorted(
+		(c for c in earnings if c in roles),
+		key=lambda c: (list(ATTENDANCE_LABELS).index(roles[c]) if roles[c] in ATTENDANCE_LABELS else len(ATTENDANCE_LABELS), c),
+	)
+	late = [(c, "Late Fine") for c in sorted(deductions) if roles.get(c) == LATE]
+	fixed = present(FIXED_ALLOWANCES)
+	named_deductions = present(DEDUCTIONS_BEFORE_LATE) + late + present(DEDUCTIONS_AFTER_LATE)
+	named = {c for c, _l in fixed + named_deductions} | set(attendance) | {BASIC, SSF_ADDITION}
 
 	extra_earnings = sorted(earnings - named)
 	allowance_extras = [c for c in extra_earnings if frappe.get_cached_value("Salary Component", c, "custom_is_allowance")]
 	other_earnings = [c for c in extra_earnings if c not in allowance_extras]
 	return frappe._dict(
-		allowances=present(FIXED_ALLOWANCES) + [(c, c) for c in allowance_extras],
-		attendance=present(ATTENDANCE_EARNINGS),
+		allowances=fixed + [(c, c) for c in allowance_extras],
+		attendance=[(c, ATTENDANCE_LABELS.get(roles[c], c)) for c in attendance],
 		other_earnings=[(c, c) for c in other_earnings],
-		deductions=present(DEDUCTIONS) + [(c, c) for c in sorted(deductions - named)],
+		deductions=named_deductions + [(c, c) for c in sorted(deductions - named)],
 	)
 
 
@@ -299,13 +339,14 @@ def base_columns():
 		{"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 140},
 		{"label": _("Designation"), "fieldname": "designation", "fieldtype": "Link", "options": "Designation", "width": 120},
 		{"label": _("Attendance"), "fieldname": "attendance", "fieldtype": "Float", "precision": 1, "width": 90},
-		{"label": _("OT Hr."), "fieldname": "ot_hours", "fieldtype": "Float", "precision": 2, "width": 70},
+		{"label": _("OT Hr."), "fieldname": "ot_hours", "fieldtype": "Float", "precision": 4, "width": 85},
+		{"label": _("OT Time"), "fieldname": "ot_time", "fieldtype": "Data", "width": 80},
 		{"label": _("Meal Qty."), "fieldname": "meal_qty", "fieldtype": "Float", "precision": 0, "width": 75},
-		{"label": _("Late Hr."), "fieldname": "late_hours", "fieldtype": "Float", "precision": 2, "width": 70},
+		{"label": _("Late Hr."), "fieldname": "late_hours", "fieldtype": "Float", "precision": 4, "width": 80},
 		currency(_("Initial Basic"), "initial_basic"),
 		currency(_("Basic Salary"), "basic_salary"),
-		currency(_("OT Rate/ Hr."), "ot_rate", 95),
-		currency(_("Late Deduction Rate"), "late_rate", 95),
+		dict(currency(_("OT Rate/ Hr."), "ot_rate", 100), precision=4),
+		dict(currency(_("Late Deduction Rate"), "late_rate", 100), precision=4),
 		{"label": _("Unpaid Leave"), "fieldname": "unpaid_days", "fieldtype": "Float", "precision": 1, "width": 80},
 		currency(_("Deduction"), "basic_deduction", 100),
 		currency(_("Net Basic"), "net_basic"),
@@ -366,13 +407,15 @@ def total_row(rows, numeric, label):
 	total = frappe._dict(employee_name=label, bold=1)
 	for f in numeric:
 		total[f] = sum(flt(r.get(f)) for r in rows)
+	if total.get("ot_hours"):
+		total.ot_time = clock(total.ot_hours)
 	return total
 
 
 # ── the check against the payroll journal ───────────────────────────────────
 
 
-def report_summary(rows, slips, docstatus):
+def report_summary(rows, slips, docstatus, amounts):
 	gross = sum(r.gross_pay for r in rows)
 	deductions = sum(r.total_deduction for r in rows)
 	net = sum(r.net_pay for r in rows)
@@ -383,14 +426,18 @@ def report_summary(rows, slips, docstatus):
 		{"label": _("Net Payable"), "value": net, "datatype": "Currency", "indicator": "Blue"},
 	]
 	if docstatus == 1:
-		cards += journal_check(rows, slips, net)
+		cards += journal_check(rows, slips, net, amounts)
 	return cards
 
 
-def journal_check(rows, slips, net):
+def journal_check(rows, slips, net, amounts):
 	"""Does the payroll journal say the same? Each section's gross against the
 	journal's debits to that section's expense accounts, and net pay against
 	its credit to the payroll payable account.
+
+	An earning whose account is not an expense (SSF Addition booked to SSF
+	Payable on NGI) never reaches an expense debit, so it is left out of the
+	sheet's side too and named on a card: the gap is the set-up, not the sheet.
 
 	HRMS tags only the payable lines with the Payroll Entry, so the journal is
 	found through them and read whole.
@@ -423,6 +470,7 @@ def journal_check(rows, slips, net):
 	)
 	company = slips[0].company
 	account_section, clashes = section_of_accounts(company)
+	off_expense = earnings_not_expensed(company)
 	journal = {}
 	for l in lines:
 		if l.root_type == "Expense":
@@ -435,7 +483,8 @@ def journal_check(rows, slips, net):
 
 	sheet = {}
 	for r in rows:
-		sheet[r.section] = sheet.get(r.section, 0) + r.gross_pay
+		booked = r.gross_pay - sum(flt(amounts.get(r.slip, {}).get(c)) for c in off_expense)
+		sheet[r.section] = sheet.get(r.section, 0) + booked
 	# (what, journal, sheet) for each figure that disagrees.
 	differences = [
 		(_("{0} expense").format(sec), journal.get(sec, 0), sheet.get(sec, 0))
@@ -453,9 +502,34 @@ def journal_check(rows, slips, net):
 			"indicator": "Red",
 		}
 		for component, account, first, section in clashes
+	] + [
+		{
+			"label": _("{0}: not an expense").format(component),
+			"value": _("posts to {0}; left out of the gross check").format(account.split(" - ")[0]),
+			"datatype": "Data",
+			"indicator": "Orange",
+		}
+		for component, account in sorted(off_expense.items())
+		if any(flt(amounts.get(r.slip, {}).get(component)) for r in rows)
 	]
 	if not differences:
 		return [{"label": _("Matches Journal"), "value": names, "datatype": "Data", "indicator": "Green"}] + setup
+	# A slip cancelled after its entry was posted is still in the journal (NGI
+	# Shrawan: NGI-SAL-83/84-00021, 43,080.51 net); name it, it is the usual gap.
+	setup += [
+		{
+			"label": _("Cancelled after posting: {0}").format(c.name),
+			"value": _("{0}, net {1}, still in the journal").format(c.employee_name, fmt_money(c.net_pay)),
+			"datatype": "Data",
+			"indicator": "Red",
+		}
+		for c in frappe.get_all(
+			"Salary Slip",
+			filters={"payroll_entry": ("in", entries), "docstatus": 2},
+			fields=["name", "employee_name", "net_pay"],
+			order_by="name",
+		)
+	]
 	return setup + [
 		{
 			"label": _("{0}: journal {1}").format(what, fmt_money(in_journal)),
@@ -471,16 +545,23 @@ def section_of_accounts(company):
 	"""({expense account: section label}, [accounts set for two sections]).
 
 	Each column of a component's account row names a section: the row's own
-	account O/O, then S/D and F/P. Read column by column, O/O first, so the
+	account O/O, then S/D and F/P. A row with one account in every column is
+	not split by section and is skipped. Read column by column, O/O first, so the
 	answer never depends on which row comes first; an account a row puts under
 	another section too is a set-up mistake and is returned, not guessed (NGN
 	Education Allowance's S/D column held the O/O ledger, October 2026).
 	"""
-	rows = frappe.get_all(
-		"Salary Component Account",
-		filters={"company": company, "parenttype": "Salary Component"},
-		fields=["parent", "account", "custom_account_marketing", "custom_account_plant"],
-	)
+	rows = [
+		row
+		for row in frappe.get_all(
+			"Salary Component Account",
+			filters={"company": company, "parenttype": "Salary Component"},
+			fields=["parent", "account", "custom_account_marketing", "custom_account_plant"],
+		)
+		# One account for every section is a component not split by section
+		# (SSF, tax, the late fine): nothing to clash.
+		if len({row.account, row.custom_account_marketing or row.account, row.custom_account_plant or row.account}) > 1
+	]
 	out, clashes = {}, []
 	for fieldname, section in (("account", "O/O"), ("custom_account_marketing", "S/D"), ("custom_account_plant", "F/P")):
 		for row in rows:
@@ -492,3 +573,21 @@ def section_of_accounts(company):
 				continue
 			out[account] = section
 	return out, clashes
+
+
+def earnings_not_expensed(company):
+	"""{earning: its account} for earnings booked to an account that is not an
+	expense, so the journal's expense debits never include them."""
+	rows = frappe.db.sql(
+		"""
+		select sca.parent, sca.account
+		from `tabSalary Component Account` sca
+		join `tabSalary Component` sc on sc.name = sca.parent
+		join `tabAccount` acc on acc.name = sca.account
+		where sca.company = %(company)s and sca.parenttype = 'Salary Component'
+			and sc.type = 'Earning' and acc.root_type != 'Expense'
+		""",
+		{"company": company},
+		as_dict=True,
+	)
+	return {r.parent: r.account for r in rows}
