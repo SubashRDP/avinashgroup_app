@@ -326,6 +326,9 @@ _je["before_insert"] = [
 
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
+# Leave approved for a day the person already punched on: HRMS updates an
+# existing row with db_set, so the validate hook above never sees it (policy 3.4).
+_add_doc_event("Leave Application", "on_submit", "avinashgroup_app.biometric.attendance_override.on_leave_submit")
 
 # Employee Checkin lifecycle: keep the day's IN/OUT alternation consistent when
 # punches are entered, edited or deleted via desk/API. On a past day the hand

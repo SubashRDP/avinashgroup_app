@@ -343,10 +343,20 @@ def reconcile_employee_day(
     # punches to it, and for Present/Half Day also refresh the row's computed
     # values (working hours, in/out, late/early, deviations) from the full
     # punch set, so late punches correct the numbers instead of leaving them
-    # stale forever. Status itself is never changed here. Falling through to
+    # stale forever. Status is changed only for policy 3.4: On Leave with
+    # punches becomes Half Day. Falling through to
     # mark_attendance_and_link_log would raise DuplicateAttendanceError and
     # poison the checkins.
     if existing and existing.status != "Absent":
+        if existing.status == "On Leave":
+            from avinashgroup_app.biometric.attendance_override import half_day_if_came_in
+
+            if half_day_if_came_in(employee, attendance_date):
+                existing.status = "Half Day"
+                counters["attendance_created_or_updated"] += 1
+                log_lines.append(
+                    f"{employee} {attendance_date}: came in while on leave, {existing.name} made Half Day (policy 3.4)"
+                )
         orphan_names = [c.name for c in checkins if not c.attendance]
         if orphan_names:
             update_attendance_in_checkins(orphan_names, existing.name)

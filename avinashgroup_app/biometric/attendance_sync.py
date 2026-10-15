@@ -243,10 +243,15 @@ def sync_day(employee, punch_date):
     Attendance and refresh the row's computed values.
 
     Past dates only — today belongs to the realtime auto-attendance flow.
-    Days with no Attendance yet, or marked Absent / On Leave / WFH, are left
-    alone: creating rows and changing status are Attendance Fix / self-heal
-    territory. Returns True when the day had a row to sync."""
+    Days with no Attendance yet, or marked Absent / WFH, are left alone:
+    creating rows and changing status are Attendance Fix / self-heal
+    territory. The one status change made here is policy 3.4: a leave day
+    the person punched on becomes a Half Day (today included), and is then
+    synced like any other. Returns True when the day had a row to sync."""
+    from avinashgroup_app.biometric.attendance_override import half_day_if_came_in
+
     punch_date = getdate(punch_date)
+    half_day_if_came_in(employee, punch_date)
     if punch_date >= getdate(today()):
         return False
 

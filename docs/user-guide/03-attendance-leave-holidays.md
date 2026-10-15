@@ -46,7 +46,7 @@ What HR must have in place:
 
 **More than 2 hours late = Half Day.** If the first punch is more than 2 hours after the shift starts (the shift's **Half Day If Late By (Hours)**), the day becomes a Half Day, half absent. Example: on a 9 AM shift, in at 11:00 (exactly 2 hours) stays Present; in at 11:01 becomes Half Day. There is no grace period.
 
-**Coming to work while on approved leave = Half Day.** If a person has approved leave for a day but also punched in, the day becomes a Half Day: half leave, half present.
+**Coming to work while on approved leave = Half Day.** If a person has approved leave for a day but also punched in, the day becomes a Half Day: half leave, half present. It does not matter which came first: leave approved for a day they already punched on, or a punch on a day already marked On Leave (today, past or future). The leave balance still counts the full day. A day inside a submitted salary slip is not changed.
 
 **Late minutes.** The Attendance form has a **Shift Deviation** section: Late Entry, Early Entry, Early Exit, Late Exit. These are measured against that day's shift and are what the late fine and meals use.
 

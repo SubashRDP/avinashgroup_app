@@ -241,7 +241,9 @@ before its own shift start, or one carrying seconds).
 the status to On Leave from the approved leave application; if there is also a
 punch, the day becomes a Half Day with `half_day_status = Present`, keeping the
 leave type so payroll still deducts the leave half. No punch, and it stays a full
-day of leave.
+day of leave. It holds whichever comes first: leave approved over a day already
+punched (Leave Application on_submit), or a punch arriving on a day already On
+Leave (sync_day, Attendance Fix, self-heal) — `half_day_if_came_in`.
 
 Both live in `biometric/attendance_override.py` and run on Attendance validate,
 after HRMS's own checks.

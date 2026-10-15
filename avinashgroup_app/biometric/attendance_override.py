@@ -149,14 +149,87 @@ def half_day_when_working_on_leave(doc, method=None):
     HRMS's own `check_leave_record` has already forced the status to On Leave and
     filled in the leave application by the time this runs. The punch is the thing
     it does not know about: if there is one, the day becomes a Half Day, with the
-    leave type kept so payroll still deducts the leave half.
+    leave type kept so payroll still deducts the leave half. The attendance HRMS
+    makes for an approved leave carries no in-time, so the day's punches count
+    as well as an in-time typed on the form. A day inside a submitted salary
+    slip stays On Leave: it was paid as leave.
     """
-    if doc.status != "On Leave" or not doc.in_time:
+    if doc.status != "On Leave" or not doc.get("leave_application"):
         return
-    if not doc.get("leave_application"):
+    if not (doc.in_time or _punched(doc.employee, doc.attendance_date)):
+        return
+    if _paid(doc.employee, doc.attendance_date):
         return
 
     doc.status = "Half Day"
     # The half they worked is present; the other half stays against their leave.
     if doc.meta.has_field("half_day_status"):
         doc.half_day_status = "Present"
+
+
+def half_day_if_came_in(employee, day):
+    """Policy 3.4 for a leave day already saved: On Leave from a leave
+    application, and the person punched that day → Half Day, other half Present,
+    leave kept. Returns the attendance changed, or None.
+
+    The validate hook above cannot see these: HRMS updates an existing row for a
+    leave with db_set (no hooks), and punches that arrive after the leave link to
+    the row without saving it. Called when a leave is submitted
+    (`on_leave_submit`), when a day's punches are synced
+    (attendance_sync.sync_day) and by the per-day repair (Attendance Fix,
+    self-heal). A day inside a submitted salary slip is left alone: it was paid
+    as leave."""
+    day = getdate(day)
+    name = frappe.db.get_value(
+        "Attendance",
+        {
+            "employee": employee,
+            "attendance_date": day,
+            "docstatus": 1,
+            "status": "On Leave",
+            "leave_application": ("is", "set"),
+        },
+        "name",
+    )
+    if not name or not _punched(employee, day):
+        return None
+    if _paid(employee, day):
+        return None
+    frappe.db.set_value("Attendance", name, {"status": "Half Day", "half_day_status": "Present"})
+    frappe.get_doc("Attendance", name).add_comment(
+        "Info", "Came in while on leave: Half Day, leave kept (policy 3.4)."
+    )
+    return name
+
+
+def on_leave_submit(doc, method=None):
+    """Leave Application on_submit, after HRMS has marked the days: any day of
+    the leave the person punched on becomes a Half Day (policy 3.4)."""
+    if doc.status != "Approved":
+        return
+    day = getdate(doc.from_date)
+    while day <= getdate(doc.to_date):
+        half_day_if_came_in(doc.employee, day)
+        day += timedelta(days=1)
+
+
+def _punched(employee, day):
+    day = getdate(day)
+    start = datetime.combine(day, datetime.min.time())
+    return bool(
+        frappe.db.exists(
+            "Employee Checkin",
+            {"employee": employee, "time": ("between", [start, start + timedelta(days=1, microseconds=-1)])},
+        )
+    )
+
+
+def _paid(employee, day):
+    """Whether a submitted salary slip covers `day`."""
+    day = getdate(day)
+    return bool(
+        frappe.db.exists(
+            "Salary Slip",
+            {"employee": employee, "docstatus": 1, "start_date": ("<=", day), "end_date": (">=", day)},
+        )
+    )

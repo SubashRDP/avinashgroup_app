@@ -26,11 +26,10 @@ Two deliberate departures, both about who approves:
     submitted state ("Approved") directly, so no approver is asked and no
     "pending" notification is sent.
   * a day with punches. HRMS marks every day of the leave On Leave over an
-    existing Absent; it does not know the person came in. Policy 3.4 (and
-    biometric.attendance_override.half_day_when_working_on_leave, which does the
-    same on any attendance saved later) says coming in while on leave is a Half
-    Day with the leave kept, so those days are set Half Day / half Present
-    after HRMS has written them. The leave balance still drops by the whole
+    existing Absent; it does not know the person came in. Policy 3.4 says
+    coming in while on leave is a Half Day with the leave kept, so those days
+    are set Half Day / half Present after HRMS has written them — by
+    biometric.attendance_override.on_leave_submit, as for any leave approved. The leave balance still drops by the whole
     day, as it does for any application; give a half day of leave if only half
     was taken.
 
@@ -143,8 +142,9 @@ def give_leave(employee, leave_type, dates, reason, half_day_date=None):
 			d: frappe.db.get_value("Attendance", {"employee": employee, "attendance_date": d, "docstatus": ("<", 2)}, "status")
 			for d in _span(start, end)
 		}
-		application = _apply(employee, leave_type, start, end, half if half and start <= half <= end else None, reason)
-		half_days = _half_day_where_came_in(employee, application, start, end)
+		run_half = half if half and start <= half <= end else None
+		application = _apply(employee, leave_type, start, end, run_half, reason)
+		half_days = _half_day_where_came_in(application, run_half)
 		total = flt(frappe.db.get_value("Leave Application", application, "total_leave_days"))
 		span = str(start) if start == end else f"{start} – {end}"
 		was = ", ".join(sorted({s or _("not marked") for s in before.values()}))
@@ -215,21 +215,20 @@ def _apply(employee, leave_type, start, end, half_day_date, reason):
 	return application.name
 
 
-def _half_day_where_came_in(employee, application, start, end):
-	"""Days of the leave the person punched on: Half Day, half Present, leave kept.
-	The same outcome biometric.attendance_override.half_day_when_working_on_leave
-	gives an attendance saved later; HRMS's db_set does not run that hook."""
-	changed = []
-	for day in _span(start, end):
-		name = frappe.db.get_value(
+def _half_day_where_came_in(application, half_day_date):
+	"""Days of the leave made Half Day because the person punched on them —
+	done on submit by biometric.attendance_override.on_leave_submit (policy
+	3.4); the half-day date asked for is not one of them."""
+	return [
+		getdate(d)
+		for d in frappe.get_all(
 			"Attendance",
-			{"employee": employee, "attendance_date": day, "docstatus": 1, "leave_application": application, "status": "On Leave"},
-			"name",
+			filters={"leave_application": application, "docstatus": 1, "status": "Half Day"},
+			pluck="attendance_date",
+			order_by="attendance_date",
 		)
-		if name and shown_up(employee, day):
-			frappe.db.set_value("Attendance", name, {"status": "Half Day", "half_day_status": "Present"})
-			changed.append(day)
-	return changed
+		if not half_day_date or getdate(d) != half_day_date
+	]
 
 
 def _notes(employee, days):
@@ -260,7 +259,7 @@ def _notes(employee, days):
 	for la in leave:
 		if any(getdate(la.from_date) <= d <= getdate(la.to_date) for d in days):
 			notes.append(_("Already on leave {0} ({1}, {2} – {3}): HRMS will refuse the overlap.").format(la.name, la.leave_type, la.from_date, la.to_date))
-	came = [d for d in days if d < getdate() and d not in [getdate(p) for p in present] and shown_up(employee, d)]
+	came = [d for d in days if d <= getdate() and d not in [getdate(p) for p in present] and shown_up(employee, d)]
 	if came:
 		notes.append(
 			_("Punched on {0}: those days become Half Day with the leave kept (policy 3.4).").format(", ".join(map(str, came)))
