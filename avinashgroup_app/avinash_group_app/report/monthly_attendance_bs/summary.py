@@ -20,7 +20,8 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
                         (attendance_allowance.overtime_rate, as pay prices it)
   • Late Time (min)   = late arrival + leaving early, against the day's shift,
                         as the sheet's card adds them (Late + Before ofc. Time)
-  • Present Days      = count(Present + WFH) + 0.5 × count(Half Day)
+  • Present Days      = count(Present + WFH) + 0.5 × count(Half Day), on working days
+                        only (a holiday came in on is Worked on Holiday only)
   • Worked on Holiday = days came in (Present / Half Day / WFH) on a date of the
                         employee's holiday list — the Detail view's rule
                         (monthly_attendance_bs.worked_on_holiday)
@@ -209,8 +210,11 @@ def _build_summary_row(
 			continue
 		status = att.status or ""
 
-		# Present-day count (includes WFH; Half Day counts 0.5)
-		if status in present_statuses:
+		# Present-day count (includes WFH; Half Day counts 0.5). A holiday came
+		# in on is Worked on Holiday only, as in the Detail view.
+		if ad_date in emp_holidays:
+			pass
+		elif status in present_statuses:
 			present_days += 1.0
 		elif status == "Half Day":
 			present_days += 0.5

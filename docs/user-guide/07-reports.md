@@ -107,7 +107,7 @@ Adding, moving or deleting a punch directly on the **Employee Checkin** form doe
 
 **Worked on Holiday** counts days someone came in on a date in their holiday list, the same in the Detail and Summary views.
 
-Summary cards for **one employee** read as that person's month: BS Period, Working Days in Month, Present Days (a half day counts ½), Half Days, Absent Days, Leave Days, Worked on Holiday, Not Marked Days, Late Time (min), O.T. Hours, O.T. Amount. For **several employees** the same figures are sums over everybody, so each card says so ("Present Days — all 42 employees"), Employees and Present Days per Employee (avg) are added, and Working Days in Month is shown once (a range such as 25–26 when holiday lists differ). There are charts of hours worked and of statuses.
+Summary cards for **one employee** read as that person's month: BS Period, Working Days in Month, Present Days (working days only; a half day counts ½), Half Days,  Absent Days, Leave Days, Worked on Holiday (a holiday the person came in on counts here only, never as a present or half day; its status reads "Worked on Holiday (name)"), Not Marked Days, Late Time (min), O.T. Hours, O.T. Amount. For **several employees** the same figures are sums over everybody, so each card says so ("Present Days — all 42 employees"), Employees and Present Days per Employee (avg) are added, and Working Days in Month is shown once (a range such as 25–26 when holiday lists differ). There are charts of hours worked and of statuses.
 
 **Summary view columns:** S.N., Employee, Department, the allowance columns, **O.T. (hrs)**, **Late Time (min)** (late + left early), **Present Days**, **Worked on Holiday**, **Leave (Current)**, **Leave (Prev Month)**, **Leave (Upto Month)**.
 

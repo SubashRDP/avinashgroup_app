@@ -812,7 +812,9 @@ function _chip(status) {
 		Absent: ["#A64E5B", "#FAEAEC"],
 		Holiday: ["#70569C", "#F0EAF8"],
 	};
-	const [fg, bg] = tones[status] || ["var(--text-muted)", "var(--bg-light-gray)"];
+	// "Worked on Holiday (DASHAIN)" and "Holiday (SATURDAY)" carry the holiday's name.
+	const kind = status.startsWith("Worked on Holiday") ? "Present" : status.startsWith("Holiday") ? "Holiday" : status;
+	const [fg, bg] = tones[kind] || ["var(--text-muted)", "var(--bg-light-gray)"];
 	const italic = status === "Not Marked" ? "font-style:italic;" : "";
 	return `<span style="color:${fg};background:${bg};${italic}
 		padding:2px 8px;border-radius:10px;font-size:.85em;font-weight:600;

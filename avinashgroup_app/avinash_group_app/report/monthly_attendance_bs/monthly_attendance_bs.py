@@ -697,12 +697,17 @@ def _accumulate(totals, row, present_statuses, counts_as_missing):
 	"""Add one day to the totals.
 
 	Present Days counts a Half Day as half, the way the Summary view and the
-	salary slip do; it used to count it as a whole day.
+	salary slip do; it used to count it as a whole day. A holiday the person
+	came in on is Worked on Holiday only: it is not a working day, so it adds
+	neither a present day nor a half day (a holiday's Half Day was a late-rule
+	leftover, and inflated Present Days past the month's working days).
 	"""
 	totals["late_min"] += row["late_minutes"] + row["before_office_minutes"]
 	totals["ot_hours"] += row["ot_hours"]
 	att_status = row.get("att_status")
-	if att_status in present_statuses:
+	if row.get("is_holiday"):
+		pass
+	elif att_status in present_statuses:
 		totals["present"] += 1
 	elif att_status == "Half Day":
 		totals["present"] += 0.5
