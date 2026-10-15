@@ -212,8 +212,8 @@ Two components in `payroll/attendance_allowance.py` read the sheet directly. Bot
 
 | Component (condition) | Function | Reads | Quantity |
 |---|---|---|---|
-| Overtime (`Authorised Overtime`, Per Hour) | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L437) | `SUM(worked_hours)` for the employee and date | hours; rate = hourly basic × 1.5 |
-| Meal (`Meal Entitlement`) | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L356) via [`_on_overtime_sheet`](../../avinashgroup_app/payroll/attendance_allowance.py#L411) | *existence* of the row (not its hours) | holiday: by hours worked first IN to last OUT ([`holiday_hours_worked`](../../avinashgroup_app/hr/shift_day.py#L137), rounded to the half hour), [`HOLIDAY_MEAL_HOURS`](../../avinashgroup_app/payroll/attendance_allowance.py#L400) 8 h → 2, 6 h → 1; working day: 1 if `custom_early_entry` ≥ 1.5 h, plus 1 if `custom_late_exit` ≥ 1.5 h; capped at `custom_max_per_day` (2) |
+| Overtime (`Authorised Overtime`, Per Hour) | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L440) | `SUM(worked_hours)` for the employee and date | hours; rate = hourly basic × 1.5 |
+| Meal (`Meal Entitlement`) | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L359) via [`_on_overtime_sheet`](../../avinashgroup_app/payroll/attendance_allowance.py#L414) | *existence* of the row (not its hours) | holiday: by hours worked first IN to last OUT ([`holiday_hours_worked`](../../avinashgroup_app/hr/shift_day.py#L137), rounded to the half hour), [`HOLIDAY_MEAL_HOURS`](../../avinashgroup_app/payroll/attendance_allowance.py#L403) 8 h → 2, 6 h → 1; working day: 1 if `custom_early_entry` ≥ 1.5 h, plus 1 if `custom_late_exit` ≥ 1.5 h; capped at `custom_max_per_day` (2) |
 
 Consequences:
 

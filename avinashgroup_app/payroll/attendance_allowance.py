@@ -149,7 +149,9 @@ def refresh_slips_covering(employees, on_date) -> int:
 	return refreshed
 
 
-def create_additional_salaries(payroll_entry) -> dict:
+def create_additional_salaries(payroll_entry, commit: bool = True) -> dict:
+	"""Post the month's attendance-driven pay as Additional Salary. `commit=False`
+	when called inside another document's submit, so that submit stays atomic."""
 	if isinstance(payroll_entry, str):
 		payroll_entry = frappe.get_doc("Payroll Entry", payroll_entry)
 
@@ -221,7 +223,8 @@ def create_additional_salaries(payroll_entry) -> dict:
 					title=f"Nepal HRMS Attendance Allowance: {employee}/{sc.name}",
 				)
 
-	frappe.db.commit()
+	if commit:
+		frappe.db.commit()
 	if skipped:
 		frappe.msgprint(
 			_("{0} record(s) skipped (see Error Log for details).").format(len(skipped)),
@@ -783,6 +786,15 @@ def _delete_existing_draft(employee: str, salary_component: str, payroll_date) -
 		fields=["name", "docstatus"],
 	)
 	for row in existing:
+		# A draft slip made from the old row still links it, and could then never
+		# be saved or submitted again ("Could not find Additional Salary"). Drop
+		# that line; the slip's next save adds the new row's line in its place.
+		frappe.db.sql(
+			"""delete sd from `tabSalary Detail` sd
+			join `tabSalary Slip` ss on ss.name = sd.parent and sd.parenttype = 'Salary Slip'
+			where sd.additional_salary = %s and ss.docstatus = 0""",
+			row.name,
+		)
 		if row.docstatus == 1:
 			doc = frappe.get_doc("Additional Salary", row.name)
 			doc.flags.ignore_permissions = True

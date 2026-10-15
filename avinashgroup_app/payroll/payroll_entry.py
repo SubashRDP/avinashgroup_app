@@ -33,6 +33,20 @@ from avinashgroup_app.payroll.income_tax import warn_missing_tax_history
 from avinashgroup_app.payroll.payroll_month import fill_from_bs_month, warn_missing_attendance
 
 
+def prepare_payroll_inputs(entry):
+	"""Post the entry's attendance-driven pay and advance instalments, without committing.
+
+	The same work as the Prepare Payroll Inputs button, minus its commit and
+	its draft-slip refresh: it runs inside HRMS's own submit and slip calls,
+	which commit (or roll back) everything together.
+	"""
+	from avinashgroup_app.payroll.advance_recovery import post_recoveries
+	from avinashgroup_app.payroll.attendance_allowance import create_additional_salaries
+
+	create_additional_salaries(entry, commit=False)
+	post_recoveries(entry)
+
+
 #: The account types a salary payment may be made from (HRMS's own filter on
 #: the Payment Account field, payroll_entry.js).
 PAYMENT_ACCOUNT_TYPES = ("Bank", "Cash")
@@ -50,6 +64,34 @@ class AvinashPayrollEntry(PayrollEntry):
 		warn_missing_attendance(self)
 		warn_missing_tax_history(self)
 		super().before_submit()
+
+	@frappe.whitelist()
+	def create_salary_slips(self):
+		"""HRMS's slip creation, with this month's payroll inputs posted first.
+
+		Late fine, tea, meals, overtime and advance instalments reach a slip only
+		as Additional Salary, which Prepare Payroll Inputs posts. Left to a
+		button, it was forgotten (NGI-SAL-83/84-00005 went out without its late
+		fine and tea), so making the slips now posts them first, and the slips
+		are born with them. The button stays, for after an attendance fix.
+		"""
+		prepare_payroll_inputs(self)
+		return super().create_salary_slips()
+
+	@frappe.whitelist()
+	def submit_salary_slips(self):
+		"""HRMS's slip submission, with the inputs posted again just before.
+
+		Attendance is often corrected between making and submitting the slips;
+		posting again picks that up. Posting replaces the month's Additional
+		Salary, so the drafts are recalculated onto the new ones before HRMS
+		submits them (a draft still pointing at a replaced one cannot submit).
+		"""
+		from avinashgroup_app.payroll.attendance_allowance import refresh_draft_slips
+
+		prepare_payroll_inputs(self)
+		refresh_draft_slips(self)
+		return super().submit_salary_slips()
 
 	@frappe.whitelist()
 	def make_bank_entry(self, for_withheld_salaries=False):

@@ -35,7 +35,7 @@ HRMS and rdp_common_app register no Salary Slip `doc_events`. Details are in [06
 
 | Doctype | Class | Registered | Defined | Why |
 |---|---|---|---|---|
-| Payroll Entry | `AvinashPayrollEntry` | [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L521) | [`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L41) | Fills the period from a BS month and warns about missing attendance. Splits the accrual journal by section (O/O, S/D, F/P accounts), and refuses a bank entry without a Bank/Cash account. See [05-payroll-entry.md](05-payroll-entry.md) and [07-after-the-slip.md](07-after-the-slip.md). |
+| Payroll Entry | `AvinashPayrollEntry` | [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L521) | [`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L55) | Fills the period from a BS month and warns about missing attendance. Splits the accrual journal by section (O/O, S/D, F/P accounts), and refuses a bank entry without a Bank/Cash account. See [05-payroll-entry.md](05-payroll-entry.md) and [07-after-the-slip.md](07-after-the-slip.md). |
 | Leave Policy Assignment | `BSLeavePolicyAssignment` | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hooks.py#L519) | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L40) | A mid-year assignment back-fills earned leave in BS months, matching the BS accrual job. See [01-masters.md](01-masters.md). |
 | Salary Slip | `BSSalarySlip` (rdp_common_app) | [`BSSalarySlip`](../../../rdp_common_app/rdp_common_app/hooks.py#L149) | [`BSSalarySlip`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L47) | Puts slips on BS months: the period, `total_working_days` = BS month length, the proration denominator, and the tax months left. See [06-salary-slip.md](06-salary-slip.md). |
 | Employee | `EmployeeMaster` (HRMS) | [`EmployeeMaster`](../../../hrms/hrms/hooks.py#L150) | [`EmployeeMaster`](../../../hrms/hrms/overrides/employee_master.py#L12) | Stock HRMS. Listed because our Employee `validate` hooks run alongside it. |
@@ -57,7 +57,7 @@ Registered through `attendance_events` ([`attendance_events`](../../avinashgroup
 | Order | Handler (registration) | Defined | Purpose |
 |---|---|---|---|
 | 0 | audit `validate` (company lock and match) | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | Attendance is in [`"Attendance"`](../../avinashgroup_app/utils/audit_file_manager.py#L20) |
-| 1 | [`set_holiday_flag`](../../avinashgroup_app/hooks.py#L230) | [`set_holiday_flag`](../../avinashgroup_app/payroll/attendance_allowance.py#L528) | Ticks `custom_worked_on_holiday` when the date is in the employee's (or company's) holiday list. Feeds the tea / meal / holiday-pay rules. |
+| 1 | [`set_holiday_flag`](../../avinashgroup_app/hooks.py#L230) | [`set_holiday_flag`](../../avinashgroup_app/payroll/attendance_allowance.py#L531) | Ticks `custom_worked_on_holiday` when the date is in the employee's (or company's) holiday list. Feeds the tea / meal / holiday-pay rules. |
 | 2 | [`set_shift_deviation_fields`](../../avinashgroup_app/hooks.py#L231) | [`set_shift_deviation_fields`](../../avinashgroup_app/biometric/attendance_override.py#L8) | Fills a missing shift from the roster and writes the four late/early-entry/exit `custom_*` fields. |
 | 3 | [`enforce_late_arrival_half_day`](../../avinashgroup_app/hooks.py#L232) | [`enforce_late_arrival_half_day`](../../avinashgroup_app/biometric/attendance_override.py#L55) | In more than `custom_half_day_if_late_by_hours` (2 h) after shift start → Half Day, with the other half Absent. Late Excused undoes it. |
 | 4 | [`half_day_when_working_on_leave`](../../avinashgroup_app/hooks.py#L236) | [`half_day_when_working_on_leave`](../../avinashgroup_app/biometric/attendance_override.py#L141) | On approved leave but punched in → Half Day, other half Present (policy 3.4). |
@@ -130,7 +130,7 @@ Salary Structure is audited. Salary Structure Assignment is fiscal-year filtered
 
 | Order | Event | Handler | Defined | Purpose |
 |---|---|---|---|---|
-| 0 | validate (class) | `AvinashPayrollEntry.validate` | [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L42) | Fills the period from the BS month, calls HRMS's validate, then warns about missing attendance. |
+| 0 | validate (class) | `AvinashPayrollEntry.validate` | [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L56) | Fills the period from the BS month, calls HRMS's validate, then warns about missing attendance. |
 | 1 | validate | audit | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | [`"Payroll Entry"`](../../avinashgroup_app/utils/audit_file_manager.py#L52) |
 | 2 | validate | [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L379) | [`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45) | Refuses an entry whose dates are not the BS month of its posting date. |
 | 3 | validate | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L466) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates. |
@@ -269,7 +269,7 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `trigger_for_payroll_entry` | [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L78) | **Prepare Payroll Inputs** |
 | `get_defaults`, `make_festival_adjustment` | [`get_defaults`](../../avinashgroup_app/payroll/festival_allowance.py#L222), [`make_festival_adjustment`](../../avinashgroup_app/payroll/festival_allowance.py#L234) | Payroll Entry **Dashain Allowance** |
 | `encash_for_payroll_entry` | [`encash_for_payroll_entry`](../../avinashgroup_app/payroll/leave_encashment.py#L210) | Payroll Entry **Leave Encashment** |
-| `recompute_holiday_flags` | [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L601) | By hand, after a holiday list changes |
+| `recompute_holiday_flags` | [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L604) | By hand, after a holiday list changes |
 | `get_rate_for_assignment` | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L221) | Salary Structure Assignment form |
 | `measure` | [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L140) | Overtime Sheet **Measure from Attendance** |
 | `preview` (overtime) | [`preview`](../../avinashgroup_app/hr/overtime.py#L223) | Overtime Sheet row preview |
@@ -279,7 +279,7 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `get_dashboard`, `get_menu` | [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L728) | HR dashboard |
 | `Salary Revision.get_employees` | [`get_employees`](../../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L423) | Salary Revision form |
 | `Holiday Bulk Update.apply` | [`apply`](../../avinashgroup_app/avinash_group_app/doctype/holiday_bulk_update/holiday_bulk_update.py#L42) | Holiday Bulk Update |
-| `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L55) | Payroll Entry **Make Bank Entry** |
+| `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L97) | Payroll Entry **Make Bank Entry** |
 
 ## 8. Other hook types
 

@@ -49,6 +49,8 @@ To pay only part of the company, set **Branch**, **Department** or **Designation
 
 ## 5.3 Step 2 — Prepare Payroll Inputs
 
+**This now happens by itself.** Creating the salary slips (submitting the Payroll Entry) posts tea, meals, overtime, late fines and advance instalments first, so every slip is made with them. **Submit Salary Slip** posts them again just before submitting, so an attendance fix made in between is included. The button below is still there if you want to see the figures, or after fixing attendance on draft slips.
+
 1. On the saved Payroll Entry, click **Nepal HRMS** → **Prepare Payroll Inputs**.
 2. Read the question ("Work out this month's tea, meals, overtime and late fines from attendance, and take this month's advance instalments? …") and click **Yes**.
 3. Wait. A green message tells you what was made, for example: "**312 allowance and fine records, 4 advance instalments.**" If slips already exist as drafts, it adds "**87 draft salary slips updated.**"

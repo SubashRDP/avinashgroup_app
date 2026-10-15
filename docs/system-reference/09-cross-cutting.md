@@ -217,7 +217,7 @@ Enabled users with each role on avinas1: HR Manager 17, HR User 17, Leave Approv
 | Method | Check | Note |
 |---|---|---|
 | [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L78) (Prepare Payroll Inputs) | Read on the Payroll Entry **and** create on Additional Salary (since 2026-10-12) | The writes still use `ignore_permissions`; the check is on the caller. The button shows only to users who can create Additional Salary |
-| [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L601) | Write on Attendance (since 2026-10-12) | Rewrites `custom_worked_on_holiday` on every Attendance row when called without dates |
+| [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L604) | Write on Attendance (since 2026-10-12) | Rewrites `custom_worked_on_holiday` on every Attendance row when called without dates |
 | [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L140) | Overtime Sheet write | |
 | [`repair_attendance_day`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L524) | `only_for(HR Manager, System Manager)` | |
 | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L221) | Salary Structure read | |
