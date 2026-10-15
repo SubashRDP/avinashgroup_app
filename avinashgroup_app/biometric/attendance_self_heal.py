@@ -174,5 +174,7 @@ def _shift_window_closed(day, shift_doc):
     end_dt = datetime.combine(day, time.min) + shift_doc.end_time
     if shift_doc.end_time < shift_doc.start_time:  # overnight shift
         end_dt += timedelta(days=1)
-    end_dt += timedelta(minutes=cint(shift_doc.allow_check_out_after_shift_end_time or 0))
+    from avinashgroup_app.hr.shift_window import window_minutes
+
+    end_dt += timedelta(minutes=window_minutes(shift_doc)[1])
     return end_dt < get_datetime(shift_doc.last_sync_of_checkin)

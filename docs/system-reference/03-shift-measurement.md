@@ -20,6 +20,9 @@ The **>2 h late = Half Day** rule is not here: it is an Attendance validate hook
 
 ---
 
+
+**Check-in window of 0 = the whole day** ([`window_minutes`](../../avinashgroup_app/hr/shift_window.py#L39), applied to HRMS by [`patch_whole_day_window`](../../avinashgroup_app/hr/shift_window.py#L53) on every request and job). On a day shift, a 0 in **Begin check-in before shift start time** or **Allow check-out after shift end time** stretches that side of HRMS's window to 00:00 or 23:59:59, so any punch that day belongs to the shift and counts for presence; lateness, early exit and overtime are still measured against the shift's own start and end. Non-zero values and overnight shifts keep HRMS's rule. Such a day is marked once Last Sync passes midnight.
+
 ## 1. Which shift: `get_shift_window` and `ShiftRoster`
 
 | | |

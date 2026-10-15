@@ -602,13 +602,12 @@ def _shift_for(employee, day, existing):
 
 
 def _check_in_window(shift_doc, day):
-	"""(opens, closes): where HRMS attaches punches to this shift on this day."""
-	opens = datetime.combine(day, get_time(shift_doc.start_time)) - timedelta(
-		minutes=cint(shift_doc.begin_check_in_before_shift_start_time)
-	)
-	closes = datetime.combine(day, get_time(shift_doc.end_time)) + timedelta(
-		minutes=cint(shift_doc.allow_check_out_after_shift_end_time)
-	)
+	"""(opens, closes): where HRMS attaches punches to this shift on this day (0 = to the day's edge)."""
+	from avinashgroup_app.hr.shift_window import window_minutes
+
+	before, after = window_minutes(shift_doc)
+	opens = datetime.combine(day, get_time(shift_doc.start_time)) - timedelta(minutes=before)
+	closes = datetime.combine(day, get_time(shift_doc.end_time)) + timedelta(minutes=after)
 	return opens, closes
 
 

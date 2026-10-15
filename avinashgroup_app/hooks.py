@@ -588,6 +588,9 @@ before_request = [
     # Frappe permanently flips prepared_report on after one slow run, after
     # which the report serves a cached result and ignores its own filters.
     "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
+    # A check-in window of 0 on a day shift means the whole day (hr/shift_window.py):
+    # the bridge's punches arrive by request, auto attendance in a job.
+    "avinashgroup_app.hr.shift_window.patch_whole_day_window",
 ]
 
 # The repost runs in a background job, so the get_recipients patch must also be
@@ -597,6 +600,7 @@ before_job = [
     # Prepared Reports render in a worker, where before_request never fires.
     "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
     "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
+    "avinashgroup_app.hr.shift_window.patch_whole_day_window",
 ]
 
 # The distro's unpatched-Qt wkhtmltopdf shrinks every length by 0.7688x, which
