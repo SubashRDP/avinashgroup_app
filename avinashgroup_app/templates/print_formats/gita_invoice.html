@@ -1,0 +1,330 @@
+{#- ============================================================================
+Gita Gas Udhyog — A4 portrait Tax Invoice / Credit Note (plain paper)
+=============================================================================
+One template, two print formats:
+  "Gita Sales Invoice"  -> title "TAX INVOICE", Unit + Alt. Qty columns,
+                           Freight on Gas line in the totals
+  "Gita Sales Return"   -> title "CREDIT NOTE", Reference No (return_against),
+                           no Alt. Qty / Freight
+The print format sets `is_return_format` before including this file.
+Sheet titles: 1st print of an invoice is TAX INVOICE + INVOICE (two sheets,
+print counter in print_count.py); later prints are one INVOICE sheet (no
+COPY OF ORIGINAL n for now). A credit note is always one CREDIT NOTE sheet.
+
+Company name, logo, VAT and phone come off the Company record; the address
+line comes off the company's Address (address_line1, city).
+All figures print positive — the title states the direction.
+-#}
+{%- set is_return_format = is_return_format | default(false) -%}
+
+{#- ------------------------------ company -------------------------------- -#}
+{%- set company = frappe.db.get_value('Company', doc.company, ['company_logo', 'tax_id', 'phone_no'], as_dict=1) -%}
+{#- address line under the company name, as on Gita's own bill -#}
+{%- set company_address = 'Gajuri-1, Dhading' -%}
+
+{#- ------------------------------- data --------------------------------- -#}
+{%- set bill_no = doc.get('custom_branch_name') or doc.name -%}
+
+{#- Dates print as "25-Oct-2026 / 2083-07-09": AD, then BS -#}
+{%- macro ad_bs(ad, bs) -%}
+  {{- frappe.utils.formatdate(ad, 'dd-MMM-yyyy') }} / {{ (bs | string).split(' ')[0] | replace('/', '-') }}
+{%- endmacro -%}
+{%- set bill_date = ad_bs(doc.posting_date, doc.get('custom_invoice_miti') or bs_date_str(doc.posting_date)) -%}
+{#- Trans. Date = the day the document was entered in the system -#}
+{%- set txn_ad = frappe.utils.getdate(doc.creation) -%}
+{%- set trans_date = ad_bs(txn_ad, bs_date_str(txn_ad)) -%}
+
+{%- set customer = frappe.db.get_value('Customer', doc.customer, ['tax_id', 'mobile_no', 'custom_address_line_1'], as_dict=1) -%}
+{%- set buyer_pan = doc.tax_id or customer.tax_id or '' -%}
+{%- set contact_no = doc.contact_mobile or customer.mobile_no or '' -%}
+{#- customer address: "Address line 1" on the Customer record -#}
+{%- set address = customer.custom_address_line_1 or '' -%}
+
+{#- Reference No (return only): the original invoice's number -#}
+{%- set ref_no = '' -%}
+{%- if doc.return_against -%}
+  {%- set ref_no = frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_branch_name') or doc.return_against -%}
+{%- endif -%}
+
+{#- Remarks: the return reason on a credit note, else the invoice remarks -#}
+{%- set remarks = doc.get('custom_reason_for_return') if is_return_format else '' -%}
+{%- if not remarks and doc.remarks and doc.remarks != 'No Remarks' -%}{%- set remarks = doc.remarks -%}{%- endif -%}
+
+{#- Mode of payment: POS payment row wins; a submitted unpaid invoice is Credit -#}
+{%- set ns = namespace(mode='Credit') -%}
+{%- if doc.get('is_pos') and doc.get('payments') -%}
+  {%- set ns.mode = doc.payments[0].mode_of_payment or 'Cash' -%}
+{%- elif doc.docstatus == 1 and not doc.get('outstanding_amount') and not doc.is_return -%}
+  {%- set ns.mode = 'Cash' -%}
+{%- endif -%}
+
+{#- Tax table: VAT rows and Freight rows, summed separately -#}
+{%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0, freight=0) -%}
+{%- for t in doc.taxes -%}
+  {%- set head = ((t.description or '') ~ (t.account_head or '')) | lower -%}
+  {%- if 'freight' in head -%}
+    {%- set ns2.freight = ns2.freight + (t.tax_amount or 0) -%}
+  {%- elif 'vat' in head and not doc.get('custom_total_vat_amount') -%}
+    {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
+  {%- endif -%}
+{%- endfor -%}
+
+{#- Alt. Qty (kg): the item's total weight; when the item has no weight set,
+    the kg size in its name or unit ("Filled Cylinder 14.2 Kg", UOM "14.2 KG")
+    x qty. Blank if none of these has it. -#}
+{%- macro alt_kg(item) -%}
+  {%- set ns3 = namespace(kg=(item.total_weight or 0) | abs) -%}
+  {%- if not ns3.kg -%}
+    {%- set words = (((item.item_name or '') ~ ' ' ~ (item.uom or '')) | lower | replace('kg', ' kg')).split() -%}
+    {%- for w in words -%}
+      {%- if w == 'kg' and loop.index0 > 0 and words[loop.index0 - 1] | float(0) -%}
+        {%- set ns3.kg = (words[loop.index0 - 1] | float) * ((item.qty or 0) | abs) -%}
+      {%- endif -%}
+    {%- endfor -%}
+  {%- endif -%}
+  {{- ns3.kg -}}
+{%- endmacro -%}
+{%- set ns4 = namespace(qty=0, kg=0) -%}
+{%- for item in doc.items -%}
+  {%- set ns4.qty = ns4.qty + (item.qty or 0) | abs -%}
+  {%- set ns4.kg = ns4.kg + alt_kg(item) | float -%}
+{%- endfor -%}
+
+{#- In Words reads "Rupees ... Only." -#}
+{%- set in_words = (doc.in_words or '') | replace('NPR ', 'Rupees ') | replace(' only.', ' Only.') -%}
+
+{%- set signer = frappe.db.get_value('User', doc.owner, 'full_name') or doc.owner -%}
+{%- set printed_by = frappe.db.get_value('User', frappe.session.user, 'full_name') or frappe.session.user -%}
+{%- set now = frappe.utils.now_datetime() -%}
+{%- set printed_on = bs_date_str(now.date()) ~ ' ' ~ now.strftime('%I:%M:%S %p').lstrip('0') -%}
+
+{%- if is_return_format -%}
+  {%- set copy_titles = ['CREDIT NOTE'] -%}
+{%- else -%}
+  {%- set copy_titles = [] -%}
+  {%- for t in invoice_copy_titles(doc, pair=true) -%}
+    {%- set _ = copy_titles.append('INVOICE' if t.startswith('COPY OF ORIGINAL') else t) -%}
+  {%- endfor -%}
+{%- endif -%}
+
+{%- set rows_per_page = rows_per_page | default(12) -%}
+
+{%- macro num(v) -%}{{ frappe.utils.fmt_money((v or 0) | abs, 2) }}{%- endmacro -%}
+{%- macro qty_fmt(q) -%}{%- set q = (q or 0) | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
+{%- macro kg_fmt(k) -%}{%- set k = k | float -%}{{ (k | round(2) | string).rstrip('0').rstrip('.') if k else '' }}{%- endmacro -%}
+{#- each digit of a VAT/PAN number in its own box -#}
+{%- macro boxed(number) -%}
+  {%- for ch in (number | string) %}<span class="box">{{ ch }}</span>{% endfor -%}
+{%- endmacro -%}
+
+<style>
+  @page { size: 210mm 297mm; margin: 0; }
+  .print-format { page-width: 210mm; page-height: 297mm;
+    margin-top: 0mm; margin-bottom: 0mm; margin-left: 0mm; margin-right: 0mm; }
+  @media screen {
+    .print-format { padding: 0 !important; }
+  }
+  .print-format, .print-format p, .print-format div, .print-format td, .print-format th {
+    font-family: Arial, Helvetica, sans-serif; color: #000; }
+  .print-format .letter-head, .print-format .print-heading { display: none; }
+
+  .gg-sheet { position: relative; width: 210mm; height: 296mm;
+    padding: 14mm 12mm; page-break-after: always; page-break-inside: avoid; overflow: hidden; }
+  .gg-sheet.last { page-break-after: auto; }
+
+  /* side padding keeps the centred text clear of the logo */
+  .gg-head { position: relative; text-align: center; border-bottom: 0.4mm solid #000; padding: 0 26mm 1mm; }
+  .gg-head .logo { position: absolute; left: 2mm; top: 0; width: 22mm; height: 25mm; object-fit: contain; }
+  .gg-head .cname { font-weight: bold; font-size: 17pt; line-height: 1.3; }
+  .gg-head .caddr { font-size: 10.5pt; line-height: 1.35; }
+  .gg-head .title { font-weight: bold; font-size: 14pt; letter-spacing: 0.3mm; margin-top: 1mm; }
+
+  .box { display: inline-block; min-width: 3.6mm; padding: 0 0.6mm; border: 0.25mm solid #000;
+    border-left-width: 0; text-align: center; line-height: 1.3; font-size: 9pt; }
+  .box:first-child { border-left-width: 0.25mm; }
+
+  .gg-info { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin: 2mm 0 2mm; }
+  .gg-info td { padding: 0.9mm 0; vertical-align: middle; white-space: nowrap; }
+  .gg-info .l { width: 28mm; }
+  .gg-info .c { width: 4mm; }
+  .gg-info .v { overflow: hidden; max-width: 55mm; }
+  .gg-info .r { text-align: right; }
+  .gg-info .small { font-size: 9pt; }
+
+  /* separate (not collapse) borders: Firefox drops collapsed borders when printing */
+  table.gg-items { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed;
+    font-size: 10.5pt; border-top: 0.3mm solid #000; border-left: 0.3mm solid #000; }
+  table.gg-items th, table.gg-items td { border-right: 0.3mm solid #000; border-bottom: 0.3mm solid #000;
+    padding: 0.8mm 1.2mm; }
+  table.gg-items th { font-size: 11pt; text-align: center; }
+  table.gg-items td.body { vertical-align: top; height: 52mm; padding: 0; overflow: hidden; }
+  .cell-stack div { padding: 0.6mm 1.2mm 0; line-height: 1.25; }
+  table.gg-items td.num { text-align: right; }
+
+  table.gg-items td.foot { border-right: 0.3mm solid #000; vertical-align: top; padding: 1mm 2mm 2mm; }
+  /* the words/totals block is a nested table: no grid lines inside it */
+  table.gg-items td.foot td { border: 0; padding: 0; }
+  .gg-words .lbl { font-weight: bold; }
+  .gg-words .txt { padding-left: 4mm; }
+  table.gg-tot { border-collapse: collapse; margin-left: auto; font-size: 10.5pt; }
+  table.gg-items td.foot table.gg-tot td { padding: 0.5mm 1mm; white-space: nowrap; text-align: right; }
+  table.gg-items td.foot table.gg-tot td.v { width: 32mm; border-bottom: 0.2mm dotted #000; }
+
+  .gg-foot { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 18mm; }
+  .gg-foot td { padding: 0.9mm 0; vertical-align: top; }
+  .gg-foot .sign { text-align: center; width: 70mm; }
+  .gg-printed { position: absolute; left: 12mm; right: 12mm; bottom: 18mm; border-top: 0.2mm solid #999;
+    padding-top: 1.5mm; font-size: 9pt; display: flex; justify-content: space-between; }
+  .gg-pageno { position: absolute; right: 12mm; bottom: 12mm; font-size: 8pt; }
+</style>
+
+{#- split items into pages -#}
+{%- set item_pages = [] -%}
+{%- for i in range(0, doc.items | length, rows_per_page) -%}
+  {%- set _ = item_pages.append(doc.items[i : i + rows_per_page]) -%}
+{%- endfor -%}
+{%- if not item_pages -%}{%- set _ = item_pages.append([]) -%}{%- endif -%}
+
+{%- for copy_label in copy_titles -%}
+{%- set copy_last = loop.last -%}
+{%- for page_items in item_pages -%}
+{#- totals close every copy, not just the last one -#}
+{%- set page_last = loop.last -%}
+{%- set is_last = copy_last and page_last -%}
+{%- set page_no = loop.index -%}
+<div class="gg-sheet{% if is_last %} last{% endif %}">
+
+  <div class="gg-head">
+    {%- if company.company_logo -%}<img class="logo" src="{{ company.company_logo }}" onerror="this.style.display='none'">{%- endif -%}
+    <div class="cname">{{ doc.company }}</div>
+    <div class="caddr">{{ company_address }}</div>
+    <div class="caddr">Tel.: {{ company.phone_no or '' }}</div>
+    <div class="title">{{ copy_label }}</div>
+  </div>
+
+  <table class="gg-info">
+    <tr>
+      <td class="l small">VAT/PAN</td><td class="c">:</td><td class="v">{% if company.tax_id %}{{ boxed(company.tax_id) }}{% endif %}</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="l">{{ 'Credit Note No.' if is_return_format else 'Bill No.' }}</td><td class="c">:</td><td class="v">{{ bill_no }}</td>
+      <td class="r">Bill Date : {{ bill_date }}</td>
+    </tr>
+    <tr>
+      <td class="l">Buyer Name</td><td class="c">:</td><td class="v">{{ doc.customer_name }}</td>
+      <td class="r">Trans. Date : {{ trans_date }}</td>
+    </tr>
+    <tr>
+      <td class="l">Address</td><td class="c">:</td><td class="v">{{ address }}</td>
+      <td class="r">{% if is_return_format %}Reference No : {{ ref_no }}{% endif %}</td>
+    </tr>
+    <tr>
+      <td class="l">Contact No</td><td class="c">:</td><td class="v">{{ contact_no }}</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td class="l small">Buyer VAT/PAN :</td><td class="c"></td><td class="v">{% if buyer_pan %}{{ boxed(buyer_pan) }}{% endif %}</td>
+      <td class="r">Mode of Payment : {{ ns.mode }}</td>
+    </tr>
+  </table>
+
+  {%- set base_sno = (page_no - 1) * rows_per_page -%}
+  {%- set ncols = 7 if is_return_format else 8 -%}
+  <table class="gg-items">
+    <colgroup>
+      <col style="width:8mm;"><col style="width:22mm;"><col>
+      <col style="width:15mm;"><col style="width:12mm;">
+      {%- if not is_return_format %}<col style="width:18mm;">{% endif %}
+      <col style="width:21mm;"><col style="width:28mm;">
+    </colgroup>
+    <tr>
+      <th>S.N</th><th>H.S. Code</th><th>Description</th><th>Qty</th><th>Unit</th>
+      {%- if not is_return_format %}<th>Alt. Qty</th>{% endif %}
+      <th>Rate</th><th>Amount</th>
+    </tr>
+    <tr>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ base_sno + loop.index }}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:center;">
+        {%- for item in page_items %}<div>{{ frappe.db.get_value('Item', item.item_code, 'custom_hs_code') or '&nbsp;' }}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack">
+        {%- for item in page_items %}<div>{{ item.item_name or item.item_code }}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack">
+        {%- for item in page_items %}<div>{{ item.uom or '' }}</div>{% endfor -%}
+      </div></td>
+      {%- if not is_return_format %}
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}{% set k = kg_fmt(alt_kg(item)) %}<div>{{ k ~ ' kg' if k else '&nbsp;' }}</div>{% endfor -%}
+      </div></td>
+      {%- endif %}
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ num(item.rate) }}</div>{% endfor -%}
+      </div></td>
+      <td class="body"><div class="cell-stack" style="text-align:right;">
+        {%- for item in page_items %}<div>{{ num(item.amount) }}</div>{% endfor -%}
+      </div></td>
+    </tr>
+
+    {%- if page_last %}
+    <tr>
+      <td></td><td></td><td style="text-align:right;">Total</td>
+      <td class="num">{{ qty_fmt(ns4.qty) }}</td><td></td>
+      {%- if not is_return_format %}<td class="num">{{ '%.2f' | format(ns4.kg) if ns4.kg else '' }}</td>{% endif %}
+      <td></td>
+      <td class="num">{{ num(doc.total) }}</td>
+    </tr>
+    <tr>
+      <td class="foot" colspan="{{ ncols }}">
+        <table style="width:100%; border-collapse:collapse;"><tr>
+          <td class="gg-words" style="vertical-align:top; width:50%;">
+            <div class="lbl">In Words :</div>
+            <div class="txt">{{ in_words }}</div>
+          </td>
+          <td style="vertical-align:top;">
+            <table class="gg-tot">
+              {%- if not is_return_format %}
+              <tr><td>Freight on Gas :</td><td class="v">{{ num(ns2.freight) }}</td></tr>
+              {%- endif %}
+              <tr><td>Discount :</td><td class="v">{{ num(doc.discount_amount) }}</td></tr>
+              <tr><td>Taxable Amount :</td><td class="v">{{ num(doc.net_total) }}</td></tr>
+              <tr><td>VAT 13% :</td><td class="v">{{ num(ns2.vat) }}</td></tr>
+              <tr><td>Net Amount :</td><td class="v">{{ num(doc.grand_total) }}</td></tr>
+            </table>
+          </td>
+        </tr></table>
+      </td>
+    </tr>
+    {%- else %}
+    <tr>
+      <td class="foot" colspan="{{ ncols }}"><b>Contd. on next page...</b></td>
+    </tr>
+    {%- endif %}
+  </table>
+
+  {%- if page_last %}
+  <table class="gg-foot">
+    <tr><td>E. &amp; O.E</td><td class="sign"><b>For {{ doc.company }}</b></td></tr>
+    <tr><td>Goods once sold will not be taken back.</td><td class="sign"><b>{{ signer }}</b></td></tr>
+    <tr><td><b>Remarks :</b> &nbsp;&nbsp;&nbsp; {{ remarks }}</td><td class="sign">Authorised Signatory</td></tr>
+    <tr><td><div style="margin-top:14mm;"><b>Received By :</b></div></td><td></td></tr>
+  </table>
+  {%- endif %}
+
+  <div class="gg-printed">
+    <span>Printed by : {{ printed_by }}</span>
+    <span>Printed on : {{ printed_on }}</span>
+  </div>
+
+  {%- if item_pages | length > 1 %}
+  <div class="gg-pageno">Page {{ page_no }}/{{ item_pages | length }}</div>
+  {%- endif %}
+</div>
+{%- endfor -%}
+{%- endfor -%}
