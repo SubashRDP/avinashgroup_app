@@ -1,0 +1,91 @@
+name: Build Backup Puller EXE
+
+on:
+  push:
+    paths:
+      - 'backup_puller/**'
+      - '.github/workflows/build-backup-puller.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        # PowerShell does not fail a step when a non-final native command exits
+        # non-zero, so check $LASTEXITCODE (see build-k40-bridge.yml).
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backup_puller/requirements.txt
+          if ($LASTEXITCODE -ne 0) { Write-Error "requirements install failed"; exit 1 }
+
+      - name: Smoke test the window
+        # Builds the whole window and closes it after 3 seconds; fails the build
+        # on any error. Uses a throwaway APPDATA so no config is created.
+        run: |
+          $env:APPDATA = "$env:RUNNER_TEMP\bp_appdata"
+          python backup_puller/backup_puller.py --smoke-test
+          if ($LASTEXITCODE -ne 0) { Write-Error "smoke test failed"; exit 1 }
+
+      - name: Build EXE
+        run: |
+          python -m PyInstaller --onefile --noconsole --name backup_puller `
+            --collect-all requests `
+            --collect-all urllib3 `
+            --collect-all certifi `
+            --collect-all charset_normalizer `
+            --collect-all idna `
+            backup_puller/backup_puller.py
+          if ($LASTEXITCODE -ne 0) { Write-Error "pyinstaller failed"; exit 1 }
+
+      - name: Build Installer (Inno Setup)
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" backup_puller/installer.iss
+          if ($LASTEXITCODE -ne 0) { Write-Error "installer build failed"; exit 1 }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup_puller
+          path: |
+            dist/backup_puller.exe
+            backup_puller/Output/BackupPullerSetup.exe
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(head -1 backup_puller/latest_version.txt | tr -d '[:space:]')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create / update GitHub Release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: backup-puller-v${{ steps.version.outputs.version }}
+          name: Backup Puller v${{ steps.version.outputs.version }}
+          body: |
+            Download `BackupPullerSetup.exe` below and run it on the backup PC.
+            See `backup_puller/README.md` for setup.
+
+            Uses only standard Frappe endpoints, no ERP changes needed:
+              - `/api/method/frappe.utils.backups.fetch_latest_backups`
+              - `/backups/<file>`
+            The API user needs the System Manager role.
+          files: |
+            dist/backup_puller.exe
+            backup_puller/Output/BackupPullerSetup.exe
+          # Don't take "latest" from the bridges: their self-updaters may read the repo's latest release.
+          make_latest: 'false'
+          token: ${{ secrets.GITHUB_TOKEN }}
