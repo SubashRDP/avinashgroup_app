@@ -47,16 +47,17 @@ The English date fields are locked, so the payroll cannot slip into another mont
 
 To pay only part of the company, set **Branch**, **Department** or **Designation** before saving, or click **Get Employees** after changing them.
 
-## 5.3 Step 2 — Yearly payments and payroll inputs (no button)
+## 5.3 Step 2 — Payroll inputs (no button)
 
 Nothing is pressed for tea, meals, overtime, late fines or advance instalments. **Create Salary Slips** works them out from attendance and Overtime Sheets and posts them first, so every slip is made with them; **Submit Salary Slip** works them out again just before submitting, so an attendance fix made in between is paid.
 
 In the **Yearly Payments** section of the Payroll Entry (first tab), before **Create Salary Slips**:
 
-- **Pay Dashain Allowance** — tick it in the Dashain month, pick the **Festival Component** and the **Count Service To (Cut-off)** date (Chapter 8.4).
-- **Settle Leave (encash or recover)** — tick it in Ashadh, or in a month someone leaves: leave left is paid, leave taken beyond what was earned is deducted (Chapter 8.5).
+- **Settle Leave** — tick it in Ashadh, or in a month someone leaves: leave taken beyond what was earned is deducted on this salary slip as **Leave Recovery** (Chapter 8.5).
 
-Both are paid in the same run as everything else. The read-only **Payroll Inputs Log** on the form records every run: when, by whom, the tea / meal / overtime and late-fine totals, advance instalments, the Dashain adjustment and the encashment total, for example "**2026-10-15 12:26 Slips created by hr@…: 212 attendance lines: tea / meal / overtime 1,04,960.00, late fines 5,375.40; 3 advance instalments; Dashain PADJ-2026-00001: 96 people, total 18,40,000.00**". **Dashain Payroll Adjustment** links the adjustment that paid the allowance.
+**Dashain and leave encashment are not paid on the salary slip.** Each has its own Payroll Entry, with its own slips: see 5.12.
+
+The read-only **Payroll Inputs Log** on the form records every run: when, by whom, the tea / meal / overtime and late-fine totals, advance instalments and leave recovery, for example "**2026-10-15 12:26 Slips created by hr@…: 212 attendance lines: tea / meal / overtime 1,04,960.00, late fines 5,375.40; 3 advance instalments**".
 
 What it works out, per person, for the month:
 
@@ -70,7 +71,7 @@ What it works out, per person, for the month:
 
 Who gets tea and meal: anyone with a row for it on their salary assignment; no row, none. Overtime: anyone **OT eligible** who is on a submitted Overtime Sheet — no row on the assignment is needed. Late fine: everyone, except staff ticked **Late Fine Exempt** on the Employee — no line in the structure is needed, and the component's Unit and Rate Basis do not change it. Meals and overtime are only for OT-eligible staff.
 
-**Running again is safe.** Each run replaces the month's tea, meal, overtime and late-fine lines and removes what is no longer due; amounts HR typed by hand are never touched. A Dashain allowance or encashment already paid is not paid twice. Submitted slips are never changed: cancel the slip first if it really must change.
+**Running again is safe.** Each run replaces the month's tea, meal, overtime and late-fine lines and removes what is no longer due; amounts HR typed by hand are never touched. Submitted slips are never changed: cancel the slip first if it really must change.
 
 If the log says "**… skipped (Error Log)**", some records could not be made. Ask IT to look at the Error Log; the usual causes are in Chapter 10.
 
@@ -136,4 +137,27 @@ Then fix the cause and run the month again. Tell the accountant before cancellin
 
 ## 5.11 Running a second payroll for the same month
 
-Sometimes a person was left out (assignment made late). Make a new Payroll Entry for the same month, answer **Yes** to "Make another one for it?", keep only the missing people in the Employees table, and continue as normal. The system will not make a second slip for someone already paid that month ("Salary Slip of employee … already created for this period").
+Sometimes a person was left out (assignment made late). Make a new Payroll Entry for the same month, answer **Yes** to "Make another one for it?", keep only the missing people in the Employees table, and continue as normal. The system will not make a second salary slip for someone already paid that month ("Salary Slip already exists for … for the given dates"). A Dashain or leave encashment slip (5.12) does not count: it sits beside the salary slip.
+
+## 5.12 Dashain and leave encashment: their own payout
+
+Since 26 October 2026 the **Dashain allowance** and **leave encashment** are each paid on their **own salary slip**, apart from the month's salary: the slip shows only that payment and the income tax on it, nothing else (no Basic, allowances, tea, overtime, SSF, late fine or advance). It has its own payroll journal and its own bank payment.
+
+**Making one**
+
+1. **Payroll Entry → New**, choose the Company and click the month on the calendar, as for the salary (5.2). Answer **Yes** if it asks whether to make another entry for the month.
+2. Set **Payout**:
+   - **Dashain Allowance** — then pick the **Festival Component** and **Count Service To (Cut-off)** (Chapter 8.4). Only the Dashain month (Ashwin) is allowed.
+   - **Leave Encashment** — in Ashadh (year end), or in a month someone leaves (Chapter 8.5). **Settle Leave** ticks itself.
+3. Save. **Get Employees** lists the company as usual; anyone with nothing due is taken off when the slips are made, and the **Payroll Inputs Log** names them.
+4. **Create Salary Slips**, check them, **Submit Salary Slip**, check the salary sheet with **Payout** set to the same (Chapter 7.1), **Make Bank Entry** — exactly as for the salary.
+
+Attendance is not checked on a payout entry: the amount does not depend on it. The month's salary entry and the payout entry can be made in either order.
+
+**The tax on it.** The payout slip deducts the whole tax the payment adds to the person's year: the year's tax worked out with the payment, less the year's tax without it, at the person's own rate (women's rebate and the retirement-contribution cap included). The salary slip of the same month deducts the month's usual tax, and from the next month on the system counts both slips, earnings and tax. Together they deduct exactly what one slip with both on it used to.
+
+Example (test employee, basic 2,00,000, SSF, Ashwin 2083): the Ashwin salary slip deducts **10,600** tax; the Dashain slip pays 2,00,000 and deducts **40,000** (20 % — the allowance lands in the 20 % band), net 1,60,000; the Kartik salary slip again deducts **10,600**.
+
+**What stays on the salary slip:** **Leave Recovery** (leave taken beyond what was earned) is a deduction from pay, so it stays on the month's salary slip: tick **Settle Leave** on the salary entry.
+
+**Undoing** a payout: cancel its bank entry, journal, slips and Payroll Entry, as in 5.10; then cancel the Payroll Adjustment (Dashain) or the Leave Encashments. The month's salary is not touched.

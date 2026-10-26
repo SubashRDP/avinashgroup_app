@@ -361,6 +361,14 @@ _add_doc_event("Employee", "validate", "avinashgroup_app.hr.overtime.validate_em
 # dates that changed; the flag otherwise keeps the list as it was on save.
 _add_doc_event("Holiday List", "on_update", "avinashgroup_app.payroll.attendance_allowance.resync_holiday_flags")
 
+# Dashain and leave encashment are paid on their own payout slip, not the
+# month's salary slip: the slip takes its Payout from its Payroll Entry, and a
+# payout slip is cut down to the payout's rows and the tax they add to the year.
+# First of the slip's validate hooks; the others skip a payout slip. See
+# payroll/special_payout.py.
+_add_doc_event("Salary Slip", "before_validate", "avinashgroup_app.payroll.special_payout.set_slip_payout_type")
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.special_payout.build_payout_slip")
+
 # Fixed allowances from the employee's Allowances table, then the slip is
 # recalculated so gross, tax and net include them. Ahead of the tax hooks below,
 # which read the result. A hook, not a class: rdp_common_app owns the Salary
@@ -485,6 +493,9 @@ _add_doc_event("Leave Encashment", "on_submit", "avinashgroup_app.payroll.leave_
 _add_doc_event("Leave Encashment", "on_cancel", "avinashgroup_app.payroll.leave_encashment.refresh_slip")
 _add_doc_event("Additional Salary", "validate", "avinashgroup_app.payroll.leave_encashment.mark_additional_salary")
 _add_doc_event("Additional Salary", "on_submit", "avinashgroup_app.payroll.leave_encashment.link_additional_salary")
+# A festival allowance or an encashment's Additional Salary is tagged with its
+# payout and kept off the monthly slip (payroll/special_payout.py).
+_add_doc_event("Additional Salary", "validate", "avinashgroup_app.payroll.special_payout.tag_additional_salary")
 _add_doc_event("Salary Structure", "validate", "avinashgroup_app.payroll.allowance.validate_salary_structure")
 _add_doc_event("Salary Structure", "before_update_after_submit", "avinashgroup_app.payroll.allowance.guard_structure_rates")
 _add_doc_event("Salary Structure Assignment", "validate", "avinashgroup_app.payroll.allowance.validate_assignment_allowances")

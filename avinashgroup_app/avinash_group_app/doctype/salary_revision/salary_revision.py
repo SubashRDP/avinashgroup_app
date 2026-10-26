@@ -55,6 +55,7 @@ from avinashgroup_app.payroll.allowance import (
 	structure_rate,
 	unit_for,
 )
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 from avinashgroup_app.payroll.year_rollover import tax_slab_for
 
 ARREARS_COMPONENT = "Salary Arrears"
@@ -511,7 +512,7 @@ def months_already_paid(employee, effective_date):
 	"""Submitted slips covering a month on or after the date the rise runs from."""
 	return frappe.db.count(
 		"Salary Slip",
-		{"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)]},
+		{"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)], **REGULAR_SLIPS},
 	)
 
 
@@ -524,7 +525,8 @@ def arrears_for(employee, effective_date, monthly_difference):
 	owed = 0.0
 	for slip in frappe.get_all(
 		"Salary Slip",
-		filters={"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)]},
+		# Monthly salary slips only: a Dashain / encashment payout pays no month.
+		filters={"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)], **REGULAR_SLIPS},
 		fields=["payment_days", "total_working_days"],
 	):
 		share = flt(slip.payment_days) / flt(slip.total_working_days) if flt(slip.total_working_days) else 1
@@ -550,7 +552,7 @@ def attendance_qty_paid(employee, allowance, effective_date) -> float:
 	qty = 0.0
 	for slip in frappe.get_all(
 		"Salary Slip",
-		filters={"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)]},
+		filters={"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)], **REGULAR_SLIPS},
 		fields=["start_date", "end_date"],
 	):
 		qty += _qty_for_employee(employee, sc, *_attendance_period(sc, getdate(slip.start_date), getdate(slip.end_date)))

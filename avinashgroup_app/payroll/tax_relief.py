@@ -75,7 +75,14 @@ def retirement_cap(categories, assessable):
 
 
 def apply_tax_reliefs(doc, method=None):
-	"""Recompute the slip's income tax with the retirement cap and women's rebate. Hook: validate."""
+	"""Recompute the slip's income tax with the retirement cap and women's rebate. Hook: validate.
+
+	A payout slip (Dashain, leave encashment) is skipped: its tax is the
+	payout's share of the year, worked out with both reliefs already by
+	payroll/special_payout.py `payout_tax`.
+	"""
+	if doc.get("custom_payout_type"):
+		return
 	row = get_tax_row(doc)
 	slab = getattr(doc, "tax_slab", None)
 	if not row or not slab or not hasattr(doc, "total_taxable_earnings_without_full_tax_addl_components"):

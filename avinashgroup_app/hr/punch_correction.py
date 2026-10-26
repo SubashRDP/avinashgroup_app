@@ -106,6 +106,7 @@ from avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix im
 from avinashgroup_app.biometric.attendance_sync import get_day_checkins, relabel_day_checkins
 from avinashgroup_app.hr.overtime import get_shift_window
 from avinashgroup_app.hr.shift_backdate import LEAVE_STATUSES, _remeasure_overtime
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 # The same two roles Attendance Fix's single-day Repair allows
 # (attendance_fix.repair_attendance_day).
@@ -567,7 +568,8 @@ def _defer():
 def _guard_paid(employee, day):
 	slip = frappe.db.get_value(
 		"Salary Slip",
-		{"employee": employee, "docstatus": 1, "start_date": ("<=", day), "end_date": (">=", day)},
+		# A Dashain / encashment payout slip does not pay the days.
+		{"employee": employee, "docstatus": 1, "start_date": ("<=", day), "end_date": (">=", day), **REGULAR_SLIPS},
 		"name",
 	)
 	if slip:
@@ -648,7 +650,7 @@ def _check_in_window(shift_doc, day):
 def _draft_slip_warning(employee, day):
 	slip = frappe.db.get_value(
 		"Salary Slip",
-		{"employee": employee, "docstatus": 0, "start_date": ("<=", day), "end_date": (">=", day)},
+		{"employee": employee, "docstatus": 0, "start_date": ("<=", day), "end_date": (">=", day), **REGULAR_SLIPS},
 		"name",
 	)
 	if not slip:

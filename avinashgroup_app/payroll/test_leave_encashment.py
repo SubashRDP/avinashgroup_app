@@ -156,7 +156,7 @@ class TestYearEndEncashment(FrappeTestCase):
 		doc.insert()
 		self.assertEqual(doc.custom_occasion, "Separation")
 
-	def test_amount_reaches_the_ashadh_slip(self):
+	def test_amount_waits_for_the_encashment_payout(self):
 		casual = [c for c in self._run()["created"] if c["leave_type"] == "Casual Leave"][0]
 		enc = frappe.get_doc("Leave Encashment", casual["name"])
 		enc.submit()
@@ -165,6 +165,9 @@ class TestYearEndEncashment(FrappeTestCase):
 		additional = frappe.get_doc("Additional Salary", enc.additional_salary)
 		self.assertEqual(additional.deduct_full_tax_on_selected_payroll_date, 1)
 		self.assertEqual(getdate(additional.payroll_date), getdate(YEAR_END_DATE))
+		# Paid on the Leave Encashment payout's own slip (payroll/special_payout.py,
+		# tested in test_special_payout), never on the Ashadh salary slip.
+		self.assertEqual((additional.custom_payout_type, additional.disabled), ("Leave Encashment", 1))
 
 		structure = frappe.db.get_value(
 			"Salary Structure Assignment", {"employee": self.employee, "docstatus": 1}, "salary_structure"
@@ -175,17 +178,13 @@ class TestYearEndEncashment(FrappeTestCase):
 				"employee": self.employee,
 				"posting_date": YEAR_END_DATE,
 				"start_date": self.ashadh[0],
-				# Explicit: with BS-month payroll off in Nepal HRMS Settings a bare
-				# slip runs to the English month end and misses the encashment.
 				"end_date": self.ashadh[1],
 				"salary_structure": structure,
 				"payroll_frequency": "Monthly",
 			}
 		)
 		slip.run_method("validate")
-		rows = [r for r in slip.earnings if r.salary_component == "Leave Encashment"]
-		self.assertEqual(len(rows), 1)
-		self.assertAlmostEqual(flt(rows[0].amount), flt(enc.encashment_amount), delta=0.01)
+		self.assertNotIn("Leave Encashment", [r.salary_component for r in slip.earnings])
 
 		# cancelling the encashment takes the payment back
 		enc.cancel()

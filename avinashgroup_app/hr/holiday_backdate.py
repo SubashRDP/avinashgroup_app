@@ -42,6 +42,7 @@ from frappe.utils import getdate, today
 from avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix import (
 	cancel_and_delete_attendance,
 )
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 # Statuses that mean the person turned up (Half Day included: half a day worked
 # on a holiday is still holiday work).
@@ -71,6 +72,7 @@ def follow_up(holiday_date, holiday_lists):
 				"docstatus": 1,
 				"start_date": ("<=", day),
 				"end_date": (">=", day),
+				**REGULAR_SLIPS,  # a payout slip does not pay the days
 			},
 			pluck="employee",
 		)

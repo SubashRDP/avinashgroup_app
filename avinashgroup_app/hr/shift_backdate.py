@@ -64,6 +64,7 @@ from avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix im
 	reconcile_employee_day,
 )
 from avinashgroup_app.hr.shift_day import as_clock
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 # A request spanning more days than this is rebuilt in the background. One day is
 # a handful of queries; a month inline stays well under a request timeout.
@@ -95,6 +96,7 @@ def guard_paid_period(doc, method=None):
 			"docstatus": 1,
 			"start_date": ("<=", end),
 			"end_date": (">=", start),
+			**REGULAR_SLIPS,  # a payout slip does not pay the days
 		},
 		["name", "start_date", "end_date"],
 		as_dict=True,

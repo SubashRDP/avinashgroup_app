@@ -69,7 +69,8 @@ def tax_history_gaps(company: str, employees: list, start_date) -> list:
 
 	The opening is `taxable_earnings_till_date` / `tax_deducted_till_date`, and
 	HRMS reads it only from an assignment starting inside the year
-	(SalarySlip.get_opening_for).
+	(SalarySlip.get_opening_for). A Dashain or encashment payout slip covers no
+	days (payroll/special_payout.py), so only monthly slips count here.
 	"""
 	period = frappe.db.get_value(
 		"Payroll Period",
@@ -86,6 +87,7 @@ def tax_history_gaps(company: str, employees: list, start_date) -> list:
 			"""select employee, sum(datediff(end_date, start_date) + 1) from `tabSalary Slip`
 			where docstatus = 1 and employee in %(employees)s
 			  and start_date >= %(year_start)s and end_date < %(start)s
+			  and ifnull(custom_payout_type, '') = ''
 			group by employee""",
 			{"employees": tuple(employees), "year_start": period.start_date, "start": start_date},
 		)

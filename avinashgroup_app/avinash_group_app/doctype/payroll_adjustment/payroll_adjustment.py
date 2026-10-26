@@ -16,7 +16,9 @@ payroll/festival_allowance.py): its rows carry the Basic, service days and
 factor they were worked out from, and a row may not exceed its Basic — the
 festival allowance is capped at 100 % of one month's basic, hand edits included.
 Submitting or cancelling any adjustment re-saves the listed people's draft
-slips covering the payroll date, so the review shows the change.
+slips covering the payroll date, so the review shows the change. A festival
+allowance row is paid on the Dashain payout's own slip, not the month's salary
+slip: its Additional Salary is tagged so (payroll/special_payout.py).
 """
 
 import frappe

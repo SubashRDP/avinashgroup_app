@@ -19,15 +19,15 @@ So, for example, a Salary Slip's `validate` runs like this:
 |---|---|---|
 | 0 | `SalarySlip.validate` (HRMS), as inherited/overridden by `BSSalarySlip` | controller |
 | 1 | `audit_file_manager.validate`: company lock and company match | ours, audit |
-| 2 | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L368) | ours |
-| 3 | [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L375) | ours |
-| 4 | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L379) | ours |
-| 5 | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L386) (BS period guard) | ours |
-| 6 | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L389) | ours |
-| 7 | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L472) | ours, registered later in the file |
+| 2 | [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L376) | ours |
+| 3 | [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L383) | ours |
+| 4 | [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L387) | ours |
+| 5 | [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L394) (BS period guard) | ours |
+| 6 | [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L397) | ours |
+| 7 | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L480) | ours, registered later in the file |
 | 7b | erpnext's `"*"` validate handlers (e.g. service-level-agreement `apply`) | erpnext, wildcard (installed before us) |
-| 8 | [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L435) | ours, wildcard |
-| 9 | [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L472) | ours, wildcard |
+| 8 | [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L443) | ours, wildcard |
+| 9 | [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L480) | ours, wildcard |
 
 HRMS and rdp_common_app register no Salary Slip `doc_events`. Details are in [06-salary-slip.md](06-salary-slip.md).
 
@@ -35,12 +35,12 @@ HRMS and rdp_common_app register no Salary Slip `doc_events`. Details are in [06
 
 | Doctype | Class | Registered | Defined | Why |
 |---|---|---|---|---|
-| Payroll Entry | `AvinashPayrollEntry` | [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L533) | [`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L240) | Fills the period from a BS month and warns about missing attendance. Splits the accrual journal by section (O/O, S/D, F/P accounts), and refuses a bank entry without a Bank/Cash account. See [05-payroll-entry.md](05-payroll-entry.md) and [07-after-the-slip.md](07-after-the-slip.md). |
-| Leave Policy Assignment | `BSLeavePolicyAssignment` | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hooks.py#L529) | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L44) | A mid-year assignment back-fills earned leave in BS months, matching the BS accrual job. See [01-masters.md](01-masters.md). |
+| Payroll Entry | `AvinashPayrollEntry` | [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L544) | [`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L320) | Fills the period from a BS month and warns about missing attendance. Splits the accrual journal by section (O/O, S/D, F/P accounts), and refuses a bank entry without a Bank/Cash account. See [05-payroll-entry.md](05-payroll-entry.md) and [07-after-the-slip.md](07-after-the-slip.md). |
+| Leave Policy Assignment | `BSLeavePolicyAssignment` | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hooks.py#L540) | [`BSLeavePolicyAssignment`](../../avinashgroup_app/hr/leave_policy_assignment_bs.py#L44) | A mid-year assignment back-fills earned leave in BS months, matching the BS accrual job. See [01-masters.md](01-masters.md). |
 | Salary Slip | `BSSalarySlip` (rdp_common_app) | [`BSSalarySlip`](../../../rdp_common_app/rdp_common_app/hooks.py#L149) | [`BSSalarySlip`](../../../rdp_common_app/rdp_common_app/nepal_hrms_common/payroll/salary_slip_bs.py#L47) | Puts slips on BS months: the period, `total_working_days` = BS month length, the proration denominator, and the tax months left. See [06-salary-slip.md](06-salary-slip.md). |
 | Employee | `EmployeeMaster` (HRMS) | [`EmployeeMaster`](../../../hrms/hrms/hooks.py#L150) | [`EmployeeMaster`](../../../hrms/hrms/overrides/employee_master.py#L12) | Stock HRMS. Listed because our Employee `validate` hooks run alongside it. |
 
-**Why the slip hooks are hooks, not a class.** `rdp_common_app` already owns the Salary Slip class, and a second `override_doctype_class` entry would silently replace it (the last app wins). That is why [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L368) and the tax hooks are `validate` doc_events. The comment above that line in `hooks.py` says so.
+**Why the slip hooks are hooks, not a class.** `rdp_common_app` already owns the Salary Slip class, and a second `override_doctype_class` entry would silently replace it (the last app wins). That is why [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L376) and the tax hooks are `validate` doc_events. The comment above that line in `hooks.py` says so.
 
 ## 2. Document events: HR and payroll doctypes
 
@@ -57,10 +57,10 @@ Registered through `attendance_events` ([`attendance_events`](../../avinashgroup
 | Order | Handler (registration) | Defined | Purpose |
 |---|---|---|---|
 | 0 | audit `validate` (company lock and match) | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | Attendance is in [`"Attendance"`](../../avinashgroup_app/utils/audit_file_manager.py#L20) |
-| 1 | [`set_holiday_flag`](../../avinashgroup_app/hooks.py#L230) | [`set_holiday_flag`](../../avinashgroup_app/payroll/attendance_allowance.py#L552) | Ticks `custom_worked_on_holiday` when the date is in the employee's (or company's) holiday list. Feeds the tea / meal / holiday-pay rules. |
-| 2 | [`set_shift_deviation_fields`](../../avinashgroup_app/hooks.py#L231) | [`set_shift_deviation_fields`](../../avinashgroup_app/biometric/attendance_override.py#L8) | Fills a missing shift from the roster and writes the four late/early-entry/exit `custom_*` fields. |
-| 3 | [`enforce_late_arrival_half_day`](../../avinashgroup_app/hooks.py#L232) | [`enforce_late_arrival_half_day`](../../avinashgroup_app/biometric/attendance_override.py#L55) | In more than `custom_half_day_if_late_by_hours` (2 h) after shift start → Half Day, with the other half Absent. Late Excused undoes it. |
-| 4 | [`half_day_when_working_on_leave`](../../avinashgroup_app/hooks.py#L236) | [`half_day_when_working_on_leave`](../../avinashgroup_app/biometric/attendance_override.py#L141) | On approved leave but punched in (in-time or a punch that day) → Half Day, other half Present (policy 3.4). Leave Application `on_submit` → [`on_leave_submit`](../../avinashgroup_app/biometric/attendance_override.py#L205) does the same for rows HRMS updated with `db_set`. |
+| 1 | [`set_holiday_flag`](../../avinashgroup_app/hooks.py#L230) | [`set_holiday_flag`](../../avinashgroup_app/payroll/attendance_allowance.py#L554) | Ticks `custom_worked_on_holiday` when the date is in the employee's (or company's) holiday list. Feeds the tea / meal / holiday-pay rules. |
+| 2 | [`set_shift_deviation_fields`](../../avinashgroup_app/hooks.py#L231) | [`set_shift_deviation_fields`](../../avinashgroup_app/biometric/attendance_override.py#L9) | Fills a missing shift from the roster and writes the four late/early-entry/exit `custom_*` fields. |
+| 3 | [`enforce_late_arrival_half_day`](../../avinashgroup_app/hooks.py#L232) | [`enforce_late_arrival_half_day`](../../avinashgroup_app/biometric/attendance_override.py#L56) | In more than `custom_half_day_if_late_by_hours` (2 h) after shift start → Half Day, with the other half Absent. Late Excused undoes it. |
+| 4 | [`half_day_when_working_on_leave`](../../avinashgroup_app/hooks.py#L236) | [`half_day_when_working_on_leave`](../../avinashgroup_app/biometric/attendance_override.py#L142) | On approved leave but punched in (in-time or a punch that day) → Half Day, other half Present (policy 3.4). Leave Application `on_submit` → [`on_leave_submit`](../../avinashgroup_app/biometric/attendance_override.py#L206) does the same for rows HRMS updated with `db_set`. |
 | 5 | wildcard numbering, dynamic approval | see §3 | |
 
 ### Employee
@@ -69,27 +69,27 @@ Registered through `attendance_events` ([`attendance_events`](../../avinashgroup
 |---|---|---|---|
 | 0 | audit `validate` | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | Employee is audited ([`"Employee"`](../../avinashgroup_app/utils/audit_file_manager.py#L28)). |
 | 1 | [`validate_unique_device_id`](../../avinashgroup_app/hooks.py#L353) | [`validate_unique_device_id`](../../avinashgroup_app/biometric/employee.py#L13) | One Attendance Device ID per company, so a punch maps to one person. |
-| 2 | [`validate_womens_tax_rebate`](../../avinashgroup_app/hooks.py#L356) | [`validate_womens_tax_rebate`](../../avinashgroup_app/payroll/tax_relief.py#L195) | The Women's Tax Rebate tick is only allowed on a female employee. |
+| 2 | [`validate_womens_tax_rebate`](../../avinashgroup_app/hooks.py#L356) | [`validate_womens_tax_rebate`](../../avinashgroup_app/payroll/tax_relief.py#L202) | The Women's Tax Rebate tick is only allowed on a female employee. |
 | 3 | [`validate_employee_holiday_rule`](../../avinashgroup_app/hooks.py#L359) | [`validate_employee_holiday_rule`](../../avinashgroup_app/hr/overtime.py#L136) | Overtime Eligible and Replacement Leave for Holiday Work are never ticked together (policy 2.2/2.5). |
-| 4 | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L472) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS (miti) copies of the AD dates. |
+| 4 | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L480) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS (miti) copies of the AD dates. |
 | 5 | HRMS [`validate_onboarding_process`](../../../hrms/hrms/hooks.py#L200) | [`validate_onboarding_process`](../../../hrms/hrms/overrides/employee_master.py#L29) | Stock HRMS. Runs after ours (install order). |
 
 ### Shift Type, Shift Assignment, Shift Request
 
 | Doctype | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|---|
-| Shift Request | validate | [`validate_request`](../../avinashgroup_app/hooks.py#L443) | [`validate_request`](../../avinashgroup_app/hr/shift_change.py#L41) | Checks a "work a different shift" request. |
-| Shift Request | validate | [`guard_paid_period`](../../avinashgroup_app/hooks.py#L452) | [`guard_paid_period`](../../avinashgroup_app/hr/shift_backdate.py#L81) | Refuses a backdated change that reaches into an already-paid period. |
-| Shift Request | before_submit | [`prepare_request`](../../avinashgroup_app/hooks.py#L444) | [`prepare_request`](../../avinashgroup_app/hr/shift_backdate.py#L118) | Records which past days the change touches. Runs before the split below. |
-| Shift Request | before_submit | [`make_room_for_request`](../../avinashgroup_app/hooks.py#L445) | [`make_room_for_request`](../../avinashgroup_app/hr/shift_change.py#L58) | Splits the standing open-ended Shift Assignment so HRMS can insert the requested one. |
-| Shift Request | on_submit | [`rebuild_for_request`](../../avinashgroup_app/hooks.py#L453) | [`rebuild_for_request`](../../avinashgroup_app/hr/shift_backdate.py#L141) | Re-marks the past days' attendance on the new shift. |
-| Shift Request | before_cancel | [`prepare_request`](../../avinashgroup_app/hooks.py#L444) | [`prepare_request`](../../avinashgroup_app/hr/shift_backdate.py#L118) | Same as before_submit, for the cancel. |
-| Shift Request | on_cancel | [`close_gap_after_cancel`](../../avinashgroup_app/hooks.py#L447) | [`close_gap_after_cancel`](../../avinashgroup_app/hr/shift_change.py#L87) | Re-joins the split standing assignment. |
-| Shift Request | on_cancel | [`rebuild_for_request`](../../avinashgroup_app/hooks.py#L453) | [`rebuild_for_request`](../../avinashgroup_app/hr/shift_backdate.py#L141) | Re-marks the past days on the restored shift. |
-| Shift Assignment | validate | [`guard_paid_period`](../../avinashgroup_app/hooks.py#L452) | [`guard_paid_period`](../../avinashgroup_app/hr/shift_backdate.py#L81) | Refuses backdating into a paid period. |
-| Shift Assignment | on_submit | [`rebuild_for_assignment`](../../avinashgroup_app/hooks.py#L456) | [`rebuild_for_assignment`](../../avinashgroup_app/hr/shift_backdate.py#L160) | Re-marks the affected past attendance. |
-| Shift Assignment | before_cancel | [`prepare_assignment_cancel`](../../avinashgroup_app/hooks.py#L457) | [`prepare_assignment_cancel`](../../avinashgroup_app/hr/shift_backdate.py#L150) | Records the days the cancel touches. |
-| Shift Assignment | on_cancel | [`rebuild_for_assignment`](../../avinashgroup_app/hooks.py#L456) | [`rebuild_for_assignment`](../../avinashgroup_app/hr/shift_backdate.py#L160) | Re-marks them after the cancel. |
+| Shift Request | validate | [`validate_request`](../../avinashgroup_app/hooks.py#L451) | [`validate_request`](../../avinashgroup_app/hr/shift_change.py#L41) | Checks a "work a different shift" request. |
+| Shift Request | validate | [`guard_paid_period`](../../avinashgroup_app/hooks.py#L460) | [`guard_paid_period`](../../avinashgroup_app/hr/shift_backdate.py#L82) | Refuses a backdated change that reaches into an already-paid period. |
+| Shift Request | before_submit | [`prepare_request`](../../avinashgroup_app/hooks.py#L452) | [`prepare_request`](../../avinashgroup_app/hr/shift_backdate.py#L120) | Records which past days the change touches. Runs before the split below. |
+| Shift Request | before_submit | [`make_room_for_request`](../../avinashgroup_app/hooks.py#L453) | [`make_room_for_request`](../../avinashgroup_app/hr/shift_change.py#L58) | Splits the standing open-ended Shift Assignment so HRMS can insert the requested one. |
+| Shift Request | on_submit | [`rebuild_for_request`](../../avinashgroup_app/hooks.py#L461) | [`rebuild_for_request`](../../avinashgroup_app/hr/shift_backdate.py#L143) | Re-marks the past days' attendance on the new shift. |
+| Shift Request | before_cancel | [`prepare_request`](../../avinashgroup_app/hooks.py#L452) | [`prepare_request`](../../avinashgroup_app/hr/shift_backdate.py#L120) | Same as before_submit, for the cancel. |
+| Shift Request | on_cancel | [`close_gap_after_cancel`](../../avinashgroup_app/hooks.py#L455) | [`close_gap_after_cancel`](../../avinashgroup_app/hr/shift_change.py#L87) | Re-joins the split standing assignment. |
+| Shift Request | on_cancel | [`rebuild_for_request`](../../avinashgroup_app/hooks.py#L461) | [`rebuild_for_request`](../../avinashgroup_app/hr/shift_backdate.py#L143) | Re-marks the past days on the restored shift. |
+| Shift Assignment | validate | [`guard_paid_period`](../../avinashgroup_app/hooks.py#L460) | [`guard_paid_period`](../../avinashgroup_app/hr/shift_backdate.py#L82) | Refuses backdating into a paid period. |
+| Shift Assignment | on_submit | [`rebuild_for_assignment`](../../avinashgroup_app/hooks.py#L464) | [`rebuild_for_assignment`](../../avinashgroup_app/hr/shift_backdate.py#L162) | Re-marks the affected past attendance. |
+| Shift Assignment | before_cancel | [`prepare_assignment_cancel`](../../avinashgroup_app/hooks.py#L465) | [`prepare_assignment_cancel`](../../avinashgroup_app/hr/shift_backdate.py#L152) | Records the days the cancel touches. |
+| Shift Assignment | on_cancel | [`rebuild_for_assignment`](../../avinashgroup_app/hooks.py#L464) | [`rebuild_for_assignment`](../../avinashgroup_app/hr/shift_backdate.py#L162) | Re-marks them after the cancel. |
 
 Shift Type is also an audited master ([`"Shift Type"`](../../avinashgroup_app/utils/audit_file_manager.py#L110)). Shift Assignment and Shift Request are filtered by fiscal year (§5).
 
@@ -97,10 +97,10 @@ Shift Type is also an audited master ([`"Shift Type"`](../../avinashgroup_app/ut
 
 | Doctype | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|---|
-| Leave Allocation, Leave Application | validate | [`validate_gender`](../../avinashgroup_app/hooks.py#L495) | [`validate_gender`](../../avinashgroup_app/hr/statutory_leave.py#L27) | Maternity leave for mothers only, paternity leave for fathers only. |
-| Leave Allocation | validate | [`validate_within_policy`](../../avinashgroup_app/hooks.py#L499) | [`validate_within_policy`](../../avinashgroup_app/hr/leave_ceiling.py#L36) | A year can grant no more days than the employee's own Leave Policy (21 + 12, or 8 + 12 at Karnali). |
-| Leave Application | validate | [`validate_application_within_year`](../../avinashgroup_app/hooks.py#L503) | [`validate_application_within_year`](../../avinashgroup_app/hr/leave_ceiling.py#L99) | Leave may be taken ahead of the credit (Casual / Sick allow negative) but a year's applications of a type cannot pass its figure. |
-| Leave Application | validate | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L472) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates. |
+| Leave Allocation, Leave Application | validate | [`validate_gender`](../../avinashgroup_app/hooks.py#L506) | [`validate_gender`](../../avinashgroup_app/hr/statutory_leave.py#L27) | Maternity leave for mothers only, paternity leave for fathers only. |
+| Leave Allocation | validate | [`validate_within_policy`](../../avinashgroup_app/hooks.py#L510) | [`validate_within_policy`](../../avinashgroup_app/hr/leave_ceiling.py#L36) | A year can grant no more days than the employee's own Leave Policy (21 + 12, or 8 + 12 at Karnali). |
+| Leave Application | validate | [`validate_application_within_year`](../../avinashgroup_app/hooks.py#L514) | [`validate_application_within_year`](../../avinashgroup_app/hr/leave_ceiling.py#L99) | Leave may be taken ahead of the credit (Casual / Sick allow negative) but a year's applications of a type cannot pass its figure. |
+| Leave Application | validate | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L480) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates. |
 | Leave Application | wildcard | Dynamic Approval | see §3 | The `leave_application_dynamic_approval` patch set Leave Application up for Dynamic Approval. See [09-cross-cutting.md](09-cross-cutting.md). |
 | Leave Policy Assignment | class | `BSLeavePolicyAssignment` | §1 | |
 
@@ -110,9 +110,9 @@ Both Leave Allocation and Leave Application are also audited and fiscal-year fil
 
 | Order | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|---|
-| 1 | on_submit | [`replacement_leave.on_sheet_submit`](../../avinashgroup_app/hooks.py#L463) | [`on_sheet_submit`](../../avinashgroup_app/hr/replacement_leave.py#L101) | For officers and admin staff, holiday work becomes a Compensatory Leave Request once attendance shows the day was worked. |
-| 2 | on_cancel | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L464) | [`on_sheet_cancel`](../../avinashgroup_app/hr/replacement_leave.py#L109) | Withdraws the replacement leave. |
-| 3 | on_submit | [`overtime_settlement.on_sheet_submit`](../../avinashgroup_app/hooks.py#L463) | [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L213) | Measures the never-measured rows. Without this, overtime paid 0 on any sheet where nobody pressed "Measure from Attendance". |
+| 1 | on_submit | [`replacement_leave.on_sheet_submit`](../../avinashgroup_app/hooks.py#L471) | [`on_sheet_submit`](../../avinashgroup_app/hr/replacement_leave.py#L101) | For officers and admin staff, holiday work becomes a Compensatory Leave Request once attendance shows the day was worked. |
+| 2 | on_cancel | [`on_sheet_cancel`](../../avinashgroup_app/hooks.py#L472) | [`on_sheet_cancel`](../../avinashgroup_app/hr/replacement_leave.py#L109) | Withdraws the replacement leave. |
+| 3 | on_submit | [`overtime_settlement.on_sheet_submit`](../../avinashgroup_app/hooks.py#L471) | [`on_sheet_submit`](../../avinashgroup_app/hr/overtime_settlement.py#L213) | Measures the never-measured rows. Without this, overtime paid 0 on any sheet where nobody pressed "Measure from Attendance". |
 
 The sheet's own controller (`OvertimeSheet.apply_rules`) runs on validate. See [04-overtime.md](04-overtime.md).
 
@@ -120,10 +120,10 @@ The sheet's own controller (`OvertimeSheet.apply_rules`) runs on validate. See [
 
 | Doctype | Event | Handler (registration) | Defined | Purpose |
 |---|---|---|---|---|
-| Salary Component | validate | [`validate_salary_component`](../../avinashgroup_app/hooks.py#L478) | [`validate_salary_component`](../../avinashgroup_app/payroll/allowance.py#L368) | The allowance kind decides the attendance rule. Attendance-driven components get no payment-days proration and are removed if zero. Section (S/D, F/P) accounts must belong to the row's company. |
-| Salary Structure | validate | [`validate_salary_structure`](../../avinashgroup_app/hooks.py#L488) | [`validate_salary_structure`](../../avinashgroup_app/payroll/allowance.py#L465) | No allowances in Earnings/Deductions (they live in Allowance Rates). Attendance-driven rows are tags with no amount. |
-| Salary Structure | before_update_after_submit | [`guard_structure_rates`](../../avinashgroup_app/hooks.py#L489) | [`guard_structure_rates`](../../avinashgroup_app/payroll/allowance.py#L494) | On a submitted structure, a listed rate changes only through a Salary Revision. |
-| Salary Structure Assignment | validate | [`validate_assignment_allowances`](../../avinashgroup_app/hooks.py#L490) | [`validate_assignment_allowances`](../../avinashgroup_app/payroll/allowance.py#L520) | The Allowances table takes allowances only, once each. A blank rate takes the structure's; a rate still 0 is refused. |
+| Salary Component | validate | [`validate_salary_component`](../../avinashgroup_app/hooks.py#L486) | [`validate_salary_component`](../../avinashgroup_app/payroll/allowance.py#L368) | The allowance kind decides the attendance rule. Attendance-driven components get no payment-days proration and are removed if zero. Section (S/D, F/P) accounts must belong to the row's company. |
+| Salary Structure | validate | [`validate_salary_structure`](../../avinashgroup_app/hooks.py#L499) | [`validate_salary_structure`](../../avinashgroup_app/payroll/allowance.py#L465) | No allowances in Earnings/Deductions (they live in Allowance Rates). Attendance-driven rows are tags with no amount. |
+| Salary Structure | before_update_after_submit | [`guard_structure_rates`](../../avinashgroup_app/hooks.py#L500) | [`guard_structure_rates`](../../avinashgroup_app/payroll/allowance.py#L494) | On a submitted structure, a listed rate changes only through a Salary Revision. |
+| Salary Structure Assignment | validate | [`validate_assignment_allowances`](../../avinashgroup_app/hooks.py#L501) | [`validate_assignment_allowances`](../../avinashgroup_app/payroll/allowance.py#L520) | The Allowances table takes allowances only, once each. A blank rate takes the structure's; a rate still 0 is refused. |
 
 Salary Structure is audited. Salary Structure Assignment is fiscal-year filtered. See [01b-pay-masters.md](01b-pay-masters.md).
 
@@ -131,10 +131,10 @@ Salary Structure is audited. Salary Structure Assignment is fiscal-year filtered
 
 | Order | Event | Handler | Defined | Purpose |
 |---|---|---|---|---|
-| 0 | validate (class) | `AvinashPayrollEntry.validate` | [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L241) | Fills the period from the BS month, calls HRMS's validate, then warns about missing attendance. |
+| 0 | validate (class) | `AvinashPayrollEntry.validate` | [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L321) | Fills the period from the BS month, calls HRMS's validate, then warns about missing attendance. |
 | 1 | validate | audit | [`validate`](../../avinashgroup_app/utils/audit_file_manager.py#L582) | [`"Payroll Entry"`](../../avinashgroup_app/utils/audit_file_manager.py#L52) |
-| 2 | validate | [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L385) | [`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45) | Refuses an entry whose dates are not the BS month of its posting date. |
-| 3 | validate | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L472) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates. |
+| 2 | validate | [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L393) | [`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45) | Refuses an entry whose dates are not the BS month of its posting date. |
+| 3 | validate | [`set_bs_dates`](../../avinashgroup_app/hooks.py#L480) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates. |
 
 ### Salary Slip
 
@@ -142,12 +142,12 @@ The order is in the table at the top of this page. The handlers:
 
 | Handler (registration) | Defined | Purpose |
 |---|---|---|
-| [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L368) | [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33) | Fixed (Monthly, % of Initial Basic) allowances from the assignment's Allowances table, then the slip is recalculated. |
-| [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L375) | [`apply_tax_reliefs`](../../avinashgroup_app/payroll/tax_relief.py#L77) | Retirement-contribution cap and women's rebate, which HRMS's slab cannot express. |
-| [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L379) | [`apply_income_tax_override`](../../avinashgroup_app/payroll/income_tax.py#L154) | Keeps the computed tax and lets HR type a tax figure by hand. Runs after the reliefs so the hand figure wins. |
-| [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L386) | [`validate_salary_slip`](../../avinashgroup_app/payroll/bs_period_guard.py#L70) | A slip's month must equal its Payroll Entry's. |
-| [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L389) | [`build_daily_breakdown`](../../avinashgroup_app/payroll/daily_breakdown.py#L64) | The day-by-day table (Salary Slip Day). It only describes the slip and never blocks a save. |
-| [`set_bs_dates`](../../avinashgroup_app/hooks.py#L472) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates and `custom_bs_month`. |
+| [`add_employee_allowances`](../../avinashgroup_app/hooks.py#L376) | [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33) | Fixed (Monthly, % of Initial Basic) allowances from the assignment's Allowances table, then the slip is recalculated. |
+| [`apply_tax_reliefs`](../../avinashgroup_app/hooks.py#L383) | [`apply_tax_reliefs`](../../avinashgroup_app/payroll/tax_relief.py#L77) | Retirement-contribution cap and women's rebate, which HRMS's slab cannot express. |
+| [`apply_income_tax_override`](../../avinashgroup_app/hooks.py#L387) | [`apply_income_tax_override`](../../avinashgroup_app/payroll/income_tax.py#L156) | Keeps the computed tax and lets HR type a tax figure by hand. Runs after the reliefs so the hand figure wins. |
+| [`validate_salary_slip`](../../avinashgroup_app/hooks.py#L394) | [`validate_salary_slip`](../../avinashgroup_app/payroll/bs_period_guard.py#L70) | A slip's month must equal its Payroll Entry's. |
+| [`build_daily_breakdown`](../../avinashgroup_app/hooks.py#L397) | [`build_daily_breakdown`](../../avinashgroup_app/payroll/daily_breakdown.py#L64) | The day-by-day table (Salary Slip Day). It only describes the slip and never blocks a save. |
+| [`set_bs_dates`](../../avinashgroup_app/hooks.py#L480) | [`set_bs_dates`](../../avinashgroup_app/hr/bs_dates.py#L75) | BS dates and `custom_bs_month`. |
 
 ### Journal Entry (payroll journals)
 
@@ -162,8 +162,8 @@ The order is in the table at the top of this page. The handlers:
 | Doctype | Hooks | Notes |
 |---|---|---|
 | Employee Advance | audit; fiscal-year filter | Recovered through Prepare Payroll Inputs (`advance_recovery.py`), not a hook. See [05-payroll-entry.md](05-payroll-entry.md). |
-| Additional Salary | fiscal-year filter; validate [`mark_additional_salary`](../../avinashgroup_app/payroll/leave_encashment.py#L152), on_submit [`link_additional_salary`](../../avinashgroup_app/payroll/leave_encashment.py#L164) | Written by Prepare Payroll Inputs, Payroll Adjustment, Salary Revision and HRMS Leave Encashment. The two hooks touch only rows with `ref_doctype = Leave Encashment`: full tax in the month, `custom_source`, and the link back to the encashment. |
-| Leave Encashment | fiscal-year filter; validate [`price_encashment`](../../avinashgroup_app/payroll/leave_encashment.py#L110); on_submit / on_cancel [`refresh_slip`](../../avinashgroup_app/payroll/leave_encashment.py#L173) | Prices at the person's basic per day, only at year end or separation, refuses a second encashment of an allocation. See [08-changes-over-time.md](08-changes-over-time.md#8a-leave-encashment). |
+| Additional Salary | fiscal-year filter; validate [`mark_additional_salary`](../../avinashgroup_app/payroll/leave_encashment.py#L158), on_submit [`link_additional_salary`](../../avinashgroup_app/payroll/leave_encashment.py#L172) | Written by Prepare Payroll Inputs, Payroll Adjustment, Salary Revision and HRMS Leave Encashment. The two hooks touch only rows with `ref_doctype = Leave Encashment`: full tax in the month, `custom_source`, and the link back to the encashment. |
+| Leave Encashment | fiscal-year filter; validate [`price_encashment`](../../avinashgroup_app/payroll/leave_encashment.py#L116); on_submit / on_cancel [`refresh_slip`](../../avinashgroup_app/payroll/leave_encashment.py#L181) | Prices at the person's basic per day, only at year end or separation, refuses a second encashment of an allocation. See [08-changes-over-time.md](08-changes-over-time.md#8a-leave-encashment). |
 | Payroll Adjustment | controller only (`validate`, `on_submit`, `on_cancel`) | Refuses a computed row above its Basic; submit / cancel re-save the draft slips. See [08-changes-over-time.md](08-changes-over-time.md). |
 | Holiday List | audit; HRMS cache invalidation ([`invalidate_cache`](../../../hrms/hrms/hooks.py#L174)) | |
 | Attendance Fix | fiscal-year filter; controller does the work | See [02-checkin-to-attendance.md](02-checkin-to-attendance.md). |
@@ -173,13 +173,13 @@ The order is in the table at the top of this page. The handlers:
 
 | Event | Handler (registration) | Defined | Effect on HR docs |
 |---|---|---|---|
-| validate, before_save | [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L435) | [`apply_engine_numbering`](../../avinashgroup_app/custom_code/Override/naming_series.py#L2913) | Numbering Configuration engine. It exits through a cached gate when no rule targets the doctype. Where a rule exists, the Fiscal Year lookup can throw on a date with no FY row. See [09-cross-cutting.md](09-cross-cutting.md). |
-| after_delete | [`revert_engine_series_on_delete`](../../avinashgroup_app/hooks.py#L437) | [`revert_engine_series_on_delete`](../../avinashgroup_app/custom_code/Override/naming_series.py#L2929) | Gives the series back when a numbered doc is deleted. |
-| validate | [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L472) | [`validate`](../../avinashgroup_app/custom_code/dynamic_approval.py#L250) | Blocks edits while Pending Approval, except by the current approver (only on doctypes with a Dynamic Approval Setting). |
-| before_save | [`dynamic_approval.before_save`](../../avinashgroup_app/hooks.py#L506) | [`before_save`](../../avinashgroup_app/custom_code/dynamic_approval.py#L338) | |
-| on_update | [`dynamic_approval.on_update`](../../avinashgroup_app/hooks.py#L507) | [`on_update`](../../avinashgroup_app/custom_code/dynamic_approval.py#L501) | |
-| before_workflow_action | [`dynamic_approval.before_workflow_action`](../../avinashgroup_app/hooks.py#L508) | [`before_workflow_action`](../../avinashgroup_app/custom_code/dynamic_approval.py#L366) | |
-| on_submit, on_cancel, after_insert, on_update | [`sms_dispatch.on_submit`](../../avinashgroup_app/hooks.py#L484) and its siblings | [`on_submit`](../../avinashgroup_app/sparrow_sms/sms_dispatch.py#L533) | Sparrow SMS. Rules are data (SMS Notification Rule); avinas1 has none, so nothing is sent for HR docs. |
+| validate, before_save | [`apply_engine_numbering`](../../avinashgroup_app/hooks.py#L443) | [`apply_engine_numbering`](../../avinashgroup_app/custom_code/Override/naming_series.py#L2913) | Numbering Configuration engine. It exits through a cached gate when no rule targets the doctype. Where a rule exists, the Fiscal Year lookup can throw on a date with no FY row. See [09-cross-cutting.md](09-cross-cutting.md). |
+| after_delete | [`revert_engine_series_on_delete`](../../avinashgroup_app/hooks.py#L445) | [`revert_engine_series_on_delete`](../../avinashgroup_app/custom_code/Override/naming_series.py#L2929) | Gives the series back when a numbered doc is deleted. |
+| validate | [`dynamic_approval.validate`](../../avinashgroup_app/hooks.py#L480) | [`validate`](../../avinashgroup_app/custom_code/dynamic_approval.py#L250) | Blocks edits while Pending Approval, except by the current approver (only on doctypes with a Dynamic Approval Setting). |
+| before_save | [`dynamic_approval.before_save`](../../avinashgroup_app/hooks.py#L517) | [`before_save`](../../avinashgroup_app/custom_code/dynamic_approval.py#L338) | |
+| on_update | [`dynamic_approval.on_update`](../../avinashgroup_app/hooks.py#L518) | [`on_update`](../../avinashgroup_app/custom_code/dynamic_approval.py#L501) | |
+| before_workflow_action | [`dynamic_approval.before_workflow_action`](../../avinashgroup_app/hooks.py#L519) | [`before_workflow_action`](../../avinashgroup_app/custom_code/dynamic_approval.py#L366) | |
+| on_submit, on_cancel, after_insert, on_update | [`sms_dispatch.on_submit`](../../avinashgroup_app/hooks.py#L492) and its siblings | [`on_submit`](../../avinashgroup_app/sparrow_sms/sms_dispatch.py#L533) | Sparrow SMS. Rules are data (SMS Notification Rule); avinas1 has none, so nothing is sent for HR docs. |
 
 **Audit handlers** ([`get_doc_events`](../../avinashgroup_app/utils/audit_file_manager.py#L471)) register `before_insert`, `before_save`, `validate`, `autoname` and `after_delete` on every doctype in [`AuditBase.doctypes`](../../avinashgroup_app/utils/audit_file_manager.py#L10). The HR doctypes in it are Salary Structure, Attendance, Employee, Employee Advance, Overtime Sheet, Holiday List, Leave Application, Leave Allocation, Payroll Entry, Salary Slip, Journal Entry and Shift Type. Each handler does:
 
@@ -196,13 +196,13 @@ They run **before** every other handler of ours on the same event.
 
 | Frequency | Job (registration) | Defined | Stopped on avinas1? | What it does |
 |---|---|---|---|---|
-| hourly | [`check_bridge_heartbeats`](../../avinashgroup_app/hooks.py#L541) | [`check_bridge_heartbeats`](../../avinashgroup_app/biometric/heartbeat.py#L26) | no (scheduler off) | Alerts when a K40/HTMS bridge stops pinging. |
-| daily_long | [`heal_unlinked_checkins`](../../avinashgroup_app/hooks.py#L554) | [`heal_unlinked_checkins`](../../avinashgroup_app/biometric/attendance_self_heal.py#L58) | no | Repairs the days HRMS auto attendance could not mark. It only touches shifts with auto attendance **on**, and both avinas1 shift types have it off. |
-| daily_long | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hooks.py#L560) | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hr/utils.py#L81) | no; never ran | Monthly earned leave on BS months. **Replaces** HRMS's `allocate_earned_leaves`, which is `stopped = 1` on avinas1, as required. |
-| daily_long | [`switch_to_current_year_lists`](../../avinashgroup_app/hooks.py#L563) | [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30) | no; never ran | On a fiscal year's first day, moves companies and employees onto that year's holiday lists. |
-| daily_long | [`grant_pending`](../../avinashgroup_app/hooks.py#L551) | [`grant_pending`](../../avinashgroup_app/hr/replacement_leave.py#L156) | no; never ran | Replacement leave for holiday work whose attendance arrived after the sheet was submitted. |
-| daily_long | [`measure_pending`](../../avinashgroup_app/hooks.py#L551) | [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L224) | no; never ran | Measures overtime rows whose attendance arrived after submission (62-day look-back). |
-| cron `10 13 * * *` | [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L589) | [`send_daily_attendance_digest`](../../avinashgroup_app/biometric/daily_digest.py#L79) | no; never ran | Midday mail of the day's attendance problems. Runs at :10 so it does not race HRMS's hourly auto attendance. |
+| hourly | [`check_bridge_heartbeats`](../../avinashgroup_app/hooks.py#L552) | [`check_bridge_heartbeats`](../../avinashgroup_app/biometric/heartbeat.py#L26) | no (scheduler off) | Alerts when a K40/HTMS bridge stops pinging. |
+| daily_long | [`heal_unlinked_checkins`](../../avinashgroup_app/hooks.py#L565) | [`heal_unlinked_checkins`](../../avinashgroup_app/biometric/attendance_self_heal.py#L58) | no | Repairs the days HRMS auto attendance could not mark. It only touches shifts with auto attendance **on**, and both avinas1 shift types have it off. |
+| daily_long | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hooks.py#L571) | [`allocate_earned_leaves_bs`](../../avinashgroup_app/hr/utils.py#L81) | no; never ran | Monthly earned leave on BS months. **Replaces** HRMS's `allocate_earned_leaves`, which is `stopped = 1` on avinas1, as required. |
+| daily_long | [`switch_to_current_year_lists`](../../avinashgroup_app/hooks.py#L574) | [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30) | no; never ran | On a fiscal year's first day, moves companies and employees onto that year's holiday lists. |
+| daily_long | [`grant_pending`](../../avinashgroup_app/hooks.py#L562) | [`grant_pending`](../../avinashgroup_app/hr/replacement_leave.py#L156) | no; never ran | Replacement leave for holiday work whose attendance arrived after the sheet was submitted. |
+| daily_long | [`measure_pending`](../../avinashgroup_app/hooks.py#L562) | [`measure_pending`](../../avinashgroup_app/hr/overtime_settlement.py#L224) | no; never ran | Measures overtime rows whose attendance arrived after submission (62-day look-back). |
+| cron `10 13 * * *` | [`send_daily_attendance_digest`](../../avinashgroup_app/hooks.py#L600) | [`send_daily_attendance_digest`](../../avinashgroup_app/biometric/daily_digest.py#L79) | no; never ran | Midday mail of the day's attendance problems. Runs at :10 so it does not race HRMS's hourly auto attendance. |
 
 HRMS jobs that matter here:
 
@@ -220,10 +220,10 @@ HRMS jobs that matter here:
 
 | Hook | Registration | Handler | HR doctypes covered | Effect |
 |---|---|---|---|---|
-| `permission_query_conditions` | [`permission_query_conditions`](../../avinashgroup_app/hooks.py#L401) | [`_make_query_conditions_for`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L487) | Every name in [`FILTERED_DOCTYPES`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L8). The HR ones are Additional Salary, Attendance, Attendance Fix, Attendance Request, Employee Advance, Leave Allocation / Application / Encashment / Ledger Entry / Adjustment, Overtime Slip, Payroll Entry, Salary Slip, Salary Structure Assignment, Salary Withholding, Shift Assignment, Shift Request, Expense Claim, Gratuity, Full and Final Statement. | List views show a user only the fiscal years their User Fiscal Year Access allows. |
-| `has_permission` | [`has_permission`](../../avinashgroup_app/hooks.py#L407) | [`has_fiscal_year_permission`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L500) | same | Opening a single document outside the user's years is refused. |
-| `frappe.client.get_list` override | [`filtered_get_list`](../../avinashgroup_app/hooks.py#L641) | [`filtered_get_list`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L562) | same | Applies the same filter to API list calls. |
-| workflow overrides | [`get_transitions`](../../avinashgroup_app/hooks.py#L639), [`apply_workflow`](../../avinashgroup_app/hooks.py#L640) | [`get_transitions`](../../avinashgroup_app/custom_code/workflow_admin_bypass.py#L28), [`apply_workflow`](../../avinashgroup_app/custom_code/workflow_admin_bypass.py#L68) | Any doctype with a Workflow | Administrator / System Manager bypass. avinas1 has **no** Workflow records (`tabWorkflow` is empty), so this does nothing on HR docs today. |
+| `permission_query_conditions` | [`permission_query_conditions`](../../avinashgroup_app/hooks.py#L409) | [`_make_query_conditions_for`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L487) | Every name in [`FILTERED_DOCTYPES`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L8). The HR ones are Additional Salary, Attendance, Attendance Fix, Attendance Request, Employee Advance, Leave Allocation / Application / Encashment / Ledger Entry / Adjustment, Overtime Slip, Payroll Entry, Salary Slip, Salary Structure Assignment, Salary Withholding, Shift Assignment, Shift Request, Expense Claim, Gratuity, Full and Final Statement. | List views show a user only the fiscal years their User Fiscal Year Access allows. |
+| `has_permission` | [`has_permission`](../../avinashgroup_app/hooks.py#L415) | [`has_fiscal_year_permission`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L500) | same | Opening a single document outside the user's years is refused. |
+| `frappe.client.get_list` override | [`filtered_get_list`](../../avinashgroup_app/hooks.py#L652) | [`filtered_get_list`](../../avinashgroup_app/custom_code/fiscal_year_filter.py#L562) | same | Applies the same filter to API list calls. |
+| workflow overrides | [`get_transitions`](../../avinashgroup_app/hooks.py#L650), [`apply_workflow`](../../avinashgroup_app/hooks.py#L651) | [`get_transitions`](../../avinashgroup_app/custom_code/workflow_admin_bypass.py#L28), [`apply_workflow`](../../avinashgroup_app/custom_code/workflow_admin_bypass.py#L68) | Any doctype with a Workflow | Administrator / System Manager bypass. avinas1 has **no** Workflow records (`tabWorkflow` is empty), so this does nothing on HR docs today. |
 
 Notable: Employee, Overtime Sheet, Salary Structure and Salary Revision are **not** fiscal-year filtered. A user with no access to a year still sees those.
 
@@ -234,7 +234,7 @@ Notable: Employee, Overtime Sheet, Salary Structure and Salary Revision are **no
 | Doctype | Registration | Script | What it adds | Server calls |
 |---|---|---|---|---|
 | Attendance | [`attendance.js`](../../avinashgroup_app/hooks.py#L107) | [`render_checkin_log`](../../avinashgroup_app/public/js/attendance.js#L14) | Removes Nepal HRMS's old check-in log block. Adds **Repair from Check-ins** ([`add_repair_button`](../../avinashgroup_app/public/js/attendance.js#L85)). | [`repair_attendance_day`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L534) |
-| Payroll Entry | [`payroll_entry.js`](../../avinashgroup_app/hooks.py#L107) | [`BS_CALENDAR`](../../avinashgroup_app/public/js/payroll_entry.js#L8) | BS month calendar; locks posting/start/end/frequency once a BS month is chosen. Opens on the month after the last payroll. Lists only festival allowances in the entry's Festival Component. No buttons: tea, meals, overtime, late fines, advances, Dashain and leave encashment are posted by [`prepare_payroll_inputs`](../../avinashgroup_app/payroll/payroll_entry.py#L37) when the slips are made and submitted. | [`get_defaults`](../../avinashgroup_app/payroll/festival_allowance.py#L223), [`make_festival_adjustment`](../../avinashgroup_app/payroll/festival_allowance.py#L235), [`encash_for_payroll_entry`](../../avinashgroup_app/payroll/leave_encashment.py#L228), [`get_month`](../../avinashgroup_app/hr/bs_calendar.py#L148), [`month_calendar`](../../avinashgroup_app/payroll/payroll_month.py#L148), [`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121), [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L78) |
+| Payroll Entry | [`payroll_entry.js`](../../avinashgroup_app/hooks.py#L107) | [`BS_CALENDAR`](../../avinashgroup_app/public/js/payroll_entry.js#L8) | BS month calendar; locks posting/start/end/frequency once a BS month is chosen. Opens on the month after the last payroll. Lists only festival allowances in the entry's Festival Component. No buttons: tea, meals, overtime, late fines, advances, Dashain and leave encashment are posted by [`prepare_payroll_inputs`](../../avinashgroup_app/payroll/payroll_entry.py#L50) when the slips are made and submitted. | [`get_defaults`](../../avinashgroup_app/payroll/festival_allowance.py#L232), [`make_festival_adjustment`](../../avinashgroup_app/payroll/festival_allowance.py#L244), [`encash_for_payroll_entry`](../../avinashgroup_app/payroll/leave_encashment.py#L236), [`get_month`](../../avinashgroup_app/hr/bs_calendar.py#L148), [`month_calendar`](../../avinashgroup_app/payroll/payroll_month.py#L148), [`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121), [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L79) |
 | Payroll Entry (rdp_common_app) | [`payroll_entry.js`](../../../rdp_common_app/rdp_common_app/hooks.py#L58) | rdp_common_app | Loaded too. Frappe concatenates every app's doctype_js for a doctype, so both scripts are active. See [05-payroll-entry.md](05-payroll-entry.md). | |
 | Salary Structure Assignment | [`salary_structure_assignment.js`](../../avinashgroup_app/hooks.py#L110) | [`Assignment Allowance`](../../avinashgroup_app/public/js/salary_structure_assignment.js#L35) | Picking an allowance fills the structure's rate. | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L221) |
 | Salary Structure | [`salary_structure.js`](../../avinashgroup_app/hooks.py#L110) | [`custom_allowance_rates`](../../avinashgroup_app/public/js/salary_structure.js#L7) | Allowance Rates may only list allowances that are not Entered by Hand or Yearly. | none |
@@ -267,10 +267,10 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `get_shift_roster` | [`get_shift_roster`](../../avinashgroup_app/avinash_group_app/doctype/attendance_fix/attendance_fix.py#L640) | Attendance Fix form |
 | `get_month`, `get_default_month` | [`get_month`](../../avinashgroup_app/hr/bs_calendar.py#L148), [`get_default_month`](../../avinashgroup_app/hr/bs_calendar.py#L165) | Payroll Entry calendar |
 | `default_month`, `month_calendar` | [`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121), [`month_calendar`](../../avinashgroup_app/payroll/payroll_month.py#L148) | Payroll Entry form |
-| `trigger_for_payroll_entry` | [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L78) | **Prepare Payroll Inputs** |
-| `get_defaults`, `make_festival_adjustment` | [`get_defaults`](../../avinashgroup_app/payroll/festival_allowance.py#L223), [`make_festival_adjustment`](../../avinashgroup_app/payroll/festival_allowance.py#L235) | Payroll Entry **Dashain Allowance** |
-| `encash_for_payroll_entry` | [`encash_for_payroll_entry`](../../avinashgroup_app/payroll/leave_encashment.py#L228) | Payroll Entry **Leave Encashment** |
-| `recompute_holiday_flags` | [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L625) | By hand, after a holiday list changes |
+| `trigger_for_payroll_entry` | [`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L79) | **Prepare Payroll Inputs** |
+| `get_defaults`, `make_festival_adjustment` | [`get_defaults`](../../avinashgroup_app/payroll/festival_allowance.py#L232), [`make_festival_adjustment`](../../avinashgroup_app/payroll/festival_allowance.py#L244) | Payroll Entry **Dashain Allowance** |
+| `encash_for_payroll_entry` | [`encash_for_payroll_entry`](../../avinashgroup_app/payroll/leave_encashment.py#L236) | Payroll Entry **Leave Encashment** |
+| `recompute_holiday_flags` | [`recompute_holiday_flags`](../../avinashgroup_app/payroll/attendance_allowance.py#L627) | By hand, after a holiday list changes |
 | `get_rate_for_assignment` | [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L221) | Salary Structure Assignment form |
 | `measure` | [`measure`](../../avinashgroup_app/hr/overtime_settlement.py#L139) | Overtime Sheet **Measure from Attendance** |
 | `preview` (overtime) | [`preview`](../../avinashgroup_app/hr/overtime.py#L223) | Overtime Sheet row preview |
@@ -278,15 +278,15 @@ These are what the buttons and the device bridge call. All are `@frappe.whitelis
 | `roster` | [`roster`](../../avinashgroup_app/hr/shift_roster.py#L30) | shift roster view |
 | `preview_accrual_dates` | [`preview_accrual_dates`](../../avinashgroup_app/hr/utils.py#L266) | Leave setup check |
 | `get_dashboard`, `get_menu` | [`get_dashboard`](../../avinashgroup_app/hr/hr_dashboard.py#L75), [`get_menu`](../../avinashgroup_app/hr/hr_dashboard.py#L728) | HR dashboard |
-| `Salary Revision.get_employees` | [`get_employees`](../../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L423) | Salary Revision form |
+| `Salary Revision.get_employees` | [`get_employees`](../../avinashgroup_app/avinash_group_app/doctype/salary_revision/salary_revision.py#L424) | Salary Revision form |
 | `Holiday Bulk Update.apply` | [`apply`](../../avinashgroup_app/avinash_group_app/doctype/holiday_bulk_update/holiday_bulk_update.py#L42) | Holiday Bulk Update |
-| `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L287) | Payroll Entry **Make Bank Entry** |
+| `AvinashPayrollEntry.make_bank_entry` | [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L447) | Payroll Entry **Make Bank Entry** |
 
 ## 8. Other hook types
 
 | Hook | Registration | HR relevance |
 |---|---|---|
 | `page_renderer` | [`IclockRenderer`](../../avinashgroup_app/hooks.py#L11) → [`IclockRenderer`](../../avinashgroup_app/biometric/iclock.py#L35) | `/iclock/*`: the ZKTeco ADMS push endpoint. Devices post punches here directly, with no login. |
-| `company_data_to_be_ignored` | [`company_data_to_be_ignored`](../../avinashgroup_app/hooks.py#L720) | "Biometric Device" and "Nepal BS Period" survive Company → Delete Transactions. |
+| `company_data_to_be_ignored` | [`company_data_to_be_ignored`](../../avinashgroup_app/hooks.py#L731) | "Biometric Device" and "Nepal BS Period" survive Company → Delete Transactions. |
 | Client Scripts, Server Scripts, Notifications, Webhooks on avinas1 | n/a | None on any HR doctype (read 2026-10-12). The 7 client scripts are on buying and accounting doctypes. The 6 notifications are stock HRMS ones (Exit Interview, Training, Retention Bonus) plus "Notification for new fiscal year". |
-| `fixtures` | [`fixtures`](../../avinashgroup_app/hooks.py#L653) | No HR fixtures. All HR custom fields come from **patches** (see [01b-pay-masters.md](01b-pay-masters.md), appendix). |
+| `fixtures` | [`fixtures`](../../avinashgroup_app/hooks.py#L664) | No HR fixtures. All HR custom fields come from **patches** (see [01b-pay-masters.md](01b-pay-masters.md), appendix). |
