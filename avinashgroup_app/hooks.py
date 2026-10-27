@@ -25,6 +25,9 @@ web_include_js = [
     # "Place Order" + "Customer Statement" buttons on /orders, and "Customer
     # Statement" in a Sales Order's Actions menu.
     "/assets/avinashgroup_app/js/portal_orders_buttons.js?v=1",
+    # Portal pages in the phone ☰ menu on custom pages (Place Order, Product Wise
+    # Invoice Details, ...), which keep show_sidebar off — see portal_menu.py.
+    "/assets/avinashgroup_app/js/portal_mobile_menu.js?v=1",
 ]
 
 app_include_js = [

@@ -233,8 +233,8 @@ body { background: var(--po-paper); }
 	box-shadow: 0 0 0 3px rgba(67, 92, 168, .16);
 }
 .po .form-control[readonly] { color: var(--po-muted); cursor: default; }
-/* Remarks takes the two columns to the right of Company and Customer. */
-.po-field--remarks { grid-column: span 2; }
+/* Remarks takes its own full-width row, under Company / Customer / Posting Date / Posting Miti. */
+.po-field--remarks { grid-column: 1 / -1; }
 .po .po-remarks {
 	display: block;
 	min-height: 46px;
@@ -813,6 +813,9 @@ body { background: var(--po-paper); }
 {% endblock %}
 
 {% block script %}
+{#- Same AD -> BS converter the desk forms use (rdp_common_app), so Posting Miti
+    matches what Sales Order / Payment Entry / Journal Entry show on the desk. -#}
+<script src="/assets/rdp_common_app/js/nepali.datepicker.v5.0.4.min.js"></script>
 <script>
 // Every value is defaulted before tojson. Frappe re-reads a template from disk
 // on every render but imports the page controller once per process, so a deploy
@@ -881,12 +884,42 @@ class PlaceOrder {
 
 		this.bind_company_search();
 		this.bind_customer_change();
+		this.bind_posting_date();
 		this.bind_add_row();
 		this.bind_submit();
 		this.add_row(); // start with one empty row
 		this.brand();
 		this.apply_item_availability();
 		this.preselect_only_customer();
+	}
+
+	// ── Posting Date → Posting Miti ──────────────────────────────────
+	// Posting Miti is the BS date of Posting Date, converted in the browser with
+	// the desk's Nepali datepicker (NepaliFunctions.AD2BS), so it matches the desk.
+	// If that script failed to load, the server converts it instead.
+	bind_posting_date() {
+		const set_miti = function () {
+			const posting_date = $("#po-posting-date").val();
+			$("#po-posting-miti").val("");
+			if (!posting_date) return;
+
+			if (window.NepaliFunctions) {
+				$("#po-posting-miti").val(NepaliFunctions.AD2BS(posting_date, "YYYY-MM-DD", "YYYY-MM-DD") || "");
+				return;
+			}
+			frappe.call({
+				method: "avinashgroup_app.templates.pages.place_order.get_posting_miti",
+				args: { posting_date: posting_date },
+				callback: function (r) {
+					// ignore a late reply for a date that has since been changed again
+					if ($("#po-posting-date").val() === posting_date) {
+						$("#po-posting-miti").val(r.message || "");
+					}
+				}
+			});
+		};
+		$("#po-posting-date").on("change", set_miti);
+		set_miti(); // the page opens on today: show its Miti from the same converter
 	}
 
 	// ── The company decides the item ──────────────────────────────────
@@ -1568,6 +1601,11 @@ class PlaceOrder {
 			return;
 		}
 
+		if (!$("#po-posting-date").val()) {
+			frappe.msgprint({ title: "Missing", message: "Please select a posting date.", indicator: "red" });
+			return;
+		}
+
 		const valid_items = me.ctx.items.filter(i => i.item_code);
 		if (!valid_items.length) {
 			frappe.msgprint({ title: "Missing Items", message: "Please add at least one item with quantity.", indicator: "red" });
@@ -1616,6 +1654,8 @@ class PlaceOrder {
 				customer: customer,
 				company: company,
 				remarks: $("#po-remarks").val().trim(),
+				posting_date: $("#po-posting-date").val(),
+				posting_miti: $("#po-posting-miti").val(),
 				items: JSON.stringify(payload)
 			},
 			callback: function (r) {
@@ -1693,6 +1733,16 @@ class PlaceOrder {
 							<input type="text" class="form-control" id="po-customer"
 								placeholder="Search customer" value="" autocomplete="off">
 						{% endif %}
+					</div>
+
+					<div class="po-field">
+						<label class="po-label" for="po-posting-date">Posting Date <i>*</i></label>
+						<input type="date" class="form-control" id="po-posting-date" value="{{ posting_date }}">
+					</div>
+
+					<div class="po-field">
+						<label class="po-label" for="po-posting-miti">Posting Miti</label>
+						<input type="text" class="form-control" id="po-posting-miti" value="" readonly>
 					</div>
 
 					<div class="po-field po-field--remarks">
