@@ -28,6 +28,7 @@ Open any report by typing its name in the search bar. Set the filters at the top
 | **Company** | The company |
 | **Fiscal Year** and **BS Month** | The month, as on the Payroll Entry (for example 83/84, 05 - Bhadra). If left empty, the last finished month is used |
 | **Payroll Entry** | Optional. Choose one entry to see only its slips (useful when a month has two entries) |
+| **Payout** | **Salary** (default): the month's salary slips. **Dashain Allowance** or **Leave Encashment**: that payout's own slips (Chapter 5.12). One kind at a time, so nobody shows twice and the journal check compares with that payout's journal. **Previous Net Pay** is always last month's salary |
 | **Slips** | **1 - Submitted** (default) for the final sheet; **0 - Draft** to preview before submitting |
 
 A line under the filters says which dates were used, for example "Bhadra 2083: 2026-08-17 to 2026-09-16 (Nepali calendar)".

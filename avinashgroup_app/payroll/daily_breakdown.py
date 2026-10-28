@@ -67,6 +67,10 @@ def build_daily_breakdown(doc, method=None):
 		return
 	if not doc.meta.has_field("custom_daily_breakdown"):
 		return
+	if doc.get("custom_payout_type"):
+		# A Dashain or encashment payout is one amount, not earned day by day.
+		doc.set("custom_daily_breakdown", [])
+		return
 	try:
 		doc.set("custom_daily_breakdown", breakdown_rows(doc))
 	except Exception:

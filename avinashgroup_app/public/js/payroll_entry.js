@@ -243,9 +243,11 @@ frappe.ui.form.on("Payroll Entry", {
 	refresh(frm) {
 		lock_bs_dates(frm);
 		draw_month_calendar(frm, frm.doc.custom_fiscal_year);
-		// Tea, meals, overtime, late fines, advances, and the ticked Dashain and
-		// leave encashment are posted when the slips are made and again when they
-		// are submitted (payroll/payroll_entry.py prepare_payroll_inputs); the
-		// Payroll Inputs Log on the form records each run.
+		// Tea, meals, overtime, late fines, advances and leave recovery are
+		// posted when the slips are made and again when they are submitted
+		// (payroll/payroll_entry.py prepare_payroll_inputs); on an entry with
+		// Payout set, only the Dashain allowance or the leave encashment, on
+		// slips of its own (payroll/special_payout.py). The Payroll Inputs Log
+		// on the form records each run.
 	},
 });

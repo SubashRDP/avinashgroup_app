@@ -1,0 +1,217 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "shipment_no",
+  "status",
+  "transport_doc_no",
+  "transport_doc_date",
+  "invoice_no",
+  "invoice_date",
+  "amount",
+  "purchase_receipt",
+  "purchase_invoice",
+  "column_break_docs",
+  "docs_received_date",
+  "discrepancies",
+  "acceptance_date",
+  "maturity_date",
+  "column_break_settle",
+  "settlement_date",
+  "exchange_rate",
+  "amount_npr",
+  "margin_applied",
+  "exchange_difference",
+  "settlement_journal_entry",
+  "column_break_customs",
+  "customs_declaration_no",
+  "customs_date",
+  "customs_proof_due",
+  "customs_proof_submitted_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "shipment_no",
+   "fieldtype": "Int",
+   "label": "No.",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Shipped\nDocs Received\nAccepted\nSettled",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "transport_doc_no",
+   "fieldtype": "Data",
+   "label": "B/L / AWB / CN No.",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "transport_doc_date",
+   "fieldtype": "Date",
+   "label": "Shipment Date",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "invoice_no",
+   "fieldtype": "Data",
+   "label": "Supplier Invoice No.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "invoice_date",
+   "fieldtype": "Date",
+   "label": "Invoice Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Float",
+   "label": "Amount (LC Currency)",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "purchase_receipt",
+   "fieldtype": "Link",
+   "label": "Purchase Receipt",
+   "options": "Purchase Receipt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purchase_invoice",
+   "fieldtype": "Link",
+   "label": "Purchase Invoice",
+   "options": "Purchase Invoice",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "column_break_docs",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "docs_received_date",
+   "fieldtype": "Date",
+   "label": "Documents Received",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discrepancies",
+   "fieldtype": "Small Text",
+   "label": "Discrepancies",
+   "read_only": 1
+  },
+  {
+   "fieldname": "acceptance_date",
+   "fieldtype": "Date",
+   "label": "Accepted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "maturity_date",
+   "fieldtype": "Date",
+   "label": "Maturity Date",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "column_break_settle",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "settlement_date",
+   "fieldtype": "Date",
+   "label": "Settled On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exchange_rate",
+   "fieldtype": "Float",
+   "label": "Bank Rate",
+   "read_only": 1,
+   "precision": "6"
+  },
+  {
+   "fieldname": "amount_npr",
+   "fieldtype": "Currency",
+   "label": "Bank Debit (Company Currency)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "margin_applied",
+   "fieldtype": "Currency",
+   "label": "Margin Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exchange_difference",
+   "fieldtype": "Currency",
+   "label": "Exchange Loss / (Gain)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "settlement_journal_entry",
+   "fieldtype": "Link",
+   "label": "Settlement Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_customs",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customs_declaration_no",
+   "fieldtype": "Data",
+   "label": "Customs Declaration (Pragyapan) No.",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customs_date",
+   "fieldtype": "Date",
+   "label": "Customs Clearance Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customs_proof_due",
+   "fieldtype": "Date",
+   "label": "Customs Proof Due",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customs_proof_submitted_on",
+   "fieldtype": "Date",
+   "label": "Customs Proof Given to Bank",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Shipment",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1
+}

@@ -19,6 +19,8 @@ class CBMSConfig(Document):
 def sync_failed_now(cbms_config_name):
 	"""Manually re-queue every unsynced CBMS Bill / CBMS Bill Return for one company."""
 	from avinashgroup_app.custom_code.CBMS.scheduler import queue_failed_for_company
+	from avinashgroup_app.custom_code.CBMS.utils import ensure_cbms_live_site
 
+	ensure_cbms_live_site()
 	config = frappe.get_doc("CBMS Config", cbms_config_name)
 	return queue_failed_for_company(config)

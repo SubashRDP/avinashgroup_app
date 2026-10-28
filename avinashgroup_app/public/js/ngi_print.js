@@ -86,12 +86,12 @@
 	// custom_code/printing/chrome_pdf.py and had drifted from it; that is the
 	// bug that sent the seven A5 Overlay formats to the browser dialog.
 	const NGI_FORMATS = [
-		"Nepal Gas Invoice Pre-Printed",
-		"Nepal Gas Invoice Plain Paper",
-		"Nepal Gas Invoice A4 Proof",
-		"Nepal Gas Invoice A4 Portrait",
-		"Avinash Invoice Pre-Printed",
-		"Grishma Invoice Pre-Printed",
+		"Nepal Gas Invoice Overlay",
+		"Nepal Gas Sales Invoice",
+		"Aarati Sales Invoice",
+		"Aarati Sales Return",
+		"Gita Sales Invoice",
+		"Gita Sales Return",
 	];
 
 	function is_chrome_format(view) {

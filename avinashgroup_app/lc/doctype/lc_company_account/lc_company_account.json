@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "firm_type",
+  "margin_account",
+  "charges_account"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "firm_type",
+   "fieldtype": "Select",
+   "label": "Firm Type",
+   "options": "Industry\nTrading",
+   "default": "Industry",
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "NRB margin and usance rules differ for industries and trading firms"
+  },
+  {
+   "fieldname": "margin_account",
+   "fieldtype": "Link",
+   "label": "LC Margin",
+   "options": "Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 3,
+   "description": "Asset account holding margin money the bank blocks"
+  },
+  {
+   "fieldname": "charges_account",
+   "fieldtype": "Link",
+   "label": "LC Charges Clearing",
+   "options": "Account",
+   "reqd": 1,
+   "in_list_view": 1,
+   "columns": 3,
+   "description": "Holds bank charges until a Landed Cost Voucher moves them into stock"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Company Account",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

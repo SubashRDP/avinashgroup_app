@@ -16,6 +16,8 @@ operator-initiated action.
 
 import frappe
 
+from avinashgroup_app.custom_code.CBMS.utils import is_cbms_live_site
+
 
 def _enabled_configs():
 	return frappe.get_all(
@@ -64,6 +66,8 @@ def queue_failed_for_company(config):
 def retry_failed_cbms_syncs():
 	"""Cron job (every 5 minutes): retry all failed CBMS Bills/Returns, per company."""
 	totals = {"bills_queued": 0, "returns_queued": 0}
+	if not is_cbms_live_site():
+		return totals
 	for config in _enabled_configs():
 		result = queue_failed_for_company(config)
 		totals["bills_queued"] += result["bills_queued"]

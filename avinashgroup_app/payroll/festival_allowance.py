@@ -1,15 +1,23 @@
-"""Dashain (festival) allowance: a tick on the Payroll Entry that pays it.
+"""Dashain (festival) allowance: a Payroll Entry of its own that pays it.
 
 Before this, the festival allowance had no way into payroll except a person's
 amount worked out on paper and typed onto a Payroll Adjustment (an earlier
 "Dashain Bonus" screen was removed on 2026-09-29, by user decision, because it
-was a document of its own). This keeps that decision: nothing new to file. The
-Payroll Entry of the month it is paid in has "Pay Dashain Allowance" ticked,
-with the component and the service cut-off. Making its slips builds a Payroll
-Adjustment — the screen HR already uses for one-off amounts — with one row per
-person showing the arithmetic, and submits it (payroll/payroll_entry.py
-`_pay_dashain`); submitting writes the Additional Salary the slip reads,
-taxed in its own month. The entry links the adjustment and logs the total.
+was a document of its own). This keeps that decision: nothing new to file. HR
+makes a Payroll Entry for the month it is paid in with Payout = Dashain
+Allowance, the component and the service cut-off. Making its slips builds a
+Payroll Adjustment — the screen HR already uses for one-off amounts — with one
+row per person showing the arithmetic, and submits it (payroll/payroll_entry.py
+`_pay_dashain`); submitting writes the Additional Salary, tagged Payout =
+Dashain Allowance. The entry links the adjustment and logs the total.
+
+Since 2026-10-26 (user: "calculated separately with that only component ...
+without binding with another month") the allowance is paid on that entry's own
+slips — the allowance and the income tax it adds to the year, nothing else —
+with its own journal and bank entry, never on the month's salary slip. Any
+Additional Salary of a festival component is tagged the same way, so one typed
+on a Payroll Adjustment by hand is paid by the payout too. How the slip and its
+tax are made: payroll/special_payout.py.
 
 The rule (user, 2026-10-13): one month's BASIC salary — the Salary Structure
 Assignment's `base` on the cut-off date, which is what the structures' Basic
@@ -40,7 +48,8 @@ A second draft for the same company, component and year from a different entry
 is refused, so two drafts can never both be submitted. Payroll Adjustment
 refuses a computed row above its basic (the 100 % cap holds after hand edits).
 
-Boundary: it pays the people on this Payroll Entry. Someone who left in an
+Boundary: it pays the people on this Payroll Entry (anyone with nothing due
+is taken off it when the slips are made). Someone who left in an
 earlier month is not on it and has no slip this month; settle them in their
 Full and Final.
 """

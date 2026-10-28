@@ -55,6 +55,12 @@ app_include_js = [
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
+    # "Create > PDC Cheque" on submitted Sales / Purchase Invoices. Global for the
+    # same reason as sales_invoice.js above. See pdc/lifecycle.py make_from_invoice.
+    "/assets/avinashgroup_app/js/invoice_pdc.js?v=1.0",
+    # "Create > Letter of Credit" and the NRB LC hint on foreign-currency
+    # Purchase Orders. See lc/lifecycle.py make_from_purchase_order.
+    "/assets/avinashgroup_app/js/purchase_order_lc.js?v=1.0",
     # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
     "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.3",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
@@ -71,7 +77,7 @@ app_include_js = [
     # company_print (form printer icon). QZ Tray is fully replaced, so qz_sign.js
     # is no longer loaded.
     "/assets/avinashgroup_app/js/print_bridge.js?v=1.1",
-    "/assets/avinashgroup_app/js/ngi_print.js?v=1.6",
+    "/assets/avinashgroup_app/js/ngi_print.js?v=1.7",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=2.0",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
@@ -244,15 +250,7 @@ attendance_events = {
 jinja = {
     "methods": [
         "avinashgroup_app.custom_code.CBMS.utils.bs_date_str",
-        "avinashgroup_app.custom_code.printing.escp_invoice.ngi_escp",
-        "avinashgroup_app.custom_code.printing.escp_avinash_slip.avinash_slip_escp",
-        "avinashgroup_app.custom_code.printing.escp_grishma.grishma_escp",
-        "avinashgroup_app.custom_code.printing.escp_gandaki.gandaki_escp",
-        "avinashgroup_app.custom_code.printing.escp_narayani.narayani_escp",
-        "avinashgroup_app.custom_code.printing.escp_ngi_udyog.ngi_udyog_escp",
-        "avinashgroup_app.custom_code.printing.escp_karnali.karnali_escp",
         "avinashgroup_app.custom_code.SalesInvoice.print_count.invoice_copy_titles",
-        "avinashgroup_app.custom_code.printing.overlay.overlay_pos",
     ],
 }
 
@@ -363,6 +361,14 @@ _add_doc_event("Employee", "validate", "avinashgroup_app.hr.overtime.validate_em
 # Editing a Holiday List re-ticks Worked on Holiday on the attendance of the
 # dates that changed; the flag otherwise keeps the list as it was on save.
 _add_doc_event("Holiday List", "on_update", "avinashgroup_app.payroll.attendance_allowance.resync_holiday_flags")
+
+# Dashain and leave encashment are paid on their own payout slip, not the
+# month's salary slip: the slip takes its Payout from its Payroll Entry, and a
+# payout slip is cut down to the payout's rows and the tax they add to the year.
+# First of the slip's validate hooks; the others skip a payout slip. See
+# payroll/special_payout.py.
+_add_doc_event("Salary Slip", "before_validate", "avinashgroup_app.payroll.special_payout.set_slip_payout_type")
+_add_doc_event("Salary Slip", "validate", "avinashgroup_app.payroll.special_payout.build_payout_slip")
 
 # Fixed allowances from the employee's Allowances table, then the slip is
 # recalculated so gross, tax and net include them. Ahead of the tax hooks below,
@@ -488,6 +494,9 @@ _add_doc_event("Leave Encashment", "on_submit", "avinashgroup_app.payroll.leave_
 _add_doc_event("Leave Encashment", "on_cancel", "avinashgroup_app.payroll.leave_encashment.refresh_slip")
 _add_doc_event("Additional Salary", "validate", "avinashgroup_app.payroll.leave_encashment.mark_additional_salary")
 _add_doc_event("Additional Salary", "on_submit", "avinashgroup_app.payroll.leave_encashment.link_additional_salary")
+# A festival allowance or an encashment's Additional Salary is tagged with its
+# payout and kept off the monthly slip (payroll/special_payout.py).
+_add_doc_event("Additional Salary", "validate", "avinashgroup_app.payroll.special_payout.tag_additional_salary")
 _add_doc_event("Salary Structure", "validate", "avinashgroup_app.payroll.allowance.validate_salary_structure")
 _add_doc_event("Salary Structure", "before_update_after_submit", "avinashgroup_app.payroll.allowance.guard_structure_rates")
 _add_doc_event("Salary Structure Assignment", "validate", "avinashgroup_app.payroll.allowance.validate_assignment_allowances")
@@ -516,6 +525,31 @@ _add_doc_event("*", "on_submit", "avinashgroup_app.sparrow_sms.sms_dispatch.on_s
 _add_doc_event("*", "on_cancel", "avinashgroup_app.sparrow_sms.sms_dispatch.on_cancel")
 _add_doc_event("*", "after_insert", "avinashgroup_app.sparrow_sms.sms_dispatch.after_insert")
 _add_doc_event("*", "on_update", "avinashgroup_app.sparrow_sms.sms_dispatch.on_update")
+
+# Miti fields from AD dates on every save, for each doctype a Bs Conversion record
+# maps: rdp_common_app fills them only in the browser, so documents made by code,
+# imports or the API came out blank. Cached map; cleared when a record changes.
+# See utils/bs_miti.py.
+_add_doc_event("*", "validate", "avinashgroup_app.utils.bs_miti.set_mitis")
+for _event in ("on_update", "on_submit", "on_cancel", "on_trash"):
+    _add_doc_event("Bs Conversion", _event, "avinashgroup_app.utils.bs_miti.clear_cache")
+
+# PDC: an invoice an active post-dated cheque settles, or a JE a cheque posted,
+# cannot be cancelled out from under the cheque. See pdc/invoice_guard.py.
+_add_doc_event("Sales Invoice", "before_cancel", "avinashgroup_app.pdc.invoice_guard.block_invoice_cancel")
+_add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.pdc.invoice_guard.block_invoice_cancel")
+_add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.pdc.invoice_guard.block_je_cancel")
+# A cheque entered in Payment Entry bounces, is re-presented or replaced through
+# a PDC Cheque record; the PE itself is entered as before. See pdc/payment_entry_bounce.py.
+_add_doc_event("Payment Entry", "before_cancel", "avinashgroup_app.pdc.payment_entry_bounce.before_cancel")
+_add_doc_event("Payment Entry", "on_cancel", "avinashgroup_app.pdc.payment_entry_bounce.on_cancel")
+_add_doc_event("Payment Entry", "on_submit", "avinashgroup_app.pdc.payment_entry_bounce.on_submit")
+
+# LC: a Purchase Receipt / Invoice linked to a Letter of Credit shipment, or a JE
+# an LC posted, cannot be cancelled out from under the LC. See lc/guards.py.
+_add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
+_add_doc_event("Purchase Receipt", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
+_add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.block_je_cancel")
 
 override_doctype_class = {
     "Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",
@@ -591,6 +625,18 @@ scheduler_events = {
         "10 13 * * *": [
             "avinashgroup_app.biometric.daily_digest.send_daily_attendance_digest",
         ],
+        # PDC: due-date SMS reminders, then the accounts digest of cheques to
+        # deposit. 08:25, before the bank opens at 10, so today's deposits are
+        # known in time; off :00 like the attendance digest. See pdc/notifications.py.
+        "25 8 * * *": [
+            "avinashgroup_app.pdc.notifications.daily_run",
+        ],
+        # LC: latest-shipment, expiry, usance maturity and customs-proof dates
+        # due soon, emailed to accounts. 08:35, ten minutes after the PDC digest
+        # so the two mails do not race. See lc/notifications.py.
+        "35 8 * * *": [
+            "avinashgroup_app.lc.notifications.daily_run",
+        ],
     },
 }
 
@@ -628,7 +674,13 @@ pdf_generator = ["avinashgroup_app.custom_code.printing.chrome_pdf.render"]
 
 # Re-pins pdf_generator="chrome" on the NGI formats after every migrate, since
 # re-importing a standard print format resets the field to its default.
-after_migrate = ["avinashgroup_app.custom_code.printing.setup.ensure_chrome_generator"]
+after_migrate = [
+    "avinashgroup_app.custom_code.printing.setup.ensure_chrome_generator",
+    # PDC workspace number cards / charts and the default JV Type (never accounts).
+    "avinashgroup_app.pdc.install.after_migrate",
+    # LC Settings defaults, the default JV Type and the LC Miti mapping (never accounts).
+    "avinashgroup_app.lc.install.after_migrate",
+]
 
 override_whitelisted_methods = {
     # Sales Invoice: desk Save on a draft is escalated to Submit so save+submit
@@ -711,6 +763,20 @@ fixtures = [
                     # mobile_no (which only fills in via a Primary Contact).
                     # Read by the Nepal Gas Invoice Overlay print format.
                     "Customer-custom_mobile_number",
+                    # Which PDC Cheque posted this JE. Read by pdc/invoice_guard.py
+                    # and the cheque's "Journal Entries" button.
+                    "Journal Entry-pdc_cheque",
+                    # Payment Entry cheque bounce / replacement, through the PDC
+                    # module. Written by pdc/payment_entry_bounce.py.
+                    "Payment Entry-pdc_cheque",
+                    "Payment Entry-pdc_replacement_of",
+                    # Bounce / re-present JE -> the Payment Entry it is about.
+                    "Journal Entry-pdc_payment_entry",
+                    # Which Letter of Credit posted this JE / whose bank
+                    # charges this Landed Cost Voucher capitalises. Read by
+                    # lc/guards.py, lc/accounting.py and the LC's Connections.
+                    "Journal Entry-letter_of_credit",
+                    "Landed Cost Voucher-letter_of_credit",
                 ],
             ]
         },
@@ -720,6 +786,12 @@ fixtures = [
 # Custom masters/config that must survive ERPNext's Transaction Deletion
 # Record (Company > Delete Transactions), which otherwise wipes every
 # doctype carrying a Company link field.
+# Connections on a Payment Entry: the Journal Entries and cheque record of its
+# cheque's bounce. Payment Entry ships no dashboard of its own. See pdc/payment_entry_bounce.py.
+override_doctype_dashboards = {
+    "Payment Entry": "avinashgroup_app.pdc.payment_entry_bounce.get_payment_entry_dashboard",
+}
+
 company_data_to_be_ignored = [
     "Biometric Device",
     "JV Type",
@@ -731,4 +803,6 @@ company_data_to_be_ignored = [
     "Dynamic Approval Setting",
     "Nepal BS Period",
     "Sub-Ledger Category",
+    "PDC Settings",
+    "LC Settings",
 ]

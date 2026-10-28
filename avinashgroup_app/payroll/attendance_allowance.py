@@ -34,6 +34,7 @@ from avinashgroup_app.payroll.allowance import (
 	get_employee_allowance_rows,
 	structure_components,
 )
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 SOURCE_TAG = "Nepal HRMS Attendance Allowance"
 
@@ -250,6 +251,7 @@ def paid_employees(employees, on_date) -> set:
 				"docstatus": 1,
 				"start_date": ("<=", getdate(on_date)),
 				"end_date": (">=", getdate(on_date)),
+				**REGULAR_SLIPS,  # a payout slip does not pay attendance
 			},
 			pluck="employee",
 		)

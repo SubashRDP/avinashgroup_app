@@ -1,0 +1,206 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "accounts_section",
+  "company_accounts",
+  "create_missing_accounts",
+  "jv_type",
+  "margin_section",
+  "margin_industry",
+  "margin_trading",
+  "column_break_margin",
+  "margin_industry_epay",
+  "margin_trading_epay",
+  "rules_section",
+  "trading_usance_cap_days",
+  "bci_threshold_usd",
+  "bci_validity_days",
+  "column_break_rules",
+  "india_lc_threshold_inr",
+  "draft_tt_limit_usd",
+  "customs_proof_days",
+  "digest_section",
+  "send_daily_digest",
+  "alert_days_ahead",
+  "column_break_digest",
+  "digest_role"
+ ],
+ "fields": [
+  {
+   "fieldname": "accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Accounts"
+  },
+  {
+   "fieldname": "company_accounts",
+   "fieldtype": "Table",
+   "label": "Company Accounts",
+   "options": "LC Company Account"
+  },
+  {
+   "fieldname": "create_missing_accounts",
+   "fieldtype": "Button",
+   "label": "Create Missing Accounts",
+   "description": "Adds 'LC Margin' and 'LC Charges Clearing' under Current Assets for every company that has no row yet"
+  },
+  {
+   "fieldname": "jv_type",
+   "fieldtype": "Link",
+   "label": "JV Type for LC Entries",
+   "options": "JV Type",
+   "description": "custom_p_type on the Journal Entries this module posts. Its numbering rule numbers them"
+  },
+  {
+   "fieldname": "margin_section",
+   "fieldtype": "Section Break",
+   "label": "NRB Margin",
+   "description": "From NRB Unified Foreign Exchange Circular 2082 (amended 6 Apr 2026, Circular 10/2082/83). NRB changes these often: check the current circular and your bank."
+  },
+  {
+   "fieldname": "margin_industry",
+   "fieldtype": "Percent",
+   "label": "Industry",
+   "default": "2"
+  },
+  {
+   "fieldname": "margin_trading",
+   "fieldtype": "Percent",
+   "label": "Trading Firm",
+   "default": "10"
+  },
+  {
+   "fieldname": "column_break_margin",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "margin_industry_epay",
+   "fieldtype": "Percent",
+   "label": "Industry, E-Payment Customs Point",
+   "default": "1"
+  },
+  {
+   "fieldname": "margin_trading_epay",
+   "fieldtype": "Percent",
+   "label": "Trading Firm, E-Payment Customs Point",
+   "default": "3"
+  },
+  {
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "NRB Limits",
+   "description": "From NRB Unified Foreign Exchange Circular 2082 (amended 6 Apr 2026, Circular 10/2082/83) and banks' published LC terms. Blank or 0 switches a check off."
+  },
+  {
+   "fieldname": "trading_usance_cap_days",
+   "fieldtype": "Int",
+   "label": "Usance Limit for Trading Firms (Days)",
+   "default": "180",
+   "description": "A trading firm's usance LC may not exceed this. Industries follow their supplier contract"
+  },
+  {
+   "fieldname": "bci_threshold_usd",
+   "fieldtype": "Currency",
+   "label": "BCI Report Needed From (USD)",
+   "default": "50000",
+   "description": "Sight LCs at or above this USD value need a BCI report on the beneficiary"
+  },
+  {
+   "fieldname": "bci_validity_days",
+   "fieldtype": "Int",
+   "label": "BCI Report Valid For (Days)",
+   "default": "365"
+  },
+  {
+   "fieldname": "column_break_rules",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "india_lc_threshold_inr",
+   "fieldtype": "Currency",
+   "label": "India: LC Mandatory Above (INR)",
+   "default": "30000000",
+   "description": "INR imports above this must go through an LC. Shown as a hint on Purchase Orders"
+  },
+  {
+   "fieldname": "draft_tt_limit_usd",
+   "fieldtype": "Currency",
+   "label": "Third Country: Draft / TT Limit (USD)",
+   "default": "50000",
+   "description": "Imports above this need an LC or documentary collection. Shown as a hint on Purchase Orders"
+  },
+  {
+   "fieldname": "customs_proof_days",
+   "fieldtype": "Int",
+   "label": "Customs Proof Due Within (Days)",
+   "default": "120",
+   "description": "Days after settlement by which the bank expects the customs declaration. Not confirmed from the NRB text: set what your bank enforces"
+  },
+  {
+   "fieldname": "digest_section",
+   "fieldtype": "Section Break",
+   "label": "Daily Email Digest"
+  },
+  {
+   "fieldname": "send_daily_digest",
+   "fieldtype": "Check",
+   "label": "Send Daily Digest",
+   "default": "1"
+  },
+  {
+   "fieldname": "alert_days_ahead",
+   "fieldtype": "Int",
+   "label": "Warn This Many Days Ahead",
+   "default": "15"
+  },
+  {
+   "fieldname": "column_break_digest",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "digest_role",
+   "fieldtype": "Link",
+   "label": "Send To Role",
+   "options": "Role",
+   "default": "Accounts Manager"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "issingle": 1,
+ "track_changes": 1
+}

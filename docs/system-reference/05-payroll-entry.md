@@ -24,7 +24,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 
 **HRMS vs us.** HRMS owns the Payroll Entry doctype, slip creation, the accrual journal and the bank entry. We add the following:
 
-* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L533);
+* a **class override**, `AvinashPayrollEntry`, registered at [`AvinashPayrollEntry`](../../avinashgroup_app/hooks.py#L544);
 * the **BS month** fields and calendar;
 * one **doc_event** guard;
 * the whole **attendance engine**. HRMS has no attendance-driven pay at all, only proration by payment days (stage [06](06-salary-slip.md)).
@@ -38,7 +38,7 @@ A month's payroll is one **Payroll Entry** per company and BS month. HR picks th
 | **What** | The entry is made by choosing **Fiscal Year + Month (BS)**. Everything else (start, end, posting date, frequency, currency, payable account, cost centre, employees) is derived from them. |
 | **Why** | Module docstring ([`Payroll Entry`](../../avinashgroup_app/payroll/payroll_month.py#L1)): "HR runs 'Bhadra's salary', not '17 August to 16 September'". Typing an AD posting date was the root of the Bhadra-paid-on-2-Ashwin mistake that `bs_period_guard` refuses. Commits df53710 and 714edfc (2026-10-09). |
 | **Where** | [`fill_from_bs_month`](../../avinashgroup_app/payroll/payroll_month.py#L45), [`default_month`](../../avinashgroup_app/payroll/payroll_month.py#L121), [`month_calendar`](../../avinashgroup_app/payroll/payroll_month.py#L148); BS calendar [`month_period`](../../avinashgroup_app/hr/bs_calendar.py#L88), [`month_of_date`](../../avinashgroup_app/hr/bs_calendar.py#L127), [`get_month`](../../avinashgroup_app/hr/bs_calendar.py#L148) |
-| **Triggered by** | `fill_from_bs_month` runs from [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L241) (drafts only). `default_month` runs from the form's `onload` on a new entry. `month_calendar` runs whenever the form draws the calendar. |
+| **Triggered by** | `fill_from_bs_month` runs from [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L321) (drafts only). `default_month` runs from the form's `onload` on a new entry. `month_calendar` runs whenever the form draws the calendar. |
 | **Reads** | Company `default_currency`, `default_payroll_payable_account`, `cost_center`; Nepal BS Period / Nepal BS Period Month (company first, then global), falling back to the Nepali calendar (`get_bs_month_range`); existing Payroll Entries. |
 | **Writes** | Payroll Entry `start_date`, `end_date`, `posting_date` (= month end), `payroll_frequency` = Monthly, `currency`, `exchange_rate` = 1, `payroll_payable_account` and `cost_center` (only when blank), `employees` (HRMS `fill_employee_details`, when empty or when the month changed). |
 | **Impacts downstream** | `posting_date` decides the slip's month (the BS slip derives its period from posting date, [06](06-salary-slip.md)); `start_date`/`end_date` bound the attendance engine and the Additional Salary `payroll_date`; the payable account is credited by the accrual journal ([07](07-after-the-slip.md)). |
@@ -69,7 +69,7 @@ Registered at [`payroll_entry.js`](../../avinashgroup_app/hooks.py#L107).
 | [`show_bs_month`](../../avinashgroup_app/public/js/payroll_entry.js#L16) | Calls `bs_calendar.get_month` and writes start, end, posting date and the mitis **directly on `frm.doc`**, "so HRMS's own start/end/posting handlers would [not] recompute the dates from the AD calendar". |
 | [`lock_bs_dates`](../../avinashgroup_app/public/js/payroll_entry.js#L11) | Makes `posting_date`, `start_date`, `end_date` and `payroll_frequency` read-only once a month is picked. |
 | [`fill_company_defaults`](../../avinashgroup_app/public/js/payroll_entry.js#L50) | Fills a blank payable account, cost centre and currency on the client. HRMS only does this when the company is *changed*, and the form would otherwise refuse Save before the server could fill them. |
-| **Yearly Payments** section | No buttons. The entry carries **Pay Dashain Allowance** (with Festival Component and cut-off) and **Settle Leave (encash or recover)** (`custom_pay_leave_encashment`; relabelled by patch `setup_leave_recovery`: a positive balance is encashed, a negative one recovered by [`recover_month`](../../avinashgroup_app/payroll/leave_encashment.py#L333) as a "Leave Recovery" deduction); making and submitting the slips posts tea, meals, overtime, late fines, advances and the ticked payments in one run ([`prepare_payroll_inputs`](../../avinashgroup_app/payroll/payroll_entry.py#L37)), and appends to the read-only **Payroll Inputs Log**. The festival component picker lists only festival allowances. |
+| **Yearly Payments** section | No buttons. The entry carries **Pay Dashain Allowance** (with Festival Component and cut-off) and **Settle Leave (encash or recover)** (`custom_pay_leave_encashment`; relabelled by patch `setup_leave_recovery`: a positive balance is encashed, a negative one recovered by [`recover_month`](../../avinashgroup_app/payroll/leave_encashment.py#L341) as a "Leave Recovery" deduction); making and submitting the slips posts tea, meals, overtime, late fines, advances and the ticked payments in one run ([`prepare_payroll_inputs`](../../avinashgroup_app/payroll/payroll_entry.py#L50)), and appends to the read-only **Payroll Inputs Log**. The festival component picker lists only festival allowances. |
 
 ### Coexisting script from rdp_common_app
 
@@ -85,15 +85,15 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 ## 5.2 The class override: `AvinashPayrollEntry` (payroll/payroll_entry.py)
 
-[`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L240) subclasses HRMS [`PayrollEntry`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L35).
+[`AvinashPayrollEntry`](../../avinashgroup_app/payroll/payroll_entry.py#L320) subclasses HRMS [`PayrollEntry`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L35).
 
 | Method | Ours / HRMS | What |
 |---|---|---|
-| [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L241) | ours, then `super()` | `fill_from_bs_month` → HRMS [`validate`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L45) (sets `number_of_employees`, status) → `warn_missing_attendance` on a new entry or a changed `start_date`. |
-| [`before_submit`](../../avinashgroup_app/payroll/payroll_entry.py#L249) | ours, then `super()` | `warn_missing_attendance` again, then HRMS [`before_submit`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L58): [`validate_existing_salary_slips`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L68) (refuses if a slip already exists for an employee for the same dates), [`validate_payroll_payable_account`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L99) (the payable account must have **no** account type; patch `clear_payroll_payable_account_type` blanked it), and the unmarked-attendance refusal, which applies only when **Validate Attendance** is ticked ([`get_employees_with_unmarked_attendance`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L1109)). |
+| [`validate`](../../avinashgroup_app/payroll/payroll_entry.py#L321) | ours, then `super()` | `fill_from_bs_month` → HRMS [`validate`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L45) (sets `number_of_employees`, status) → `warn_missing_attendance` on a new entry or a changed `start_date`. |
+| [`before_submit`](../../avinashgroup_app/payroll/payroll_entry.py#L330) | ours, then `super()` | `warn_missing_attendance` again, then HRMS [`before_submit`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L58): [`validate_existing_salary_slips`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L68) (refuses if a slip already exists for an employee for the same dates), [`validate_payroll_payable_account`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L99) (the payable account must have **no** account type; patch `clear_payroll_payable_account_type` blanked it), and the unmarked-attendance refusal, which applies only when **Validate Attendance** is ticked ([`get_employees_with_unmarked_attendance`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L1109)). |
 | HRMS [`on_submit`](../../../hrms/hrms/payroll/doctype/payroll_entry/payroll_entry.py#L64) | HRMS | Status Submitted, then `create_salary_slips` (5.8). |
-| [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L287) | ours, then `super()` | Refuses a missing or non-Bank/Cash Payment Account. See [07](07-after-the-slip.md). |
-| [`get_salary_component_total`](../../avinashgroup_app/payroll/payroll_entry.py#L308), [`section_for`](../../avinashgroup_app/payroll/payroll_entry.py#L356), [`get_account`](../../avinashgroup_app/payroll/payroll_entry.py#L365) | ours, replacing HRMS | Section accounts (O/O, S/D, F/P) on the accrual journal. See [07](07-after-the-slip.md). |
+| [`make_bank_entry`](../../avinashgroup_app/payroll/payroll_entry.py#L447) | ours, then `super()` | Refuses a missing or non-Bank/Cash Payment Account. See [07](07-after-the-slip.md). |
+| [`get_salary_component_total`](../../avinashgroup_app/payroll/payroll_entry.py#L468), [`section_for`](../../avinashgroup_app/payroll/payroll_entry.py#L516), [`get_account`](../../avinashgroup_app/payroll/payroll_entry.py#L525) | ours, replacing HRMS | Section accounts (O/O, S/D, F/P) on the accrual journal. See [07](07-after-the-slip.md). |
 
 **Config on avinas1:** `validate_attendance` is 0 on all three entries, so HRMS never refuses for unmarked attendance. Our orange warning is the only signal.
 
@@ -110,7 +110,7 @@ rdp's script only matters on an entry with no Fiscal Year / BS month, i.e. an ol
 
 ## 5.3 The BS period guard (Payroll Entry side)
 
-[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L385).
+[`validate_payroll_entry`](../../avinashgroup_app/payroll/bs_period_guard.py#L45), hooked at [`validate_payroll_entry`](../../avinashgroup_app/hooks.py#L393).
 
 | | |
 |---|---|
@@ -141,17 +141,17 @@ Other guards on the way to slips: the BS period guard (5.3); HRMS's duplicate-sl
 
 ## 5.5 Prepare Payroll Inputs: `trigger_for_payroll_entry`
 
-[`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L78) (whitelisted)
+[`trigger_for_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L79) (whitelisted)
 
 | Step | Function | Notes |
 |---|---|---|
 | 0 | refuse a cancelled entry | Works on a **draft** entry (once saved, so its `employees` exist) and on a **submitted** one. |
-| 1 | [`create_additional_salaries`](../../avinashgroup_app/payroll/attendance_allowance.py#L152) | The attendance engine (5.6). Each employee × component pair is in its own savepoint. It **commits** at the end. |
+| 1 | [`create_additional_salaries`](../../avinashgroup_app/payroll/attendance_allowance.py#L153) | The attendance engine (5.6). Each employee × component pair is in its own savepoint. It **commits** at the end. |
 | 2 | [`post_recoveries`](../../avinashgroup_app/payroll/advance_recovery.py#L67) | Advance instalments (5.7). There is **no savepoint per advance**: one failure raises, and the allowances from step 1 are already committed. |
-| 3 | [`refresh_draft_slips`](../../avinashgroup_app/payroll/attendance_allowance.py#L108) | Re-saves every **draft** slip of this entry (`ignore_permissions`) so it pulls the new Additional Salary. Submitted slips are never touched. |
+| 3 | [`refresh_draft_slips`](../../avinashgroup_app/payroll/attendance_allowance.py#L109) | Re-saves every **draft** slip of this entry (`ignore_permissions`) so it pulls the new Additional Salary. Submitted slips are never touched. |
 | 4 | `frappe.db.commit()` and return the counts | |
 
-**Why one button:** the comment says "one button prepares everything the slips will read". The refresh exists because HRMS makes the slips at submit, and a press after that would otherwise reach a slip only on its next save ([`refresh_draft_slips`](../../avinashgroup_app/payroll/attendance_allowance.py#L108) docstring).
+**Why one button:** the comment says "one button prepares everything the slips will read". The refresh exists because HRMS makes the slips at submit, and a press after that would otherwise reach a slip only on its next save ([`refresh_draft_slips`](../../avinashgroup_app/payroll/attendance_allowance.py#L109) docstring).
 
 **When to press:** the user guide says before *Create Salary Slips* (submit), and again before submitting the slips if anything changed ([user guide 5.3](../user-guide/05-monthly-payroll.md)). Pressing after the slips are **submitted**: `_delete_existing_draft` tries to cancel Additional Salary that a submitted slip references. That is likely refused by Frappe's link check, so the record is *skipped* with an Error Log (unverified; not reproduced).
 
@@ -163,7 +163,7 @@ The module docstring ([`Calculator`](../../avinashgroup_app/payroll/attendance_a
 
 ### Which components
 
-[`get_attendance_driven_components`](../../avinashgroup_app/payroll/attendance_allowance.py#L695): every Salary Component with `custom_is_attendance_driven` = 1 and `disabled` = 0.
+[`get_attendance_driven_components`](../../avinashgroup_app/payroll/attendance_allowance.py#L697): every Salary Component with `custom_is_attendance_driven` = 1 and `disabled` = 0.
 
 Config on avinas1 (2026-10-12):
 
@@ -177,30 +177,30 @@ Config on avinas1 (2026-10-12):
 
 \* Meal's unit is not used: `_meals_for_day` returns a meal count directly. All attendance-month settings are "Same as Salary". All have `depends_on_payment_days` = 0, which `validate_salary_component` forces ([01b-pay-masters.md](01b-pay-masters.md)).
 
-**Daily Wage: doc vs code.** Patch `setup_daily_wage` ([`Daily-wage labour`](../../avinashgroup_app/patches/setup_daily_wage.py#L1)) says the day's wage is the assignment base on a structure flagged Daily Wage, and that "Overtime reads the flag and divides by 8 instead of 30 * 8". It also adds a `Daily Wage` option to Rate Basis. The code no longer does either: [`_hourly_basic`](../../avinashgroup_app/payroll/attendance_allowance.py#L503) says "Daily-wage labour is paid in cash day to day, outside payroll (decided 2026-10-08), so every assignment's base here is a monthly basic". `_resolve_rate` knows only `Hourly Basic × Multiplier`, and the component is disabled (commit fb3b934). The `custom_daily_wage` checkbox on Salary Structure and the `Daily Wage` rate-basis option remain as leftovers.
+**Daily Wage: doc vs code.** Patch `setup_daily_wage` ([`Daily-wage labour`](../../avinashgroup_app/patches/setup_daily_wage.py#L1)) says the day's wage is the assignment base on a structure flagged Daily Wage, and that "Overtime reads the flag and divides by 8 instead of 30 * 8". It also adds a `Daily Wage` option to Rate Basis. The code no longer does either: [`_hourly_basic`](../../avinashgroup_app/payroll/attendance_allowance.py#L505) says "Daily-wage labour is paid in cash day to day, outside payroll (decided 2026-10-08), so every assignment's base here is a monthly basic". `_resolve_rate` knows only `Hourly Basic × Multiplier`, and the component is disabled (commit fb3b934). The `custom_daily_wage` checkbox on Salary Structure and the `Daily Wage` rate-basis option remain as leftovers.
 
 ### Per employee × component
 
-For each employee in the entry's `employees` table (falling back to [`_employees_in_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L782)):
+For each employee in the entry's `employees` table (falling back to [`_employees_in_payroll_entry`](../../avinashgroup_app/payroll/attendance_allowance.py#L784)):
 
 | # | Function | Rule |
 |---|---|---|
 | a | [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L285) | `{allowance: row}` from the **Assignment Allowance** rows of the assignment in force on the period's **end date**. Rows with a later `effective_from` are left out. |
-| b | [`_gets`](../../avinashgroup_app/payroll/attendance_allowance.py#L735) | An **allowance** (`custom_is_allowance`) is paid only if the person has a row for it on their assignment: no row, not paid. **Overtime** (Condition Type `Authorised Overtime`) is the exception: anyone OT eligible (row c) is paid the hours on their submitted Overtime Sheets at [`overtime_rate`](../../avinashgroup_app/payroll/attendance_allowance.py#L523) — hourly basic × 1.5 — with no assignment row and whatever the component's Rate Basis / Multiplier (user, 2026-10-14). The **late fine** (Condition Type `Late Time`) applies to everyone: no structure row is needed, and its only exception is Late Fine Exempt (row c); it is always priced minutes ÷ 60 × the hourly basic × Multiplier (blank = 1), whatever its Unit and Rate Basis (user, 2026-10-14). Any other **non-allowance** is paid only when the person's Salary **Structure** lists it in Earnings or Deductions ([`structure_components`](../../avinashgroup_app/payroll/allowance.py#L307)); the structure row's amount and formula are blanked by `validate_salary_structure`, so the row works purely as a tag. |
-| c | [`_skip_for_eligibility`](../../avinashgroup_app/payroll/attendance_allowance.py#L665) | Skip if the component is `custom_ot_eligible_only` and Employee `custom_ot_eligibility` = 0 (policy 2.2). Skip Late Time / Late Arrival components if Employee `custom_late_fine_exempt` (NGI's sheet types 0 for its managers). |
-| d | [`_attendance_period`](../../avinashgroup_app/payroll/attendance_allowance.py#L684) | The entry's own dates, or the previous BS month when the component's `custom_attendance_month` = "Previous Month". |
-| e | [`_resolve_rate`](../../avinashgroup_app/payroll/attendance_allowance.py#L753) | `Hourly Basic × Multiplier` gives `_hourly_basic × custom_rate_multiplier`, unrounded. Otherwise the **Rate on the person's assignment row**. If neither applies, the result is `None` and the component is skipped. |
-| f | [`_hourly_basic`](../../avinashgroup_app/payroll/attendance_allowance.py#L503) | `assignment.base ÷ days ÷ hours`. Days = `custom_rate_days_per_month` if set, otherwise the **actual length of the attendance period** (29–32, `date_diff + 1`). Hours = `custom_rate_hours_per_day`, otherwise [`RATE_HOURS_PER_DAY`](../../avinashgroup_app/payroll/attendance_allowance.py#L490) (8). `base` comes from [`_assignment`](../../avinashgroup_app/payroll/attendance_allowance.py#L493): the latest submitted assignment with `from_date` ≤ the period end. |
-| g | [`_qty_for_employee`](../../avinashgroup_app/payroll/attendance_allowance.py#L273) | Sums `evaluate_rule` over the period's **submitted** Attendance ([`_attendance_rows`](../../avinashgroup_app/payroll/attendance_allowance.py#L704)). `Flat per Period` gives 1 if any day matched. |
+| b | [`_gets`](../../avinashgroup_app/payroll/attendance_allowance.py#L737) | An **allowance** (`custom_is_allowance`) is paid only if the person has a row for it on their assignment: no row, not paid. **Overtime** (Condition Type `Authorised Overtime`) is the exception: anyone OT eligible (row c) is paid the hours on their submitted Overtime Sheets at [`overtime_rate`](../../avinashgroup_app/payroll/attendance_allowance.py#L525) — hourly basic × 1.5 — with no assignment row and whatever the component's Rate Basis / Multiplier (user, 2026-10-14). The **late fine** (Condition Type `Late Time`) applies to everyone: no structure row is needed, and its only exception is Late Fine Exempt (row c); it is always priced minutes ÷ 60 × the hourly basic × Multiplier (blank = 1), whatever its Unit and Rate Basis (user, 2026-10-14). Any other **non-allowance** is paid only when the person's Salary **Structure** lists it in Earnings or Deductions ([`structure_components`](../../avinashgroup_app/payroll/allowance.py#L307)); the structure row's amount and formula are blanked by `validate_salary_structure`, so the row works purely as a tag. |
+| c | [`_skip_for_eligibility`](../../avinashgroup_app/payroll/attendance_allowance.py#L667) | Skip if the component is `custom_ot_eligible_only` and Employee `custom_ot_eligibility` = 0 (policy 2.2). Skip Late Time / Late Arrival components if Employee `custom_late_fine_exempt` (NGI's sheet types 0 for its managers). |
+| d | [`_attendance_period`](../../avinashgroup_app/payroll/attendance_allowance.py#L686) | The entry's own dates, or the previous BS month when the component's `custom_attendance_month` = "Previous Month". |
+| e | [`_resolve_rate`](../../avinashgroup_app/payroll/attendance_allowance.py#L755) | `Hourly Basic × Multiplier` gives `_hourly_basic × custom_rate_multiplier`, unrounded. Otherwise the **Rate on the person's assignment row**. If neither applies, the result is `None` and the component is skipped. |
+| f | [`_hourly_basic`](../../avinashgroup_app/payroll/attendance_allowance.py#L505) | `assignment.base ÷ days ÷ hours`. Days = `custom_rate_days_per_month` if set, otherwise the **actual length of the attendance period** (29–32, `date_diff + 1`). Hours = `custom_rate_hours_per_day`, otherwise [`RATE_HOURS_PER_DAY`](../../avinashgroup_app/payroll/attendance_allowance.py#L492) (8). `base` comes from [`_assignment`](../../avinashgroup_app/payroll/attendance_allowance.py#L495): the latest submitted assignment with `from_date` ≤ the period end. |
+| g | [`_qty_for_employee`](../../avinashgroup_app/payroll/attendance_allowance.py#L275) | Sums `evaluate_rule` over the period's **submitted** Attendance ([`_attendance_rows`](../../avinashgroup_app/payroll/attendance_allowance.py#L706)). `Flat per Period` gives 1 if any day matched. |
 | h | `amount = flt(qty × rate, 2)` | Skipped when ≤ 0. |
-| i | [`_delete_existing_draft`](../../avinashgroup_app/payroll/attendance_allowance.py#L790) | Cancels and deletes this calculator's earlier row for the same employee, component and `payroll_date` (tag `custom_source` = "Nepal HRMS Attendance Allowance"). Hand-made rows (other tags) are left alone. |
-| j | [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L827) | Inserts and **submits** an Additional Salary (5.6.2). |
+| i | [`_delete_existing_draft`](../../avinashgroup_app/payroll/attendance_allowance.py#L792) | Cancels and deletes this calculator's earlier row for the same employee, component and `payroll_date` (tag `custom_source` = "Nepal HRMS Attendance Allowance"). Hand-made rows (other tags) are left alone. |
+| j | [`_make_additional_salary`](../../avinashgroup_app/payroll/attendance_allowance.py#L829) | Inserts and **submits** an Additional Salary (5.6.2). |
 
-Errors in steps i–j roll back to a savepoint whose name is made SQL-safe ([`_savepoint_name`](../../avinashgroup_app/payroll/attendance_allowance.py#L729); "Tea & Conveyance" once broke MariaDB, commit 886d643). The record is listed as *skipped*, with an Error Log titled "Nepal HRMS Attendance Allowance: {employee}/{component}".
+Errors in steps i–j roll back to a savepoint whose name is made SQL-safe ([`_savepoint_name`](../../avinashgroup_app/payroll/attendance_allowance.py#L731); "Tea & Conveyance" once broke MariaDB, commit 886d643). The record is listed as *skipped*, with an Error Log titled "Nepal HRMS Attendance Allowance: {employee}/{component}".
 
 ### 5.6.1 `evaluate_rule`: one day's quantity
 
-[`evaluate_rule`](../../avinashgroup_app/payroll/attendance_allowance.py#L295). "Present statuses" are the Attendance `status` options minus Absent, On Leave and Half Day ([`get_present_statuses`](../../avinashgroup_app/payroll/attendance_allowance.py#L55)), i.e. Present and Work From Home.
+[`evaluate_rule`](../../avinashgroup_app/payroll/attendance_allowance.py#L297). "Present statuses" are the Attendance `status` options minus Absent, On Leave and Half Day ([`get_present_statuses`](../../avinashgroup_app/payroll/attendance_allowance.py#L56)), i.e. Present and Work From Home.
 
 | Condition (`custom_condition_type`) | Day counts when | Quantity | Used by |
 |---|---|---|---|
@@ -209,8 +209,8 @@ Errors in steps i–j roll back to a savepoint whose name is made SQL-safe ([`_s
 | | `Half Day` | `custom_half_day_counts`: Full Day → 1 (client policy 2026-09-21: "someone who comes gets the day"), Half Day → 0.5, Not At All → 0 | |
 | `Status = Half Day` | status Half Day | 1 | none on avinas1 |
 | `Worked on Holiday` | holiday flag and present or Half Day | 1 day / hours | none on avinas1 (Overtime used this before 2026-09-21) |
-| `Meal Entitlement` | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L381) | see [04 §4.6](04-overtime.md#46-how-the-sheet-reaches-payroll): OT eligible **and** on a submitted Overtime Sheet with Overtime entitlement that day; holiday = 6 h → 1, 8 h → 2 (first IN to last OUT); working day = 1 per early or late ≥ offset; capped at max/day | Meal |
-| `Authorised Overtime` | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L461) | Σ `worked_hours` of submitted Overtime-entitlement rows for that date (already rounded to ½ h) | Overtime |
+| `Meal Entitlement` | [`_meals_for_day`](../../avinashgroup_app/payroll/attendance_allowance.py#L383) | see [04 §4.6](04-overtime.md#46-how-the-sheet-reaches-payroll): OT eligible **and** on a submitted Overtime Sheet with Overtime entitlement that day; holiday = 6 h → 1, 8 h → 2 (first IN to last OUT); working day = 1 per early or late ≥ offset; capped at max/day | Meal |
+| `Authorised Overtime` | [`_authorised_overtime_hours`](../../avinashgroup_app/payroll/attendance_allowance.py#L463) | Σ `worked_hours` of submitted Overtime-entitlement rows for that date (already rounded to ½ h) | Overtime |
 | `Late Time` | not `custom_late_excused`; [`measure_day`](../../avinashgroup_app/hr/shift_day.py#L106) | (late minutes + early-exit minutes) ÷ 60 hours. Counted only on a **full working day**: no holidays, no Half Day ([03](03-shift-measurement.md)) | Late Fine |
 | `Early Entry Before` / `Late Stay After` / `Late Arrival After` | seconds from `custom_early_entry` / `custom_late_exit` / `custom_late_entry` ≥ the offset; Late Arrival is skipped if excused or Half Day (policy 1.2: no double charge) | day / hours | none on avinas1 |
 
@@ -225,7 +225,7 @@ Reads Attendance `status`, `working_hours`, `custom_worked_on_holiday`, `custom_
 | `payroll_date` | the entry's **end date** | Inside the slip's period, so HRMS [`get_additional_salaries`](../../../hrms/hrms/payroll/doctype/additional_salary/additional_salary.py#L218) picks it up ([06](06-salary-slip.md)). |
 | `is_recurring` 0, `overwrite_salary_structure_amount` 0 | | |
 | `deduct_full_tax_on_selected_payroll_date` | 1 for earnings, 0 for deductions | "a labourer's 7,068.75 month drew 6 of tax instead of the sheet's 1%, 70.69" (commit 913bde9). The one-off is taxed in the month it is paid. |
-| `custom_source` | "Nepal HRMS Attendance Allowance" ([`SOURCE_TAG`](../../avinashgroup_app/payroll/attendance_allowance.py#L38)) | Identifies the calculator's own rows for replace-on-rerun. Field created by patch `setup_attendance_allowance` ([`custom_source`](../../avinashgroup_app/patches/setup_attendance_allowance.py#L150)). |
+| `custom_source` | "Nepal HRMS Attendance Allowance" ([`SOURCE_TAG`](../../avinashgroup_app/payroll/attendance_allowance.py#L39)) | Identifies the calculator's own rows for replace-on-rerun. Field created by patch `setup_attendance_allowance` ([`custom_source`](../../avinashgroup_app/patches/setup_attendance_allowance.py#L150)). |
 | `custom_quantity`, `custom_rate` | qty and rate | Read by the **Avinas Salary Statement** (OT hours, meals, late hours). Patch `setup_additional_salary_quantity` ([`custom_quantity`](../../avinashgroup_app/patches/setup_additional_salary_quantity.py#L24)) back-filled the old rows. |
 | docstatus | **1 (submitted)** | "a draft Additional Salary is invisible to the salary slip, so the first full payroll run produced slips with no tea on them at all". |
 
@@ -233,7 +233,7 @@ HRMS checks on insert: [`validate_salary_structure`](../../../hrms/hrms/payroll/
 
 ### 5.6.3 Gotchas in the engine
 
-* **Stale rows on a re-press — Fixed 2026-10-12..** The last press's row is now deleted first for every employee and component ([`_delete_existing_draft`](../../avinashgroup_app/payroll/attendance_allowance.py#L790)), and only then is a new one made if anything is due ([`_priced`](../../avinashgroup_app/payroll/attendance_allowance.py#L259)). Removed rows come back as `cleared` and the button says "… earlier records removed". A month whose slips are submitted still cannot change: its rows are reported as skipped (LinkExistsError).
+* **Stale rows on a re-press — Fixed 2026-10-12..** The last press's row is now deleted first for every employee and component ([`_delete_existing_draft`](../../avinashgroup_app/payroll/attendance_allowance.py#L792)), and only then is a new one made if anything is due ([`_priced`](../../avinashgroup_app/payroll/attendance_allowance.py#L261)). Removed rows come back as `cleared` and the button says "… earlier records removed". A month whose slips are submitted still cannot change: its rows are reported as skipped (LinkExistsError).
 * **Only the entry's employee table is processed.** Someone removed from the entry keeps any rows posted earlier.
 * **The assignment for allowance rows is the one in force on the end date.** The `base` for OT comes from `_assignment`, the latest submitted assignment with `from_date` ≤ end. A mid-month raise prices the whole month's OT at the new base, while the slip prorates nothing for it (Salary Revision handles arrears, [08](08-changes-over-time.md)).
 * Late Fine depends on the person's **structure** listing it. A structure without a Late Fine row means no fine, for everyone on that structure.

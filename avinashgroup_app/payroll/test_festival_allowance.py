@@ -218,8 +218,9 @@ class TestTaxOnSlip(FrappeTestCase):
 	def _tax(slip):
 		return sum(flt(r.amount) for r in slip.deductions if r.variable_based_on_taxable_salary)
 
-	def test_dashain_is_taxed_once_in_its_month(self):
-		# The best-paid NGI employee, so the allowance lands above the 1 % band.
+	def test_dashain_stays_off_the_salary_slip(self):
+		# Paid on its own Dashain payout slip since 2026-10-26; the payout's slip
+		# and tax are payroll/test_special_payout.py's.
 		row = frappe.db.sql(
 			"""select a.employee, a.base from `tabSalary Structure Assignment` a
 			join tabEmployee e on e.name = a.employee
@@ -231,13 +232,12 @@ class TestTaxOnSlip(FrappeTestCase):
 			self.skipTest("no NGI assignment")
 		employee, basic = row[0][0], flt(row[0][1])
 		without = self._slip(employee)
-		tax_without = self._tax(without)
 
 		adj = frappe.get_doc(
 			{
 				"doctype": "Payroll Adjustment",
 				"company": COMPANY,
-				"payroll_date": SLIP_END,  # inside the slip, or the slip never reads it
+				"payroll_date": SLIP_END,
 				"adjustments": [{"employee": employee, "salary_component": festival_component(), "amount": basic}],
 			}
 		)
@@ -245,22 +245,8 @@ class TestTaxOnSlip(FrappeTestCase):
 		adj.submit()
 		additional = frappe.get_doc("Additional Salary", adj.adjustments[0].additional_salary)
 		self.assertEqual(additional.deduct_full_tax_on_selected_payroll_date, 1)
+		self.assertEqual(additional.custom_payout_type, "Dashain Allowance")
 
-		with_dashain = self._slip(employee)
-		paid = [r for r in with_dashain.earnings if r.salary_component == festival_component()]
-		self.assertEqual(len(paid), 1)
-		self.assertAlmostEqual(flt(paid[0].amount), basic, delta=0.01)  # not prorated by payment days
-
-		delta = self._tax(with_dashain) - tax_without
-		# The whole tax on the allowance is in this month: what the slab charges on
-		# the year with it, less the year without it. Never negative, never more
-		# than the top rate on the allowance, and not multiplied over the months
-		# left (an annualised one-off would be several times this).
-		self.assertGreaterEqual(delta, 0)
-		self.assertLessEqual(delta, basic * 0.39 + 1)
-		self.assertAlmostEqual(delta, flt(with_dashain.get("full_tax_on_additional_earnings")), delta=1.01)
-		self.assertAlmostEqual(
-			flt(with_dashain.get("current_structured_tax_amount")),
-			flt(without.get("current_structured_tax_amount")),
-			delta=1.01,
-		)
+		salary = self._slip(employee)
+		self.assertNotIn(festival_component(), [r.salary_component for r in salary.earnings])
+		self.assertAlmostEqual(self._tax(salary), self._tax(without), delta=0.01)

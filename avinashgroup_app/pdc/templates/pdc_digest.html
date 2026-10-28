@@ -1,0 +1,29 @@
+{% macro table(title, rows, date_field="cheque_date") %}
+{% if rows %}
+<h3 style="margin:18px 0 6px">{{ title }} ({{ rows|length }})</h3>
+<table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse;font-size:13px;width:100%">
+	<tr style="background:#f3f3f3">
+		<th align="left">Cheque</th><th align="left">Company</th><th align="left">Party</th>
+		<th align="left">Cheque No</th><th align="left">Cheque Date</th><th align="right">Amount</th>
+		{% if date_field == "bounce_date" %}<th align="left">Reason</th>{% endif %}
+	</tr>
+	{% for r in rows %}
+	<tr>
+		<td><a href="{{ frappe.utils.get_url_to_form('PDC Cheque', r.name) }}">{{ r.name }}</a></td>
+		<td>{{ r.company }}</td>
+		<td>{{ r.party_name or r.party }}</td>
+		<td>{{ r.cheque_no }}</td>
+		<td>{{ frappe.format(r.cheque_date, {"fieldtype": "Date"}) }}</td>
+		<td align="right">{{ frappe.format(r.amount, {"fieldtype": "Currency"}) }}</td>
+		{% if date_field == "bounce_date" %}<td>{{ r.bounce_reason or "" }}</td>{% endif %}
+	</tr>
+	{% endfor %}
+</table>
+{% endif %}
+{% endmacro %}
+
+<p>Post-dated cheques as on {{ frappe.format(today, {"fieldtype": "Date"}) }}:</p>
+{{ table("Received cheques to deposit (dated within " ~ days ~ " days, or overdue)", rows.to_deposit) }}
+{{ table("Issued cheques the supplier can present", rows.issued_due) }}
+{{ table("Bounced since yesterday", rows.bounced, "bounce_date") }}
+<p style="color:#888;font-size:12px">Sent by PDC Settings → Daily Email Digest.</p>

@@ -27,6 +27,8 @@ Last checked against the system: 9 October 2026 (23 Ashwin 2083).
 | 9 | [Accounts setup for payroll (for the accountant)](09-accounts-setup.md) | Setting accounts on salary components, the payable account, reading the payroll journal |
 | 10 | [Troubleshooting: error messages and what to do](10-troubleshooting.md) | The system shows a red message, or a number looks wrong |
 | 11 | [Glossary](11-glossary.md) | You meet a word you do not know (O/O, SSF Addition, Miti…) |
+| 12 | [Post-dated cheques (PDC)](12-post-dated-cheques.md) | For accounts: a customer gives a cheque with a future date, or we write one to a supplier |
+| 13 | [Letters of credit (LC)](13-letters-of-credit.md) | For accounts: an import is paid through a bank letter of credit |
 
 ---
 
@@ -39,7 +41,7 @@ When extra work     HR makes an Overtime Sheet for that date and it is approved
 is needed
 End of BS month     1. Check attendance (Monthly Attendance BS report)
                     2. New Payroll Entry → Company → click the month → Save
-                    3. Tick Dashain / Leave Encashment if due (Yearly Payments)
+                    3. Tick Settle Leave in Ashadh or a leaver's month (recovery)
                     4. Create Salary Slips → check a few slips  (tea, meal, overtime,
                        late fine, advances are worked out by themselves)
                     5. Submit Salary Slip       (journal is posted, slips are emailed)

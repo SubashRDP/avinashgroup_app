@@ -7,6 +7,11 @@ from erpnext.accounts.general_ledger import make_gl_entries
 @frappe.whitelist()
 def make_cheque_bounce_entry(payment_entry_name):
 	"""
+	Superseded by avinashgroup_app.pdc.payment_entry_bounce.bounce (bounce date,
+	reason, charges, undo, re-present, replacement). The Payment Entry button no
+	longer calls this; it stays so the Payment Entries bounced through it keep a
+	readable origin, and Party Ledger still reads their "Cheque Bounce -" rows.
+
 	Create reversed GL entries for a bounced cheque.
 	Copies the exact GL entries of the Payment Entry with debit and credit swapped.
 	voucher_type stays "Payment Entry", against_voucher stays the same.

@@ -55,6 +55,7 @@ from hrms.hr.doctype.leave_application.leave_application import (
 
 from avinashgroup_app.hr.punch_correction import CORRECTION_ROLES, SOURCE_REPORT, log_correction
 from avinashgroup_app.hr.replacement_leave import shown_up
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 LOG_DOCTYPE = "Attendance Correction Log"
 
@@ -141,7 +142,8 @@ def give_leave(employee, leave_type, dates, reason, half_day_date=None):
 
 	paid = frappe.db.get_value(
 		"Salary Slip",
-		{"employee": employee, "docstatus": 1, "start_date": ("<=", days[-1]), "end_date": (">=", days[0])},
+		# A Dashain / encashment payout slip does not pay the days.
+		{"employee": employee, "docstatus": 1, "start_date": ("<=", days[-1]), "end_date": (">=", days[0]), **REGULAR_SLIPS},
 		["name", "start_date", "end_date"],
 		as_dict=True,
 	)
@@ -180,7 +182,7 @@ def give_leave(employee, leave_type, dates, reason, half_day_date=None):
 
 	draft = frappe.db.get_value(
 		"Salary Slip",
-		{"employee": employee, "docstatus": 0, "start_date": ("<=", days[-1]), "end_date": (">=", days[0])},
+		{"employee": employee, "docstatus": 0, "start_date": ("<=", days[-1]), "end_date": (">=", days[0]), **REGULAR_SLIPS},
 		"name",
 	)
 	if draft:

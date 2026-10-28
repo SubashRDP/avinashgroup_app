@@ -104,7 +104,7 @@ Each month, the payroll run deducts the smaller of the instalment and what is st
 
 Example (cut-off Ghatasthapana, 11 October 2026): Ram joined 11 April 2026, basic 30,000. Days of service 183, factor 183 ÷ 365 = 0.5014, Dashain allowance **15,041.10**. Sita joined in 2019: **30,000**.
 
-The allowance is taxable. It is taxed in full in the month it is paid (one month's tax on it, not spread over the year).
+The allowance is taxable. It is paid on its **own salary slip** (Chapter 5.12), apart from the Ashwin salary, and that slip deducts the whole tax it adds to the year (not spread over the year).
 
 ### Where the settings are
 
@@ -112,8 +112,8 @@ The allowance is taxable. It is taxed in full in the month it is paid (one month
 
 | Setting | Now | Meaning |
 |---|---|---|
-| Festival Allowance | ✓ | This component is paid by the Dashain Allowance button |
-| Pay Month | 06 - Ashwin | The button works only on that month's Payroll Entry. Blank = any month |
+| Festival Allowance | ✓ | This component is paid by a Dashain Allowance payout entry, never on the salary slip |
+| Pay Month | 06 - Ashwin | Only that month's Dashain payout entry may pay it. Blank = any month |
 | Minimum Service Days | 0 | Fewer days of service than this → nothing |
 | Prorate for Under a Year | ✓ | Off = anyone who joined before the cut-off gets a full month |
 | Include Daily-Wage Staff | ✗ | Daily-wage labour is paid in cash, outside payroll |
@@ -123,16 +123,19 @@ The rule itself (basic, 100 % cap) is not a setting.
 
 ### Paying it
 
-1. Make the **Payroll Entry** for the pay month (Ashwin) as usual and press **Get Employees**.
-2. In **Yearly Payments**, tick **Pay Dashain Allowance**, pick the **Festival Component** (Dashain Allowance) and set **Count Service To (Cut-off)**: Ghatasthapana, or the payment date. Blank = the month's last day. Save.
-3. Press **Create Salary Slips**. The allowance is worked out and submitted as a **Payroll Adjustment** before the slips are made, so each slip carries it. The entry's **Dashain Payroll Adjustment** links it, and the **Payroll Inputs Log** shows how many people and the total.
+1. Make a **new Payroll Entry** for the pay month (Ashwin), separate from the Ashwin salary entry, with **Payout = Dashain Allowance** (Chapter 5.12).
+2. Pick the **Festival Component** (Dashain Allowance) and set **Count Service To (Cut-off)**: Ghatasthapana, or the payment date. Blank = the month's last day. Save.
+3. Press **Create Salary Slips**. The allowance is worked out and submitted as a **Payroll Adjustment**, then each person gets a slip with only the allowance and its tax. The entry's **Dashain Payroll Adjustment** links it, and the **Payroll Inputs Log** shows how many people and the total, and who had nothing due.
 4. Open the Payroll Adjustment to check: each row shows **Basic**, **Service Days** and **Factor**; the **Note** says "Full year" or "183 of 365 days".
+5. **Submit Salary Slip** and **Make Bank Entry** as for the salary.
 
-Nobody is paid twice: someone already paid this year is left out of a later run. To undo, cancel the slips, then **Cancel** the Payroll Adjustment.
+Nobody is paid twice: someone already paid this year is left out of a later run. A festival allowance typed by hand on a Payroll Adjustment is also paid by the Dashain payout entry, not on the salary slip. To undo, cancel the payout's slips, then **Cancel** the Payroll Adjustment.
+
+The old **Pay Dashain Allowance** tick on the salary entry is gone: ticked on an older draft, it is cleared on save with a notice.
 
 | Message | Fix |
 |---|---|
-| "Dashain Allowance is paid in 06 - Ashwin …; this entry is for …" | Use the Ashwin Payroll Entry, or change **Pay Month** on the component |
+| "Dashain Allowance is paid in 06 - Ashwin …; this entry is for …" | Make the payout entry for Ashwin, or change **Pay Month** on the component |
 | "Draft … already holds Dashain Allowance for this year" | A draft from another entry exists. Delete that draft, or submit it |
 | "The Payroll Entry has no employees yet" | Press **Get Employees** and save first |
 | "Row …: … is more than …'s basic …; it is capped at 100 %" | Type an amount up to the Basic |
@@ -141,11 +144,11 @@ The component **Dashain Bonus** also exists. It is not a festival allowance; pic
 
 ## 8.5 Leave encashment at year end
 
-**The rule** (decided by the company, 13 October 2026; policy minute 3.7): in the last month of the fiscal year (**Ashadh**), the leave each person has **left** on every **encashable** leave type is worked out and paid on the **Ashadh salary slip**. Nothing is carried into the new year.
+**The rule** (decided by the company, 13 October 2026; policy minute 3.7): in the last month of the fiscal year (**Ashadh**), the leave each person has **left** on every **encashable** leave type is worked out and paid on its **own salary slip** in Ashadh (Chapter 5.12), apart from the Ashadh salary. Nothing is carried into the new year.
 
 - **Days encashed** = the balance on the year's last day, less **Non-Encashable Leaves**, capped at **Maximum Encashable Leaves** (both on the Leave Type; 0 = no limit).
 - **Rate per day** = monthly basic (Base on the salary assignment) ÷ **Encashment Days per Month** on the Leave Type. Blank = the number of days in the BS month (Ashadh: 31 or 32), the same as overtime uses.
-- **Amount** = days × rate per day. Taxable, taxed in full in Ashadh.
+- **Amount** = days × rate per day. Taxable: the encashment slip deducts the whole tax it adds to the year.
 
 ### Where the settings are
 
@@ -165,27 +168,26 @@ Untick **Allow Encashment** and that type is left out completely.
 
 ### Paying it (once a year, in Ashadh)
 
-Leave encashment is paid by the payroll that pays it, the same as the Dashain allowance.
+Leave encashment has its own Payroll Entry and its own slips, the same as the Dashain allowance (Chapter 5.12).
 
 1. Wait until the last day of Ashadh has been credited (the monthly leave credit runs on the month's last day).
-2. Open the **Ashadh Payroll Entry**, press **Get Employees**, tick **Pay Leave Encashment** in **Yearly Payments**, and save.
-3. Press **Create Salary Slips** (on or after the first day of the payroll month). Each person's remaining balance on every encashable type is encashed and submitted, dated the year's last day, before the slips are made, so the Ashadh slip carries it.
+2. Make a **new Payroll Entry** for Ashadh with **Payout = Leave Encashment** (separate from the Ashadh salary entry), and save. **Settle Leave** ticks itself.
+3. Press **Create Salary Slips** (on or after the first day of the payroll month). Each person's remaining balance on every encashable type is encashed and submitted, dated the year's last day; each person with something due gets a slip with only the encashment and its tax.
 4. The **Payroll Inputs Log** shows how many people, the total, and how many were left out (no salary assignment, no balance, already encashed). The encashments are in the **Leave Encashment** list; each shows **Balance**, **Days Encashed**, **Monthly Basic**, **Days per Month**, **Rate per Day** and **Amount**.
+5. **Submit Salary Slip** and **Make Bank Entry** as for the salary. The encashments turn **Paid**.
 
-A later run never touches a submitted encashment, and the system refuses a second encashment of the same allocation, even typed by hand. To undo one, cancel the slip, then **Cancel** the encashment: its payment is cancelled with it.
+A later run never touches a submitted encashment, and the system refuses a second encashment of the same allocation, even typed by hand. To undo one, cancel the encashment slip, then **Cancel** the encashment: its payment is cancelled with it.
 
 ### Someone leaving during the year
 
 1. Set the **Relieving Date** on the Employee. Keep the status **Active** until the encashment is submitted (the system refuses an encashment for an employee who has Left).
-2. In the Payroll Entry of the month they leave, tick **Settle Leave (encash or recover)** (it was called Pay Leave Encashment). Everyone whose relieving date falls in the month is settled at Separation, dated that day, at the same rate as above, when the slips are made.
-3. It is on that month's slip (the last one):
-   - **Leave left** (balance above 0) is paid as **Leave Encashment**.
-   - **Leave taken beyond what was earned** (balance below 0, because leave can be taken before it is credited) is deducted as **Leave Recovery**: the days short × the same per-day rate. Example: basic 20,000, Ashwin (30 days), 21 Casual + 12 Sick taken in Shrawan, relieved at Ashwin end with 6 Casual + 3.5 Sick earned → 15 + 8.5 = **23.5 days × 666.67 = 15,666.67 deducted**.
+2. **Leave left** (balance above 0): make a **Leave Encashment** payout entry for the month they leave (Chapter 5.12). Everyone whose relieving date falls in the month is encashed at Separation, dated that day, at the same rate as above, on a slip of its own.
+3. **Leave taken beyond what was earned** (balance below 0, because leave can be taken before it is credited): tick **Settle Leave** on that month's **salary** entry. It is deducted on the last salary slip as **Leave Recovery**: the days short × the same per-day rate. Example: basic 20,000, Ashwin (30 days), 21 Casual + 12 Sick taken in Shrawan, relieved at Ashwin end with 6 Casual + 3.5 Sick earned → 15 + 8.5 = **23.5 days × 666.67 = 15,666.67 deducted**.
    - The earned figure counts the month's own credit when the person leaves on the BS month's last day, even if the month-end credit has not run yet.
 
 The same check runs at year end: a year can only end below zero for someone who joined mid-year and took the full year's leave. If a recovery is larger than the last month's pay, the slip cannot be submitted (net pay below zero): collect the rest outside payroll and reduce the deduction.
 
-A single leaver can also be done by hand: **Leave Encashment → New**, Employee, Leave Type, **Encashment Date = the relieving date**; the days and amount fill themselves.
+A single leaver can also be done by hand: **Leave Encashment → New**, Employee, Leave Type, **Encashment Date = the relieving date**; the days and amount fill themselves. It is paid by that month's Leave Encashment payout entry.
 
 | Message | Fix |
 |---|---|
@@ -232,7 +234,7 @@ The year's setup is mostly done in one step by IT, but it needs information that
 | 4 | Shift Types, and each employee's Overtime Eligible / Replacement Leave tick, still correct | HR | Ashadh |
 | 5 | IT runs the **year setup**: holiday lists (all Saturdays), leave period, payroll period, new salary assignments on the new tax slab, leave policy assignments | IT | Ashadh |
 | 6 | **Festivals** added to the new holiday lists with **Holiday Bulk Update**; Teej and Women's Day on the Women lists only | HR | Right after step 5, before the first festival |
-| 7 | **Leave encashment** for the closing year: Ashadh Payroll Entry → **Nepal HRMS → Leave Encashment**, check, submit | HR | In Ashadh, before the Ashadh payroll (see 8.5) |
+| 7 | **Leave encashment** for the closing year: an Ashadh Payroll Entry with **Payout = Leave Encashment** (see 8.5) | HR | In Ashadh, on or after the year's last credit |
 | 8 | On 1 Shrawan the companies and the women move to the new holiday lists | Automatic | Nothing to do. If a list was missing, IT sees it in the Error Log |
 
 > **Check after step 5.** The year setup gives everyone a new salary assignment from 1 Shrawan so that the new tax rates apply. It copies the Basic, **Initial Basic**, **SSF Applicable** and the whole **Allowances** table from the old assignment. Open two or three of the new assignments and compare them with the old ones before the first payroll of the new year.

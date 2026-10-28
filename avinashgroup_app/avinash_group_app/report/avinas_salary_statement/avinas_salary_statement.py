@@ -31,6 +31,12 @@ It reproduces the payroll, it never recomputes it:
 
 The month is chosen as on the Payroll Entry: Fiscal Year + BS Month, dates
 from hr/bs_calendar.py (Nepal BS Period first).
+
+Payout picks which slips of the month: the month's salary (the default), or a
+Dashain / leave encashment payout, each paid on slips of its own
+(payroll/special_payout.py). One kind at a time, so a person never shows twice
+and the journal check compares the sheet with that payout's own journal.
+Previous Net Pay is always last month's salary slip.
 """
 
 import frappe
@@ -39,6 +45,7 @@ from frappe.utils import add_days, flt, fmt_money
 
 from avinashgroup_app.hr.bs_calendar import bs_year_of, get_default_month, month_of_date, month_period
 from avinashgroup_app.payroll.allowance import get_section
+from avinashgroup_app.payroll.special_payout import PAYOUT_TYPES, REGULAR_SLIPS, slip_kind_filter
 
 #: Payroll Section (Department) → the sheet's own label, in the sheet's order.
 SECTION_LABELS = {"Admin & Accounts": "O/O", "Marketing": "S/D", "Plant": "F/P"}
@@ -78,7 +85,7 @@ def execute(filters=None):
 
 	slips = get_slips(filters, period, docstatus)
 	if not slips:
-		return base_columns(), [], _("No salary slips for {0}.").format(period.label)
+		return base_columns(), [], _("No {0} slips for {1}.").format(payout_of(filters) or _("salary"), period.label)
 
 	names = [s.name for s in slips]
 	amounts, defaults, components = get_details(names)
@@ -103,6 +110,8 @@ def execute(filters=None):
 	data = grouped(rows, numeric_fields(columns))
 	summary = report_summary(rows, slips, docstatus, amounts)
 	message = _("{0}: {1} to {2} ({3}).").format(period.label, period.start_date, period.end_date, period.source)
+	if payout_of(filters):
+		message = _("{0} payout. ").format(payout_of(filters)) + message
 	return columns, data, message, None, summary
 
 
@@ -118,6 +127,7 @@ def get_slips(filters, period, docstatus):
 	}
 	if filters.payroll_entry:
 		conditions["payroll_entry"] = filters.payroll_entry
+	conditions.update(slip_kind_filter(payout_of(filters)))
 	slips = frappe.get_all(
 		"Salary Slip",
 		filters=conditions,
@@ -240,6 +250,11 @@ def get_initial_basic(slips):
 	return out
 
 
+def payout_of(filters):
+	"""The Payout the sheet shows: a payout type, or None for the month's salary."""
+	return filters.get("payout_type") if filters.get("payout_type") in PAYOUT_TYPES else None
+
+
 def get_prev_net(company, period, employees):
 	"""Last month's net pay as paid: submitted slips, whichever slips this
 	month's sheet shows (a draft month compared with draft last month showed 0)."""
@@ -254,6 +269,7 @@ def get_prev_net(company, period, employees):
 				"employee": ("in", employees),
 				"start_date": (">=", prev.start_date),
 				"end_date": ("<=", prev.end_date),
+				**REGULAR_SLIPS,
 			},
 			fields=["employee", "net_pay"],
 		)

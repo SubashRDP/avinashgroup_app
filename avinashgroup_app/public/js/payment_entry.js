@@ -131,33 +131,7 @@ frappe.ui.form.on("Payment Entry", {
 			frm.page.set_indicator(__("Cheque Bounced"), "red");
 		}
 
-		if (frm.doc.docstatus === 1) {
-			frm.add_custom_button(
-				__("Cheque Bounce"),
-				function () {
-					frappe.confirm(
-						__(
-							"Are you sure you want to mark this as a Cheque Bounce? Reversed GL entries will be posted for <b>{0}</b>.",
-							[frm.doc.name]
-						),
-						function () {
-							frappe.call({
-								method: "avinashgroup_app.custom_code.payment_entry.cheque_bounce.make_cheque_bounce_entry",
-								args: { payment_entry_name: frm.doc.name },
-								freeze: true,
-								freeze_message: __("Posting Cheque Bounce GL Entries..."),
-								callback: function (r) {
-									if (!r.exc) {
-										frm.reload_doc();
-									}
-								},
-							});
-						}
-					);
-				},
-				__("Actions")
-			);
-		}
+		if (frm.doc.docstatus === 1) add_cheque_bounce_buttons(frm);
 	},
 	company: function (frm) {
 		frm.trigger("setup_party_query");
@@ -166,3 +140,129 @@ frappe.ui.form.on("Payment Entry", {
 		frm.trigger("setup_party_query");
 	},
 });
+
+// Cheque bounce on a submitted Payment Entry, through the PDC module: the dialog
+// asks for date, reason and charges; a PDC Cheque record then carries Re-present,
+// Replace and Undo. Server side: avinashgroup_app/pdc/payment_entry_bounce.py.
+const PE_BOUNCE_API = "avinashgroup_app.pdc.payment_entry_bounce";
+
+function add_cheque_bounce_buttons(frm) {
+	if (!["Receive", "Pay"].includes(frm.doc.payment_type)) return;
+	if (!["Customer", "Supplier"].includes(frm.doc.party_type)) return;
+
+	if (frm.doc.pdc_cheque) {
+		frm.add_custom_button(__("Cheque Record"), () => frappe.set_route("Form", "PDC Cheque", frm.doc.pdc_cheque), __("Cheque"));
+	}
+	if (frm.doc.custom_cheque_bounce === "Cheque Bounced") {
+		if (frm.doc.pdc_cheque) {
+			frm.add_custom_button(__("Replace With New Payment"), () => replace_with_payment(frm), __("Cheque"));
+			if (frappe.user.has_role(["Accounts Manager", "System Manager"]))
+				frm.add_custom_button(__("Undo Bounce"), () => undo_bounce(frm), __("Cheque"));
+		}
+		return;
+	}
+	frm.add_custom_button(__("Cheque Bounced"), () => bounce_payment_dialog(frm), __("Cheque"));
+}
+
+function bounce_payment_dialog(frm) {
+	const received = frm.doc.payment_type === "Receive";
+	const d = new frappe.ui.Dialog({
+		title: __("Cheque Bounced: {0}", [frm.doc.reference_no || frm.doc.name]),
+		fields: [
+			{
+				fieldtype: "HTML",
+				options: `<p class="text-muted small">${__(
+					"Posts one Journal Entry that reverses this payment on the bounce date: the invoices it paid become unpaid again and the bank is credited. This Payment Entry itself is not changed."
+				)}</p>`,
+			},
+			{ fieldname: "posting_date", fieldtype: "Date", label: __("Bounce Date"), reqd: 1, default: frappe.datetime.get_today() },
+			{
+				fieldname: "reason",
+				fieldtype: "Select",
+				label: __("Reason"),
+				reqd: 1,
+				options: [
+					"",
+					"Insufficient Funds",
+					"Signature Mismatch",
+					"Signature Missing",
+					"Stale Cheque",
+					"Post Dated (Presented Early)",
+					"Payment Stopped by Drawer",
+					"Account Closed",
+					"Amount in Words and Figures Differ",
+					"Alteration / Overwriting",
+					"Other",
+				].join("\n"),
+			},
+			{ fieldname: "charges", fieldtype: "Currency", label: __("Bank Charges"), default: 0 },
+			{
+				fieldname: "jv_type",
+				fieldtype: "Link",
+				options: "JV Type",
+				label: __("Journal Type"),
+				reqd: 1,
+				description: __("Numbering series of the bounce Journal Entry"),
+			},
+			{
+				fieldname: "recover_charges",
+				fieldtype: "Check",
+				label: __("Recover Charges From Party"),
+				hidden: received ? 0 : 1,
+				description: __("Debit the customer for the charge instead of booking it as an expense"),
+			},
+		],
+		primary_action_label: __("Record Bounce"),
+		primary_action(values) {
+			d.hide();
+			frappe.call({
+				method: `${PE_BOUNCE_API}.bounce`,
+				args: Object.assign({ payment_entry: frm.doc.name }, values),
+				freeze: true,
+				freeze_message: __("Recording the bounce…"),
+				callback: (r) => {
+					if (r.exc) return;
+					frm.reload_doc();
+					frappe.show_alert({ message: __("Bounce recorded on {0}", [r.message]), indicator: "red" });
+				},
+			});
+		},
+	});
+	d.show();
+	set_default_jv_type(d);
+}
+
+// Journal Type defaults to PDC Settings → JV Type; the user may pick another.
+function set_default_jv_type(d) {
+	frappe.db.get_single_value("PDC Settings", "jv_type").then((v) => v && d.set_value("jv_type", v));
+}
+
+function undo_bounce(frm) {
+	frappe.confirm(
+		__("Undo the bounce of {0}? Its bounce Journal Entry is cancelled and the invoices are paid again.", [
+			frm.doc.reference_no || frm.doc.name,
+		]),
+		() =>
+			frappe.call({
+				method: `${PE_BOUNCE_API}.undo_bounce`,
+				args: { payment_entry: frm.doc.name },
+				freeze: true,
+				callback: (r) => {
+					if (r.exc) return;
+					frm.reload_doc();
+					frappe.show_alert({ message: __("Bounce undone"), indicator: "green" });
+				},
+			})
+	);
+}
+
+function replace_with_payment(frm) {
+	frappe.call({
+		method: `${PE_BOUNCE_API}.make_replacement_payment_entry`,
+		args: { name: frm.doc.pdc_cheque },
+		callback: (r) => {
+			const doc = frappe.model.sync(r.message)[0];
+			frappe.set_route("Form", doc.doctype, doc.name);
+		},
+	});
+}

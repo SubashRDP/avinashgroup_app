@@ -34,10 +34,19 @@ def add_employee_allowances(doc, method=None):
 	"""Add, update or drop the slip rows of the employee's monthly allowances.
 
 	Hook: doc_events → Salary Slip → validate, ahead of the tax hooks. Leaves a
-	submitted slip, and a slip without a structure, alone.
+	submitted slip, a slip without a structure, and a payout slip alone (a
+	Dashain or encashment slip pays only that: payroll/special_payout.py, which
+	calls `apply_employee_allowances` itself to project the year's tax).
 	"""
-	if doc.docstatus != 0 or not doc.salary_structure or not doc.employee:
+	if doc.get("custom_payout_type"):
 		return
+	apply_employee_allowances(doc)
+
+
+def apply_employee_allowances(doc) -> bool:
+	"""Put the allowance rows on the slip and recalculate it; False when there was nothing to do."""
+	if doc.docstatus != 0 or not doc.salary_structure or not doc.employee:
+		return False
 
 	wanted = fixed_allowance_amounts(doc.employee, doc.end_date)
 	managed = {
@@ -47,7 +56,7 @@ def add_employee_allowances(doc, method=None):
 		and frappe.get_cached_value("Salary Component", d.salary_component, "custom_allowance_kind") in FIXED_KINDS
 	} | set(wanted)
 	if not managed:
-		return
+		return False
 
 	# Rebuilt on every save, even when the full-month amounts are unchanged:
 	# payment days may have moved (an absence marked since the last save), and
@@ -63,3 +72,4 @@ def add_employee_allowances(doc, method=None):
 	for component, amount in wanted.items():
 		doc.update_component_row(get_salary_component_data(component), amount, "earnings", default_amount=amount)
 	doc.calculate_net_pay()
+	return True

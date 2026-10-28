@@ -24,20 +24,24 @@ Leave Type's Earning Component — but three things in stock HRMS do not fit her
      cancelling the encashment left the payment standing). `mark_additional_salary`
      and `link_additional_salary` fix both.
 
-HR's entry point is the Payroll Entry that pays it, the same as the Dashain
-allowance: tick "Pay Leave Encashment" on the entry. Making its slips
-(payroll/payroll_entry.py `prepare_payroll_inputs`) makes and submits, for the
-entry's employees, what falls in that month — the remaining balance on each
+HR's entry point is a Payroll Entry of its own, the same as the Dashain
+allowance: Payout = Leave Encashment (Settle Leave is ticked with it). Making its
+slips (payroll/payroll_entry.py `prepare_payroll_inputs`) makes and submits, for
+the entry's employees, what falls in that month — the remaining balance on each
 encashable type, dated the allocation's last day, when the month is the year's
 last (Ashadh); and for anyone relieved in the month, their balance dated the
 relieving date — and writes the totals to the entry's Payroll Inputs Log.
-Submitting writes the Additional Salary the slip reads. Running again leaves
-submitted ones alone, and `price_encashment` refuses a second encashment of an
-allocation. `encash_for_payroll_entry` still drafts without submitting, for a
-look before the month is run.
+Submitting writes the Additional Salary; it is tagged Payout = Leave Encashment
+and paid on the payout's own slip, with the tax it adds to the year, never on
+the month's salary slip (payroll/special_payout.py, since 2026-10-26: "calculated
+separately with that only component"). Running again leaves submitted ones
+alone, and `price_encashment` refuses a second encashment of an allocation.
+`encash_for_payroll_entry` still drafts without submitting, for a look before
+the month is run.
 
 A one-off separation can still be made on the stock form (New, dated the
-relieving date); this module prices it and checks the type allows it the same way.
+relieving date); this module prices it and checks the type allows it the same
+way, and it is paid by that month's Leave Encashment payout entry like the rest.
 
 Every rule is data: which types (Allow Encashment), the earning component, the
 day cap (Maximum / Non-Encashable Leaves), the divisor, and the two occasions
@@ -52,7 +56,9 @@ negative balance, capped at the year's figure by hr/leave_ceiling.py. At the
 same two moments, a balance below zero — someone who took 33 days in three
 months and left with 8.25 earned — is days paid as leave but never earned:
 `recover_month` deducts them, at the same per-day rate, as a submitted
-"Leave Recovery" Additional Salary on that month's slip. The balance counts the
+"Leave Recovery" Additional Salary on that month's salary slip (Settle Leave
+ticked on the month's salary entry; recovery is a deduction from pay, so it is
+never moved to the encashment payout). The balance counts the
 month's credit still due on that day when the BS-month-end accrual has not run
 yet (the Ashadh payroll is usually made before the last day), so a year that
 ends square is never charged.
@@ -152,6 +158,8 @@ def price_encashment(doc, method=None):
 def mark_additional_salary(doc, method=None):
 	"""An encashment's Additional Salary is taxed in its own month and tagged.
 
+	Its Payout tag (paid on its own slip) is special_payout.tag_additional_salary's.
+
 	Hook: doc_events → Additional Salary → validate. Touches only rows whose
 	ref_doctype is Leave Encashment.
 	"""
@@ -171,7 +179,7 @@ def link_additional_salary(doc, method=None):
 
 
 def refresh_slip(doc, method=None):
-	"""Re-save the person's draft slip covering the encashment date.
+	"""Re-save the person's draft slips covering the encashment date (the payout slip among them).
 
 	Hook: doc_events → Leave Encashment → on_submit, on_cancel.
 	"""
@@ -439,10 +447,13 @@ def _credit_still_due(allocation: str, leave_type: str, on_date) -> float:
 
 
 def _slip_submitted(employee: str, on_date) -> bool:
+	"""Whether the month's salary slip covering the date is submitted (a payout slip does not count)."""
+	from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
+
 	return bool(
 		frappe.db.exists(
 			"Salary Slip",
-			{"employee": employee, "docstatus": 1, "start_date": ("<=", on_date), "end_date": (">=", on_date)},
+			{"employee": employee, "docstatus": 1, "start_date": ("<=", on_date), "end_date": (">=", on_date), **REGULAR_SLIPS},
 		)
 	)
 

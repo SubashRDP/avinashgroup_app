@@ -1,0 +1,29 @@
+{% macro lc_table(title, items, date_field, date_label) %}
+{% if items %}
+<h4 style="margin:18px 0 6px">{{ title }} ({{ items|length }})</h4>
+<table style="border-collapse:collapse;width:100%;font-size:13px" border="1" cellpadding="5">
+	<tr style="background:#f3f3f3">
+		<th align="left">LC</th><th align="left">Bank LC No.</th><th align="left">Supplier</th>
+		<th align="left">Company</th><th align="right">Amount</th><th align="left">{{ date_label }}</th>
+	</tr>
+	{% for r in items %}
+	<tr>
+		<td><a href="{{ frappe.utils.get_url_to_form('Letter of Credit', r.name) }}">{{ r.name }}</a>
+			{% if r.shipment_no %} / shipment {{ r.shipment_no }}{% endif %}</td>
+		<td>{{ r.lc_no or "" }}</td>
+		<td>{{ r.supplier_name or "" }}</td>
+		<td>{{ r.company }}</td>
+		<td align="right">{{ r.currency }} {{ frappe.format_value(r.amount or r.lc_amount, {"fieldtype": "Float", "precision": 2}) }}</td>
+		<td{% if r[date_field] and r[date_field] < today %} style="color:#c0392b;font-weight:bold"{% endif %}>
+			{{ frappe.format_date(r[date_field]) }}</td>
+	</tr>
+	{% endfor %}
+</table>
+{% endif %}
+{% endmacro %}
+
+<p>Letter of credit dates falling due by {{ frappe.format_date(frappe.utils.add_days(today, days)) }}. Overdue dates are in red.</p>
+{{ lc_table("Latest shipment date coming up", rows.shipping, "latest_shipment_date", "Ship By") }}
+{{ lc_table("LCs expiring", rows.expiring, "expiry_date", "Expires") }}
+{{ lc_table("Usance bills maturing (fund the account)", rows.maturing, "due", "Matures") }}
+{{ lc_table("Customs proof due at the bank", rows.customs, "due", "Proof Due") }}

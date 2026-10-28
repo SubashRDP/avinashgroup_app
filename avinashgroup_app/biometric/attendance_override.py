@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from frappe.utils import flt, getdate, get_datetime
 
 from avinashgroup_app.biometric.attendance_sync import compute_shift_deviations
+from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 
 def set_shift_deviation_fields(doc, method):
@@ -267,6 +268,7 @@ def _paid(employee, day):
     return bool(
         frappe.db.exists(
             "Salary Slip",
-            {"employee": employee, "docstatus": 1, "start_date": ("<=", day), "end_date": (">=", day)},
+            # A Dashain / encashment payout slip does not pay the days.
+            {"employee": employee, "docstatus": 1, "start_date": ("<=", day), "end_date": (">=", day), **REGULAR_SLIPS},
         )
     )

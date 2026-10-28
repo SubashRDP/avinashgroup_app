@@ -56,6 +56,16 @@ frappe.query_reports["Avinas Salary Statement"] = {
 			}),
 		},
 		{
+			// The month's salary, or a Dashain / leave encashment payout paid on
+			// slips of its own (payroll/special_payout.py).
+			fieldname: "payout_type",
+			label: __("Payout"),
+			fieldtype: "Select",
+			options: ["Salary", "Dashain Allowance", "Leave Encashment"].join("\n"),
+			default: "Salary",
+			reqd: 1,
+		},
+		{
 			fieldname: "docstatus",
 			label: __("Slips"),
 			fieldtype: "Select",
