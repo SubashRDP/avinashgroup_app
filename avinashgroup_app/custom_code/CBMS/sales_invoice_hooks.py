@@ -81,70 +81,31 @@ def is_export_invoice(sales_invoice):
 	return "Nepal" not in (get_ancestors_of("Territory", territory) or [])
 
 
-def _line_value(item):
-	"""A line's sales value in company currency: custom_total (net + excise) when the
-	selling-taxes handler has computed it, else base_net_amount. VAT here is levied on
-	net + excise, so this is the base the taxable/exempt split must use for the
-	reported components to reconcile with grand_total."""
-	return flt(item.get("custom_total")) 
-
-
-def _booked_vat(sales_invoice):
-	"""The VAT actually booked on the invoice — summed from each line's
-	custom_vat_amount where VAT Apply On is "VAT 13%" or "Amount" (both maintained
-	by salesinvoice_taxes on every save; "VAT 0%" lines carry no VAT). Falls back to
-	the parent custom_total_vat_amount, then to the VAT-account tax rows, for any
-	document that predates the per-line fields."""
-	line_vat = sum(
-		flt(item.get("custom_vat_amount"))
-		for item in sales_invoice.items
-		if item.get("custom_vat_apply_on") in ("VAT 13%", "Amount")
-	)
-	if line_vat:
-		return abs(line_vat)
-	booked = flt(sales_invoice.get("custom_total_vat_amount"))
-	if booked:
-		return abs(booked)
-	return abs(
-		sum(
-			flt(row.base_tax_amount)
-			for row in (sales_invoice.taxes or [])
-			if (row.account_head or "").upper().startswith("VAT")
-		)
-	)
-
-
-
 def build_cbms_fields(sales_invoice):
 	"""Field mapping shared by CBMS Bill and CBMS Bill Return, from a submitted Sales
-	Invoice, per the IRD mapping spec:
+	Invoice, per the IRD mapping spec.
 
+	Amounts are the invoice's own totals (salesinvoice_taxes.py, run on every save),
+	the same figures its print shows, not a second calculation: taxable is
+	custom_total_amount_including_excise, VAT custom_total_vat_amount, excise
+	custom_total_excise_amount. tax_exempted_sales is the "VAT 0%" lines' total.
 	"""
 	customer_pan = frappe.db.get_value("Customer", sales_invoice.customer, "tax_id")
 	seller_pan = frappe.get_cached_value("Company", sales_invoice.company, "tax_id")
 
 	exempt_sales = abs(
 		sum(
-			_line_value(item)
+			flt(item.get("custom_total"))
 			for item in sales_invoice.items
 			if item.get("custom_vat_apply_on") == "VAT 0%"
 		)
 	)
-	taxable_sales = abs(
-		sum(
-			_line_value(item)
-			for item in sales_invoice.items
-			if item.get("custom_vat_apply_on") != "VAT 0%"
-		)
-	)
-	vat = _booked_vat(sales_invoice)
+	taxable_sales = abs(flt(sales_invoice.get("custom_total_amount_including_excise")))
+	vat = abs(flt(sales_invoice.get("custom_total_vat_amount")))
+	excise = abs(flt(sales_invoice.get("custom_total_excise_amount")))
 
-	# Excise: lines carrying a custom_excise_value (manual, maintained by
-	# salesinvoice_taxes). excise = their summed excise; excisable_amount = the
-	# summed base_net_amount of those same lines (the base the excise sits on).
-	excise = abs(
-		sum(flt(item.get("custom_excise_value")) for item in sales_invoice.items)
-	)
+	# excisable_amount: the summed amount of the lines carrying excise (the base
+	# the excise sits on); the invoice has no header total for it.
 	excisable_amount = abs(
 		sum(
 			flt(item.amount)
@@ -173,15 +134,6 @@ def build_cbms_fields(sales_invoice):
 		"buyer_pan": customer_pan or "",
 		"seller_pan": seller_pan or "",
 		"fiscal_year": utils.cbms_fiscal_year(sales_invoice.posting_date, sales_invoice.company),
-		# Stamped from the INVOICE, not the session: a bill can be written by the
-		# retry scheduler or a backfill run long after the clerk entered the
-		# invoice, and the annexure's "Entered By" means the clerk.
-		#
-		# custom_created_by ahead of owner, because owner is NOT the clerk here —
-		# invoices created through the API carry the API user (Administrator on
-		# every one of avinas1's 48,837 invoices) while custom_created_by, the
-		# app-wide audit field, holds the person. owner is only the fallback for
-		# a site without that field.
 		"created_by": utils.user_display_name(
 			sales_invoice.get("custom_created_by") or sales_invoice.owner
 		),
