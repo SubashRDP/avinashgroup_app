@@ -525,6 +525,14 @@ _add_doc_event("*", "on_cancel", "avinashgroup_app.sparrow_sms.sms_dispatch.on_c
 _add_doc_event("*", "after_insert", "avinashgroup_app.sparrow_sms.sms_dispatch.after_insert")
 _add_doc_event("*", "on_update", "avinashgroup_app.sparrow_sms.sms_dispatch.on_update")
 
+# Miti fields from AD dates on every save, for each doctype a Bs Conversion record
+# maps: rdp_common_app fills them only in the browser, so documents made by code,
+# imports or the API came out blank. Cached map; cleared when a record changes.
+# See utils/bs_miti.py.
+_add_doc_event("*", "validate", "avinashgroup_app.utils.bs_miti.set_mitis")
+for _event in ("on_update", "on_submit", "on_cancel", "on_trash"):
+    _add_doc_event("Bs Conversion", _event, "avinashgroup_app.utils.bs_miti.clear_cache")
+
 override_doctype_class = {
     "Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",
     "Purchase Order": "avinashgroup_app.custom_code.Override.overrides.PurchaseOrder",
