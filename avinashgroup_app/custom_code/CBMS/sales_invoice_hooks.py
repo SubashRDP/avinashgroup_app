@@ -291,6 +291,10 @@ def _first_send_after_commit(method_path, kwargs):
 
 
 def on_submit(doc, method=None):
+	if not utils.is_cbms_live_site():
+		# Not the live site: no CBMS Bill / Return is created at all (utils.is_cbms_live_site).
+		return
+
 	lock_key = f"cbms_processing_{doc.name}"
 	if frappe.cache().get_value(lock_key):
 		return
