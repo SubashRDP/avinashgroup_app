@@ -18,17 +18,25 @@ from frappe.utils import get_datetime, getdate
 # Reporting to IRD cannot be undone, so a copy must do nothing at all: no
 # CBMS Bill / CBMS Bill Return is created and nothing is sent.
 #
-# The switch lives in site_config.json, not the database: a restore brings the
-# database across but never this file, so a copy cannot inherit it — not even
-# one restored under the live site's own name. Set it once, on live only:
-#
-#     bench --site ng-group.raindropinc.com set-config cbms_live_site ng-group.raindropinc.com
-#
-# The value is the site's own name rather than a plain 1 because site_config.json
-# does get copied by hand (to carry the encryption_key across a restore); a
-# copied file then still names the live site, and the copy stays switched off.
+# The switch is System Settings > CBMS Live Site, set on the live site to its own
+# name (ng-group.raindropinc.com). It holds a NAME rather than a tick because a
+# restore brings System Settings across with the database: a copy restored under
+# any other name still reads the live site's name, and so stays switched off.
+# What this cannot catch is a copy restored under the live site's exact name on
+# another server; clear the field on such a copy before its scheduler runs.
+# patches/cbms_live_site_in_system_settings.py adds the field.
+LIVE_SITE_FIELD = "custom_cbms_live_site"
+
+
 def is_cbms_live_site():
-	return bool(frappe.local.site) and frappe.conf.get("cbms_live_site") == frappe.local.site
+	"""True only on the site named in System Settings > CBMS Live Site.
+
+	Never raises: on_submit calls it outside its try, and nothing may block a
+	Sales Invoice submit. Before the patch has added the field, it is off."""
+	if not frappe.local.site or not frappe.get_meta("System Settings").has_field(LIVE_SITE_FIELD):
+		return False
+	live_site = (frappe.db.get_single_value("System Settings", LIVE_SITE_FIELD) or "").strip()
+	return live_site == frappe.local.site
 
 
 def ensure_cbms_live_site():
@@ -38,8 +46,8 @@ def ensure_cbms_live_site():
 		frappe.throw(
 			frappe._(
 				"IRD (CBMS) sync is switched off on this site ({0}): nothing is created "
-				"in CBMS or sent to IRD from here. Only the live site, whose "
-				"site_config.json sets cbms_live_site to its own name, reports to IRD."
+				"in CBMS or sent to IRD from here. Only the site named in System "
+				"Settings > CBMS Live Site reports to IRD."
 			).format(frappe.local.site),
 			title=frappe._("Not the live site"),
 		)
