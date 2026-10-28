@@ -44,15 +44,9 @@ All figures print positive — the title states the direction.
   {%- set ref_date = ad_bs(ref.posting_date, ref.custom_invoice_miti or bs_date_str(ref.posting_date)) -%}
 {%- endif -%}
 
-{#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
+{#- VAT and taxable: the invoice's own totals (salesinvoice_taxes.py), taxable
+    including excise, the base the VAT is worked on and the figure CBMS gets -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
-{%- if not ns2.vat -%}
-  {%- for t in doc.taxes -%}
-    {%- if 'vat' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
-      {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
-    {%- endif -%}
-  {%- endfor -%}
-{%- endif -%}
 
 {%- set printed_by = frappe.db.get_value('User', frappe.session.user, 'full_name') or frappe.session.user -%}
 {%- set printed_at = frappe.utils.now_datetime().strftime('%Y-%m-%d %I:%M %p') -%}
@@ -226,7 +220,7 @@ All figures print positive — the title states the direction.
     </tr>
     <tr>
       <td class="tot-label">Taxable Amount</td>
-      <td class="tot-val">{{ num(doc.net_total) }}</td>
+      <td class="tot-val">{{ num(doc.custom_total_amount_including_excise) }}</td>
     </tr>
     <tr>
       <td class="tot-label">VAT 13%</td>
