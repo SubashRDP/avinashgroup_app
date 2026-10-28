@@ -327,6 +327,10 @@ _je["before_insert"] = [
     list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
 )
 
+# Supplier ticked "Is Transporter" → its name is added to the "Name of Transportor"
+# list on Purchase Invoice / Purchase Receipt. See custom_code/transporter_options.py.
+_add_doc_event("Supplier", "on_update", "avinashgroup_app.custom_code.transporter_options.add_transporter_option")
+
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
 # Leave approved for a day the person already punched on: HRMS updates an

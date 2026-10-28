@@ -149,3 +149,4 @@ avinashgroup_app.patches.relabel_checkins_plain_alternation
 avinashgroup_app.patches.setup_leave_recovery
 avinashgroup_app.patches.setup_salary_advance_component
 avinashgroup_app.patches.late_fine_and_overtime_not_tax_exempt
+avinashgroup_app.patches.add_existing_transporter_options
