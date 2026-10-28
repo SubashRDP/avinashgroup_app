@@ -9,7 +9,10 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
-    "nepali-datetime", # BS date conversion for the CBMS/IRD integration
+    # BS date conversion: Miti fields, CBMS/IRD, payroll and leave months.
+    # 1.0.8.4 has 2083 wrong (Ashwin 30, Mangsir 30, Poush 29, Magh 30), so
+    # 17 Oct-15 Dec 2026 and 14 Jan-12 Feb 2027 came out a day late.
+    "nepali-datetime>=1.0.8.5",
 ]
 
 [build-system]
