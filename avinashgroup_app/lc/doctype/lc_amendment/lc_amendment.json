@@ -1,0 +1,98 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "amendment_no",
+  "amendment_date",
+  "field_label",
+  "fieldname",
+  "old_value",
+  "new_value",
+  "beneficiary_accepted",
+  "journal_entry",
+  "remarks"
+ ],
+ "fields": [
+  {
+   "fieldname": "amendment_no",
+   "fieldtype": "Int",
+   "label": "Amendment",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "amendment_date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "field_label",
+   "fieldtype": "Data",
+   "label": "Changed",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "fieldname",
+   "fieldtype": "Data",
+   "label": "Field Name",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "old_value",
+   "fieldtype": "Data",
+   "label": "From",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "new_value",
+   "fieldtype": "Data",
+   "label": "To",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "beneficiary_accepted",
+   "fieldtype": "Check",
+   "label": "Beneficiary Accepted",
+   "read_only": 1,
+   "in_list_view": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Charge Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Data",
+   "label": "Remarks",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Amendment",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1
+}

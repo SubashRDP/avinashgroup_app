@@ -55,6 +55,9 @@ app_include_js = [
     # "Create > PDC Cheque" on submitted Sales / Purchase Invoices. Global for the
     # same reason as sales_invoice.js above. See pdc/lifecycle.py make_from_invoice.
     "/assets/avinashgroup_app/js/invoice_pdc.js?v=1.0",
+    # "Create > Letter of Credit" and the NRB LC hint on foreign-currency
+    # Purchase Orders. See lc/lifecycle.py make_from_purchase_order.
+    "/assets/avinashgroup_app/js/purchase_order_lc.js?v=1.0",
     # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
     "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.3",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
@@ -547,6 +550,12 @@ _add_doc_event("Payment Entry", "before_cancel", "avinashgroup_app.pdc.payment_e
 _add_doc_event("Payment Entry", "on_cancel", "avinashgroup_app.pdc.payment_entry_bounce.on_cancel")
 _add_doc_event("Payment Entry", "on_submit", "avinashgroup_app.pdc.payment_entry_bounce.on_submit")
 
+# LC: a Purchase Receipt / Invoice linked to a Letter of Credit shipment, or a JE
+# an LC posted, cannot be cancelled out from under the LC. See lc/guards.py.
+_add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
+_add_doc_event("Purchase Receipt", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
+_add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.block_je_cancel")
+
 override_doctype_class = {
     "Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",
     "Purchase Order": "avinashgroup_app.custom_code.Override.overrides.PurchaseOrder",
@@ -627,6 +636,12 @@ scheduler_events = {
         "25 8 * * *": [
             "avinashgroup_app.pdc.notifications.daily_run",
         ],
+        # LC: latest-shipment, expiry, usance maturity and customs-proof dates
+        # due soon, emailed to accounts. 08:35, ten minutes after the PDC digest
+        # so the two mails do not race. See lc/notifications.py.
+        "35 8 * * *": [
+            "avinashgroup_app.lc.notifications.daily_run",
+        ],
     },
 }
 
@@ -668,6 +683,8 @@ after_migrate = [
     "avinashgroup_app.custom_code.printing.setup.ensure_chrome_generator",
     # PDC workspace number cards / charts and the default JV Type (never accounts).
     "avinashgroup_app.pdc.install.after_migrate",
+    # LC Settings defaults, the default JV Type and the LC Miti mapping (never accounts).
+    "avinashgroup_app.lc.install.after_migrate",
 ]
 
 override_whitelisted_methods = {
@@ -760,6 +777,11 @@ fixtures = [
                     "Payment Entry-pdc_replacement_of",
                     # Bounce / re-present JE -> the Payment Entry it is about.
                     "Journal Entry-pdc_payment_entry",
+                    # Which Letter of Credit posted this JE / whose bank
+                    # charges this Landed Cost Voucher capitalises. Read by
+                    # lc/guards.py, lc/accounting.py and the LC's Connections.
+                    "Journal Entry-letter_of_credit",
+                    "Landed Cost Voucher-letter_of_credit",
                 ],
             ]
         },
@@ -787,4 +809,5 @@ company_data_to_be_ignored = [
     "Nepal BS Period",
     "Sub-Ledger Category",
     "PDC Settings",
+    "LC Settings",
 ]

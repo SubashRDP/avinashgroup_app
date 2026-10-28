@@ -1,0 +1,170 @@
+{
+ "charts": [],
+ "content": "[{\"id\": \"lc_h1\", \"type\": \"header\", \"data\": {\"text\": \"<span class=\\\"h4\\\"><b>Letters of Credit</b></span>\", \"col\": 12}}, {\"id\": \"lc_sc0\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"New Letter of Credit\", \"col\": 3}}, {\"id\": \"lc_sc1\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Open LCs\", \"col\": 3}}, {\"id\": \"lc_sc2\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"LC Maturity\", \"col\": 3}}, {\"id\": \"lc_sc3\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"LC Settings\", \"col\": 3}}, {\"id\": \"lc_sp\", \"type\": \"spacer\", \"data\": {\"col\": 12}}, {\"id\": \"lc_card0\", \"type\": \"card\", \"data\": {\"card_name\": \"Letters of Credit\", \"col\": 4}}, {\"id\": \"lc_card1\", \"type\": \"card\", \"data\": {\"card_name\": \"Reports\", \"col\": 4}}, {\"id\": \"lc_card2\", \"type\": \"card\", \"data\": {\"card_name\": \"Setup\", \"col\": 4}}]",
+ "creation": "2026-10-27 12:00:00.000000",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "file",
+ "idx": 0,
+ "indicator_color": "",
+ "is_hidden": 0,
+ "label": "LC",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Letters of Credit",
+   "link_count": 3,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Letter of Credit",
+   "link_count": 0,
+   "link_to": "Letter of Credit",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Journal Entry",
+   "link_count": 0,
+   "link_to": "Journal Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Landed Cost Voucher",
+   "link_count": 0,
+   "link_to": "Landed Cost Voucher",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports",
+   "link_count": 4,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LC Register",
+   "link_count": 0,
+   "link_to": "LC Register",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LC Maturity",
+   "link_count": 0,
+   "link_to": "LC Maturity",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LC Margin and Charges",
+   "link_count": 0,
+   "link_to": "LC Margin and Charges",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "LC Cost Sheet",
+   "link_count": 0,
+   "link_to": "LC Cost Sheet",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Setup",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "LC Settings",
+   "link_count": 0,
+   "link_to": "LC Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link",
+   "dependencies": ""
+  }
+ ],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC",
+ "number_cards": [],
+ "owner": "Administrator",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 31.0,
+ "shortcuts": [
+  {
+   "label": "New Letter of Credit",
+   "link_to": "Letter of Credit",
+   "type": "DocType",
+   "doc_view": "New",
+   "color": "Grey"
+  },
+  {
+   "label": "Open LCs",
+   "link_to": "Letter of Credit",
+   "type": "DocType",
+   "doc_view": "List",
+   "color": "Blue",
+   "stats_filter": "[[\"Letter of Credit\",\"status\",\"in\",[\"Opened\",\"Partly Settled\"],false]]"
+  },
+  {
+   "label": "LC Maturity",
+   "link_to": "LC Maturity",
+   "type": "Report",
+   "color": "Orange"
+  },
+  {
+   "label": "LC Settings",
+   "link_to": "LC Settings",
+   "type": "DocType",
+   "color": "Grey"
+  }
+ ],
+ "title": "LC"
+}

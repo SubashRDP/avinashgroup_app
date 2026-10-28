@@ -91,5 +91,37 @@
   "depends_on": "eval:doc.pdc_payment_entry",
   "in_standard_filter": 1,
   "search_index": 1
+ },
+ {
+  "allow_on_submit": 0,
+  "doctype": "Custom Field",
+  "fieldname": "letter_of_credit",
+  "fieldtype": "Link",
+  "options": "Letter of Credit",
+  "label": "Letter of Credit",
+  "module": "LC",
+  "no_copy": 1,
+  "in_standard_filter": 1,
+  "search_index": 1,
+  "dt": "Journal Entry",
+  "insert_after": "pdc_cheque",
+  "name": "Journal Entry-letter_of_credit",
+  "read_only": 1
+ },
+ {
+  "allow_on_submit": 0,
+  "doctype": "Custom Field",
+  "fieldname": "letter_of_credit",
+  "fieldtype": "Link",
+  "options": "Letter of Credit",
+  "label": "Letter of Credit",
+  "module": "LC",
+  "no_copy": 1,
+  "in_standard_filter": 1,
+  "search_index": 1,
+  "dt": "Landed Cost Voucher",
+  "insert_after": "company",
+  "name": "Landed Cost Voucher-letter_of_credit",
+  "read_only": 0
  }
 ]
