@@ -88,7 +88,8 @@ def build_cbms_fields(sales_invoice):
 	Amounts are the invoice's own totals (salesinvoice_taxes.py, run on every save),
 	the same figures its print shows, not a second calculation: taxable is
 	custom_total_amount_including_excise, VAT custom_total_vat_amount, excise
-	custom_total_excise_amount. tax_exempted_sales is the "VAT 0%" lines' total.
+	custom_total_excise_amount. The "VAT 0%" lines' total goes to tax_exempted_sales
+	and is taken out of taxable.
 	"""
 	customer_pan = frappe.db.get_value("Customer", sales_invoice.customer, "tax_id")
 	seller_pan = frappe.get_cached_value("Company", sales_invoice.company, "tax_id")
@@ -100,7 +101,8 @@ def build_cbms_fields(sales_invoice):
 			if item.get("custom_vat_apply_on") == "VAT 0%"
 		)
 	)
-	taxable_sales = abs(flt(sales_invoice.get("custom_total_amount_including_excise")))
+	# "VAT 0%" lines are reported once, as tax_exempted_sales, never also as taxable.
+	taxable_sales = abs(flt(sales_invoice.get("custom_total_amount_including_excise"))) - exempt_sales
 	vat = abs(flt(sales_invoice.get("custom_total_vat_amount")))
 	excise = abs(flt(sales_invoice.get("custom_total_excise_amount")))
 
