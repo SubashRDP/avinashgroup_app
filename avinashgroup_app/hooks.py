@@ -25,6 +25,9 @@ web_include_js = [
     # "Place Order" + "Customer Statement" buttons on /orders, and "Customer
     # Statement" in a Sales Order's Actions menu.
     "/assets/avinashgroup_app/js/portal_orders_buttons.js?v=1",
+    # Portal pages in the phone ☰ menu on custom pages (Place Order, Product Wise
+    # Invoice Details, ...), which keep show_sidebar off — see portal_menu.py.
+    "/assets/avinashgroup_app/js/portal_mobile_menu.js?v=1",
 ]
 
 app_include_js = [
@@ -321,6 +324,10 @@ _je["before_insert"] = [
 ] + (
     list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
 )
+
+# Supplier ticked "Is Transporter" → its name is added to the "Name of Transportor"
+# list on Purchase Invoice / Purchase Receipt. See custom_code/transporter_options.py.
+_add_doc_event("Supplier", "on_update", "avinashgroup_app.custom_code.transporter_options.add_transporter_option")
 
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)

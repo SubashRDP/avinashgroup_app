@@ -44,14 +44,6 @@ All figures print positive — the title states the direction.
   {%- set ref_date = ad_bs(ref.posting_date, ref.custom_invoice_miti or bs_date_str(ref.posting_date)) -%}
 {%- endif -%}
 
-{#- Mode of payment: POS payment row wins; a submitted unpaid invoice is Credit -#}
-{%- set ns = namespace(mode='CREDIT') -%}
-{%- if doc.get('is_pos') and doc.get('payments') -%}
-  {%- set ns.mode = (doc.payments[0].mode_of_payment or 'CASH') | upper -%}
-{%- elif doc.docstatus == 1 and not doc.get('outstanding_amount') and not doc.is_return -%}
-  {%- set ns.mode = 'CASH' -%}
-{%- endif -%}
-
 {#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
 {%- if not ns2.vat -%}
@@ -174,10 +166,13 @@ All figures print positive — the title states the direction.
       <td class="rl">Transaction Date:</td><td class="rv">{{ transaction_date }}</td>
     </tr>
     <tr>
-      <td class="l">Mode of Payment:</td><td>{{ ns.mode }}</td>
       {%- if is_return_format %}
+      {#- no Mode of Payment on a return -#}
+      <td></td><td></td>
       <td class="rl">Reference No:</td><td class="rv">{{ ref_no }}</td>
       {%- else %}
+      {#- the invoice prints the fixed option list, like Nepal Gas Invoice Overlay -#}
+      <td class="l">Mode of Payment:</td><td>Cash/Credit/Cheque/Other</td>
       <td></td><td></td>
       {%- endif %}
     </tr>
@@ -209,7 +204,7 @@ All figures print positive — the title states the direction.
         {%- for item in page_items %}<div>{{ item.item_name or item.item_code }}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack">
-        {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }} {{ item.uom or '' }}.</div>{% endfor -%}
+        {%- for item in page_items %}<div>{{ qty_fmt(item.qty) }}{% if item.uom %} ({{ item.uom }}){% endif %}</div>{% endfor -%}
       </div></td>
       <td class="body"><div class="cell-stack" style="text-align:right;">
         {%- for item in page_items %}<div>{{ num(item.rate) }}</div>{% endfor -%}

@@ -2,7 +2,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, nowdate, flt
+from frappe.utils import add_days, cint, flt, getdate, nowdate
 
 from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
 
@@ -121,6 +121,9 @@ def get_context(context):
 	)
 
 	context.number_format = frappe.db.get_default("number_format") or "#,###.##"
+
+	# Posting Date starts on today; the page fills Posting Miti in the browser.
+	context.posting_date = nowdate()
 
 	# The item is fixed on the form (no item picker) but resolved per company.
 	default_item = _get_lp_gas_item(company)
@@ -488,17 +491,42 @@ def get_item_price(item_code, price_list, uom=None):
 	return {"item_name": item.item_name, "uom": resolved_uom, "stock_uom": item.stock_uom, "rate": rate}
 
 
-def _set_order_miti(so):
-	"""Fill Sales Order.custom_miti (the BS order date) from transaction_date.
+@frappe.whitelist()
+def get_posting_miti(posting_date):
+	"""BS date (yyyy-mm-dd) for the page's Posting Miti box; blank if it can't convert.
+	Only used when the page's own converter (the desk Nepali datepicker) didn't load."""
+	if not posting_date:
+		return ""
+	try:
+		return bs_date_str(getdate(posting_date))
+	except Exception:
+		return ""
 
-	On the desk custom_miti is filled on the Sales Order form; an order placed
-	from this page never opens that form, so its miti stayed blank (the Sales
-	Order Analysis reports then had to convert on the fly). custom_miti exists
-	on some sites only (ng-group, not avinas1), hence the meta check. Never
-	blocks the order:
-	a miti is a mirror, so a failed conversion is logged and the order goes in.
+
+def _is_bs_date(value):
+	"""True for a 'yyyy-mm-dd' BS date with a sensible month (1-12) and day (1-32)."""
+	parts = (value or "").split("-")
+	if len(parts) != 3 or not all(p.isdigit() for p in parts) or len(parts[0]) != 4:
+		return False
+	return 1 <= int(parts[1]) <= 12 and 1 <= int(parts[2]) <= 32
+
+
+def _set_order_miti(so, posting_miti=None):
+	"""Fill Sales Order.custom_miti (the BS order date).
+
+	The page converts Posting Date with the desk's Nepali datepicker and sends
+	posting_miti, so the order gets the same Miti the desk would show. Without a
+	valid posting_miti (older cached page, script didn't load) it falls back to
+	converting transaction_date here.
+
+	custom_miti exists on some sites only (ng-group, not avinas1), hence the meta
+	check. Never blocks the order: a miti is a mirror, so a failed conversion is
+	logged and the order goes in.
 	"""
 	if not so.meta.has_field("custom_miti") or not so.transaction_date:
+		return
+	if _is_bs_date(posting_miti):
+		so.custom_miti = posting_miti
 		return
 	try:
 		so.custom_miti = bs_date_str(so.transaction_date)
@@ -531,7 +559,7 @@ def _delivery_days():
 
 
 @frappe.whitelist()
-def create_sales_order(customer, company, items, remarks=None, transaction_date=None, delivery_date=None):
+def create_sales_order(customer, company, items, remarks=None, transaction_date=None, delivery_date=None, posting_date=None, posting_miti=None):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can place orders."), frappe.PermissionError)
 
@@ -559,11 +587,11 @@ def create_sales_order(customer, company, items, remarks=None, transaction_date=
 		or frappe.db.get_single_value("Global Defaults", "default_currency")
 	)
 
-	# Both dates are set here, never by the browser: the page no longer shows
-	# them. The order is dated today, and delivery is today + Selling Settings >
-	# Default Delivery Days. The date arguments stay only so an older cached
-	# page that still sends them doesn't fail; their values are ignored.
-	transaction_date = nowdate()
+	# The order is dated by the page's Posting Date (any date; today if none is
+	# sent). Delivery is that date + Selling Settings > Default Delivery Days.
+	# The old transaction_date/delivery_date arguments stay only so an older
+	# cached page that still sends them doesn't fail; their values are ignored.
+	transaction_date = getdate(posting_date) if posting_date else getdate(nowdate())
 	delivery_date = add_days(transaction_date, _delivery_days())
 
 	if isinstance(items, str):
@@ -613,7 +641,7 @@ def create_sales_order(customer, company, items, remarks=None, transaction_date=
 	so.delivery_date = delivery_date
 	if remarks and remarks.strip():
 		so.custom_remarks = remarks.strip()[:REMARKS_MAX_LENGTH]
-	_set_order_miti(so)
+	_set_order_miti(so, posting_miti)
 	so.selling_price_list = selling_price_list
 	so.currency = currency
 	so.order_type = "Sales"

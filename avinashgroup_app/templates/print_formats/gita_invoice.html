@@ -2,17 +2,16 @@
 Gita Gas Udhyog — A4 portrait Tax Invoice / Credit Note (plain paper)
 =============================================================================
 One template, two print formats:
-  "Gita Sales Invoice"  -> title "TAX INVOICE", Unit + Alt. Qty columns,
-                           Freight on Gas line in the totals
-  "Gita Sales Return"   -> title "CREDIT NOTE", Reference No (return_against),
-                           no Alt. Qty / Freight
+  "Gita Sales Invoice"  -> title "TAX INVOICE", Freight on Gas line in the totals
+  "Gita Sales Return"   -> title "CREDIT NOTE", Reference No (return_against), no Freight
+Both show Unit + Alt. Qty columns.
 The print format sets `is_return_format` before including this file.
-Sheet titles: 1st print of an invoice is TAX INVOICE + INVOICE (two sheets,
-print counter in print_count.py); later prints are one INVOICE sheet (no
-COPY OF ORIGINAL n for now). A credit note is always one CREDIT NOTE sheet.
+Sheet titles, same as Nepal Gas Invoice Overlay (print counter in print_count.py):
+1st print of an invoice is TAX INVOICE + INVOICE (two sheets), then one
+COPY OF ORIGINAL 1, 2, ... sheet per reprint. A credit note is always one CREDIT NOTE sheet.
 
 Company name, logo, VAT and phone come off the Company record; the address
-line comes off the company's Address (address_line1, city).
+line under the name is fixed text.
 All figures print positive — the title states the direction.
 -#}
 {%- set is_return_format = is_return_format | default(false) -%}
@@ -50,14 +49,6 @@ All figures print positive — the title states the direction.
 {%- set remarks = doc.get('custom_reason_for_return') if is_return_format else '' -%}
 {%- if not remarks and doc.remarks and doc.remarks != 'No Remarks' -%}{%- set remarks = doc.remarks -%}{%- endif -%}
 
-{#- Mode of payment: POS payment row wins; a submitted unpaid invoice is Credit -#}
-{%- set ns = namespace(mode='Credit') -%}
-{%- if doc.get('is_pos') and doc.get('payments') -%}
-  {%- set ns.mode = doc.payments[0].mode_of_payment or 'Cash' -%}
-{%- elif doc.docstatus == 1 and not doc.get('outstanding_amount') and not doc.is_return -%}
-  {%- set ns.mode = 'Cash' -%}
-{%- endif -%}
-
 {#- Tax table: VAT rows and Freight rows, summed separately -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0, freight=0) -%}
 {%- for t in doc.taxes -%}
@@ -69,25 +60,12 @@ All figures print positive — the title states the direction.
   {%- endif -%}
 {%- endfor -%}
 
-{#- Alt. Qty (kg): the item's total weight; when the item has no weight set,
-    the kg size in its name or unit ("Filled Cylinder 14.2 Kg", UOM "14.2 KG")
-    x qty. Blank if none of these has it. -#}
-{%- macro alt_kg(item) -%}
-  {%- set ns3 = namespace(kg=(item.total_weight or 0) | abs) -%}
-  {%- if not ns3.kg -%}
-    {%- set words = (((item.item_name or '') ~ ' ' ~ (item.uom or '')) | lower | replace('kg', ' kg')).split() -%}
-    {%- for w in words -%}
-      {%- if w == 'kg' and loop.index0 > 0 and words[loop.index0 - 1] | float(0) -%}
-        {%- set ns3.kg = (words[loop.index0 - 1] | float) * ((item.qty or 0) | abs) -%}
-      {%- endif -%}
-    {%- endfor -%}
-  {%- endif -%}
-  {{- ns3.kg -}}
-{%- endmacro -%}
-{%- set ns4 = namespace(qty=0, kg=0) -%}
+{#- Alt. Qty: the row's Qty as per Stock UOM + Stock UOM, e.g. "142 Kg"
+    (Qty 10 x UOM Conversion Factor 14.2). The Total row sums the stock qty. -#}
+{%- set ns4 = namespace(qty=0, stock_qty=0) -%}
 {%- for item in doc.items -%}
   {%- set ns4.qty = ns4.qty + (item.qty or 0) | abs -%}
-  {%- set ns4.kg = ns4.kg + alt_kg(item) | float -%}
+  {%- set ns4.stock_qty = ns4.stock_qty + (item.stock_qty or 0) | abs -%}
 {%- endfor -%}
 
 {#- In Words reads "Rupees ... Only." -#}
@@ -98,20 +76,14 @@ All figures print positive — the title states the direction.
 {%- set now = frappe.utils.now_datetime() -%}
 {%- set printed_on = bs_date_str(now.date()) ~ ' ' ~ now.strftime('%I:%M:%S %p').lstrip('0') -%}
 
-{%- if is_return_format -%}
-  {%- set copy_titles = ['CREDIT NOTE'] -%}
-{%- else -%}
-  {%- set copy_titles = [] -%}
-  {%- for t in invoice_copy_titles(doc, pair=true) -%}
-    {%- set _ = copy_titles.append('INVOICE' if t.startswith('COPY OF ORIGINAL') else t) -%}
-  {%- endfor -%}
-{%- endif -%}
+{%- set copy_titles = ['CREDIT NOTE'] if is_return_format else invoice_copy_titles(doc, pair=true) -%}
 
 {%- set rows_per_page = rows_per_page | default(12) -%}
 
 {%- macro num(v) -%}{{ frappe.utils.fmt_money((v or 0) | abs, 2) }}{%- endmacro -%}
 {%- macro qty_fmt(q) -%}{%- set q = (q or 0) | abs -%}{{ q | int if q == q | int else q }}{%- endmacro -%}
-{%- macro kg_fmt(k) -%}{%- set k = k | float -%}{{ (k | round(2) | string).rstrip('0').rstrip('.') if k else '' }}{%- endmacro -%}
+{#- 142.0 -> "142", 837.80 -> "837.8" -#}
+{%- macro trim_num(v) -%}{%- set v = (v or 0) | abs | float -%}{{ (v | round(3) | string).rstrip('0').rstrip('.') if v else '' }}{%- endmacro -%}
 {#- each digit of a VAT/PAN number in its own box -#}
 {%- macro boxed(number) -%}
   {%- for ch in (number | string) %}<span class="box">{{ ch }}</span>{% endfor -%}
@@ -170,7 +142,8 @@ All figures print positive — the title states the direction.
   table.gg-items td.foot table.gg-tot td { padding: 0.5mm 1mm; white-space: nowrap; text-align: right; }
   table.gg-items td.foot table.gg-tot td.v { width: 32mm; border-bottom: 0.2mm dotted #000; }
 
-  .gg-foot { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 18mm; }
+  .gg-note { font-size: 8pt; margin-top: 1mm; }
+  .gg-foot { width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-top: 14mm; }
   .gg-foot td { padding: 0.9mm 0; vertical-align: top; }
   .gg-foot .sign { text-align: center; width: 70mm; }
   .gg-printed { position: absolute; left: 12mm; right: 12mm; bottom: 18mm; border-top: 0.2mm solid #999;
@@ -225,22 +198,21 @@ All figures print positive — the title states the direction.
     </tr>
     <tr>
       <td class="l small">Buyer VAT/PAN :</td><td class="c"></td><td class="v">{% if buyer_pan %}{{ boxed(buyer_pan) }}{% endif %}</td>
-      <td class="r">Mode of Payment : {{ ns.mode }}</td>
+      {#- invoice: fixed option list like Nepal Gas Invoice Overlay; credit note: none -#}
+      <td class="r">{% if not is_return_format %}Mode of Payment : Cash/Credit/Cheque/Other{% endif %}</td>
     </tr>
   </table>
 
   {%- set base_sno = (page_no - 1) * rows_per_page -%}
-  {%- set ncols = 7 if is_return_format else 8 -%}
+  {%- set ncols = 8 -%}
   <table class="gg-items">
     <colgroup>
       <col style="width:8mm;"><col style="width:22mm;"><col>
-      <col style="width:15mm;"><col style="width:12mm;">
-      {%- if not is_return_format %}<col style="width:18mm;">{% endif %}
+      <col style="width:15mm;"><col style="width:12mm;"><col style="width:18mm;">
       <col style="width:21mm;"><col style="width:28mm;">
     </colgroup>
     <tr>
-      <th>S.N</th><th>H.S. Code</th><th>Description</th><th>Qty</th><th>Unit</th>
-      {%- if not is_return_format %}<th>Alt. Qty</th>{% endif %}
+      <th>S.N</th><th>H.S. Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Alt. Qty</th>
       <th>Rate</th><th>Amount</th>
     </tr>
     <tr>
@@ -259,11 +231,9 @@ All figures print positive — the title states the direction.
       <td class="body"><div class="cell-stack">
         {%- for item in page_items %}<div>{{ item.uom or '' }}</div>{% endfor -%}
       </div></td>
-      {%- if not is_return_format %}
       <td class="body"><div class="cell-stack" style="text-align:right;">
-        {%- for item in page_items %}{% set k = kg_fmt(alt_kg(item)) %}<div>{{ k ~ ' kg' if k else '&nbsp;' }}</div>{% endfor -%}
+        {%- for item in page_items %}{% set s = trim_num(item.stock_qty) %}<div>{{ (s ~ ' ' ~ (item.stock_uom or '')) | trim if s else '&nbsp;' }}</div>{% endfor -%}
       </div></td>
-      {%- endif %}
       <td class="body"><div class="cell-stack" style="text-align:right;">
         {%- for item in page_items %}<div>{{ num(item.rate) }}</div>{% endfor -%}
       </div></td>
@@ -276,7 +246,7 @@ All figures print positive — the title states the direction.
     <tr>
       <td></td><td></td><td style="text-align:right;">Total</td>
       <td class="num">{{ qty_fmt(ns4.qty) }}</td><td></td>
-      {%- if not is_return_format %}<td class="num">{{ '%.2f' | format(ns4.kg) if ns4.kg else '' }}</td>{% endif %}
+      <td class="num">{{ '%.2f' | format(ns4.stock_qty) if ns4.stock_qty else '' }}</td>
       <td></td>
       <td class="num">{{ num(doc.total) }}</td>
     </tr>
@@ -307,6 +277,8 @@ All figures print positive — the title states the direction.
     </tr>
     {%- endif %}
   </table>
+
+  <div class="gg-note">Note: This is computer generated invoice. Not Required Signature and Stamp.</div>
 
   {%- if page_last %}
   <table class="gg-foot">
