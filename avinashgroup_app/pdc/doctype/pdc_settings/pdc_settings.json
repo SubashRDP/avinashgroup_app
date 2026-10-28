@@ -1,0 +1,227 @@
+{
+ "actions": [],
+ "creation": "2026-10-27 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "accounts_section",
+  "company_accounts",
+  "create_missing_accounts",
+  "jv_type",
+  "policy_section",
+  "allow_on_account",
+  "block_duplicate_cheque",
+  "column_break_policy",
+  "cheque_validity_months",
+  "digest_section",
+  "send_daily_digest",
+  "digest_days_ahead",
+  "column_break_digest",
+  "digest_role",
+  "sms_section",
+  "send_sms",
+  "sms_on_receipt",
+  "receipt_template",
+  "sms_due_reminder",
+  "reminder_days_before",
+  "reminder_template",
+  "column_break_sms",
+  "sms_on_clearance",
+  "clearance_template",
+  "sms_on_bounce",
+  "bounce_template"
+ ],
+ "fields": [
+  {
+   "fieldname": "accounts_section",
+   "fieldtype": "Section Break",
+   "label": "Holding Accounts"
+  },
+  {
+   "fieldname": "company_accounts",
+   "fieldtype": "Table",
+   "label": "Company Accounts",
+   "options": "PDC Company Account"
+  },
+  {
+   "fieldname": "create_missing_accounts",
+   "fieldtype": "Button",
+   "label": "Create Missing Accounts",
+   "description": "Adds 'Cheques in Hand', 'Cheques Issued' and 'Cheque Bounce Charges' to every company that has no row yet, under Current Assets / Current Liabilities / Indirect Expenses"
+  },
+  {
+   "fieldname": "jv_type",
+   "fieldtype": "Link",
+   "label": "JV Type for Cheque Entries",
+   "options": "JV Type",
+   "description": "custom_p_type on the Journal Entries this module posts. Its numbering rule numbers them"
+  },
+  {
+   "fieldname": "policy_section",
+   "fieldtype": "Section Break",
+   "label": "Rules"
+  },
+  {
+   "fieldname": "allow_on_account",
+   "fieldtype": "Check",
+   "label": "Allow Unallocated Amount (Advance)",
+   "default": "1"
+  },
+  {
+   "fieldname": "block_duplicate_cheque",
+   "fieldtype": "Check",
+   "label": "Block Duplicate Cheque Number per Party",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_break_policy",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cheque_validity_months",
+   "fieldtype": "Int",
+   "label": "Cheque Valid For (Months)",
+   "default": "6",
+   "description": "A cheque older than this from its cheque date is stale and cannot be deposited. 0 = no check"
+  },
+  {
+   "fieldname": "digest_section",
+   "fieldtype": "Section Break",
+   "label": "Daily Email Digest"
+  },
+  {
+   "fieldname": "send_daily_digest",
+   "fieldtype": "Check",
+   "label": "Send Daily Digest",
+   "default": "1"
+  },
+  {
+   "fieldname": "digest_days_ahead",
+   "fieldtype": "Int",
+   "label": "Cheques Due Within (Days)",
+   "default": "7"
+  },
+  {
+   "fieldname": "column_break_digest",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "digest_role",
+   "fieldtype": "Link",
+   "label": "Send To Role",
+   "options": "Role",
+   "default": "Accounts Manager"
+  },
+  {
+   "fieldname": "sms_section",
+   "fieldtype": "Section Break",
+   "label": "SMS to Party (via Sparrow SMS)",
+   "description": "Messages go through Sparrow SMS Settings and are logged in Sparrow SMS Log. Nothing is sent unless both Sparrow SMS and the switch below are on"
+  },
+  {
+   "fieldname": "send_sms",
+   "fieldtype": "Check",
+   "label": "Send SMS to Party",
+   "default": "0"
+  },
+  {
+   "fieldname": "sms_on_receipt",
+   "fieldtype": "Check",
+   "label": "On Cheque Received",
+   "depends_on": "send_sms"
+  },
+  {
+   "fieldname": "receipt_template",
+   "fieldtype": "Small Text",
+   "label": "Received Message",
+   "depends_on": "eval:doc.send_sms && doc.sms_on_receipt",
+   "default": "Dear {{ doc.party_name }}, we received your cheque no {{ doc.cheque_no }} of Rs {{ doc.amount }} dated {{ doc.cheque_date }}. Thank you. - {{ doc.company }}"
+  },
+  {
+   "fieldname": "sms_due_reminder",
+   "fieldtype": "Check",
+   "label": "Reminder Before Cheque Date",
+   "depends_on": "send_sms"
+  },
+  {
+   "fieldname": "reminder_days_before",
+   "fieldtype": "Int",
+   "label": "Days Before",
+   "default": "2",
+   "depends_on": "eval:doc.send_sms && doc.sms_due_reminder"
+  },
+  {
+   "fieldname": "reminder_template",
+   "fieldtype": "Small Text",
+   "label": "Reminder Message",
+   "depends_on": "eval:doc.send_sms && doc.sms_due_reminder",
+   "default": "Dear {{ doc.party_name }}, your cheque no {{ doc.cheque_no }} of Rs {{ doc.amount }} will be deposited on {{ doc.cheque_date }}. Please keep sufficient balance. - {{ doc.company }}"
+  },
+  {
+   "fieldname": "column_break_sms",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sms_on_clearance",
+   "fieldtype": "Check",
+   "label": "On Cheque Cleared",
+   "depends_on": "send_sms"
+  },
+  {
+   "fieldname": "clearance_template",
+   "fieldtype": "Small Text",
+   "label": "Cleared Message",
+   "depends_on": "eval:doc.send_sms && doc.sms_on_clearance",
+   "default": "Dear {{ doc.party_name }}, your cheque no {{ doc.cheque_no }} of Rs {{ doc.amount }} has cleared. Thank you. - {{ doc.company }}"
+  },
+  {
+   "fieldname": "sms_on_bounce",
+   "fieldtype": "Check",
+   "label": "On Cheque Bounced",
+   "depends_on": "send_sms"
+  },
+  {
+   "fieldname": "bounce_template",
+   "fieldtype": "Small Text",
+   "label": "Bounced Message",
+   "depends_on": "eval:doc.send_sms && doc.sms_on_bounce",
+   "default": "Dear {{ doc.party_name }}, your cheque no {{ doc.cheque_no }} of Rs {{ doc.amount }} was returned unpaid ({{ doc.bounce_reason }}). Please contact us. - {{ doc.company }}"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "PDC",
+ "name": "PDC Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "print": 1,
+   "email": 1,
+   "share": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

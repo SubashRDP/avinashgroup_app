@@ -52,6 +52,9 @@ app_include_js = [
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
+    # "Create > PDC Cheque" on submitted Sales / Purchase Invoices. Global for the
+    # same reason as sales_invoice.js above. See pdc/lifecycle.py make_from_invoice.
+    "/assets/avinashgroup_app/js/invoice_pdc.js?v=1.0",
     # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
     "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.3",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
@@ -533,6 +536,17 @@ _add_doc_event("*", "validate", "avinashgroup_app.utils.bs_miti.set_mitis")
 for _event in ("on_update", "on_submit", "on_cancel", "on_trash"):
     _add_doc_event("Bs Conversion", _event, "avinashgroup_app.utils.bs_miti.clear_cache")
 
+# PDC: an invoice an active post-dated cheque settles, or a JE a cheque posted,
+# cannot be cancelled out from under the cheque. See pdc/invoice_guard.py.
+_add_doc_event("Sales Invoice", "before_cancel", "avinashgroup_app.pdc.invoice_guard.block_invoice_cancel")
+_add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.pdc.invoice_guard.block_invoice_cancel")
+_add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.pdc.invoice_guard.block_je_cancel")
+# A cheque entered in Payment Entry bounces, is re-presented or replaced through
+# a PDC Cheque record; the PE itself is entered as before. See pdc/payment_entry_bounce.py.
+_add_doc_event("Payment Entry", "before_cancel", "avinashgroup_app.pdc.payment_entry_bounce.before_cancel")
+_add_doc_event("Payment Entry", "on_cancel", "avinashgroup_app.pdc.payment_entry_bounce.on_cancel")
+_add_doc_event("Payment Entry", "on_submit", "avinashgroup_app.pdc.payment_entry_bounce.on_submit")
+
 override_doctype_class = {
     "Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",
     "Purchase Order": "avinashgroup_app.custom_code.Override.overrides.PurchaseOrder",
@@ -607,6 +621,12 @@ scheduler_events = {
         "10 13 * * *": [
             "avinashgroup_app.biometric.daily_digest.send_daily_attendance_digest",
         ],
+        # PDC: due-date SMS reminders, then the accounts digest of cheques to
+        # deposit. 08:25, before the bank opens at 10, so today's deposits are
+        # known in time; off :00 like the attendance digest. See pdc/notifications.py.
+        "25 8 * * *": [
+            "avinashgroup_app.pdc.notifications.daily_run",
+        ],
     },
 }
 
@@ -644,7 +664,11 @@ pdf_generator = ["avinashgroup_app.custom_code.printing.chrome_pdf.render"]
 
 # Re-pins pdf_generator="chrome" on the NGI formats after every migrate, since
 # re-importing a standard print format resets the field to its default.
-after_migrate = ["avinashgroup_app.custom_code.printing.setup.ensure_chrome_generator"]
+after_migrate = [
+    "avinashgroup_app.custom_code.printing.setup.ensure_chrome_generator",
+    # PDC workspace number cards / charts and the default JV Type (never accounts).
+    "avinashgroup_app.pdc.install.after_migrate",
+]
 
 override_whitelisted_methods = {
     # Sales Invoice: desk Save on a draft is escalated to Submit so save+submit
@@ -727,6 +751,15 @@ fixtures = [
                     # mobile_no (which only fills in via a Primary Contact).
                     # Read by the Nepal Gas Invoice Overlay print format.
                     "Customer-custom_mobile_number",
+                    # Which PDC Cheque posted this JE. Read by pdc/invoice_guard.py
+                    # and the cheque's "Journal Entries" button.
+                    "Journal Entry-pdc_cheque",
+                    # Payment Entry cheque bounce / replacement, through the PDC
+                    # module. Written by pdc/payment_entry_bounce.py.
+                    "Payment Entry-pdc_cheque",
+                    "Payment Entry-pdc_replacement_of",
+                    # Bounce / re-present JE -> the Payment Entry it is about.
+                    "Journal Entry-pdc_payment_entry",
                 ],
             ]
         },
@@ -736,6 +769,12 @@ fixtures = [
 # Custom masters/config that must survive ERPNext's Transaction Deletion
 # Record (Company > Delete Transactions), which otherwise wipes every
 # doctype carrying a Company link field.
+# Connections on a Payment Entry: the Journal Entries and cheque record of its
+# cheque's bounce. Payment Entry ships no dashboard of its own. See pdc/payment_entry_bounce.py.
+override_doctype_dashboards = {
+    "Payment Entry": "avinashgroup_app.pdc.payment_entry_bounce.get_payment_entry_dashboard",
+}
+
 company_data_to_be_ignored = [
     "Biometric Device",
     "JV Type",
@@ -747,4 +786,5 @@ company_data_to_be_ignored = [
     "Dynamic Approval Setting",
     "Nepal BS Period",
     "Sub-Ledger Category",
+    "PDC Settings",
 ]

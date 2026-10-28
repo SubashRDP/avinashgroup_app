@@ -1,0 +1,473 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-27 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "cheque_type",
+  "company",
+  "posting_date",
+  "column_break_head",
+  "status",
+  "replacement_of",
+  "replaced_by",
+  "replaced_by_payment_entry",
+  "payment_entry",
+  "amended_from",
+  "party_section",
+  "party_type",
+  "party",
+  "party_name",
+  "column_break_party",
+  "party_account",
+  "mobile_no",
+  "cheque_section",
+  "cheque_no",
+  "cheque_date",
+  "amount",
+  "currency",
+  "column_break_cheque",
+  "bank_name",
+  "bank_branch",
+  "bank_account",
+  "cost_center",
+  "references_section",
+  "get_outstanding_invoices",
+  "references",
+  "total_allocated",
+  "column_break_alloc",
+  "unallocated_amount",
+  "remarks",
+  "lifecycle_section",
+  "deposit_date",
+  "deposit_account",
+  "presentation_count",
+  "clearance_date",
+  "column_break_life",
+  "bounce_date",
+  "bounce_reason",
+  "bounce_charges",
+  "charges_recovered",
+  "return_date",
+  "last_reminder_on",
+  "events_section",
+  "events"
+ ],
+ "fields": [
+  {
+   "fieldname": "cheque_type",
+   "fieldtype": "Select",
+   "label": "Cheque Type",
+   "options": "Received\nIssued",
+   "default": "Received",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Received: a customer gave us the cheque. Issued: we wrote it to a supplier"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "remember_last_selected_value": 1
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Posting Date",
+   "reqd": 1,
+   "default": "Today",
+   "description": "The day the cheque was received or handed over. The holding entry is dated this day"
+  },
+  {
+   "fieldname": "column_break_head",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Draft\nIn Hand\nIssued\nDeposited\nCleared\nBounced\nReturned\nReplaced\nCancelled",
+   "default": "Draft",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "replacement_of",
+   "fieldtype": "Link",
+   "label": "Replacement Of",
+   "options": "PDC Cheque",
+   "read_only": 1,
+   "no_copy": 0,
+   "description": "The bounced or returned cheque this one replaces"
+  },
+  {
+   "fieldname": "replaced_by",
+   "fieldtype": "Link",
+   "label": "Replaced By",
+   "options": "PDC Cheque",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "replaced_by_payment_entry",
+   "fieldtype": "Link",
+   "label": "Replaced By Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "depends_on": "replaced_by_payment_entry"
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Payment Entry",
+   "options": "Payment Entry",
+   "read_only": 1,
+   "no_copy": 1,
+   "depends_on": "payment_entry",
+   "description": "The cheque was entered in this Payment Entry (straight to the bank); this record tracks its bounce"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "PDC Cheque",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
+   "fieldname": "party_section",
+   "fieldtype": "Section Break",
+   "label": "Party"
+  },
+  {
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "label": "Party Type",
+   "options": "DocType",
+   "reqd": 1,
+   "default": "Customer"
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "label": "Party",
+   "options": "party_type",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "label": "Party Name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "column_break_party",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "party_account",
+   "fieldtype": "Link",
+   "label": "Party Account",
+   "options": "Account",
+   "reqd": 1,
+   "description": "Receivable / payable account the cheque settles. Filled from the party"
+  },
+  {
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "label": "Mobile No",
+   "options": "Phone",
+   "description": "Used for the SMS in PDC Settings. Filled from the party; change it here if the cheque came with a different number"
+  },
+  {
+   "fieldname": "cheque_section",
+   "fieldtype": "Section Break",
+   "label": "Cheque"
+  },
+  {
+   "fieldname": "cheque_no",
+   "fieldtype": "Data",
+   "label": "Cheque No",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "cheque_date",
+   "fieldtype": "Date",
+   "label": "Cheque Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "The date written on the cheque. It cannot be deposited before this day"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "currency",
+   "reqd": 1,
+   "in_list_view": 1,
+   "bold": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "column_break_cheque",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bank_name",
+   "fieldtype": "Data",
+   "label": "Drawer's Bank",
+   "description": "Bank the cheque is drawn on (for received cheques)"
+  },
+  {
+   "fieldname": "bank_branch",
+   "fieldtype": "Data",
+   "label": "Branch"
+  },
+  {
+   "fieldname": "bank_account",
+   "fieldtype": "Link",
+   "label": "Company Bank Account",
+   "options": "Account",
+   "description": "Issued: the account the cheque is written on (required). Received: the default deposit account"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "references_section",
+   "fieldtype": "Section Break",
+   "label": "Invoices Settled"
+  },
+  {
+   "fieldname": "get_outstanding_invoices",
+   "fieldtype": "Button",
+   "label": "Get Outstanding Invoices"
+  },
+  {
+   "fieldname": "references",
+   "fieldtype": "Table",
+   "label": "References",
+   "options": "PDC Cheque Reference"
+  },
+  {
+   "fieldname": "total_allocated",
+   "fieldtype": "Currency",
+   "label": "Total Allocated",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_alloc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "unallocated_amount",
+   "fieldtype": "Currency",
+   "label": "Unallocated (Advance)",
+   "options": "currency",
+   "read_only": 1,
+   "description": "Booked as an advance against the party when allowed in PDC Settings"
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Small Text",
+   "label": "Remarks"
+  },
+  {
+   "fieldname": "lifecycle_section",
+   "fieldtype": "Section Break",
+   "label": "Lifecycle",
+   "collapsible": 0,
+   "depends_on": "eval:doc.docstatus==1"
+  },
+  {
+   "fieldname": "deposit_date",
+   "fieldtype": "Date",
+   "label": "Deposit Date",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "deposit_account",
+   "fieldtype": "Link",
+   "label": "Deposited To",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "options": "Account"
+  },
+  {
+   "fieldname": "presentation_count",
+   "fieldtype": "Int",
+   "label": "Times Presented",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "clearance_date",
+   "fieldtype": "Date",
+   "label": "Clearance Date",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "column_break_life",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bounce_date",
+   "fieldtype": "Date",
+   "label": "Bounce Date",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "bounce_reason",
+   "fieldtype": "Select",
+   "label": "Bounce Reason",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "options": "\nInsufficient Funds\nSignature Mismatch\nSignature Missing\nStale Cheque\nPost Dated (Presented Early)\nPayment Stopped by Drawer\nAccount Closed\nAmount in Words and Figures Differ\nAlteration / Overwriting\nOther"
+  },
+  {
+   "fieldname": "bounce_charges",
+   "fieldtype": "Currency",
+   "label": "Bounce Charges",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "options": "currency"
+  },
+  {
+   "fieldname": "charges_recovered",
+   "fieldtype": "Check",
+   "label": "Charges Recovered From Party",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "return_date",
+   "fieldtype": "Date",
+   "label": "Returned / Stopped On",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "last_reminder_on",
+   "fieldtype": "Date",
+   "label": "Last Reminder SMS",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "events_section",
+   "fieldtype": "Section Break",
+   "label": "History",
+   "depends_on": "eval:doc.docstatus>0"
+  },
+  {
+   "fieldname": "events",
+   "fieldtype": "Table",
+   "label": "Events",
+   "options": "PDC Cheque Event",
+   "read_only": 1,
+   "allow_on_submit": 1,
+   "no_copy": 1
+  }
+ ],
+ "is_calendar_and_gantt": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-10-27 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "PDC",
+ "name": "PDC Cheque",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "submit": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "share": 1
+  }
+ ],
+ "search_fields": "cheque_no,party,amount,cheque_date",
+ "show_title_field_in_link": 0,
+ "sort_field": "cheque_date",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "party_name",
+ "track_changes": 1
+}
