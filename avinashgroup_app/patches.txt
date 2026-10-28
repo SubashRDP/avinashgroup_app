@@ -151,3 +151,4 @@ avinashgroup_app.patches.setup_salary_advance_component
 avinashgroup_app.patches.late_fine_and_overtime_not_tax_exempt
 avinashgroup_app.patches.setup_special_payout
 avinashgroup_app.patches.remove_unused_sales_invoice_print_formats
+avinashgroup_app.patches.transporter_select_to_link
