@@ -6,7 +6,7 @@
 ; CI builds it via .github/workflows/build-backup-puller.yml (Inno Setup 6 is preinstalled on the runner).
 
 #define MyAppName "Avinash Backup Puller"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Raindrop"
 #define MyAppExeName "backup_puller.exe"
 
@@ -25,9 +25,9 @@ OutputBaseFilename=BackupPullerSetup
 Compression=lzma
 SolidCompression=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
-; Per-user install, no admin needed. Settings live in %APPDATA%\AvinashBackupPuller
-; and the API secrets are encrypted for this Windows user, so it is a per-user app anyway.
-PrivilegesRequired=lowest
+; Admin: registers the background scheduled tasks, which run as SYSTEM so
+; backups are pulled with no one signed in.
+PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 CloseApplications=force
@@ -40,7 +40,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a Desktop shortcut"; GroupDescription: "Additional icons:"
-Name: "autostart"; Description: "Start automatically when I sign in to Windows (recommended, so backups are pulled every hour)"; GroupDescription: "Auto-start:"
+
+[Dirs]
+; Shared by the window (any user) and the SYSTEM background task.
+Name: "{commonappdata}\AvinashBackupPuller"; Permissions: users-modify
+
+[InstallDelete]
+; 1.0.0 started its window at sign-in; the scheduled tasks replace that.
+Type: files; Name: "{userstartup}\{#MyAppName}.lnk"
 
 [Files]
 Source: "..\dist\backup_puller.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -50,13 +57,26 @@ Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Tasks: autostart
 
 [Run]
+; Background pulls: every hour, and 2 minutes after every boot, as SYSTEM, so
+; they run with the window closed and no one signed in. /F replaces the tasks
+; on upgrade. A run still going when the next hour starts is left alone
+; (Task Scheduler's default), and the app's own lock covers the rest.
+Filename: "schtasks"; \
+  Parameters: "/Create /TN ""{#MyAppName}"" /TR ""\""{app}\{#MyAppExeName}\"" --run-once"" /SC HOURLY /RU SYSTEM /RL HIGHEST /F"; \
+  Flags: runhidden waituntilterminated
+Filename: "schtasks"; \
+  Parameters: "/Create /TN ""{#MyAppName} (Startup)"" /TR ""\""{app}\{#MyAppExeName}\"" --run-once"" /SC ONSTART /DELAY 0002:00 /RU SYSTEM /RL HIGHEST /F"; \
+  Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName} now"; Flags: nowait postinstall skipifsilent
 
+[UninstallRun]
+Filename: "schtasks"; Parameters: "/Delete /TN ""{#MyAppName}"" /F"; Flags: runhidden; RunOnceId: "DelTask"
+Filename: "schtasks"; Parameters: "/Delete /TN ""{#MyAppName} (Startup)"" /F"; Flags: runhidden; RunOnceId: "DelStartupTask"
+
 [UninstallDelete]
-; Settings and the pulled-backup history in %APPDATA%\AvinashBackupPuller are kept on purpose.
+; Settings and the pulled-backup history in %ProgramData%\AvinashBackupPuller are kept on purpose.
 ; Backups on the hard disk / fallback folder are never touched.
 
 [Code]
