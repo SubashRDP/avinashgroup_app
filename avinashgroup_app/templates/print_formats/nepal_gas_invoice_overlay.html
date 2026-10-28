@@ -103,16 +103,10 @@ defaults.
 {#- Reference Invoice Date: the original invoice's BS miti (return only). -#}
 {%- set ref_invoice_date = miti_fmt(frappe.db.get_value('Sales Invoice', doc.return_against, 'custom_invoice_miti')) if doc.return_against else '' -%}
 
-{#- VAT: per-invoice custom total, else sum of VAT rows in the tax table -#}
+{#- VAT and taxable: the invoice's own totals (salesinvoice_taxes.py), taxable
+    including excise, the base the VAT is worked on and the figure CBMS gets -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0) -%}
-{%- if not ns2.vat -%}
-  {%- for t in doc.taxes -%}
-    {%- if 'vat' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
-      {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
-    {%- endif -%}
-  {%- endfor -%}
-{%- endif -%}
-{%- set taxable = doc.net_total -%}
+{%- set taxable = doc.custom_total_amount_including_excise -%}
 {#- Price Lists carry a naming series here, so selling_price_list is a code
     (NGI-PList-00001) — price_list_name holds the readable name (Bulk) -#}
 {%- set price_list = (frappe.db.get_value('Price List', doc.selling_price_list, 'price_list_name')

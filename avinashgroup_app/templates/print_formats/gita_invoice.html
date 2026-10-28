@@ -49,14 +49,12 @@ All figures print positive — the title states the direction.
 {%- set remarks = doc.get('custom_reason_for_return') if is_return_format else '' -%}
 {%- if not remarks and doc.remarks and doc.remarks != 'No Remarks' -%}{%- set remarks = doc.remarks -%}{%- endif -%}
 
-{#- Tax table: VAT rows and Freight rows, summed separately -#}
+{#- VAT: the invoice's own total (salesinvoice_taxes.py); Freight rows summed
+    from the tax table -#}
 {%- set ns2 = namespace(vat=doc.get('custom_total_vat_amount') or 0, freight=0) -%}
 {%- for t in doc.taxes -%}
-  {%- set head = ((t.description or '') ~ (t.account_head or '')) | lower -%}
-  {%- if 'freight' in head -%}
+  {%- if 'freight' in ((t.description or '') ~ (t.account_head or '')) | lower -%}
     {%- set ns2.freight = ns2.freight + (t.tax_amount or 0) -%}
-  {%- elif 'vat' in head and not doc.get('custom_total_vat_amount') -%}
-    {%- set ns2.vat = ns2.vat + (t.tax_amount or 0) -%}
   {%- endif -%}
 {%- endfor -%}
 
@@ -263,7 +261,7 @@ All figures print positive — the title states the direction.
               <tr><td>Freight on Gas :</td><td class="v">{{ num(ns2.freight) }}</td></tr>
               {%- endif %}
               <tr><td>Discount :</td><td class="v">{{ num(doc.discount_amount) }}</td></tr>
-              <tr><td>Taxable Amount :</td><td class="v">{{ num(doc.net_total) }}</td></tr>
+              <tr><td>Taxable Amount :</td><td class="v">{{ num(doc.custom_total_amount_including_excise) }}</td></tr>
               <tr><td>VAT 13% :</td><td class="v">{{ num(ns2.vat) }}</td></tr>
               <tr><td>Net Amount :</td><td class="v">{{ num(doc.grand_total) }}</td></tr>
             </table>
