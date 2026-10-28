@@ -48,12 +48,12 @@ import frappe
 
 #: Formats that cannot tolerate wkhtmltopdf's 0.7688x shrink.
 CHROME_PRINT_FORMATS = {
-	"Nepal Gas Invoice Pre-Printed",
-	"Nepal Gas Invoice Plain Paper",
-	"Nepal Gas Invoice A4 Proof",
-	"Nepal Gas Invoice A4 Portrait",
-	"Avinash Invoice Pre-Printed",
-	"Grishma Invoice Pre-Printed",
+	"Nepal Gas Invoice Overlay",
+	"Nepal Gas Sales Invoice",
+	"Aarati Sales Invoice",
+	"Aarati Sales Return",
+	"Gita Sales Invoice",
+	"Gita Sales Return",
 }
 
 _CHROME_BINARIES = ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser")

@@ -74,7 +74,7 @@ app_include_js = [
     # company_print (form printer icon). QZ Tray is fully replaced, so qz_sign.js
     # is no longer loaded.
     "/assets/avinashgroup_app/js/print_bridge.js?v=1.1",
-    "/assets/avinashgroup_app/js/ngi_print.js?v=1.6",
+    "/assets/avinashgroup_app/js/ngi_print.js?v=1.7",
     # must load after ngi_print.js — it chains that file's PrintView descriptor
     "/assets/avinashgroup_app/js/company_print.js?v=2.0",
     "/assets/avinashgroup_app/js/list_cleanup.js?v=1.2",
@@ -247,15 +247,7 @@ attendance_events = {
 jinja = {
     "methods": [
         "avinashgroup_app.custom_code.CBMS.utils.bs_date_str",
-        "avinashgroup_app.custom_code.printing.escp_invoice.ngi_escp",
-        "avinashgroup_app.custom_code.printing.escp_avinash_slip.avinash_slip_escp",
-        "avinashgroup_app.custom_code.printing.escp_grishma.grishma_escp",
-        "avinashgroup_app.custom_code.printing.escp_gandaki.gandaki_escp",
-        "avinashgroup_app.custom_code.printing.escp_narayani.narayani_escp",
-        "avinashgroup_app.custom_code.printing.escp_ngi_udyog.ngi_udyog_escp",
-        "avinashgroup_app.custom_code.printing.escp_karnali.karnali_escp",
         "avinashgroup_app.custom_code.SalesInvoice.print_count.invoice_copy_titles",
-        "avinashgroup_app.custom_code.printing.overlay.overlay_pos",
     ],
 }
 
