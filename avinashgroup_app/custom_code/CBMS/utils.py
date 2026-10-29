@@ -11,39 +11,6 @@ import nepali_datetime
 from erpnext.accounts.utils import get_fiscal_year
 from frappe.utils import get_datetime, getdate
 
-# Only the live site may report to IRD. Every other site — a backup restored
-# onto another server, a sandbox or demo copy — carries the same CBMS Configs
-# (enable_cbms on, real company PANs), so without this check a copy would
-# create CBMS Bills for its test invoices and post them to IRD as live sales.
-# Reporting to IRD cannot be undone, so a copy must do nothing at all: no
-# CBMS Bill / CBMS Bill Return is created and nothing is sent.
-#
-# The switch lives in site_config.json, not the database: a restore brings the
-# database across but never this file, so a copy cannot inherit it — not even
-# one restored under the live site's own name. Set it once, on live only:
-#
-#     bench --site ng-group.raindropinc.com set-config cbms_live_site ng-group.raindropinc.com
-#
-# The value is the site's own name rather than a plain 1 because site_config.json
-# does get copied by hand (to carry the encryption_key across a restore); a
-# copied file then still names the live site, and the copy stays switched off.
-def is_cbms_live_site():
-	return bool(frappe.local.site) and frappe.conf.get("cbms_live_site") == frappe.local.site
-
-
-def ensure_cbms_live_site():
-	"""Throw for a human-run action (Sync Now, Sync Failed Now, backfill) on a
-	site that is not the live one, so the operator sees why nothing happened."""
-	if not is_cbms_live_site():
-		frappe.throw(
-			frappe._(
-				"IRD (CBMS) sync is switched off on this site ({0}): nothing is created "
-				"in CBMS or sent to IRD from here. Only the live site, whose "
-				"site_config.json sets cbms_live_site to its own name, reports to IRD."
-			).format(frappe.local.site),
-			title=frappe._("Not the live site"),
-		)
-
 
 def user_display_name(user):
 	"""A user's full name for CBMS Bill.created_by, falling back to the user id.

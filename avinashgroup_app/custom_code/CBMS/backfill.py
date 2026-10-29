@@ -36,7 +36,6 @@ from avinashgroup_app.custom_code.CBMS.sales_invoice_hooks import (
 	get_cbms_config,
 	in_cbms_scope,
 )
-from avinashgroup_app.custom_code.CBMS.utils import ensure_cbms_live_site
 
 _SEND = {
 	False: (
@@ -136,7 +135,6 @@ def run(company=None, limit=None, commit=False, triggered_from="Retry"):
 			"invoices": [m.name for m in missing],
 		}
 
-	ensure_cbms_live_site()
 	done = {"bills": 0, "returns": 0, "skipped": 0}
 	for m in missing:
 		_create_and_enqueue(frappe.get_doc("Sales Invoice", m.name), triggered_from, done)
@@ -189,7 +187,6 @@ def run_for(invoice_names, commit=False, triggered_from="Retry"):
 			"skipped": skipped,
 		}
 
-	ensure_cbms_live_site()
 	done = {"bills": 0, "returns": 0, "skipped": len(skipped), "skipped_detail": skipped}
 	# Bills before returns, so an original's CBMS Bill exists before its return is
 	# sent (send_return_to_cbms otherwise holds the return until the bill Syncs).

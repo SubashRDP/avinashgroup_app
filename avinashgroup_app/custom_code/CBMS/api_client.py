@@ -10,7 +10,6 @@ import requests
 from frappe.utils import flt, getdate
 
 from avinashgroup_app.custom_code.CBMS.activity_log import log_cbms_activity
-from avinashgroup_app.custom_code.CBMS.utils import ensure_cbms_live_site, is_cbms_live_site
 
 BILL_URL = "https://cbapi.ird.gov.np/api/bill"
 RETURN_URL = "https://cbapi.ird.gov.np/api/billreturn"
@@ -68,10 +67,10 @@ def _is_realtime(triggered_from):
 	return triggered_from == "Submit"
 
 
-def _build_bill_payload(bill, config, password, is_realtime):
+def _build_bill_payload(bill, config, is_realtime):
 	return {
 		"username": config.username,
-		"password": password,
+		"password": config.get_password("password"),
 		"seller_pan": bill.seller_pan,
 		"buyer_pan": bill.buyer_pan or "",
 		"buyer_name": bill.buyer_name or "",
@@ -97,10 +96,10 @@ def _buyer_pan_decimal(pan):
 	return int(pan) if pan.isdigit() else None
 
 
-def _build_return_payload(bill_return, config, password, is_realtime):
+def _build_return_payload(bill_return, config, is_realtime):
 	return {
 		"username": config.username,
-		"password": password,
+		"password": config.get_password("password"),
 		"seller_pan": bill_return.seller_pan,
 		"buyer_pan": _buyer_pan_decimal(bill_return.buyer_pan),
 		"buyer_name": bill_return.buyer_name or "",
@@ -189,38 +188,8 @@ def _predates_send_from_date(config, document_date, doc, triggered_from):
 	return True
 
 
-def _ird_password(doctype, doc, config, triggered_from):
-	"""The plain IRD password from CBMS Config, or None after marking the record Failed.
-
-	Frappe keeps a Password field encrypted with site_config.json's encryption_key
-	and decrypts it on read. When that key is not the one the password was saved
-	with (a site restored or moved without its original site_config), it can no
-	longer be decrypted, and the cure is to type the password into CBMS Config
-	again. Said in plain words on the record, rather than surfacing as a generic
-	exception in the Error Log.
-
-	Logged only for a human-initiated attempt, like _predates_send_from_date: the
-	retry job meets the same rows every cycle."""
-	password = config.get_password("password", raise_exception=False)
-	if password:
-		return password
-
-	error = (
-		f"IRD password on CBMS Config {config.name} is missing or cannot be decrypted "
-		"(encryption_key in site_config.json changed). Re-enter it on that form."
-	)
-	if triggered_from != "Retry":
-		log_cbms_activity(doc, "Failed", details=error, triggered_from=triggered_from)
-	_record_result(doctype, doc.name, "Failed", error)
-	return None
-
-
 def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry", timeout=REQUEST_TIMEOUT):
 	"""POST a CBMS Bill to /api/bill. Always returns True/False, never raises."""
-	if not is_cbms_live_site():
-		# A restored copy: leave the record exactly as it is — no status change,
-		# no log row — so the copy never looks like it attempted a send.
-		return False
 	try:
 		bill = frappe.get_doc("CBMS Bill", cbms_bill_name)
 		if bill.sync_status == "Synced":
@@ -231,13 +200,10 @@ def send_bill_to_cbms(cbms_bill_name, triggered_from="Retry", timeout=REQUEST_TI
 			return False
 		if _predates_send_from_date(config, bill.invoice_date, bill, triggered_from):
 			return False
-		password = _ird_password("CBMS Bill", bill, config, triggered_from)
-		if not password:
-			return False
 
 		realtime = _is_realtime(triggered_from)
 		response = requests.post(
-			BILL_URL, json=_build_bill_payload(bill, config, password, realtime), timeout=timeout
+			BILL_URL, json=_build_bill_payload(bill, config, realtime), timeout=timeout
 		)
 		code = _response_code(response)
 
@@ -281,7 +247,6 @@ def sync_now(cbms_doctype, name):
 	the exact send functions the cron uses (same success codes, same activity
 	logging, logged with Triggered From = Manual)."""
 	frappe.only_for(("System Manager", "Accounts Manager"))
-	ensure_cbms_live_site()
 	if cbms_doctype not in ("CBMS Bill", "CBMS Bill Return"):
 		frappe.throw(frappe._("Sync Now supports only CBMS Bill and CBMS Bill Return."))
 	if not frappe.db.exists(cbms_doctype, name):
@@ -325,8 +290,6 @@ def _original_predates_cbms(bill_return, config):
 
 def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry", timeout=REQUEST_TIMEOUT):
 	"""POST a CBMS Bill Return to /api/billreturn. Always returns True/False, never raises."""
-	if not is_cbms_live_site():
-		return False
 	try:
 		bill_return = frappe.get_doc("CBMS Bill Return", cbms_bill_return_name)
 		if bill_return.sync_status == "Synced":
@@ -365,14 +328,10 @@ def send_return_to_cbms(cbms_bill_return_name, triggered_from="Retry", timeout=R
 					frappe.db.commit()
 				return False
 
-		password = _ird_password("CBMS Bill Return", bill_return, config, triggered_from)
-		if not password:
-			return False
-
 		realtime = _is_realtime(triggered_from)
 		response = requests.post(
 			RETURN_URL,
-			json=_build_return_payload(bill_return, config, password, realtime),
+			json=_build_return_payload(bill_return, config, realtime),
 			timeout=timeout,
 		)
 		code = _response_code(response)
