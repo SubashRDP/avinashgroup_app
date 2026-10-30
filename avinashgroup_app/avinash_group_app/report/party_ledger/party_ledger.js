@@ -304,6 +304,76 @@ frappe.query_reports["Party Ledger"] = {
 				+ '&view=1';  // Print → view inline in a new tab (no download)
 			window.open(url);
 		};
+
+		// Excel export carries the same header as the PDF (company, title, party, PAN/VAT,
+		// date range) — the stock export_query only dumps the table — so keep the same
+		// "Export Report" dialog but route an Excel pick to our endpoint. CSV still goes
+		// through the stock flow.
+		_report.export_report = function () {
+			if (_report.export_dialog) {
+				_report.export_dialog.clear();
+				_report.export_dialog.show();
+				return;
+			}
+			const extra_fields = [];
+			if (_report.filters.length > 0) {
+				extra_fields.push({ label: __('Include filters'), fieldname: 'include_filters', fieldtype: 'Check' });
+			}
+			_report.export_dialog = frappe.report_utils.get_export_dialog(
+				__(_report.report_name),
+				extra_fields,
+				({ file_format, include_filters, export_in_background, csv_delimiter, csv_quoting }) => {
+					_report.make_access_log('Export', file_format);
+					const filters = _report.get_filter_values(true);
+
+					if (file_format === 'Excel') {
+						if (!filters.company || !filters.from_date || !filters.to_date) {
+							frappe.msgprint(__('Please set Company, From Date and To Date'));
+							return;
+						}
+						const url = '/api/method/avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.export_xlsx'
+							+ '?filters=' + encodeURIComponent(JSON.stringify(filters))
+							+ '&selected_columns=' + encodeURIComponent(JSON.stringify(pl_selected_columns(null)));
+						window.open(url);
+						_report.export_dialog.hide();
+						return;
+					}
+
+					const boolean_labels = { 1: __('Yes'), 0: __('No') };
+					const applied_filters = {};
+					for (const [key, value] of Object.entries(filters)) {
+						const df = _report.get_filter(key).df;
+						if (!df.hidden_due_to_dependency) {
+							applied_filters[df.label] = df.fieldtype === 'Check' ? boolean_labels[value] : value;
+						}
+					}
+					const visible_idx = _report.datatable?.bodyRenderer.visibleRowIndices || [];
+					if (visible_idx.length + 1 === _report.data?.length) {
+						visible_idx.push(visible_idx.length);
+					}
+					const args = {
+						cmd: 'frappe.desk.query_report.export_query',
+						report_name: _report.report_name,
+						custom_columns: _report.custom_columns?.length ? _report.custom_columns : [],
+						file_format_type: file_format,
+						filters,
+						applied_filters,
+						visible_idx,
+						csv_delimiter,
+						csv_quoting,
+						include_filters,
+						export_in_background,
+					};
+					if (export_in_background) {
+						frappe.call({ method: args.cmd, args });
+					} else {
+						open_url_post(frappe.request.url, args);
+					}
+					_report.export_dialog.hide();
+				}
+			);
+			_report.export_dialog.show();
+		};
 	},
 
 	formatter: function (value, row, column, data, default_formatter) {

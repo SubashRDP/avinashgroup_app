@@ -161,29 +161,7 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 	report_title = report_title or 'Party Ledger - {0}'.format(filters.get('party_type') or 'Customer')
 
 	_, data = execute(filters)
-
-	# Only show party names in header when a specific party filter was applied.
-	# In customer-wise grouped mode (2+ parties) each section already names its customer,
-	# so we keep the page header clean instead of listing every party there.
-	selected_parties = _normalize_multiselect(filters.get("party"))
-	grouped_mode = len(selected_parties) != 1 and not filters.get("disable_party_grouping")
-	seen = set()
-	party_names = []
-	if selected_parties and not grouped_mode:
-		for row in data:
-			pn = row.get('party_name') or ''
-			for part in pn.split(','):
-				part = part.strip()
-				if part and part not in seen:
-					seen.add(part)
-					party_names.append(part)
-
-	# When exactly one party is selected, show its Tax ID (VAT/PAN) under the name.
-	party_tax_id = None
-	if len(selected_parties) == 1:
-		party_tax_id = frappe.db.get_value(
-			filters.get("party_type") or "Customer", selected_parties[0], "tax_id"
-		)
+	party_names, party_tax_id = _pl_header_parties(filters, data)
 
 	pages = _pl_paginate(
 		data, orientation, bool(filters.get('show_remarks')), bool(filters.get('detailed_mapping')),
@@ -235,6 +213,128 @@ def download_pdf(filters, orientation=None, report_title=None, filename=None, se
 	frappe.response.filecontent = pdf_data
 	# view=1 (Print) → open inline in the browser tab; otherwise download the file.
 	frappe.response.type = 'pdf' if frappe.utils.cint(view) else 'download'
+
+
+def _pl_header_parties(filters, data):
+	"""Party names and Tax ID for the report header (PDF and Excel share this).
+
+	Party names show only when a specific party filter was applied. In customer-wise
+	grouped mode (2+ parties) each section already names its customer, so the header
+	stays clean instead of listing every party there. The Tax ID (VAT/PAN) shows only
+	when exactly one party is selected.
+
+	Returns (party_names list, party_tax_id or None).
+	"""
+	selected_parties = _normalize_multiselect(filters.get("party"))
+	grouped_mode = len(selected_parties) != 1 and not filters.get("disable_party_grouping")
+	seen = set()
+	party_names = []
+	if selected_parties and not grouped_mode:
+		for row in data:
+			pn = row.get('party_name') or ''
+			for part in pn.split(','):
+				part = part.strip()
+				if part and part not in seen:
+					seen.add(part)
+					party_names.append(part)
+
+	party_tax_id = None
+	if len(selected_parties) == 1:
+		party_tax_id = frappe.db.get_value(
+			filters.get("party_type") or "Customer", selected_parties[0], "tax_id"
+		)
+
+	return party_names, party_tax_id
+
+
+@frappe.whitelist()
+def export_xlsx(filters, selected_columns=None):
+	"""Excel export with the same header block as the PDF on top of the table:
+
+	    <Company>                                   Party Ledger - Customer
+	    <Party name(s)>
+	    PAN/VAT: <tax id>
+	    From <date> To <date>                       Amount in Nepalese Rupee ( NPR )
+
+	The table below is the report's own columns and rows, like the stock export.
+	Called from the Excel option of the Export dialog (party_ledger.js); CSV still
+	goes through Frappe's stock export.
+
+	selected_columns: fieldnames still visible in the datatable; empty means all.
+	"""
+	from io import BytesIO
+	from frappe.utils.xlsxutils import make_xlsx
+	from openpyxl import load_workbook
+	from openpyxl.styles import Alignment, Font
+
+	if isinstance(filters, str):
+		filters = frappe._dict(json.loads(filters))
+	if isinstance(selected_columns, str):
+		selected_columns = json.loads(selected_columns)
+
+	columns, data = execute(filters)
+	if selected_columns:
+		columns = [c for c in columns if c["fieldname"] in selected_columns]
+	width = max(len(columns), 2)
+	party_names, party_tax_id = _pl_header_parties(filters, data)
+	report_title = 'Party Ledger - {0}'.format(filters.get('party_type') or 'Customer')
+
+	def spread(left, right):
+		"""One header row: text on the left edge, text on the right edge."""
+		row = [""] * width
+		row[0], row[-1] = left, right
+		return row
+
+	rows = [spread(filters.get('company') or '', report_title)]
+	rows += [[name] for name in party_names]
+	if party_tax_id:
+		rows.append(["PAN/VAT: {0}".format(party_tax_id)])
+	rows.append(spread(
+		"From {0} To {1}".format(
+			frappe.utils.formatdate(filters.get('from_date')),
+			frappe.utils.formatdate(filters.get('to_date')),
+		),
+		"Amount in Nepalese Rupee ( NPR )",
+	))
+	rows.append([])
+	header_row_count = len(rows)
+	rows.append([c["label"] for c in columns])
+
+	show_bal = filters.get('show_balance') not in (0, '0', False)
+	for d in data:
+		row = []
+		for c in columns:
+			value = d.get(c["fieldname"])
+			# Customer header row (grouped mode): code under Date, name + VAT under Miti,
+			# the same way the screen and PDF show it.
+			if d.get('is_customer_header'):
+				value = {'date': d.get('cust_code'), 'miti': d.get('cust_label')}.get(c["fieldname"], "")
+			# Show Balance off: blank the balance on transaction rows only, like the screen.
+			elif c["fieldname"] == 'balance' and not show_bal and not d.get('is_summary'):
+				value = ""
+			row.append(value)
+		rows.append(row)
+
+	xlsx = make_xlsx(rows, "Party Ledger")
+
+	# make_xlsx writes a write-only workbook (no styling), so reopen it to bold the
+	# company / title / party lines and the column headers, and right-align the
+	# right-hand header texts.
+	wb = load_workbook(xlsx)
+	ws = wb.active
+	for r in range(1, 2 + len(party_names)):
+		for cell in ws[r]:
+			cell.font = Font(bold=True)
+	for cell in ws[header_row_count + 1]:
+		cell.font = Font(bold=True)
+	for r in (1, header_row_count - 1):
+		ws.cell(row=r, column=width).alignment = Alignment(horizontal="right")
+	out = BytesIO()
+	wb.save(out)
+
+	frappe.response.filename = "party_ledger.xlsx"
+	frappe.response.filecontent = out.getvalue()
+	frappe.response.type = "binary"
 
 
 def _normalize_multiselect(value):

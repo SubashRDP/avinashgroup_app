@@ -8,8 +8,34 @@
 # name (its title field, or a "<doctype>_name" field) so "Add Column" shows the name
 # instead of the id — for every report, generically.
 
+#
+# Also overrides frappe.desk.query_report.get_script, the method that sends a
+# report's JS to the browser, so this app can add filters to stock ERPNext reports
+# without editing apps/erpnext. See REPORT_SCRIPT_ADDITIONS.
+
+import os
+
 import frappe
 from frappe import _
+from frappe.desk import query_report
+
+# Stock report name -> JS file (in this folder) added after the report's own script.
+REPORT_SCRIPT_ADDITIONS = {
+	# Customer Group filter; see trial_balance_party_customer_group.py
+	"Trial Balance for Party": "trial_balance_party_customer_group.js",
+}
+
+
+@frappe.whitelist()
+def get_script(report_name):
+	result = query_report.get_script(report_name)
+
+	addition = REPORT_SCRIPT_ADDITIONS.get(report_name)
+	if addition:
+		with open(os.path.join(os.path.dirname(__file__), addition)) as f:
+			result["script"] += "\n\n" + f.read()
+
+	return result
 
 
 @frappe.whitelist()
