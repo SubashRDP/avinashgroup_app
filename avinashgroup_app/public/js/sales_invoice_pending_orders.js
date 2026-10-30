@@ -286,7 +286,11 @@
 		// asked for by the clerk: put them straight into the search box
 		const open_by_hand = () => open_drawer({ focus: true });
 		ui.$tab.on("click", open_by_hand);
-		ui.$tab.on("keydown", (e) => (e.key === "Enter" || e.key === " ") && open_by_hand());
+		// Never `cond && action` in a jQuery handler: a `false` return cancels
+		// the event — on document that ate every keystroke typed in the desk.
+		ui.$tab.on("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") open_by_hand();
+		});
 		swipe(ui.$tab, (dx) => dx < -30 && open_by_hand());
 
 		// Any press outside the drawer closes it — without swallowing the press,
@@ -341,7 +345,9 @@
 			ui.$drawer.addClass("is-dragging").css("transform", `translateX(${Math.max(0, dx)}px)`);
 		}, () => ui.$drawer.removeClass("is-dragging").css("transform", ""));
 
-		$(document).on("keydown", (e) => e.key === "Escape" && ui.$drawer.hasClass("is-open") && close_drawer());
+		$(document).on("keydown", (e) => {
+			if (e.key === "Escape" && ui.$drawer.hasClass("is-open")) close_drawer();
+		});
 	}
 
 	// Horizontal swipe on touch screens. on_end(dx) on release; on_move(dx) while dragging.

@@ -66,7 +66,7 @@ app_include_js = [
     # Billing nudges toward invoicing from the Sales Order: customer popup,
     # swipe-in pending-orders drawer on the invoice, and the new-order cards
     # sales staff get live. See custom_code/SalesInvoice/pending_orders.py.
-    "/assets/avinashgroup_app/js/sales_invoice_pending_orders.js?v=6",
+    "/assets/avinashgroup_app/js/sales_invoice_pending_orders.js?v=7",
     "/assets/avinashgroup_app/js/sales_order_alerts.js?v=4",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
