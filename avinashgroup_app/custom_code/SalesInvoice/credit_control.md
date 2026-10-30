@@ -311,3 +311,14 @@ Measured on avinas1, worst case (NGN-CUS-00048, 3,706 unpaid bills):
   `tabJournal Entry`. Cheap today (4,097 rows), worth watching.
 - `avinas1` reads from the replica on `:3307`, so all four reads are replica hits while
   the invoice write goes to the master.
+
+## 9. Planning ahead: Sales Order Billing Capacity report
+
+`avinash_group_app/report/sales_order_billing_capacity` runs these same checks over
+every pending Sales Order before anyone tries to invoice it. It reads
+`get_credit_position` per customer, then bills that customer's orders oldest-first
+on paper: each order uses up the credit it is given, and each invoice not fully
+paid from left-over advance adds one to the unpaid-bill count. Each order comes out
+**Ready**, **Partly** (with the amount that fits) or **Blocked** (with the reason).
+"To Bill" is the order's own price; the real invoice is repriced at today's Item
+Price, so after a price change it can differ.
