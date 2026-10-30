@@ -4,7 +4,7 @@ Code map: [docs/salary-code-map.md](../../docs/salary-code-map.md) — every fun
 
 | File | What it owns | Entry point |
 |---|---|---|
-| `allowance.py` | Allowances on Salary Component (Is Allowance, kind; per company O/O·S/D·F/P accounts, no rate); the structure's Allowance Rates (usual rates, changed only by Salary Revision once submitted); a person's pay on the Salary Structure Assignment (Initial Basic, SSF Applicable, Allowances with their Rate). See `docs/allowances.md` | `doc_events` → Salary Component / Salary Structure / Salary Structure Assignment validate, Salary Structure before_update_after_submit; `get_rate_for_assignment` (form) |
+| `allowance.py` | Allowances on Salary Component (Is Allowance, kind; per company O/O·S/D·F/P accounts, no rate); the structure's Allowance Rates (usual rates, changed only by Salary Revision once submitted); a person's pay on the Salary Structure Assignment (Initial Basic, SSF Applicable, Allowances with their Rate). See `docs/payroll-complete-reference.md` | `doc_events` → Salary Component / Salary Structure / Salary Structure Assignment validate, Salary Structure before_update_after_submit; `get_rate_for_assignment` (form) |
 | `attendance_allowance.py` | Tea, meal, overtime, late fine, daily wage → submitted Additional Salary rows (tagged `custom_source`), for employees with a row on their assignment, at its Rate (overtime and late fine from basic); then refreshes the entry's draft slips | Payroll Entry → Prepare Payroll Inputs |
 | `festival_allowance.py` | Dashain allowance: one month's basic × service factor (full year by the cut-off = 100 %, else days ÷ days in the year; never above basic) → a Payroll Adjustment, paid on a Dashain Allowance payout entry's own slips; rules on the Salary Component's Festival Allowance section | Payroll Entry with Payout = Dashain Allowance (`_pay_dashain`); `make_festival_adjustment` |
 | `leave_encashment.py` | HRMS Leave Encashment priced at the person's basic ÷ days per month, allowed only at year end / separation per Leave Type; its Additional Salary linked back and paid on a Leave Encashment payout entry's own slips; leave recovery stays on the salary slip | Payroll Entry → Nepal HRMS → Leave Encashment (`encash_for_payroll_entry`); `doc_events` → Leave Encashment validate / on_submit / on_cancel, Additional Salary validate / on_submit |
@@ -25,4 +25,4 @@ Report: **Salary Tax and SSF Deposit** (`avinash_group_app/report/salary_tax_and
 Print format: **Salary Slip BS** (`templates/print_formats/salary_slip_bs.html`) — the default Salary Slip format, so it is also what HRMS emails.
 
 The BS salary slip itself (`BSSalarySlip`) lives in `rdp_common_app`, which this
-app does not edit. Handover and traps: `docs/payroll-handover.md`.
+app does not edit. Handover and traps: `docs/payroll-complete-reference.md`.

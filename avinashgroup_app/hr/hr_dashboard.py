@@ -502,7 +502,7 @@ def _away(companies):
 
 
 # (label, SQL condition on tabEmployee e, what happens while it stays blank)
-# The list mirrors docs/payroll-handover.md §8 — keep the two in step.
+# The list mirrors docs/payroll-complete-reference.md §9 — keep the two in step.
 SETUP_GAPS = [
 	("attendance_device_id", _("Attendance Device ID"), "ifnull(e.attendance_device_id,'')=''",
 		_("No punch reaches this person")),

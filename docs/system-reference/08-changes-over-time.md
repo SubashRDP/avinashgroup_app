@@ -107,7 +107,7 @@ The arrears are paid as one **Additional Salary** of component `Salary Arrears` 
 | | |
 |---|---|
 | **What** | On the new fiscal year's first day, every active employee gets a new submitted assignment with the same pay and the **new year's Income Tax Slab**. |
-| **Why** | HRMS reads the slab from the assignment ([`get_income_tax_slabs`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L1592)) and only checks that it started on or before the payroll period. Without a rollover, all 84/85 slips would silently be taxed at 83/84 rates. Source: [module notes, `Carrying everyone's pay`](../../avinashgroup_app/payroll/year_rollover.py#L1); commits `24b12af` (2026-09-24) and `6a37bc5` (2026-10-09, "year rollover keeps a person's whole pay" — before it the new assignments lost HRA, SSF and every allowance). Doc: [payroll-handover.md §9 "Year rollover"](../payroll-handover.md), [user-guide 8.7](../user-guide/08-raises-advances-bonuses-year-end.md). |
+| **Why** | HRMS reads the slab from the assignment ([`get_income_tax_slabs`](../../../hrms/hrms/payroll/doctype/salary_slip/salary_slip.py#L1592)) and only checks that it started on or before the payroll period. Without a rollover, all 84/85 slips would silently be taxed at 83/84 rates. Source: [module notes, `Carrying everyone's pay`](../../avinashgroup_app/payroll/year_rollover.py#L1); commits `24b12af` (2026-09-24) and `6a37bc5` (2026-10-09, "year rollover keeps a person's whole pay" — before it the new assignments lost HRA, SSF and every allowance). Doc: [payroll-handover.md §9 "Year rollover"](../payroll-complete-reference.md), [user-guide 8.7](../user-guide/08-raises-advances-bonuses-year-end.md). |
 | **Stock HRMS** | Nothing. Ours entirely. |
 | **Where** | [`roll_salary_assignments`](../../avinashgroup_app/payroll/year_rollover.py#L50), [`tax_slab_for`](../../avinashgroup_app/payroll/year_rollover.py#L35); called from [`setup_year`](../../avinashgroup_app/hr/year_setup.py#L65) at [`roll_salary_assignments`](../../avinashgroup_app/hr/year_setup.py#L115). |
 | **Triggered by** | IT, once a year, by hand: `bench --site avinas1 execute avinashgroup_app.hr.year_setup.setup_year --kwargs "{'fiscal_year': '84/85'}"`. Not scheduled. |
@@ -133,7 +133,7 @@ The arrears are paid as one **Additional Salary** of component `Salary Arrears` 
 - Allowance rows lose any future From Date — the row starts with the new assignment.
 - Only `Active` employees roll. Someone on leave-without-pay status "Inactive" (unverified whether HR uses it) would be left on the old slab.
 - `setup_year` must run **before** 1 Shrawan, but the holiday-list switch must run **on** 1 Shrawan; that part is the daily job [`switch_to_current_year_lists`](../../avinashgroup_app/hr/holiday_year_switch.py#L30), which does not run while the scheduler is off (see [09-cross-cutting.md](09-cross-cutting.md#5-scheduler-jobs)).
-- Doc vs. DB: [payroll-handover.md](../payroll-handover.md) says "84/85 exists on avinas1 since 2026-09-24" and the module notes say "All 205 assignments". On 2026-10-12 avinas1 has **no 84/85 Fiscal Year** (latest is 83/84; the 84/85 run was inside a rolled-back test) and **195** submitted assignments, all `from_date` 2026-07-17. The user guide (8.7) is the accurate one.
+- Doc vs. DB: [payroll-handover.md](../payroll-complete-reference.md) says "84/85 exists on avinas1 since 2026-09-24" and the module notes say "All 205 assignments". On 2026-10-12 avinas1 has **no 84/85 Fiscal Year** (latest is 83/84; the 84/85 run was inside a rolled-back test) and **195** submitted assignments, all `from_date` 2026-07-17. The user guide (8.7) is the accurate one.
 - Rolled-back proof script: [`Rolled-back check` (scripts/check_year_rollover.py)](../../avinashgroup_app/scripts/check_year_rollover.py#L1) — it hard-codes `sites_path="/home/sijan/frappe-15/sites"`, so it does not run on this bench without editing the path.
 
 ### 2.3 Config on avinas1 (2026-10-12)
@@ -249,7 +249,7 @@ Gotchas:
 | Cancel an **Additional Salary** | Hands an advance recovery back to the advance balance | [`on_cancel`](../../../hrms/hrms/payroll/doctype/additional_salary/additional_salary.py#L22) |
 | Amend a slip | Standard Frappe amend (`-1` suffix). Our naming keeps the suffix (`get_amendment_suffix` in `naming_series.py`) | — |
 
-Recommended order (from [payroll-handover.md §9](../payroll-handover.md)): bank entry → journal → slips → payroll entry; then fix the inputs, press Prepare Payroll Inputs again (it replaces its own rows), submit again.
+Recommended order (from [payroll-handover.md §9](../payroll-complete-reference.md)): bank entry → journal → slips → payroll entry; then fix the inputs, press Prepare Payroll Inputs again (it replaces its own rows), submit again.
 
 What survives a cancelled Payroll Entry: the month's **Additional Salary rows** (engine, advance, adjustment, arrears) stay submitted. A new Payroll Entry for the same month picks them up again; Prepare Payroll Inputs replaces only its own.
 

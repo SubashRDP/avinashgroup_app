@@ -7,11 +7,14 @@ const REPORT_MODULE =
 // CORRECTION_ROLES; the server checks them again, this only hides the pencil.
 const CORRECT_DAY_METHOD = "avinashgroup_app.hr.punch_correction.correct_day";
 const CORRECTION_ROLES = ["HR Manager", "System Manager"];
+// Late Excused from the grid (hr/late_excuse.py); the Attendance enforces the rules.
+const LATE_EXCUSE_METHOD = "avinashgroup_app.hr.late_excuse.set_late_excuse";
 
 frappe.query_reports["Monthly Attendance BS"] = {
 	onload: async function (report) {
 		_apply_theme(report);
 		_bind_punch_correction(report);
+		_bind_late_excuse(report);
 		report.page.add_inner_button(__("Correction Log"), () => _open_correction_log());
 		if (frappe.user.has_role(CORRECTION_ROLES)) {
 			report.page.add_inner_button(__("Give Leave"), () => _open_give_leave_dialog());
@@ -162,6 +165,10 @@ frappe.query_reports["Monthly Attendance BS"] = {
 			// 15 minutes is the grace period on every shift; past it, it counts.
 			const tone = n > 15 ? "#A64E5B" : "#96662A";
 			return `<span style="color:${tone};font-weight:600">${n}</span>`;
+		}
+
+		if (f === "late_excused") {
+			return _late_excuse_cell(data);
 		}
 
 		if (f === "working_hours") {
@@ -803,6 +810,88 @@ function _open_correction_dialog(row) {
 
 // Status as a chip rather than coloured text: at a glance the eye picks out
 // the blocks of colour, not the words.
+// --- Late Excused cell ---------------------------------------------------
+// Shows the tick and, as its tooltip, the reason. HR Manager can click a day
+// with an Attendance and some late time (or one already excused) to change it.
+
+function _late_excuse_cell(data) {
+	const late = cint(data.late_minutes) + cint(data.before_office_minutes);
+	const editable = data.attendance && frappe.user.has_role(CORRECTION_ROLES) && (late || data.late_excused);
+	const attrs = editable
+		? `class="mab-late-excuse" data-attendance="${frappe.utils.escape_html(data.attendance)}" style="cursor:pointer"`
+		: "";
+	if (data.late_excused) {
+		const reason = frappe.utils.escape_html(data.late_excuse_reason || "");
+		return `<span ${attrs} title="${__("Excused")}: ${reason}"
+			style="background:#E6F2EA;color:#2E6B45;border-radius:3px;padding:2px 6px;font-weight:600">
+			✓ ${__("Excused")}</span>`;
+	}
+	if (editable) {
+		return `<span ${attrs} title="${__("Click to excuse this day's late time")}"
+			style="color:var(--text-light)">${__("Excuse")} ✎</span>`;
+	}
+	return `<span style="color: var(--text-lighter)">—</span>`;
+}
+
+function _bind_late_excuse(report) {
+	report.page.wrapper.off("click.mab-excuse").on("click.mab-excuse", ".mab-late-excuse", (e) => {
+		const attendance = $(e.currentTarget).attr("data-attendance");
+		const row = (frappe.query_report.data || []).find((r) => r.attendance === attendance);
+		if (row) _open_late_excuse_dialog(row);
+	});
+}
+
+function _open_late_excuse_dialog(row) {
+	const name = frappe.utils.escape_html(row.employee_name || row.employee);
+	const late = cint(row.late_minutes) + cint(row.before_office_minutes);
+	const d = new frappe.ui.Dialog({
+		title: __("Late Excuse"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				options: `<div style="margin-bottom:8px">
+					<div style="font-weight:600">${name} · ${row.bs_date} (${row.ad_date})</div>
+					<div class="text-muted" style="margin-top:4px">
+						${__("Late in")} ${cint(row.late_minutes)} ${__("min")}, ${__("left early")} ${cint(row.before_office_minutes)} ${__("min")} · ${frappe.utils.escape_html(row.status || "")}
+					</div>
+					<div style="margin-top:8px;padding:8px 10px;background:#FAF6EC;border-left:3px solid #C9A227;font-size:.92em">
+						${__("An excused day keeps its {0} minutes on record, but they are not fined, and a half day caused only by lateness goes back to Present. Not possible once the month's salary slip is submitted.", [late])}
+					</div>
+				</div>`,
+			},
+			{ fieldtype: "Check", fieldname: "excused", label: __("Late Excused"), default: row.late_excused ? 1 : 0 },
+			{
+				fieldtype: "Small Text",
+				fieldname: "reason",
+				label: __("Reason for Excusing"),
+				default: row.late_excuse_reason || "",
+				depends_on: "eval:doc.excused",
+				mandatory_depends_on: "eval:doc.excused",
+			},
+		],
+		primary_action_label: __("Save"),
+		primary_action(values) {
+			frappe.call({
+				method: LATE_EXCUSE_METHOD,
+				args: { attendance: row.attendance, excused: values.excused ? 1 : 0, reason: values.reason || "" },
+				freeze: true,
+				callback: (r) => {
+					if (r.exc) return;
+					d.hide();
+					frappe.show_alert({
+						message: values.excused
+							? __("Excused. Day is now {0}.", [r.message.status])
+							: __("Excuse removed. Day is now {0}.", [r.message.status]),
+						indicator: "green",
+					});
+					frappe.query_report.refresh();
+				},
+			});
+		},
+	});
+	d.show();
+}
+
 function _chip(status) {
 	if (!status) return "";
 	// Softened deliberately. The stock --red-600 / --green-600 pair is built to

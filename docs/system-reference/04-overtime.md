@@ -16,7 +16,7 @@ Extra work — a festival holiday, a Saturday, or staying past the shift on a no
 
 **HRMS vs us.** Stock HRMS v15 has no overtime model at all; it has neither an overtime request nor overtime pay. The doctypes, rules, measuring and pay are all ours. The only HRMS piece used is **Compensatory Leave Request**, which turns a worked holiday into a leave allocation.
 
-Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-15.txt` ([file](../hr-decisions/00-policy-minutes-2026-09-15.txt)), items 5.1 (the sheet decides eligibility), 2.2 (as corrected 2026-09-16) and 2.5 (holiday work: plant staff paid OT, officer/admin get replacement leave, never both). User-facing description: [docs/overtime-sheet.md](../overtime-sheet.md) and [user guide ch. 4](../user-guide/04-overtime-and-meals.md).
+Policy source: the client minutes `docs/hr-decisions/00-policy-minutes-2026-09-15.txt` ([file](../hr-decisions/00-policy-minutes-2026-09-15.txt)), items 5.1 (the sheet decides eligibility), 2.2 (as corrected 2026-09-16) and 2.5 (holiday work: plant staff paid OT, officer/admin get replacement leave, never both). User-facing description: [docs/overtime-sheet.md](../payroll-complete-reference.md) and [user guide ch. 4](../user-guide/04-overtime-and-meals.md).
 
 ---
 

@@ -6,7 +6,7 @@ All values are from `avinas1`, read on **2026-10-12**.
 
 ## The model in one paragraph
 
-HRMS calculates a slip from a **Salary Structure** (formula rows) applied to a **Salary Structure Assignment** (the person's `base`), plus submitted **Additional Salary** documents, then taxes it with the **Income Tax Slab** named on the assignment, projected over the **Payroll Period**. This app keeps that engine and adds three things around it (allowance.py docstring ([`Allowances`](../../avinashgroup_app/payroll/allowance.py#L1)), [docs/allowances.md](../allowances.md)):
+HRMS calculates a slip from a **Salary Structure** (formula rows) applied to a **Salary Structure Assignment** (the person's `base`), plus submitted **Additional Salary** documents, then taxes it with the **Income Tax Slab** named on the assignment, projected over the **Payroll Period**. This app keeps that engine and adds three things around it (allowance.py docstring ([`Allowances`](../../avinashgroup_app/payroll/allowance.py#L1)), [docs/allowances.md](../payroll-complete-reference.md)):
 
 1. **Salary Component** says what an allowance *is* and how it is counted (`custom_allowance_kind`) and which three accounts it posts to (O/O, S/D, F/P). It holds no rate.
 2. **Salary Structure → Allowance Rates** lists the *usual* rate of each allowance for that structure (tea 235/day, gas 1,690/month, HRA 25 %). It decides nobody's pay; it is the starting Allowances table when a structure is picked on a draft assignment, fills a row's rate when an allowance is picked, and is what a Salary Revision raises.
@@ -243,7 +243,7 @@ GLMI, GEPL and SGU have no structure and no active employees.
 | Deductions | Late Fine (LF) | (blank — a tag) | no |
 | Deductions | Income Tax (IT) | (slab) | no |
 
-**Why SSF is 20 % / 31 %.** The Social Security Fund takes 31 % of basic: 20 % paid by the employer (shown as the SSF Addition earning) and 11 % by the employee, all deducted as one SSF line ([payroll-ngi.md](../payroll-ngi.md), `setup_payroll_employee_fields` ([`execute`](../../avinashgroup_app/patches/setup_payroll_employee_fields.py#L22)) docstring). SSF reads `B`, which is already prorated, so the SSF rows are not payment-days rows ([`structure_rows`](../../avinashgroup_app/payroll/onboarding.py#L187) docstring). `custom_ssf_applicable` comes from the assignment (HRMS puts assignment fields in formula scope).
+**Why SSF is 20 % / 31 %.** The Social Security Fund takes 31 % of basic: 20 % paid by the employer (shown as the SSF Addition earning) and 11 % by the employee, all deducted as one SSF line ([payroll-ngi.md](../payroll-complete-reference.md), `setup_payroll_employee_fields` ([`execute`](../../avinashgroup_app/patches/setup_payroll_employee_fields.py#L22)) docstring). SSF reads `B`, which is already prorated, so the SSF rows are not payment-days rows ([`structure_rows`](../../avinashgroup_app/payroll/onboarding.py#L187) docstring). `custom_ssf_applicable` comes from the assignment (HRMS puts assignment fields in formula scope).
 
 **Allowance Rates** (`custom_allowance_rates`, child **Structure Allowance Rate**: [`allowance`](../../avinashgroup_app/avinash_group_app/doctype/structure_allowance_rate/structure_allowance_rate.json#L14), [`rate`](../../avinashgroup_app/avinash_group_app/doctype/structure_allowance_rate/structure_allowance_rate.json#L24), [`unit`](../../avinashgroup_app/avinash_group_app/doctype/structure_allowance_rate/structure_allowance_rate.json#L33)) — added by `allowance_rate_list` ([`execute`](../../avinashgroup_app/patches/allowance_rate_list.py#L50)):
 
@@ -267,7 +267,7 @@ A rate of 0 means "per person, no usual rate" (dearness, other, fixed…). Overt
 - Structure Allowance Rates feed only the form ([`get_structure_allowances`](../../avinashgroup_app/payroll/allowance.py#L231), [`get_rate_for_assignment`](../../avinashgroup_app/payroll/allowance.py#L221)), [`validate_assignment_allowances`](../../avinashgroup_app/payroll/allowance.py#L520) (blank row rate) and Salary Revision. **Payroll never reads them.**
 
 **Gotchas.**
-- `Salary Structure.custom_daily_wage` (created by `setup_daily_wage` ([`custom_daily_wage`](../../avinashgroup_app/patches/setup_daily_wage.py#L24))) is **read by no code**. Daily-wage labour is paid in cash outside payroll (decided 2026-10-08, [`_hourly_basic`](../../avinashgroup_app/payroll/attendance_allowance.py#L505) docstring); [`retire_daily_wage`](../../avinashgroup_app/patches/setup_allowance_kinds.py#L306) disabled the component and dropped the "Daily Wage" rate basis. The checkbox is dead; [payroll-ngi.md](../payroll-ngi.md) still lists Daily Wage as a paid component.
+- `Salary Structure.custom_daily_wage` (created by `setup_daily_wage` ([`custom_daily_wage`](../../avinashgroup_app/patches/setup_daily_wage.py#L24))) is **read by no code**. Daily-wage labour is paid in cash outside payroll (decided 2026-10-08, [`_hourly_basic`](../../avinashgroup_app/payroll/attendance_allowance.py#L505) docstring); [`retire_daily_wage`](../../avinashgroup_app/patches/setup_allowance_kinds.py#L306) disabled the component and dropped the "Daily Wage" rate basis. The checkbox is dead; [payroll-ngi.md](../payroll-complete-reference.md) still lists Daily Wage as a paid component.
 - [`COMPONENTS`](../../avinashgroup_app/payroll/onboarding.py#L124) gives Income Tax abbr `TAX`; the site has `IT` (made earlier by `setup_income_tax`). `ensure_components` only creates missing components, so no conflict — but a fresh site onboarded before `setup_income_tax` would get `TAX`.
 
 ## 9. Salary Structure Assignment (the person's pay)
@@ -335,7 +335,7 @@ All from 2026-07-17. 195 people have an assignment; **70 active employees have n
 | Components Arrear, Grade Amount | Disabled; Salary Arrears (ARR) is the live arrears line | DB |
 | Professional Tax, Provident Fund | HRMS-shipped, on no structure | DB |
 
-**Doc-vs-code contradictions.** [payroll-ngi.md](../payroll-ngi.md) still describes Employee fields `custom_dearness_allowance` etc. and an "Allowance Exceptions" table (its 2026-10-08 banner points at allowances.md but the banner itself names the superseded Exceptions table), and lists Daily Wage as paid. [allowances.md](../allowances.md) is current.
+**Doc-vs-code contradictions.** [payroll-ngi.md](../payroll-complete-reference.md) still describes Employee fields `custom_dearness_allowance` etc. and an "Allowance Exceptions" table (its 2026-10-08 banner points at allowances.md but the banner itself names the superseded Exceptions table), and lists Daily Wage as paid. [allowances.md](../payroll-complete-reference.md) is current.
 
 ---
 

@@ -134,8 +134,8 @@ def add_fields():
 					"fieldname": "custom_allowance_section",
 					"label": "Allowance",
 					"fieldtype": "Section Break",
-					"insert_after": "formula",
-					"collapsible": 1,
+					# On the Overview tab: see move_allowance_fields_to_overview_tab.
+					"insert_after": "disabled",
 				},
 				{
 					"fieldname": "custom_is_allowance",

@@ -18,6 +18,7 @@ Mirrors the Nepal Gas Udhyog physical attendance sheet:
                         the same hours overtime pay reads
   • O.T. Amount       = each day's hours × that person's hourly basic × 1.5
                         (attendance_allowance.overtime_rate, as pay prices it)
+  • Late Excused (min) = the part of Late Time on days HR ticked Late Excused
   • Late Time (min)   = late arrival + leaving early, against the day's shift,
                         as the sheet's card adds them (Late + Before ofc. Time)
   • Present Days      = Working Days Present + Worked on Holiday (every day came)
@@ -189,6 +190,7 @@ def _build_summary_row(
 	component_totals = {sc.name: 0.0 for sc in components}
 
 	late_min_total = 0
+	excused_min_total = 0
 	ot_hours = ot_hours or {}
 	ot_rates = ot_rates or {}
 	ot_hours_total = 0.0
@@ -229,6 +231,8 @@ def _build_summary_row(
 		# here sets, and counted every minute anyone stayed late as overtime.
 		measured = measure_day(att, is_holiday=ad_date in emp_holidays)
 		late_min_total += measured.late_minutes + measured.early_exit_minutes
+		if att.get("custom_late_excused"):
+			excused_min_total += measured.late_minutes + measured.early_exit_minutes
 
 		# Sum each attendance-driven component's per-day qty
 		for sc in components:
@@ -268,6 +272,8 @@ def _build_summary_row(
 		"ot_hours": flt(ot_hours_total, 4),
 		"ot_amount": flt(ot_amount_total, 2),
 		"late_minutes": int(late_min_total),
+		# Of those, excused by HR: shown, not fined.
+		"excused_minutes": int(excused_min_total),
 		# Present Days = every day came; split into working days and holidays.
 		"present_days": flt(present_days + holiday_worked, 1),
 		"working_present": flt(present_days, 1),
@@ -376,6 +382,7 @@ def _columns(groups, standalone_components):
 		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 90, "precision": 4},
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 110},
 		{"label": _("Late Time (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 110},
+		{"label": _("Late Excused (min)"), "fieldname": "excused_minutes", "fieldtype": "Int", "width": 120},
 		{"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Float", "width": 100, "precision": 1},
 		{"label": _("Working Days Present"), "fieldname": "working_present", "fieldtype": "Float", "width": 120, "precision": 1},
 		{"label": _("Worked on Holiday"), "fieldname": "worked_on_holiday", "fieldtype": "Int", "width": 130},
@@ -408,6 +415,7 @@ def _summary(data, bs_label, working_days):
 		{"value": flt(sum(r["ot_hours"] for r in data), 4), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
 		{"value": flt(sum(r["ot_amount"] for r in data), 2), "label": per_scope(_("O.T. Amount"), n), "datatype": "Currency"},
 		{"value": sum(r["late_minutes"] for r in data), "label": per_scope(_("Late Time (min)"), n), "datatype": "Int"},
+		{"value": sum(r["excused_minutes"] for r in data), "label": per_scope(_("Late Time Excused (min)"), n), "datatype": "Int"},
 	])
 	return cards
 

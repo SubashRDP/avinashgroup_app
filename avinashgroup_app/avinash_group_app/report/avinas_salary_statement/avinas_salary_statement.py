@@ -1,7 +1,7 @@
 """The salary sheet, from the submitted slips: what the client's Excel showed.
 
 Each company used to run payroll on its own Excel sheet (the Falgun 2082
-sheets, docs/allowances.md): one row per person, the columns from attendance
+sheets, docs/payroll-complete-reference.md): one row per person, the columns from attendance
 through Basic, allowances, tea, OT, meal, gross, SSF, tax, late fine, advances
 to Net Payable, and people grouped O/O, S/D, F/P with a subtotal each, because
 that is how the books charge salary. This report prints the same sheet from the

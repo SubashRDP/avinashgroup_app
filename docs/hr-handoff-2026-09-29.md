@@ -34,7 +34,7 @@ contains the 10 HR commits `297ebbd … 08672a0`). Test site: `avinas1` on the l
 | Late half day | >2 h late = Half Day + Half Day Status **Absent**, no leave type (was "Leave Without Pay"); pay identical (58 slips checked) | `biometric/attendance_override.py`, `patches/late_half_day_as_half_absent.py` |
 | Site-only fields | Holiday List.custom_company, Attendance late/early fields, Shift Type cutoff now created by a patch | `patches/add_site_only_hr_fields.py` |
 
-Handover doc in repo: `docs/payroll-handover.md` (§4 built, §8 open, §9 go-live runbook).
+Handover doc in repo: `docs/payroll-complete-reference.md` (§4 built, §8 open, §9 go-live runbook).
 
 ## Data changed on avinas1 (not in code)
 - 2083 holiday lists for NGG / NGK / NGN from the HR PDFs (Baisakh rows skipped = FY 82/83); Teej only on Women lists.

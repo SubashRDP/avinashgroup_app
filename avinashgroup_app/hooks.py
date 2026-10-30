@@ -244,6 +244,10 @@ attendance_events = {
         # On Leave from the leave application.
         "avinashgroup_app.biometric.attendance_override.half_day_when_working_on_leave",
     ],
+    # Late Excused can be ticked on a submitted day (no cancel and amend);
+    # validate does not run then, so these two carry the late rule instead.
+    "before_update_after_submit": "avinashgroup_app.biometric.attendance_override.check_late_excuse_change",
+    "on_update_after_submit": "avinashgroup_app.biometric.attendance_override.apply_late_excuse_change",
 }
 
 # Jinja helpers for print formats (e.g. BS date on the Nepal Gas invoice)

@@ -45,7 +45,7 @@ row (no longer needed: the late fine applies to everyone not exempt);
 Hooks: doc_events → Salary Component / Salary Structure / Salary Structure
 Assignment validate, Salary Structure before_update_after_submit.
 Read by attendance_allowance.py, salary_slip.py, payroll_entry.py and Salary
-Revision. See docs/allowances.md.
+Revision. See docs/payroll-complete-reference.md.
 """
 
 import frappe

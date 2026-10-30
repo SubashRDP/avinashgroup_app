@@ -1,4 +1,4 @@
-"""Rolled-back check, see docs/payroll-handover.md §9. Nothing is kept: commits are
+"""Rolled-back check, see docs/payroll-complete-reference.md §12. Nothing is kept: commits are
 stubbed and the transaction is rolled back. Run from sites/:
     ../env/bin/python ../apps/avinashgroup_app/avinashgroup_app/scripts/check_leave_backfill_bs.py
 """

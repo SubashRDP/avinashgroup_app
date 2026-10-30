@@ -139,6 +139,64 @@ def _undo_excused_late_half_day(doc):
     doc.half_day_status = None
 
 
+def check_late_excuse_change(doc, method=None):
+    """Before Update after Submit: excusing a day is allowed only while it can still count.
+
+    Late Excused and its reason can be changed on a submitted Attendance
+    (patches/late_excuse_editable_after_submit.py), so HR no longer cancels and
+    amends a day to excuse it. The fine is posted when the month's slips are made
+    and again when they are submitted, so a change reaches pay on its own until
+    the slip is submitted. After that it would change nothing, which HR would not
+    see, so it is refused.
+    """
+    before = doc.get_doc_before_save()
+    if not before or (
+        before.get("custom_late_excused") == doc.get("custom_late_excused")
+        and before.get("custom_late_excuse_reason") == doc.get("custom_late_excuse_reason")
+    ):
+        return
+    if doc.get("custom_late_excused") and not (doc.get("custom_late_excuse_reason") or "").strip():
+        frappe.throw(frappe._("Give the reason for excusing the late arrival."), title=frappe._("Reason Needed"))
+    slip = frappe.db.get_value(
+        "Salary Slip",
+        {
+            "employee": doc.employee,
+            "docstatus": 1,
+            "start_date": ("<=", doc.attendance_date),
+            "end_date": (">=", doc.attendance_date),
+            **REGULAR_SLIPS,
+        },
+        "name",
+    )
+    if slip:
+        frappe.throw(
+            frappe._(
+                "Salary Slip {0} for this day is already submitted, so excusing the lateness would not change "
+                "the pay. Cancel the slip first, or settle it as a Payroll Adjustment."
+            ).format(slip),
+            title=frappe._("Already Paid"),
+        )
+
+
+def apply_late_excuse_change(doc, method=None):
+    """On Update after Submit: put the day's status where the late rule now says.
+
+    Status cannot be changed through Update after Submit, so the same rules as a
+    fresh save are run on the document and the result is written directly.
+    Excused: a day the late rule made a Half Day goes back to Present. No longer
+    excused: the rule applies again and may make it a Half Day.
+    """
+    before = doc.get_doc_before_save()
+    if not before or before.get("custom_late_excused") == doc.get("custom_late_excused"):
+        return
+    enforce_late_arrival_half_day(doc)
+    changed = {
+        f: doc.get(f) for f in ("status", "half_day_status", "leave_type") if doc.get(f) != before.get(f)
+    }
+    if changed:
+        doc.db_set(changed, update_modified=False)
+
+
 def half_day_when_working_on_leave(doc, method=None):
     """
     Before save: an employee who comes in while on approved leave has worked half

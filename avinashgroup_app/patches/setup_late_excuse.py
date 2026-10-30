@@ -29,6 +29,7 @@ def execute():
 					"fieldtype": "Check",
 					"insert_after": "custom_late_exit",
 					"description": "Lateness stays recorded, but is not fined and does not make a half day",
+					"allow_on_submit": 1,
 				},
 				{
 					"fieldname": "custom_late_excuse_reason",
@@ -37,6 +38,7 @@ def execute():
 					"insert_after": "custom_late_excused",
 					"depends_on": "custom_late_excused",
 					"mandatory_depends_on": "custom_late_excused",
+					"allow_on_submit": 1,
 				},
 			]
 		},

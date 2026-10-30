@@ -161,6 +161,16 @@ def clear_month(employees, payroll_date):
 		},
 		pluck="name",
 	):
+		# A draft slip made on the earlier run still links this recovery and
+		# could not be saved once it is cancelled ("Cannot link cancelled
+		# document"), which stopped Submit Salary Slips for anyone with an
+		# advance. Drop that line; the slip's next save adds the new one.
+		frappe.db.sql(
+			"""delete sd from `tabSalary Detail` sd
+			join `tabSalary Slip` ss on ss.name = sd.parent and sd.parenttype = 'Salary Slip'
+			where sd.additional_salary = %s and ss.docstatus = 0""",
+			name,
+		)
 		doc = frappe.get_doc("Additional Salary", name)
 		doc.flags.ignore_permissions = True
 		doc.cancel()

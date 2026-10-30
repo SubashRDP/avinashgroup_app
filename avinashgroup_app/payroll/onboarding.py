@@ -33,7 +33,7 @@ Allowance Rates list holds and the row is filled from. The structure's
 Earnings and Deductions hold the formula lines (Basic, SSF Addition, SSF,
 income tax) and the late fine tag. A raise is a Salary Revision, a new
 allowance is a component and some rows, and a new starter is one Employee.
-See docs/allowances.md.
+See docs/payroll-complete-reference.md.
 
     bench --site <site> execute avinashgroup_app.payroll.onboarding.onboard \\
         --kwargs "{'key': 'NGN', 'path': '/path/to/NGN.xlsx'}"

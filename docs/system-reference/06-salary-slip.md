@@ -114,7 +114,7 @@ payment_days       = days between max(start, joining) and min(end, relieving), i
 | `email_salary_slip_to_employee` / `email_template` | 1 / `Salary Slip (BS)` | See [07-after-the-slip.md](07-after-the-slip.md) |
 | `process_payroll_accounting_entry_based_on_employee` | 0 | One payable line per journal ([07](07-after-the-slip.md)) |
 
-**Which components are prorated** (Salary Component `depends_on_payment_days`, avinas1): Basic, all Monthly allowances (Dearness, Other, Fixed, Fuel, Gas, Education, Maintenance, Transport), House Rent Allowance, Load/Unload. **Not prorated:** Leave Encashment and Dashain Allowance (one-off amounts already worked out; since 2026-10-13), SSF Addition and SSF (they are a share of the already-prorated Basic, so prorating again would cut twice — [../payroll-ngi.md](../payroll-ngi.md)), Income Tax, Late Fine, and every attendance-driven earning (Tea, Meal, Overtime: already counted per day; `validate_salary_component` forces this, see [01b-pay-masters.md](01b-pay-masters.md)).
+**Which components are prorated** (Salary Component `depends_on_payment_days`, avinas1): Basic, all Monthly allowances (Dearness, Other, Fixed, Fuel, Gas, Education, Maintenance, Transport), House Rent Allowance, Load/Unload. **Not prorated:** Leave Encashment and Dashain Allowance (one-off amounts already worked out; since 2026-10-13), SSF Addition and SSF (they are a share of the already-prorated Basic, so prorating again would cut twice — [../payroll-complete-reference.md](../payroll-complete-reference.md)), Income Tax, Late Fine, and every attendance-driven earning (Tea, Meal, Overtime: already counted per day; `validate_salary_component` forces this, see [01b-pay-masters.md](01b-pay-masters.md)).
 
 **Impacts downstream.** Gross pay, SSF (31% of prorated Basic), taxable income for the month, the daily breakdown's fixed-pay rate, the salary sheet's "Deduction" column ([07](07-after-the-slip.md)).
 
@@ -143,7 +143,7 @@ payment_days       = days between max(start, joining) and min(end, relieving), i
 | Salary Advance | Deduction | 0 | 0 | Recovery only; no tax effect |
 | Income Tax | Deduction | 1 | 0 | `variable_based_on_taxable_salary` = 1, `round_to_the_nearest_integer` = 1 |
 
-HRMS copies the exemption flag onto each structure row when the row is written; changing a component flag later does nothing to an existing structure until its rows are re-synced ([../payroll-ngi.md](../payroll-ngi.md) "Income tax and SST").
+HRMS copies the exemption flag onto each structure row when the row is written; changing a component flag later does nothing to an existing structure until its rows are re-synced ([../payroll-complete-reference.md](../payroll-complete-reference.md) "Income tax and SST").
 
 ---
 
@@ -153,7 +153,7 @@ HRMS copies the exemption flag onto each structure row when the row is written; 
 
 **Where.** [`add_employee_allowances`](../../avinashgroup_app/payroll/salary_slip.py#L33); amounts from [`fixed_allowance_amounts`](../../avinashgroup_app/payroll/allowance.py#L332), rows from [`get_employee_allowance_rows`](../../avinashgroup_app/payroll/allowance.py#L285), assignment from [`current_assignment`](../../avinashgroup_app/payroll/allowance.py#L270); kinds in [`FIXED_KINDS`](../../avinashgroup_app/payroll/allowance.py#L73).
 
-**Why** (module docstring, [../allowances.md](../allowances.md)):
+**Why** (module docstring, [../payroll-complete-reference.md](../payroll-complete-reference.md)):
 - Every person has their own mix (27 combinations across 195 people, October 2026), so allowances are rows on the person's Salary Structure Assignment, not structure formulas. No row → not paid.
 - **Not** monthly Additional Salary, because HRMS treats Additional Salary as a one-off and would not project it over the rest of the year, under-taxing. Rows without `additional_salary` are projected like structure rows and prorated by payment days.
 - A hook, not a class: rdp_common_app owns the Salary Slip class.
@@ -215,7 +215,7 @@ this month                         = (year's tax − tax already deducted this p
 | 25,00,001 | 40,00,000 | 27 | |
 | 40,00,001 | — | 29 | |
 
-The first band is the 1% Social Security Tax, waived for SSF contributors; HRMS skips a band whose condition is false, so one Income Tax component yields either the SST or the progressive tax (`payroll/income_tax.py` module docstring, [../payroll-ngi.md](../payroll-ngi.md)). The seed table is [`FY_8384_SLABS`](../../avinashgroup_app/payroll/income_tax.py#L31) in [`TAX_SLABS_BY_YEAR`](../../avinashgroup_app/payroll/income_tax.py#L45); the slip reads the **record**, created by [`ensure_income_tax_slab`](../../avinashgroup_app/hr/year_setup.py#L355). Changing `FY_8384_SLABS` changes nothing on a slip until a new slab record is built.
+The first band is the 1% Social Security Tax, waived for SSF contributors; HRMS skips a band whose condition is false, so one Income Tax component yields either the SST or the progressive tax (`payroll/income_tax.py` module docstring, [../payroll-complete-reference.md](../payroll-complete-reference.md)). The seed table is [`FY_8384_SLABS`](../../avinashgroup_app/payroll/income_tax.py#L31) in [`TAX_SLABS_BY_YEAR`](../../avinashgroup_app/payroll/income_tax.py#L45); the slip reads the **record**, created by [`ensure_income_tax_slab`](../../avinashgroup_app/hr/year_setup.py#L355). Changing `FY_8384_SLABS` changes nothing on a slip until a new slab record is built.
 
 **Payroll Period.** One per company, `83/84 - <abbr>`, 2026-07-17 → 2027-07-16 (made by [`ensure_payroll_period`](../../avinashgroup_app/hr/year_setup.py#L335)). A slip outside any Payroll Period gets no tax and a message.
 
@@ -262,7 +262,7 @@ It writes the tax row (`amount`, `default_amount`), `custom_retirement_excess`, 
 
 **Where.** [`apply_income_tax_override`](../../avinashgroup_app/payroll/income_tax.py#L156), [`get_tax_row`](../../avinashgroup_app/payroll/income_tax.py#L148).
 
-**Why.** The computed figure is a projection; accounts often knows better (previous employer's income, late declarations, auditor's figure) — module docstring, [../payroll-ngi.md](../payroll-ngi.md) "Changing it by hand".
+**Why.** The computed figure is a projection; accounts often knows better (previous employer's income, late declarations, auditor's figure) — module docstring, [../payroll-complete-reference.md](../payroll-complete-reference.md) "Changing it by hand".
 
 **Fields.** Salary Slip `custom_override_income_tax` (Check), `custom_income_tax_override` (Currency), `custom_income_tax_computed` (read-only). None is *Allow on Submit*: the override must be set on the draft.
 
@@ -289,7 +289,7 @@ It writes the tax row (`amount`, `default_amount`), `custom_retirement_excess`, 
 
 **Where.** [`build_daily_breakdown`](../../avinashgroup_app/payroll/daily_breakdown.py#L64), [`breakdown_rows`](../../avinashgroup_app/payroll/daily_breakdown.py#L80), [`paid_weight`](../../avinashgroup_app/payroll/daily_breakdown.py#L219), [`spread_over_days`](../../avinashgroup_app/payroll/daily_breakdown.py#L162), [`attendance_additional_salaries`](../../avinashgroup_app/payroll/daily_breakdown.py#L207), [`fetch_holidays`](../../avinashgroup_app/payroll/daily_breakdown.py#L277). Created by `patches/setup_salary_slip_daily_breakdown.py`.
 
-**Why.** Employees asked "why is my tea 2,115 and not 2,350?"; the slip only had monthly totals (module docstring, [../allowances.md](../allowances.md) "Daily breakdown on the salary slip").
+**Why.** Employees asked "why is my tea 2,115 and not 2,350?"; the slip only had monthly totals (module docstring, [../payroll-complete-reference.md](../payroll-complete-reference.md) "Daily breakdown on the salary slip").
 
 **How it reconciles.**
 - Fixed pay per day = (Σ non-additional, non-statistical earning `amount`s ÷ `payment_days`) × the day's weight: Absent 0, Half Day 0.5 (1 if the other half is paid leave), LWP 0, holiday and paid leave 1, unmarked 1 when Payroll Settings says Present.
@@ -384,4 +384,4 @@ A real submitted slip on avinas1, chosen because it exercises every kind of line
 | G3 | Retirement cap counts every exempt deduction, not only retirement ones (6.8) | Latent; only SSF is exempt today |
 | G4 | Women's rebate: 0 of 21 active women ticked | Data, HR to confirm per person |
 | G5 | Bhadra 2083 slips (NGI 87, NGN 63) carry no tea / meal / OT / late fine: Prepare Payroll Inputs was not run or found no attendance | Confirm with HR; see [05-payroll-entry.md](05-payroll-entry.md) |
-| G6 | [../payroll-ngi.md](../payroll-ngi.md) "The structure" still lists Dearness, Other, HRA, Gas, Education as structure formulas reading Employee fields (`custom_dearness_allowance`, `custom_hra_eligible`…) and says rates come from "Allowance Category". The live structures have only Basic / SSF Addition / SSF / Late Fine / Income Tax; allowances come from the assignment (`move_pay_to_salary_assignment`, `allowance_rate_list` patches) | Doc is stale |
+| G6 | [../payroll-complete-reference.md](../payroll-complete-reference.md) "The structure" still lists Dearness, Other, HRA, Gas, Education as structure formulas reading Employee fields (`custom_dearness_allowance`, `custom_hra_eligible`…) and says rates come from "Allowance Category". The live structures have only Basic / SSF Addition / SSF / Late Fine / Income Tax; allowances come from the assignment (`move_pay_to_salary_assignment`, `allowance_rate_list` patches) | Doc is stale |

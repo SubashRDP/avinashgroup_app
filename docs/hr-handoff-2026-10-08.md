@@ -4,7 +4,7 @@ Branch `feature/allowances`, merged into `develop`. Built and checked on `avinas
 (dell box, `/home/dell/frappe-v15`). Reference sheets: the Falgun 2082 salary
 sheets `NGI.xlsx`, `NGN.xlsx`, `NGG.xlsx`, `NGK.xlsx` (dell box:
 `~/Downloads/salary detial for samita jee/`). **Copy them to the server.**
-Design and day-to-day use: [allowances.md](allowances.md).
+Design and day-to-day use: [payroll-complete-reference.md](payroll-complete-reference.md).
 
 ---
 

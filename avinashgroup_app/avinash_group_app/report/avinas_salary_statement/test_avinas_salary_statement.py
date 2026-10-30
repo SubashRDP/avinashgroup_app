@@ -1,6 +1,6 @@
 """The salary sheet adds up to the slips and checks itself against the journal.
 
-Runs on the submitted Shrawan 83/84 test month of NGI (docs/allowances.md),
+Runs on the submitted Shrawan 83/84 test month of NGI (docs/payroll-complete-reference.md),
 whose journal NGI-JE-83/84-00004 was checked by hand.
 """
 

@@ -30,6 +30,9 @@ Columns:
     mid-month shift change shows on the day it happened
   • Late In (min), Before ofc. Time (min) — measured against that shift by
     hr.shift_day.measure_day.
+  • Late Excused — the Attendance's Late Excused tick, its reason as the
+    tooltip. The minutes beside it stay shown but are not fined. HR Manager
+    can tick or untick it from the cell (hr/late_excuse.py).
   • O.T. (hrs), O.T. Rate, O.T. Amount — the hours a submitted Overtime Sheet
     measured for that employee that day (hr.overtime.get_overtime_hours), the
     same hours pay reads; the rate is the person's hourly basic × 1.5
@@ -440,6 +443,7 @@ def _fetch_attendance(employees, ad_start, ad_end, company=None):
 			"custom_worked_on_holiday",
 			"custom_late_entry", "custom_early_entry",
 			"custom_early_exit", "custom_late_exit",
+			"custom_late_excused", "custom_late_excuse_reason",
 			"leave_application",
 		],
 	)
@@ -629,6 +633,11 @@ def _build_row(
 		"status": status,
 		"late_minutes": measured.late_minutes,
 		"before_office_minutes": measured.early_exit_minutes,
+		# Excused: the minutes stay shown, but are not fined and do not make a
+		# half day. HR Manager can tick it from the cell (hr/late_excuse.py).
+		"late_excused": 1 if att and att.custom_late_excused else 0,
+		"late_excuse_reason": (att.custom_late_excuse_reason or "") if att else "",
+		"attendance": att.name if att else None,
 		"ot_hours": flt(ot_hours),
 		"ot_rate": flt(ot_rate, 2) if ot_hours else 0,
 		"ot_amount": flt(flt(ot_hours) * flt(ot_rate), 2),
@@ -723,6 +732,7 @@ def _new_totals():
 	return {
 		"present": 0.0, "half_day": 0, "absent": 0, "not_marked": 0, "holiday": 0,
 		"leave": 0, "late_min": 0, "ot_hours": 0.0, "ot_amount": 0.0,
+		"excused_min": 0, "excused_days": 0,
 	}
 
 
@@ -743,6 +753,9 @@ def _accumulate(totals, row, present_statuses, counts_as_missing):
 	leftover, and inflated Present Days past the month's working days).
 	"""
 	totals["late_min"] += row["late_minutes"] + row["before_office_minutes"]
+	if row.get("late_excused"):
+		totals["excused_min"] += row["late_minutes"] + row["before_office_minutes"]
+		totals["excused_days"] += 1
 	totals["ot_hours"] += row["ot_hours"]
 	att_status = row.get("att_status")
 	if row.get("is_holiday"):
@@ -822,6 +835,7 @@ def _columns(components):
 		{"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 95},
 		{"label": _("Late In (min)"), "fieldname": "late_minutes", "fieldtype": "Int", "width": 80},
 		{"label": _("Before ofc. Time (min)"), "fieldname": "before_office_minutes", "fieldtype": "Int", "width": 130},
+		{"label": _("Late Excused"), "fieldname": "late_excused", "fieldtype": "Check", "width": 100},
 		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 2},
 		{"label": _("O.T. Rate"), "fieldname": "ot_rate", "fieldtype": "Currency", "width": 90},
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 100},
@@ -886,6 +900,14 @@ def _summary(totals, employee_count, bs_label, working_days):
 		cards.append({"value": totals["not_marked"], "label": per_scope(_("Not Marked Days"), n), "datatype": "Int"})
 	cards.extend([
 		{"value": totals["late_min"], "label": per_scope(_("Late Time (min)"), n), "datatype": "Int"},
+	])
+	if totals["excused_days"]:
+		cards.append({
+			"value": totals["excused_min"],
+			"label": per_scope(_("Late Time Excused (min)"), n),
+			"datatype": "Int",
+		})
+	cards.extend([
 		{"value": flt(totals["ot_hours"], 2), "label": per_scope(_("O.T. Hours"), n), "datatype": "Float"},
 		{"value": flt(totals["ot_amount"], 2), "label": per_scope(_("O.T. Amount"), n), "datatype": "Currency"},
 	])

@@ -52,11 +52,11 @@ What HR must have in place:
 **Late minutes.** The Attendance form has a **Shift Deviation** section: Late Entry, Early Entry, Early Exit, Late Exit. These are measured against that day's shift and are what the late fine and meals use.
 
 **Excusing lateness for one day.** For a real reason (traffic jam, funeral):
-1. Open the person's **Attendance** for that day.
-2. If it is submitted (the usual case), click **Cancel**, then **Amend**: Late Excused cannot be ticked on a submitted Attendance.
-3. Tick **Late Excused** and type the **Reason for Excusing**.
-4. Save and **Submit**.
-5. If the month's slips are drafts, **Submit Salary Slip** picks the change up.
+1. Open the person's **Attendance** for that day. It can be submitted: there is no need to cancel or amend. (Or, quicker: in **Monthly Attendance BS**, click **Excuse ✎** in the day's **Late Excused** column; Chapter 7.)
+2. Tick **Late Excused** and type the **Reason for Excusing**.
+3. Click **Update** (a draft: **Save**, then **Submit**).
+4. Unticking it later puts the fine and the half day back.
+5. If the month's slips are drafts, **Submit Salary Slip** picks the change up. Once the slip is submitted the change is refused ("Already Paid"): settle it with a Payroll Adjustment instead.
 
 The lateness stays recorded in reports but is no longer fined. If lateness was the only reason the day became a Half Day, the day goes back to Present.
 
