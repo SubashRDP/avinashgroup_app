@@ -63,6 +63,11 @@ app_include_js = [
     "/assets/avinashgroup_app/js/purchase_order_lc.js?v=1.0",
     # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
     "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.3",
+    # Billing nudges toward invoicing from the Sales Order: customer popup,
+    # swipe-in pending-orders drawer on the invoice, and the new-order cards
+    # sales staff get live. See custom_code/SalesInvoice/pending_orders.py.
+    "/assets/avinashgroup_app/js/sales_invoice_pending_orders.js?v=6",
+    "/assets/avinashgroup_app/js/sales_order_alerts.js?v=4",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -92,6 +97,8 @@ app_include_js = [
 app_include_css = [
     "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
     "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
+    # glass look for the pending-order popup, drawer and new-order cards
+    "/assets/avinashgroup_app/css/sales_pending_orders.css?v=4",
 ]
 
 doctype_js = {

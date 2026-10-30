@@ -18,6 +18,8 @@ logged and swallowed.
 import frappe
 from frappe.utils import fmt_money, formatdate
 
+from avinashgroup_app.custom_code.SalesInvoice.pending_orders import order_alert_payload
+
 
 # subject, and the sentence under it. {name}, {total} and {date} are filled in.
 NOTICES = {
@@ -110,19 +112,10 @@ def notify_customer(doc, method=None):
 			return
 
 		recipients = _portal_users(doc.get("customer"))
-		if not recipients:
-			return
+		total = fmt_money(doc.get("grand_total") or 0, currency=doc.get("currency"))
 
 		subject, body = notice
-		message = body.format(
-			name=doc.name,
-			total=fmt_money(doc.get("grand_total") or 0, currency=doc.get("currency")),
-			date=_document_date(doc),
-		)
-
-		staff = [u for u in _company_staff(doc.get("company")) if u not in recipients]
-		staff_subject, staff_body = STAFF_NOTICES.get(doc.doctype, (None, None))
-
+		message = body.format(name=doc.name, total=total, date=_document_date(doc))
 		for user in recipients:
 			frappe.get_doc({
 				"doctype": "Notification Log",
@@ -135,26 +128,9 @@ def notify_customer(doc, method=None):
 				"email_content": f"<p>{frappe.utils.escape_html(message)}</p>",
 			}).insert(ignore_permissions=True)
 
-		if not staff_subject:
-			return
-
-		staff_message = staff_body.format(
-			name=doc.name,
-			customer=doc.get("customer_name") or doc.get("customer"),
-			total=fmt_money(doc.get("grand_total") or 0, currency=doc.get("currency")),
-			date=_document_date(doc),
-		)
-		for user in staff:
-			frappe.get_doc({
-				"doctype": "Notification Log",
-				"for_user": user,
-				"from_user": frappe.session.user,
-				"type": "Alert",
-				"document_type": doc.doctype,
-				"document_name": doc.name,
-				"subject": f"{staff_subject} - {doc.get('company')}",
-				"email_content": f"<p>{frappe.utils.escape_html(staff_message)}</p>",
-			}).insert(ignore_permissions=True)
+		# Staff are told whether or not the customer has a portal login — an
+		# order keyed in on the customer's behalf still needs invoicing.
+		_notify_staff(doc, total, exclude=recipients)
 
 	except Exception:
 		# A notification is never worth failing a submitted document for.
@@ -162,3 +138,39 @@ def notify_customer(doc, method=None):
 			title="Customer notification failed",
 			message=f"{doc.doctype} {doc.name}\n\n{frappe.get_traceback()}",
 		)
+
+
+def _notify_staff(doc, total, exclude):
+	staff_subject, staff_body = STAFF_NOTICES.get(doc.doctype, (None, None))
+	if not staff_subject:
+		return
+
+	staff_message = staff_body.format(
+		name=doc.name,
+		customer=doc.get("customer_name") or doc.get("customer"),
+		total=total,
+		date=_document_date(doc),
+	)
+	for user in _company_staff(doc.get("company")):
+		if user in exclude:
+			continue
+		log = frappe.get_doc({
+			"doctype": "Notification Log",
+			"for_user": user,
+			"from_user": frappe.session.user,
+			"type": "Alert",
+			"document_type": doc.doctype,
+			"document_name": doc.name,
+			"subject": f"{staff_subject} - {doc.get('company')}",
+			"email_content": f"<p>{frappe.utils.escape_html(staff_message)}</p>",
+		}).insert(ignore_permissions=True)
+
+		# A new order also pops up as a card with "Make Invoice" on that user's
+		# open desk — see public/js/sales_order_alerts.js.
+		if doc.doctype == "Sales Order":
+			frappe.publish_realtime(
+				"avinash_new_sales_order",
+				order_alert_payload(doc, log.name, log.creation),
+				user=user,
+				after_commit=True,
+			)
