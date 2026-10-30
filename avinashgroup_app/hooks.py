@@ -94,6 +94,11 @@ app_include_css = [
     "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
 ]
 
+doctype_list_js = {
+    # List view shows the real status ("To Deliver and Bill") instead of ERPNext's "Overdue".
+    "Sales Order": "public/js/sales_order_list.js",
+}
+
 doctype_js = {
     # Approval-workflow UI (banner + reject dialog) is now generic — see
     # approval_workflow_auto.js in app_include_js. No per-doctype file needed;
@@ -646,6 +651,8 @@ before_request = [
     # Stock General Ledger prints the Frappe document name; adds a column
     # carrying the number actually written on the document.
     "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
+    # Stock Trial Balance for Party: adds a Customer Group (name, not ID) column.
+    "avinashgroup_app.custom_code.Override.trial_balance_party_customer_group.patch_trial_balance_party_customer_group",
     # Frappe permanently flips prepared_report on after one slow run, after
     # which the report serves a cached result and ignores its own filters.
     "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
@@ -662,6 +669,7 @@ before_job = [
     "avinashgroup_app.custom_code.Override.repost_valuation_notify.patch_repost_valuation_disable_error_email",
     # Prepared Reports render in a worker, where before_request never fires.
     "avinashgroup_app.custom_code.Override.general_ledger_voucher_no.patch_general_ledger_voucher_no",
+    "avinashgroup_app.custom_code.Override.trial_balance_party_customer_group.patch_trial_balance_party_customer_group",
     "avinashgroup_app.custom_code.Override.prepared_report_guard.patch_keep_reports_interactive",
     "avinashgroup_app.hr.shift_window.patch_whole_day_window",
     "avinashgroup_app.utils.bs_converter.patch_converter",
@@ -696,6 +704,8 @@ override_whitelisted_methods = {
     "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",
     # Report "Add Column": show a Link field's name instead of its id.
     "frappe.desk.query_report.get_data_for_custom_field": "avinashgroup_app.custom_code.Override.query_report.get_data_for_custom_field",
+    # Adds this app's filters to stock ERPNext report scripts (Trial Balance for Party: Customer Group).
+    "frappe.desk.query_report.get_script": "avinashgroup_app.custom_code.Override.query_report.get_script",
     "frappe.desk.reportview.export_query": "avinashgroup_app.custom_code.Override.reportview.export_query",
 }
 
