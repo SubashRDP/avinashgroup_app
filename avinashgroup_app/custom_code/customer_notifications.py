@@ -18,6 +18,8 @@ logged and swallowed.
 import frappe
 from frappe.utils import fmt_money, formatdate
 
+from avinashgroup_app.custom_code.SalesInvoice.so_latest_rate import issued_at_updated_rate
+
 from avinashgroup_app.custom_code.SalesInvoice.pending_orders import order_alert_payload
 
 
@@ -36,6 +38,10 @@ NOTICES = {
 		"Invoice {name} of {total} is now on your account, dated {date}.",
 	),
 }
+
+# Added to the customer's Sales Invoice notice when the order was billed at a
+# price that changed after it was placed.
+UPDATED_RATE_NOTE = "It has been issued at the updated rate."
 
 
 # The desk side is told through the company's Sales Persons, and only about
@@ -116,6 +122,9 @@ def notify_customer(doc, method=None):
 
 		subject, body = notice
 		message = body.format(name=doc.name, total=total, date=_document_date(doc))
+		# Billed at today's price instead of the order's (SalesInvoice/so_latest_rate.py).
+		if recipients and doc.doctype == "Sales Invoice" and issued_at_updated_rate(doc):
+			message += " " + UPDATED_RATE_NOTE
 		for user in recipients:
 			frappe.get_doc({
 				"doctype": "Notification Log",

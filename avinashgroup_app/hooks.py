@@ -710,6 +710,8 @@ override_whitelisted_methods = {
     "frappe.utils.print_format.download_pdf": "avinashgroup_app.custom_code.printing.chrome_pdf.download_pdf",
     "erpnext.buying.doctype.request_for_quotation.request_for_quotation.create_supplier_quotation": "avinashgroup_app.templates.pages.rfq.create_supplier_quotation",
     "erpnext.stock.get_item_details.get_item_details": "avinashgroup_app.custom_code.Override.get_item_details.get_item_details",
+    # Sales Order -> Sales Invoice bills at the current Item Price, not the SO rate.
+    "erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice": "avinashgroup_app.custom_code.SalesInvoice.so_latest_rate.make_sales_invoice",
     "frappe.model.workflow.get_transitions": "avinashgroup_app.custom_code.workflow_admin_bypass.get_transitions",
     "frappe.model.workflow.apply_workflow": "avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow",
     "frappe.client.get_list": "avinashgroup_app.custom_code.fiscal_year_filter.filtered_get_list",

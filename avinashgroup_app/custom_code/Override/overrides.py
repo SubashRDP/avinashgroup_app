@@ -126,6 +126,24 @@ class CustomSalesInvoice(ERPNextSalesInvoice):
 	def validate_warehouse(self):
 		_lenient_warehouse_check(self, super().validate_warehouse)
 
+	def limits_crossed_error(self, args, item, qty_or_amount):
+		"""Let a Sales Order be billed above its amount when only the price went up.
+
+		ERPNext calls this from its over-billing check (status_updater) just before
+		blocking the submit; args["name"] is the Sales Order Item being checked.
+		See SalesInvoice/so_latest_rate.overbilled_by_price_update for the rule.
+		"""
+		from avinashgroup_app.custom_code.SalesInvoice.so_latest_rate import overbilled_by_price_update
+
+		if (
+			qty_or_amount == "amount"
+			and args.get("target_dt") == "Sales Order Item"
+			and overbilled_by_price_update(self, args.get("name"))
+		):
+			return
+
+		super().limits_crossed_error(args, item, qty_or_amount)
+
 	def validate_zero_qty_for_return_invoices_with_stock(self):
 		"""Let the zero-qty setting reach stock-affecting returns too.
 
