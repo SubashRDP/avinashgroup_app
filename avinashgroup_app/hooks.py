@@ -55,6 +55,9 @@ app_include_js = [
     # 4.5 = 4.4 (POS logic) merged with 3.7 (credit banner rebuild). Both sides
     # changed this file, so the buster has to clear BOTH caches.
     "/assets/avinashgroup_app/js/sales_invoice.js?v=4.8",
+    # One line above the Items table: is each row's rate today's Item Price?
+    # Check only, never changes or blocks. See SalesInvoice/rate_check.py.
+    "/assets/avinashgroup_app/js/sales_invoice_rate_check.js?v=1.0",
     # "Create > PDC Cheque" on submitted Sales / Purchase Invoices. Global for the
     # same reason as sales_invoice.js above. See pdc/lifecycle.py make_from_invoice.
     "/assets/avinashgroup_app/js/invoice_pdc.js?v=1.0",
