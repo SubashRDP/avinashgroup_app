@@ -77,7 +77,7 @@
    "fieldname": "how_to",
    "fieldtype": "HTML",
    "label": "How To",
-   "options": "<ol style=\"padding-left: 1.2em; margin-bottom: 0\"><li>Pick the Company and From Date, then <b>Download Template</b>: one row per active employee, filled from their current salary, one column per allowance.</li><li>Change what is new. Delete the rows of people who are not changing.</li><li>An allowance cell is the person's rate. Leave it blank (or 0) when they do not get it. For a column marked <i>from basic</i> (overtime), type Yes.</li><li>Attach the file. Each row is checked; fix any row marked Error in Excel and attach again.</li><li>Submit: one Salary Structure Assignment per row.</li></ol>"
+   "options": "<ol style=\"padding-left: 1.2em; margin-bottom: 0\"><li>Pick the Company and From Date, then <b>Download Template</b>: one row per active employee, filled from their current salary, one column per allowance.</li><li>Fill in or change only the people whose salary is new. Rows left blank, or the same as now, are skipped.</li><li>An allowance cell is the person's rate. Leave it blank (or 0) when they do not get it. For a column marked <i>from basic</i> (overtime), type Yes.</li><li>Attach the file. Each row is checked; fix any row marked Error in Excel and attach again.</li><li>Submit: one Salary Structure Assignment per row.</li></ol>"
   },
   {
    "fieldname": "download_template",

@@ -11,12 +11,16 @@ column per allowance, the cell being that person's rate.
 
   Download Template  every active employee of the company, pre-filled from the
                      assignment in force on From Date, so HR changes only what
-                     is new and deletes the rows of people who are not changing.
+                     is new; untouched rows are left out on reading.
   Filled Template    attaching it replaces the Employees table. Each row is
                      checked by building the assignment in memory and running
                      its real validate (HRMS's plus validate_assignment_allowances),
                      so a row marked Ready is one that will save.
   Submit             one submitted assignment per row; Cancel cancels them.
+
+Rows nobody filled in (no Base, Initial Basic or allowance) and rows exactly
+the same as the person's current assignment are left out, so HR fills in only
+the people who change and need not delete the rest.
 
 Cells: an allowance left blank or 0 is not given — on the assignment no row
 means not paid. A column whose rate is worked out from basic (overtime) takes
@@ -58,7 +62,9 @@ class SalaryAssignmentUpload(Document):
 		if self.upload_file and (self.is_new() or self.has_value_changed("upload_file")):
 			self.read_rows_from_file()
 		if not self.employees:
-			frappe.throw(_("Attach the filled template: no employees yet"))
+			frappe.throw(
+				_("Nothing to upload: attach the filled template, with at least one person whose salary is new")
+			)
 		self.check_rows()
 		self.employee_count = len(self.employees)
 		self.error_count = sum(1 for row in self.employees if row.status == "Error")
@@ -106,6 +112,7 @@ class SalaryAssignmentUpload(Document):
 		columns = header_columns(header)
 
 		self.set("employees", [])
+		left_out = {"blank": 0, "unchanged": 0}
 		for line_no, values in enumerate(table[1:], start=2):
 			cells = {header[i]: values[i] if i < len(values) else None for i in range(len(header))}
 			employee = text(cells.get(columns["fixed"].get(EMPLOYEE)))
@@ -138,20 +145,68 @@ class SalaryAssignmentUpload(Document):
 			if ssf and ssf not in YES + NO:
 				problems.append(_("SSF Applicable: type Yes or No"))
 
+			row = {
+				"employee": employee,
+				"salary_structure": text(cells.get(columns["fixed"].get(STRUCTURE))) or None,
+				"base": base,
+				"initial_basic": initial_basic,
+				"ssf_applicable": 0 if ssf in NO else 1,
+			}
+			if not problems:
+				if not base and not initial_basic and not rates:
+					left_out["blank"] += 1  # a person in the template nobody filled in
+					continue
+				if self.is_unchanged(row, rates):
+					left_out["unchanged"] += 1
+					continue
+
 			self.append(
 				"employees",
 				{
-					"employee": employee,
-					"salary_structure": text(cells.get(columns["fixed"].get(STRUCTURE))) or None,
-					"base": base,
-					"initial_basic": initial_basic,
-					"ssf_applicable": 0 if ssf in NO else 1,
+					**row,
 					"allowance_rates": json.dumps(rates),
 					"status": "Error" if problems else "",
 					"file_error": 1 if problems else 0,
 					"message": _("Line {0}: {1}").format(line_no, "; ".join(problems)) if problems else "",
 				},
 			)
+
+		if any(left_out.values()):
+			frappe.msgprint(
+				_("Left out {0} blank row(s) and {1} row(s) the same as the person's current salary.").format(
+					left_out["blank"], left_out["unchanged"]
+				),
+				alert=True,
+			)
+
+	def is_unchanged(self, row: dict, rates: dict) -> bool:
+		"""The row says exactly what the assignment in force on From Date already says, so there is nothing to make."""
+		current = frappe.db.get_value(
+			"Salary Structure Assignment",
+			{"employee": row["employee"], "docstatus": 1, "from_date": ["<=", getdate(self.from_date)]},
+			["name", "salary_structure", "base", "custom_initial_basic", "custom_ssf_applicable"],
+			as_dict=True,
+			order_by="from_date desc",
+		)
+		if not current:
+			return False
+		# An allowance worked out from basic is given or not; any rate an old row carries is ignored.
+		current_rates = {
+			a: 0 if rate_is_computed(a) else flt(r, 2)
+			for a, r in frappe.get_all(
+				"Assignment Allowance",
+				filters={"parent": current.name, "parenttype": "Salary Structure Assignment"},
+				fields=["allowance", "rate"],
+				as_list=True,
+			)
+		}
+		return (
+			(row["salary_structure"] or self.salary_structure) == current.salary_structure
+			and flt(row["base"], 2) == flt(current.base, 2)
+			and flt(row["initial_basic"], 2) == flt(current.custom_initial_basic, 2)
+			and cint(row["ssf_applicable"]) == cint(current.custom_ssf_applicable)
+			and {a: flt(r, 2) for a, r in rates.items()} == current_rates
+		)
 
 	# ── checking a row ────────────────────────────────────────────────────
 
@@ -181,12 +236,15 @@ class SalaryAssignmentUpload(Document):
 		"""Run everything an assignment's save would run, without saving it. Raises what the save would raise."""
 		if frappe.db.get_value("Employee", row.employee, "company") != self.company:
 			frappe.throw(_("{0} is not an employee of {1}").format(row.employee, self.company))
+		missing = []
 		if not row.salary_structure:
-			frappe.throw(_("No Salary Structure: fill the cell, or the Default Salary Structure above"))
-		if frappe.db.get_value("Salary Structure", row.salary_structure, "docstatus") != 1:
-			frappe.throw(_("Salary Structure {0} is not submitted").format(row.salary_structure))
+			missing.append(_("No Salary Structure: fill the cell, or the Default Salary Structure above"))
+		elif frappe.db.get_value("Salary Structure", row.salary_structure, "docstatus") != 1:
+			missing.append(_("Salary Structure {0} is not submitted").format(row.salary_structure))
 		if flt(row.base) <= 0:
-			frappe.throw(_("Base is missing"))
+			missing.append(_("Base is missing"))
+		if missing:
+			frappe.throw("; ".join(missing))
 
 		doc = self.build_assignment(row)
 		messages = list(frappe.local.message_log)

@@ -472,7 +472,7 @@ For opening salaries, a batch of new joiners, or any day you would otherwise mak
 
 1. **Salary Assignment Upload → New.** Pick the Company and From Date. The Default Salary Structure is optional: it is used for a row whose Salary Structure cell is blank.
 2. **Download Template.** You get every active employee of the company, filled from the assignment in force on From Date. A person with no assignment yet has a blank row.
-3. In Excel, change what is new and **delete the rows of people who are not changing**.
+3. In Excel, fill in or change only the people whose salary is new. Rows left blank, and rows the same as the person's current assignment, are skipped when the file is read (a message says how many).
    - An allowance cell is that person's Rate, in the unit shown in the column heading. **Blank or 0 means not paid.** The structure's rate is *not* filled in for you.
    - A column marked *from basic* (overtime) takes Yes or No.
    - SSF Applicable: Yes or No. Blank means Yes.
