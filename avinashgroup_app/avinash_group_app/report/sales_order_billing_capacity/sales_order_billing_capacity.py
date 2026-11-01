@@ -83,10 +83,23 @@ def execute(filters=None):
 		frappe.throw(_("To Date cannot be before From Date."))
 
 	orders = _pending_orders(_as_list(filters.company), _as_list(filters.customer))
-	rows = _plan_billing(orders)
 
-	rows = [r for r in rows if _shown(r, filters)]
-	return get_columns(), rows, None, None, _summary(rows)
+	customers = []
+	for c in _plan_billing(orders):
+		c["orders"] = [r for r in c["orders"] if _shown(r, filters)]
+		if c["orders"]:
+			customers.append(c)
+	# Most money held back first: the customers someone has to chase are on top.
+	customers.sort(key=lambda c: (-sum(r["short_by"] for r in c["orders"]),
+		-sum(r["can_bill"] for r in c["orders"])))
+
+	rows = []
+	for c in customers:
+		rows.append(_customer_row(c))
+		rows.extend(c["orders"])
+
+	order_rows = [r for c in customers for r in c["orders"]]
+	return get_columns(), rows, None, _chart(customers), _summary(order_rows)
 
 
 def _pending_orders(companies, customers):
@@ -188,7 +201,8 @@ def _last_invoices(order_names):
 
 
 def _plan_billing(orders):
-	"""One row per order with how much of it the customer's limits let through today."""
+	"""Per customer, their credit position and one row per order with how much of it
+	the limits let through today: [{customer, customer_name, company, state, orders}]."""
 	if not orders:
 		return []
 
@@ -204,11 +218,123 @@ def _plan_billing(orders):
 		o.last_invoice = last.get(o.name)
 		by_customer.setdefault(o.customer, []).append(o)
 
-	rows = []
+	customers = []
 	for customer, customer_orders in by_customer.items():
 		state = get_credit_position(customer) or {}
-		rows.extend(_plan_customer(state, customer_orders, abbr))
-	return rows
+		first = customer_orders[0]
+		customers.append({
+			"customer": customer,
+			"customer_name": first.customer_name or customer,
+			"company": abbr.get(first.company) or first.company,
+			"state": state,
+			"orders": _plan_customer(state, customer_orders),
+		})
+	return customers
+
+
+def _customer_row(c):
+	"""The bold parent row of a customer's block: their orders added up, and their
+	credit position, which the order rows below it no longer repeat."""
+	state, orders = c["state"], c["orders"]
+	has_limits = bool(state.get("has_limits"))
+	amount_limit = flt(state.get("amount_limit"))
+	bill_limit = int(state.get("bill_limit") or 0)
+	days_limit = int(state.get("days_limit") or 0)
+
+	verdicts = {r["verdict"] for r in orders} - {QTY_BILLED}
+	if not verdicts:
+		verdict = QTY_BILLED
+	elif verdicts == {READY}:
+		verdict = READY
+	elif verdicts == {BLOCKED}:
+		verdict = BLOCKED
+	else:
+		verdict = PARTLY
+	# The first order that did not go through names what is holding the customer.
+	held = next((r for r in orders if r["verdict"] in (PARTLY, BLOCKED)), None)
+
+	meter = _credit_meter(state, sum(r["can_bill"] for r in orders))
+	row = {
+		"label": c["customer_name"],
+		"customer": c["customer"],
+		"indent": 0,
+		"bold": 1,
+		"company": c["company"],
+		"item": _("{0} orders").format(len(orders)) if len(orders) > 1 else _("1 order"),
+		"verdict": verdict,
+		"reason": held["reason"] if held else _("Every order fits the limits"),
+		"bills": _of(state.get("unpaid_count"), bill_limit) if has_limits else "",
+		"days": _of(state.get("days_used"), days_limit) if has_limits else "",
+		"amount_limit": amount_limit if has_limits else None,
+		"credit_left": flt(amount_limit - flt(state.get("exposure")), 2) if (has_limits and amount_limit) else None,
+		# Plain text for the Excel export; the JS draws the bar from _meter.
+		"_meter": meter,
+		"credit_meter": meter["text"],
+	}
+	for field in ("order_qty", "billed_qty", "pending_qty", "to_bill_order", "to_bill",
+			"qty_can_bill", "can_bill", "short_by"):
+		row[field] = flt(sum(r[field] or 0 for r in orders), 2)
+	return row
+
+
+def _credit_meter(state, can_bill=0):
+	"""What the Credit Used cell shows: {kind, text, used_pct, after_pct | leftover}.
+
+	Measured against the customer's whole room to bill — the amount limit PLUS
+	any advance left over once their bills are covered — because that is what
+	the credit check lets through (exposure = outstanding - leftover advance).
+	Against the limit alone a prepaid customer reads 0 % used while their orders
+	are being blocked: Counter Sales has a 1,455 limit and 1.4 lakh of advance.
+
+	used_pct is that room used today; after_pct is once the orders that fit
+	(`can_bill`) are invoiced. JS draws both on one bar.
+	"""
+	amount_limit = flt(state.get("amount_limit"))
+	if not state.get("has_limits") or not amount_limit:
+		return {"kind": "none", "text": _("No amount limit")}
+	leftover = flt(state.get("leftover_advance"))
+	if amount_limit <= ADVANCE_ONLY_LIMIT:
+		return {"kind": "advance", "leftover": leftover,
+			"text": _("Advance only · {0} left").format(frappe.format_value(leftover, "Currency"))}
+
+	room = amount_limit + leftover
+	outstanding = max(0.0, flt(state.get("outstanding")))
+	used_pct = round(outstanding / room * 100, 1)
+	after_pct = round((outstanding + flt(can_bill)) / room * 100, 1)
+	text = _("{0}% used").format(round(used_pct))
+	if after_pct > used_pct:
+		text += _(" → {0}% after billing").format(round(after_pct))
+	return {"kind": "amount", "used_pct": used_pct, "after_pct": after_pct, "text": text,
+		"limit": amount_limit, "leftover": leftover}
+
+
+# Chart colours. Can Bill Now is the status "good" green; Held Back is a neutral
+# grey rather than red — red beside green is the pair deuteranopes cannot tell
+# apart (validated: green/red deutan dE 4.1 fails, green/grey 12.5 passes).
+CHART_CAN_BILL = "#0ca30c"
+CHART_HELD = "#9e9d94"
+CHART_MAX_CUSTOMERS = 12
+
+
+def _chart(customers):
+	"""Stacked bar per customer — can bill now over held back — largest first."""
+	if not customers:
+		return None
+	top = sorted(customers, key=lambda c: -sum(r["to_bill"] for r in c["orders"]))[:CHART_MAX_CUSTOMERS]
+	return {
+		"data": {
+			"labels": [c["customer_name"] for c in top],
+			"datasets": [
+				{"name": _("Can Bill Now"), "values": [flt(sum(r["can_bill"] for r in c["orders"]), 2) for c in top]},
+				{"name": _("Held Back"), "values": [flt(sum(r["short_by"] for r in c["orders"]), 2) for c in top]},
+			],
+		},
+		"type": "bar",
+		"barOptions": {"stacked": 1, "spaceRatio": 0.5},
+		"colors": [CHART_CAN_BILL, CHART_HELD],
+		"fieldtype": "Currency",
+		"height": 260,
+	}
 
 
 def _priced_lines(order, order_items, prices):
@@ -260,7 +386,7 @@ def _fill_units(lines, room):
 	return qty, flt(amount, 2)
 
 
-def _plan_customer(state, orders, abbr):
+def _plan_customer(state, orders):
 	"""Bill one customer's orders oldest-first against their credit position.
 
 	`state` is get_credit_position's payload. Running figures:
@@ -338,9 +464,10 @@ def _plan_customer(state, orders, abbr):
 		single = lines[0] if len(lines) == 1 else None
 		last = o.last_invoice or {}
 		rows.append({
+			# Tree child of the customer row; `label` is the first column.
+			"label": o.name,
+			"indent": 1,
 			"customer": o.customer,
-			"customer_name": o.customer_name or o.customer,
-			"company": abbr.get(o.company) or o.company,
 			"sales_order": o.name,
 			"miti": bs_date_str(o.transaction_date) if o.transaction_date else "",
 			"date": o.transaction_date,
@@ -363,9 +490,6 @@ def _plan_customer(state, orders, abbr):
 			"last_invoice": last.get("invoice"),
 			"last_invoice_miti": (last.get("miti") or bs_date_str(last["posting_date"])) if last else "",
 			"last_invoice_qty": flt(last.get("qty")) if last else None,
-			"bills": _of(state.get("unpaid_count"), bill_limit) if has_limits else "",
-			"days": _of(days_used, days_limit) if has_limits else "",
-			"amount_limit": amount_limit if has_limits else None,
 			"credit_left": room,
 		})
 	return rows
@@ -398,46 +522,44 @@ def _summary(rows):
 	can_bill = sum(r["can_bill"] for r in rows)
 	billable_customers = {r["customer"] for r in rows if r["can_bill"] > 0}
 	blocked_customers = {r["customer"] for r in rows if r["verdict"] == BLOCKED} - billable_customers
+	pending_qty = sum(r["pending_qty"] for r in rows)
+	can_qty = sum(r["qty_can_bill"] for r in rows)
 	return [
 		{"label": _("Pending Orders"), "value": len(rows), "datatype": "Int", "indicator": "Blue"},
-		{"label": _("Pending Qty"), "value": sum(r["pending_qty"] for r in rows), "datatype": "Float",
-			"indicator": "Blue"},
+		{"label": _("Qty Can Bill / Pending"), "value": f"{_qty(can_qty)} / {_qty(pending_qty)}",
+			"datatype": "Data", "indicator": "Green" if can_qty >= pending_qty else "Orange"},
 		{"label": _("To Bill at Today's Rate"), "value": to_bill, "datatype": "Currency", "indicator": "Blue"},
-		{"label": _("Qty Can Bill Now"), "value": sum(r["qty_can_bill"] for r in rows), "datatype": "Float",
-			"indicator": "Green"},
 		{"label": _("Can Bill Now"), "value": can_bill, "datatype": "Currency", "indicator": "Green"},
 		{"label": _("Held by Credit Limits"), "value": to_bill - can_bill, "datatype": "Currency",
-			"indicator": "Red"},
+			"indicator": "Red" if to_bill - can_bill > PAISA else "Green"},
 		{"label": _("Customers Fully Blocked"), "value": len(blocked_customers), "datatype": "Int",
-			"indicator": "Red"},
+			"indicator": "Red" if blocked_customers else "Green"},
 	]
 
 
 def get_columns():
 	return [
-		{"fieldname": "customer", "label": _("Customer"), "fieldtype": "Link", "options": "Customer",
-			"width": 130},
-		{"fieldname": "customer_name", "label": _("Customer Name"), "fieldtype": "Data", "width": 180},
+		# Customer name on a customer row, Sales Order number on an order row;
+		# the JS formatter makes each a link to its own document.
+		{"fieldname": "label", "label": _("Customer / Sales Order"), "fieldtype": "Data", "width": 240},
 		{"fieldname": "company", "label": _("Company"), "fieldtype": "Data", "width": 75},
-		{"fieldname": "sales_order", "label": _("Sales Order"), "fieldtype": "Link",
-			"options": "Sales Order", "width": 160},
+		{"fieldname": "verdict", "label": _("Verdict"), "fieldtype": "Data", "width": 100},
+		{"fieldname": "credit_meter", "label": _("Credit Used"), "fieldtype": "Data", "width": 170},
 		{"fieldname": "miti", "label": _("Miti"), "fieldtype": "Data", "width": 95},
-		{"fieldname": "date", "label": _("Date"), "fieldtype": "Date", "width": 95},
-		{"fieldname": "item", "label": _("Item"), "fieldtype": "Data", "width": 170},
-		{"fieldname": "order_qty", "label": _("Order Qty"), "fieldtype": "Float", "width": 90},
-		{"fieldname": "billed_qty", "label": _("Billed Qty"), "fieldtype": "Float", "width": 90},
+		{"fieldname": "item", "label": _("Item"), "fieldtype": "Data", "width": 150},
 		{"fieldname": "pending_qty", "label": _("Pending Qty"), "fieldtype": "Float", "width": 100},
+		{"fieldname": "qty_can_bill", "label": _("Qty Can Bill Now"), "fieldtype": "Float", "width": 125},
+		{"fieldname": "today_rate", "label": _("Today's Rate"), "fieldtype": "Currency", "width": 130},
 		{"fieldname": "order_rate", "label": _("Order Rate"), "fieldtype": "Currency", "width": 110},
-		{"fieldname": "today_rate", "label": _("Today's Rate"), "fieldtype": "Currency", "width": 110},
-		{"fieldname": "to_bill_order", "label": _("To Bill at Order Rate"), "fieldtype": "Currency",
-			"width": 145},
 		{"fieldname": "to_bill", "label": _("To Bill at Today's Rate"), "fieldtype": "Currency",
 			"width": 155},
-		{"fieldname": "qty_can_bill", "label": _("Qty Can Bill Now"), "fieldtype": "Float", "width": 125},
-		{"fieldname": "can_bill", "label": _("Can Bill Now"), "fieldtype": "Currency", "width": 120},
-		{"fieldname": "short_by", "label": _("Held Back"), "fieldtype": "Currency", "width": 110},
-		{"fieldname": "verdict", "label": _("Verdict"), "fieldtype": "Data", "width": 95},
+		{"fieldname": "can_bill", "label": _("Can Bill Now"), "fieldtype": "Currency", "width": 125},
+		{"fieldname": "short_by", "label": _("Held Back"), "fieldtype": "Currency", "width": 115},
 		{"fieldname": "reason", "label": _("Why"), "fieldtype": "Data", "width": 300},
+		{"fieldname": "order_qty", "label": _("Order Qty"), "fieldtype": "Float", "width": 90},
+		{"fieldname": "billed_qty", "label": _("Billed Qty"), "fieldtype": "Float", "width": 90},
+		{"fieldname": "to_bill_order", "label": _("To Bill at Order Rate"), "fieldtype": "Currency",
+			"width": 145},
 		{"fieldname": "last_invoice", "label": _("Last Invoice"), "fieldtype": "Link",
 			"options": "Sales Invoice", "width": 160},
 		{"fieldname": "last_invoice_miti", "label": _("Last Invoice Miti"), "fieldtype": "Data",
@@ -447,6 +569,6 @@ def get_columns():
 		{"fieldname": "bills", "label": _("Unpaid Bills / Limit"), "fieldtype": "Data", "width": 135},
 		{"fieldname": "days", "label": _("Days / Limit"), "fieldtype": "Data", "width": 100},
 		{"fieldname": "amount_limit", "label": _("Amount Limit"), "fieldtype": "Currency", "width": 120},
-		{"fieldname": "credit_left", "label": _("Credit Left Before Order"), "fieldtype": "Currency",
-			"width": 160},
+		{"fieldname": "credit_left", "label": _("Credit Left"), "fieldtype": "Currency", "width": 120},
+		{"fieldname": "date", "label": _("Date"), "fieldtype": "Date", "width": 95},
 	]
