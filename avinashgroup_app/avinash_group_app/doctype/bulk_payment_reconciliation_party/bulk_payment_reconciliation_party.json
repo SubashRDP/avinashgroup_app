@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "creation": "2026-11-01 13:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "party_type",
+  "party",
+  "party_name",
+  "receivable_payable_account",
+  "default_advance_account",
+  "column_break_dates",
+  "from_invoice_date",
+  "to_invoice_date",
+  "from_payment_date",
+  "to_payment_date",
+  "column_break_other",
+  "cost_center",
+  "bank_cash_account",
+  "process_payment_reconciliation"
+ ],
+ "fields": [
+  {
+   "fieldname": "party_type",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Party Type",
+   "options": "DocType",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "party",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Party",
+   "options": "party_type",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "party_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Party Name",
+   "read_only": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "receivable_payable_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Receivable/Payable Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "columns": 2,
+   "fieldname": "default_advance_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Default Advance Account",
+   "options": "Account",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_invoice_date",
+   "fieldtype": "Date",
+   "label": "From Invoice Date"
+  },
+  {
+   "fieldname": "to_invoice_date",
+   "fieldtype": "Date",
+   "label": "To Invoice Date"
+  },
+  {
+   "fieldname": "from_payment_date",
+   "fieldtype": "Date",
+   "label": "From Payment Date"
+  },
+  {
+   "fieldname": "to_payment_date",
+   "fieldtype": "Date",
+   "label": "To Payment Date"
+  },
+  {
+   "fieldname": "column_break_other",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_center",
+   "fieldtype": "Link",
+   "label": "Cost Center",
+   "options": "Cost Center"
+  },
+  {
+   "fieldname": "bank_cash_account",
+   "fieldtype": "Link",
+   "label": "Bank/Cash Account",
+   "options": "Account"
+  },
+  {
+   "columns": 2,
+   "fieldname": "process_payment_reconciliation",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Process Payment Reconciliation",
+   "no_copy": 1,
+   "options": "Process Payment Reconciliation",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-01 14:00:00.000000",
+ "module": "Avinash Group App",
+ "name": "Bulk Payment Reconciliation Party",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
