@@ -176,28 +176,28 @@ def _todays_prices(orders, items):
 	return prices
 
 
-def _last_invoices(order_names):
-	"""{order: {invoice, posting_date, miti, qty}} — the newest submitted invoice
-	made from the order, and the qty it billed from this order.
+def _last_invoices(customers):
+	"""{customer: {invoice, posting_date, miti, qty}} — the customer's newest
+	submitted Sales Invoice, whether or not it was made from an order, and its
+	total qty. Tells billing staff when the customer was last sold to.
 
-	Credit notes are left out: "last invoiced" means the last sale, not the
+	Credit notes are left out: "last invoice" means the last sale, not the
 	last return.
 	"""
-	miti = "si.custom_invoice_miti" if frappe.db.has_column("Sales Invoice", "custom_invoice_miti") else "NULL"
-	last = {}
-	for r in frappe.db.sql(f"""
-		SELECT sii.sales_order, si.name AS invoice, si.posting_date, {miti} AS miti,
-			SUM(sii.qty) AS qty
-		FROM `tabSales Invoice Item` sii
-		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE si.docstatus = 1
-		  AND si.is_return = 0
-		  AND sii.sales_order IN %(orders)s
-		GROUP BY sii.sales_order, si.name
-		ORDER BY si.posting_date DESC, si.posting_time DESC, si.creation DESC
-	""", {"orders": tuple(order_names)}, as_dict=True):
-		last.setdefault(r.sales_order, r)
-	return last
+	miti = "custom_invoice_miti" if frappe.db.has_column("Sales Invoice", "custom_invoice_miti") else "NULL"
+	rows = frappe.db.sql(f"""
+		SELECT customer, invoice, posting_date, miti, qty FROM (
+			SELECT customer, name AS invoice, posting_date, {miti} AS miti, total_qty AS qty,
+				ROW_NUMBER() OVER (PARTITION BY customer
+					ORDER BY posting_date DESC, posting_time DESC, creation DESC) AS n
+			FROM `tabSales Invoice`
+			WHERE docstatus = 1
+			  AND is_return = 0
+			  AND customer IN %(customers)s
+		) latest
+		WHERE n = 1
+	""", {"customers": tuple(customers)}, as_dict=True)
+	return {r.customer: r for r in rows}
 
 
 def _plan_billing(orders):
@@ -209,13 +209,12 @@ def _plan_billing(orders):
 	names = [o.name for o in orders]
 	items = _order_items(names)
 	prices = _todays_prices(orders, items)
-	last = _last_invoices(names)
+	last = _last_invoices({o.customer for o in orders})
 	abbr = dict(frappe.get_all("Company", fields=["name", "abbr"], as_list=True))
 
 	by_customer = {}
 	for o in orders:
 		o.lines = _priced_lines(o, items.get(o.name, []), prices)
-		o.last_invoice = last.get(o.name)
 		by_customer.setdefault(o.customer, []).append(o)
 
 	customers = []
@@ -227,6 +226,7 @@ def _plan_billing(orders):
 			"customer_name": first.customer_name or customer,
 			"company": abbr.get(first.company) or first.company,
 			"state": state,
+			"last_invoice": last.get(customer),
 			"orders": _plan_customer(state, customer_orders),
 		})
 	return customers
@@ -271,6 +271,11 @@ def _customer_row(c):
 		"_meter": meter,
 		"credit_meter": meter["text"],
 	}
+	last = c["last_invoice"]
+	if last:
+		row["last_invoice"] = last.invoice
+		row["last_invoice_miti"] = last.miti or bs_date_str(last.posting_date)
+		row["last_invoice_qty"] = flt(last.qty)
 	for field in ("order_qty", "billed_qty", "pending_qty", "to_bill_order", "to_bill",
 			"qty_can_bill", "can_bill", "short_by"):
 		row[field] = flt(sum(r[field] or 0 for r in orders), 2)
@@ -462,7 +467,6 @@ def _plan_customer(state, orders):
 			verdict = BLOCKED
 
 		single = lines[0] if len(lines) == 1 else None
-		last = o.last_invoice or {}
 		rows.append({
 			# Tree child of the customer row; `label` is the first column.
 			"label": o.name,
@@ -487,9 +491,6 @@ def _plan_customer(state, orders):
 			"short_by": flt(to_bill - can_bill, 2),
 			"verdict": verdict,
 			"reason": reason,
-			"last_invoice": last.get("invoice"),
-			"last_invoice_miti": (last.get("miti") or bs_date_str(last["posting_date"])) if last else "",
-			"last_invoice_qty": flt(last.get("qty")) if last else None,
 			"credit_left": room,
 		})
 	return rows
@@ -545,6 +546,13 @@ def get_columns():
 		{"fieldname": "company", "label": _("Company"), "fieldtype": "Data", "width": 75},
 		{"fieldname": "verdict", "label": _("Verdict"), "fieldtype": "Data", "width": 100},
 		{"fieldname": "credit_meter", "label": _("Credit Used"), "fieldtype": "Data", "width": 170},
+		# The customer's newest invoice, from an order or not; on customer rows only.
+		{"fieldname": "last_invoice", "label": _("Last Invoice"), "fieldtype": "Link",
+			"options": "Sales Invoice", "width": 160},
+		{"fieldname": "last_invoice_miti", "label": _("Last Invoice Miti"), "fieldtype": "Data",
+			"width": 125},
+		{"fieldname": "last_invoice_qty", "label": _("Last Invoice Qty"), "fieldtype": "Float",
+			"width": 120},
 		{"fieldname": "miti", "label": _("Miti"), "fieldtype": "Data", "width": 95},
 		{"fieldname": "item", "label": _("Item"), "fieldtype": "Data", "width": 150},
 		{"fieldname": "pending_qty", "label": _("Pending Qty"), "fieldtype": "Float", "width": 100},
@@ -560,12 +568,6 @@ def get_columns():
 		{"fieldname": "billed_qty", "label": _("Billed Qty"), "fieldtype": "Float", "width": 90},
 		{"fieldname": "to_bill_order", "label": _("To Bill at Order Rate"), "fieldtype": "Currency",
 			"width": 145},
-		{"fieldname": "last_invoice", "label": _("Last Invoice"), "fieldtype": "Link",
-			"options": "Sales Invoice", "width": 160},
-		{"fieldname": "last_invoice_miti", "label": _("Last Invoice Miti"), "fieldtype": "Data",
-			"width": 125},
-		{"fieldname": "last_invoice_qty", "label": _("Last Invoice Qty"), "fieldtype": "Float",
-			"width": 120},
 		{"fieldname": "bills", "label": _("Unpaid Bills / Limit"), "fieldtype": "Data", "width": 135},
 		{"fieldname": "days", "label": _("Days / Limit"), "fieldtype": "Data", "width": 100},
 		{"fieldname": "amount_limit", "label": _("Amount Limit"), "fieldtype": "Currency", "width": 120},

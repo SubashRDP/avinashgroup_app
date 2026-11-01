@@ -323,4 +323,5 @@ bills that customer's orders oldest-first on paper, in whole units: each order t
 as many units as the credit left allows, and each invoice not fully paid from
 left-over advance adds one to the unpaid-bill count. Each order comes out **Ready**,
 **Partly** (with the qty that fits) or **Blocked** (with the reason), next to the
-order's last Sales Invoice, its miti and the qty it billed.
+customer's last Sales Invoice (any invoice, not only one made from an order),
+its miti and qty.
