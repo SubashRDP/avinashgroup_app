@@ -10,8 +10,13 @@ The print format sets `is_return_format` before including this file.
 Company name, logo, VAT number, phone/fax/email come off the Company record;
 the address line comes off the company's Address (address_line1 | city | country).
 All figures print positive — the title states the direction.
+
+A print format that sets `rotated` gets each A4 sheet turned 90° clockwise and
+shrunk to 70.7% (210/297), so it lies sideways on the top half of an A4
+portrait page; the bottom half is left blank to be cut off.
 -#}
 {%- set is_return_format = is_return_format | default(false) -%}
+{%- set rotated = rotated | default(false) -%}
 
 {#- ------------------------------ company -------------------------------- -#}
 {%- set company = frappe.db.get_value('Company', doc.company,
@@ -80,6 +85,17 @@ All figures print positive — the title states the direction.
     padding: 10mm 12mm; page-break-after: always; page-break-inside: avoid; overflow: hidden; }
   .ag-sheet.last { page-break-after: auto; }
 
+  /* rotated: the page box keeps the A4 page; the sheet inside is scaled to
+     148.5 x 210mm, turned clockwise and moved right by 210mm, which lands it
+     on the top half with its header along the right edge */
+  .ag-page { position: relative; width: 210mm; height: 296mm; overflow: hidden;
+    page-break-after: always; page-break-inside: avoid; }
+  .ag-page.last { page-break-after: auto; }
+  .ag-page .ag-sheet { position: absolute; left: 0; top: 0; page-break-after: auto;
+    -webkit-transform-origin: 0 0; transform-origin: 0 0;
+    -webkit-transform: translate(210mm, 0) rotate(90deg) scale(0.7071);
+    transform: translate(210mm, 0) rotate(90deg) scale(0.7071); }
+
   /* side padding keeps the centred text clear of the logo */
   .ag-head { position: relative; text-align: center; padding: 0 28mm; }
   .ag-head .logo { position: absolute; left: 0; top: 0; width: 26mm; height: 22mm; object-fit: contain; }
@@ -133,6 +149,7 @@ All figures print positive — the title states the direction.
 {%- set page_last = loop.last -%}
 {%- set is_last = copy_last and page_last -%}
 {%- set page_no = loop.index -%}
+{%- if rotated %}<div class="ag-page{% if is_last %} last{% endif %}">{% endif %}
 <div class="ag-sheet{% if is_last %} last{% endif %}">
 
   <div class="ag-head">
@@ -264,5 +281,6 @@ All figures print positive — the title states the direction.
   <div class="ag-pageno">Page {{ page_no }}/{{ item_pages | length }}</div>
   {%- endif %}
 </div>
+{%- if rotated %}</div>{% endif %}
 {%- endfor -%}
 {%- endfor -%}
