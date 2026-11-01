@@ -99,7 +99,7 @@ def execute(filters=None):
 		rows.extend(c["orders"])
 
 	order_rows = [r for c in customers for r in c["orders"]]
-	return get_columns(), rows, None, _chart(customers), _summary(order_rows)
+	return get_columns(), rows, None, None, _summary(order_rows)
 
 
 def _pending_orders(companies, customers):
@@ -311,35 +311,6 @@ def _credit_meter(state, can_bill=0):
 		text += _(" → {0}% after billing").format(round(after_pct))
 	return {"kind": "amount", "used_pct": used_pct, "after_pct": after_pct, "text": text,
 		"limit": amount_limit, "leftover": leftover}
-
-
-# Chart colours. Can Bill Now is the status "good" green; Held Back is a neutral
-# grey rather than red — red beside green is the pair deuteranopes cannot tell
-# apart (validated: green/red deutan dE 4.1 fails, green/grey 12.5 passes).
-CHART_CAN_BILL = "#0ca30c"
-CHART_HELD = "#9e9d94"
-CHART_MAX_CUSTOMERS = 12
-
-
-def _chart(customers):
-	"""Stacked bar per customer — can bill now over held back — largest first."""
-	if not customers:
-		return None
-	top = sorted(customers, key=lambda c: -sum(r["to_bill"] for r in c["orders"]))[:CHART_MAX_CUSTOMERS]
-	return {
-		"data": {
-			"labels": [c["customer_name"] for c in top],
-			"datasets": [
-				{"name": _("Can Bill Now"), "values": [flt(sum(r["can_bill"] for r in c["orders"]), 2) for c in top]},
-				{"name": _("Held Back"), "values": [flt(sum(r["short_by"] for r in c["orders"]), 2) for c in top]},
-			],
-		},
-		"type": "bar",
-		"barOptions": {"stacked": 1, "spaceRatio": 0.5},
-		"colors": [CHART_CAN_BILL, CHART_HELD],
-		"fieldtype": "Currency",
-		"height": 260,
-	}
 
 
 def _priced_lines(order, order_items, prices):
