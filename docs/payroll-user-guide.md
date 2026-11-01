@@ -466,6 +466,22 @@ The Allowances table is filled only on the form. An assignment made by a Salary 
 5. If they worked elsewhere earlier in the same tax year, enter Taxable Earnings Till Date and Tax Deducted Till Date (section 7.8).
 6. Life or health insurance? File a Tax Exemption Declaration (section 7.5).
 
+### 4.4 Many people at once: Salary Assignment Upload
+
+For opening salaries, a batch of new joiners, or any day you would otherwise make assignments one by one. It has one row per person and one column per allowance.
+
+1. **Salary Assignment Upload → New.** Pick the Company and From Date. The Default Salary Structure is optional: it is used for a row whose Salary Structure cell is blank.
+2. **Download Template.** You get every active employee of the company, filled from the assignment in force on From Date. A person with no assignment yet has a blank row.
+3. In Excel, change what is new and **delete the rows of people who are not changing**.
+   - An allowance cell is that person's Rate, in the unit shown in the column heading. **Blank or 0 means not paid.** The structure's rate is *not* filled in for you.
+   - A column marked *from basic* (overtime) takes Yes or No.
+   - SSF Applicable: Yes or No. Blank means Yes.
+4. **Attach** the file in Filled Template. The Employees table fills, and each row is marked **Ready** or **Error** with the reason. The check runs the same rules as saving an assignment, so "already exists" and "before joining date" show here too.
+5. Fix the Error rows in Excel and attach again. If you corrected the file under the same name, use **Read File Again**.
+6. **Submit.** One submitted Salary Structure Assignment per row. It cannot be submitted while any row is in Error.
+
+Each row is the person's whole new assignment: an allowance that is not in the file is not on it. To raise pay, or change one allowance for people who keep the rest, use a Salary Revision (section 8). Cancelling the upload cancels the assignments it made.
+
 ---
 
 ## 5. The monthly run, step by step

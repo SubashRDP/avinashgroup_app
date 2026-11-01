@@ -1,0 +1,131 @@
+{
+ "actions": [],
+ "creation": "2026-11-01 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 0,
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "salary_structure",
+  "base",
+  "initial_basic",
+  "ssf_applicable",
+  "column_break_row",
+  "status",
+  "message",
+  "allowances",
+  "allowance_rates",
+  "file_error",
+  "salary_structure_assignment"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "columns": 2
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Employee Name",
+   "read_only": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "salary_structure",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Salary Structure",
+   "options": "Salary Structure",
+   "columns": 2
+  },
+  {
+   "fieldname": "base",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Base",
+   "columns": 1
+  },
+  {
+   "fieldname": "initial_basic",
+   "fieldtype": "Currency",
+   "label": "Initial Basic"
+  },
+  {
+   "default": "1",
+   "fieldname": "ssf_applicable",
+   "fieldtype": "Check",
+   "label": "SSF Applicable"
+  },
+  {
+   "fieldname": "column_break_row",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "\nReady\nError\nCreated",
+   "read_only": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Message",
+   "read_only": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "allowances",
+   "fieldtype": "Small Text",
+   "label": "Allowances",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allowance_rates",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "Allowance Rates",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "file_error",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "File Error",
+   "read_only": 1,
+   "description": "The file's own cells were wrong on this line, so there is nothing to check further"
+  },
+  {
+   "fieldname": "salary_structure_assignment",
+   "fieldtype": "Link",
+   "label": "Salary Structure Assignment",
+   "no_copy": 1,
+   "options": "Salary Structure Assignment",
+   "read_only": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-01 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Salary Assignment Upload Row",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
