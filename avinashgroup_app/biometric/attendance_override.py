@@ -44,7 +44,9 @@ def set_shift_deviation_fields(doc, method):
     try:
         shift = frappe.get_cached_doc("Shift Type", doc.shift)
         doc.update(
-            compute_shift_deviations(shift, doc.attendance_date, doc.in_time, doc.out_time)
+            compute_shift_deviations(
+                shift, doc.attendance_date, doc.in_time, doc.out_time, company=doc.company
+            )
         )
     except Exception:
         frappe.log_error(

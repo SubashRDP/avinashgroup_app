@@ -60,6 +60,13 @@ What HR must have in place:
 
 The lateness stays recorded in reports but is no longer fined. If lateness was the only reason the day became a Half Day, the day goes back to Present.
 
+**The company closed the shift early.** When everyone is sent home early (power cut, a function, a strike), that day is still a full day:
+1. In **Monthly Attendance BS**, click **Close Shift Early** (HR Manager). Or open **Shift Early Closure** → **New** and Submit.
+2. Choose the **Company**, the **Date** and **Closed At**, the time people were let go. **Shifts:** pick the ones that closed early, or leave it blank for every shift still running at that time.
+3. Type the **Reason** and click **Close Early**.
+
+Leaving at or after the closing time is no longer counted as leaving early, so it is not fined. Leaving before it still counts, from the closing time: closed at 2:00, left at 1:30 = 30 minutes early. Late arrival that morning still counts, and so does the 2-hours-late half day. Anyone who did not come stays Absent. Overtime still counts only after the normal shift end. Attendance already marked for that day is re-measured straight away, and days marked later follow the closure automatically. The report shows "Closed early at 14:00 — reason" in the day's Remarks and lists the period's closures above the grid. To undo, **Cancel** the Shift Early Closure (**Early Closures** button). Both are refused once that month's salary slip is submitted.
+
 **Worked on Holiday** is ticked automatically when someone has attendance on a day that is a holiday on their own holiday list.
 
 ## 3.4 Fixing attendance

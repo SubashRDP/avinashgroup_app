@@ -135,10 +135,15 @@ def _round_to_minute(seconds):
     return int((int(seconds) + 30) / 60) * 60
 
 
-def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time):
+def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, company=None):
     """The four custom deviation fields on Attendance (seconds, rounded to the
     nearest minute) for the given actual in/out against the shift's scheduled
-    start/end. Only one of each pair is non-zero at a time."""
+    start/end. Only one of each pair is non-zero at a time.
+
+    With `company`, a submitted Shift Early Closure for that day moves the end
+    early leaving is measured against to the closing time; late exit (overtime)
+    still counts from the normal end, and leaving in between is neither
+    (hr/shift_early_closure.py). Without it the day is measured as normal."""
     values = {
         "custom_late_entry": 0,
         "custom_early_entry": 0,
@@ -160,11 +165,14 @@ def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time):
             values["custom_early_entry"] = _round_to_minute(abs(diff))
 
     if out_time:
-        diff = (get_datetime(out_time) - shift_end_dt).total_seconds()
-        if diff > 0:
-            values["custom_late_exit"] = _round_to_minute(diff)
-        elif diff < 0:
-            values["custom_early_exit"] = _round_to_minute(abs(diff))
+        from avinashgroup_app.hr.shift_early_closure import closing_time
+
+        closed_at = closing_time(company, shift_doc, attendance_date) or shift_end_dt
+        out_dt = get_datetime(out_time)
+        if out_dt > shift_end_dt:
+            values["custom_late_exit"] = _round_to_minute((out_dt - shift_end_dt).total_seconds())
+        elif out_dt < closed_at:
+            values["custom_early_exit"] = _round_to_minute((closed_at - out_dt).total_seconds())
 
     return values
 
@@ -194,7 +202,7 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
     current = frappe.db.get_value(
         "Attendance",
         attendance_name,
-        ["attendance_date", "working_hours", "late_entry", "early_exit", "in_time", "out_time"],
+        ["attendance_date", "company", "working_hours", "late_entry", "early_exit", "in_time", "out_time"],
         as_dict=True,
     )
     if not current:
@@ -229,7 +237,9 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
 
     if "in_time" in updates or "out_time" in updates:
         updates.update(
-            compute_shift_deviations(shift_doc, current.attendance_date, in_time, out_time)
+            compute_shift_deviations(
+                shift_doc, current.attendance_date, in_time, out_time, company=current.company
+            )
         )
 
     if not updates:

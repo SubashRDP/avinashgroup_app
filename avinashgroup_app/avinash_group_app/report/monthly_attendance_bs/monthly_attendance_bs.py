@@ -43,7 +43,10 @@ Columns:
   • Worked on Holiday (1/blank)
   • One dynamic column per attendance-driven Salary Component, with the qty
     computed by the SAME rule the allowance engine uses (evaluate_rule).
-  • Remarks (festival/leave text)  +  Holidays (weekly-off label only)
+  • Remarks (festival/leave text)  +  Holidays (weekly-off label only).
+    A day the company closed the shift early (hr/shift_early_closure.py) says
+    "Closed early at 14:00 — reason" here, and the closures in the period are
+    listed above the grid. Leaving at the closing time shows no Before ofc. Time.
 
 Summary cards are worded for the headcount (see _summary): one person's month
 for a single employee, sums that name the people they cover for a roster.
@@ -59,6 +62,7 @@ from avinashgroup_app.hr.overtime import get_overtime_hours
 from avinashgroup_app.hr.leave_from_report import get_leave_notes
 from avinashgroup_app.hr.punch_correction import get_edited_days, get_shift_corrections
 from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
+from avinashgroup_app.hr.shift_early_closure import closure_note, closures_between
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
@@ -132,6 +136,8 @@ def execute(filters=None):
 	# Leave HR gave from this report (hr/leave_from_report.py), told apart from
 	# leave the employee applied for.
 	leave_notes = get_leave_notes({a.leave_application for a in att_map.values() if a.get("leave_application")})
+	closures = closures_between(company, ad_start, ad_end)
+	note = _with_closures(note, closures)
 
 	data = []
 	totals = _new_totals()
@@ -170,6 +176,11 @@ def execute(filters=None):
 			row["shift_edit_note"] = shift_edits.get((emp.name, ad_date))
 			att = att_map.get((emp.name, ad_date))
 			row["leave_note"] = leave_notes.get(att.leave_application) if att and att.get("leave_application") else None
+			day_closures = closures.get((emp.company, ad_date))
+			if day_closures and row["shift"]:
+				closed = closure_note(day_closures, frappe.get_cached_doc("Shift Type", row["shift"]), ad_date)
+				if closed:
+					row["remarks"] = f"{row['remarks']} · {closed}" if row["remarks"] else closed
 			data.append(row)
 			_accumulate(
 				totals, row, present_statuses,
@@ -1044,6 +1055,26 @@ def _status_mix_chart(rows, day_label):
 		"axisOptions": {"xIsSeries": 1, "shortenYAxisNumbers": 1},
 		"height": 260,
 	}
+
+
+def _with_closures(note, closures):
+	"""Add the period's Shift Early Closures to the banner, so a short day in the
+	grid never looks like everyone walked out."""
+	if not closures:
+		return note
+	lines = []
+	for (company, day), items in sorted(closures.items(), key=lambda kv: kv[0][1]):
+		bs = ad_to_bs(day)
+		for c in items:
+			shifts = ", ".join(sorted(c.shifts)) if c.shifts else _("all shifts")
+			lines.append(
+				_("{0} {1} ({2}): {3} closed at {4} — {5}").format(
+					bs.day, get_bs_month_name(bs.month), day, shifts,
+					str(c.close_at)[:-3], frappe.utils.escape_html(c.reason),
+				)
+			)
+	closed = _("Shift closed early: ") + "; ".join(lines)
+	return f"{note}<br>{closed}" if note else closed
 
 
 def _note_html(note):
