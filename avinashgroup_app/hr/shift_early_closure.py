@@ -76,9 +76,23 @@ def _closing_inside(shift_doc, day, close_at):
 	return closing if start < closing < end else None
 
 
+def _installed():
+	"""Whether this site has been migrated since the doctype was added.
+
+	Pulled code runs before `bench migrate` creates the table. Every Attendance
+	save asks for closures (compute_shift_deviations), and that hook swallows
+	errors into the Error Log, so a missing table would silently zero everyone's
+	late and early minutes; Monthly Attendance BS threw outright (demo-nggroup,
+	2026-11-01). No table means no closure can exist, so the answer is none.
+	"""
+	return frappe.db.table_exists("Shift Early Closure")
+
+
 def _closures_on(company, day, exclude=None):
 	"""Submitted closures for the company on `day`: [(name, close_at, {shifts} or None)]."""
-	filters = {"company": company, "closure_date": getdate(day), "docstatus": 1}
+	if not _installed():
+		return []
+	filters ={"company": company, "closure_date": getdate(day), "docstatus": 1}
 	if exclude:
 		filters["name"] = ("!=", exclude)
 	rows = frappe.get_all("Shift Early Closure", filters=filters, fields=["name", "close_at", "reason"])
@@ -219,6 +233,8 @@ def apply_closure(doc, cancelling=False):
 
 def closures_between(company, start, end):
 	"""{(company, date): [closure, ...]} for the report, each with `shifts` (a set or None)."""
+	if not _installed():
+		return {}
 	filters = {"closure_date": ("between", [getdate(start), getdate(end)]), "docstatus": 1}
 	if company:
 		filters["company"] = company
