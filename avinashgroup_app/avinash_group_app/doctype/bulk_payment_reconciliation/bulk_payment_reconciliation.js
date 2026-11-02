@@ -38,6 +38,7 @@ frappe.ui.form.on("Bulk Payment Reconciliation", {
 	},
 
 	refresh(frm) {
+		set_party_link_titles(frm);
 		if (frm.doc.docstatus === 0) {
 			frm.add_custom_button(__("Get Parties"), () => frm.events.fill_parties(frm));
 		}
@@ -69,7 +70,8 @@ frappe.ui.form.on("Bulk Payment Reconciliation", {
 			freeze_message: __("Getting parties..."),
 			callback: (r) => {
 				frm.clear_table("parties");
-				(r.message || []).forEach((row) => {
+				(r.message || []).forEach(({ party_title, ...row }) => {
+					add_party_link_title(frm.doc.party_type, row.party, party_title);
 					frm.add_child("parties", { ...row, party_type: frm.doc.party_type });
 				});
 				frm.refresh_field("parties");
@@ -82,18 +84,30 @@ frappe.ui.form.on("Bulk Payment Reconciliation", {
 	},
 });
 
+function add_party_link_title(party_type, party, title) {
+	if (party_type && party && title) {
+		frappe.utils.add_link_title(party_type, party, title);
+	}
+}
+
+function set_party_link_titles(frm) {
+	const parties = [...new Set((frm.doc.parties || []).map((row) => row.party).filter(Boolean))];
+	if (!frm.doc.party_type || !parties.length) return;
+
+	frappe.call({
+		method: "avinashgroup_app.avinash_group_app.doctype.bulk_payment_reconciliation.bulk_payment_reconciliation.get_party_titles",
+		args: { party_type: frm.doc.party_type, parties },
+		callback: (r) => {
+			Object.entries(r.message || {}).forEach(([party, title]) => {
+				add_party_link_title(frm.doc.party_type, party, title);
+			});
+			frm.refresh_field("parties");
+		},
+	});
+}
+
 frappe.ui.form.on("Bulk Payment Reconciliation Party", {
 	parties_add(frm, cdt, cdn) {
 		frappe.model.set_value(cdt, cdn, "party_type", frm.doc.party_type);
-	},
-
-	// a party picked by hand shows its name straight away (save sets it too)
-	party(frm, cdt, cdn) {
-		const row = locals[cdt][cdn];
-		if (!row.party) return frappe.model.set_value(cdt, cdn, "party_name", "");
-		const name_field = frm.doc.party_type == "Supplier" ? "supplier_name" : "customer_name";
-		frappe.db.get_value(frm.doc.party_type, row.party, name_field).then((r) => {
-			frappe.model.set_value(cdt, cdn, "party_name", (r.message || {})[name_field]);
-		});
 	},
 });

@@ -7,7 +7,6 @@
  "field_order": [
   "party_type",
   "party",
-  "party_name",
   "receivable_payable_account",
   "default_advance_account",
   "column_break_dates",
@@ -37,14 +36,6 @@
    "label": "Party",
    "options": "party_type",
    "reqd": 1
-  },
-  {
-   "columns": 2,
-   "fieldname": "party_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Party Name",
-   "read_only": 1
   },
   {
    "columns": 2,

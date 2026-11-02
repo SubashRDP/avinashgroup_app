@@ -35,7 +35,8 @@ from erpnext.accounts.party import get_party_account
 # filter knows (Customer -> Liability, everything else -> Asset).
 PARTY_TYPES = ("Customer", "Supplier")
 
-# the readable-name field on each party doctype, shown beside the party ID
+# The Party link stores the document ID, while the client uses this title for
+# the readable value shown in the grid.
 PARTY_NAME_FIELD = {"Customer": "customer_name", "Supplier": "supplier_name"}
 
 # PPR statuses that mean "not finished yet": a party with one of these already
@@ -50,12 +51,10 @@ class BulkPaymentReconciliation(Document):
 	def validate(self):
 		validate_party_type(self.party_type)
 
-		names = party_names(self.party_type, [row.party for row in self.parties])
 		pending = pending_pprs(self.company, self.party_type)
 		seen = set()
 		for row in self.parties:
 			row.party_type = self.party_type
-			row.party_name = names.get(row.party)
 			if row.party in seen:
 				frappe.throw(_("Row {0}: {1} is listed twice").format(row.idx, frappe.bold(row.party)))
 			seen.add(row.party)
@@ -140,12 +139,24 @@ def get_parties(company, party_type, only_with_open_items=1):
 		rows.append(
 			{
 				"party": party.name,
-				"party_name": party.get(name_field),
+				"party_title": party.get(name_field),
 				"receivable_payable_account": accounts[0],
 				"default_advance_account": accounts[1] if len(accounts) > 1 else None,
 			}
 		)
 	return rows
+
+
+@frappe.whitelist()
+def get_party_titles(party_type, parties):
+	"""Readable titles for Party links already present in the child table."""
+	validate_party_type(party_type)
+	if not parties:
+		return {}
+	name_field = PARTY_NAME_FIELD[party_type]
+	return dict(
+		frappe.get_all(party_type, filters={"name": ("in", parties)}, fields=["name", name_field], as_list=True)
+	)
 
 
 def pending_pprs(company, party_type):
@@ -162,16 +173,6 @@ def pending_pprs(company, party_type):
 		fields=["party", "name", "status"],
 	)
 	return {r.party: (r.name, r.status) for r in rows}
-
-
-def party_names(party_type, parties):
-	"""{party ID: readable name} for the given parties."""
-	if not parties:
-		return {}
-	name_field = PARTY_NAME_FIELD[party_type]
-	return dict(
-		frappe.get_all(party_type, filters={"name": ("in", parties)}, fields=["name", name_field], as_list=True)
-	)
 
 
 def parties_with_open_items(company, party_type):
