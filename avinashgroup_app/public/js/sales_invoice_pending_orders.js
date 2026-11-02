@@ -25,6 +25,13 @@
 // visibility:hidden so Tab cannot wander into it. An earlier version broke all
 // four and made the invoice feel like it would not take input.
 //
+// Every order card in the popup and the drawer is coloured by whether the
+// customer's credit limits (credit_control.py) let it be invoiced right now —
+// green Ready, amber Partly (only some units fit), red Blocked with the reason
+// — the Sales Order Billing Capacity report's verdict, so the clerk sees it
+// before the save throws "Credit Limit Exceeded". Fill stays available on red:
+// the customer may pay first, and the save still enforces the limits.
+//
 // Fill is the same request ERPNext's Get Items From > Sales Order makes
 // (map_docs + make_sales_invoice), so rates, taxes and the sales_order links
 // on the rows are stock behaviour. An order for a different customer than an
@@ -136,8 +143,32 @@
 		});
 	}
 
+	// {cls, label, detail, title} for the credit pill; null when there is no verdict.
+	function credit_status(c) {
+		if (!c) return null;
+		const qty = (v) => flt(v, 2); // 1, not 1.00 — cylinders are whole units
+		if (c.verdict === "Ready") {
+			return { cls: "ready", label: __("Can invoice"), detail: "", title: c.reason };
+		}
+		if (c.verdict === "Partly") {
+			return {
+				cls: "partly",
+				label: __("Partly"),
+				detail: __("{0} of {1} qty can be invoiced", [qty(c.qty_can_bill), qty(c.pending_qty)]),
+				title: c.reason,
+			};
+		}
+		if (c.verdict === "Blocked") {
+			return { cls: "blocked", label: __("Can't invoice"), detail: c.reason, title: c.reason };
+		}
+		return null;
+	}
+
 	function order_html(o, { check = false, action_label = __("Fill"), added = false, show_company = false } = {}) {
 		const billed = Math.min(100, Math.max(0, o.per_billed || 0));
+		const status = credit_status(o.credit);
+		// what is left to bill, at today's price (the invoice reprices; so_latest_rate.py)
+		const amount = o.credit && o.credit.to_bill ? o.credit.to_bill : o.grand_total;
 		const meta = [
 			show_company ? `<span class="ag-po-chip-tag" title="${esc(o.company)}">${esc(o.company_abbr)}</span>` : "",
 			`<a href="/app/sales-order/${encodeURIComponent(o.name)}" target="_blank">${esc(o.name)}</a>`,
@@ -145,17 +176,22 @@
 			__("Qty {0}", [format_number(o.total_qty, null, 2)]),
 		].filter(Boolean).join(" · ");
 		return `
-			<div class="ag-po-order ${check ? "" : "ag-po-order--nocheck"}" data-name="${esc(o.name)}">
+			<div class="ag-po-order ${check ? "" : "ag-po-order--nocheck"} ${status ? `ag-po-order--${status.cls}` : ""}" data-name="${esc(o.name)}">
 				${check ? `<input type="checkbox" class="ag-po-order__check" aria-label="${esc(o.name)}">` : ""}
 				<div class="ag-po-order__main">
 					<div class="ag-po-order__title" title="${esc(o.customer_name)}">${esc(o.customer_name)}</div>
 					<div class="ag-po-order__meta">${meta}</div>
+					${status ? `
+						<div class="ag-po-status ag-po-status--${status.cls}" title="${esc(status.title)}">
+							<span class="ag-po-status__pill">${esc(status.label)}</span>
+							${status.detail ? `<span class="ag-po-status__why">${esc(status.detail)}</span>` : ""}
+						</div>` : ""}
 				</div>
 				<div class="ag-po-order__side">
-					<div class="ag-po-order__amount">${esc(format_currency(o.grand_total, o.currency))}</div>
+					<div class="ag-po-order__amount" title="${__("Left to bill, at today's price")}">${esc(format_currency(amount, o.currency))}</div>
 					${added
 						? `<button class="ag-po-btn ag-po-btn--ghost" disabled>✓ ${__("Added")}</button>`
-						: `<button class="ag-po-btn ag-po-btn--primary" data-act="fill">${esc(action_label)}</button>`}
+						: `<button class="ag-po-btn ${status && status.cls === "blocked" ? "ag-po-btn--ghost" : "ag-po-btn--primary"}" data-act="fill">${esc(action_label)}</button>`}
 				</div>
 				${billed > 0 ? `
 				<div class="ag-po-billed">
@@ -175,7 +211,7 @@
 		if ((frm.doc.items || []).some((d) => d.sales_order)) return;
 		frm.__ag_po_popup_for = customer;
 
-		fetch_orders(frm, { customer }).then((r) => {
+		fetch_orders(frm, { customer, with_credit: 1 }).then((r) => {
 			// the clerk may have moved on while we asked
 			if (!r || !r.orders.length || frm.doc.customer !== customer) return;
 			show_popup(frm, r.orders);
@@ -478,7 +514,7 @@
 			$(this).toggleClass("is-active", ($(this).data("scope") === "mine") === ui.mine_only);
 		});
 		const $list = ui.$drawer.find(".ag-po-drawer__list");
-		const args = { txt: ui.search || undefined };
+		const args = { txt: ui.search || undefined, with_credit: 1 };
 		if (frm) {
 			args.company = frm.doc.company;
 			if (ui.mine_only && frm.doc.customer) args.customer = frm.doc.customer;

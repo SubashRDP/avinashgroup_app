@@ -232,6 +232,25 @@ def _plan_billing(orders):
 	return customers
 
 
+def billing_verdicts(customers):
+	"""{sales_order: {verdict, reason, pending_qty, qty_can_bill, to_bill, can_bill}}
+	for every pending order of `customers` — this report's verdict, for the
+	pending-orders popup and drawer (pending_orders.get_pending_orders).
+
+	All of a customer's pending orders are planned, oldest first, even when the
+	caller shows only some, so each verdict is what billing them in turn would hit.
+	"""
+	customers = [c for c in customers if c]
+	if not customers:
+		return {}
+	out = {}
+	for c in _plan_billing(_pending_orders([], customers)):
+		for r in c["orders"]:
+			out[r["sales_order"]] = {k: r[k] for k in
+				("verdict", "reason", "pending_qty", "qty_can_bill", "to_bill", "can_bill")}
+	return out
+
+
 def _customer_row(c):
 	"""The bold parent row of a customer's block: their orders added up, and their
 	credit position, which the order rows below it no longer repeat."""
