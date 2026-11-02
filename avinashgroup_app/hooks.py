@@ -587,6 +587,9 @@ override_doctype_class = {
     # Holiday work earns a full replacement day for turning up at all; the
     # requests hr/replacement_leave files skip HRMS's Present / ½-day check.
     "Compensatory Leave Request": "avinashgroup_app.hr.replacement_leave.ReplacementLeaveRequest",
+    # Leave over a day already marked Present is allowed (backdated leave); the
+    # punched day becomes a Half Day under policy 3.4. See hr/backdated_leave.py.
+    "Leave Application": "avinashgroup_app.hr.backdated_leave.BackdatedLeaveApplication",
 }
 
 scheduler_events = {
