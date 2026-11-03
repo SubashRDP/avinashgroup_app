@@ -34,6 +34,9 @@ INCLUDE_HOLIDAY = 1
 LEAVE_TYPES = {
 	"Home Leave": {
 		"is_earned_leave": 1,
+		# The largest year any company grants (minute 3.3); each company's own
+		# figure (NGK 20) is its Leave Policy, held by hr/leave_ceiling.
+		"max_leaves_allowed": 33,
 		"earned_leave_frequency": "Monthly",
 		"rounding": "0.25",
 		"allocate_on_day": "Last Day",
