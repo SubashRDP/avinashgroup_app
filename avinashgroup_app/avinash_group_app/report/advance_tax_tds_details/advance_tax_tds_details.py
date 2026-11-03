@@ -21,6 +21,8 @@ def execute(filters=None):
 
 	rows = _get_tds_rows(filters.company, from_date, to_date)
 	rows += _get_partyless_je_rows(filters.company, from_date, to_date)
+	# last, so _build_rows can add each one onto the party's invoice row
+	rows += _get_party_je_rows(filters.company, from_date, to_date)
 	columns = _get_columns()
 	data = _build_rows(rows)
 	return columns, data
@@ -216,6 +218,87 @@ def _get_partyless_je_rows(company, from_date, to_date):
 	return _merge_partyless(rows)
 
 
+# the readable-name field of each party type a TDS line can carry
+PARTY_NAME_FIELD = {"Supplier": "supplier_name", "Customer": "customer_name", "Employee": "employee_name"}
+
+
+def _get_party_je_rows(company, from_date, to_date):
+	"""Journal Entry TDS deductions where the line carries a party.
+
+	E.g. a "Debit Note" JE deducting TDS on a dealer's cylinder transportation
+	(party = Customer), or an expense booked by JE with TDS (party = Supplier).
+	Neither query above reads these: they are not Purchase Invoices, and they have
+	a party, so without this they are missing from the report.
+
+	Only credits count (TDS deducted). A debit on a TDS account with a party is the
+	TDS being paid to the tax office and is left out. Opening entries carry old
+	balances, not deductions, and are left out too.
+
+	Only अग्रिम कर रकम is filled: _build_rows adds the amount onto the party's
+	invoice row in the same section, or gives the party a row of its own with no
+	कारोबार रकम or rate when it has none.
+	"""
+	accounts = _tds_accounts(company)
+	if not accounts:
+		return []
+
+	abbr = frappe.get_cached_value("Company", company, "abbr")
+
+	lines = frappe.db.sql(
+		"""
+		SELECT gle.party_type, gle.party, gle.account, SUM(gle.credit - gle.debit) AS tds_amount
+		FROM `tabGL Entry` gle
+		WHERE gle.company = %(company)s
+			AND gle.is_cancelled = 0
+			AND gle.is_opening = 'No'
+			AND gle.voucher_type = 'Journal Entry'
+			AND gle.posting_date BETWEEN %(from_date)s AND %(to_date)s
+			AND gle.account IN %(accounts)s
+			AND COALESCE(gle.party, '') != ''
+			AND (gle.credit - gle.debit) > 0
+		GROUP BY gle.party_type, gle.party, gle.account
+		""",
+		{
+			"company": company,
+			"from_date": from_date,
+			"to_date": to_date,
+			"accounts": tuple(accounts),
+		},
+		as_dict=True,
+	)
+
+	rows = []
+	for line in lines:
+		name, pan = _party_name_and_pan(line.party_type, line.party)
+		khata, title = _split_account(line.account, abbr)
+		rows.append(
+			frappe._dict(
+				supplier_name=name,
+				pan=pan,
+				category=None,
+				khata=khata,
+				title=title,
+				rate=0,
+				turnover=None,
+				tds_amount=flt(line.tds_amount),
+				amount_based=0,
+				add_to_party_row=1,
+			)
+		)
+	return rows
+
+
+def _party_name_and_pan(party_type, party):
+	"""(readable name, PAN) of a GL party. Employees have no Tax ID field."""
+	name_field = PARTY_NAME_FIELD.get(party_type)
+	if not name_field:
+		return party, None
+	if party_type == "Employee":
+		return frappe.db.get_value(party_type, party, name_field) or party, None
+	name, pan = frappe.db.get_value(party_type, party, [name_field, "tax_id"]) or (None, None)
+	return name or party, pan
+
+
 def _merge_partyless(rows):
 	"""One "No Subledger" line per section, rather than one per journal entry.
 
@@ -276,11 +359,19 @@ def _build_rows(rows):
 		# keep the first non-empty title seen for the account
 		if not section["title"] and title:
 			section["title"] = title
+		# a party Journal Entry deduction goes onto the party's own row in this
+		# section, अग्रिम कर रकम only (see _get_party_je_rows)
+		if r.get("add_to_party_row"):
+			party_row = next((x for x in section["rows"] if x.supplier_name == r.supplier_name), None)
+			if party_row:
+				party_row.tds_amount += flt(r.tds_amount)
+				continue
 		section["rows"].append(
 			frappe._dict(
 				supplier_name=r.supplier_name,
 				pan=r.pan or "",
-				turnover=flt(r.turnover),
+				# None (not 0) leaves the cell blank for a party with JE deductions only
+				turnover=flt(r.turnover) if r.turnover is not None else None,
 				tds_amount=flt(r.tds_amount),
 				rate="amount" if r.amount_based else ("{0}%".format(rate) if rate else ""),
 			)
@@ -303,7 +394,7 @@ def _build_rows(rows):
 		sec_turnover = sec_tds = 0.0
 		for row in sorted(section["rows"], key=lambda x: (x.supplier_name or "")):
 			serial += 1
-			sec_turnover += row.turnover
+			sec_turnover += flt(row.turnover)
 			sec_tds += row.tds_amount
 			data.append(
 				{
