@@ -466,7 +466,14 @@ def validate_sales_invoice(doc, method):
     Runs last on the `validate` chain: the amount check reads doc.grand_total,
     which is only final once the tax pipeline ahead of it has built the taxes
     table. Moving this earlier would test a pre-VAT figure.
+
+    Skipped during a Data Import (frappe.flags.in_import, also on for
+    fast_import): uploaded invoices are historical records that already
+    happened, so a credit block would only fail the upload row.
     """
+    if frappe.flags.in_import:
+        return
+
     # Cancelled documents enforce nothing, and a credit note reduces exposure
     # rather than consuming it.
     if doc.docstatus == 2 or doc.is_return:
