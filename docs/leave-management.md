@@ -237,6 +237,13 @@ allocation periods splits into two negative rows rather than one.
 **On `nepalgas`, approval runs through the custom `Leave Application Approval
 Workflow`, not the stock `leave_approver` field.**
 
+**Backdated leave over a Present day is allowed** (`hr/backdated_leave.py`,
+2026-11-02). Stock HRMS refuses it ("Attendance for employee … is already marked
+for the following dates"). Here it goes through. On approval HRMS changes the
+existing row to On Leave, and a day the person punched on then becomes Half Day
+with the leave kept (policy 3.4). The balance still counts the full day. A
+Present day inside a submitted salary slip is still refused.
+
 ---
 
 ## Leave Ledger Entry — the truth

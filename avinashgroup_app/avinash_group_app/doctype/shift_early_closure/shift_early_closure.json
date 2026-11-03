@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "autoname": "format:SEC-{closure_date}-{###}",
+ "creation": "2026-11-01 00:00:00.000000",
+ "description": "The company ended the shift early on one day. Leaving at or after the closing time costs nothing; the day is a full day.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "closure_date",
+  "column_break_1",
+  "close_at",
+  "reason",
+  "section_shifts",
+  "shifts",
+  "section_result",
+  "attendance_updated",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "closure_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The time the company let everyone go. Leaving before this still counts as leaving early.",
+   "fieldname": "close_at",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "Closed At",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_shifts",
+   "fieldtype": "Section Break",
+   "label": "Shifts"
+  },
+  {
+   "description": "Leave blank for every shift of the company that is still running at the closing time.",
+   "fieldname": "shifts",
+   "fieldtype": "Table MultiSelect",
+   "label": "Shifts",
+   "options": "Shift Early Closure Shift"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.docstatus>0",
+   "fieldname": "section_result",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "attendance_updated",
+   "fieldtype": "Int",
+   "label": "Attendance Rows Recomputed",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Shift Early Closure",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Shift Early Closure",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "submit": 1, "write": 1},
+  {"email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR User", "share": 1},
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1}
+ ],
+ "sort_field": "closure_date",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "reason",
+ "track_changes": 1
+}

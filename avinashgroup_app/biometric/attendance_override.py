@@ -17,7 +17,7 @@ def set_shift_deviation_fields(doc, method):
     - custom_late_exit   : how late the employee punched OUT after shift end
 
     Only one of each pair will be non-zero at a time.
-    Values are rounded to the nearest minute (>=30s rounds up, <30s rounds down).
+    Values are whole minutes, seconds dropped: 1 min 45 s late is 1 minute.
     Duration fields store seconds as integers.
 
     The calculation itself lives in attendance_sync.compute_shift_deviations,
@@ -44,7 +44,9 @@ def set_shift_deviation_fields(doc, method):
     try:
         shift = frappe.get_cached_doc("Shift Type", doc.shift)
         doc.update(
-            compute_shift_deviations(shift, doc.attendance_date, doc.in_time, doc.out_time)
+            compute_shift_deviations(
+                shift, doc.attendance_date, doc.in_time, doc.out_time, company=doc.company
+            )
         )
     except Exception:
         frappe.log_error(

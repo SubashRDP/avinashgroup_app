@@ -6,6 +6,12 @@
 //
 // Laid out as a tree: a bold row per customer (their credit position and their
 // orders added up) with that customer's orders under it.
+//
+// Each order row has Make Invoice: a new Sales Invoice filled from the order,
+// the same path as the pending-orders drawer (avinash.make_invoice_from_order,
+// public/js/sales_invoice_pending_orders.js). On a Blocked order it is a plain
+// button rather than the blue one — the save will still refuse it until the
+// customer pays, but the clerk may know they just have.
 
 // Verdict pills. Each carries a symbol as well as a colour, so the verdict
 // never rests on colour alone.
@@ -69,6 +75,9 @@ frappe.query_reports["Sales Order Billing Capacity"] = {
 		if (column.fieldname === "label") {
 			return sobc_label(data, is_customer);
 		}
+		if (column.fieldname === "action") {
+			return is_customer ? "" : sobc_invoice_button(data);
+		}
 		// A rate belongs to one order line; a customer row adds up several.
 		if (is_customer && ["today_rate", "order_rate"].includes(column.fieldname)) {
 			return "";
@@ -109,6 +118,31 @@ frappe.query_reports["Sales Order Billing Capacity"] = {
 		return value;
 	},
 };
+
+function sobc_invoice_button(data) {
+	if (!data.sales_order || data.verdict === "Qty Billed") return "";
+	const style = data.verdict === "Blocked" ? "btn-default" : "btn-primary";
+	return `<button class="btn btn-xs ${style} sobc-make-invoice"
+		data-order="${frappe.utils.escape_html(data.sales_order)}"
+		data-company="${frappe.utils.escape_html(data.sales_order_company || "")}">${__("Make Invoice")}</button>`;
+}
+
+// One delegated handler for every row. Namespaced and unbound first: the
+// report script can be evaluated again in the same session, and a second
+// handler would open two invoices per click. Block body, so it never returns
+// false to jQuery (which would cancel the click for everything else).
+$(document).off("click.sobc").on("click.sobc", ".sobc-make-invoice", function (e) {
+	e.stopPropagation();
+	const order = { name: this.dataset.order, company: this.dataset.company };
+	if (window.avinash && avinash.make_invoice_from_order) {
+		avinash.make_invoice_from_order(order);
+	} else {
+		frappe.model.open_mapped_doc({
+			method: "erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice",
+			source_name: order.name,
+		});
+	}
+});
 
 // Customer name links to the Customer, an order number to the Sales Order.
 function sobc_label(data, is_customer) {

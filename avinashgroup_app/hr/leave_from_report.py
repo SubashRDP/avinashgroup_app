@@ -11,9 +11,9 @@ days HR ticks.
 Done the HRMS way, because balances, payroll and the leave ledger all read it:
 one Leave Application per run of consecutive days, status Approved, submitted.
 HRMS's own validate runs in full — balance, overlap with other leave, an
-allocation and Leave Period, attendance already marked Present ("Attendance
-for employee … is already marked") — and its refusal text goes back to HR
-unchanged. On submit HRMS writes the attendance itself (On Leave, or Half Day
+allocation and Leave Period (a Present day is no longer refused outside a
+submitted slip, see hr/backdated_leave.py) — and its refusal text goes back to
+HR unchanged. On submit HRMS writes the attendance itself (On Leave, or Half Day
 on the half-day date; holidays skipped unless the type includes them) and the
 ledger entries. Nothing here writes leave attendance directly.
 
@@ -264,10 +264,12 @@ def _notes(employee, days):
 		},
 		pluck="attendance_date",
 	)
-	if present:
+	punched = {d for d in days if d <= getdate() and shown_up(employee, d)}
+	unpunched = sorted(getdate(p) for p in present if getdate(p) not in punched)
+	if unpunched:
 		notes.append(
-			_("Marked Present on {0}: HRMS will refuse leave there. Untick those days, or correct the attendance first.").format(
-				", ".join(str(getdate(d)) for d in sorted(present))
+			_("Marked Present on {0} with no punch: those days become On Leave.").format(
+				", ".join(map(str, unpunched))
 			)
 		)
 	leave = frappe.get_all(
@@ -278,7 +280,7 @@ def _notes(employee, days):
 	for la in leave:
 		if any(getdate(la.from_date) <= d <= getdate(la.to_date) for d in days):
 			notes.append(_("Already on leave {0} ({1}, {2} – {3}): HRMS will refuse the overlap.").format(la.name, la.leave_type, la.from_date, la.to_date))
-	came = [d for d in days if d <= getdate() and d not in [getdate(p) for p in present] and shown_up(employee, d)]
+	came = sorted(punched)
 	if came:
 		notes.append(
 			_("Punched on {0}: those days become Half Day with the leave kept (policy 3.4).").format(", ".join(map(str, came)))

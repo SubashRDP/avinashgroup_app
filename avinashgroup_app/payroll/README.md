@@ -20,6 +20,7 @@ Code map: [docs/salary-code-map.md](../../docs/salary-code-map.md) — every fun
 | `advance_recovery.py` | Employee advance instalments on the slip | Payroll Entry flow |
 | `hr_journal.py` | JV Type / Document No on payroll journals | `doc_events` |
 | `onboarding.py` | A company's own salary sheet → components, structure, first assignments | `bench execute` |
+| `avinash_group_app/doctype/salary_assignment_upload/` | Salary Assignment Upload: an Excel sheet (one row per person, one column per allowance, pre-filled from the current assignment) → one submitted Salary Structure Assignment per row, each row checked by the assignment's own validate first | form: Download Template / attach; `download_template` (whitelisted) |
 
 Report: **Salary Tax and SSF Deposit** (`avinash_group_app/report/salary_tax_and_ssf_deposit/`) — one BS month's SSF (31%), SST and remuneration tax to deposit, with deadlines.
 Print format: **Salary Slip BS** (`templates/print_formats/salary_slip_bs.html`) — the default Salary Slip format, so it is also what HRMS emails.

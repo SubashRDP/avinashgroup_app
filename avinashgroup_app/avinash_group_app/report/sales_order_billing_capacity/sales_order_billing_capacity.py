@@ -232,6 +232,25 @@ def _plan_billing(orders):
 	return customers
 
 
+def billing_verdicts(customers):
+	"""{sales_order: {verdict, reason, pending_qty, qty_can_bill, to_bill, can_bill}}
+	for every pending order of `customers` — this report's verdict, for the
+	pending-orders popup and drawer (pending_orders.get_pending_orders).
+
+	All of a customer's pending orders are planned, oldest first, even when the
+	caller shows only some, so each verdict is what billing them in turn would hit.
+	"""
+	customers = [c for c in customers if c]
+	if not customers:
+		return {}
+	out = {}
+	for c in _plan_billing(_pending_orders([], customers)):
+		for r in c["orders"]:
+			out[r["sales_order"]] = {k: r[k] for k in
+				("verdict", "reason", "pending_qty", "qty_can_bill", "to_bill", "can_bill")}
+	return out
+
+
 def _customer_row(c):
 	"""The bold parent row of a customer's block: their orders added up, and their
 	credit position, which the order rows below it no longer repeat."""
@@ -444,6 +463,8 @@ def _plan_customer(state, orders):
 			"indent": 1,
 			"customer": o.customer,
 			"sales_order": o.name,
+			# full name for the Make Invoice button (the Company column shows the abbr)
+			"sales_order_company": o.company,
 			"miti": bs_date_str(o.transaction_date) if o.transaction_date else "",
 			"date": o.transaction_date,
 			"item": (f"{single.item_name} · {single.uom}" if single
@@ -516,6 +537,8 @@ def get_columns():
 		{"fieldname": "label", "label": _("Customer / Sales Order"), "fieldtype": "Data", "width": 240},
 		{"fieldname": "company", "label": _("Company"), "fieldtype": "Data", "width": 75},
 		{"fieldname": "verdict", "label": _("Verdict"), "fieldtype": "Data", "width": 100},
+		# Make Invoice button on order rows, drawn by the JS formatter.
+		{"fieldname": "action", "label": _("Invoice"), "fieldtype": "Data", "width": 120},
 		{"fieldname": "credit_meter", "label": _("Credit Used"), "fieldtype": "Data", "width": 170},
 		# The customer's newest invoice, from an order or not; on customer rows only.
 		{"fieldname": "last_invoice", "label": _("Last Invoice"), "fieldtype": "Link",

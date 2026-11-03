@@ -81,90 +81,67 @@ def is_export_invoice(sales_invoice):
 	return "Nepal" not in (get_ancestors_of("Territory", territory) or [])
 
 
-def _line_value(item):
-	"""A line's sales value in company currency: custom_total (net + excise) when the
-	selling-taxes handler has computed it, else base_net_amount. VAT here is levied on
-	net + excise, so this is the base the taxable/exempt split must use for the
-	reported components to reconcile with grand_total."""
-	return flt(item.get("custom_total")) 
-
-
-def _booked_vat(sales_invoice):
-	"""The VAT actually booked on the invoice — summed from each line's
-	custom_vat_amount where VAT Apply On is "VAT 13%" or "Amount" (both maintained
-	by salesinvoice_taxes on every save; "VAT 0%" lines carry no VAT). Falls back to
-	the parent custom_total_vat_amount, then to the VAT-account tax rows, for any
-	document that predates the per-line fields."""
-	line_vat = sum(
-		flt(item.get("custom_vat_amount"))
-		for item in sales_invoice.items
-		if item.get("custom_vat_apply_on") in ("VAT 13%", "Amount")
-	)
-	if line_vat:
-		return abs(line_vat)
+def _invoice_vat(sales_invoice):
+	"""The VAT booked on the invoice: the header custom_total_vat_amount that
+	salesinvoice_taxes maintains on every save (the sum of the per-line VAT), else
+	the VAT-account tax rows for a document that predates the custom fields."""
 	booked = flt(sales_invoice.get("custom_total_vat_amount"))
 	if booked:
-		return abs(booked)
-	return abs(
-		sum(
-			flt(row.base_tax_amount)
-			for row in (sales_invoice.taxes or [])
-			if (row.account_head or "").upper().startswith("VAT")
-		)
+		return booked
+	return sum(
+		flt(row.base_tax_amount)
+		for row in (sales_invoice.taxes or [])
+		if (row.account_head or "").upper().startswith("VAT")
 	)
-
 
 
 def build_cbms_fields(sales_invoice):
 	"""Field mapping shared by CBMS Bill and CBMS Bill Return, from a submitted Sales
-	Invoice, per the IRD mapping spec:
+	Invoice.
 
+	The amounts are READ from the totals salesinvoice_taxes already saved on the
+	invoice, not recomputed here, so the bill always says what the invoice says:
+
+	- custom_total_amount_including_excise: sum of line custom_total (net + excise)
+	- custom_total_vat_amount: sum of line VAT
+	- custom_total_excise_amount: sum of line excise
+	- base_grand_total / base_discount_amount: core, in company currency (NPR)
+
+	The only split worked out here is which part of the sales value is zero-rated
+	(lines with VAT Apply On = "VAT 0%"); the invoice has no header total for it.
+	On a domestic invoice that part is tax_exempted_sales, on an export invoice it
+	is export_sales. Lines that carry VAT stay taxable either way, with the VAT
+	the invoice booked, so taxable and VAT never contradict each other.
+
+	All amounts are reported positive; a return's sign is carried by it being a
+	CBMS Bill Return.
 	"""
 	customer_pan = frappe.db.get_value("Customer", sales_invoice.customer, "tax_id")
 	seller_pan = frappe.get_cached_value("Company", sales_invoice.company, "tax_id")
 
-	exempt_sales = abs(
-		sum(
-			_line_value(item)
-			for item in sales_invoice.items
-			if item.get("custom_vat_apply_on") == "VAT 0%"
-		)
+	excise = flt(sales_invoice.get("custom_total_excise_amount"))
+	# custom_total_amount_including_excise is 0 only on a document saved before the
+	# custom fields existed; net + excise is what it would have held.
+	sales_value = flt(sales_invoice.get("custom_total_amount_including_excise")) or (
+		flt(sales_invoice.base_net_total) + excise
 	)
-	taxable_sales = abs(
-		sum(
-			_line_value(item)
-			for item in sales_invoice.items
-			if item.get("custom_vat_apply_on") != "VAT 0%"
-		)
+	zero_rated = sum(
+		flt(item.get("custom_total")) or flt(item.base_net_amount)
+		for item in sales_invoice.items
+		if item.get("custom_vat_apply_on") == "VAT 0%"
 	)
-	vat = _booked_vat(sales_invoice)
-
-	# Excise: lines carrying a custom_excise_value (manual, maintained by
-	# salesinvoice_taxes). excise = their summed excise; excisable_amount = the
-	# summed base_net_amount of those same lines (the base the excise sits on).
-	excise = abs(
-		sum(flt(item.get("custom_excise_value")) for item in sales_invoice.items)
-	)
-	excisable_amount = abs(
-		sum(
-			flt(item.amount)
-			for item in sales_invoice.items
-			if flt(item.get("custom_excise_value"))
-		)
+	# The base the excise sits on: net amount (after discount, company currency)
+	# of the lines that carry excise.
+	excisable_amount = sum(
+		flt(item.base_net_amount)
+		for item in sales_invoice.items
+		if flt(item.get("custom_excise_value"))
 	)
 
 	if is_export_invoice(sales_invoice):
-		# Exports are zero-rated: the whole sales value goes in export_sales.
-		export_sales = sales_invoice.grand_total
-		taxable_sales = 0
-		total_sales = abs(sales_invoice.grand_total)
+		export_sales, exempt_sales = zero_rated, 0
 	else:
-		export_sales = 0
-		total_sales = abs(sales_invoice.grand_total) - exempt_sales
-
-	discount = 0
-	if sales_invoice.apply_discount_on == "Net Total":
-		discount = abs(flt(sales_invoice.discount_amount))
+		export_sales, exempt_sales = 0, zero_rated
 
 	return {
 		"company": sales_invoice.company,
@@ -185,14 +162,18 @@ def build_cbms_fields(sales_invoice):
 		"created_by": utils.user_display_name(
 			sales_invoice.get("custom_created_by") or sales_invoice.owner
 		),
-		"total_sales": flt(total_sales, 2),
-		"taxable_sales_vat": flt(taxable_sales, 2),
-		"vat": flt(vat, 2),
-		"tax_exempted_sales": flt(exempt_sales, 2),
-		"export_sales": flt(export_sales, 2),
-		"excisable_amount": flt(excisable_amount, 2),
-		"excise": flt(excise, 2),
-		"discount": flt(discount, 2),
+		# Excludes exempt sales; the Materialized reports add them back
+		# (total_sales + tax_exempted_sales = the invoice's grand total).
+		"total_sales": flt(abs(flt(sales_invoice.base_grand_total)) - abs(exempt_sales), 2),
+		"taxable_sales_vat": flt(abs(sales_value - zero_rated), 2),
+		"vat": flt(abs(_invoice_vat(sales_invoice)), 2),
+		"tax_exempted_sales": flt(abs(exempt_sales), 2),
+		"export_sales": flt(abs(export_sales), 2),
+		"excisable_amount": flt(abs(excisable_amount), 2),
+		"excise": flt(abs(excise), 2),
+		# Whichever way the discount was applied, core has already spread it into
+		# the lines' net amounts; this reports how much it was.
+		"discount": flt(abs(flt(sales_invoice.base_discount_amount)), 2),
 		"datetime_client": frappe.utils.now_datetime(),
 	}
 

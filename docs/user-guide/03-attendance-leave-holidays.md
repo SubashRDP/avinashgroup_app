@@ -60,6 +60,13 @@ What HR must have in place:
 
 The lateness stays recorded in reports but is no longer fined. If lateness was the only reason the day became a Half Day, the day goes back to Present.
 
+**The company closed the shift early.** When everyone is sent home early (power cut, a function, a strike), that day is still a full day:
+1. In **Monthly Attendance BS**, click **Close Shift Early** (HR Manager). Or open **Shift Early Closure** → **New** and Submit.
+2. Choose the **Company**, the **Date** and **Closed At**, the time people were let go. **Shifts:** pick the ones that closed early, or leave it blank for every shift still running at that time.
+3. Type the **Reason** and click **Close Early**.
+
+Leaving at or after the closing time is no longer counted as leaving early, so it is not fined. Leaving before it still counts, from the closing time: closed at 2:00, left at 1:30 = 30 minutes early. Late arrival that morning still counts, and so does the 2-hours-late half day. Anyone who did not come stays Absent. Overtime still counts only after the normal shift end. Attendance already marked for that day is re-measured straight away, and days marked later follow the closure automatically. The report shows "Closed early at 14:00 — reason" in the day's Remarks and lists the period's closures above the grid. To undo, **Cancel** the Shift Early Closure (**Early Closures** button). Both are refused once that month's salary slip is submitted.
+
 **Worked on Holiday** is ticked automatically when someone has attendance on a day that is a holiday on their own holiday list.
 
 ## 3.4 Fixing attendance
@@ -73,14 +80,14 @@ The Attendance form also shows a **Checkin Log** with each punch of the day.
 
 ### Many people or many days: Attendance Fix
 1. Open **Attendance Fix** → **New**.
-2. Choose the **Company** and the **Shift Type**.
-3. **Repair Scope:** "All Employees in Shift", or "Selected Employees" and list them in **Employees** (the **Add Everyone on This Shift** button fills the list; remove the ones you do not want).
-4. Set **From Date** and **To Date**. Optionally limit to some **Devices**.
+2. Choose the **Company**. Leave **Shift Type** blank: each person's day is worked out against the shift their punches show for that day (or their Default Shift if the punches have none), so people who move between shifts are fixed correctly. Pick a Shift Type only to limit the run to the people on that shift.
+3. **Period:** "Month" and pick the **BS Year** and **BS Month** (it opens on the current month; From and To Date fill themselves), or "Date Range" and type **From Date** and **To Date**.
+4. **Repair Scope:** "All Employees", or "Selected Employees" and list them in **Employees** (the **Add Employees** button fills the list with everyone in the company for that period; remove the ones you do not want). Optionally limit to some **Devices**.
 5. Save and **Submit**. The repair runs in the background. **Status**, **Progress %** and **Current Step** show how far it is. At the end you see how many rows were created, updated or removed, and a **Per-Day Log**.
 
 Use Attendance Fix after: a device was offline, device IDs were filled late, a shift was changed, or a holiday was **removed** for a past date.
 
-Attendance Fix **skips holiday dates** (each person's own list). For a holiday **added** for a past date, nothing is needed: Holiday Bulk Update corrects that day's attendance itself. For one person's holiday that was worked, use **Repair from Check-ins** on that day instead.
+Attendance Fix **skips holiday dates** (each person's own list), and days before someone joined or after they were relieved. For a holiday **added** for a past date, nothing is needed: Holiday Bulk Update corrects that day's attendance itself. For one person's holiday that was worked, use **Repair from Check-ins** on that day instead.
 
 ### A punch is genuinely missing
 If the person forgot to punch, the device cannot know. Create or edit the **Attendance** for that day by hand with the right status, after checking with the person's manager.

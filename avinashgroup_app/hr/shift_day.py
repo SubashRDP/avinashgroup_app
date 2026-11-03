@@ -13,6 +13,8 @@ count on which kind of day.
 
 What the Chaitra 2082 attendance cards show, and what is reproduced here:
 
+  (All minutes are whole minutes, seconds dropped: 1 min 45 s is 1.)
+
   Late Time       minutes after the shift starts, on a working day the person
                   worked in full. No grace: 09:08 is 8. A holiday has no start
                   time to be late for, and a half day is already its own penalty.
@@ -116,8 +118,8 @@ def measure_day(att, is_holiday=False, ot_eligible=False):
 	holiday = bool(is_holiday or att.get("custom_worked_on_holiday"))
 
 	if not holiday and att.get("status") != "Half Day":
-		out.late_minutes = int(round(flt(att.get("custom_late_entry")) / 60))
-		out.early_exit_minutes = int(round(flt(att.get("custom_early_exit")) / 60))
+		out.late_minutes = int(flt(att.get("custom_late_entry")) // 60)
+		out.early_exit_minutes = int(flt(att.get("custom_early_exit")) // 60)
 
 	if ot_eligible:
 		if holiday:

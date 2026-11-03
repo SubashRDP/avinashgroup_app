@@ -12,20 +12,22 @@ from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
 
 
 def set_invoice_miti(doc, method=None):
-	"""Set the BS miti from the posting date. Never throws: a bad/blank posting
-	date is the tax pipeline's problem to report, not this mirror's."""
+	"""Require today's posting date, then set the BS miti from it.
+
+	The today-only rule is skipped during a Data Import (frappe.flags.in_import,
+	set by frappe's Importer, which fast_import also runs through), because
+	imports carry historical invoices. A failed miti conversion is only logged,
+	never thrown."""
 	if not doc.get("posting_date"):
 		return
 
-	if doc.posting_date:
+	if not frappe.flags.in_import:
 		posting = frappe.utils.getdate(doc.posting_date)
 		current = frappe.utils.getdate(frappe.utils.today())
 		if posting > current:
 			frappe.throw("Posting Date cannot be a future date. It must be today's date.")
 		if posting < current:
 			frappe.throw("Posting Date cannot be backdated. It must be today's date.")
-
-	
 
 	try:
 		doc.custom_invoice_miti = bs_date_str(doc.posting_date)

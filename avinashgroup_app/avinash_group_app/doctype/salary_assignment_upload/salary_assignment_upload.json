@@ -1,0 +1,155 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-11-01 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "company",
+  "from_date",
+  "column_break_main",
+  "salary_structure",
+  "note",
+  "file_section",
+  "how_to",
+  "download_template",
+  "column_break_file",
+  "upload_file",
+  "employees_section",
+  "employees",
+  "totals_section",
+  "employee_count",
+  "column_break_totals",
+  "error_count",
+  "amended_from"
+ ],
+ "fields": [
+  {
+   "default": "SAU-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SAU-.YYYY.-",
+   "reqd": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "description": "Every assignment in the file starts on this date",
+   "fieldname": "from_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "From Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Used for a row whose Salary Structure cell is blank, and for new staff in the template",
+   "fieldname": "salary_structure",
+   "fieldtype": "Link",
+   "label": "Default Salary Structure",
+   "options": "Salary Structure"
+  },
+  {
+   "fieldname": "note",
+   "fieldtype": "Small Text",
+   "label": "Note",
+   "description": "New joiners of Mangsir, opening salaries, annual increment"
+  },
+  {
+   "depends_on": "eval:doc.docstatus === 0",
+   "fieldname": "file_section",
+   "fieldtype": "Section Break",
+   "label": "File"
+  },
+  {
+   "fieldname": "how_to",
+   "fieldtype": "HTML",
+   "label": "How To",
+   "options": "<ol style=\"padding-left: 1.2em; margin-bottom: 0\"><li>Pick the Company and From Date, then <b>Download Template</b>: one row per active employee, filled from their current salary, one column per allowance.</li><li>Fill in or change only the people whose salary is new. Rows left blank, or the same as now, are skipped.</li><li>An allowance cell is the person's rate. Leave it blank (or 0) when they do not get it. For a column marked <i>from basic</i> (overtime), type Yes.</li><li>Attach the file. Each row is checked; fix any row marked Error in Excel and attach again.</li><li>Submit: one Salary Structure Assignment per row.</li></ol>"
+  },
+  {
+   "fieldname": "download_template",
+   "fieldtype": "Button",
+   "label": "Download Template"
+  },
+  {
+   "fieldname": "column_break_file",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The filled template (.xlsx or .csv). Attaching it replaces the rows below.",
+   "fieldname": "upload_file",
+   "fieldtype": "Attach",
+   "label": "Filled Template"
+  },
+  {
+   "fieldname": "employees_section",
+   "fieldtype": "Section Break",
+   "label": "Employees"
+  },
+  {
+   "fieldname": "employees",
+   "fieldtype": "Table",
+   "label": "Employees",
+   "options": "Salary Assignment Upload Row"
+  },
+  {
+   "fieldname": "totals_section",
+   "fieldtype": "Section Break",
+   "label": "Total"
+  },
+  {
+   "fieldname": "employee_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Employees",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totals",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "error_count",
+   "fieldtype": "Int",
+   "label": "Rows With Errors",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Salary Assignment Upload",
+   "print_hide": 1,
+   "read_only": 1
+  }
+ ],
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2026-11-01 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Salary Assignment Upload",
+ "owner": "Administrator",
+ "permissions": [
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "HR Manager", "share": 1, "submit": 1, "write": 1},
+  {"amend": 1, "cancel": 1, "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1, "read": 1, "report": 1, "role": "System Manager", "share": 1, "submit": 1, "write": 1}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

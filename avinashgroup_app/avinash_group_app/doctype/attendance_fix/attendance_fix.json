@@ -7,10 +7,13 @@
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
-  "shift_type",
   "company",
+  "shift_type",
   "repair_scope",
   "column_break_1",
+  "period",
+  "bs_year",
+  "bs_month",
   "from_date",
   "to_date",
   "selection_section",
@@ -42,25 +45,27 @@
   {
    "fieldname": "shift_type",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Shift Type",
    "options": "Shift Type",
-   "reqd": 1,
-   "description": "Restricts the fix to employees assigned to this shift."
+   "reqd": 0,
+   "description": "Optional. Leave blank to repair everyone in the company: each person's day is computed against the shift their punches carry, or their Default Shift. Pick a shift only to limit the run to the people on it."
   },
   {
    "fieldname": "company",
    "fieldtype": "Link",
    "label": "Company",
-   "options": "Company"
+   "options": "Company",
+   "reqd": 1,
+   "in_list_view": 1
   },
   {
-   "default": "All Employees in Shift",
-   "description": "Whether to repair everyone assigned to the shift, or only the employees you list below.",
+   "default": "All Employees",
+   "description": "Everyone in the company (on the chosen shift, if one is picked), or only the employees you list below.",
    "fieldname": "repair_scope",
    "fieldtype": "Select",
    "label": "Repair Scope",
-   "options": "All Employees in Shift\nSelected Employees",
+   "options": "All Employees\nSelected Employees",
    "reqd": 1
   },
   {
@@ -68,18 +73,45 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "Month",
+   "fieldname": "period",
+   "fieldtype": "Select",
+   "label": "Period",
+   "options": "Month\nDate Range",
+   "reqd": 1,
+   "description": "A whole Nepali month, or any date range."
+  },
+  {
+   "depends_on": "eval:doc.period==\"Month\"",
+   "mandatory_depends_on": "eval:doc.period==\"Month\"",
+   "fieldname": "bs_year",
+   "fieldtype": "Int",
+   "label": "BS Year",
+   "non_negative": 1
+  },
+  {
+   "depends_on": "eval:doc.period==\"Month\"",
+   "mandatory_depends_on": "eval:doc.period==\"Month\"",
+   "fieldname": "bs_month",
+   "fieldtype": "Select",
+   "label": "BS Month",
+   "options": "\nBaisakh\nJestha\nAshadh\nShrawan\nBhadra\nAshwin\nKartik\nMangsir\nPoush\nMagh\nFalgun\nChaitra"
+  },
+  {
    "fieldname": "from_date",
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "From Date",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.period!=\"Month\"",
+   "read_only_depends_on": "eval:doc.period==\"Month\""
   },
   {
    "fieldname": "to_date",
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "To Date",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.period!=\"Month\"",
+   "read_only_depends_on": "eval:doc.period==\"Month\""
   },
   {
    "fieldname": "selection_section",
@@ -88,7 +120,7 @@
   },
   {
    "depends_on": "eval:doc.repair_scope==\"Selected Employees\"",
-   "description": "Only these employees are repaired. They are used as given \u2014 an employee not assigned to the chosen shift is still processed, but their check-ins will not match it, so nothing will change for them.",
+   "description": "Only these employees are repaired. If a Shift Type is picked, an employee not on it is still processed, but their check-ins will not match it, so nothing will change for them.",
    "fieldname": "employees",
    "fieldtype": "Table",
    "label": "Employees",
@@ -193,7 +225,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-08-26 00:00:00.000000",
+ "modified": "2026-11-02 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Attendance Fix",

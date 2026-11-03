@@ -21,6 +21,11 @@
   --ag-po-accent-text: #ffffff;
   --ag-po-accent-soft: rgba(37, 99, 235, 0.12);
   --ag-po-good: #16a34a;
+  /* credit verdict tints, as r, g, b so the glass can take them at any alpha */
+  --ag-po-ok-rgb: 22, 163, 74;
+  --ag-po-warn-rgb: 217, 119, 6;
+  --ag-po-bad-rgb: 220, 38, 38;
+  --ag-po-tint-alpha: 0.07;
   --ag-po-track: rgba(15, 23, 42, 0.08);
   --ag-po-blur: blur(14px) saturate(160%);
   --ag-po-radius: 22px;
@@ -41,6 +46,10 @@
   --ag-po-accent-text: #0b1220;
   --ag-po-accent-soft: rgba(96, 165, 250, 0.16);
   --ag-po-good: #4ade80;
+  --ag-po-ok-rgb: 74, 222, 128;
+  --ag-po-warn-rgb: 251, 191, 36;
+  --ag-po-bad-rgb: 248, 113, 113;
+  --ag-po-tint-alpha: 0.09;
   --ag-po-track: rgba(255, 255, 255, 0.1);
 }
 
@@ -162,6 +171,74 @@
 .ag-po-billed { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--ag-po-muted); }
 .ag-po-billed__track { flex: 1; height: 4px; border-radius: 999px; background: var(--ag-po-track); overflow: hidden; }
 .ag-po-billed__bar { height: 100%; border-radius: inherit; background: var(--ag-po-good); }
+
+/* ---------- credit verdict: can this order be invoiced right now ----------
+ * (credit_control.py, via the Sales Order Billing Capacity report)
+ * The card stays plain glass; the colour lives in the frosted pill, plus the
+ * faintest glow of it in the card's top-right corner. No coloured edges or
+ * borders — the cards read as a list, not an alarm. */
+
+.ag-po-order--ready { --ag-po-tint: var(--ag-po-ok-rgb); }
+.ag-po-order--partly { --ag-po-tint: var(--ag-po-warn-rgb); }
+.ag-po-order--blocked { --ag-po-tint: var(--ag-po-bad-rgb); }
+
+.ag-po-order--ready,
+.ag-po-order--partly,
+.ag-po-order--blocked {
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(var(--ag-po-tint), var(--ag-po-tint-alpha)) 0%, rgba(var(--ag-po-tint), 0) 60%),
+    var(--ag-po-glass-strong);
+}
+
+.ag-po-status { margin-top: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+
+.ag-po-status__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+  color: rgb(var(--ag-po-tint));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 70%),
+    rgba(var(--ag-po-tint), 0.14);
+  border: 1px solid rgba(var(--ag-po-tint), 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(6px) saturate(180%);
+  backdrop-filter: blur(6px) saturate(180%);
+  white-space: nowrap;
+}
+[data-theme="dark"] .ag-po-status__pill {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 70%),
+    rgba(var(--ag-po-tint), 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* the dot glows like a status light */
+.ag-po-status__pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(var(--ag-po-tint));
+  box-shadow: 0 0 0 2px rgba(var(--ag-po-tint), 0.18), 0 0 6px rgba(var(--ag-po-tint), 0.9);
+}
+
+/* the reason: the point on red, so up to two lines in the narrow drawer */
+.ag-po-status__why {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ag-po-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 .ag-po-empty { text-align: center; color: var(--ag-po-muted); padding: 40px 12px; font-size: 13px; }
 

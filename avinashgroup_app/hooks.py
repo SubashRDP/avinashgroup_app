@@ -66,8 +66,12 @@ app_include_js = [
     # Billing nudges toward invoicing from the Sales Order: customer popup,
     # swipe-in pending-orders drawer on the invoice, and the new-order cards
     # sales staff get live. See custom_code/SalesInvoice/pending_orders.py.
-    "/assets/avinashgroup_app/js/sales_invoice_pending_orders.js?v=7",
+    "/assets/avinashgroup_app/js/sales_invoice_pending_orders.js?v=10",
     "/assets/avinashgroup_app/js/sales_order_alerts.js?v=4",
+    # Shift Early Closure month sheet (many days / Excel import), opened from
+    # Monthly Attendance BS and the Shift Early Closure list. See
+    # hr/shift_early_closure_sheet.py.
+    "/assets/avinashgroup_app/js/shift_early_closure_sheet.js?v=2",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",
@@ -98,7 +102,7 @@ app_include_css = [
     "/assets/avinashgroup_app/css/desk_focus.css?v=1.1",
     "/assets/avinashgroup_app/css/list_cleanup.css?v=2.1",
     # glass look for the pending-order popup, drawer and new-order cards
-    "/assets/avinashgroup_app/css/sales_pending_orders.css?v=4",
+    "/assets/avinashgroup_app/css/sales_pending_orders.css?v=8",
 ]
 
 doctype_list_js = {
@@ -591,6 +595,9 @@ override_doctype_class = {
     # Holiday work earns a full replacement day for turning up at all; the
     # requests hr/replacement_leave files skip HRMS's Present / ½-day check.
     "Compensatory Leave Request": "avinashgroup_app.hr.replacement_leave.ReplacementLeaveRequest",
+    # Leave over a day already marked Present is allowed (backdated leave); the
+    # punched day becomes a Half Day under policy 3.4. See hr/backdated_leave.py.
+    "Leave Application": "avinashgroup_app.hr.backdated_leave.BackdatedLeaveApplication",
 }
 
 scheduler_events = {

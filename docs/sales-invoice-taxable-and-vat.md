@@ -83,16 +83,19 @@ Consequence: because the VAT and excise rows are `Actual`, core's `total_taxes_a
 
 ### 3.3 CBMS field build (`CBMS/sales_invoice_hooks.py`)
 
-Called by `create_cbms_bill` (`:200`) and `create_cbms_bill_return` (`:217`) from `on_submit`, and by `backfill.py:208` (`_create_and_enqueue`). Nothing is read from the CBMS doc later; these values are frozen at creation.
+Called by `create_cbms_bill` and `create_cbms_bill_return` from `on_submit`, and by `backfill.py` (`_create_and_enqueue`). Nothing is read from the CBMS doc later; these values are frozen at creation.
 
-- `_line_value(item)` (`:84-89`): returns `flt(item.get("custom_total"))`. Its docstring says "else base_net_amount" but the code has no fallback.
-- `taxable_sales` (`:133-139`): `abs(sum(_line_value(item) for items where custom_vat_apply_on != "VAT 0%"))`. So `Amount` lines are taxable, and so is a line whose `custom_vat_apply_on` is empty.
-- `exempt_sales` (`:127-132`): `abs(sum(...))` of the `VAT 0%` lines.
-- `vat = _booked_vat(si)` (`:92-115`): `abs(sum(custom_vat_amount))` over lines with `VAT 13%` or `Amount`; if that is 0, `custom_total_vat_amount`; if that is 0, `sum(base_tax_amount)` of tax rows whose `account_head` starts with `VAT`.
-- `excise` (`:145`): `abs(sum(custom_excise_value))`; `excisable_amount` = `abs(sum(item.amount))` of lines with excise (uses `amount`, not `base_net_amount`, despite the comment).
-- Export (`is_export_invoice` `:72`: currency not NPR, or customer territory outside Nepal): `export_sales = sales_invoice.grand_total`, `taxable_sales = 0`, `total_sales = abs(grand_total)` (`:157-160`). Otherwise `export_sales = 0`, `total_sales = abs(grand_total) - exempt_sales` (`:162-163`).
-- `discount` (`:165-167`): `abs(discount_amount)` only when `apply_discount_on == "Net Total"`.
-- Output (`:189-190`): `taxable_sales_vat = flt(taxable_sales, 2)`, `vat = flt(vat, 2)`. Sign is dropped with `abs`, so a Sales Return produces positive amounts on CBMS Bill Return.
+Since branch `cbms-amounts-from-invoice` (1 November 2026) `build_cbms_fields` reads the invoice's saved totals instead of recomputing them:
+
+- `taxable_sales_vat` = `custom_total_amount_including_excise` minus the zero-rated part (lines with `VAT 0%`). Falls back to `base_net_total + excise` if the header is 0 (pre-field documents).
+- `vat` = `custom_total_vat_amount`, else VAT-account tax rows. This is the figure in the VAT ledger row and the grand total.
+- `excise` = `custom_total_excise_amount`; `excisable_amount` = `base_net_amount` of lines with excise (after discount, NPR).
+- Zero-rated part goes to `tax_exempted_sales` on a domestic invoice and to `export_sales` on an export invoice (`is_export_invoice`). VAT-bearing lines stay taxable on an export too, so taxable and VAT never contradict.
+- `total_sales` = `abs(base_grand_total) - exempt` (NPR).
+- `discount` = `base_discount_amount`, whichever way it was applied.
+- Every amount is `abs`; a return is positive on CBMS Bill Return.
+
+Replaced behaviour: export invoices sent `taxable_sales_vat = 0` with VAT still set, and `export_sales = grand_total` (incl. VAT, invoice currency, signed); `excisable_amount` used `item.amount` (before discount); `discount` was 0 for a Grand Total discount; a missing `custom_total` made taxable 0; VAT was a sum of line VATs, which on invoices saved before per-line rounding differed by a paisa from the header and the VAT ledger row. A read-only comparison of 3,000 submitted invoices on avinasdemo showed the old and new code agree on every field except those 34 one-paisa VAT cases.
 
 ### 3.4 CBMS send (`api_client.py`)
 

@@ -18,6 +18,15 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		report.page.add_inner_button(__("Correction Log"), () => _open_correction_log());
 		if (frappe.user.has_role(CORRECTION_ROLES)) {
 			report.page.add_inner_button(__("Give Leave"), () => _open_give_leave_dialog());
+			// the month sheet: many days at once, or an Excel import (public/js/shift_early_closure_sheet.js)
+			report.page.add_inner_button(__("Close Shift Early"), () =>
+				avinash.open_closure_sheet({
+					company: frappe.query_report.get_filter_value("company"),
+					date: frappe.query_report.get_filter_value("from_date"),
+					on_done: () => frappe.query_report.refresh(),
+				})
+			);
+			report.page.add_inner_button(__("Early Closures"), () => frappe.set_route("List", "Shift Early Closure"));
 		}
 		_make_full_width(report);
 		_setup_fiscal_year_visibility(report);

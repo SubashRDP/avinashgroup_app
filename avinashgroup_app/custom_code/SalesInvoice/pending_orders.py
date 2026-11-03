@@ -39,7 +39,8 @@ def _pending_filters(company=None, customer=None):
 
 
 @frappe.whitelist()
-def get_pending_orders(company=None, customer=None, txt=None, limit=50, with_companies=False):
+def get_pending_orders(company=None, customer=None, txt=None, limit=50, with_companies=False,
+		with_credit=False):
 	"""Pending orders, newest first — of one company, or of every company the
 	user may read when none is given (optionally one customer, a search text).
 
@@ -50,6 +51,11 @@ def get_pending_orders(company=None, customer=None, txt=None, limit=50, with_com
 	with_companies adds [{company, abbr, count}] over all their companies
 	(ignoring `company`, so the filter chips keep their numbers when one is
 	picked).
+
+	with_credit puts `credit` on each order: whether the customer's credit
+	limits (credit_control.py) let it be invoiced right now — the Sales Order
+	Billing Capacity report's verdict (Ready / Partly / Blocked, with the
+	reason and today's amount), so the cards can never disagree with it.
 	"""
 	filters = _pending_filters(company, customer)
 	or_filters = None
@@ -82,6 +88,16 @@ def get_pending_orders(company=None, customer=None, txt=None, limit=50, with_com
 	abbr = dict(frappe.get_all("Company", fields=["name", "abbr"], as_list=True))
 	for o in orders:
 		o.company_abbr = abbr.get(o.company) or o.company
+
+	if cint(with_credit) and orders:
+		# imported here: the report imports _pending_filters from this module
+		from avinashgroup_app.avinash_group_app.report.sales_order_billing_capacity.sales_order_billing_capacity import (
+			billing_verdicts,
+		)
+
+		verdicts = billing_verdicts({o.customer for o in orders})
+		for o in orders:
+			o.credit = verdicts.get(o.name)
 
 	count = len(frappe.get_list(
 		"Sales Order", filters=filters, or_filters=or_filters, pluck="name", page_length=0,
