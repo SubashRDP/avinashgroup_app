@@ -80,14 +80,14 @@ The Attendance form also shows a **Checkin Log** with each punch of the day.
 
 ### Many people or many days: Attendance Fix
 1. Open **Attendance Fix** → **New**.
-2. Choose the **Company** and the **Shift Type**.
-3. **Repair Scope:** "All Employees in Shift", or "Selected Employees" and list them in **Employees** (the **Add Everyone on This Shift** button fills the list; remove the ones you do not want).
-4. Set **From Date** and **To Date**. Optionally limit to some **Devices**.
+2. Choose the **Company**. Leave **Shift Type** blank: each person's day is worked out against the shift their punches show for that day (or their Default Shift if the punches have none), so people who move between shifts are fixed correctly. Pick a Shift Type only to limit the run to the people on that shift.
+3. **Period:** "Month" and pick the **BS Year** and **BS Month** (it opens on the current month; From and To Date fill themselves), or "Date Range" and type **From Date** and **To Date**.
+4. **Repair Scope:** "All Employees", or "Selected Employees" and list them in **Employees** (the **Add Employees** button fills the list with everyone in the company for that period; remove the ones you do not want). Optionally limit to some **Devices**.
 5. Save and **Submit**. The repair runs in the background. **Status**, **Progress %** and **Current Step** show how far it is. At the end you see how many rows were created, updated or removed, and a **Per-Day Log**.
 
 Use Attendance Fix after: a device was offline, device IDs were filled late, a shift was changed, or a holiday was **removed** for a past date.
 
-Attendance Fix **skips holiday dates** (each person's own list). For a holiday **added** for a past date, nothing is needed: Holiday Bulk Update corrects that day's attendance itself. For one person's holiday that was worked, use **Repair from Check-ins** on that day instead.
+Attendance Fix **skips holiday dates** (each person's own list), and days before someone joined or after they were relieved. For a holiday **added** for a past date, nothing is needed: Holiday Bulk Update corrects that day's attendance itself. For one person's holiday that was worked, use **Repair from Check-ins** on that day instead.
 
 ### A punch is genuinely missing
 If the person forgot to punch, the device cannot know. Create or edit the **Attendance** for that day by hand with the right status, after checking with the person's manager.

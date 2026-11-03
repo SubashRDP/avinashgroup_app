@@ -171,7 +171,9 @@ Those people's salary slip for the month is already submitted, so their tea, mea
 | **Attendance Device ID … is already used by … (…) in company …. It must be unique within a company…** | Check the device enrolment; give each person their own number |
 | **Device serial … is not registered or is disabled.** (seen by IT in the bridge log) | Register the device on **Biometric Device** with that serial and tick Enabled |
 | **From Date must be on or before To Date.** (Attendance Fix) | Correct the dates |
-| **Add at least one employee, or set Repair Scope to All Employees in Shift.** | Add employees, or change the scope |
+| **Add at least one employee, or set Repair Scope to All Employees.** | Add employees, or change the scope |
+| **… do not belong to … Remove them or change the Company.** (Attendance Fix) | Remove the employees of another company from the list |
+| **Pick the BS Year and BS Month.** (Attendance Fix) | Fill both, or set Period to Date Range |
 | **Row …: … is listed more than once.** (Attendance Fix) | Remove the duplicate |
 | **To Date cannot be before From Date** (Monthly Attendance BS) | Correct the filter dates |
 | **Holiday Date is required** / **Holiday name is required when adding** | Fill both on Holiday Bulk Update |

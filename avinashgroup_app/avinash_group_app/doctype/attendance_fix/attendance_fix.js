@@ -1,5 +1,10 @@
 frappe.ui.form.on("Attendance Fix", {
 	onload: function (frm) {
+		// A new fix defaults to the current BS month.
+		if (frm.is_new() && frm.doc.period === "Month" && !(frm.doc.bs_year && frm.doc.bs_month)) {
+			set_month_dates(frm);
+		}
+
 		// Listen for real-time progress updates
 		frappe.realtime.on("attendance_fix_progress", (data) => {
 			if (data.doc_name === frm.doc.name) {
@@ -43,7 +48,7 @@ frappe.ui.form.on("Attendance Fix", {
 		});
 
 		if (frm.doc.docstatus === 0 && frm.doc.repair_scope === "Selected Employees") {
-			frm.add_custom_button(__("Add Everyone on This Shift"), () => fill_from_shift(frm));
+			frm.add_custom_button(__("Add Employees"), () => fill_roster(frm));
 		}
 
 		if (frm.doc.docstatus === 1) {
@@ -74,7 +79,36 @@ frappe.ui.form.on("Attendance Fix", {
 			}
 		}
 	},
+
+	period(frm) {
+		if (frm.doc.period === "Month") set_month_dates(frm);
+	},
+	bs_year(frm) {
+		if (frm.doc.bs_year && frm.doc.bs_month) set_month_dates(frm);
+	},
+	bs_month(frm) {
+		if (frm.doc.bs_year && frm.doc.bs_month) set_month_dates(frm);
+	},
 });
+
+// Month mode: fill From/To Date with the BS month's AD span (the server
+// recomputes them on save, so these are only for the person to see).
+function set_month_dates(frm) {
+	frappe.call({
+		method: "avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix.get_bs_month_dates",
+		args: { bs_year: frm.doc.bs_year || null, bs_month: frm.doc.bs_month || null },
+		callback: (r) => {
+			const m = r.message;
+			if (!m) return;
+			frm.doc.bs_year = m.bs_year;
+			frm.doc.bs_month = m.bs_month;
+			frm.doc.from_date = m.from_date;
+			frm.doc.to_date = m.to_date;
+			frm.refresh_fields(["bs_year", "bs_month", "from_date", "to_date"]);
+			frm.dirty();
+		},
+	});
+}
 
 function _show_progress_bar(frm) {
 	// Create progress bar if not already present
@@ -110,25 +144,27 @@ function _show_progress_bar(frm) {
 }
 
 
-// Pre-fill the employee table from the shift roster, so "Selected Employees"
+// Pre-fill the employee table with everyone in the company employed in the
+// period (narrowed to the shift, if one is picked), so "Selected Employees"
 // can be used as a starting list to trim rather than typed from scratch.
-function fill_from_shift(frm) {
-	if (!frm.doc.shift_type || !frm.doc.from_date) {
-		frappe.msgprint(__("Pick a Shift Type and From Date first."));
+function fill_roster(frm) {
+	if (!frm.doc.company || !frm.doc.from_date || !frm.doc.to_date) {
+		frappe.msgprint(__("Pick the Company and the period first."));
 		return;
 	}
 	frappe.call({
-		method: "avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix.get_shift_roster",
+		method: "avinashgroup_app.avinash_group_app.doctype.attendance_fix.attendance_fix.get_roster",
 		args: {
-			shift_type: frm.doc.shift_type,
-			on_date: frm.doc.from_date,
-			company: frm.doc.company || null,
+			company: frm.doc.company,
+			from_date: frm.doc.from_date,
+			to_date: frm.doc.to_date,
+			shift_type: frm.doc.shift_type || null,
 		},
 		freeze: true,
 		callback: (r) => {
 			const rows = r.message || [];
 			if (!rows.length) {
-				frappe.msgprint(__("No active employees are assigned to this shift on that date."));
+				frappe.msgprint(__("No employees of this company (on this shift) in that period."));
 				return;
 			}
 			const existing = new Set((frm.doc.employees || []).map((d) => d.employee));

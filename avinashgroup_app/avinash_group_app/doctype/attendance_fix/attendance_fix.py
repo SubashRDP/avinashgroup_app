@@ -1,7 +1,8 @@
 """Attendance Fix — manual repair tool for offline-bridge gaps.
 
-HR picks a Shift Type + date range. On submit, for every (employee, date) in
-that range we look at what's actually in the database and reconcile it:
+HR picks a Company and a period (a whole BS month, or a date range). On
+submit, for every (employee, date) in that period we look at what's actually
+in the database and reconcile it:
 
   - Checkins exist, no Attendance      → create Attendance, link the checkins.
   - Checkins exist, Attendance Absent  → delete stale Absent, create from checkins.
@@ -9,6 +10,17 @@ that range we look at what's actually in the database and reconcile it:
     (Present / Half Day / On Leave / WFH — never overwritten).
   - No checkins, no Attendance         → mark Absent (skipping holidays).
   - No checkins, Attendance exists     → leave it (HR may have entered it).
+
+Shift is optional, because people here move between shifts day to day. With no
+Shift Type picked, each (employee, day) is computed against the shift that
+day's punches resolved to, falling back to the employee's Default Shift — the
+same resolver the self-heal job and the one-day Repair button use. Picking a
+Shift Type keeps the old behaviour: only that shift's roster, and every day
+computed against that shift.
+
+Each employee's days are clipped to their employment (joining to relieving
+date). Without that, a month run on a new joiner marks Absent before they
+existed, which HRMS rejects and logs as an error per day.
 
 Reuses stock HRMS primitives so attendance status / working-hours computation
 matches everywhere else in the system.
@@ -31,34 +43,67 @@ from hrms.hr.doctype.employee_checkin.employee_checkin import (
     update_attendance_in_checkins,
 )
 
+from rdp_common_app.utils.bs_boundaries import BS_MONTH_NAMES, ad_to_bs, get_bs_month_range
+
 from avinashgroup_app.biometric.attendance_sync import (
     prepare_checkins_for_shift,
     refresh_attendance_values,
 )
 
 
+# Records submitted before the scope was widened to the whole company carry
+# this value; they are read (and amended) as "All Employees".
+LEGACY_ALL_SCOPE = "All Employees in Shift"
+
+BS_MONTH_NUMBERS = {name: num for num, name in BS_MONTH_NAMES.items()}
+
+
 class AttendanceFix(Document):
     def validate(self):
+        if self.repair_scope == LEGACY_ALL_SCOPE:
+            self.repair_scope = "All Employees"
+        self.set_period_dates()
+        if not (self.from_date and self.to_date):
+            frappe.throw(_("Set From Date and To Date, or pick a BS Month."))
         if getdate(self.from_date) > getdate(self.to_date):
             frappe.throw(_("From Date must be on or before To Date."))
         self.validate_selected_employees()
+
+    def set_period_dates(self):
+        """Month mode: From/To Date are the BS month's first and last AD day.
+
+        Computed here as well as in the form, so the dates can never disagree
+        with the month that is shown (an API insert, or a form whose server
+        call failed)."""
+        if self.period != "Month":
+            return
+        if not (self.bs_year and self.bs_month):
+            frappe.throw(_("Pick the BS Year and BS Month."))
+        try:
+            start, end = get_bs_month_range(int(self.bs_year), BS_MONTH_NUMBERS[self.bs_month])
+        except (KeyError, ValueError):
+            frappe.throw(_("{0} {1} is not a BS month the calendar knows.").format(self.bs_month, self.bs_year))
+        self.from_date, self.to_date = start, end
 
     def validate_selected_employees(self):
         """Warn when a named employee cannot possibly be repaired by this run.
 
         In Selected Employees mode the list is honoured as given — the point of
-        naming someone is to repair them. But attendance is computed against the
-        chosen Shift Type, and prepare_checkins_for_shift only accepts check-ins
-        that resolve to it, so an employee on a different shift is processed and
-        then silently does nothing. Say so at save time instead of leaving it to
-        be discovered in an empty log.
+        naming someone is to repair them. Two things can still make a name a
+        no-op, and both are said at save time instead of being discovered in
+        an empty log:
+
+          * the employee belongs to another company (the run is company-scoped);
+          * a Shift Type is picked and they are not on it — attendance is then
+            computed against that shift, and prepare_checkins_for_shift only
+            accepts check-ins that resolve to it.
         """
         if self.repair_scope != "Selected Employees":
             return
         if not self.employees:
             frappe.throw(
                 _("Add at least one employee, or set Repair Scope to {0}.").format(
-                    frappe.bold(_("All Employees in Shift"))
+                    frappe.bold(_("All Employees"))
                 )
             )
 
@@ -70,6 +115,20 @@ class AttendanceFix(Document):
                 )
             seen.add(row.employee)
 
+        other_company = [
+            r for r in self.employees
+            if frappe.db.get_value("Employee", r.employee, "company") != self.company
+        ]
+        if other_company:
+            frappe.throw(
+                _("{0} do not belong to {1}. Remove them or change the Company.").format(
+                    frappe.bold(", ".join(r.employee_name or r.employee for r in other_company[:8])),
+                    frappe.bold(self.company),
+                )
+            )
+
+        if not self.shift_type:
+            return
         shift_doc = frappe.get_cached_doc("Shift Type", self.shift_type)
         assigned = set(
             shift_doc.get_assigned_employees(getdate(self.from_date), consider_default_shift=True)
@@ -113,12 +172,17 @@ class AttendanceFix(Document):
     # ──────────────────────────────────────────────────────────────────────
 
     def _run_fix(self):
-        shift_doc = frappe.get_doc("Shift Type", self.shift_type)
+        # Lazy import: attendance_self_heal imports reconcile_employee_day from
+        # this module, so a top-level import would be circular.
+        from avinashgroup_app.biometric.attendance_self_heal import _resolve_shift
+
+        shift_doc = frappe.get_doc("Shift Type", self.shift_type) if self.shift_type else None
+        shift_cache = {}
         employees = self._resolve_employees(shift_doc)
 
         from_date = getdate(self.from_date)
         to_date = getdate(self.to_date)
-        date_list = [from_date + timedelta(days=i) for i in range((to_date - from_date).days + 1)]
+        employment = _employment_spans(employees)
 
         counters = {
             "employees_processed": 0,
@@ -128,13 +192,21 @@ class AttendanceFix(Document):
         }
         log_lines: list[str] = []
 
+        date_lists = {}
+        for employee in employees:
+            joined, relieved = employment.get(employee, (None, None))
+            start = max(from_date, getdate(joined)) if joined else from_date
+            end = min(to_date, getdate(relieved)) if relieved else to_date
+            date_lists[employee] = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+
         # Calculate total work items for progress
-        total_items = len(employees) * len(date_list)
+        total_items = sum(len(v) for v in date_lists.values())
         items_done = 0
 
         for emp_idx, employee in enumerate(employees):
             counters["employees_processed"] += 1
             holiday_dates = _get_holiday_dates(employee, from_date, to_date)
+            date_list = date_lists[employee]
 
             # Publish progress update for new employee
             self._publish_progress(emp_idx, len(employees), f"Processing {employee}...")
@@ -143,8 +215,9 @@ class AttendanceFix(Document):
                 savepoint = f"af_{employee}_{d}".replace("-", "_").replace(" ", "_")[:60]
                 frappe.db.savepoint(savepoint)
                 try:
+                    day_shift = shift_doc or _resolve_shift(employee, d, shift_cache)
                     self._reconcile_day(
-                        shift_doc, employee, d, holiday_dates, counters, log_lines
+                        day_shift, employee, d, holiday_dates, counters, log_lines
                     )
                 except Exception as e:
                     frappe.db.rollback(save_point=savepoint)
@@ -188,32 +261,33 @@ class AttendanceFix(Document):
     def _resolve_employees(self, shift_doc) -> list[str]:
         """The employees this run will walk, in one of two modes.
 
-        All Employees in Shift — everyone the stock helper reports as assigned to
-        this Shift Type (or carrying it as their default shift) on the start date.
+        All Employees — everyone in the company employed during the period; with
+        a Shift Type picked, narrowed to those the stock helper reports as
+        assigned to it (or carrying it as their default shift) on the start date.
 
         Selected Employees — exactly the names in the child table, used as given.
-        They are NOT intersected with the shift's roster: someone whose assignment
+        They are NOT intersected with a shift's roster: someone whose assignment
         lapsed, or who was never assigned but has check-ins that resolve to this
         shift, is precisely who a targeted repair is for. validate() has already
         warned about names that cannot match.
 
-        The company and device filters apply to both modes.
+        The company, employment-period and device filters apply to both modes.
         """
         if self.repair_scope == "Selected Employees":
             employees = [r.employee for r in (self.employees or []) if r.employee]
-        else:
+        elif shift_doc:
             # Stock helper returns employees with this shift assigned (or default shift).
             employees = shift_doc.get_assigned_employees(
                 getdate(self.from_date), consider_default_shift=True
             )
+        else:
+            employees = _company_employees(self.company, self.from_date, self.to_date)
         employees = list(dict.fromkeys(employees))  # dedup, preserve order
 
-        if self.company:
-            employees = [
-                e
-                for e in employees
-                if frappe.db.get_value("Employee", e, "company") == self.company
-            ]
+        # Company, and employed at some point in the period: Active, or relieved
+        # on/after its start (someone who left mid-month still needs that month).
+        employed = set(_company_employees(self.company, self.from_date, self.to_date))
+        employees = [e for e in employees if e in employed]
 
         device_serials = self._selected_device_serials()
         if device_serials:
@@ -232,15 +306,7 @@ class AttendanceFix(Document):
             )
             employees = [e for e in employees if e in employees_with_device_checkins]
 
-        # Skip inactive employees
-        active = set(
-            frappe.get_all(
-                "Employee",
-                filters={"name": ("in", employees), "status": "Active"},
-                pluck="name",
-            )
-        )
-        return [e for e in employees if e in active]
+        return employees
 
     def _selected_device_serials(self) -> list[str]:
         """Return device serials (the value the bridge stamps on Employee Checkin.device_id)
@@ -287,6 +353,11 @@ def reconcile_employee_day(
     mark_absent_when_no_checkins: the self-heal job passes False — marking
         absentees is stock HRMS's job; self-heal only acts on days that have
         punches.
+
+    shift_doc may be None (Attendance Fix with no Shift Type, for an employee
+    whose punches carry no shift and who has no Default Shift). An empty day
+    is still marked Absent, with no shift; a day with punches is left as-is,
+    because there are no rules to compute it against.
     """
     if attendance_date in holiday_dates:
         return
@@ -331,7 +402,9 @@ def reconcile_employee_day(
     if not checkins:
         if existing or not mark_absent_when_no_checkins:
             return  # leave as-is
-        marked = mark_attendance(employee, attendance_date, "Absent", shift_doc.name)
+        marked = mark_attendance(
+            employee, attendance_date, "Absent", shift_doc.name if shift_doc else None
+        )
         if marked:
             _ensure_posting_date(marked, attendance_date)
             counters["attendance_created_or_updated"] += 1
@@ -364,7 +437,7 @@ def reconcile_employee_day(
             log_lines.append(
                 f"{employee} {attendance_date}: relinked {len(orphan_names)} orphan checkin(s) to {existing.name}"
             )
-        if existing.status in ("Present", "Half Day") and refresh_attendance_values(
+        if shift_doc and existing.status in ("Present", "Half Day") and refresh_attendance_values(
             existing.name, shift_doc, checkins
         ):
             counters["attendance_created_or_updated"] += 1
@@ -376,6 +449,14 @@ def reconcile_employee_day(
     # Prepare logs BEFORE touching the existing Absent. If we can't produce a
     # replacement (no resolvable checkins for this shift, all skip_auto_attendance,
     # fetch_shift failed) we leave the Absent in place rather than nuke evidence.
+    if not shift_doc:
+        log_lines.append(
+            f"{employee} {attendance_date}: kept existing "
+            f"({existing.status if existing else 'no row'}) — punches carry no shift and "
+            f"the employee has no Default Shift"
+        )
+        return
+
     prepared_logs = prepare_checkins_for_shift(checkins, shift_doc, include_skipped)
     if not prepared_logs:
         log_lines.append(
@@ -511,6 +592,39 @@ def run_attendance_fix_in_background(doc_name: str):
         frappe.flags.audit_user = None
 
 
+def _company_employees(company, from_date, to_date) -> list[str]:
+    """Employees of the company who were employed at some point in the period:
+    joined on/before its end, and either still Active or relieved on/after its
+    start."""
+    rows = frappe.get_all(
+        "Employee",
+        filters={"company": company, "status": ("!=", "Inactive")},
+        fields=["name", "status", "date_of_joining", "relieving_date"],
+        order_by="name asc",
+    )
+    from_date, to_date = getdate(from_date), getdate(to_date)
+    out = []
+    for r in rows:
+        if r.date_of_joining and getdate(r.date_of_joining) > to_date:
+            continue
+        if r.status != "Active" and not (r.relieving_date and getdate(r.relieving_date) >= from_date):
+            continue
+        out.append(r.name)
+    return out
+
+
+def _employment_spans(employees) -> dict:
+    """{employee: (date_of_joining, relieving_date)} — either may be None."""
+    if not employees:
+        return {}
+    rows = frappe.get_all(
+        "Employee",
+        filters={"name": ("in", employees)},
+        fields=["name", "date_of_joining", "relieving_date"],
+    )
+    return {r.name: (r.date_of_joining, r.relieving_date) for r in rows}
+
+
 def _get_holiday_dates(employee, from_date, to_date) -> set:
     holiday_list = frappe.db.get_value("Employee", employee, "holiday_list")
     if not holiday_list:
@@ -637,25 +751,35 @@ def repair_attendance_day(employee, attendance_date):
 
 
 @frappe.whitelist()
-def get_shift_roster(shift_type, on_date, company=None):
-	"""Active employees assigned to a shift on a date — the seed list for the
-	Selected Employees table, so it can be trimmed rather than typed."""
+def get_roster(company, from_date, to_date, shift_type=None):
+	"""Employees of the company employed in the period (and on the shift, if one
+	is picked) — the seed list for the Selected Employees table, so it can be
+	trimmed rather than typed."""
 	frappe.only_for(("HR Manager", "System Manager"))
-	shift_doc = frappe.get_cached_doc("Shift Type", shift_type)
-	names = list(
-		dict.fromkeys(
-			shift_doc.get_assigned_employees(getdate(on_date), consider_default_shift=True)
-		)
-	)
+	names = _company_employees(company, from_date, to_date)
+	if shift_type:
+		shift_doc = frappe.get_cached_doc("Shift Type", shift_type)
+		on_shift = set(shift_doc.get_assigned_employees(getdate(from_date), consider_default_shift=True))
+		names = [n for n in names if n in on_shift]
 	if not names:
 		return []
 
-	filters = {"name": ("in", names), "status": "Active"}
-	if company:
-		filters["company"] = company
+	filters = {"name": ("in", names)}
 	return frappe.get_all(
 		"Employee",
 		filters=filters,
 		fields=["name", "employee_name", "department", "company"],
 		order_by="employee_name asc",
 	)
+
+
+@frappe.whitelist()
+def get_bs_month_dates(bs_year=None, bs_month=None):
+	"""AD first/last day of a BS month, for the form's Month picker.
+
+	With no month given, returns the current BS month — the form's default."""
+	if not (bs_year and bs_month):
+		today = ad_to_bs(getdate())
+		bs_year, bs_month = today.year, BS_MONTH_NAMES[today.month]
+	start, end = get_bs_month_range(int(bs_year), BS_MONTH_NUMBERS[bs_month])
+	return {"bs_year": int(bs_year), "bs_month": bs_month, "from_date": start, "to_date": end}
