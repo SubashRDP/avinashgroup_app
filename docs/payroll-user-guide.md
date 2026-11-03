@@ -1107,7 +1107,7 @@ At year end (Ashadh), the balance left on each encashable leave type is paid on 
 
 **Desk → HR → Leave Type**, **Encashment** section:
 
-| Setting | Casual / Sick Leave | Others |
+| Setting | Home Leave | Others |
 |---|---|---|
 | Allow Encashment | ✓ | ✗ (Maternity, Paternity, Replacement, Leave Without Pay) |
 | Earning Component | Leave Encashment | |

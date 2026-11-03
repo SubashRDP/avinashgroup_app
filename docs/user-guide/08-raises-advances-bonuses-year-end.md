@@ -154,15 +154,15 @@ The component **Dashain Bonus** also exists. It is not a festival allowance; pic
 
 **Leave Type → Encashment** section, for each type:
 
-| Setting | Casual Leave | Sick Leave | Others |
-|---|---|---|---|
-| Allow Encashment | ✓ | ✓ | ✗ (Maternity, Paternity, Replacement, Leave Without Pay are never encashed) |
-| Earning Component | Leave Encashment | Leave Encashment | |
-| Maximum Encashable Leaves | 0 (whole balance) | 0 (whole balance) | |
-| Non-Encashable Leaves | 0 | 0 | |
-| Encash at Year End | ✓ | ✓ | |
-| Encash at Separation | ✓ | ✓ | |
-| Encashment Days per Month | blank (BS month's days) | blank | |
+| Setting | Home Leave | Others |
+|---|---|---|
+| Allow Encashment | ✓ | ✗ (Maternity, Paternity, Replacement, Leave Without Pay are never encashed) |
+| Earning Component | Leave Encashment | |
+| Maximum Encashable Leaves | 0 (whole balance) | |
+| Non-Encashable Leaves | 0 | |
+| Encash at Year End | ✓ | |
+| Encash at Separation | ✓ | |
+| Encashment Days per Month | blank (BS month's days) | |
 
 Untick **Allow Encashment** and that type is left out completely.
 
@@ -182,7 +182,7 @@ A later run never touches a submitted encashment, and the system refuses a secon
 
 1. Set the **Relieving Date** on the Employee. Keep the status **Active** until the encashment is submitted (the system refuses an encashment for an employee who has Left).
 2. **Leave left** (balance above 0): make a **Leave Encashment** payout entry for the month they leave (Chapter 5.12). Everyone whose relieving date falls in the month is encashed at Separation, dated that day, at the same rate as above, on a slip of its own.
-3. **Leave taken beyond what was earned** (balance below 0, because leave can be taken before it is credited): tick **Settle Leave** on that month's **salary** entry. It is deducted on the last salary slip as **Leave Recovery**: the days short × the same per-day rate. Example: basic 20,000, Ashwin (30 days), 21 Casual + 12 Sick taken in Shrawan, relieved at Ashwin end with 6 Casual + 3.5 Sick earned → 15 + 8.5 = **23.5 days × 666.67 = 15,666.67 deducted**.
+3. **Leave taken beyond what was earned** (balance below 0, because leave can be taken before it is credited): tick **Settle Leave** on that month's **salary** entry. It is deducted on the last salary slip as **Leave Recovery**: the days short × the same per-day rate. Example: basic 20,000, Ashwin (30 days), 33 days of Home Leave taken in Shrawan, relieved at Ashwin end with 8.25 earned (3 × 2.75) → **24.75 days × 666.67 = 16,500 deducted**.
    - The earned figure counts the month's own credit when the person leaves on the BS month's last day, even if the month-end credit has not run yet.
 
 The same check runs at year end: a year can only end below zero for someone who joined mid-year and took the full year's leave. If a recovery is larger than the last month's pay, the slip cannot be submitted (net pay below zero): collect the rest outside payroll and reduce the deduction.

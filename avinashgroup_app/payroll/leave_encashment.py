@@ -51,7 +51,7 @@ without these checks.
 
 The other direction is recovery (user, 2026-10-15: leave may be taken before
 it is credited, "what is calculated is in the end of the year it does not pass
-the allocated days other wise deduction"). Casual and Sick Leave allow a
+the allocated days other wise deduction"). Home Leave allows a
 negative balance, capped at the year's figure by hr/leave_ceiling.py. At the
 same two moments, a balance below zero — someone who took 33 days in three
 months and left with 8.25 earned — is days paid as leave but never earned:

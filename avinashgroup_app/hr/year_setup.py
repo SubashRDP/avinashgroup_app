@@ -319,8 +319,8 @@ def ensure_leave_period(company, fiscal_year, year):
 def find_leave_policies(abbr, fiscal_year):
 	"""The two policies HR submitted for this company and year.
 
-	Entitlements are the client's answer and differ by company — Karnali gives 8
-	casual days where the rest give 21 — so they are read, never written.
+	Entitlements are the client's answer and differ by company — Karnali gives 20
+	days of Home Leave where the rest give 33 — so they are read, never written.
 	`require_standing_setup` has already refused the run if either is absent, so
 	both are here.
 	"""

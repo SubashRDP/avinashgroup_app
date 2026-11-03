@@ -49,7 +49,7 @@ What HR must have in place:
 
 **Coming to work while on approved leave = Half Day.** If a person has approved leave for a day but also punched in, the day becomes a Half Day: half leave, half present. It does not matter which came first: leave approved for a day they already punched on, or a punch on a day already marked On Leave (today, past or future). If the device missed the punch, add it with First IN / Last OUT on Monthly Attendance BS, or on the Employee Checkin form: the save says "Came in while on leave: … is a Half Day". The leave balance still counts the full day. A day inside a submitted salary slip is not changed.
 
-**Late minutes.** The Attendance form has a **Shift Deviation** section: Late Entry, Early Entry, Early Exit, Late Exit. These are measured against that day's shift and are what the late fine and meals use.
+**Late minutes.** The Attendance form has a **Shift Deviation** section: Late Entry, Early Entry, Early Exit, Late Exit. These are measured against that day's shift and are what the late fine and meals use. Whole minutes, **seconds dropped**: 1 min 45 s late counts as 1 minute (decided 2 Nov 2026).
 
 **Excusing lateness for one day.** For a real reason (traffic jam, funeral):
 1. Open the person's **Attendance** for that day. It can be submitted: there is no need to cancel or amend. (Or, quicker: in **Monthly Attendance BS**, click **Excuse ✎** in the day's **Late Excused** column; Chapter 7.)
@@ -98,21 +98,20 @@ If the person forgot to punch, the device cannot know. Create or edit the **Atte
 
 | Leave type | How the days arrive | Notes |
 |---|---|---|
-| **Casual Leave** | Credited automatically at the end of every BS month | Encashable at year end |
-| **Sick Leave** | Credited automatically at the end of every BS month | Encashable at year end |
+| **Home Leave** | Credited automatically at the end of every BS month | The one paid leave. Encashable at year end |
 | **Maternity Leave** | Allocated by HR | Female employees only |
 | **Paternity Leave** | Allocated by HR | Male employees only |
 | **Replacement Leave** | Granted automatically for holiday work by Officer & Admin staff (Chapter 4) | |
 | **Leave Without Pay** | Not allocated | Unpaid |
 
-> There is also a leave type spelled **"Causal Leave"** on the system. It is a spelling mistake and is not set up correctly. Do not use it. Use **Casual Leave**.
+> There is also a leave type spelled **"Causal Leave"** on the system. It is a spelling mistake and is not set up correctly. Do not use it. Use **Home Leave**.
 
-Policy (client meeting, September 2026): 33 days a year in total — Casual 21 + Sick 12 (Karnali: Casual 8 + Sick 12). Staff on probation get 1 day a month. **Holidays that fall between two leave days count as leave** ("sandwich" rule). Leave left at the end of the fiscal year is **encashed**, not carried forward.
+Policy: **Home Leave, 33 days a year** (Karnali: 20). There is no Casual or Sick Leave (decided 3 Nov 2026; until then the 33 was split Casual 21 + Sick 12, Karnali 8 + 12). Staff on probation (six months) get 1 day a month. **Holidays that fall between two leave days count as leave** ("sandwich" rule). Leave left at the end of the fiscal year is **encashed**, not carried forward.
 
-**Leave may be taken before it is credited, but never past the year** (decided 15 Oct 2026). Casual and Sick Leave allow a negative balance: someone with 5.25 days credited can still take 10. What is refused is a year past its figure: "**… is allowed 21 days of Casual Leave this year and has 21 already …**". Give the rest as Leave Without Pay. If the person leaves (or the year ends) having taken more than they had earned by then, the difference is **deducted** from their last slip as **Leave Recovery**, at the same per-day rate as encashment (Chapter 8.5).
+**Leave may be taken before it is credited, but never past the year** (decided 15 Oct 2026). Home Leave allows a negative balance: someone with 5.25 days credited can still take 10. What is refused is a year past its figure: "**… is allowed 33 days of Home Leave this year and has 33 already …**". Give the rest as Leave Without Pay. If the person leaves (or the year ends) having taken more than they had earned by then, the difference is **deducted** from their last slip as **Leave Recovery**, at the same per-day rate as encashment (Chapter 8.5).
 
 ### Monthly credit
-Leave is credited on the **last day of each BS month** (not the English month end), from the person's Leave Policy. A person who joins mid-month gets a share for that BS month. A policy assigned part-way through the year gives, at once, only the BS months already ended (by Ashwin 15: Shrawan and Bhadra, 3.5 casual + 2 sick), and the month-end credit never takes anyone past what the months so far are worth, so running it twice gives nothing extra.
+Leave is credited on the **last day of each BS month** (not the English month end), from the person's Leave Policy. A person who joins mid-month gets a share for that BS month. A policy assigned part-way through the year gives, at once, only the BS months already ended (by Ashwin 15: Shrawan and Bhadra, 5.5 days), and the month-end credit never takes anyone past what the months so far are worth, so running it twice gives nothing extra.
 
 If someone has a Leave Policy Assignment but no Leave Allocation (their allocations were deleted), running the year setup again gives them their allocations; it no longer skips them.
 

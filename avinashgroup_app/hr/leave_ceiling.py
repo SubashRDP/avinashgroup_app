@@ -2,8 +2,8 @@
 
 The client's rule (2026-09-22): the monthly credit is a convenience, not the
 policy. An admin may give three days one month and four the next — what must
-never happen is a year totalling more than the days the company grants: 21
-casual and 12 sick, or 8 and 12 at Karnali.
+never happen is a year totalling more than the days the company grants: 33 days
+of Home Leave, 20 at Karnali.
 
 The monthly accrual already respects that: it credits the smaller of this
 month's share and what is left of the year. Nothing, though, stopped a
@@ -20,7 +20,7 @@ year's ceiling, and counting it here would quietly shrink this year's.
 
 The same ceiling holds for leave TAKEN (user, 2026-10-15: "they can take leave
 but what is calculated is in the end of the year it does not pass the
-allocated days other wise deduction"). Casual and Sick Leave allow a negative
+allocated days other wise deduction"). Home Leave allows a negative
 balance, so someone may take leave before the monthly credit has caught up,
 but `validate_application_within_year` refuses any application that would make
 the year's leave of that type pass the year's figure. What was taken beyond

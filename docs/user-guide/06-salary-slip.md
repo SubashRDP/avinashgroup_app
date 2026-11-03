@@ -28,7 +28,7 @@ It has **one row per day** of the BS month, then **month-end rows**, and the las
 |---|---|---|
 | **Line** | Day | Month End |
 | **Miti**, **Date**, **Day** | "03 Shrawan", the English date, "Sun" | — |
-| **Attendance** | "Present 07:20–18:45", "Absent", "Half Day 11:05–17:00", "Leave: Casual Leave", "Holiday: Dashain", "Not marked", "Not yet joined" | The name of the line: SSF, Income Tax, Salary Advance, Salary Arrears, Rounding… |
+| **Attendance** | "Present 07:20–18:45", "Absent", "Half Day 11:05–17:00", "Leave: Home Leave", "Holiday: Dashain", "Not marked", "Not yet joined" | The name of the line: SSF, Income Tax, Salary Advance, Salary Arrears, Rounding… |
 | **Paid Day** | How much of the day is paid: 1, ½ or 0 | — |
 | **Fixed Pay** | The slip's daily rate (fixed earnings ÷ payment days) × Paid Day | — |
 | **Earned** | Tea, meal, overtime earned that day | One-off earnings |

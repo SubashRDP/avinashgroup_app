@@ -80,7 +80,7 @@ That month has not started yet. You can only pay a month that has started (usual
 The Leave Allocation is still a **draft**. Open it and **Submit** it.
 
 ### Leave balance is below zero
-Normal: Casual and Sick Leave may be taken before they are credited, so a balance can be −5 in Bhadra and catch up as the monthly credit arrives. HRMS shows an orange "Insufficient leave balance" warning on the application; it is only a warning. If the person leaves while still below zero, the days are deducted as **Leave Recovery** on the last slip (8.5).
+Normal: Home Leave may be taken before they are credited, so a balance can be −5 in Bhadra and catch up as the monthly credit arrives. HRMS shows an orange "Insufficient leave balance" warning on the application; it is only a warning. If the person leaves while still below zero, the days are deducted as **Leave Recovery** on the last slip (8.5).
 
 ### "Collect Outside Payroll" when submitting slips
 A leaver's Leave Recovery or advance was larger than their last month's pay. **Submit Salary Slip** cuts it to what the slip can pay (net pay 0), leave recovery first, then the advance, and lists the rest — "**Ram Bahadur (NGI-EMP-00123): 12,400.00 of Salary Advance**" — in the message and in the Payroll Inputs Log. Collect that amount outside payroll. A cut advance keeps the rest as still owed on the Employee Advance.

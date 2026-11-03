@@ -112,3 +112,13 @@ STILL OPEN
 - Sick / Paternity / Maternity: how many days each, and are they inside the
   33 or on top of it?
 - Are the 33 days one pool, or split across Sick and Casual?
+
+
+AMENDMENT 2026-11-03 (user, during the Shrawan 2083 attendance reconciliation)
+------------------------------------------------------------------------------
+3.1 / 3.2 replaced: there is no Sick or Casual Leave. One paid type, HOME
+LEAVE, 33 days a year (Karnali: 20), credited monthly as before.
+3.6 restated: probation is six months, 1 day of Home Leave a month.
+   -> patches/setup_leave_types.py: Casual Leave renamed back to Home Leave.
+      Leave Policies "<ABBR> Regular <FY>" = Home Leave 33 (NGK 20),
+      "<ABBR> Probation <FY>" = Home Leave 12 (1 a month).

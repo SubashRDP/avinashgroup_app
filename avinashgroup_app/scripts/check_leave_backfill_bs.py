@@ -13,7 +13,7 @@ from hrms.hr.doctype.leave_policy_assignment.leave_policy_assignment import Leav
 frappe.cache.delete_value("app_hooks"); frappe.local.app_hooks = None; frappe.local.doctype_class_cache = {} if hasattr(frappe.local, "doctype_class_cache") else None
 check("override is the class Frappe loads", frappe.get_doc({"doctype": "Leave Policy Assignment"}).__class__.__name__ == "BSLeavePolicyAssignment",
       frappe.get_doc({"doctype": "Leave Policy Assignment"}).__class__.__name__)
-lt = frappe.get_doc("Leave Type", "Casual Leave")
+lt = frappe.get_doc("Leave Type", "Home Leave")
 def both(joining, today):
     frappe.flags.current_date = getdate(today)
     d = frappe._dict(effective_from=getdate("2026-07-17"), effective_to=getdate("2027-07-16"))

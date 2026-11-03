@@ -2,7 +2,7 @@
 
 The user's rule (2026-10-15): staff may take leave before it is credited; what
 counts is that the year's leave does not pass the allocated days, otherwise it
-is deducted. So Casual and Sick Leave allow a negative balance (hr/leave_ceiling
+is deducted. So Home Leave allows a negative balance (hr/leave_ceiling
 still refuses an application past the year's figure), a "Leave Recovery"
 deduction exists for payroll/leave_encashment.recover_month to post, booked to
 the same accounts as Leave Encashment so the two net off on the same expense,
@@ -13,7 +13,7 @@ import frappe
 
 COMPONENT = "Leave Recovery"
 ENCASHMENT_COMPONENT = "Leave Encashment"
-NEGATIVE_ALLOWED = ("Casual Leave", "Sick Leave")
+NEGATIVE_ALLOWED = ("Home Leave",)  # Casual + Sick until 2026-11-03
 SETTLE_FIELD = "Payroll Entry-custom_pay_leave_encashment"
 
 
