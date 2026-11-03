@@ -463,6 +463,8 @@ def _plan_customer(state, orders):
 			"indent": 1,
 			"customer": o.customer,
 			"sales_order": o.name,
+			# full name for the Make Invoice button (the Company column shows the abbr)
+			"sales_order_company": o.company,
 			"miti": bs_date_str(o.transaction_date) if o.transaction_date else "",
 			"date": o.transaction_date,
 			"item": (f"{single.item_name} · {single.uom}" if single
@@ -535,6 +537,8 @@ def get_columns():
 		{"fieldname": "label", "label": _("Customer / Sales Order"), "fieldtype": "Data", "width": 240},
 		{"fieldname": "company", "label": _("Company"), "fieldtype": "Data", "width": 75},
 		{"fieldname": "verdict", "label": _("Verdict"), "fieldtype": "Data", "width": 100},
+		# Make Invoice button on order rows, drawn by the JS formatter.
+		{"fieldname": "action", "label": _("Invoice"), "fieldtype": "Data", "width": 120},
 		{"fieldname": "credit_meter", "label": _("Credit Used"), "fieldtype": "Data", "width": 170},
 		# The customer's newest invoice, from an order or not; on customer rows only.
 		{"fieldname": "last_invoice", "label": _("Last Invoice"), "fieldtype": "Link",
