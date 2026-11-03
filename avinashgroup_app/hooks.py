@@ -68,6 +68,10 @@ app_include_js = [
     # sales staff get live. See custom_code/SalesInvoice/pending_orders.py.
     "/assets/avinashgroup_app/js/sales_invoice_pending_orders.js?v=10",
     "/assets/avinashgroup_app/js/sales_order_alerts.js?v=4",
+    # Shift Early Closure month sheet (many days / Excel import), opened from
+    # Monthly Attendance BS and the Shift Early Closure list. See
+    # hr/shift_early_closure_sheet.py.
+    "/assets/avinashgroup_app/js/shift_early_closure_sheet.js?v=2",
     "/assets/avinashgroup_app/js/global_filter.js?v=1.9",
     "/assets/avinashgroup_app/js/company_filter.js?v=2.4",
     "/assets/avinashgroup_app/js/approval_field_visibility.js?v=1.2",

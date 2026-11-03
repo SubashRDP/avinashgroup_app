@@ -9,8 +9,6 @@ const CORRECT_DAY_METHOD = "avinashgroup_app.hr.punch_correction.correct_day";
 const CORRECTION_ROLES = ["HR Manager", "System Manager"];
 // Late Excused from the grid (hr/late_excuse.py); the Attendance enforces the rules.
 const LATE_EXCUSE_METHOD = "avinashgroup_app.hr.late_excuse.set_late_excuse";
-// The company ended a shift early: that day is a full day (hr/shift_early_closure.py).
-const CLOSE_EARLY_METHOD = "avinashgroup_app.hr.shift_early_closure.close_shift_early";
 
 frappe.query_reports["Monthly Attendance BS"] = {
 	onload: async function (report) {
@@ -20,7 +18,14 @@ frappe.query_reports["Monthly Attendance BS"] = {
 		report.page.add_inner_button(__("Correction Log"), () => _open_correction_log());
 		if (frappe.user.has_role(CORRECTION_ROLES)) {
 			report.page.add_inner_button(__("Give Leave"), () => _open_give_leave_dialog());
-			report.page.add_inner_button(__("Close Shift Early"), () => _open_close_early_dialog());
+			// the month sheet: many days at once, or an Excel import (public/js/shift_early_closure_sheet.js)
+			report.page.add_inner_button(__("Close Shift Early"), () =>
+				avinash.open_closure_sheet({
+					company: frappe.query_report.get_filter_value("company"),
+					date: frappe.query_report.get_filter_value("from_date"),
+					on_done: () => frappe.query_report.refresh(),
+				})
+			);
 			report.page.add_inner_button(__("Early Closures"), () => frappe.set_route("List", "Shift Early Closure"));
 		}
 		_make_full_width(report);
@@ -886,59 +891,6 @@ function _open_late_excuse_dialog(row) {
 						message: values.excused
 							? __("Excused. Day is now {0}.", [r.message.status])
 							: __("Excuse removed. Day is now {0}.", [r.message.status]),
-						indicator: "green",
-					});
-					frappe.query_report.refresh();
-				},
-			});
-		},
-	});
-	d.show();
-}
-
-function _open_close_early_dialog() {
-	const company = frappe.query_report.get_filter_value("company");
-	const d = new frappe.ui.Dialog({
-		title: __("Close Shift Early"),
-		fields: [
-			{
-				fieldtype: "HTML",
-				options: `<div style="margin-bottom:8px;padding:8px 10px;background:#FAF6EC;border-left:3px solid #C9A227;font-size:.92em">
-					${__("Everyone who came that day gets a full day: leaving at or after the closing time is not counted as leaving early, and is not fined. Leaving before it still counts, from the closing time. Late arrival in the morning still counts. Absent stays absent. Not possible once that month's salary slip is submitted.")}
-				</div>`,
-			},
-			{ fieldtype: "Link", fieldname: "company", label: __("Company"), options: "Company", reqd: 1, default: company },
-			{ fieldtype: "Date", fieldname: "closure_date", label: __("Date"), reqd: 1, default: frappe.datetime.get_today() },
-			{ fieldtype: "Time", fieldname: "close_at", label: __("Closed At"), reqd: 1 },
-			{
-				fieldtype: "MultiSelectList",
-				fieldname: "shifts",
-				label: __("Shifts"),
-				description: __("Leave blank for every shift running at the closing time."),
-				get_data: (txt) => frappe.db.get_link_options("Shift Type", txt),
-			},
-			{ fieldtype: "Small Text", fieldname: "reason", label: __("Reason"), reqd: 1 },
-		],
-		primary_action_label: __("Close Early"),
-		primary_action(values) {
-			frappe.call({
-				method: CLOSE_EARLY_METHOD,
-				args: {
-					company: values.company,
-					closure_date: values.closure_date,
-					close_at: values.close_at,
-					reason: values.reason,
-					shifts: values.shifts || [],
-				},
-				freeze: true,
-				callback: (r) => {
-					if (r.exc) return;
-					d.hide();
-					frappe.show_alert({
-						message: __("{0} saved. {1} attendance row(s) re-measured.", [
-							r.message.name,
-							r.message.attendance_updated || 0,
-						]),
 						indicator: "green",
 					});
 					frappe.query_report.refresh();

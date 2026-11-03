@@ -36,9 +36,11 @@ covering the day is submitted: the fine has been paid by then, and the change
 would silently mean nothing. The Late Time fine is posted when the month's slips
 are made, so draft slips pick the change up on their own.
 
-Entry points: the Shift Early Closure doctype, the "Close Shift Early" button on
-Monthly Attendance BS (`close_shift_early`), and `closing_time`, which
-compute_shift_deviations asks for every Attendance it measures.
+Entry points: the Shift Early Closure doctype, the month sheet behind the
+"Close Shift Early" button on Monthly Attendance BS and the Shift Early Closure
+list (hr/shift_early_closure_sheet.py — many days at once, or an Excel import),
+and `closing_time`, which compute_shift_deviations asks for every Attendance it
+measures.
 """
 
 from datetime import datetime, time, timedelta
@@ -257,11 +259,8 @@ def closure_note(closures, shift_doc, day):
 	return ""
 
 
-@frappe.whitelist()
-def close_shift_early(company: str, closure_date: str, close_at: str, reason: str, shifts=None) -> dict:
-	"""Make and submit a Shift Early Closure from the Monthly Attendance BS button."""
-	frappe.only_for(CLOSURE_ROLES)
-	shifts = frappe.parse_json(shifts) if isinstance(shifts, str) else (shifts or [])
+def make_closure(company, closure_date, close_at, reason, shifts=None):
+	"""Insert and submit one Shift Early Closure; the doctype's own rules apply."""
 	doc = frappe.get_doc(
 		{
 			"doctype": "Shift Early Closure",
@@ -269,9 +268,19 @@ def close_shift_early(company: str, closure_date: str, close_at: str, reason: st
 			"closure_date": closure_date,
 			"close_at": close_at,
 			"reason": reason,
-			"shifts": [{"shift_type": s} for s in shifts if s],
+			"shifts": [{"shift_type": s} for s in shifts or [] if s],
 		}
 	)
 	doc.insert()
 	doc.submit()
+	return doc
+
+
+@frappe.whitelist()
+def close_shift_early(company: str, closure_date: str, close_at: str, reason: str, shifts=None) -> dict:
+	"""Make and submit one Shift Early Closure (API; the desk uses the month
+	sheet, hr/shift_early_closure_sheet.py)."""
+	frappe.only_for(CLOSURE_ROLES)
+	shifts = frappe.parse_json(shifts) if isinstance(shifts, str) else (shifts or [])
+	doc = make_closure(company, closure_date, close_at, reason, shifts)
 	return {"name": doc.name, "attendance_updated": doc.attendance_updated}
