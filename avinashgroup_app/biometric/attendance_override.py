@@ -17,7 +17,7 @@ def set_shift_deviation_fields(doc, method):
     - custom_late_exit   : how late the employee punched OUT after shift end
 
     Only one of each pair will be non-zero at a time.
-    Values are rounded to the nearest minute (>=30s rounds up, <30s rounds down).
+    Values are whole minutes, seconds dropped: 1 min 45 s late is 1 minute.
     Duration fields store seconds as integers.
 
     The calculation itself lives in attendance_sync.compute_shift_deviations,

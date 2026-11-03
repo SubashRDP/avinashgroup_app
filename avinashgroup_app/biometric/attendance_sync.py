@@ -127,18 +127,22 @@ def prepare_checkins_for_shift(checkins, shift_doc, include_skipped=False):
     return prepared
 
 
-def _round_to_minute(seconds):
-    """Round seconds to the nearest whole minute.
-    >= 30 seconds → round up   (e.g. 30m 40s → 31m = 1860s)
-    <  30 seconds → round down (e.g. 30m 20s → 30m = 1800s)
+def _floor_to_minute(seconds):
+    """Drop the seconds: only whole minutes count (HR, 2026-11-02: "if 1.45 min
+    late then we have to take 1 min"). 30m 59s → 30m = 1800s; 59s → 0.
+
+    This used to round to the nearest minute, so 09:34:34 read 35 minutes late
+    where the attendance sheet, which HR checks against, says 34. Applies to all
+    four deviations alike.
     """
-    return int((int(seconds) + 30) / 60) * 60
+    return int(seconds) // 60 * 60
 
 
 def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, company=None):
-    """The four custom deviation fields on Attendance (seconds, rounded to the
-    nearest minute) for the given actual in/out against the shift's scheduled
-    start/end. Only one of each pair is non-zero at a time.
+    """The four custom deviation fields on Attendance (seconds) for the given
+    actual in/out against the shift's scheduled start/end, in whole minutes
+    with the seconds dropped (_floor_to_minute). Only one of each pair is
+    non-zero at a time.
 
     With `company`, a submitted Shift Early Closure for that day moves the end
     early leaving is measured against to the closing time; late exit (overtime)
@@ -160,9 +164,9 @@ def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, comp
     if in_time:
         diff = (get_datetime(in_time) - shift_start_dt).total_seconds()
         if diff > 0:
-            values["custom_late_entry"] = _round_to_minute(diff)
+            values["custom_late_entry"] = _floor_to_minute(diff)
         elif diff < 0:
-            values["custom_early_entry"] = _round_to_minute(abs(diff))
+            values["custom_early_entry"] = _floor_to_minute(abs(diff))
 
     if out_time:
         from avinashgroup_app.hr.shift_early_closure import closing_time
@@ -170,9 +174,9 @@ def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, comp
         closed_at = closing_time(company, shift_doc, attendance_date) or shift_end_dt
         out_dt = get_datetime(out_time)
         if out_dt > shift_end_dt:
-            values["custom_late_exit"] = _round_to_minute((out_dt - shift_end_dt).total_seconds())
+            values["custom_late_exit"] = _floor_to_minute((out_dt - shift_end_dt).total_seconds())
         elif out_dt < closed_at:
-            values["custom_early_exit"] = _round_to_minute((closed_at - out_dt).total_seconds())
+            values["custom_early_exit"] = _floor_to_minute((closed_at - out_dt).total_seconds())
 
     return values
 
