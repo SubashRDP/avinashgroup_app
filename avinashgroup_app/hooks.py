@@ -793,6 +793,9 @@ fixtures = [
                     # mobile_no (which only fills in via a Primary Contact).
                     # Read by the Nepal Gas Invoice Overlay print format.
                     "Customer-custom_mobile_number",
+                    # Income Tax Act Schedule-2 pool (A-E / Not Depreciable).
+                    # Set by fixed_assets/tax_pools.setup.
+                    "Asset Category-custom_tax_pool",
                     # Which PDC Cheque posted this JE. Read by pdc/invoice_guard.py
                     # and the cheque's "Journal Entries" button.
                     "Journal Entry-pdc_cheque",

@@ -123,5 +123,19 @@
   "insert_after": "company",
   "name": "Landed Cost Voucher-letter_of_credit",
   "read_only": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Asset Category",
+  "fieldname": "custom_tax_pool",
+  "fieldtype": "Select",
+  "insert_after": "asset_category_name",
+  "label": "Tax Pool",
+  "module": "Avinash Group App",
+  "name": "Asset Category-custom_tax_pool",
+  "options": "\nA\nB\nC\nD\nE\nNot Depreciable",
+  "in_list_view": 1,
+  "in_standard_filter": 1,
+  "description": "Income Tax Act 2058, Schedule-2 pool: A buildings 5%, B computers/furniture/office equipment 25%, C vehicles 20%, D plant & machinery and all other 15%, E intangibles."
  }
 ]
