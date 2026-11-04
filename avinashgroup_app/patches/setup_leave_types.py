@@ -1,11 +1,10 @@
-"""The leave types the group actually uses, plus the unpaid catch-all.
+"""The four leave types the group actually uses, plus the unpaid catch-all.
 
 Client decisions of 2026-09-15, refined 2026-09-17
-(`docs/hr-decisions/00-policy-minutes-2026-09-15.txt`), and 2026-11-03: there
-is no Casual or Sick Leave, only Home Leave — 33 days a year (Karnali 20).
+(`docs/hr-decisions/00-policy-minutes-2026-09-15.txt`):
 
-  Home Leave        the one paid leave: credited every month, sandwich counted,
-                    encashed at year end
+  Casual Leave      credited every month, sandwich counted, encashed at year end
+  Sick Leave        same
   Maternity Leave   granted when a child is born, women only, never encashed
   Paternity Leave   granted when a child is born, fathers only, never encashed
   Leave Without Pay everything else an employee takes is unpaid
@@ -13,14 +12,12 @@ is no Casual or Sick Leave, only Home Leave — 33 days a year (Karnali 20).
                     credited per day by hr/replacement_leave.py through a
                     Compensatory Leave Request — never by the Leave Policy
 
-The day counts are NOT here: they differ per company (NGK 20, the others 33)
-and live in each company's Leave Policy. This patch only settles how each type
-behaves.
+The day counts are NOT here: they differ per company (NGK 8 casual + 12 sick,
+the others 21 + 12) and live in each company's Leave Policy. This patch only
+settles how each type behaves.
 
-Idempotent: an existing type is updated in place. A site that still has Casual
-Leave gets it renamed to Home Leave, so its allocations and applications follow.
-Sick Leave is left as it is: its allocations are data, folded into Home Leave
-by HR (a new Leave Policy), not by a patch.
+Idempotent: an existing type is updated in place, so a site that already has
+"Home Leave" (the old name for Casual Leave) keeps its allocations.
 """
 
 import frappe
@@ -32,20 +29,25 @@ HR_OWNED = ("allow_encashment",)
 INCLUDE_HOLIDAY = 1
 
 LEAVE_TYPES = {
-	"Home Leave": {
+	"Casual Leave": {
 		"is_earned_leave": 1,
-		# The largest year any company grants (minute 3.3); each company's own
-		# figure (NGK 20) is its Leave Policy, held by hr/leave_ceiling.
-		"max_leaves_allowed": 33,
 		"earned_leave_frequency": "Monthly",
 		"rounding": "0.25",
 		"allocate_on_day": "Last Day",
 		"include_holiday": INCLUDE_HOLIDAY,
 		"allow_encashment": 1,
 		"is_carry_forward": 0,
-		# Taken ahead of the credit, capped at the year (user 2026-10-15,
-		# patches/setup_leave_recovery). Set here too: year_setup re-runs this.
-		"allow_negative": 1,
+		"allow_negative": 0,
+	},
+	"Sick Leave": {
+		"is_earned_leave": 1,
+		"earned_leave_frequency": "Monthly",
+		"rounding": "0.25",
+		"allocate_on_day": "Last Day",
+		"include_holiday": INCLUDE_HOLIDAY,
+		"allow_encashment": 1,
+		"is_carry_forward": 0,
+		"allow_negative": 0,
 	},
 	"Maternity Leave": {
 		"is_earned_leave": 0,
@@ -80,10 +82,10 @@ LEAVE_TYPES = {
 
 
 def execute():
-	# Home Leave was renamed Casual Leave on 2026-09-17 and back on 2026-11-03;
-	# rename rather than create a second type, or every allocation is orphaned.
-	if frappe.db.exists("Leave Type", "Casual Leave") and not frappe.db.exists("Leave Type", "Home Leave"):
-		frappe.rename_doc("Leave Type", "Casual Leave", "Home Leave", force=True)
+	# The first cut of this setup called Casual Leave "Home Leave"; rename rather
+	# than create a second type, or every allocation made so far is orphaned.
+	if frappe.db.exists("Leave Type", "Home Leave") and not frappe.db.exists("Leave Type", "Casual Leave"):
+		frappe.rename_doc("Leave Type", "Home Leave", "Casual Leave", force=True)
 
 	for name, values in LEAVE_TYPES.items():
 		if frappe.db.exists("Leave Type", name):
