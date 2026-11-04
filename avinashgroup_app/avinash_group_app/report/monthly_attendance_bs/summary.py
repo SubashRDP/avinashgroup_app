@@ -65,6 +65,7 @@ from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_att
 	employed_dates,
 	per_scope,
 	worked_on_holiday,
+	working_day_present,
 	working_days_card,
 )
 
@@ -213,14 +214,11 @@ def _build_summary_row(
 			continue
 		status = att.status or ""
 
-		# Present-day count (includes WFH; Half Day counts 0.5). A holiday came
+		# Present-day count (includes WFH; a Half Day for lateness counts 0.5,
+		# one with leave on it counts whole: working_day_present). A holiday came
 		# in on is Worked on Holiday only, as in the Detail view.
-		if ad_date in emp_holidays:
-			pass
-		elif status in present_statuses:
-			present_days += 1.0
-		elif status == "Half Day":
-			present_days += 0.5
+		if ad_date not in emp_holidays:
+			present_days += working_day_present(status, bool(att.get("leave_application")), present_statuses)
 
 		# Worked on holiday count
 		if worked_on_holiday(att, ad_date in emp_holidays):

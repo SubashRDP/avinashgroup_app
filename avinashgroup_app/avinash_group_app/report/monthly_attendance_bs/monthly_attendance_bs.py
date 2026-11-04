@@ -754,14 +754,32 @@ def employed_dates(emp, dates):
 	return {d for d in dates if (not joined or d >= joined) and (not left or d <= left)}
 
 
+def working_day_present(status, on_leave, present_statuses):
+	"""How much of a working day counts as present: 1, ½ or 0. Both views.
+
+	A Half Day with leave on it is a day the person came in and took the other
+	half as leave (policy 3.4, or a half-day leave given). They were present
+	that day, so it counts whole; the leave half is counted under Leave. NGI's
+	sheet counts it the same way: Tea, its present column, is 1 for that day.
+	Only a Half Day for coming more than two hours late counts ½, the half that
+	costs pay (biometric/attendance_override.enforce_late_arrival_half_day).
+	"""
+	if status in present_statuses:
+		return 1.0
+	if status == "Half Day":
+		return 1.0 if on_leave else 0.5
+	return 0.0
+
+
 def _accumulate(totals, row, present_statuses, counts_as_missing):
 	"""Add one day to the totals.
 
-	Present Days counts a Half Day as half, the way the Summary view and the
-	salary slip do; it used to count it as a whole day. A holiday the person
-	came in on is Worked on Holiday only: it is not a working day, so it adds
-	neither a present day nor a half day (a holiday's Half Day was a late-rule
-	leftover, and inflated Present Days past the month's working days).
+	Present Days counts a Half Day for lateness as half, the way the Summary
+	view and the salary slip do; a Half Day with leave on it counts whole
+	(working_day_present). A holiday the person came in on is Worked on Holiday
+	only: it is not a working day, so it adds neither a present day nor a half
+	day (a holiday's Half Day was a late-rule leftover, and inflated Present
+	Days past the month's working days).
 	"""
 	totals["late_min"] += row["late_minutes"] + row["before_office_minutes"]
 	if row.get("late_excused"):
@@ -769,14 +787,11 @@ def _accumulate(totals, row, present_statuses, counts_as_missing):
 		totals["excused_days"] += 1
 	totals["ot_hours"] += row["ot_hours"]
 	att_status = row.get("att_status")
-	if row.get("is_holiday"):
-		pass
-	elif att_status in present_statuses:
-		totals["present"] += 1
-	elif att_status == "Half Day":
-		totals["present"] += 0.5
+	credit = 0.0 if row.get("is_holiday") else working_day_present(att_status, bool(row["leave_count"]), present_statuses)
+	totals["present"] += credit
+	if credit == 0.5:
 		totals["half_day"] += 1
-	elif att_status == "Absent" and not row.get("is_holiday"):
+	if att_status == "Absent" and not row.get("is_holiday"):
 		totals["absent"] += 1
 	if row["work_in_holiday"]:
 		totals["holiday"] += 1
