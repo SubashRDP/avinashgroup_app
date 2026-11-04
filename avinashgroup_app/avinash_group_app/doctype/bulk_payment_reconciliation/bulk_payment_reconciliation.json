@@ -11,6 +11,16 @@
   "column_break_main",
   "party_type",
   "only_with_open_items",
+  "defaults_section",
+  "receivable_payable_account",
+  "default_advance_account",
+  "column_break_dates",
+  "from_invoice_date",
+  "to_invoice_date",
+  "from_payment_date",
+  "to_payment_date",
+  "column_break_bank",
+  "bank_cash_account",
   "parties_section",
   "parties",
   "amended_from"
@@ -54,6 +64,60 @@
    "label": "Only Parties With Unpaid Invoices And Unallocated Payments"
   },
   {
+   "fieldname": "defaults_section",
+   "fieldtype": "Section Break",
+   "label": "Accounts and Dates",
+   "description": "Values set here are copied to every row in the Parties table (rows can still be changed one by one)"
+  },
+  {
+   "fieldname": "receivable_payable_account",
+   "fieldtype": "Link",
+   "label": "Receivable/Payable Account",
+   "options": "Account",
+   "description": "Leave blank to use each party's own account"
+  },
+  {
+   "fieldname": "default_advance_account",
+   "fieldtype": "Link",
+   "label": "Default Advance Account",
+   "options": "Account",
+   "description": "Leave blank to use each party's own advance account"
+  },
+  {
+   "fieldname": "column_break_dates",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "from_invoice_date",
+   "fieldtype": "Date",
+   "label": "From Invoice Date"
+  },
+  {
+   "fieldname": "to_invoice_date",
+   "fieldtype": "Date",
+   "label": "To Invoice Date"
+  },
+  {
+   "fieldname": "from_payment_date",
+   "fieldtype": "Date",
+   "label": "From Payment Date"
+  },
+  {
+   "fieldname": "to_payment_date",
+   "fieldtype": "Date",
+   "label": "To Payment Date"
+  },
+  {
+   "fieldname": "column_break_bank",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bank_cash_account",
+   "fieldtype": "Link",
+   "label": "Bank/Cash Account",
+   "options": "Account"
+  },
+  {
    "fieldname": "parties_section",
    "fieldtype": "Section Break",
    "label": "Parties"
@@ -78,7 +142,7 @@
  ],
  "is_submittable": 1,
  "links": [],
- "modified": "2026-11-01 13:00:00.000000",
+ "modified": "2026-11-04 12:00:00.000000",
  "module": "Avinash Group App",
  "name": "Bulk Payment Reconciliation",
  "owner": "Administrator",
