@@ -64,6 +64,7 @@ from avinashgroup_app.avinash_group_app.report.monthly_attendance_bs.monthly_att
 	_ot_rates,
 	employed_dates,
 	per_scope,
+	leave_days,
 	worked_on_holiday,
 	working_day_present,
 	working_days_card,
@@ -286,38 +287,39 @@ def _build_summary_row(
 
 
 def _bucket_leave_dates(leave_map):
-	"""Pre-bucket a (employee, date) -> leave_type map into {employee: sorted [dates]}.
+	"""Pre-bucket a leave map into {employee: (sorted [dates], [days for each])}.
 
 	`_fetch_leaves` returns one entry per unrolled day of each overlapping Leave
-	Application, keyed by (employee, date). Bucketing once (single pass) lets each
-	per-employee, per-window count be a bounded bisect instead of a full scan of
-	every entry across all employees.
+	Application, keyed by (employee, date); a half-day leave's date is half a
+	day (LeaveMap). Bucketing once (single pass) lets each per-employee,
+	per-window count be a bounded bisect instead of a full scan of every entry
+	across all employees.
 	"""
 	buckets = {}
-	for (emp, d) in (leave_map or {}):
-		buckets.setdefault(emp, []).append(d)
-	for dates in buckets.values():
-		dates.sort()
+	for key in sorted(leave_map or {}, key=lambda k: (k[0], k[1])):
+		dates, days = buckets.setdefault(key[0], ([], []))
+		dates.append(key[1])
+		days.append(leave_days(leave_map, key))
 	return buckets
 
 
 def _leave_days_for(employee, leave_dates, range_start, range_end):
-	"""Count this employee's leave dates falling within [range_start, range_end].
+	"""Leave days of this employee within [range_start, range_end]: half-day leave counts 0.5.
 
-	`leave_dates` is the bucketed {employee: sorted [dates]} map produced by
-	`_bucket_leave_dates`. The underlying dates can lie outside the intended window
-	(applications are unrolled fully), so we bound here to stop previous/upto counts
-	bleeding across windows. Equivalent to counting (employee, date) entries where
-	range_start <= date <= range_end, but via bisect on the sorted per-employee list.
+	`leave_dates` is the bucketed map produced by `_bucket_leave_dates`. The
+	underlying dates can lie outside the intended window (applications are
+	unrolled fully), so we bound here to stop previous/upto counts bleeding
+	across windows, via bisect on the sorted per-employee list.
 	"""
 	if not leave_dates or range_start is None or range_end is None:
 		return 0
-	dates = leave_dates.get(employee)
-	if not dates:
+	bucket = leave_dates.get(employee)
+	if not bucket:
 		return 0
+	dates, days = bucket
 	lo = bisect.bisect_left(dates, range_start)
 	hi = bisect.bisect_right(dates, range_end)
-	return hi - lo
+	return flt(sum(days[lo:hi]), 1)
 
 
 # ---------------------------------------------------------------------------

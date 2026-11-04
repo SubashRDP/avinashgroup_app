@@ -514,11 +514,35 @@ def _fetch_holidays(holiday_list_of, ad_start, ad_end):
 	return out
 
 
+class LeaveMap(dict):
+	"""{(employee, date): leave_type}, knowing which of those dates are half-day leave.
+
+	A half-day leave is half a day of leave: HR's sheet writes 0.5, and so does
+	the leave balance (total_leave_days). Counting every leave date as 1 put
+	NGI's Shrawan 2083 at 129 leave days where the sheet has 114.
+	"""
+
+	def __init__(self):
+		super().__init__()
+		self.half = set()
+
+	def days(self, key):
+		"""Leave days one (employee, date) is: 0.5 for a half-day leave, else 1."""
+		return 0.5 if key in self.half else 1.0
+
+
+def leave_days(leave_map, key):
+	"""Leave days of one (employee, date) in any leave map; a plain dict counts 1 per date."""
+	if key not in (leave_map or {}):
+		return 0.0
+	return leave_map.days(key) if isinstance(leave_map, LeaveMap) else 1.0
+
+
 def _fetch_leaves(employees, ad_start, ad_end, company=None):
-	"""Return {(employee, date): leave_type}."""
+	"""Return a LeaveMap: {(employee, date): leave_type}, with the half-day dates in `.half`."""
 	emp_names = [e.name for e in employees]
 	if not emp_names:
-		return {}
+		return LeaveMap()
 	leave_filters = {
 		"employee": ["in", emp_names],
 		"status": "Approved",
@@ -531,14 +555,19 @@ def _fetch_leaves(employees, ad_start, ad_end, company=None):
 	rows = frappe.get_all(
 		"Leave Application",
 		filters=leave_filters,
-		fields=["employee", "from_date", "to_date", "leave_type"],
+		fields=["employee", "from_date", "to_date", "leave_type", "half_day", "half_day_date"],
 	)
-	out = {}
+	out = LeaveMap()
 	for r in rows:
 		fd = getdate(r.from_date)
 		td = getdate(r.to_date)
 		for offset in range((td - fd).days + 1):
 			out[(r.employee, getdate(frappe.utils.add_days(fd, offset)))] = r.leave_type
+		if r.half_day:
+			# HRMS: the half day is half_day_date, or the only day of a one-day leave.
+			half = getdate(r.half_day_date) if r.half_day_date else (fd if fd == td else None)
+			if half:
+				out.half.add((r.employee, half))
 	return out
 
 
@@ -576,7 +605,7 @@ def _build_row(
 			remarks = holiday_label or "HOLIDAY"
 
 	if leave_type:
-		leave_flag = 1
+		leave_flag = leave_days(leave_map, (emp.name, ad_date))  # 0.5 on a half-day leave
 		if not remarks:
 			remarks = f"LEAVE — {leave_type}".upper()
 
@@ -795,8 +824,7 @@ def _accumulate(totals, row, present_statuses, counts_as_missing):
 		totals["absent"] += 1
 	if row["work_in_holiday"]:
 		totals["holiday"] += 1
-	if row["leave_count"]:
-		totals["leave"] += 1
+	totals["leave"] += row["leave_count"]  # 0.5 for a half-day leave
 	if row["status"] == "Not Marked" and counts_as_missing:
 		totals["not_marked"] += 1
 
@@ -865,7 +893,7 @@ def _columns(components):
 		{"label": _("O.T. (hrs)"), "fieldname": "ot_hours", "fieldtype": "Float", "width": 80, "precision": 2},
 		{"label": _("O.T. Rate"), "fieldname": "ot_rate", "fieldtype": "Currency", "width": 90},
 		{"label": _("O.T. Amount"), "fieldname": "ot_amount", "fieldtype": "Currency", "width": 100},
-		{"label": _("On Leave"), "fieldname": "leave_count", "fieldtype": "Check", "width": 65},
+		{"label": _("On Leave"), "fieldname": "leave_count", "fieldtype": "Float", "precision": 1, "width": 65},
 		{"label": _("Worked on Holiday"), "fieldname": "work_in_holiday", "fieldtype": "Check", "width": 110},
 	]
 	# Dynamic allowance columns — one per attendance-driven Salary Component.
@@ -920,7 +948,7 @@ def _summary(totals, employee_count, bs_label, working_days):
 		cards.append({"value": totals["half_day"], "label": per_scope(_("Half Days (counted ½)"), n), "datatype": "Int"})
 	cards.extend([
 		{"value": totals["absent"], "label": per_scope(_("Absent Days"), n), "datatype": "Int"},
-		{"value": totals["leave"], "label": per_scope(_("Leave Days"), n), "datatype": "Int"},
+		{"value": flt(totals["leave"], 1), "label": per_scope(_("Leave Days"), n), "datatype": "Float"},
 	])
 	if totals["not_marked"]:
 		cards.append({"value": totals["not_marked"], "label": per_scope(_("Not Marked Days"), n), "datatype": "Int"})
