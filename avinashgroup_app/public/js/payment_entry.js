@@ -14,7 +14,12 @@ const P_TYPE_TO_PAYMENT_TYPE = {
 //   invoice tagged    -> party's Default Account
 // Runs after core's own party / reference handlers have finished, so it is not
 // overwritten by the account core sets from get_party_details.
-function set_party_account_from_party(frm) {
+//
+// party_changed = true: a new party was chosen, always pick its account.
+// party_changed = false: References / amounts changed. Core runs this path on
+// every Paid Amount or exchange-rate change too, so an account the user picked
+// by hand is left alone here (see user_changed_party_account).
+function set_party_account_from_party(frm, party_changed) {
 	const doc = frm.doc;
 	if (doc.docstatus !== 0) return;
 	if (!["Customer", "Supplier"].includes(doc.party_type)) return;
@@ -34,12 +39,16 @@ function set_party_account_from_party(frm) {
 			// Several of these calls can be in flight at once; read References when the
 			// answer arrives, not when it was asked, so a slow earlier reply can't win.
 			if (!r.message || frm.doc.party !== party) return;
-			const has_tagged_bills = (frm.doc.references || []).some((row) => row.reference_name);
 			const accounts = r.message;
+			if (!party_changed && user_changed_party_account(frm, account_field, accounts)) return;
+
+			const has_tagged_bills = (frm.doc.references || []).some((row) => row.reference_name);
 			const account = has_tagged_bills
 				? accounts.default_account
 				: accounts.advance_account || accounts.default_account;
 
+			// Remember what we filled, so a later change by the user can be told apart.
+			frm.__auto_party_account = account;
 			if (account && frm.doc[account_field] !== account) {
 				frm.set_value(account_field, account);
 			}
@@ -47,15 +56,26 @@ function set_party_account_from_party(frm) {
 	});
 }
 
+// True when the account now in the field was picked by the user, not by us.
+//   - we filled it in this form session -> user changed it if it differs from ours
+//   - draft opened fresh (we filled nothing yet) -> user's own choice if it is
+//     neither the party's Advance nor Default account
+function user_changed_party_account(frm, account_field, accounts) {
+	const current = frm.doc[account_field];
+	if (!current) return false;
+	if (frm.__auto_party_account) return current !== frm.__auto_party_account;
+	return current !== accounts.advance_account && current !== accounts.default_account;
+}
+
 // While core is filling the account from get_party_details it keeps
 // frm.set_party_account_based_on_party true; wait for it to finish so core's
 // account doesn't land on top of ours. Gives up waiting after ~10 seconds.
-function set_party_account_after_core(frm, tries_left = 50) {
+function set_party_account_after_core(frm, party_changed = false, tries_left = 50) {
 	if (frm.set_party_account_based_on_party && tries_left > 0) {
-		setTimeout(() => set_party_account_after_core(frm, tries_left - 1), 200);
+		setTimeout(() => set_party_account_after_core(frm, party_changed, tries_left - 1), 200);
 		return;
 	}
-	set_party_account_from_party(frm);
+	set_party_account_from_party(frm, party_changed);
 }
 
 // Core calls frm.events.set_total_allocated_amount every time References change:
@@ -84,7 +104,7 @@ frappe.ui.form.on("Payment Entry Reference", {
 });
 
 frappe.ui.form.on("Payment Entry", {
-	party: (frm) => set_party_account_after_core(frm),
+	party: (frm) => set_party_account_after_core(frm, true),
 	custom_p_type: function (frm) {
 		const payment_type = P_TYPE_TO_PAYMENT_TYPE[frm.doc.custom_p_type];
 		if (payment_type && frm.doc.payment_type !== payment_type) {
