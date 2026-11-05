@@ -50,6 +50,12 @@ Always pick one from **your own company**.
 
 Software, licences and trademarks (Pool E): see **section 3A**, click by click.
 
+**Low-value items.** There is no minimum value in the tax law: a durable item
+(chair, kettle, small tool) is a fixed asset whatever it cost. Things used up
+within a year (stationery, consumables) are expenses, not assets. Whether small
+durable items are expensed in the books is for Accounts to decide (decision J in
+the depreciation guide); until then, ask.
+
 Not sure? Ask Accounts **before** submitting. Changing the category after
 depreciation has been posted is messy.
 

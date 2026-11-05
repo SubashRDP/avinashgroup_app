@@ -95,6 +95,11 @@ this year depends on **when it was bought or first used, whichever is later**:
 If a pool's balance after depreciation is **below Rs 2,000**, the **whole
 remaining balance** is written off as depreciation that year.
 
+This is a rule for the **whole pool**, not a minimum value for an asset. The
+Act has **no capitalisation threshold**: a Rs 1,500 chair is still capital
+expenditure (s.21(3) allows capital expenses only through depreciation), goes
+into Pool B and is depreciated at 25% with the rest of the pool.
+
 ### 1.7 Selling or scrapping an asset (Schedule-2, s.4)
 
 There is **no gain or loss per asset**. The sale proceeds are subtracted from
@@ -281,6 +286,7 @@ Two known limits:
 | **G** | NGK "WIP" category | What will it become (building / plant / vehicle)? |
 | **H** | WIP categories with no CWIP account: GEPL Filling Plant and Civil Work, NGI Civil Work, NGN Vehicle | Create the CWIP accounts? |
 | **I** | Do any companies have generators or solar for **own power** (50% rule) or **fiscal printers** (100% rule)? | Need their own categories |
+| **J** | **Low-value assets**: capitalise everything, or expense items below a set amount in the books? | The Act has **no minimum value**: s.21(3) disallows capital expenses except through depreciation, and the Rs 2,000 rule (s.2(6)) is per **pool**, not per asset. Expensing small durable items is a book policy; for tax they would still need to go into the pool |
 
 ---
 

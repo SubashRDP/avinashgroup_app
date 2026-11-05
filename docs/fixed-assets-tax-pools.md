@@ -76,7 +76,7 @@ users see the thirds rule.
   line. Tax adviser.
 
 - ~~Book depreciation method~~ **Decided 2026-11-05: follow the law.** Written down
-  value at the Schedule-2 rates, yearly, first year by the thirds rule (not by days).
+  value at the Schedule-2 rates, yearly, first year by the thirdsbut  rule (not by days).
   Built via ERPNext's `regional_overrides["Nepal"]` hook on
   `asset_depreciation_schedule.get_wdv_or_dd_depr_amount`.
 - **Special industry +1/3**: GLMI almost certainly; the gas companies need the tax adviser.
