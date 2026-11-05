@@ -44,6 +44,8 @@ Always pick one from **your own company**.
 | Filling plant machinery, compressors, pumps, weighing scales | Plant & Machinery | D, 15% |
 | LPG cylinders | Cylinders | D, 15% |
 | Anything else that lasts more than a year | Other Fixed Assets | D, 15% |
+| Software, ERP / accounting licence, other licence bought for more than a year | Software (Pool E) | E, 100 ÷ useful life |
+| Trademark, brand, copyright bought from someone | Brands, Trademarks & Copyrights (Pool E) | E, 100 ÷ useful life |
 | Something **still being built or installed** | the matching **WIP** category | see section 5 |
 
 Not sure? Ask Accounts **before** submitting. Changing the category after
@@ -78,6 +80,7 @@ Open the draft Asset (or **Asset → New**) and check:
 | Gross Purchase Amount | Filled from the purchase document; must include transport, installation and other costs to bring it into use |
 | Calculate Depreciation | **Ticked** (except Land) |
 | Is Existing Asset | **Not** ticked for a new purchase |
+| **Useful Life (Years)** | Pool E only (appears for Software / Trademarks): the licence's period of use, e.g. 5. Half years allowed; it is rounded to the nearest half year. The rate and number of years are set from it when you save |
 
 In the **Depreciation** section, the row is filled from the category. Leave
 **Depreciation Start Date** alone: the system sets it to the fiscal year end
@@ -214,5 +217,7 @@ the sale rule) is being built.
   tax adviser. Rates will change on those companies' categories only.
 - **50% rule for own power generation** and **100% for fiscal printers**. These
   will get their own categories once confirmed.
-- **Intangibles (Pool E)**, e.g. software licences. No category yet; ask Accounts.
+- **Pool E method** is waiting for the tax adviser to confirm (reducing balance at
+  100 ÷ life, as built, or straight line). Goodwill and right-of-use (lease)
+  assets have no category on purpose; ask Accounts.
 - **SGU** has no asset categories yet.

@@ -136,6 +136,34 @@
   "options": "\nA\nB\nC\nD\nE\nNot Depreciable",
   "in_list_view": 1,
   "in_standard_filter": 1,
-  "description": "Income Tax Act 2058, Schedule-2 pool: A buildings 5%, B computers/furniture/office equipment 25%, C vehicles 20%, D plant & machinery and all other 15%, E intangibles."
+  "description": "Income Tax Act 2058, Schedule-2 pool: A buildings 5%, B computers/furniture/office equipment 25%, C vehicles 20%, D plant & machinery and all other 15%, E intangibles at 100 / useful life, set per asset."
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Asset",
+  "fieldname": "custom_tax_pool",
+  "fieldtype": "Data",
+  "insert_after": "asset_category",
+  "label": "Tax Pool",
+  "module": "Avinash Group App",
+  "name": "Asset-custom_tax_pool",
+  "fetch_from": "asset_category.custom_tax_pool",
+  "read_only": 1,
+  "in_standard_filter": 1,
+  "description": "From the Asset Category (Schedule-2 pool)."
+ },
+ {
+  "doctype": "Custom Field",
+  "dt": "Asset",
+  "fieldname": "custom_useful_life_years",
+  "fieldtype": "Float",
+  "insert_after": "custom_tax_pool",
+  "label": "Useful Life (Years)",
+  "module": "Avinash Group App",
+  "name": "Asset-custom_useful_life_years",
+  "precision": "2",
+  "depends_on": "eval:doc.custom_tax_pool=='E'",
+  "mandatory_depends_on": "eval:doc.custom_tax_pool=='E' && doc.calculate_depreciation",
+  "description": "Pool E only: the licence or right's period of use. Rounded to the nearest half year; the yearly rate is 100 / that (Schedule-2 s.3(1))."
  }
 ]

@@ -20,10 +20,23 @@ What ``setup()`` does, for each company that has the pool chart (the
 ``111100`` Property, Plant and Equipment group):
 
 1. creates the group ``111190 Accumulated Depreciation`` under 111100 and one
-   contra account per pool fixed-asset account (111102 -> 111192, ...);
-2. sets ``custom_tax_pool``, the four accounts, CWIP accounting and the
+   contra account per pool fixed-asset account (111102 -> 111192, ...), and
+   the same for intangibles: ``111290 Accumulated Amortization`` under
+   ``111200 Intangible Assets`` (111201 -> 111291, ...);
+2. creates the Pool E categories (``INTANGIBLE_CATEGORIES``) for a company
+   that has the intangible accounts but no such category yet. No company had
+   intangibles in 2026-11, but the chart already carries ``111201 Pool E
+   -Capitalized Software``, so the category is ready when the first licence
+   is bought;
+3. sets ``custom_tax_pool``, the four accounts, CWIP accounting and the
    non-depreciable flag on each category, matching on its name
    (``CATEGORY_RULES``).
+
+Pool E differs from A-D (Schedule-2 s.1(2)(b), s.3(1), s.3(2)): every
+intangible is a class of its own, its rate is 100 / period of use rounded to
+the nearest half year, so it is set per Asset from ``custom_useful_life_years``
+(``nepal_wdv.set_pool_e_rate``), not on the category, and it never gets the
++1/3 rate. The category's finance-book row only carries the method.
 
 It is idempotent: a second run changes nothing. ``dry_run=True`` (the default)
 only reports.
@@ -35,7 +48,7 @@ Deliberately NOT done here:
   auditors' decision, which is still open;
 - the tax computation itself (thirds rule, disposals, 7% repair cap,
   +1/3 for special industries). That is a report built on ``custom_tax_pool``;
-- creating categories for a company that has none, or guessing the pool of a
+- creating A-D categories for a company that has none, or guessing the pool of a
   category whose name matches no rule. Both are reported for a person to fix;
 - touching ``345109`` or renaming any existing account.
 
@@ -55,6 +68,15 @@ NOT_DEPRECIABLE = "Not Depreciable"
 
 PPE_GROUP_NUMBER = "111100"  # "Property, Plant and Equipment", parent of the pool accounts
 ACCUMULATED_GROUP_NUMBER = "111190"
+INTANGIBLE_GROUP_NUMBER = "111200"  # "Intangible Assets", parent of the Pool E accounts
+AMORTIZATION_GROUP_NUMBER = "111290"
+
+# Fixed-asset account prefix -> (contra group number, its name, parent group number).
+# The contra account takes the fixed-asset account's last digit: 111102 -> 111192, 111201 -> 111291.
+ACCUMULATED_GROUPS = {
+	"1111": (ACCUMULATED_GROUP_NUMBER, "Accumulated Depreciation", PPE_GROUP_NUMBER),
+	"1112": (AMORTIZATION_GROUP_NUMBER, "Accumulated Amortization", INTANGIBLE_GROUP_NUMBER),
+}
 CWIP_GROUP_NUMBER = "111300"  # "Capital WIP- Assets"
 
 # Category name keywords -> (tax pool, fixed asset account number, CWIP account name keyword).
@@ -73,6 +95,17 @@ CATEGORY_RULES = (
 	(("cylinder",), "D", "111106", None),
 	(("plant",), "D", "111105", None),
 	(("other fixed asset",), "D", "111105", None),
+	(("software",), "E", "111201", None),
+	(("trademark",), "E", "111203", None),
+)
+
+# Pool E categories created per company (name, fixed asset account). The names
+# match the "software" / "trademark" rules above. Not 111202 Right of Use
+# Assets (an NFRS 16 lease, not a tax intangible) and not 111204 Goodwill,
+# whose tax treatment is for the tax adviser to confirm.
+INTANGIBLE_CATEGORIES = (
+	("Software (Pool E)", "111201"),
+	("Brands, Trademarks & Copyrights (Pool E)", "111203"),
 )
 
 # GLMI has no separate cylinders account; its cylinders sit in Plant & Machinery.
@@ -98,7 +131,14 @@ DEPRECIATION_EXPENSE = {
 	"111104": "555103",
 	"111105": "555104",
 	"111106": "555105",
+	"111201": "555200",  # Amortization A/c
+	"111203": "555200",
 }
+
+# Pool E finance-book row on the category. Rate and number of years are per
+# asset (nepal_wdv.set_pool_e_rate fills them from the useful life); these are
+# placeholders ERPNext's category validation needs (at least one year).
+POOL_E_PLACEHOLDER = {"rate_of_depreciation": 0, "total_number_of_depreciations": 1}
 
 
 def setup(dry_run: bool = True) -> list[str]:
@@ -116,20 +156,22 @@ def setup(dry_run: bool = True) -> list[str]:
 		log.append(f"NOTE: {TAX_POOL_FIELD} not installed yet; bench migrate adds it before applying")
 
 	for company in frappe.get_all("Company", pluck="name", order_by="name"):
-		ppe_group = _account(company, PPE_GROUP_NUMBER, is_group=1)
-		if not ppe_group:
+		if not _account(company, PPE_GROUP_NUMBER, is_group=1):
 			log.append(f"SKIP {company}: no {PPE_GROUP_NUMBER} group, not on the pool chart")
 			continue
-		_ensure_accumulated_accounts(company, ppe_group, log, dry_run)
+		_ensure_accumulated_accounts(company, log, dry_run)
+		_ensure_depreciation_type(company, log, dry_run)
+		_ensure_intangible_categories(company, log, dry_run)
 
 	for name in frappe.get_all("Asset Category", pluck="name", order_by="name"):
 		_wire_category(frappe.get_doc("Asset Category", name), log, dry_run)
 
 	for company in frappe.get_all("Company", pluck="name", order_by="name"):
+		# Pool E categories are created above, so they do not count as having categories.
 		if _account(company, PPE_GROUP_NUMBER, is_group=1) and not frappe.db.exists(
-			"Asset Category Account", {"company_name": company, "parenttype": "Asset Category"}
+			"Asset Category", {"custom_company": company, TAX_POOL_FIELD: ["!=", "E"]}
 		):
-			log.append(f"TODO {company}: has the pool chart but no Asset Categories")
+			log.append(f"TODO {company}: has the pool chart but no Asset Categories for pools A-D or Land")
 
 	if not dry_run:
 		frappe.db.commit()
@@ -142,14 +184,13 @@ def _account(company: str, number: str, is_group: int = 0) -> str | None:
 	)
 
 
-def _ensure_accumulated_accounts(company: str, ppe_group: str, log: list, dry_run: bool) -> None:
-	"""Create 111190 and one contra account per existing pool fixed-asset account."""
-	group = _account(company, ACCUMULATED_GROUP_NUMBER, is_group=1)
-	if not group:
-		log.append(f"CREATE {company}: group {ACCUMULATED_GROUP_NUMBER} Accumulated Depreciation")
-		if not dry_run:
-			group = _insert_account(company, "Accumulated Depreciation", ACCUMULATED_GROUP_NUMBER, ppe_group, is_group=1)
+def _ensure_accumulated_accounts(company: str, log: list, dry_run: bool) -> None:
+	"""Create 111190 / 111290 and one contra account per existing pool fixed-asset account.
 
+	A contra group is only created when the company has at least one fixed-asset
+	account that needs it, so a company without intangible accounts gets no 111290.
+	"""
+	groups = {}
 	for fa_number in DEPRECIATION_EXPENSE:
 		fa_name = frappe.db.get_value(
 			"Account", {"company": company, "account_number": fa_number, "is_group": 0}, "account_name"
@@ -157,20 +198,78 @@ def _ensure_accumulated_accounts(company: str, ppe_group: str, log: list, dry_ru
 		number = _accumulated_number(fa_number)
 		if not fa_name or _account(company, number):
 			continue
-		log.append(f"CREATE {company}: {number} Accumulated Depreciation - {fa_name}")
+		group_number, group_name, parent_number = ACCUMULATED_GROUPS[fa_number[:4]]
+		if group_number not in groups:
+			groups[group_number] = _account(company, group_number, is_group=1)
+			if not groups[group_number]:
+				parent = _account(company, parent_number, is_group=1)
+				if not parent:
+					log.append(f"TODO {company}: no {parent_number} group for {group_number} {group_name}")
+					continue
+				log.append(f"CREATE {company}: group {group_number} {group_name}")
+				if not dry_run:
+					groups[group_number] = _insert_account(company, group_name, group_number, parent, is_group=1)
+		label = f"{group_name} - {fa_name}"
+		log.append(f"CREATE {company}: {number} {label}")
 		if not dry_run:
-			_insert_account(
-				company,
-				f"Accumulated Depreciation - {fa_name}",
-				number,
-				group,
-				account_type="Accumulated Depreciation",
-			)
+			_insert_account(company, label, number, groups[group_number], account_type="Accumulated Depreciation")
 
 
 def _accumulated_number(fa_number: str) -> str:
-	"""111102 -> 111192: same last digit, inside the 111190 group."""
-	return ACCUMULATED_GROUP_NUMBER[:-1] + fa_number[-1]
+	"""111102 -> 111192, 111201 -> 111291: same last digit, inside the prefix's contra group."""
+	return ACCUMULATED_GROUPS[fa_number[:4]][0][:-1] + fa_number[-1]
+
+
+def _ensure_depreciation_type(company: str, log: list, dry_run: bool) -> None:
+	"""Asset Category only accepts an expense account typed Depreciation.
+
+	555200 Amortization A/c was created as a plain expense (or untyped) on every
+	company. Its type is fixed only while it has no GL entries; otherwise a
+	person decides.
+	"""
+	for number in sorted(set(DEPRECIATION_EXPENSE.values())):
+		account = frappe.db.get_value(
+			"Account", {"company": company, "account_number": number, "is_group": 0}, ["name", "account_type"], as_dict=True
+		)
+		if not account or account.account_type == "Depreciation":
+			continue
+		if frappe.db.exists("GL Entry", {"account": account.name, "is_cancelled": 0}):
+			log.append(f"TODO {account.name}: typed {account.account_type or 'blank'} and has GL entries")
+			continue
+		log.append(f"FIX {account.name}: account type {account.account_type or 'blank'} -> Depreciation")
+		if not dry_run:
+			frappe.db.set_value("Account", account.name, "account_type", "Depreciation")
+
+
+def _ensure_intangible_categories(company: str, log: list, dry_run: bool) -> None:
+	"""Create each INTANGIBLE_CATEGORIES row the company has the account for but no category.
+
+	Only the company and its fixed-asset account are set here; _wire_category,
+	which runs over every category next, fills the pool, contra, expense account
+	and finance-book row like any other category.
+	"""
+	existing = {
+		name.strip().lower()
+		for name in frappe.get_all(
+			"Asset Category", filters={"custom_company": company}, pluck="asset_category_name"
+		)
+	}
+	for category_name, fa_number in INTANGIBLE_CATEGORIES:
+		fa_account = _account(company, fa_number)
+		if not fa_account or category_name.lower() in existing:
+			continue
+		log.append(f"CREATE {company}: Asset Category {category_name} on {fa_account}")
+		if dry_run:
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "Asset Category",
+				"asset_category_name": category_name,
+				"custom_company": company,
+				"custom_tax_pool": "E",
+				"accounts": [{"company_name": company, "fixed_asset_account": fa_account}],
+			}
+		).insert()
 
 
 def _insert_account(company, account_name, number, parent, is_group=0, account_type=None) -> str:
@@ -232,7 +331,7 @@ def _wire_category(doc, log: list, dry_run: bool) -> None:
 			wanted["accumulated_depreciation_account"] = _account(
 				company, _accumulated_number(number)
 			) or ("(new) " + _accumulated_number(number) if dry_run else None)
-			wanted["depreciation_expense_account"] = _account(company, DEPRECIATION_EXPENSE[number])
+			wanted["depreciation_expense_account"] = _account(company, DEPRECIATION_EXPENSE.get(number))
 
 		if cwip_keyword:
 			# No match -> keep whatever is there; the TODO line asks a person to decide.
@@ -250,7 +349,7 @@ def _wire_category(doc, log: list, dry_run: bool) -> None:
 	if doc.enable_cwip_accounting != enable_cwip:
 		changes["enable_cwip_accounting"] = enable_cwip
 
-	if pool in POOL_RATES:
+	if pool in POOL_RATES or pool == "E":
 		_wire_finance_book(doc, pool, label, changes, log, dry_run)
 
 	if not changes:
@@ -266,22 +365,30 @@ def _wire_category(doc, log: list, dry_run: bool) -> None:
 def _wire_finance_book(doc, pool: str, label: str, changes: dict, log: list, dry_run: bool) -> None:
 	"""One default-book row: yearly WDV at the pool rate (+1/3 where the company qualifies).
 
-	The thirds rule for the first year is applied at schedule time by
+	Pool E gets the same method with placeholder rate and years, because both
+	depend on each asset's useful life (nepal_wdv.set_pool_e_rate). The thirds
+	rule for the first year is applied at schedule time by
 	fixed_assets/nepal_wdv.py, not stored here. Rows for a named Finance Book
 	are left alone.
 	"""
-	companies = {row.company_name for row in doc.accounts}
-	extra = {c in EXTRA_THIRD_COMPANIES for c in companies}
-	if len(extra) > 1:
-		log.append(f"TODO {label}: shared by companies with and without the +1/3 rate")
-		return
-	rate = POOL_RATES[pool] * (4 / 3 if extra == {True} else 1)
+	if pool == "E":
+		years_and_rate = POOL_E_PLACEHOLDER
+	else:
+		companies = {row.company_name for row in doc.accounts}
+		extra = {c in EXTRA_THIRD_COMPANIES for c in companies}
+		if len(extra) > 1:
+			log.append(f"TODO {label}: shared by companies with and without the +1/3 rate")
+			return
+		rate = POOL_RATES[pool] * (4 / 3 if extra == {True} else 1)
+		years_and_rate = {
+			"rate_of_depreciation": round(rate, 2),
+			"total_number_of_depreciations": POOL_YEARS[pool],
+		}
 
 	wanted = {
 		"depreciation_method": "Written Down Value",
 		"frequency_of_depreciation": 12,
-		"rate_of_depreciation": round(rate, 2),
-		"total_number_of_depreciations": POOL_YEARS[pool],
+		**years_and_rate,
 		"daily_prorata_based": 0,
 	}
 	row = next((r for r in doc.finance_books if not r.finance_book), None)
@@ -292,7 +399,9 @@ def _wire_finance_book(doc, pool: str, label: str, changes: dict, log: list, dry
 	):
 		return
 	changes["finance book"] = (
-		f"WDV {wanted['rate_of_depreciation']}% yearly, {POOL_YEARS[pool]} years"
+		"WDV yearly, rate and years per asset from its useful life"
+		if pool == "E"
+		else f"WDV {wanted['rate_of_depreciation']}% yearly, {POOL_YEARS[pool]} years"
 	)
 	if not dry_run:
 		if not row:

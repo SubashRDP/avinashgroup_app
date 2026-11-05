@@ -45,7 +45,19 @@ Stock-in-trade is excluded.
 | **B** | Computers, data processing equipment, furniture, fixtures, office equipment | **25%** |
 | **C** | Automobiles, buses, minibuses | **20%** |
 | **D** | Construction and excavation equipment, plant and machinery, and **everything not listed elsewhere** | **15%** |
-| **E** | Intangible assets (software, licences, etc.) | Cost ÷ useful life (straight line), **each asset its own class** |
+| **E** | Intangible assets (software, licences, etc.) | 100 ÷ useful life (rounded to the nearest half year), **each asset its own class** |
+
+**Pool E, as built.** s.3(1) sets the E rate as cost divided by the period of
+use, the period adjusted to the nearest half year, and s.2(3) applies every
+pool's rate to its reducing base. Read literally, a 5-year licence is **20%
+reducing balance**, first year by the thirds rule (s.2(5) covers "any class"),
+never the +1/3 (s.3(2) is A-D only). In the year the right expires, what is left
+is written off: an expired right is a disposal with no proceeds (s.4). Some
+secondary sources teach Pool E as straight line (cost ÷ life each year). The
+system follows the literal reading; **the tax adviser should confirm** before
+the first intangible is filed. Example, Rs 3,00,000 software, 5 years, in use
+from Bhadra 2083: 60,000 · 48,000 · 38,400 · 30,720 · 24,576, then 98,304 on
+expiry in Bhadra 2088.
 
 **Our cylinders, filling plant and machinery** go in **Pool D**.
 **Generators, ATMs and lockers** used commercially go in **Pool B**, not D. This

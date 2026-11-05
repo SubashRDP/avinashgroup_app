@@ -13,7 +13,7 @@ compulsory: s.19(1) says "shall" (changed from "may" by the Finance Acts from 20
 | B | Computers, data processing equipment, furniture, fixtures, office equipment | 25% |
 | C | Automobiles, buses, minibuses | 20% |
 | D | Construction/excavation equipment, plant, everything not listed elsewhere | 15% |
-| E | Intangibles, one class per asset | cost / useful life |
+| E | Intangibles, one class per asset (s.1(2)(b)) | 100 / period of use, rounded to the nearest half year; no +1/3 |
 | - | Land | not depreciable (s.2(aak)) |
 
 - **Base** (s.2(3)): opening base minus last year's depreciation, plus additions,
@@ -53,12 +53,27 @@ ERPNext depreciates per asset; the tax figure needs pools. So:
 2. `fixed_assets/nepal_wdv.py` applies the thirds rule to the first year
    (`regional_overrides["Nepal"]`), sets the first date to the fiscal year end and
    snaps yearly rows to Asar end. Tested 2026-11-05: see the guide, section 3.5.
-3. *(not built)* A Schedule-2 tax depreciation report on top of the pool field.
+3. **Pool E** (built 2026-11-05). `tax_pools.setup` creates `111290 Accumulated
+   Amortization` under `111200 Intangible Assets` (`111291`, `111293`), types
+   `555200 Amortization A/c` as Depreciation, and creates two categories per
+   company: **Software (Pool E)** on `111201` and **Brands, Trademarks &
+   Copyrights (Pool E)** on `111203`. Not `111202 Right of Use Assets` (NFRS 16
+   lease) or `111204 Goodwill` (tax treatment unconfirmed). The rate is per
+   asset: the Asset's **Useful Life (Years)** (`custom_useful_life_years`) gives
+   rate = 100 / life and the number of yearly rows (`nepal_wdv.set_pool_e_rate`);
+   the last row, in the expiry year, writes off the rest. Literal reading of
+   s.3(1) + s.2(3); secondary sources teach straight line, so **tax adviser to
+   confirm**. Tested on demo-nggroup in a rolled-back transaction: 1 Shrawan /
+   Bhadra / Magh starts, 3.3 -> 3.5 years rounding, missing life refused.
+4. *(not built)* A Schedule-2 tax depreciation report on top of the pool field.
 
 Workers must be restarted (`bench restart`) to load the new hooks before desk
 users see the thirds rule.
 
 ## Open decisions
+
+- **Pool E method**: literal reducing balance at 100 / life (built) or straight
+  line. Tax adviser.
 
 - ~~Book depreciation method~~ **Decided 2026-11-05: follow the law.** Written down
   value at the Schedule-2 rates, yearly, first year by the thirds rule (not by days).

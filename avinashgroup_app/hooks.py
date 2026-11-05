@@ -574,6 +574,7 @@ _add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.blo
 # Income Tax Act Schedule-2 depreciation: yearly WDV, first year by the thirds
 # rule, first date at fiscal year end. See fixed_assets/nepal_wdv.py.
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_first_depreciation_date")
+_add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_pool_e_rate")
 _add_doc_event("Asset Depreciation Schedule", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.snap_rows_to_fiscal_year_end")
 regional_overrides = {
     "Nepal": {
@@ -806,6 +807,10 @@ fixtures = [
                     # Income Tax Act Schedule-2 pool (A-E / Not Depreciable).
                     # Set by fixed_assets/tax_pools.setup.
                     "Asset Category-custom_tax_pool",
+                    # Pool shown on the Asset, and a Pool E asset's useful life.
+                    # Read by fixed_assets/nepal_wdv.set_pool_e_rate.
+                    "Asset-custom_tax_pool",
+                    "Asset-custom_useful_life_years",
                     # Which PDC Cheque posted this JE. Read by pdc/invoice_guard.py
                     # and the cheque's "Journal Entries" button.
                     "Journal Entry-pdc_cheque",
