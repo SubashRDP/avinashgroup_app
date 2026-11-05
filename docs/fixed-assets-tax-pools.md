@@ -1,5 +1,7 @@
 # Fixed assets and tax depreciation pools
 
+Accountant-facing version with worked examples: [fixed-assets-depreciation-guide.md](fixed-assets-depreciation-guide.md).
+
 ## The law (Income Tax Act 2058, as amended up to Finance Act 2083)
 
 Tax depreciation is per **pool**, reducing balance (s.19, Schedule-2). It is
