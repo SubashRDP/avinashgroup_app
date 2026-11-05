@@ -48,6 +48,7 @@ Rules and sources: ``docs/fixed-assets-tax-pools.md``.
 """
 
 import frappe
+from frappe.utils import flt
 
 TAX_POOL_FIELD = "custom_tax_pool"  # Custom Field fixture "Asset Category-custom_tax_pool"
 NOT_DEPRECIABLE = "Not Depreciable"
@@ -76,6 +77,19 @@ CATEGORY_RULES = (
 
 # GLMI has no separate cylinders account; its cylinders sit in Plant & Machinery.
 FIXED_ASSET_FALLBACK = {"111106": "111105"}
+
+# Schedule-2 s.3(1) rates, unchanged from 2058 through Finance Act 2083.
+POOL_RATES = {"A": 5, "B": 25, "C": 20, "D": 15}
+
+# ERPNext needs a finite number of WDV years and writes the remainder off in
+# the last one. These are the years until under 1% of cost is left
+# (ln 0.01 / ln(1 - rate)), so that final write-off is immaterial.
+POOL_YEARS = {"A": 90, "B": 17, "C": 21, "D": 29}
+
+# Schedule-2 s.3(2): +1/3 on the A-D rates for special (manufacturing) industries
+# and some infrastructure. Compulsory once eligible (Supreme Court 074-RB-0345).
+# Empty until Accounts / the tax adviser confirm which companies qualify.
+EXTRA_THIRD_COMPANIES: tuple[str, ...] = ()
 
 # Pool fixed-asset account -> its depreciation expense account (existing chart).
 DEPRECIATION_EXPENSE = {
@@ -236,6 +250,9 @@ def _wire_category(doc, log: list, dry_run: bool) -> None:
 	if doc.enable_cwip_accounting != enable_cwip:
 		changes["enable_cwip_accounting"] = enable_cwip
 
+	if pool in POOL_RATES:
+		_wire_finance_book(doc, pool, label, changes, log, dry_run)
+
 	if not changes:
 		return
 	log.append(f"UPDATE {label}: " + "; ".join(f"{k} -> {v}" for k, v in changes.items()))
@@ -244,6 +261,43 @@ def _wire_category(doc, log: list, dry_run: bool) -> None:
 		doc.non_depreciable_category = non_depreciable
 		doc.enable_cwip_accounting = enable_cwip
 		doc.save()
+
+
+def _wire_finance_book(doc, pool: str, label: str, changes: dict, log: list, dry_run: bool) -> None:
+	"""One default-book row: yearly WDV at the pool rate (+1/3 where the company qualifies).
+
+	The thirds rule for the first year is applied at schedule time by
+	fixed_assets/nepal_wdv.py, not stored here. Rows for a named Finance Book
+	are left alone.
+	"""
+	companies = {row.company_name for row in doc.accounts}
+	extra = {c in EXTRA_THIRD_COMPANIES for c in companies}
+	if len(extra) > 1:
+		log.append(f"TODO {label}: shared by companies with and without the +1/3 rate")
+		return
+	rate = POOL_RATES[pool] * (4 / 3 if extra == {True} else 1)
+
+	wanted = {
+		"depreciation_method": "Written Down Value",
+		"frequency_of_depreciation": 12,
+		"rate_of_depreciation": round(rate, 2),
+		"total_number_of_depreciations": POOL_YEARS[pool],
+		"daily_prorata_based": 0,
+	}
+	row = next((r for r in doc.finance_books if not r.finance_book), None)
+	current = {k: (row.get(k) if row else None) for k in wanted}
+	if row and all(
+		flt(current[k]) == flt(v) if k != "depreciation_method" else current[k] == v
+		for k, v in wanted.items()
+	):
+		return
+	changes["finance book"] = (
+		f"WDV {wanted['rate_of_depreciation']}% yearly, {POOL_YEARS[pool]} years"
+	)
+	if not dry_run:
+		if not row:
+			row = doc.append("finance_books", {})
+		row.update(wanted)
 
 
 def _cwip_account(company: str, keyword: str, label: str, log: list, dry_run: bool) -> str | None:

@@ -571,6 +571,16 @@ _add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.lc.guards.
 _add_doc_event("Purchase Receipt", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
 _add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.block_je_cancel")
 
+# Income Tax Act Schedule-2 depreciation: yearly WDV, first year by the thirds
+# rule, first date at fiscal year end. See fixed_assets/nepal_wdv.py.
+_add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_first_depreciation_date")
+_add_doc_event("Asset Depreciation Schedule", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.snap_rows_to_fiscal_year_end")
+regional_overrides = {
+    "Nepal": {
+        "erpnext.assets.doctype.asset_depreciation_schedule.asset_depreciation_schedule.get_wdv_or_dd_depr_amount": "avinashgroup_app.fixed_assets.nepal_wdv.get_wdv_or_dd_depr_amount",
+    },
+}
+
 override_doctype_class = {
     "Material Request": "avinashgroup_app.custom_code.Override.overrides.MaterialRequest",
     "Purchase Order": "avinashgroup_app.custom_code.Override.overrides.PurchaseOrder",

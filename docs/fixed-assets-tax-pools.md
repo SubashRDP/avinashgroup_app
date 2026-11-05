@@ -49,21 +49,27 @@ ERPNext depreciates per asset; the tax figure needs pools. So:
    (contra, same last digit), `5551 0x` depreciation expense. Land is
    `non_depreciable_category`. WIP categories use CWIP accounting and capitalise
    into the pool of what they become. `avinashgroup_app/fixed_assets/tax_pools.py`
-   does this, dry run first.
-2. *(not built)* A Schedule-2 tax depreciation report on top of the pool field.
+   does this, dry run first, and adds a yearly WDV finance-book row at the pool rate.
+2. `fixed_assets/nepal_wdv.py` applies the thirds rule to the first year
+   (`regional_overrides["Nepal"]`), sets the first date to the fiscal year end and
+   snaps yearly rows to Asar end. Tested 2026-11-05: see the guide, section 3.5.
+3. *(not built)* A Schedule-2 tax depreciation report on top of the pool field.
+
+Workers must be restarted (`bench restart`) to load the new hooks before desk
+users see the thirds rule.
 
 ## Open decisions
 
 - ~~Book depreciation method~~ **Decided 2026-11-05: follow the law.** Written down
   value at the Schedule-2 rates, yearly, first year by the thirds rule (not by days).
-  Planned via ERPNext's `regional_overrides["Nepal"]` hook on
-  `asset_depreciation_schedule.get_wdv_or_dd_depr_amount` (not built yet).
+  Built via ERPNext's `regional_overrides["Nepal"]` hook on
+  `asset_depreciation_schedule.get_wdv_or_dd_depr_amount`.
 - **Special industry +1/3**: GLMI almost certainly; the gas companies need the tax adviser.
 - **Opening pool balances** per company from the last filed return.
 - `345109 Provision for Accumulated Depreciation` (a liability) is no longer used by
   categories; what to do with any balance on it is for the accountant.
 
-## demo-nggroup state (dry run, 2026-11-03)
+## demo-nggroup state (applied 2026-11-05)
 
 Left for a person (the script reports these as TODO):
 - SGU has no Asset Categories at all.

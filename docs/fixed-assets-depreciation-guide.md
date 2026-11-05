@@ -228,13 +228,31 @@ profit and taxable profit.
 | Step | Work | Status |
 |---|---|---|
 | 1 | Study the law and its amendments | **Done** |
-| 2 | Tax Pool field and setup script (accounts, categories, Land, CWIP) | **Built**, tested as a dry run on demo-nggroup, waiting to apply |
-| 3 | Nepal depreciation rule in ERPNext (WDV, thirds rule, yearly at fiscal year end) | Next |
-| 4 | Set rates on all categories, including +1/3 for confirmed special industries | After step 3 and decision B |
-| 5 | Test on demo-nggroup with sample assets bought in each of the three periods, sold, and repaired | After step 4 |
+| 2 | Tax Pool field and setup script (accounts, categories, Land, CWIP) | **Done on demo-nggroup** (2026-11-05): 41 accounts, 68 categories |
+| 3 | Nepal depreciation rule in ERPNext (WDV, thirds rule, yearly at fiscal year end) | **Built and tested** (see 3.5) |
+| 4 | Set rates on all categories, including +1/3 for confirmed special industries | **Normal rates done on demo-nggroup** (62 categories). +1/3 waits for decision B |
+| 5 | Test on demo-nggroup with sample assets bought in each of the three periods, sold, and repaired | **Purchase timing tested.** Sale and repairs go with the report in step 6 |
 | 6 | **Schedule-2 Tax Depreciation report** per company and fiscal year | After step 5 |
 | 7 | Enter opening pool balances and existing assets | Needs decision C |
 | 8 | Review with Accounts, then move to live | Last |
+
+### 3.5 Test result (demo-nggroup, 2026-11-05)
+
+Three test assets, cost Rs 3,00,000 each, Pool B (25%), created and then removed:
+
+| In use from | First year (FY 82/83) | Second year (FY 83/84) | Matches the law |
+|---|---|---|---|
+| Bhadra 2082 (Shrawan to Poush) | 75,000 (full year) | 56,250 | Yes |
+| Magh 2082 (Magh to Chaitra) | 50,000 (2/3) | 62,500 | Yes |
+| Baisakh 2083 (Baisakh to Asar) | 25,000 (1/3) | 68,750 | Yes |
+
+Each year's entry is dated on that year's Asar end (15 or 16 July).
+
+Two known limits:
+- ERPNext needs a fixed number of years, so the small remainder (under 1% of
+  cost) is written off in the final year: B after 17 years, C 21, D 29, A 90.
+- The Nepali calendar converter stops at BS 2100 (about 2043 AD). Schedule rows
+  after that keep ERPNext's date, which can be a day off Asar end.
 
 ---
 
