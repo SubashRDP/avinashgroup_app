@@ -256,7 +256,7 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
     current = frappe.db.get_value(
         "Attendance",
         attendance_name,
-        ["attendance_date", "company", "working_hours", "late_entry", "early_exit", "in_time", "out_time",
+        ["employee", "attendance_date", "company", "working_hours", "late_entry", "early_exit", "in_time", "out_time",
          "status", "leave_type", "leave_application"],
         as_dict=True,
     )
@@ -291,9 +291,12 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
         updates["out_time"] = out_time
 
     if "in_time" in updates or "out_time" in updates:
+        from avinashgroup_app.hr.field_duty import effective_times
+
+        eff_in, eff_out = effective_times(current.employee, current.attendance_date, in_time, out_time)
         updates.update(
             compute_shift_deviations(
-                shift_doc, current.attendance_date, in_time, out_time, company=current.company,
+                shift_doc, current.attendance_date, eff_in, eff_out, company=current.company,
                 half_day=is_half_day_leave(current),
             )
         )

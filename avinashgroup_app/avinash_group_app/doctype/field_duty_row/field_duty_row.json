@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "creation": "2026-11-05 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "istable": 1,
+ "field_order": [
+  "employee",
+  "employee_name",
+  "duty_date",
+  "from_time",
+  "to_time",
+  "place",
+  "purpose",
+  "attendance"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "columns": 2
+  },
+  {
+   "fetch_from": "employee.employee_name",
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Name",
+   "read_only": 1,
+   "columns": 2
+  },
+  {
+   "fieldname": "duty_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1,
+   "columns": 1
+  },
+  {
+   "description": "When they left for the work (or started it, if they went straight there).",
+   "fieldname": "from_time",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "From",
+   "reqd": 1,
+   "columns": 1
+  },
+  {
+   "description": "When the work ended. Counted as time at work even with no punch.",
+   "fieldname": "to_time",
+   "fieldtype": "Time",
+   "in_list_view": 1,
+   "label": "To",
+   "reqd": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "place",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Place",
+   "columns": 1
+  },
+  {
+   "fieldname": "purpose",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Purpose",
+   "columns": 2
+  },
+  {
+   "fieldname": "attendance",
+   "fieldtype": "Link",
+   "label": "Attendance",
+   "options": "Attendance",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "modified": "2026-11-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Field Duty Row",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

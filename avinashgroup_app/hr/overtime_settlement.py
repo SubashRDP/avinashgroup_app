@@ -95,6 +95,10 @@ def measure_row(employee, work_date, work_type, entitlement):
 	)
 	if not attendance:
 		return {"hours": 0.0, "attendance": None, "note": _("No attendance — called in but did not come")}
+	# Hours away on Field Duty are time at work: the duty widens the punches (hr/field_duty.py).
+	from avinashgroup_app.hr.field_duty import effective_times
+
+	attendance.in_time, attendance.out_time = effective_times(employee, work_date, attendance.in_time, attendance.out_time)
 	# A holiday is told by the employee's own list as well as by the row, so a
 	# row typed as Overtime on what is a holiday for this person is still
 	# measured as holiday work.

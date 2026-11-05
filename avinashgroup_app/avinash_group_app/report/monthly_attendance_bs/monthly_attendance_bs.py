@@ -63,6 +63,7 @@ from avinashgroup_app.hr.leave_from_report import get_leave_notes
 from avinashgroup_app.hr.punch_correction import get_edited_days, get_shift_corrections
 from avinashgroup_app.hr.shift_day import ShiftRoster, measure_day
 from avinashgroup_app.hr.shift_early_closure import closure_note, closures_between
+from avinashgroup_app.hr.field_duty import duty_notes_between
 from avinashgroup_app.hr.utils import resolve_holiday_lists
 from rdp_common_app.utils.bs_boundaries import (
 	ad_to_bs,
@@ -137,6 +138,7 @@ def execute(filters=None):
 	# leave the employee applied for.
 	leave_notes = get_leave_notes({a.leave_application for a in att_map.values() if a.get("leave_application")})
 	closures = closures_between(company, ad_start, ad_end)
+	duty_notes = duty_notes_between(company, ad_start, ad_end)
 	note = _with_closures(note, closures)
 
 	data = []
@@ -181,6 +183,9 @@ def execute(filters=None):
 				closed = closure_note(day_closures, frappe.get_cached_doc("Shift Type", row["shift"]), ad_date)
 				if closed:
 					row["remarks"] = f"{row['remarks']} · {closed}" if row["remarks"] else closed
+			on_duty = duty_notes.get((emp.name, ad_date))
+			if on_duty:
+				row["remarks"] = f"{row['remarks']} · {on_duty}" if row["remarks"] else on_duty
 			data.append(row)
 			_accumulate(
 				totals, row, present_statuses,

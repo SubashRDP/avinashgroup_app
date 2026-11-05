@@ -208,6 +208,7 @@ def apply_closure(doc, cancelling=False):
 	refresh does, so submitted rows are updated without a cancel and amend.
 	"""
 	from avinashgroup_app.biometric.attendance_sync import compute_shift_deviations, is_half_day_leave
+	from avinashgroup_app.hr.field_duty import effective_times
 
 	rows = _affected_attendance(doc)
 	_refuse_if_paid(doc, rows)
@@ -221,8 +222,9 @@ def apply_closure(doc, cancelling=False):
 	updated = 0
 	for row in rows:
 		shift_doc = frappe.get_cached_doc("Shift Type", row.shift)
+		in_t, out_t = effective_times(row.employee, row.attendance_date, row.in_time, row.out_time)
 		values = compute_shift_deviations(
-			shift_doc, row.attendance_date, row.in_time, row.out_time, company=doc.company, half_day=is_half_day_leave(row)
+			shift_doc, row.attendance_date, in_t, out_t, company=doc.company, half_day=is_half_day_leave(row)
 		)
 		changed = {f: v for f, v in values.items() if int(row.get(f) or 0) != int(v)}
 		if not changed:

@@ -94,6 +94,12 @@ Attendance Fix **skips holiday dates** (each person's own list), and days before
 ### A punch is genuinely missing
 If the person forgot to punch, the device cannot know. Create or edit the **Attendance** for that day by hand with the right status, after checking with the person's manager.
 
+### Staff away on official work: Field Duty
+Someone who goes out on official work (a site visit, a delivery, a bank errand) and does not come back to punch out reads, from the device alone, as gone early; someone sent straight to a client has no punch and reads Absent. Record it on **Field Duty** (button on Monthly Attendance BS, or HR → Field Duty): company, a reason, and one row per person per day with **From**, **To**, Place and Purpose. On submit the hours away count as time at work: the day is measured from the earlier of the first punch and From to the later of the last punch and To, so the last punch is not the last OUT. A day with no punch becomes **Present**. Late Time, overtime and meals all use these hours; the device's own punch times are not changed, and the report's Remarks say "Field duty 10:00-17:30 (place)". Field duty does not authorise overtime by itself: an Overtime Sheet still decides who is paid for staying late. Many rows at once: **Excel → Download Template**, fill it in (Date in AD or Miti), **Excel → Import from Excel**, check, then Save and Submit. Cancel puts the days back to their punches. Refused once that month's salary slip is submitted.
+
+### Staff with no device: Import Punches
+For people who sign a register instead of punching (or a day the device was down), **Import Punches** on Monthly Attendance BS takes a sheet of Employee, Date (AD) or Miti, IN, OUT. **Download Template** lists every active employee; copy a row per day. After upload the days are shown for checking; **Import** enters each one exactly as First IN / Last OUT on the report would: the punches are marked as entered by hand with the reason, the day is re-marked, and the Attendance Correction Log records it. A day that cannot be entered (salary paid, a leave day, no shift) is listed with why, and the rest still go in. Only past days.
+
 ## 3.5 Leave
 
 ### Leave types on the system

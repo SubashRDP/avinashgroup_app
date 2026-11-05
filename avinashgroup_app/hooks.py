@@ -253,6 +253,8 @@ journal_entry_events = {
 attendance_events = {
     "validate": [
         "avinashgroup_app.payroll.attendance_allowance.set_holiday_flag",
+        # A day spent on submitted Field Duty is not Absent (hr/field_duty.py).
+        "avinashgroup_app.hr.field_duty.mark_present_if_on_duty",
         "avinashgroup_app.biometric.attendance_override.set_shift_deviation_fields",
         "avinashgroup_app.biometric.attendance_override.enforce_late_arrival_half_day",
         # Came to the office while on approved leave: half a day, not a full

@@ -42,10 +42,14 @@ def set_shift_deviation_fields(doc, method):
         return
 
     try:
+        from avinashgroup_app.hr.field_duty import effective_times
+
         shift = frappe.get_cached_doc("Shift Type", doc.shift)
+        # Field duty widens the punches: hours away on official work are time at work.
+        in_t, out_t = effective_times(doc.employee, doc.attendance_date, doc.in_time, doc.out_time)
         doc.update(
             compute_shift_deviations(
-                shift, doc.attendance_date, doc.in_time, doc.out_time, company=doc.company,
+                shift, doc.attendance_date, in_t, out_t, company=doc.company,
                 half_day=is_half_day_leave(doc),
             )
         )
@@ -271,13 +275,16 @@ def remeasure_half_day(name):
     of the shift, not all of it (attendance_sync.compute_shift_deviations)."""
     row = frappe.db.get_value(
         "Attendance", name,
-        ["shift", "attendance_date", "in_time", "out_time", "company", "status", "leave_type", "leave_application"],
+        ["employee", "shift", "attendance_date", "in_time", "out_time", "company", "status", "leave_type", "leave_application"],
         as_dict=True,
     )
-    if not row or not row.shift or not (row.in_time or row.out_time):
+    from avinashgroup_app.hr.field_duty import effective_times
+
+    in_t, out_t = effective_times(row.employee, row.attendance_date, row.in_time, row.out_time) if row else (None, None)
+    if not row or not row.shift or not (in_t or out_t):
         return
     values = compute_shift_deviations(
-        frappe.get_cached_doc("Shift Type", row.shift), row.attendance_date, row.in_time, row.out_time,
+        frappe.get_cached_doc("Shift Type", row.shift), row.attendance_date, in_t, out_t,
         company=row.company, half_day=is_half_day_leave(row),
     )
     frappe.db.set_value("Attendance", name, values, update_modified=False)

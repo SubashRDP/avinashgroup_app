@@ -27,6 +27,10 @@ frappe.query_reports["Monthly Attendance BS"] = {
 				})
 			);
 			report.page.add_inner_button(__("Early Closures"), () => frappe.set_route("List", "Shift Early Closure"));
+			// Punches for staff with no device, from a sheet (hr/sheet_import.py)
+			report.page.add_inner_button(__("Import Punches"), () => _open_punch_import());
+			// Staff away on official work (hr/field_duty.py)
+			report.page.add_inner_button(__("Field Duty"), () => frappe.set_route("List", "Field Duty"));
 		}
 		_make_full_width(report);
 		_setup_fiscal_year_visibility(report);
@@ -1291,4 +1295,72 @@ function _bind_arrow_key_scrolling(datatable) {
 	_teardown(state.keys);
 	document.addEventListener("keydown", handler);
 	state.keys = () => document.removeEventListener("keydown", handler);
+}
+
+
+// ── Import Punches: IN / OUT for many people and days from one sheet ──
+const PUNCH_IMPORT_API = "avinashgroup_app.hr.sheet_import.";
+
+function _open_punch_import() {
+	let rows = [];
+	const d = new frappe.ui.Dialog({
+		title: __("Import Punches"),
+		size: "extra-large",
+		fields: [
+			{ fieldtype: "Link", fieldname: "company", label: __("Company"), options: "Company", reqd: 1,
+				default: frappe.query_report.get_filter_value("company") },
+			{ fieldtype: "HTML", fieldname: "help", options: `<p class="text-muted small">${__(
+				"For staff with no device punch. One row per person per day: Employee, Date (AD) or Miti, IN, OUT. " +
+				"Each day goes in through the same correction as First IN / Last OUT on this report, marked as entered by hand."
+			)}</p>` },
+			{ fieldtype: "Button", fieldname: "template", label: __("Download Template") },
+			{ fieldtype: "Button", fieldname: "upload", label: __("Upload Sheet") },
+			{ fieldtype: "HTML", fieldname: "preview" },
+			{ fieldtype: "Small Text", fieldname: "reason", label: __("Reason"), reqd: 1,
+				default: __("Manual attendance sheet (no device punch)") },
+		],
+		primary_action_label: __("Import"),
+		primary_action(values) {
+			if (!rows.length) return frappe.msgprint(__("Upload a sheet first."));
+			frappe.xcall(PUNCH_IMPORT_API + "import_punches", { rows, reason: values.reason }).then((out) => {
+				const ok = out.filter((r) => r.ok).length;
+				const bad = out.filter((r) => !r.ok);
+				const lines = bad.map((r) => `${frappe.utils.escape_html(r.employee)} ${r.date}: ${frappe.utils.escape_html(r.error)}`);
+				frappe.msgprint({
+					title: __("Punches Imported"),
+					indicator: bad.length ? "orange" : "green",
+					message: __("{0} day(s) entered.", [ok]) + (bad.length ? `<br><br>${__("Refused:")}<br>${lines.join("<br>")}` : ""),
+				});
+				d.hide();
+				frappe.query_report.refresh();
+			});
+		},
+	});
+	d.fields_dict.template.$input.on("click", () => {
+		const company = d.get_value("company");
+		if (!company) return frappe.msgprint(__("Choose the Company first."));
+		window.open(`/api/method/${PUNCH_IMPORT_API}download_punch_template?${new URLSearchParams({ company })}`);
+	});
+	d.fields_dict.upload.$input.on("click", () => {
+		const company = d.get_value("company");
+		if (!company) return frappe.msgprint(__("Choose the Company first."));
+		new frappe.ui.FileUploader({
+			restrictions: { allowed_file_types: [".xlsx", ".csv"] },
+			make_attachments_public: false,
+			on_success(file) {
+				frappe.xcall(PUNCH_IMPORT_API + "read_punch_file", { file_url: file.file_url, company }).then((res) => {
+					rows = res.rows || [];
+					const esc = frappe.utils.escape_html;
+					const body = rows.map((r) => `<tr><td>${esc(r.employee)}</td><td>${esc(r.employee_name || "")}</td><td>${r.date}</td><td>${r.in_time.slice(0, 5)}</td><td>${r.out_time.slice(0, 5)}</td></tr>`).join("");
+					const errs = (res.errors || []).map(esc).join("<br>");
+					d.fields_dict.preview.$wrapper.html(
+						`<p><b>${__("{0} day(s) ready", [rows.length])}</b></p>` +
+						(rows.length ? `<div style="max-height:320px;overflow:auto"><table class="table table-bordered table-sm"><thead><tr><th>${__("Employee")}</th><th>${__("Name")}</th><th>${__("Date")}</th><th>IN</th><th>OUT</th></tr></thead><tbody>${body}</tbody></table></div>` : "") +
+						(errs ? `<p class="text-danger small">${__("Not read:")}<br>${errs}</p>` : "")
+					);
+				});
+			},
+		});
+	});
+	d.show();
 }
