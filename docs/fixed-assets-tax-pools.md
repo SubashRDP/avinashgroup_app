@@ -52,8 +52,10 @@ ERPNext depreciates per asset; the tax figure needs pools. So:
 
 ## Open decisions
 
-- **Book depreciation method**: WDV at the tax rates, or NFRS straight-line? Auditors decide.
-  Category finance-book rows are left alone until then.
+- ~~Book depreciation method~~ **Decided 2026-11-05: follow the law.** Written down
+  value at the Schedule-2 rates, yearly, first year by the thirds rule (not by days).
+  Planned via ERPNext's `regional_overrides["Nepal"]` hook on
+  `asset_depreciation_schedule.get_wdv_or_dd_depr_amount` (not built yet).
 - **Special industry +1/3**: GLMI almost certainly; the gas companies need the tax adviser.
 - **Opening pool balances** per company from the last filed return.
 - `345109 Provision for Accumulated Depreciation` (a liability) is no longer used by
