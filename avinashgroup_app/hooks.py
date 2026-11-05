@@ -341,6 +341,8 @@ _je = doc_events.setdefault("Journal Entry", {})
 _existing = _je.get("before_insert")
 _je["before_insert"] = [
     "avinashgroup_app.payroll.hr_journal.default_jv_type",
+    # Same for ERPNext's asset entries (depreciation, scrap). fixed_assets/asset_journal_entries.py
+    "avinashgroup_app.fixed_assets.asset_journal_entries.set_jv_type",
 ] + (
     list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
 )

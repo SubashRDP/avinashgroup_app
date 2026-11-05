@@ -67,6 +67,14 @@ ERPNext depreciates per asset; the tax figure needs pools. So:
    Bhadra / Magh starts, 3.3 -> 3.5 years rounding, missing life refused.
 4. *(not built)* A Schedule-2 tax depreciation report on top of the pool field.
 
+ERPNext's own asset journals (depreciation, scrap, value adjustment) carry no
+JV Type / Document No, both mandatory here; `fixed_assets/asset_journal_entries.py`
+fills them through `payroll.hr_journal.fill_system_journal` (Journal Entry
+`before_insert`). Without it the daily depreciation job fails silently.
+
+Re-check everything (rolled back): `cd sites && ../env/bin/python
+../apps/avinashgroup_app/avinashgroup_app/scripts/check_fixed_assets.py <site>`.
+
 Workers must be restarted (`bench restart`) to load the new hooks before desk
 users see the thirds rule.
 

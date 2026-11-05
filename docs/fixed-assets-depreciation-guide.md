@@ -265,6 +265,28 @@ Three test assets, cost Rs 3,00,000 each, Pool B (25%), created and then removed
 
 Each year's entry is dated on that year's Asar end (15 or 16 July).
 
+**Full test run (2026-11-05), all passed**, everything rolled back afterwards:
+
+| Test | Result |
+|---|---|
+| All 69 categories point at their pool's accounts and rate | Pass |
+| Thirds rule at all 6 boundary dates (1 Shrawan, end Poush, 1 Magh, end Chaitra, 1 Baisakh, end Asar) for Pools A, B, C, D | Pass |
+| Second year = written-down value × rate; total depreciation = cost | Pass |
+| Every yearly entry dated on Asar end | Pass |
+| Existing asset (bought earlier) gets a full year | Pass |
+| Land refuses depreciation | Pass |
+| Posted entry: Dr pool depreciation expense, Cr pool accumulated depreciation, dated Asar end | Pass |
+| Scrapping: depreciation to the scrap date, then the scrap entry | Pass |
+| Pool E: rate = 100 ÷ useful life, half-year rounding, thirds rule, write-off in expiry year | Pass |
+
+The test run found one real problem, now fixed: **depreciation entries could not
+be posted at all.** Every Journal Entry here needs a JV Type and a Document No,
+and ERPNext's automatic depreciation entries had neither, so the yearly posting
+would have failed on Asar end. Asset entries now get JV Type "Journal Entry" and
+the next number in that series, the same way payroll journals already do.
+If Accounts wants a separate JV Type for depreciation, it needs its own
+numbering rule per company.
+
 Two known limits:
 - ERPNext needs a fixed number of years, so the small remainder (under 1% of
   cost) is written off in the final year: B after 17 years, C 21, D 29, A 90.

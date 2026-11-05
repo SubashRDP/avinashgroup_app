@@ -12,6 +12,9 @@ Fixed assets and Nepal tax depreciation (Income Tax Act 2058, Section 19 and Sch
 | Pool E (intangible) rate and rows from the asset's useful life | `nepal_wdv.set_pool_e_rate` | Asset `before_validate` |
 | Yearly rows on Asar end (15 or 16 July) | `nepal_wdv.snap_rows_to_fiscal_year_end` | Asset Depreciation Schedule `validate` |
 
+| JV Type + Document No on ERPNext's asset journals (depreciation, scrap) | `asset_journal_entries.set_jv_type` | Journal Entry `before_insert` |
+| End-to-end check, rolled back | `scripts/check_fixed_assets.py <site>` | by hand, from `sites/` |
+
 ## Doctypes touched
 
 - **Asset Category**: `custom_tax_pool` (Custom Field fixture), `non_depreciable_category`, `enable_cwip_accounting`, and the `accounts` rows; creates the two Pool E categories per company

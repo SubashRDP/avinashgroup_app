@@ -30,7 +30,15 @@ HR_REFERENCES = ("Payroll Entry", "Employee Advance")
 def default_jv_type(doc, method=None):
 	if not any(row.reference_type in HR_REFERENCES for row in doc.get("accounts") or []):
 		return
+	fill_system_journal(doc)
 
+
+def fill_system_journal(doc):
+	"""JV Type and, for a hand-numbered series, the next Document No.
+
+	Shared by every journal the system writes with nobody at the form: HRMS's
+	(above) and ERPNext's asset entries (fixed_assets/asset_journal_entries.py).
+	"""
 	if not doc.get("custom_p_type"):
 		jv_type = doc.voucher_type if frappe.db.exists("JV Type", doc.voucher_type) else "Journal Entry"
 		if not frappe.db.exists("JV Type", jv_type):
