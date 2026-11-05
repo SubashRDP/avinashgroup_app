@@ -211,7 +211,9 @@ def _get_partyless_je_rows(company, from_date, to_date):
 				rate=round(tds_amount / turnover * 100, 2) if turnover else 0,
 				turnover=turnover,
 				tds_amount=tds_amount,
-				amount_based=0,
+				# a JE has no TDS rate of its own: रेट reads "amount", not a rate worked
+				# back from the expense (100 TDS on 100 expense would print "100%")
+				amount_based=1,
 			)
 		)
 
@@ -281,7 +283,8 @@ def _get_party_je_rows(company, from_date, to_date):
 				rate=0,
 				turnover=None,
 				tds_amount=flt(line.tds_amount),
-				amount_based=0,
+				# a JE has no TDS rate of its own, so its own row reads "amount"
+				amount_based=1,
 				add_to_party_row=1,
 			)
 		)
@@ -360,11 +363,13 @@ def _build_rows(rows):
 		if not section["title"] and title:
 			section["title"] = title
 		# a party Journal Entry deduction goes onto the party's own row in this
-		# section, अग्रिम कर रकम only (see _get_party_je_rows)
+		# section, अग्रिम कर रकम only (see _get_party_je_rows). The invoice % no
+		# longer explains the row's total TDS then, so रेट reads "amount".
 		if r.get("add_to_party_row"):
 			party_row = next((x for x in section["rows"] if x.supplier_name == r.supplier_name), None)
 			if party_row:
 				party_row.tds_amount += flt(r.tds_amount)
+				party_row.rate = "amount"
 				continue
 		section["rows"].append(
 			frappe._dict(

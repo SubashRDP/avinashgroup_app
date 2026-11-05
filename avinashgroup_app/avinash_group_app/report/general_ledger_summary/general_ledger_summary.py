@@ -84,10 +84,16 @@ def _resolve_window(filters):
 
 # ── Columns ────────────────────────────────────────────────────────────────────
 
+AMOUNT_FIELDS = (
+	"opening_debit", "opening_credit", "period_debit", "period_credit", "closing_debit", "closing_credit",
+)
+
+
 def get_columns():
-	# Amounts are pre-formatted strings (blank for zero, lakh grouping) so a Dr in
-	# one pair and a Cr in the other never both show "0.00".
-	amt = {"fieldtype": "Data", "align": "right", "width": 130}
+	# Amounts are real numbers so an Export to Excel can be summed; a zero is sent
+	# as empty (see _amt) so a Dr in one pair and a Cr in the other never both show
+	# "0.00". The desk groups them by the site's number format (lakh style).
+	amt = {"fieldtype": "Float", "precision": 2, "align": "right", "width": 130}
 	return [
 		{"label": _("Account"), "fieldname": "account", "fieldtype": "Data", "width": 320, "align": "left"},
 		{"label": _("Opening Debit"), "fieldname": "opening_debit", **amt},
@@ -139,12 +145,12 @@ def get_data(filters, window):
 		records.append(
 			{
 				"account": label_map.get(account, account),
-				"opening_debit": _fmt(opening if opening > 0 else 0),
-				"opening_credit": _fmt(-opening if opening < 0 else 0),
-				"period_debit": _fmt(period_debit),
-				"period_credit": _fmt(period_credit),
-				"closing_debit": _fmt(closing if closing > 0 else 0),
-				"closing_credit": _fmt(-closing if closing < 0 else 0),
+				"opening_debit": _amt(opening if opening > 0 else 0),
+				"opening_credit": _amt(-opening if opening < 0 else 0),
+				"period_debit": _amt(period_debit),
+				"period_credit": _amt(period_credit),
+				"closing_debit": _amt(closing if closing > 0 else 0),
+				"closing_credit": _amt(-closing if closing < 0 else 0),
 				# raw values kept for the grand-total maths
 				"_opening": opening,
 				"_pd": period_debit,
@@ -178,12 +184,12 @@ def _grand_total_row(records):
 
 	return {
 		"account": _("Grand Total"),
-		"opening_debit": _fmt(side("_opening", True)),
-		"opening_credit": _fmt(side("_opening", False)),
-		"period_debit": _fmt(sum(r["_pd"] for r in records)),
-		"period_credit": _fmt(sum(r["_pc"] for r in records)),
-		"closing_debit": _fmt(side("_closing", True)),
-		"closing_credit": _fmt(side("_closing", False)),
+		"opening_debit": _amt(side("_opening", True)),
+		"opening_credit": _amt(side("_opening", False)),
+		"period_debit": _amt(sum(r["_pd"] for r in records)),
+		"period_credit": _amt(sum(r["_pc"] for r in records)),
+		"closing_debit": _amt(side("_closing", True)),
+		"closing_credit": _amt(side("_closing", False)),
 		"is_grand_total": 1,
 		"bold": 1,
 	}
@@ -287,8 +293,14 @@ def _is_all_zero(*values):
 	return all(round(flt(v), 2) == 0 for v in values)
 
 
+def _amt(value):
+	"""Amount rounded to 2 dp, or None for a zero so the cell stays empty."""
+	n = round(flt(value), 2)
+	return n if n else None
+
+
 def _fmt(value):
-	"""Lakh-grouped amount to 2 dp; blank for an exact zero."""
+	"""Lakh-grouped amount to 2 dp as text, for the PDF; blank for an exact zero."""
 	n = flt(value)
 	if round(n, 2) == 0:
 		return ""
@@ -400,6 +412,8 @@ def _render(filters, orientation):
 	window = _resolve_window(filters)
 	columns = get_columns()
 	data, _meta = get_data(filters, window)
+	# the PDF prints the amounts as lakh-grouped text, as before
+	data = [{**row, **{f: _fmt(row.get(f)) for f in AMOUNT_FIELDS}} for row in data]
 
 	pages = _paginate(data, orientation)
 
