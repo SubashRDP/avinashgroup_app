@@ -60,7 +60,7 @@ ERPNext depreciates per asset; the tax figure needs pools. So:
    Copyrights (Pool E)** on `111203`. Not `111202 Right of Use Assets` (NFRS 16
    lease) or `111204 Goodwill` (tax treatment unconfirmed). The rate is per
    asset: the Asset's **Useful Life (Years)** (`custom_useful_life_years`) gives
-   rate = 100 / life and the number of yearly rows (`nepal_wdv.set_pool_e_rate`);
+   rate = 100 / life and the number of yearly rows (`nepal_wdv.fill_from_tax_pool`);
    the last row, in the expiry year, writes off the rest. Literal reading of
    s.3(1) + s.2(3); secondary sources teach straight line, so **tax adviser to
    confirm**. Tested on demo-nggroup in a rolled-back transaction: 1 Shrawan /

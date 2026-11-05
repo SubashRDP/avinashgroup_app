@@ -46,5 +46,41 @@
   "module": "Avinash Group App",
   "is_system_generated": 0,
   "name": "Asset Finance Book-depreciation_method-read_only"
+ },
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "total_number_of_depreciations",
+  "property": "hidden",
+  "property_type": "Check",
+  "value": "1",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-total_number_of_depreciations-hidden"
+ },
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "total_number_of_depreciations",
+  "property": "in_list_view",
+  "property_type": "Check",
+  "value": "0",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-total_number_of_depreciations-in_list_view"
+ },
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "total_number_of_depreciations",
+  "property": "reqd",
+  "property_type": "Check",
+  "value": "0",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-total_number_of_depreciations-reqd"
  }
 ]

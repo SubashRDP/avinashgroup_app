@@ -28,7 +28,9 @@ Two hooks wire this in, both from hooks.py:
 - ``doc_events["Asset"]["before_validate"]`` puts each yearly WDV row's first
   depreciation date at the end of the fiscal year (Asar end) the asset came into
   use, so the first row is that fiscal year.
-- ``doc_events["Asset"]["before_validate"]`` also sets a Pool E asset's rate.
+- ``doc_events["Asset"]["before_validate"]`` also fills Total Number of
+  Depreciations from the tax pool (the field is hidden from staff; Nepali law
+  has no number of years) and sets a Pool E asset's rate.
 
 Pool E (intangibles: software, trademarks) has no fixed rate. Schedule-2
 s.1(2)(b) makes each intangible a class of its own and s.3(1) sets its rate at
@@ -36,7 +38,7 @@ s.1(2)(b) makes each intangible a class of its own and s.3(1) sets its rate at
 thirds rule are the same as A-D (s.2(3), s.2(5) cover "any class"), and s.3(2)
 gives the +1/3 to A-D only. So a Pool E asset is the same yearly WDV with a rate
 of its own: a 5-year licence is 20%, a 3.3-year one rounds to 3.5 and is 28.57%.
-``set_pool_e_rate`` fills the rate and the number of yearly rows from the
+``fill_from_tax_pool`` fills the rate and the number of yearly rows from the
 asset's ``custom_useful_life_years``. The last row, in the fiscal year the
 right expires, writes off what is left: an expired right is disposed of with
 no proceeds, and s.4 makes that shortfall deductible.
@@ -69,6 +71,8 @@ from erpnext.assets.doctype.asset_depreciation_schedule.asset_depreciation_sched
 )
 
 from rdp_common_app.utils.bs_boundaries import ad_to_bs, bs_to_ad
+
+from avinashgroup_app.fixed_assets.tax_pools import years_for_pool
 
 WDV = "Written Down Value"
 YEARLY = 12  # frequency_of_depreciation, in months
@@ -257,17 +261,45 @@ def pool_e_rows(available_for_use_date, years: float) -> int:
 	return fiscal_year_index(expiry) - fiscal_year_index(start) + 1
 
 
-def set_pool_e_rate(doc, method=None):
-	"""Asset before_validate: rate and yearly rows of a Pool E asset from its useful life.
+def fill_from_tax_pool(doc, method=None):
+	"""Asset before_validate: Total Number of Depreciations, and a Pool E asset's rate.
 
-	Runs on draft assets only; a submitted asset's schedule is changed through
-	ERPNext's own Asset Value Adjustment / Repair flows. Throws when a Pool E
-	asset that depreciates has no useful life, since there is no rate without it.
+	Total Number of Depreciations is hidden from staff (Property Setter
+	fixtures), so it is always set here from the category's Tax Pool:
+	A-D get tax_pools.POOL_YEARS (at least one more than an existing asset's
+	booked years), E gets the rows to its expiry year and 100 / useful life.
+
+	Draft assets only; a submitted asset's schedule is changed through ERPNext's
+	own Asset Value Adjustment / Repair flows. Throws when a depreciating asset's
+	category has no pool, or a Pool E asset has no useful life, since neither
+	has a count or rate without it.
 	"""
 	if doc.docstatus != 0 or not doc.calculate_depreciation or not doc.asset_category:
 		return
-	if frappe.get_cached_value("Asset Category", doc.asset_category, "custom_tax_pool") != POOL_E:
+	rows = [row for row in doc.get("finance_books") or [] if follows_schedule_2(row)]
+	if not rows:
 		return
+	# Still None on a new asset at before_validate; ERPNext's pro-rata test compares it.
+	doc.opening_number_of_booked_depreciations = cint(doc.opening_number_of_booked_depreciations)
+
+	pool = frappe.get_cached_value("Asset Category", doc.asset_category, "custom_tax_pool")
+	if pool == POOL_E:
+		_set_pool_e(doc, rows)
+		return
+	years = years_for_pool(pool)
+	if not years:
+		frappe.throw(
+			_("Asset Category {0} has no Tax Pool, so the depreciation years cannot be set. Ask Accounts.").format(
+				doc.asset_category
+			),
+			title=_("Tax Pool needed"),
+		)
+	for row in rows:
+		row.total_number_of_depreciations = max(years, doc.opening_number_of_booked_depreciations + 1)
+
+
+def _set_pool_e(doc, rows):
+	"""Rate = 100 / useful life and the yearly rows up to the year the right expires."""
 	if flt(doc.get(USEFUL_LIFE_FIELD)) <= 0:
 		frappe.throw(
 			_("{0} is in Pool E: enter its Useful Life (Years), the licence or right's period of use.").format(
@@ -278,13 +310,9 @@ def set_pool_e_rate(doc, method=None):
 	if not doc.available_for_use_date:
 		return  # ERPNext's own validation asks for it
 
-	# Still None on a new asset at before_validate; ERPNext's pro-rata test compares it.
-	doc.opening_number_of_booked_depreciations = cint(doc.opening_number_of_booked_depreciations)
 	years = rounded_useful_life(doc.get(USEFUL_LIFE_FIELD))
-	rows = pool_e_rows(doc.available_for_use_date, years)
-	for row in doc.get("finance_books") or []:
-		if not follows_schedule_2(row):
-			continue
+	count = pool_e_rows(doc.available_for_use_date, years)
+	for row in rows:
 		row.rate_of_depreciation = flt(100 / years, row.precision("rate_of_depreciation") or 9)
 		# ERPNext adds a part-year row of its own when the first year is not a
 		# whole year (in use after 1 Shrawan), dated on the expiry date. That row
@@ -292,5 +320,4 @@ def set_pool_e_rate(doc, method=None):
 		# ERPNext's own test decides it, so the two cannot disagree; it needs
 		# the first depreciation date, set by set_first_depreciation_date above.
 		adds_part_year = bool(row.depreciation_start_date) and _check_is_pro_rata(doc, row)
-		row.total_number_of_depreciations = max(rows - adds_part_year, 1)
-
+		row.total_number_of_depreciations = max(count - adds_part_year, 1)

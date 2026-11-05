@@ -35,7 +35,7 @@ What ``setup()`` does, for each company that has the pool chart (the
 Pool E differs from A-D (Schedule-2 s.1(2)(b), s.3(1), s.3(2)): every
 intangible is a class of its own, its rate is 100 / period of use rounded to
 the nearest half year, so it is set per Asset from ``custom_useful_life_years``
-(``nepal_wdv.set_pool_e_rate``), not on the category, and it never gets the
+(``nepal_wdv.fill_from_tax_pool``), not on the category, and it never gets the
 +1/3 rate. The category's finance-book row only carries the method.
 
 It is idempotent: a second run changes nothing. ``dry_run=True`` (the default)
@@ -136,7 +136,7 @@ DEPRECIATION_EXPENSE = {
 }
 
 # Pool E finance-book row on the category. Rate and number of years are per
-# asset (nepal_wdv.set_pool_e_rate fills them from the useful life); these are
+# asset (nepal_wdv.fill_from_tax_pool fills them from the useful life); these are
 # placeholders ERPNext's category validation needs (at least one year).
 POOL_E_PLACEHOLDER = {"rate_of_depreciation": 0, "total_number_of_depreciations": 1}
 
@@ -366,7 +366,7 @@ def _wire_finance_book(doc, pool: str, label: str, changes: dict, log: list, dry
 	"""One default-book row: yearly WDV at the pool rate (+1/3 where the company qualifies).
 
 	Pool E gets the same method with placeholder rate and years, because both
-	depend on each asset's useful life (nepal_wdv.set_pool_e_rate). The thirds
+	depend on each asset's useful life (nepal_wdv.fill_from_tax_pool). The thirds
 	rule for the first year is applied at schedule time by
 	fixed_assets/nepal_wdv.py, not stored here. Rows for a named Finance Book
 	are left alone.
@@ -429,3 +429,40 @@ def _cwip_account(company: str, keyword: str, label: str, log: list, dry_run: bo
 		if not dry_run:
 			frappe.db.set_value("Account", match.name, "account_type", "Capital Work in Progress")
 	return match.name
+
+
+def years_for_pool(pool: str | None) -> int | None:
+	"""Yearly rows ERPNext should build for a pool; None when the pool gives none.
+
+	Nepali law has no "number of years": A-D run at their rate until the pool
+	is used up, E until the right expires. ERPNext still needs a count, so A-D
+	get POOL_YEARS and E the placeholder (each Pool E asset replaces it, see
+	nepal_wdv.fill_from_tax_pool).
+	"""
+	if pool in POOL_YEARS:
+		return POOL_YEARS[pool]
+	if pool == "E":
+		return POOL_E_PLACEHOLDER["total_number_of_depreciations"]
+	return None
+
+
+def fill_category_years(doc, method=None) -> None:
+	"""Asset Category before_validate: Total Number of Depreciations from the Tax Pool.
+
+	The field is hidden and not mandatory on screen (Property Setter fixtures
+	on Asset Finance Book), so a category made or edited in the desk would
+	otherwise reach ERPNext's "cannot be less than 1" check with nothing a
+	person can fix. Throws only when a depreciating row is left with no count
+	and the category has no pool to take one from.
+	"""
+	years = years_for_pool(doc.get(TAX_POOL_FIELD))
+	for row in doc.get("finance_books") or []:
+		if years:
+			row.total_number_of_depreciations = years
+		elif not row.total_number_of_depreciations:
+			frappe.throw(
+				frappe._("Set the Tax Pool of {0}: the number of depreciation years comes from it.").format(
+					doc.name or doc.asset_category_name
+				),
+				title=frappe._("Tax Pool needed"),
+			)

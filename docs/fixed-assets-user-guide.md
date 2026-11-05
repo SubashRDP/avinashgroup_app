@@ -21,7 +21,7 @@ Once an asset is entered with the right **Asset Category**, ERPNext:
 - **posts the depreciation journal entry automatically** on that date, to the
   pool's own accounts.
 
-**You never type a rate or a depreciation start date.** The depreciation method is locked to *Written Down Value* and there is no frequency to choose: the law counts depreciation once a year. If you find yourself
+**You never type a rate or a depreciation start date.** The depreciation method is locked to *Written Down Value* and there is no frequency to choose: the law counts depreciation once a year. There is also no **number of years** to fill: Nepali law has none (a pool runs at its rate until it is used up, a licence until it expires), so that field is hidden and the system fills it from the pool. If you find yourself
 changing either, stop and ask Accounts.
 
 ---
@@ -137,10 +137,9 @@ You type the years; the system works out the rest.
    `XXX` is your company code (NGI, NGG, NGK, NGN, GLMI, GEPL, SGU).
 5. Open **Software (Pool E)**. You see:
    - **Tax Pool:** E
-   - **Finance Books** table: one row, **Written Down Value**, every **12** months.
-     The rate shows **0** and the number of depreciations shows **1**. **This is
-     correct.** Each asset gets its own rate when you save it. Do not change
-     the category.
+   - **Finance Books** table: one row, **Written Down Value**. The rate shows
+     **0**. **This is correct.** Each asset gets its own rate when you save it.
+     Do not change the category.
    - **Accounts** table: `111201 Pool E -Capitalized Software`,
      `111291 Accumulated Amortization - …`, `555200 Amortization A/c`.
 
@@ -212,11 +211,11 @@ Create Assets on Purchase*, a draft Asset is made for you. Otherwise go to Step 
    on its right). You see:
    - **Depreciation Method:** Written Down Value
    - **Rate of Depreciation (%):** **20** (that is 100 ÷ 5 years)
-   - **Total Number of Depreciations:** **5**
    - **Depreciation Posting Date:** the coming Asar end (16-07-2027 = 32 Asar 2084)
 
    You did not type any of these. If you change the Useful Life and save again,
-   they change with it.
+   they change with it. How many years the schedule runs also comes from the
+   Useful Life; you do not see or enter it.
 
 2. Scroll to **Depreciation Schedule**. For this example you see:
 

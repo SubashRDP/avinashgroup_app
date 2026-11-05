@@ -10,7 +10,8 @@ Fixed assets and Nepal tax depreciation (Income Tax Act 2058, Section 19 and Sch
 | Yearly WDV forced on pooled assets and categories (no monthly / day-based) | `nepal_wdv.enforce_yearly_on_asset` / `enforce_yearly_on_category` | Asset `before_validate` (first) / Asset Category `validate`; desk: Property Setter fixture hides Frequency, locks Method |
 | First-year thirds rule (Schedule-2 s.2(5)) | `nepal_wdv.get_wdv_or_dd_depr_amount` | `regional_overrides["Nepal"]` in hooks.py |
 | First depreciation date = fiscal year end | `nepal_wdv.set_first_depreciation_date` | Asset `before_validate` |
-| Pool E (intangible) rate and rows from the asset's useful life | `nepal_wdv.set_pool_e_rate` | Asset `before_validate` |
+| Total Number of Depreciations from the tax pool (hidden from staff), and the Pool E rate from the useful life | `nepal_wdv.fill_from_tax_pool` | Asset `before_validate` |
+| Total Number of Depreciations on a category, from its Tax Pool | `tax_pools.fill_category_years` | Asset Category `before_validate` |
 | Yearly rows on Asar end (15 or 16 July) | `nepal_wdv.snap_rows_to_fiscal_year_end` | Asset Depreciation Schedule `validate` |
 
 | JV Type + Document No on ERPNext's asset journals (depreciation, scrap) | `asset_journal_entries.set_jv_type` | Journal Entry `before_insert` |

@@ -581,7 +581,8 @@ _add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.blo
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.enforce_yearly_on_asset")
 _add_doc_event("Asset Category", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.enforce_yearly_on_category")
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_first_depreciation_date")
-_add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_pool_e_rate")
+_add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.fill_from_tax_pool")
+_add_doc_event("Asset Category", "before_validate", "avinashgroup_app.fixed_assets.tax_pools.fill_category_years")
 _add_doc_event("Asset Depreciation Schedule", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.snap_rows_to_fiscal_year_end")
 regional_overrides = {
     "Nepal": {
@@ -800,6 +801,12 @@ fixtures = [
                     "Asset Finance Book-frequency_of_depreciation-hidden",
                     "Asset Finance Book-depreciation_method-default",
                     "Asset Finance Book-depreciation_method-read_only",
+                    # Nepali law has no "number of years"; the code fills it from
+                    # the tax pool (tax_pools.fill_category_years,
+                    # nepal_wdv.fill_from_tax_pool), so staff never see it.
+                    "Asset Finance Book-total_number_of_depreciations-hidden",
+                    "Asset Finance Book-total_number_of_depreciations-in_list_view",
+                    "Asset Finance Book-total_number_of_depreciations-reqd",
                 ],
             ]
         },
@@ -833,7 +840,7 @@ fixtures = [
                     # Set by fixed_assets/tax_pools.setup.
                     "Asset Category-custom_tax_pool",
                     # Pool shown on the Asset, and a Pool E asset's useful life.
-                    # Read by fixed_assets/nepal_wdv.set_pool_e_rate.
+                    # Read by fixed_assets/nepal_wdv.fill_from_tax_pool.
                     "Asset-custom_tax_pool",
                     "Asset-custom_useful_life_years",
                     # Which PDC Cheque posted this JE. Read by pdc/invoice_guard.py
