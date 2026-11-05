@@ -223,13 +223,22 @@ def t_existing():
 		f"got {rows[0].depreciation_amount} want {exp}")
 
 
-# ---------------------------------------------------------------- T6 non-yearly untouched
+# ---------------------------------------------------------------- T6 yearly enforced
 def t_monthly():
+	"""Someone sets an asset to monthly with daily pro-rata: it is put back to yearly WDV."""
 	a = make_asset(category_for("B"), bs_date(2082, 10, 1), freq=1)
+	fb = a.finance_books[0]
 	rows = schedule(a).depreciation_schedule
-	thirds_first = round(300000 * 0.25 * 2 / 3, 2)
-	check("T6 monthly WDV row falls back to stock ERPNext (no thirds rule)",
-		flt(rows[0].depreciation_amount) != thirds_first and len(rows) > 12, f"first {rows[0].depreciation_amount}, rows {len(rows)}")
+	ok = (fb.frequency_of_depreciation == 12 and fb.depreciation_method == "Written Down Value"
+		and flt(rows[0].depreciation_amount) == round(300000 * 0.25 * 2 / 3, 2))
+	cat = frappe.get_doc("Asset Category", category_for("C"))
+	cat.finance_books[0].frequency_of_depreciation = 3
+	cat.finance_books[0].depreciation_method = "Straight Line"
+	cat.save()
+	cat.reload()
+	ok_cat = cat.finance_books[0].frequency_of_depreciation == 12 and cat.finance_books[0].depreciation_method == "Written Down Value"
+	check("T6 monthly / straight-line on an asset or category is put back to yearly WDV", ok and ok_cat,
+		f"asset freq {fb.frequency_of_depreciation} first {rows[0].depreciation_amount}; category {cat.finance_books[0].frequency_of_depreciation} {cat.finance_books[0].depreciation_method}")
 
 
 # ---------------------------------------------------------------- T7 land

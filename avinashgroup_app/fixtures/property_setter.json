@@ -1,0 +1,50 @@
+[
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "frequency_of_depreciation",
+  "property": "default",
+  "property_type": "Text",
+  "value": "12",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-frequency_of_depreciation-default"
+ },
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "frequency_of_depreciation",
+  "property": "hidden",
+  "property_type": "Check",
+  "value": "1",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-frequency_of_depreciation-hidden"
+ },
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "depreciation_method",
+  "property": "default",
+  "property_type": "Text",
+  "value": "Written Down Value",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-depreciation_method-default"
+ },
+ {
+  "doctype": "Property Setter",
+  "doc_type": "Asset Finance Book",
+  "doctype_or_field": "DocField",
+  "field_name": "depreciation_method",
+  "property": "read_only",
+  "property_type": "Check",
+  "value": "1",
+  "module": "Avinash Group App",
+  "is_system_generated": 0,
+  "name": "Asset Finance Book-depreciation_method-read_only"
+ }
+]

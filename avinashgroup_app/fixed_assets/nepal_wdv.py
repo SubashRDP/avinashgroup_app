@@ -93,6 +93,51 @@ def follows_schedule_2(fb_row) -> bool:
 	)
 
 
+TAX_POOLS = ("A", "B", "C", "D", "E")  # Asset Category custom_tax_pool values that depreciate
+SCHEDULE_2_ROW = {
+	# Schedule-2 s.2(2): written-down value (depreciation base x rate), counted
+	# once per income year. There is no monthly, quarterly or day-based figure.
+	"depreciation_method": WDV,
+	"frequency_of_depreciation": YEARLY,
+	"daily_prorata_based": 0,
+}
+
+
+def _force_yearly_rows(doc) -> list[str]:
+	"""Set every depreciation row to Schedule-2's method and yearly frequency; returns what changed."""
+	changed = []
+	for row in doc.get("finance_books") or []:
+		for field, value in SCHEDULE_2_ROW.items():
+			if (row.get(field) or 0) != value:
+				changed.append(f"row {row.idx}: {row.meta.get_label(field)} {row.get(field)!r} -> {value!r}")
+				row.set(field, value)
+	return changed
+
+
+def enforce_yearly_on_asset(doc, method=None):
+	"""Asset before_validate (first in the chain): a pooled asset depreciates yearly WDV.
+
+	Draft assets only; a submitted asset's schedule changes through ERPNext's
+	own flows. Without this a row set to monthly (1) or with daily pro-rata
+	silently drops back to stock ERPNext arithmetic, which is not the law.
+	"""
+	if doc.docstatus != 0 or not doc.calculate_depreciation or not doc.asset_category:
+		return
+	if frappe.get_cached_value("Asset Category", doc.asset_category, "custom_tax_pool") not in TAX_POOLS:
+		return
+	if _force_yearly_rows(doc):
+		frappe.msgprint(
+			_("Depreciation set to Written Down Value, yearly (12 months): Income Tax Act Schedule-2 counts it once per income year."),
+			alert=True,
+		)
+
+
+def enforce_yearly_on_category(doc, method=None):
+	"""Asset Category validate: same rule on the rows a new asset copies."""
+	if doc.get("custom_tax_pool") in TAX_POOLS:
+		_force_yearly_rows(doc)
+
+
 def first_year_fraction(available_for_use_date) -> float:
 	"""1, 2/3 or 1/3 by the BS month the asset came into use."""
 	return THIRDS_BY_BS_MONTH[ad_to_bs(getdate(available_for_use_date)).month] / 3

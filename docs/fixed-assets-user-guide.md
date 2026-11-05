@@ -21,7 +21,7 @@ Once an asset is entered with the right **Asset Category**, ERPNext:
 - **posts the depreciation journal entry automatically** on that date, to the
   pool's own accounts.
 
-**You never type a rate or a depreciation start date.** If you find yourself
+**You never type a rate or a depreciation start date.** The depreciation method is locked to *Written Down Value* and there is no frequency to choose: the law counts depreciation once a year. If you find yourself
 changing either, stop and ask Accounts.
 
 ---

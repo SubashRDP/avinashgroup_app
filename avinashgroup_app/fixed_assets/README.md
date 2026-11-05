@@ -7,6 +7,7 @@ Fixed assets and Nepal tax depreciation (Income Tax Act 2058, Section 19 and Sch
 | What | Where | Runs from |
 |---|---|---|
 | Put Asset Categories in tax pools, per-pool accumulated depreciation accounts, yearly WDV finance-book row at the pool rate | `tax_pools.setup(dry_run=True)` | `bench --site X console`, by hand; not a patch yet |
+| Yearly WDV forced on pooled assets and categories (no monthly / day-based) | `nepal_wdv.enforce_yearly_on_asset` / `enforce_yearly_on_category` | Asset `before_validate` (first) / Asset Category `validate`; desk: Property Setter fixture hides Frequency, locks Method |
 | First-year thirds rule (Schedule-2 s.2(5)) | `nepal_wdv.get_wdv_or_dd_depr_amount` | `regional_overrides["Nepal"]` in hooks.py |
 | First depreciation date = fiscal year end | `nepal_wdv.set_first_depreciation_date` | Asset `before_validate` |
 | Pool E (intangible) rate and rows from the asset's useful life | `nepal_wdv.set_pool_e_rate` | Asset `before_validate` |

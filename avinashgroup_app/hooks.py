@@ -575,6 +575,9 @@ _add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.blo
 
 # Income Tax Act Schedule-2 depreciation: yearly WDV, first year by the thirds
 # rule, first date at fiscal year end. See fixed_assets/nepal_wdv.py.
+# Yearly WDV is forced first, so the hooks after it see a Schedule-2 row.
+_add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.enforce_yearly_on_asset")
+_add_doc_event("Asset Category", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.enforce_yearly_on_category")
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_first_depreciation_date")
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_pool_e_rate")
 _add_doc_event("Asset Depreciation Schedule", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.snap_rows_to_fiscal_year_end")
@@ -781,6 +784,24 @@ fixtures = [
     # Scoped by name so this fixture ONLY ever touches this one Custom Field — it
     # never exports or overwrites any other custom field on the site. Ships the
     # field with the code so every site (new installs, prod, demo) has it on migrate.
+    # Asset Finance Book: yearly is the only Schedule-2 frequency, so the field
+    # is hidden (always 12); WDV is the only method, so it shows but is locked.
+    # Scoped by name: touches only these.
+    # Enforced server-side as well by fixed_assets/nepal_wdv.enforce_yearly_*.
+    {
+        "dt": "Property Setter",
+        "filters": {
+            "name": [
+                "in",
+                [
+                    "Asset Finance Book-frequency_of_depreciation-default",
+                    "Asset Finance Book-frequency_of_depreciation-hidden",
+                    "Asset Finance Book-depreciation_method-default",
+                    "Asset Finance Book-depreciation_method-read_only",
+                ],
+            ]
+        },
+    },
     {
         "dt": "Custom Field",
         "filters": {

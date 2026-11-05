@@ -32,7 +32,7 @@ sudo supervisorctl restart frappe-bench-web: frappe-bench-workers:
 | Accounts row: Fixed Asset Account | 111103 - Pool B - Office Equipments, Furnitures & Fixtures - NGI |
 | Accumulated Depreciation Account | 111193 - Accumulated Depreciation - Pool B - ... - NGI |
 | Depreciation Expense Account | 555102 - Depreciation on Pool B - ... - NGI |
-| Finance Books row | Written Down Value, 25% rate, 17, frequency 12 |
+| Finance Books row | Written Down Value (locked), 25% rate, 17; no Frequency column (always yearly) |
 
 **Why:** Schedule-2 s.1 puts computers in **Pool B**; s.3(1) sets Pool B at
 **25%**. Depreciation is **reducing balance** (s.2(2)), **once a year**. Each pool
@@ -222,6 +222,20 @@ scrap entry also needs JV Type and Document No, fixed together with Test 9.
 
 ---
 
+## Test 11: Frequency is gone, method is locked
+
+**Do:** open any asset's or category's **Finance Books** row.
+
+**Check:** there is **no Frequency of Depreciation** column; **Depreciation
+Method** shows *Written Down Value* and cannot be changed.
+
+**Why:** Schedule-2 counts depreciation **once per income year** (s.2(2)), on
+the written-down value. Monthly, quarterly or day-based depreciation does not
+exist in the Act, so the choice is removed. It stays 12 behind the scenes, and
+the server resets it even if something (an import, an old category) says otherwise.
+
+---
+
 ## After testing
 
 Tests 3 to 8 leave records on demo-nggroup. **Draft** assets (3 to 7) can be
@@ -242,3 +256,4 @@ example, or ask me to remove it.
 | 8 | Existing asset: 14,062.50 / 10,546.88 | | |
 | 9 | Posting: accounts, JV Type, Document No | | |
 | 10 | Scrap: part-year + scrap entry | | |
+| 11 | Frequency hidden, method locked | | |
