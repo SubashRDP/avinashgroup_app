@@ -337,6 +337,23 @@ def t_pool_e():
 	check("T10 Pool E: 100/life rate, half-year rounding, thirds, write-off in expiry year, life required", not bad, "; ".join(bad[:4]))
 
 
+# ---------------------------------------------------------------- T11 no rows given
+def t_no_rows():
+	"""An import / API asset with no depreciation rows still gets the fiscal-year end."""
+	cat = category_for("B")
+	a = frappe.get_doc({
+		"doctype": "Asset", "company": COMPANY, "custom_company": COMPANY, "item_code": item_for(cat), "asset_category": cat,
+		"asset_name": "ZZTEST no rows", "location": LOC, "purchase_date": bs_date(2082, 10, 1),
+		"available_for_use_date": bs_date(2082, 10, 1), "gross_purchase_amount": 300000, "calculate_depreciation": 1,
+	})
+	a.flags.ignore_mandatory = True
+	a.insert()
+	rows = schedule(a).depreciation_schedule
+	ok = getdate(a.finance_books[0].depreciation_start_date) == getdate(fy_end(2083)) and flt(rows[0].depreciation_amount) == 50000
+	check("T11 asset saved without depreciation rows (import/API) still gets Asar end + thirds", ok,
+		f"start {a.finance_books[0].depreciation_start_date}, first {rows[0].depreciation_amount}")
+
+
 # ---------------------------------------------------------------- run
 run("T1", t_idempotent)
 run("T2", t_categories)
@@ -349,6 +366,7 @@ run("T7", t_land)
 run("T8", t_posting)
 run("T9", t_scrap)
 run("T10", t_pool_e)
+run("T11", t_no_rows)
 
 frappe.db.rollback()
 left = frappe.db.count("Asset", {"asset_name": ["like", "ZZTEST%"]}) + frappe.db.count("Item", {"item_code": ["like", "ZZTEST%"]})

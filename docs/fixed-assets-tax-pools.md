@@ -1,6 +1,6 @@
 # Fixed assets and tax depreciation pools
 
-Accountant-facing version with worked examples: [fixed-assets-depreciation-guide.md](fixed-assets-depreciation-guide.md). Desk user steps: [fixed-assets-user-guide.md](fixed-assets-user-guide.md).
+Accountant-facing version with worked examples: [fixed-assets-depreciation-guide.md](fixed-assets-depreciation-guide.md). Desk user steps: [fixed-assets-user-guide.md](fixed-assets-user-guide.md). Hands-on checks: [fixed-assets-manual-test.md](fixed-assets-manual-test.md).
 
 ## The law (Income Tax Act 2058, as amended up to Finance Act 2083)
 

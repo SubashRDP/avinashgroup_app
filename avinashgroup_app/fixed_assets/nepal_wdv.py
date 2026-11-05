@@ -62,6 +62,7 @@ from frappe import _
 from frappe.utils import add_days, add_months, cint, date_diff, flt, getdate
 
 from erpnext.accounts.utils import get_fiscal_year
+from erpnext.assets.doctype.asset.asset import get_item_details
 from erpnext.assets.doctype.asset_depreciation_schedule.asset_depreciation_schedule import (
 	_check_is_pro_rata,
 	get_default_wdv_or_dd_depr_amount,
@@ -138,6 +139,15 @@ def set_first_depreciation_date(doc, method=None):
 	"""
 	if not doc.calculate_depreciation or doc.is_existing_asset or not doc.available_for_use_date:
 		return
+	if not doc.get("finance_books") and doc.item_code and doc.asset_category:
+		# The desk form copies the category's rows before saving; an import or API
+		# call does not, and ERPNext only copies them later in validate, after this
+		# hook, then dates them on the month end. Copy them here so they get the
+		# fiscal year end like a desk-entered asset.
+		doc.set(
+			"finance_books",
+			get_item_details(doc.item_code, doc.asset_category, doc.gross_purchase_amount),
+		)
 	fiscal_year_end = get_fiscal_year(doc.available_for_use_date, company=doc.company)[2]
 	for row in doc.get("finance_books") or []:
 		if follows_schedule_2(row):
