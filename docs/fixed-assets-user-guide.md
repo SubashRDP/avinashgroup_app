@@ -321,9 +321,15 @@ extension) may need to be added to the asset's cost instead. Ask Accounts.
 
 ## 8. Assets you already own (before ERPNext)
 
-**Not ready yet.** Accounts is deciding how old assets come in: one opening
-balance per pool, or every asset individually (decision D in the depreciation
-guide). Until then, **do not enter old assets** with *Is Existing Asset*.
+Old assets are entered **one by one** as **existing assets** (back entry), with
+their real purchase date and cost and the depreciation already booked before
+ERPNext. **Do not** make a back-dated Purchase Invoice for them: their value is
+already in the opening balance, so it would be counted twice.
+
+Full click-by-click example, a generator through all its years:
+**[fixed-assets-example-generator.md](fixed-assets-example-generator.md)**.
+
+Ask Accounts to confirm the asset is in the opening balance before you start.
 
 ---
 

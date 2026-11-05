@@ -302,7 +302,7 @@ Two known limits:
 | **A** | Is "7% of depreciation base" the base **before** depreciation? | Usual practice; please confirm |
 | **B** | Which companies are **special industries** (+1/3)? | GLMI likely. NGI, NGG, NGK, NGN, GEPL, SGU? |
 | **C** | **Opening pool balances** per company and pool | From the last filed return (D-01 depreciation schedule), 81/82 or 82/83 |
-| **D** | How should existing assets come into ERPNext? | (i) one opening entry per pool, or (ii) every asset individually with its opening accumulated depreciation |
+| **D** | How should existing assets come into ERPNext? | **Answered 2026-11-05: (ii) every asset individually** ("back entry"), as an existing asset with its opening accumulated depreciation; worked example in [fixed-assets-example-generator.md](fixed-assets-example-generator.md). Still for Accounts: the opening JE carries pool balances **net** (no opening accumulated depreciation), while each asset carries cost and accumulated depreciation, so the register and the ledger show the same value split differently |
 | **E** | What to do with any balance on **345109** | Reclassify into the new pool accumulated depreciation accounts? |
 | **F** | **SGU** has no asset categories | Copy the NGI set? |
 | **G** | NGK "WIP" category | What will it become (building / plant / vehicle)? |
