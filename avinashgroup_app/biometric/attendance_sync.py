@@ -138,7 +138,26 @@ def _floor_to_minute(seconds):
     return int(seconds) // 60 * 60
 
 
-def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, company=None):
+#: Every shift's break (HR, 2026-11-05): 30 minutes, starting right at the
+#: shift's halfway point. A 9-5 shift breaks 13:00-13:30, 6-2 10:00-10:30,
+#: 12-8 16:00-16:30.
+BREAK_MINUTES = 30
+
+
+def shift_break(shift_start_dt, shift_end_dt):
+    """(break start, break end) of a shift running [shift_start_dt, shift_end_dt]."""
+    start = shift_start_dt + (shift_end_dt - shift_start_dt) / 2
+    return start, start + timedelta(minutes=BREAK_MINUTES)
+
+
+def is_half_day_leave(row):
+    """A Half Day with leave on it: the person works one half of the shift and
+    takes the other as leave (policy 3.4, or a half-day leave). A Half Day for
+    coming more than two hours late carries no leave and is not one of these."""
+    return (row.get("status") == "Half Day") and bool(row.get("leave_type") or row.get("leave_application"))
+
+
+def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, company=None, half_day=False):
     """The four custom deviation fields on Attendance (seconds) for the given
     actual in/out against the shift's scheduled start/end, in whole minutes
     with the seconds dropped (_floor_to_minute). Only one of each pair is
@@ -147,13 +166,22 @@ def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, comp
     With `company`, a submitted Shift Early Closure for that day moves the end
     early leaving is measured against to the closing time; late exit (overtime)
     still counts from the normal end, and leaving in between is neither
-    (hr/shift_early_closure.py). Without it the day is measured as normal."""
-    values = {
-        "custom_late_entry": 0,
-        "custom_early_entry": 0,
-        "custom_early_exit": 0,
-        "custom_late_exit": 0,
-    }
+    (hr/shift_early_closure.py). Without it the day is measured as normal.
+
+    `half_day` (is_half_day_leave): the day is half leave, so only one half of
+    the shift is owed (HR, 2026-11-05). The halves meet at the 30-minute break
+    in the middle of the shift (shift_break):
+
+        first half    shift start -> break start
+        second half   break end   -> shift end
+
+    The half worked is the one the punches fit better: fewer late plus early
+    minutes, the first half on a tie (15:03-18:28 on a 12-8 shift is its
+    second half, though it starts before the 16:00 break). Late is measured
+    from the start of that half and early leaving from its end, so coming after
+    the break or leaving as it starts costs nothing, and anything past that
+    counts minute for minute, as on a full day. Late exit (overtime) still
+    counts from the shift's end."""
     attendance_date = getdate(attendance_date)
     shift_start_dt = datetime.combine(attendance_date, time.min) + shift_doc.start_time
     shift_end_dt = datetime.combine(attendance_date, time.min) + shift_doc.end_time
@@ -161,8 +189,28 @@ def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, comp
     if shift_doc.end_time < shift_doc.start_time:
         shift_end_dt += timedelta(days=1)
 
+    def measure(owed_start, owed_end=None):
+        return _deviations(shift_doc, attendance_date, in_time, out_time, company, shift_end_dt, owed_start, owed_end)
+
+    if not (half_day and (in_time or out_time)):
+        return measure(shift_start_dt)
+    break_start, break_end = shift_break(shift_start_dt, shift_end_dt)
+    first, second = measure(shift_start_dt, break_start), measure(break_end)
+    cost = lambda v: v["custom_late_entry"] + v["custom_early_exit"]  # noqa: E731
+    return first if cost(first) <= cost(second) else second
+
+
+def _deviations(shift_doc, attendance_date, in_time, out_time, company, shift_end_dt, owed_start, owed_end):
+    """compute_shift_deviations for owed time [owed_start, owed_end or the shift's end]."""
+    values = {
+        "custom_late_entry": 0,
+        "custom_early_entry": 0,
+        "custom_early_exit": 0,
+        "custom_late_exit": 0,
+    }
+
     if in_time:
-        diff = (get_datetime(in_time) - shift_start_dt).total_seconds()
+        diff = (get_datetime(in_time) - owed_start).total_seconds()
         if diff > 0:
             values["custom_late_entry"] = _floor_to_minute(diff)
         elif diff < 0:
@@ -172,6 +220,8 @@ def compute_shift_deviations(shift_doc, attendance_date, in_time, out_time, comp
         from avinashgroup_app.hr.shift_early_closure import closing_time
 
         closed_at = closing_time(company, shift_doc, attendance_date) or shift_end_dt
+        if owed_end:  # first half of a half-day leave: owed until the break, or an earlier closing
+            closed_at = min(closed_at, owed_end)
         out_dt = get_datetime(out_time)
         if out_dt > shift_end_dt:
             values["custom_late_exit"] = _floor_to_minute((out_dt - shift_end_dt).total_seconds())
@@ -206,7 +256,8 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
     current = frappe.db.get_value(
         "Attendance",
         attendance_name,
-        ["attendance_date", "company", "working_hours", "late_entry", "early_exit", "in_time", "out_time"],
+        ["attendance_date", "company", "working_hours", "late_entry", "early_exit", "in_time", "out_time",
+         "status", "leave_type", "leave_application"],
         as_dict=True,
     )
     if not current:
@@ -242,7 +293,8 @@ def refresh_attendance_values(attendance_name, shift_doc, checkins):
     if "in_time" in updates or "out_time" in updates:
         updates.update(
             compute_shift_deviations(
-                shift_doc, current.attendance_date, in_time, out_time, company=current.company
+                shift_doc, current.attendance_date, in_time, out_time, company=current.company,
+                half_day=is_half_day_leave(current),
             )
         )
 

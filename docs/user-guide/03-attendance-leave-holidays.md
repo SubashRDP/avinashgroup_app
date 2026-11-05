@@ -51,6 +51,8 @@ What HR must have in place:
 
 **Late minutes.** The Attendance form has a **Shift Deviation** section: Late Entry, Early Entry, Early Exit, Late Exit. These are measured against that day's shift and are what the late fine and meals use. Whole minutes, **seconds dropped**: 1 min 45 s late counts as 1 minute (decided 2 Nov 2026).
 
+**Half-day leave: only one half of the shift is owed** (decided 5 Nov 2026). Every shift has a **30-minute break starting at its halfway point**: 9–5 breaks 13:00–13:30, 6–2 10:00–10:30, 12–8 16:00–16:30. On a half-day leave day the person works one half: **shift start → break start**, or **break end → shift end**. Coming in when the break ends, or leaving when it starts, costs nothing; later or earlier than that counts minute for minute in Late Time. Which half is read from the punches (the one they fit better). Example, 9–5: in 13:30, out 17:00 → nothing; in 13:50 → 20 min late; out 12:30 after a morning half → 30 min early. A Half Day for coming more than 2 hours late is not a leave day and is still measured against the whole shift.
+
 **Excusing lateness for one day.** For a real reason (traffic jam, funeral):
 1. Open the person's **Attendance** for that day. It can be submitted: there is no need to cancel or amend. (Or, quicker: in **Monthly Attendance BS**, click **Excuse ✎** in the day's **Late Excused** column; Chapter 7.)
 2. Tick **Late Excused** and type the **Reason for Excusing**.

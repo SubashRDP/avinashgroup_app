@@ -2,7 +2,7 @@ import frappe
 from datetime import datetime, timedelta
 from frappe.utils import flt, getdate, get_datetime
 
-from avinashgroup_app.biometric.attendance_sync import compute_shift_deviations
+from avinashgroup_app.biometric.attendance_sync import compute_shift_deviations, is_half_day_leave
 from avinashgroup_app.payroll.special_payout import REGULAR_SLIPS
 
 
@@ -45,7 +45,8 @@ def set_shift_deviation_fields(doc, method):
         shift = frappe.get_cached_doc("Shift Type", doc.shift)
         doc.update(
             compute_shift_deviations(
-                shift, doc.attendance_date, doc.in_time, doc.out_time, company=doc.company
+                shift, doc.attendance_date, doc.in_time, doc.out_time, company=doc.company,
+                half_day=is_half_day_leave(doc),
             )
         )
     except Exception:
@@ -257,10 +258,29 @@ def half_day_if_came_in(employee, day):
     if _paid(employee, day):
         return None
     frappe.db.set_value("Attendance", name, {"status": "Half Day", "half_day_status": "Present"})
+    remeasure_half_day(name)
     frappe.get_doc("Attendance", name).add_comment(
         "Info", "Came in while on leave: Half Day, leave kept (policy 3.4)."
     )
     return name
+
+
+def remeasure_half_day(name):
+    """Re-measure a day's late / early minutes after its status was written
+    directly (db.set_value skips validate): a half-day leave day owes one half
+    of the shift, not all of it (attendance_sync.compute_shift_deviations)."""
+    row = frappe.db.get_value(
+        "Attendance", name,
+        ["shift", "attendance_date", "in_time", "out_time", "company", "status", "leave_type", "leave_application"],
+        as_dict=True,
+    )
+    if not row or not row.shift or not (row.in_time or row.out_time):
+        return
+    values = compute_shift_deviations(
+        frappe.get_cached_doc("Shift Type", row.shift), row.attendance_date, row.in_time, row.out_time,
+        company=row.company, half_day=is_half_day_leave(row),
+    )
+    frappe.db.set_value("Attendance", name, values, update_modified=False)
 
 
 def on_leave_submit(doc, method=None):
