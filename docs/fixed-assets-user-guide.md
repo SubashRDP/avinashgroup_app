@@ -48,6 +48,8 @@ Always pick one from **your own company**.
 | Trademark, brand, copyright bought from someone | Brands, Trademarks & Copyrights (Pool E) | E, 100 ÷ useful life |
 | Something **still being built or installed** | the matching **WIP** category | see section 5 |
 
+Software, licences and trademarks (Pool E): see **section 3A**, click by click.
+
 Not sure? Ask Accounts **before** submitting. Changing the category after
 depreciation has been posted is messy.
 
@@ -77,7 +79,7 @@ Open the draft Asset (or **Asset → New**) and check:
 | Location | Where the asset is kept |
 | Purchase Date | Date on the bill |
 | **Available-for-use Date** | The day it **actually started being used**. This decides the thirds rule, so be accurate |
-| Gross Purchase Amount | Filled from the purchase document; must include transport, installation and other costs to bring it into use |
+| Net Purchase Amount | Filled from the purchase document; must include transport, installation and other costs to bring it into use |
 | Calculate Depreciation | **Ticked** (except Land) |
 | Is Existing Asset | **Not** ticked for a new purchase |
 | **Useful Life (Years)** | Pool E only (appears for Software / Trademarks): the licence's period of use, e.g. 5. Half years allowed; it is rounded to the nearest half year. The rate and number of years are set from it when you save |
@@ -101,6 +103,147 @@ the first row, dated on Asar end.
 
 ### Step 4: Submit
 Submit the Asset. From now on, depreciation posts by itself every Asar end.
+
+---
+
+## 3A. Software, licences and trademarks (Pool E), click by click
+
+> **Status:** built and tested, **not yet switched on** on any site. Until
+> Accounts applies it, the categories and the Useful Life field below do not
+> exist yet. Everything else in this guide is unchanged.
+
+Software, an ERP or accounting licence, or a trademark you bought is an
+**intangible** asset. It goes in **Pool E**. Unlike A to D, Pool E has **no fixed
+rate**: each licence gets its own rate from **how many years it can be used**.
+You type the years; the system works out the rest.
+
+### Where to see what changed
+
+**1. The new categories**
+
+1. In the search bar at the top, type **Asset Category** and open **Asset Category List**.
+2. You see a new column, **Tax Pool**, with A, B, C, D, E or Not Depreciable.
+3. In the filter boxes at the top of the list, set **Tax Pool** to **E**.
+4. You see two rows for your company:
+   - `XXX-ACat-000nn` **Software (Pool E)**
+   - `XXX-ACat-000nn` **Brands, Trademarks & Copyrights (Pool E)**
+
+   `XXX` is your company code (NGI, NGG, NGK, NGN, GLMI, GEPL, SGU).
+5. Open **Software (Pool E)**. You see:
+   - **Tax Pool:** E
+   - **Finance Books** table: one row, **Written Down Value**, every **12** months.
+     The rate shows **0** and the number of depreciations shows **1**. **This is
+     correct.** Each asset gets its own rate when you save it. Do not change
+     the category.
+   - **Accounts** table: `111201 Pool E -Capitalized Software`,
+     `111291 Accumulated Amortization - …`, `555200 Amortization A/c`.
+
+**2. The new accounts** (Accounts staff only)
+
+1. Search **Chart of Accounts** and open it. Pick your company.
+2. Expand **Fixed Assets → Intangible Assets**.
+3. You see a new group, **111290 Accumulated Amortization**, holding
+   **111291** (software) and **111293** (trademarks).
+4. Under **Indirect Expenses → Depreciation & Amortizations**, the account
+   **555200 Amortization A/c** has not moved. Only its type changed, to
+   *Depreciation*, so the asset categories can use it.
+
+**3. The new fields on the Asset form**
+
+1. Search **Asset** and open **Asset List**, then click **+ Add Asset**.
+2. Pick an **Asset Category**. Right below it you now see **Tax Pool**
+   (grey, filled by itself).
+3. When the Tax Pool shows **E**, a new box appears under it: **Useful Life (Years)**.
+   For any other pool the box stays hidden.
+
+### Entering a licence, step by step
+
+Example: an ERP licence for **Rs 3,00,000**, valid **5 years**, in use from
+**4 Bhadra 2083**.
+
+**Step 1: the Item (once per kind of licence)**
+
+1. Search **Item** and click **+ Add Item**.
+2. Fill **Item Name** (e.g. *ERP Licence*) and the **Company**.
+3. **Untick** *Maintain Stock*. **Tick** *Is Fixed Asset*.
+4. In **Asset Category**, pick **Software (Pool E)** of **your company**.
+5. Save.
+
+**Step 2: buy it**
+
+Make the **Purchase Invoice** with this item as usual. If the item has *Auto
+Create Assets on Purchase*, a draft Asset is made for you. Otherwise go to Step 3.
+
+**Step 3: the Asset**
+
+1. Open the draft Asset (or **Asset List → + Add Asset**).
+2. Check these fields:
+
+   | Field | Enter | You will see |
+   |---|---|---|
+   | Item Code | ERP Licence | Asset Category fills in: *Software (Pool E)* |
+   | Tax Pool | (nothing, it fills itself) | **E** |
+   | **Useful Life (Years)** | **5** | |
+   | Company | your company | |
+   | Location | where it is used (e.g. Head Office) | |
+   | Purchase Date | the bill date | |
+   | Net Purchase Amount | 3,00,000 | |
+   | **Available-for-use Date** | the day it **started being used**: 4 Bhadra 2083 | |
+   | Calculate Depreciation | ticked | |
+   | Is Existing Asset | **not** ticked | |
+
+   - **Useful Life** is the licence term: a 1-year subscription is 1, a 3-year
+     licence is 3. Half years are fine (2.5). Anything else is **rounded to the
+     nearest half year**: 3.3 becomes 3.5, 3.2 becomes 3.
+   - **Not sure of the term?** Look at the licence agreement or invoice, or ask
+     Accounts. Do not guess: the term decides the rate.
+
+3. Click **Save** (Ctrl+S).
+
+**Step 4: check what the system filled in**
+
+1. Scroll down to **Depreciation → Finance Books**. Open the row (click the arrow
+   on its right). You see:
+   - **Depreciation Method:** Written Down Value
+   - **Rate of Depreciation (%):** **20** (that is 100 ÷ 5 years)
+   - **Total Number of Depreciations:** **5**
+   - **Depreciation Posting Date:** the coming Asar end (16-07-2027 = 32 Asar 2084)
+
+   You did not type any of these. If you change the Useful Life and save again,
+   they change with it.
+
+2. Scroll to **Depreciation Schedule**. For this example you see:
+
+   | Date | Nepali date | Depreciation | Total so far |
+   |---|---|---|---|
+   | 16-07-2027 | Asar end 2084 | 60,000 | 60,000 |
+   | 15-07-2028 | Asar end 2085 | 48,000 | 1,08,000 |
+   | 15-07-2029 | Asar end 2086 | 38,400 | 1,46,400 |
+   | 16-07-2030 | Asar end 2087 | 30,720 | 1,77,120 |
+   | 16-07-2031 | Asar end 2088 | 24,576 | 2,01,696 |
+   | 20-08-2031 | Bhadra 2088, **licence expires** | **98,304** | **3,00,000** |
+
+   - Each year is 20% of what is **left**, not of the cost.
+   - The **last row is bigger**. That is the right: when the licence expires,
+     the rest is written off in that year. This is expected, not an error.
+   - The first year follows the **thirds rule** like every other asset. The
+     same licence in use from **Magh** would show **40,000** (2/3) in the first
+     row; from **Baisakh**, **20,000** (1/3).
+
+3. If the numbers look like this, click **Submit**. From then on each year's
+   amortization posts by itself, to `555200` and `111291`.
+
+### What you might see go wrong
+
+| You see | It means | Do this |
+|---|---|---|
+| Red message **"Missing Fields: Useful Life (Years)"**, or **"… is in Pool E: enter its Useful Life (Years) …"** | The category is Pool E and the years are empty | Type the licence term in **Useful Life (Years)** and save again |
+| **Useful Life (Years)** box is not there | The category is not Pool E (check Tax Pool), or Pool E is not switched on yet on this site | Check the category; otherwise ask Accounts |
+| Rate is **100%** and only 1 row | Saved before Pool E was switched on | Ask Accounts; do not submit |
+| Category list shows Software (Pool E) of **another** company | Wrong company picked | Use the one starting with **your** company code |
+
+**Do not** use Pool E for a **lease** (right-of-use asset) or for **goodwill**.
+There is no category for them on purpose; ask Accounts.
 
 ---
 
