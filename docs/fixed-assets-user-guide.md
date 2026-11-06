@@ -70,9 +70,9 @@ Asset** and set its **Asset Category**.
 Make the **Purchase Receipt / Purchase Invoice** as usual, using the fixed asset
 item.
 
-- If the item has **Auto Create Assets on Purchase** ticked, a draft Asset is
-  created for you when the receipt or invoice is submitted.
-- If not, create the Asset yourself (step 2) and link the purchase document.
+- With **Auto Create Assets on Purchase** ticked on the item, ERPNext makes the
+  draft Asset for you only from a **Purchase Receipt**, or a Purchase Invoice with **Update Stock** ticked. A plain Purchase Invoice creates **no** asset: make it yourself (**Asset → New**) and pick that invoice in **Purchase Invoice**.
+- Either way, check the draft in step 2.
 
 ### Step 2: The Asset form
 Open the draft Asset (or **Asset → New**) and check:
@@ -176,8 +176,8 @@ Example: an ERP licence for **Rs 3,00,000**, valid **5 years**, in use from
 
 **Step 2: buy it**
 
-Make the **Purchase Invoice** with this item as usual. If the item has *Auto
-Create Assets on Purchase*, a draft Asset is made for you. Otherwise go to Step 3.
+Make the **Purchase Invoice** with this item as usual. ERPNext makes the draft
+Asset by itself only from a **Purchase Receipt**, or a Purchase Invoice with **Update Stock** ticked. A plain Purchase Invoice creates **no** asset: make it yourself (**Asset → New**) and pick that invoice in **Purchase Invoice** (Step 3).
 
 **Step 3: the Asset**
 

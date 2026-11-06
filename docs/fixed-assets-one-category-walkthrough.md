@@ -71,7 +71,7 @@ asset, e.g. a desktop).
 | Maintain Stock | **off** | A fixed asset is not stock for sale |
 | Is Fixed Asset | **on** | Purchases go to the asset account, not an expense |
 | Asset Category | **NGI-ACat-00004** | This decides the pool, rate and accounts |
-| Auto Create Assets on Purchase | **on** | The Purchase Invoice creates the draft asset for you |
+| Auto Create Assets on Purchase | **on** | A Purchase Receipt (or an invoice with Update Stock) creates the draft asset for you |
 
 **Why:** the item links every purchase to the right category, so nobody has to
 pick an account or a rate by hand.
@@ -91,7 +91,10 @@ rate **1,50,000**, VAT 13%. **Submit.**
 | VAT - NGI | 19,500 | |
 | 343100 Trade Payables - Domestic | | 1,69,500 |
 
-and a **draft Asset** created for the laptop.
+A plain Purchase Invoice (Update Stock off) does **not** create the asset.
+Create it in step 4 with **Asset → New** and pick this invoice in the
+**Purchase Invoice** field. (With a Purchase Receipt, or Update Stock ticked,
+ERPNext makes the draft asset itself.)
 
 **Why:**
 - The cost goes **straight into Pool B's account**. A fixed asset is capital
@@ -105,7 +108,7 @@ and a **draft Asset** created for the laptop.
 
 ## Step 4: Complete the asset
 
-**Do:** open the draft Asset (here **NGI-AST-00001**) and check:
+**Do:** **Asset → New** (or open the draft, if one was created), link the Purchase Invoice, and check (here **NGI-AST-00001**):
 
 | Field | Value | Why |
 |---|---|---|
@@ -245,7 +248,7 @@ price, **submit**.
 |---|---|---|
 | Once | Category set up by IT | Pool B, 25%, three Pool B accounts |
 | Once per kind of asset | Item: Is Fixed Asset, category, auto create | |
-| Buying | Purchase Invoice | Cost to 111103, draft Asset |
+| Buying | Purchase Invoice | Cost to 111103 (draft Asset only with Purchase Receipt / Update Stock) |
 | Same day | Asset: location, **real in-use date**, Calculate Depreciation, Save, check, Submit | Schedule: thirds rule, Asar-end dates |
 | Every Asar end | Nothing | Dr 555102 / Cr 111193, numbered JE |
 | Repairs | Expense to 5492xx (Pool B repairs) | |
