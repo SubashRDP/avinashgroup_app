@@ -583,6 +583,8 @@ _add_doc_event("Asset Category", "validate", "avinashgroup_app.fixed_assets.nepa
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.set_first_depreciation_date")
 _add_doc_event("Asset", "before_validate", "avinashgroup_app.fixed_assets.nepal_wdv.fill_from_tax_pool")
 _add_doc_event("Asset Category", "before_validate", "avinashgroup_app.fixed_assets.tax_pools.fill_category_years")
+# All three accounts must belong to the category's Tax Pool (Pool A vs Pool B look alike in the dropdown).
+_add_doc_event("Asset Category", "validate", "avinashgroup_app.fixed_assets.tax_pools.validate_pool_accounts")
 _add_doc_event("Asset Depreciation Schedule", "validate", "avinashgroup_app.fixed_assets.nepal_wdv.snap_rows_to_fiscal_year_end")
 regional_overrides = {
     "Nepal": {

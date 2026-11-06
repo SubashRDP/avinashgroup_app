@@ -344,6 +344,8 @@ def t_pool_e():
 	except frappe.ValidationError:
 		pass
 	check("T10 Pool E: 100/life rate, half-year rounding, thirds, write-off in expiry year, life required", not bad, "; ".join(bad[:4]))
+	frappe.db.set_value("Asset Category", cat, "custom_tax_pool", "B")  # undo the temporary Pool E
+	frappe.clear_cache()
 
 
 # ---------------------------------------------------------------- T11 no rows given
@@ -363,6 +365,30 @@ def t_no_rows():
 		f"start {a.finance_books[0].depreciation_start_date}, first {rows[0].depreciation_amount}")
 
 
+# ---------------------------------------------------------------- T12 wrong-pool account
+def t_wrong_pool_account():
+	"""A category whose accumulated depreciation is another pool's account is refused."""
+	cat = frappe.get_doc("Asset Category", category_for("B"))
+	row = cat.accounts[0]
+	good = row.accumulated_depreciation_account
+	row.accumulated_depreciation_account = frappe.db.get_value(
+		"Account", {"company": row.company_name, "account_number": "111192"}, "name")
+	try:
+		cat.save()
+		check("T12 category with another pool's account is refused", False, "saved with Pool A accumulated depreciation")
+	except frappe.ValidationError as e:
+		check("T12 category with another pool's account is refused", good in str(e), str(e)[:120])
+	# every existing category still passes
+	from avinashgroup_app.fixed_assets.tax_pools import validate_pool_accounts
+	bad = []
+	for name in frappe.get_all("Asset Category", pluck="name"):
+		try:
+			validate_pool_accounts(frappe.get_doc("Asset Category", name))
+		except frappe.ValidationError as e:
+			bad.append(f"{name}: {str(e)[:80]}")
+	check(f"T12 all existing categories pass the pool-account check", not bad, "; ".join(bad[:3]))
+
+
 # ---------------------------------------------------------------- run
 run("T1", t_idempotent)
 run("T2", t_categories)
@@ -376,6 +402,7 @@ run("T8", t_posting)
 run("T9", t_scrap)
 run("T10", t_pool_e)
 run("T11", t_no_rows)
+run("T12", t_wrong_pool_account)
 
 frappe.db.rollback()
 left = frappe.db.count("Asset", {"asset_name": ["like", "ZZTEST%"]}) + frappe.db.count("Item", {"item_code": ["like", "ZZTEST%"]})

@@ -431,6 +431,67 @@ def _cwip_account(company: str, keyword: str, label: str, log: list, dry_run: bo
 	return match.name
 
 
+# Tax Pool -> the fixed-asset accounts (by number) that hold that pool's cost.
+# The accumulated and expense accounts follow from the fixed-asset account
+# (_accumulated_number, DEPRECIATION_EXPENSE), so one table decides all three.
+POOL_FIXED_ASSET_ACCOUNTS = {
+	"A": ("111102",),
+	"B": ("111103",),
+	"C": ("111104",),
+	"D": ("111105", "111106"),  # plant & machinery, cylinders
+	"E": ("111201", "111203"),  # software, trademarks
+}
+
+
+def validate_pool_accounts(doc, method=None) -> None:
+	"""Asset Category validate: every account must belong to the category's Tax Pool.
+
+	The pool accounts differ only by "Pool A" / "Pool B" deep in a long name, so
+	picking a neighbour from the dropdown is easy and silent: depreciation would
+	then credit one pool while the cost sits in another, and both pools (and the
+	tax report) would be wrong. Found when a Generator category was saved with
+	Pool A's accumulated depreciation (demo-nggroup, 2026-11-06).
+
+	Rows of a company not on the numbered pool chart are skipped. Throws with
+	the wrong account and the one expected.
+	"""
+	pool = doc.get(TAX_POOL_FIELD)
+	allowed = POOL_FIXED_ASSET_ACCOUNTS.get(pool)
+	if not allowed:
+		return
+	problems = []
+	for row in doc.get("accounts") or []:
+		fa = frappe.db.get_value("Account", row.fixed_asset_account, "account_number") if row.fixed_asset_account else None
+		if not fa:
+			continue
+		if fa not in allowed:
+			problems.append(
+				frappe._("{0}: Fixed Asset Account {1} is not a Pool {2} account (use {3})").format(
+					row.company_name, row.fixed_asset_account, pool, " / ".join(
+						_account(row.company_name, n) or n for n in allowed
+					)
+				)
+			)
+			continue
+		expected = {
+			"accumulated_depreciation_account": _accumulated_number(fa),
+			"depreciation_expense_account": DEPRECIATION_EXPENSE[fa],
+		}
+		for field, number in expected.items():
+			want = _account(row.company_name, number)
+			if want and row.get(field) != want:
+				problems.append(
+					frappe._("{0}: {1} is {2}, should be {3}").format(
+						row.company_name, row.meta.get_label(field), row.get(field) or frappe._("empty"), want
+					)
+				)
+	if problems:
+		frappe.throw(
+			"<br>".join(problems),
+			title=frappe._("Accounts do not match Tax Pool {0}").format(pool),
+		)
+
+
 def years_for_pool(pool: str | None) -> int | None:
 	"""Yearly rows ERPNext should build for a pool; None when the pool gives none.
 
