@@ -61,6 +61,10 @@ def _advance_pool(customer):
     je_credit and je_debit are mutually exclusive: a customer's journal rows
     net to one direction or the other, never both.
     """
+    # Same account filter as the journal query below: only money that sits in
+    # one of the CREDIT_ACCOUNT_NAMES accounts counts. On a Receive the party
+    # account is paid_from; paid_to is checked too so an Internal Transfer into
+    # one of these accounts is not dropped.
     advance = flt(frappe.db.sql("""
         SELECT IFNULL(SUM(unallocated_amount), 0)
         FROM `tabPayment Entry`
@@ -69,7 +73,11 @@ def _advance_pool(customer):
           AND docstatus = 1
           AND unallocated_amount > 0.001
           AND payment_type IN ('Receive', 'Internal Transfer')
-    """, customer)[0][0])
+          AND (
+              paid_from IN (SELECT name FROM `tabAccount` WHERE account_name IN %s)
+              OR paid_to IN (SELECT name FROM `tabAccount` WHERE account_name IN %s)
+          )
+    """, (customer, CREDIT_ACCOUNT_NAMES, CREDIT_ACCOUNT_NAMES))[0][0])
 
     # Credit notes the customer still holds. A return carries a NEGATIVE
     # outstanding_amount until it is set against a bill, so `< -0.01` picks up
