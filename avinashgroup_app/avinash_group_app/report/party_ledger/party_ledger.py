@@ -672,6 +672,14 @@ def get_data(filters):
 	else:
 		entries = _merge_entries(entries)
 
+	# Submitted invoices that posted no GL Entry (e.g. a Rs 0 bill) still belong in the
+	# party's ledger, so add them as 0 / 0 rows and keep everything in date order.
+	# sort() is stable, so GL rows keep their order within a day.
+	unposted = _fetch_unposted_bills(params, party_type, parties, accounts,
+									 voucher_no_filter, exclude_account_patterns)
+	if unposted:
+		entries = sorted(entries + unposted, key=lambda e: e.get("date"))
+
 	# Batch-fetch all detail data upfront when detailed_mapping is on (avoids N+1 queries)
 	detail_data = _fetch_all_details(entries) if detailed_mapping else {}
 
@@ -696,6 +704,80 @@ def get_data(filters):
 	if show_remarks:
 		_apply_voucher_remarks(data)
 	return data
+
+
+def _fetch_unposted_bills(params, party_type, parties, accounts,
+						  voucher_no_filter, exclude_account_patterns):
+	"""Submitted Sales Invoices (Customer) / Purchase Invoices (Supplier) in the period
+	that have no GL Entry at all — in practice a bill with a Rs 0 total, which ERPNext
+	does not post. Returned as ledger entries with debit = credit = 0.
+
+	The bill's receivable/payable account (debit_to / credit_to) stands in for the GL
+	account, so the Account filter and the portal's excluded accounts still apply.
+	"""
+	if party_type == "Customer":
+		doctype, party_field, account_field = "Sales Invoice", "customer", "debit_to"
+	elif party_type == "Supplier":
+		doctype, party_field, account_field = "Purchase Invoice", "supplier", "credit_to"
+	else:
+		return []
+
+	conditions = f"""
+		inv.docstatus = 1
+		AND inv.company = %(company)s
+		AND inv.posting_date BETWEEN %(from_date)s AND %(to_date)s
+		-- Only a Rs 0 bill skips GL posting. Checking the total first keeps the
+		-- GL Entry lookup below to a handful of bills instead of every bill.
+		AND inv.grand_total = 0
+		AND NOT EXISTS (
+			SELECT 1 FROM `tabGL Entry` gle
+			WHERE gle.voucher_type = '{doctype}' AND gle.voucher_no = inv.name
+		)
+	"""
+	if parties:
+		conditions += f" AND inv.{party_field} IN %(party_list)s"
+	if accounts:
+		conditions += f" AND inv.{account_field} IN %(account_list)s"
+	if voucher_no_filter:
+		conditions += " AND inv.name LIKE %(voucher_no_filter)s"
+	if exclude_account_patterns:
+		like_clauses = " OR ".join(
+			f"acc.account_name LIKE %(exclude_acc_{i})s"
+			for i in range(len(exclude_account_patterns))
+		)
+		conditions += (
+			" AND NOT EXISTS (SELECT 1 FROM `tabAccount` acc"
+			f" WHERE acc.name = inv.{account_field} AND ({like_clauses}))"
+		)
+
+	query_params = dict(params)
+	query_params["party_list"] = tuple(parties) if parties else ("",)
+	query_params["account_list"] = tuple(accounts) if accounts else ("",)
+
+	rows = frappe.db.sql(f"""
+		SELECT
+			inv.{party_field} AS party,
+			inv.posting_date  AS date,
+			inv.name          AS voucher_no,
+			inv.is_return
+		FROM `tab{doctype}` inv
+		WHERE {conditions}
+		ORDER BY inv.posting_date, inv.creation
+	""", query_params, as_dict=True)
+
+	return_label = "Sales Return" if doctype == "Sales Invoice" else "Purchase Return"
+	return [{
+		"party":        r.party or "",
+		"date":         r.date,
+		"voucher_type": doctype,
+		"voucher_no":   r.voucher_no,
+		"is_bounce":    0,
+		"description":  return_label if r.is_return else doctype,
+		"remarks":      "",
+		"against":      "",
+		"debit":        0.0,
+		"credit":       0.0,
+	} for r in rows]
 
 
 # ── Section builders ───────────────────────────────────────────────────────────
