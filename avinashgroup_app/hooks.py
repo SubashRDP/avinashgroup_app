@@ -93,6 +93,9 @@ app_include_js = [
     # HR dashboard at the top of the stock HR workspace; loads the dashboard
     # itself (hr_dashboard.js/.css) only when HR is opened.
     "/assets/avinashgroup_app/js/hr_workspace.js?v=1",
+    # Selling / Buying dashboards at the top of those stock workspaces; loads
+    # trade_dashboard.js/.css only when one of them is opened.
+    "/assets/avinashgroup_app/js/trade_workspace.js?v=2",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
