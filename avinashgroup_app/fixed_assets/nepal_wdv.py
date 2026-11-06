@@ -266,8 +266,10 @@ def fill_from_tax_pool(doc, method=None):
 
 	Total Number of Depreciations is hidden from staff (Property Setter
 	fixtures), so it is always set here from the category's Tax Pool:
-	A-D get tax_pools.POOL_YEARS (at least one more than an existing asset's
-	booked years), E gets the rows to its expiry year and 100 / useful life.
+	A-D get enough rows that under Rs 2,000 is left for the final write-off
+	(years_until_small), never fewer than tax_pools.POOL_YEARS nor than an
+	existing asset's booked years + 1; E gets the rows to its expiry year and
+	100 / useful life.
 
 	Draft assets only; a submitted asset's schedule is changed through ERPNext's
 	own Asset Value Adjustment / Repair flows. Throws when a depreciating asset's
@@ -294,8 +296,41 @@ def fill_from_tax_pool(doc, method=None):
 			),
 			title=_("Tax Pool needed"),
 		)
+	booked = doc.opening_number_of_booked_depreciations
 	for row in rows:
-		row.total_number_of_depreciations = max(years, doc.opening_number_of_booked_depreciations + 1)
+		row.total_number_of_depreciations = max(
+			years, booked + years_until_small(doc, row), booked + 1
+		)
+
+
+# Schedule-2 s.2(6) writes a pool off once less than Rs 2,000 is left. Per asset,
+# ERPNext writes off whatever remains in its last row, so the rows run until
+# under this much is left: the final write-off is then never larger than the
+# law's own threshold, however big the asset (a 10-arab generator found the
+# old fixed 17 years leaving 9.2 crore for one row, demo-nggroup 2026-11-06).
+SMALL_REMAINDER = 2000
+MAX_YEARS = 1000  # guard against a zero rate looping forever
+
+
+def years_until_small(doc, row) -> int:
+	"""Yearly rows, at the row's rate, until under SMALL_REMAINDER is left.
+
+	Follows the same arithmetic as the schedule: a new asset's first year by
+	the thirds rule, then written-down value; an existing asset starts from
+	cost less its opening accumulated depreciation, full years.
+	"""
+	rate = flt(row.rate_of_depreciation) / 100
+	value = flt(doc.gross_purchase_amount) - flt(doc.opening_accumulated_depreciation)
+	if rate <= 0 or value < SMALL_REMAINDER:
+		return 1
+	years = 0
+	if not flt(doc.opening_accumulated_depreciation) and doc.available_for_use_date:
+		value -= value * rate * first_year_fraction(doc.available_for_use_date)
+		years = 1
+	while value >= SMALL_REMAINDER and years < MAX_YEARS:
+		value -= value * rate
+		years += 1
+	return years
 
 
 def _set_pool_e(doc, rows):

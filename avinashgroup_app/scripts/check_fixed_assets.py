@@ -389,6 +389,19 @@ def t_wrong_pool_account():
 	check(f"T12 all existing categories pass the pool-account check", not bad, "; ".join(bad[:3]))
 
 
+# ---------------------------------------------------------------- T13 large asset
+def t_large_asset():
+	"""A very large asset keeps 25% a year past 17 years; the last write-off stays under Rs 2,000."""
+	cost = 10_000_000_000
+	a = make_asset(category_for("B"), bs_date(2083, 1, 1), cost=cost)
+	rows = schedule(a).depreciation_schedule
+	left_17 = cost - flt(rows[16].accumulated_depreciation_amount)
+	ok = (len(rows) > 18 and abs(flt(rows[17].depreciation_amount) - round(left_17 * 0.25, 2)) < 0.02
+		and flt(rows[-1].depreciation_amount) < 2000 and round(sum(flt(r.depreciation_amount) for r in rows), 2) == cost)
+	check("T13 large asset: 25% every year past year 17, final write-off under Rs 2,000", ok,
+		f"rows {len(rows)}, year 18 {rows[17].depreciation_amount}, last {rows[-1].depreciation_amount}")
+
+
 # ---------------------------------------------------------------- run
 run("T1", t_idempotent)
 run("T2", t_categories)
@@ -403,6 +416,7 @@ run("T9", t_scrap)
 run("T10", t_pool_e)
 run("T11", t_no_rows)
 run("T12", t_wrong_pool_account)
+run("T13", t_large_asset)
 
 frappe.db.rollback()
 left = frappe.db.count("Asset", {"asset_name": ["like", "ZZTEST%"]}) + frappe.db.count("Item", {"item_code": ["like", "ZZTEST%"]})

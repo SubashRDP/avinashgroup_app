@@ -288,8 +288,10 @@ If Accounts wants a separate JV Type for depreciation, it needs its own
 numbering rule per company.
 
 Two known limits:
-- ERPNext needs a fixed number of years, so the small remainder (under 1% of
-  cost) is written off in the final year: B after 17 years, C 21, D 29, A 90.
+- ERPNext needs a fixed number of years, so each asset runs at its rate until
+  **less than Rs 2,000** is left (never fewer than B 17, C 21, D 29, A 90 years),
+  and that small remainder is written off in the final row. A 10-arab asset
+  therefore runs about 55 years; it no longer dumps crores into year 18.
 - The Nepali calendar converter stops at BS 2100 (about 2043 AD). Schedule rows
   after that keep ERPNext's date, which can be a day off Asar end.
 
