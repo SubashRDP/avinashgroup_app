@@ -145,26 +145,16 @@ frappe.query_reports["Party Ledger"] = {
 				frappe.query_report.refresh();
 			},
 		},
-		{
-			fieldname: "fit_columns",
-			label: __("Fit Columns"),
-			fieldtype: "Check",
-			default: 1,
-			on_change: function () {
-				frappe.query_report.refresh();
-			},
-		},
 	],
+	// Column fitting comes from the global "Fit Columns" toggle in rdp_common_app
+	// (report_fit_columns.js). It only applies to reports that have no fit_columns
+	// filter or autoFitColumns method, so don't add either back here.
 
 	get_datatable_options(options) {
 		return Object.assign(options, { layout: "fixed", serialNoColumn: false, freezeColumnsTo: 4 });
 	},
 
 	after_datatable_render: function (dt) {
-		const fit = frappe.query_report.get_filter_value("fit_columns");
-		if (fit) {
-			setTimeout(() => this.autoFitColumns(dt), 100);
-		}
 		this._initDragScroll(dt);
 	},
 
@@ -205,43 +195,6 @@ frappe.query_reports["Party Ledger"] = {
 		});
 
 		scrollable.style.cursor = "grab";
-	},
-
-	autoFitColumns: function (dt) {
-		const datatableWrapper = dt.datatableWrapper;
-		if (!datatableWrapper) return;
-
-		const columns = dt.datamanager.getColumns(true);
-		if (!columns.length) return;
-
-		columns.forEach((col) => {
-			let maxWidth = Math.max(col.width || 60, 60);
-
-			const headerCell = datatableWrapper.querySelector(
-				`.dt-cell__content--header-${col.colIndex}`
-			);
-			if (headerCell) {
-				maxWidth = Math.max(maxWidth, headerCell.scrollWidth + 20);
-			}
-
-			const dataCells = datatableWrapper.querySelectorAll(
-				`.dt-cell__content--col-${col.colIndex}`
-			);
-			const sampleSize = Math.min(100, dataCells.length);
-			for (let i = 0; i < sampleSize; i++) {
-				maxWidth = Math.max(maxWidth, dataCells[i].scrollWidth + 20);
-			}
-
-			let finalWidth = Math.min(maxWidth, 400);
-			if (col.id === "sr_no")       finalWidth = Math.min(finalWidth, 52);
-			if (col.id === "date")        finalWidth = Math.min(finalWidth, 110);
-			if (col.id === "miti")        finalWidth = Math.min(finalWidth, 110);
-			if (col.id === "description") finalWidth = Math.max(finalWidth, 420);
-			if (col.id === "remarks")     finalWidth = Math.min(finalWidth, 150);
-			dt.datamanager.updateColumn(col.colIndex, { width: finalWidth });
-			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
-			dt.columnmanager.setColumnWidth(col.colIndex);
-		});
 	},
 
 	onload: function (_report) {
