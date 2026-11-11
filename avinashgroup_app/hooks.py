@@ -684,6 +684,13 @@ scheduler_events = {
         "35 8 * * *": [
             "avinashgroup_app.lc.notifications.daily_run",
         ],
+        # CEO Dashboard credit snapshot: every customer's credit-control
+        # position, ~8 min of queries, so it cannot run on page load. Every 4
+        # hours at :20, off the hourly :00 pile-up; the entry only queues the
+        # work on the long queue. See ceo_dashboard/credit_snapshot.py.
+        "20 */4 * * *": [
+            "avinashgroup_app.ceo_dashboard.credit_snapshot.scheduled_build",
+        ],
     },
 }
 
