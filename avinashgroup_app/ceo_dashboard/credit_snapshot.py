@@ -197,7 +197,7 @@ def get_credit():
 	}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def refresh():
 	"""Queue a fresh snapshot (one at a time). Returns the job state."""
 	frappe.only_for(REFRESH_ROLES)

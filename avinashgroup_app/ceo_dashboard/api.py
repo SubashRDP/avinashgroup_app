@@ -145,7 +145,15 @@ def get_customer_invoices(customer, from_date, to_date):
 
 def _companies():
 	"""Companies the user can see, in COMPANY_ORDER, as [{name, abbr}]."""
-	rows = frappe.get_list("Company", fields=["name", "abbr"], limit_page_length=0)
+	rows = frappe.get_all("Company", fields=["name", "abbr"])
+	# Every endpoint is gated by frappe.only_for(ROLES), so the role itself is
+	# the right to see the group's figures: a user holding only "Group CEO" has
+	# no Company read permission of their own and frappe.get_list would give
+	# them nothing. A Company User Permission still narrows the list.
+	allowed = frappe.permissions.get_user_permissions(frappe.session.user).get("Company")
+	if allowed:
+		names = {p.get("doc") for p in allowed}
+		rows = [r for r in rows if r.name in names]
 	rank = {abbr: i for i, abbr in enumerate(COMPANY_ORDER)}
 	rows.sort(key=lambda r: (rank.get(r.abbr, len(rank)), r.name))
 	return [{"name": r.name, "abbr": r.abbr} for r in rows]

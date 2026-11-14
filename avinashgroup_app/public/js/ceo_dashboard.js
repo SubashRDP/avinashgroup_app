@@ -61,13 +61,17 @@ window.avinash_ceo_dashboard = (function () {
 	// Ageing buckets for "oldest unpaid bill" (days), and limit-use bands.
 	const AGE_BUCKETS = [[0, 7, "0–7 days"], [8, 15, "8–15 days"], [16, 30, "16–30 days"], [31, 60, "31–60 days"], [61, 90, "61–90 days"], [91, 1e9, "Over 90 days"]];
 	const NEAR_LIMIT = 0.8;
+	// The group's collected % is left blank when companies with no receipts
+	// recorded make up more than this share of the billing: their billing would
+	// count as nothing collected. (1%: a stray bill of a dormant company does not blank it.)
+	const COLL_GAP_MAX = 0.01;
 	// An amount limit this small is a "cash only" setting, not a credit line:
 	// 2,441 customers on demo-nggroup have Rs 1-100. They are shown as "Cash
 	// only" and left out of the limit-use bands, or every one reads "over limit".
 	const CASH_ONLY_MAX = 100;
 	const BLOCK_LABEL = ["", "Too many unpaid bills", "Oldest bill too old", "Over amount limit"];
 	const BLOCK_SHORT = ["", "Bills", "Days", "Amount"];
-	const PERIODS = [["wk", "Week"], ["mtd", "Month"], ["qtd", "Quarter"], ["ytd", "Year to date"], ["r12", "12 months"]];
+	const PERIODS = [["ytd", "Year"], ["qtd", "Quarter"], ["mtd", "Month"], ["wk", "Week"], ["day", "Day"]];
 	// Most fiscal years that can be added together (api.MAX_YEARS_BACK allows
 	// that many plus the year before the earliest, for the comparison).
 	const MAX_FYS = 6;
@@ -89,8 +93,12 @@ window.avinash_ceo_dashboard = (function () {
 	const SHOW_MARGIN = false;
 	// Fiscal-year ticks apply by themselves (no "Show" button, the CEO's call
 	// 2026-11-10) this long after the last tick, so ticking three years quickly
-	// reloads once, not three times.
-	const FY_APPLY_DELAY = 600;
+	// reloads once, not three times. Short: an answer to an older request is
+	// dropped anyway (st.gen), so the wait only saves requests.
+	const FY_APPLY_DELAY = 120;
+	// Server answers are kept in the page this long, so going back to a year already
+	// seen is as quick as picking a company (the CEO found the year picker slow, 2026-11-13).
+	const MEMO_MS = 10 * 60 * 1000;
 	// "Average price per kg" chart is off: the gas price is fixed, so a price
 	// trend tells the CEO nothing (the CEO's call, 2026-11-10).
 	const SHOW_PRICE_CHART = false;
@@ -101,11 +109,26 @@ window.avinash_ceo_dashboard = (function () {
 	const NEG_AXIS_MIN = 0.05;
 	// Bar charts print the value on every bar up to this many bars (single series).
 	const BAR_LABELS_MAX = 14;
+	// A unit of LP Gas up to this many kg is counted as a cylinder (5, 7.1, 14.2,
+	// 19, 47.5 and 50 kg on the bills); larger units (425 kg, 450 kg, 1 MT) and
+	// loose kg are bulk and are not counted in "Cylinders sold".
+	const DISTRICT_ROWS = 10;   // list beside the map on the Map screen: about as tall as the map
+	const FEW_BARS = 6;   // this many bars or fewer are drawn wider, so a short year does not look empty
 	// Compare chart (series.get_series): what can be put on it, in a fixed order
 	// with a fixed colour each (CSS .s-*), and the grains a fiscal year can be
 	// read at. Volume (MT) exists for sales and purchases only.
 	const CMP_SERIES = [["sales", "Sales", true], ["buy", "Purchases", true], ["coll", "Collected", false], ["exp", "Expenses", false]];
-	const CMP_GRAINS = [["half", "Half-year"], ["quarter", "Quarter"], ["month", "Month"], ["halfmonth", "Half-month"], ["week", "Week"], ["day", "Day"]];
+	// (No half-month: nobody reads the business that way, the CEO's call 2026-11-11.)
+	const CMP_GRAINS = [["quarter", "Quarter"], ["month", "Month"], ["week", "Week"], ["day", "Day"]];
+	// The gear on each time chart (2026-11-14, the user's "small scroller like in
+	// an electric car"): Year = one bar per fiscal year, Quarterly = each quarter,
+	// Monthly each month, Weekly each week, Daily each day, of the fiscal year
+	// picked at the top. Each card has its own (st.grain). Click, drag, mouse
+	// wheel or arrow keys. The top bar has only the fiscal year: the dashboard
+	// shows that year (the Period dropdown and the 12-month view are gone).
+	const GEAR = [["year", "Year", "Year"], ["quarter", "Quarterly", "Qtr"], ["month", "Monthly", "Month"], ["week", "Weekly", "Week"], ["day", "Daily", "Day"]];
+	const GEAR_CARDS = ["trend", "coll", "buytrend"];
+	const GEAR_WHEEL_GAP = 180;   // ms between wheel steps, so one flick moves one notch
 	// Dash patterns for the 2nd and 3rd fiscal year on the same chart. Every
 	// line on the chart also gets its own colour, in order (CSS .k0-.k5, a
 	// validated six-colour set), so several comparisons stay apart.
@@ -129,13 +152,17 @@ window.avinash_ceo_dashboard = (function () {
 		const t = (kg || 0) / 1000, a = Math.abs(t);
 		return `${t < 0 ? "−" : ""}${inr(a, a < 10 ? 1 : 0)} MT`;
 	}
-	function axisNum(v, kind) {
-		const a = Math.abs(v);
-		if (kind === "amt") return a >= 1e7 ? `${inr(v / 1e7, a >= 1e8 || v === 0 ? 0 : 1)} Cr` : a >= 1e5 ? `${inr(v / 1e5, 0)} L` : inr(v);
+	// exact (axis ticks): as many decimals as the tick needs, so 1.5 L and 2 L
+	// never both read "2 L". Bar labels keep the short form.
+	function axisNum(v, kind, exact) {
+		const a = Math.abs(v), dp = (x, d) => (!exact ? d : Math.abs(x - Math.round(x)) < 1e-9 ? 0 : Math.abs(x * 10 - Math.round(x * 10)) < 1e-9 ? 1 : 2);
+		if (kind === "amt") return a >= 1e7 ? `${inr(v / 1e7, dp(v / 1e7, a >= 1e8 || v === 0 ? 0 : 1))} Cr` : a >= 1e5 ? `${inr(v / 1e5, dp(v / 1e5, 0))} L` : inr(v);
 		if (kind === "rate") return inr(v);
 		const t = v / 1000;
-		return Math.abs(t) >= 10000 ? `${inr(t / 1000, 0)}K` : inr(t);
+		return Math.abs(t) >= 10000 ? `${inr(t / 1000, dp(t / 1000, 0))}K` : inr(t, dp(t, 0));
 	}
+	// "1 customer", "2 customers" (word: the singular).
+	const cnt = (n, word) => `${inr(n)} ${n === 1 ? __(word) : __(word + "s")}`;
 	const pct = (a, b) => (b ? (a - b) / Math.abs(b) : null);
 	const pctTxt = (d) => `${d >= 0 ? "+" : "−"}${inr(Math.abs(d) * 100, Math.abs(d) < 0.1 ? 1 : 0)}%`;
 	function delta(cur, prev, { upGood = true, note = "" } = {}) {
@@ -152,7 +179,7 @@ window.avinash_ceo_dashboard = (function () {
 	function bigNum(v) {
 		const m = /^(−?)(Rs )?([\d,.]+)( [A-Za-z]+)?$/.exec(String(v));
 		if (!m) return v;
-		return `${m[1]}${m[2] ? `<small class="pre">Rs</small>` : ""}${m[3]}${m[4] ? `<small>${m[4].trim()}</small>` : ""}`;
+		return `${m[1]}${m[2] ? `<small class="pre">Rs</small>` : ""}<span class="ceo-num">${m[3]}</span>${m[4] ? `<small>${m[4].trim()}</small>` : ""}`;
 	}
 	function niceTicks(lo, hi, count = 4) {
 		if (!(hi > lo)) hi = lo + 1;
@@ -178,15 +205,19 @@ window.avinash_ceo_dashboard = (function () {
 			measure: "kg",
 			period: "ytd",
 			internal: false,
-			sel: { co: new Set(), seg: new Set(), mo: new Set(), cust: new Set() },
+			sel: { co: new Set(), seg: new Set(), mo: new Set(), cust: new Set(), dist: new Set() },   // dist: districts picked on the map
 			custTab: "top",
 			month: null,       // picked fiscal month 0-11 (null = the latest); period "mtd"
 			quarter: null,     // picked quarter 0-3 (null = the current); period "qtd"
 			week: null,        // picked week number from 1 (null = the latest); period "wk"
+			day: null,         // picked AD date "YYYY-MM-DD" (null = data through); period "day"
 			base: null,        // the server's sales / coll before a week was folded in
 			weekKey: null,
 			weekInfo: null,
 			custSearch: "",
+			custDd: false, custDdQ: "",
+			screen: "main",    // "map": the Map screen instead of the dashboard (URL v=map)
+			mapBy: "kg",       // what the Map screen shows per district (MAP_BY)   // customer dropdown in the Top customers card
 			tables: new Set(),
 			drawer: null,
 			tips: [],
@@ -206,12 +237,23 @@ window.avinash_ceo_dashboard = (function () {
 			shape: {},         // chart name -> "bar" | "line" where it differs from CHART_SHAPE
 			pop: null,         // the chart whose funnel panel is open
 			pdOpen: false,     // period dropdown open
+			pb: null,          // opening and movement of a short period (period_balances.get_period_balances)
+			brkRaw: null,      // district / branch / returns from the server (sales_breakdowns.get_breakdowns)
+			brk: null,         // prepared (see prepareBreakdowns)
+			map: null,         // Nepal district outlines (static file, fetched once)
 			buying: null,      // purchases from the server (buying.get_buying)
 			by: null,          // prepared (see prepareBuying)
 			money: null,       // raw ledger figures from the server
 			mn: null,          // prepared (see prepareMoney)
+			gen: 0,            // bumped by every load(): an answer to an older request is dropped
+			custWant: new Set(),   // picked customer codes not (yet) in the customer list (see resolveCust)
+			weekWant: null,    // the week last asked for (see loadWeek)
 		};
 		readUrl();
+		st.period = "ytd";   // the fiscal year is the period; the charts' gears split it
+		st.grain = { trend: "month", coll: "month", buytrend: "month" };
+		st.drill = { trend: [], coll: [], buytrend: [] };   // opened periods per card (see gearDrill)
+		st.gearB = {};   // the buckets each gear chart last drew, for a click
 
 		root.classList.add("ceo-host");
 		root.innerHTML = `<div class="ceo" role="region" aria-label="${esc(__("CEO Dashboard"))}">
@@ -220,6 +262,11 @@ window.avinash_ceo_dashboard = (function () {
 			<div data-slot="main">${skeleton()}</div>
 			<aside class="ceo-drawer" data-slot="drawer" hidden aria-label="${esc(__("Details"))}"></aside>
 			<div class="ceo-tip" role="tooltip" hidden></div>
+			<svg class="ceo-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+				<linearGradient id="ceo-g-cur" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="g-cur-a"/><stop offset="1" class="g-cur-b"/></linearGradient>
+				<linearGradient id="ceo-g-coll" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="g-coll-a"/><stop offset="1" class="g-coll-b"/></linearGradient>
+				<linearGradient id="ceo-g-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="g-area-a"/><stop offset="1" class="g-area-b"/></linearGradient>
+			</defs></svg>
 		</div>`;
 		const $ = (sel) => root.querySelector(sel);
 		const slot = (n) => root.querySelector(`[data-slot="${n}"]`);
@@ -239,10 +286,13 @@ window.avinash_ceo_dashboard = (function () {
 			if (["kg", "amt"].includes(q.get("m"))) st.measure = q.get("m");
 			if (PERIODS.some(([p]) => p === q.get("p"))) st.period = q.get("p");
 			if (q.get("ic") === "1") st.internal = true;
+			if (q.get("v") === "map") st.screen = "map";
+			if (q.get("mb")) st.mapBy = q.get("mb");
 			const int = (k, max) => { const v = parseInt(q.get(k), 10); return v >= 0 && v <= max ? v : null; };
-			st.month = int("pm", 11); st.quarter = int("pq", 3); st.week = int("pw", 60) || null;
+			st.month = int("pm", 11); st.quarter = int("pq", 3); st.week = int("pw", 60) || null; st.day = /^\d{4}-\d\d-\d\d$/.test(q.get("pd") || "") ? q.get("pd") : null;
 			st.pending = { co: q.get("co"), seg: q.get("seg"), mo: q.get("mo"), cu: q.get("cu") };
-			if (CMP_GRAINS.some(([g]) => g === q.get("cg"))) st.cmp.grain = q.get("cg");
+			st.pendingDist = q.get("di");   // district names; applied when the district data arrives
+			/* "cg" (chart unit) is no longer read: the period gear sets the unit (the one below the period). */
 			for (const kv of (q.get("sh") || "").split(",")) { const [k, v] = kv.split(":"); if (CHART_SHAPE[k] && ["bar", "line"].includes(v)) st.shape[k] = v; }
 			const cs = (q.get("cs") || "").split(",").filter((k) => CMP_SERIES.some(([x]) => x === k));
 			if (cs.length) st.cmp.series = cs;
@@ -256,7 +306,16 @@ window.avinash_ceo_dashboard = (function () {
 			(p.co || "").split(",").filter(Boolean).forEach((a) => abbrs.has(a) && st.sel.co.add(abbrs.get(a)));
 			(p.seg || "").split(",").filter(Boolean).forEach((s) => { const i = d.segments.indexOf(s); if (i >= 0) st.sel.seg.add(i); });
 			(p.mo || "").split(",").filter(Boolean).forEach((m) => { const i = +m; if (i >= 0 && i < NM()) st.sel.mo.add(i); });
-			if (p.cu) { const i = d.customers.findIndex((c) => c[0] === p.cu); if (i >= 0) st.sel.cust.add(i); }
+			if (p.cu) st.custWant.add(p.cu);
+			resolveCust();
+		}
+		// A picked customer is remembered by code, not by its place in the customer
+		// list: the list is rebuilt on every load (a new customer shifts every
+		// index) and grows when the ledger, credit or a week bring customers with
+		// no bills in the window. Called after each of those.
+		function resolveCust() {
+			if (!st.custWant.size || !st.data) return;
+			st.data.customers.forEach((c, i) => { if (st.custWant.delete(c[0])) st.sel.cust.add(i); });
 		}
 		function writeUrl() {
 			const d = st.data, q = new URLSearchParams();
@@ -266,7 +325,9 @@ window.avinash_ceo_dashboard = (function () {
 			if (st.period === "mtd" && st.month != null) q.set("pm", st.month);
 			if (st.period === "qtd" && st.quarter != null) q.set("pq", st.quarter);
 			if (st.period === "wk" && st.week != null) q.set("pw", st.week);
+			if (st.period === "day" && st.day) q.set("pd", st.day);
 			if (st.internal) q.set("ic", "1");
+			if (st.screen === "map") { q.set("v", "map"); if (st.mapBy !== "kg") q.set("mb", st.mapBy); }
 			if (st.cmp.grain !== "auto") q.set("cg", st.cmp.grain);
 			const sh = Object.entries(st.shape).filter(([k, v]) => CHART_SHAPE[k] && CHART_SHAPE[k] !== v).map(([k, v]) => `${k}:${v}`).join(",");
 			if (sh) q.set("sh", sh);
@@ -275,8 +336,11 @@ window.avinash_ceo_dashboard = (function () {
 			if (d) {
 				if (st.sel.co.size) q.set("co", [...st.sel.co].map((i) => d.companies[i].abbr).join(","));
 				if (st.sel.seg.size) q.set("seg", [...st.sel.seg].map((i) => d.segments[i]).join(","));
+				if (st.sel.dist.size && st.brk) q.set("di", distNames().join(","));
+				else if (st.pendingDist) q.set("di", st.pendingDist);
 				if (st.sel.mo.size) q.set("mo", [...st.sel.mo].sort((a, b) => a - b).join(","));
 				if (st.sel.cust.size) q.set("cu", d.customers[[...st.sel.cust][0]][0]);
+				else if (st.custWant.size) q.set("cu", [...st.custWant][0]);
 			}
 			const qs = q.toString();
 			if (location.pathname.indexOf("ceo-dashboard") === -1) return;   // user navigated away
@@ -324,7 +388,7 @@ window.avinash_ceo_dashboard = (function () {
 				for (const f of st.fys) { const y = D().years.indexOf(f); if (y >= 0) for (let s = y * 24; s < y * 24 + 24 && s <= p; s++) w[s] = 1; }
 				return cmp();
 			}
-			if (st.period === "wk") { w[wkS()] = 1; return cmp(); }
+			if (slotPeriod()) { w[wkS()] = 1; return cmp(); }
 			const pm = PM(), b = FY0();
 			let start, end = p;
 			if (st.period === "mtd") { const m = st.month == null ? pm : Math.min(pm, b + st.month); start = m * 2; end = Math.min(p, m * 2 + 1); }
@@ -353,24 +417,33 @@ window.avinash_ceo_dashboard = (function () {
 		}
 		const bsShort = (isoDate) => { const x = bsDay(isoDate); return x ? `${x.day} ${monthName(x.m)}` : isoDate; };
 		const weekLabel = (n, [a, b]) => `${__("Week {0}", [n])} · ${bsShort(a)}${a === b ? "" : ` – ${bsShort(b)}`}`;
+		// A week or a day: sales and receipts for exactly those dates are read by
+		// periods.get_days and laid on the week slot (applyWeek).
+		const slotPeriod = () => st.period === "wk" || st.period === "day";
+		const fyStartIso = () => D().month_bounds[FY0()][0];
+		const curDay = () => (st.day && st.day >= fyStartIso() && st.day <= D().through ? st.day : D().through);
+		const weekOfDay = (iso) => { const wk = fyWeeks(), i = wk.findIndex(([a, b]) => iso >= a && iso <= b); return i < 0 ? wk.length : i + 1; };
+		const dayLabel = (iso) => { const x = bsDay(iso); return `${WEEKDAY[dow(iso)]} ${bsShort(iso)}${x ? ` ${bsYear(x.m)}` : ""}`; };
 		function loadWeek() {
 			const weeks = fyWeeks();
 			if (!weeks.length) return;
 			if (st.week == null || st.week > weeks.length) st.week = weeks.length;
-			const [a, b] = weeks[st.week - 1], key = `${st.fy}:${a}:${b}`;
+			const [a, b] = st.period === "day" ? [curDay(), curDay()] : weeks[st.week - 1], key = `${st.fy}:${a}:${b}`;
 			if (st.weekKey === key) return;
-			const el = $(".ceo"), fy = st.fy;
+			const el = $(".ceo"), fy = st.fy, gen = st.gen;
+			st.weekWant = key;
 			el.classList.add("is-loading");
 			frappe.call({
 				method: "avinashgroup_app.ceo_dashboard.periods.get_days",
 				args: { fiscal_year: fy, from_date: a, to_date: b },
 				callback: (r) => {
+					if (st.weekWant !== key || st.gen !== gen) return;   // a newer week or load was asked for since
 					el.classList.remove("is-loading");
-					if (!r.message || st.fy !== fy || st.period !== "wk") return;
+					if (!r.message || st.fy !== fy || !slotPeriod()) return;
 					applyWeek(r.message, key);
 					render(true);
 				},
-				error: () => el.classList.remove("is-loading"),
+				error: () => { if (st.weekWant === key) el.classList.remove("is-loading"); },
 			});
 		}
 		function applyWeek(w, key) {
@@ -385,16 +458,21 @@ window.avinash_ceo_dashboard = (function () {
 			const bd = bsDay(w.from);
 			st.weekInfo = { ...w, mo: bd ? bd.m : PM() };
 			st.weekKey = key;
+			resolveCust();
 		}
 		const monthName = (m) => D().months[m % 12];
+		// Three letters, except Ashwin and Ashadh, which would both be "Ash": their everyday names.
+		const MONTH_SHORT = { Ashwin: "Asoj", Ashoj: "Asoj", Asoj: "Asoj", Ashadh: "Asar", Ashad: "Asar", Asar: "Asar", Asadh: "Asar" };
+		const monthShort = (m) => MONTH_SHORT[monthName(m)] || monthName(m).slice(0, 3);
 		const yearOf = (m) => D().years[Math.floor(m / 12)] || "";
 		function bsYear(m) {   // "83/84" -> 2083 for Shrawan..Chaitra, 2084 for Baisakh..Ashadh
 			const y = 2000 + parseInt(yearOf(m), 10);
 			return isNaN(y) ? "" : y + (m % 12 >= 9 ? 1 : 0);
 		}
-		const monthLabel = (m, short) => `${short ? monthName(m).slice(0, 3) : monthName(m)} ${bsYear(m)}`;
+		const monthLabel = (m, short) => `${short ? monthShort(m) : monthName(m)} ${bsYear(m)}`;
 		function periodLabel(W) {
 			if (multiYear() && !st.sel.mo.size) return `${st.fys.join(" + ")}${st.fys[st.fys.length - 1] === D().fiscal_years[0] ? ` (${__("to {0}", [D().through_label])})` : ""}`;
+			if (inWin(W, wkS()) && st.period === "day") return dayLabel(curDay());
 			if (inWin(W, wkS())) { const wk = fyWeeks(); return st.week && wk[st.week - 1] ? `${weekLabel(st.week, wk[st.week - 1])} ${bsYear(FY0())}` : __("Week"); }
 			const months = [];
 			for (let m = 0; m < NM(); m++) if (monthIn(W, m)) months.push(m);
@@ -410,17 +488,36 @@ window.avinash_ceo_dashboard = (function () {
 		function compareLabel() {
 			if (st.sel.mo.size) return __("vs the same months a year earlier");
 			if (multiYear()) return __("vs each year's previous year ({0})", [st.fys.map((f) => { const n = fyNum(f) - 1; return `${n}/${n + 1}`; }).join(" + ")]);
+			if (st.period === "day") return __("vs the same weekday a year earlier");
 			if (st.period === "wk") return st.weekInfo ? __("vs the same weekdays a year earlier ({0})", [st.weekInfo.prev_label]) : __("vs the same weekdays a year earlier");
 			if (st.period === "mtd" && st.month != null && FY0() + st.month < PM()) return __("vs the same month last year");
 			if (st.period === "qtd" && st.quarter != null && st.quarter < curQuarter()) return __("vs the same quarter last year");
 			return { mtd: __("vs the same days last year"), qtd: __("vs the same days last year"), ytd: __("vs the same period last year"), r12: __("vs the 12 months before") }[st.period];
 		}
 
+		// The quiet last-year figure under the top tiles and scorecard values: the
+		// same period one year earlier, as booked. Actual figures, not a target; no
+		// change badge (SHOW_COMPARISON stays off). Blank when the window starts in
+		// the first year loaded, so a missing year never reads as zero.
+		const hasCmp = (W) => W.some((x) => (x & 2) === 2);
+		function lyShort() {
+			if (multiYear()) return __("Year before");
+			if (st.period === "r12" && !st.sel.mo.size) return __("12 months before");
+			const n = fyNum(st.fy || D().fiscal_years[0]) - 1;
+			return st.period === "day" && !st.sel.mo.size ? __("Same weekday {0}", [`${n}/${n + 1}`]) : st.period === "wk" && !st.sel.mo.size ? __("Same week {0}", [`${n}/${n + 1}`]) : __("Same period {0}", [`${n}/${n + 1}`]);
+		}
+		const lyLine = (label, value) => `<div class="ceo-kpi-ly"><span>${esc(label)}</span> <b>${esc(value)}</b></div>`;
+
 		// -------------------------------------------------------- filters
 		const okInternal = (cu) => st.internal || !D().customers[cu][5];
 		// pass(row, skip): row passes the selection on every dimension not named in `skip`.
+		// District of a customer index (-1: none / not loaded) and the district filter on it.
+		const distOf = (cu) => { const k = st.brk ? st.brk.dist.get(cu) : null; return k == null ? -1 : k; };
+		const onDist = (cu, skip = "") => !st.sel.dist.size || skip.includes("dist") || st.sel.dist.has(distOf(cu));
+		const onDistIdx = (k) => !st.sel.dist.size || st.sel.dist.has(k);
+		const distNames = () => (st.brk ? [...st.sel.dist].map((k) => st.brk.districts[k]) : []);
 		function pass(r, skip = "") {
-			if (!okInternal(r[R_CU])) return false;
+			if (!okInternal(r[R_CU]) || !onDist(r[R_CU], skip)) return false;
 			const s = st.sel;
 			if (s.co.size && !skip.includes("co") && !s.co.has(r[R_CO])) return false;
 			if (s.seg.size && !skip.includes("seg") && !s.seg.has(r[R_SEG])) return false;
@@ -428,7 +525,7 @@ window.avinash_ceo_dashboard = (function () {
 			return true;
 		}
 		function passColl(r, skip = "") {
-			if (!okInternal(r[R_CU])) return false;
+			if (!okInternal(r[R_CU]) || !onDist(r[R_CU], skip)) return false;
 			const s = st.sel;
 			if (s.co.size && !skip.includes("co") && !s.co.has(r[R_CO])) return false;
 			if (s.seg.size && !skip.includes("seg") && !s.seg.has(D().customers[r[R_CU]][2])) return false;
@@ -440,7 +537,7 @@ window.avinash_ceo_dashboard = (function () {
 		const measureName = () => (st.measure === "kg" ? __("LP Gas volume") : __("Net sales"));
 		const dimState = (dim, val) => (!st.sel[dim].size ? "" : st.sel[dim].has(val) ? "is-sel" : "is-dim");
 		const highlightActive = () => st.sel.co.size > 0 || st.sel.seg.size > 0;
-		const narrowed = () => st.sel.co.size > 0 || st.sel.seg.size > 0 || st.sel.cust.size > 0;
+		const narrowed = () => st.sel.co.size > 0 || st.sel.seg.size > 0 || st.sel.cust.size > 0 || st.sel.dist.size > 0;
 
 		// Totals over the window (cur) and the comparison window (prev).
 		function totals(W, rowPass, collPass) {
@@ -514,11 +611,15 @@ window.avinash_ceo_dashboard = (function () {
 				ev.preventDefault();
 				const a = act.dataset.act, v = act.dataset.val;
 				if (a === "measure") { st.measure = v; render(true); }
-				else if (a === "period") { st.period = v; st.sel.mo.clear(); if (v === "wk") loadWeek(); if (!["mtd", "qtd", "wk"].includes(v)) st.pdOpen = false; render(true); }
+				else if (a === "gear") setGear(act.closest("[data-gear]")?.dataset.gear, v);
+				else if (a === "gdrill") gearDrill(act.dataset.name, +v);
+				else if (a === "gback") gearBack(act.dataset.name);
+				else if (a === "gcrumb") gearBack(act.dataset.name, +v);
+				else if (a === "pick-day") { st.sel.mo.clear(); st.period = "day"; st.day = v; loadWeek(); render(true); }
 				else if (a === "pd-toggle") { st.pdOpen = !st.pdOpen; st.ddOpen = false; st.fyOpen = false; renderFilters(); }
-				else if (a === "pick") { const n = +v; if (st.period === "mtd") st.month = n; else if (st.period === "qtd") st.quarter = n; else if (st.period === "wk") { st.week = n; loadWeek(); } st.pdOpen = false; render(true); }
+				else if (a === "pick") { const n = +v; if (st.period === "day") { st.day = v; loadWeek(); } else if (st.period === "mtd") st.month = n; else if (st.period === "qtd") st.quarter = n; else if (st.period === "wk") { st.week = n; loadWeek(); } st.pdOpen = false; render(true); }
 				else if (a === "internal") { st.internal = v === "1"; render(true); }
-				else if (a === "reset") { Object.values(st.sel).forEach((s) => s.clear()); render(true); }
+				else if (a === "reset") { Object.values(st.sel).forEach((s) => s.clear()); st.custWant.clear(); render(true); }
 				else if (a === "unsel") { st.sel[act.dataset.dim].delete(+v); render(true); }
 				else if (a === "table") { const n = act.dataset.name; st.tables.has(n) ? st.tables.delete(n) : st.tables.add(n); render(false); }
 				else if (a === "custtab") { st.custTab = v; renderCustomers(); if (act.closest("[data-slot='insights']")) slot("customers").scrollIntoView({ behavior: "smooth", block: "center" }); }
@@ -538,6 +639,9 @@ window.avinash_ceo_dashboard = (function () {
 					st.fyTimer = setTimeout(() => { st.fyTimer = null; applyFys(); }, FY_APPLY_DELAY);
 				}
 				else if (a === "dd-toggle") { st.ddOpen = !st.ddOpen; st.ddSearch = ""; renderFilters(); if (st.ddOpen) { const i = root.querySelector(".ceo-ddsearch"); i && i.focus(); } }
+				else if (a === "cdd-toggle") { st.custDd = !st.custDd; st.custDdQ = ""; renderCustomers(); if (st.custDd) { const i = root.querySelector(".ceo-cddsearch"); i && i.focus(); } }
+				else if (a === "cdd-pick") { st.custDd = false; if (!st.sel.cust.has(+v)) toggle("cust", +v, false); else renderCustomers(); }
+				else if (a === "cdd-all") { st.custDd = false; st.sel.cust.clear(); render(true); }
 				else if (a === "dd-close") { st.ddOpen = false; renderFilters(); }
 				else if (a === "dd-all") { st.sel.co.clear(); st.ddOpen = false; render(true); }
 				else if (a === "dd-pick") { const i = +v; st.sel.co.has(i) ? st.sel.co.delete(i) : st.sel.co.add(i); render(true); }
@@ -563,6 +667,9 @@ window.avinash_ceo_dashboard = (function () {
 					if (!multiYear() && mo >= b && mo <= PM()) { st.period = "mtd"; st.month = mo - b; } else st.sel.mo.add(mo);
 					render(true);
 				}
+				else if (a === "screen") { st.screen = v === "map" ? "map" : "main"; render(false); window.scrollTo({ top: 0 }); }
+				else if (a === "mapby") { st.mapBy = v; renderMapScreen(st.W); writeUrl(); }
+				else if (a === "goto" && st.screen === "map") { st.screen = "main"; render(false); const t = root.querySelector(`[data-anchor="${v}"]`); t && t.scrollIntoView({ block: "start" }); }
 				else if (a === "goto") { const t = root.querySelector(`[data-anchor="${v}"]`) || slot(v); t && t.scrollIntoView({ behavior: "smooth", block: "start" }); }
 				return;
 			}
@@ -570,12 +677,14 @@ window.avinash_ceo_dashboard = (function () {
 			if (m) { ev.preventDefault(); toggle(m.dataset.dim, +m.dataset.val, ev.ctrlKey || ev.metaKey || ev.shiftKey); }
 		});
 		document.addEventListener("pointerdown", (ev) => {
+			if (st.custDd && !ev.target.closest("[data-dd='cust']")) { st.custDd = false; st.data && renderCustomers(); }
 			if (st.ddOpen && !ev.target.closest(".ceo-dd")) { st.ddOpen = false; st.data && renderFilters(); }
 			if (st.pdOpen && !ev.target.closest("[data-dd='pd']")) { st.pdOpen = false; st.data && renderFilters(); }
 			if (st.fyOpen && !ev.target.closest("[data-dd='fy']")) { st.fyOpen = false; st.data && renderFilters(); }
 			if (st.pop && !ev.target.closest(".ceo-optwrap")) { st.pop = null; renderPop(); }
 		});
 		root.addEventListener("keydown", (ev) => {
+			if (ev.key === "Escape" && st.custDd) { st.custDd = false; renderCustomers(); return; }
 			if (ev.key === "Escape" && st.ddOpen) { st.ddOpen = false; renderFilters(); return; }
 			if (ev.key === "Escape" && st.pdOpen) { st.pdOpen = false; renderFilters(); return; }
 			if (ev.key === "Escape" && st.fyOpen) { st.fyOpen = false; renderFilters(); return; }
@@ -584,6 +693,36 @@ window.avinash_ceo_dashboard = (function () {
 			if (ev.key !== "Enter" && ev.key !== " ") return;
 			const m = ev.target.closest("[data-dim]");
 			if (m && !ev.target.closest("input,select,button")) { ev.preventDefault(); toggle(m.dataset.dim, +m.dataset.val, ev.ctrlKey || ev.metaKey || ev.shiftKey); }
+		});
+		let gearWheelAt = 0;
+		root.addEventListener("wheel", (ev) => {
+			if (!ev.target.closest("[data-gear]")) return;
+			ev.preventDefault();
+			const now = Date.now();
+			if (now - gearWheelAt < GEAR_WHEEL_GAP || Math.abs(ev.deltaY || ev.deltaX) < 1) return;
+			gearWheelAt = now;
+			stepGear(ev.target.closest("[data-gear]").dataset.gear, (ev.deltaY || ev.deltaX) > 0 ? 1 : -1);
+		}, { passive: false });
+		root.addEventListener("keydown", (ev) => {
+			const gb = ev.target.closest("[data-gear]");
+			if (!gb) return;
+			const dir = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[ev.key];
+			if (!dir) return;
+			ev.preventDefault();
+			stepGear(gb.dataset.gear, dir);
+			root.querySelector(`[data-gear="${gb.dataset.gear}"] [aria-checked='true']`)?.focus();
+		});
+		// Drag the thumb: it follows the pointer notch by notch; let go to apply.
+		root.addEventListener("pointerdown", (ev) => {
+			const box = ev.target.closest("[data-gear]");
+			if (!box || ev.button !== 0) return;
+			const notch = (x) => { const r = box.getBoundingClientRect(); return Math.max(0, Math.min(GEAR.length - 1, Math.floor(((x - r.left) / r.width) * GEAR.length))); };
+			let j = null;
+			const move = (e) => { const n = notch(e.clientX); if (n !== j) { j = n; box.style.setProperty("--i", n); } };
+			const up = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); box.classList.remove("is-drag"); if (j != null) setGear(box.dataset.gear, GEAR[j][0]); };
+			box.classList.add("is-drag");
+			document.addEventListener("pointermove", move);
+			document.addEventListener("pointerup", up);
 		});
 		root.addEventListener("pointermove", (ev) => {
 			const t = ev.target.closest("[data-tip]");
@@ -597,12 +736,17 @@ window.avinash_ceo_dashboard = (function () {
 		root.addEventListener("change", (ev) => {
 			if (ev.target.matches("[data-change='pick']")) {
 				const v = +ev.target.value;
-				if (st.period === "mtd") st.month = v; else if (st.period === "qtd") st.quarter = v; else if (st.period === "wk") { st.week = v; loadWeek(); }
+				if (st.period === "day") { st.day = ev.target.value; loadWeek(); } else if (st.period === "mtd") st.month = v; else if (st.period === "qtd") st.quarter = v; else if (st.period === "wk") { st.week = v; loadWeek(); }
 				render(true);
 			}
 		});
 		root.addEventListener("input", (ev) => {
-			if (ev.target.matches("[data-input='search']")) { st.custSearch = ev.target.value; renderCustomers(); }
+			if (ev.target.matches("[data-input='cdd-search']")) {
+				st.custDdQ = ev.target.value;
+				const pos = ev.target.selectionStart;
+				renderCustomers();
+				const i = root.querySelector(".ceo-cddsearch"); if (i) { i.focus(); i.setSelectionRange(pos, pos); }
+			}
 			if (ev.target.matches("[data-input='dd-search']")) {
 				st.ddSearch = ev.target.value;
 				const pos = ev.target.selectionStart;
@@ -625,15 +769,65 @@ window.avinash_ceo_dashboard = (function () {
 		}
 
 		// -------------------------------------------------------- load
+		// frappe.call for the year-shaped loaders, with the answer remembered per
+		// method and arguments (MEMO_MS). A remembered answer is handed back at
+		// once, in the same tick. Refresh (force) empties the memory.
+		const memo = new Map();
+		function call(o) {
+			const { force, ...rest } = o.args;
+			const keyOf = (x) => o.method + JSON.stringify(Object.keys(x).sort().map((k) => [k, x[k]]));
+			const key = keyOf(rest);
+			if (force) memo.clear();
+			const hit = memo.get(key);
+			if (hit && Date.now() - hit.at < MEMO_MS) {
+				// A picked week folds its rows into the dashboard's sales / coll: hand back the server's own.
+				if (hit.sales) { hit.msg.sales = hit.sales; hit.msg.coll = hit.coll; }
+				o.callback({ message: hit.msg });
+				return;
+			}
+			frappe.call({ method: o.method, args: o.args, error: o.error, callback: (r) => {
+				if (r.message) {
+					const hit = { at: Date.now(), msg: r.message, sales: r.message.sales, coll: r.message.coll };
+					memo.set(key, hit);
+					// The first load names no year: remember it under the year it turned out to be, too.
+					if (rest.fiscal_year == null && r.message.fiscal_year) memo.set(keyOf({ ...rest, fiscal_year: r.message.fiscal_year }), hit);
+				}
+				o.callback(r);
+			} });
+		}
+		// Once the page is drawn, fetch the year before in the background, one
+		// request at a time, so the most likely next pick is already here.
+		function warmPrev() {
+			if (st.warmed) return;
+			st.warmed = true;
+			const d = D(), prev = d.fiscal_years[d.fiscal_years.indexOf(d.fiscal_year) + 1];
+			if (!prev) return;
+			const methods = ["api.get_dashboard", "money.get_money", "buying.get_buying", "sales_breakdowns.get_breakdowns"];
+			const next = (k) => { if (k < methods.length) call({ method: `avinashgroup_app.ceo_dashboard.${methods[k]}`, args: { fiscal_year: prev, force: 0, years_back: 2 }, callback: () => next(k + 1), error: () => {} }); };
+			setTimeout(() => next(0), 4000);
+		}
 		function load(force) {
-			const el = $(".ceo");
+			// Only the answer to the latest request is used: years ticked and unticked
+			// quickly, or a slow cold answer landing after a cached one, must not put
+			// one timeline's rows under another's labels. Every loader below captures
+			// st.gen and drops its answer when a newer load() has started.
+			const el = $(".ceo"), gen = ++st.gen;
 			el.classList.add("is-loading");
-			frappe.call({
+			call({
 				method: "avinashgroup_app.ceo_dashboard.api.get_dashboard",
 				args: { fiscal_year: st.fy, force: force ? 1 : 0, years_back: yearsBack() },
 				callback: (r) => {
+					if (gen !== st.gen) return;
 					el.classList.remove("is-loading");
 					if (!r.message) return;
+					// Picked customers and companies are indexes into the old lists: carry
+					// them over by code and abbreviation.
+					if (st.data) {
+						for (const i of st.sel.cust) if (st.data.customers[i]) st.custWant.add(st.data.customers[i][0]);
+						const abbrs = new Set([...st.sel.co].map((i) => st.data.companies[i] && st.data.companies[i].abbr));
+						st.sel.cust.clear(); st.sel.co.clear();
+						r.message.companies.forEach((c, i) => abbrs.has(c.abbr) && st.sel.co.add(i));
+					}
 					st.data = r.message;
 					if (st.fyDraft && !st.fyTimer) st.fyDraft = null;   // drafted ticks are now the loaded years
 					st.base = { sales: st.data.sales, coll: st.data.coll };
@@ -642,19 +836,24 @@ window.avinash_ceo_dashboard = (function () {
 					// them before drawing; loadMoney / ensureDaily fetch them again.
 					st.money = st.mn = null;
 					st.buying = st.by = null;
+					st.brkRaw = st.brk = null;
+					st.pb = null;
 					st.daily = null;
 					st.fy = st.data.fiscal_year;
 					st.cr = null;
 					cmpDayInfo.clear();   // dates were placed on the previous timeline
 					applyPendingUrl();
+					resolveCust();
 					prepareCredit();
 					render(true);
 					loadMoney(force);
 					loadBuying(force);
+					loadBreakdowns(force);
 					if (st.ser && force) loadSeries(true);
-					if (st.period === "wk") loadWeek();
+					if (slotPeriod()) loadWeek();
+					warmPrev();
 				},
-				error: () => el.classList.remove("is-loading"),
+				error: () => { if (gen === st.gen) el.classList.remove("is-loading"); },
 			});
 		}
 
@@ -669,26 +868,26 @@ window.avinash_ceo_dashboard = (function () {
 			});
 		}
 		function loadSeries(force) {
-			const fy = st.fy, yb = yearsBack();
+			const fy = st.fy, yb = yearsBack(), gen = st.gen;
 			if (st.ser && !st.ser.failed && st.ser.fiscal_year === fy && st.ser.years_back === yb && !force) return;
 			if (st.ser && st.ser.loading && st.ser.fiscal_year === fy) return;
 			st.ser = { loading: true, fiscal_year: fy };
-			frappe.call({
+			call({
 				method: "avinashgroup_app.ceo_dashboard.series.get_series",
 				args: { fiscal_year: fy, years_back: yb, force: force ? 1 : 0 },
-				callback: (r) => { if (st.fy !== fy || !r.message) return; st.ser = { ...r.message, years_back: yb }; st.data && renderTrend(); },
-				error: () => { if (st.fy === fy) { st.ser = { failed: true }; st.data && renderTrend(); } },
+				callback: (r) => { if (st.gen !== gen || st.fy !== fy || !r.message) return; st.ser = { ...r.message, years_back: yb }; if (st.data) { renderTrend(); renderColl(); renderBuying(st.W); } },
+				error: () => { if (st.gen === gen && st.fy === fy) { st.ser = { failed: true }; st.data && renderTrend(); } },
 			});
 		}
 		function loadMoney(force) {
-			const fy = st.fy;
+			const fy = st.fy, gen = st.gen;
 			st.money = null;
 			st.mn = null;
-			frappe.call({
+			call({
 				method: "avinashgroup_app.ceo_dashboard.money.get_money",
 				args: { fiscal_year: fy, force: force ? 1 : 0, years_back: yearsBack() },
-				callback: (r) => { if (st.fy !== fy) return; st.money = r.message || { failed: true }; prepareMoney(); st.data && render(false); },   // money.months matches the same years_back
-				error: () => { if (st.fy !== fy) return; st.money = { failed: true }; st.data && render(false); },
+				callback: (r) => { if (st.gen !== gen || st.fy !== fy) return; st.money = r.message || { failed: true }; prepareMoney(); st.data && render(false); },   // money.months matches the same years_back
+				error: () => { if (st.gen !== gen || st.fy !== fy) return; st.money = { failed: true }; st.data && render(false); },
 			});
 		}
 		const padM = (a) => { const o = new Array(NM()).fill(null); a.forEach((v, i) => (o[i] = v)); return o; };
@@ -713,9 +912,10 @@ window.avinash_ceo_dashboard = (function () {
 				payM: m.pay_m.map((r) => ({ co: r[0], internal: r[1], owed: padM(r[2]) })),
 				buy,
 			};
+			resolveCust();
 		}
 		const passCo = (co) => !st.sel.co.size || st.sel.co.has(co);
-		const passRecv = (x) => okInternal(x.cu) && passCo(x.co) && (!st.sel.seg.size || st.sel.seg.has(x.seg)) && (!st.sel.cust.size || st.sel.cust.has(x.cu));
+		const passRecv = (x) => okInternal(x.cu) && onDist(x.cu) && passCo(x.co) && (!st.sel.seg.size || st.sel.seg.has(x.seg)) && (!st.sel.cust.size || st.sel.cust.has(x.cu));
 		const passRecvM = (x) => (st.internal || !x.internal) && passCo(x.co) && (!st.sel.seg.size || st.sel.seg.has(x.seg));
 		const passPay = (x) => (st.internal || !x.internal) && passCo(x.co);
 		function buyRate(co, mo) {
@@ -767,7 +967,7 @@ window.avinash_ceo_dashboard = (function () {
 		// receivable trend is per company x segment, so it is not drawn for one customer.
 		function moneySeries() {
 			const pm = PM(), z = (on) => Array.from({ length: NM() }, (_, i) => (on && i <= pm ? 0 : null));
-			const out = { cash: z(true), owed: z(!st.sel.cust.size), pay: z(true) };
+			const out = { cash: z(true), owed: z(!st.sel.cust.size && !st.sel.dist.size), pay: z(true) };
 			const add = (arr, vals) => vals.forEach((v, i) => { if (v != null && arr[i] != null) arr[i] += v; });
 			for (const x of st.mn.cash) if (x.kind < 2 && passCo(x.co)) add(out.cash, x.m);
 			for (const x of st.mn.recvM) if (passRecvM(x)) add(out.owed, x.owed);
@@ -786,9 +986,10 @@ window.avinash_ceo_dashboard = (function () {
 				if (cu == null) { cu = d.customers.length; d.customers.push([r[0], r[1], r[2], null, null, r[3], null]); byCode.set(r[0], cu); }
 				return { cu, seg: r[2], co: coByAbbr.has(r[4]) ? coByAbbr.get(r[4]) : -1, blocked: r[5], owed: r[6], adv: r[7], exp: r[8], lim: r[9], days: r[10], dlim: r[11], bills: r[12], blim: r[13], oldest: r[14] };
 			});
+			resolveCust();
 		}
 		const passCredit = (x, skip = "") => {
-			if (!okInternal(x.cu)) return false;
+			if (!okInternal(x.cu) || !onDist(x.cu, skip)) return false;
 			const s = st.sel;
 			if (s.co.size && !skip.includes("co") && !s.co.has(x.co)) return false;
 			if (s.seg.size && !skip.includes("seg") && !s.seg.has(x.seg)) return false;
@@ -816,9 +1017,13 @@ window.avinash_ceo_dashboard = (function () {
 			// glance; the top tiles carry the same tint. Colours in ceo_dashboard.css.
 			const zoneHead = (title) => `<span class="ceo-zone-key" aria-hidden="true"></span><h2>${title}</h2>`;
 			// Funnel button + its panel (filled by renderPop) beside the Table button.
-			const tools = (n) => `<div class="ceo-tools"><span class="ceo-optwrap"><button class="ceo-icon small" data-act="copts" data-val="${n}" aria-haspopup="dialog" title="${esc(__("Chart options"))}" aria-label="${esc(__("Chart options"))}"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M1.5 2.5h13L9.5 8.6V13l-3 1.6V8.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button><div class="ceo-pop" data-pop="${n}" role="dialog" hidden></div></span>${tbl(n)}</div>`;
-			const tbl = (n) => `<button class="ceo-ghost" data-act="table" data-name="${n}" aria-pressed="false" title="${esc(__("Show as table"))}">${__("Table")}</button>`;
+			const gearSlot = (n) => `<div class="ceo-gear" data-slot="gear-${n}"></div>`;
+			const tools = (n) => `<div class="ceo-tools">${GEAR_CARDS.includes(n) ? gearSlot(n) : ""}<span class="ceo-optwrap"><button class="ceo-icon small" data-act="copts" data-val="${n}" aria-haspopup="dialog" title="${esc(__("Chart options"))}" aria-label="${esc(__("Chart options"))}"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M1.5 2.5h13L9.5 8.6V13l-3 1.6V8.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></button><div class="ceo-pop" data-pop="${n}" role="dialog" hidden></div></span>${tbl(n, true)}</div>`;
+			const tbl = (n, inner) => `${GEAR_CARDS.includes(n) && !inner ? `<div class="ceo-tools">${gearSlot(n)}` : ""}<button class="ceo-ghost" data-act="table" data-name="${n}" aria-pressed="false" title="${esc(__("Show as table"))}">${__("Table")}</button>${GEAR_CARDS.includes(n) && !inner ? "</div>" : ""}`;
 			return `
+				<nav class="ceo-nav ceo-phonenav" data-slot="phonenav" aria-label="${esc(__("Sections"))}"></nav>
+				<div class="ceo-mapscreen" data-slot="mapscreen" hidden></div>
+				<div data-slot="dash">
 				<div class="ceo-kpis six ceo-top" data-slot="kpis"></div>
 				<section class="ceo-zone" data-zone="sales" data-anchor="sales">
 					<div class="ceo-section">${zoneHead(__("Sales"))}</div>
@@ -826,9 +1031,9 @@ window.avinash_ceo_dashboard = (function () {
 						${card("trend", "span-8", __("Last 24 months"), tools("trend"))}
 						${card("company", "span-4", __("By company"))}
 						${card("matrix", "span-12", __("Company scorecard"))}
-						${card("segment", "span-12 ceo-feature", __("Customer segment"), tbl("segment"))}
+						${card("segment", "span-4", __("Customer segment"), tbl("segment"))}
+						${card("coll", "span-8", __("Billed and collected"), tools("coll"))}
 						${SHOW_PRICE_CHART ? card("price", "span-6", __("Average price per kg"), tbl("price")) : ""}
-						${card("coll", SHOW_PRICE_CHART ? "span-6" : "span-12", __("Billed and collected"), tools("coll"))}
 					</div>
 				</section>
 				<section class="ceo-zone" data-zone="buy" data-anchor="buying">
@@ -837,8 +1042,6 @@ window.avinash_ceo_dashboard = (function () {
 					<div class="ceo-grid">
 						${card("buytrend", "span-8", __("Purchases"), tbl("buytrend"))}
 						${card("buyco", "span-4", __("Purchases by company"))}
-						${card("buycat", "span-6", __("What we buy"))}
-						${card("buysup", "span-6", __("Top suppliers"))}
 						${SHOW_MARGIN ? card("margin", "span-6", __("Gas margin per kg"), tbl("margin")) : ""}
 						${card("pay", SHOW_MARGIN ? "span-6" : "span-12", __("We owe suppliers"), tools("pay"))}
 					</div>
@@ -857,20 +1060,21 @@ window.avinash_ceo_dashboard = (function () {
 						${card("crage", "span-4", __("Owed, by age of oldest unpaid bill"))}
 						${card("crco", "span-4", __("Credit by company"))}
 						${card("cruse", "span-4", __("Use of amount limit"))}
-						${card("crlist", "span-12", __("Customers"), `<div class="ceo-tools" data-slot="crtools"></div>`)}
+						${card("crlist", "span-12", __("Customer dues"), `<div class="ceo-tools" data-slot="crtools"></div>`)}
 					</div>
 				</section>
 				<section class="ceo-zone" data-zone="cust" data-anchor="customers">
 					<div class="ceo-section">${zoneHead(__("Customers"))}</div>
 					<div class="ceo-grid">
-						${card("customers", "span-8", __("Customers"), `<div class="ceo-tools" data-slot="custtools"></div>`)}
+						${card("customers", "span-8", __("Top customers"), `<div class="ceo-tools" data-slot="custtools"></div>`)}
 						<div class="ceo-stack span-4">
 							${card("quiet", "", __("Gone quiet"))}
 							${SHOW_COMPARISON ? card("alerts", "", __("Price alerts")) : ""}
 						</div>
 					</div>
 				</section>
-				<div class="ceo-footnote" data-slot="footnote"></div>`;
+				<div class="ceo-footnote" data-slot="footnote"></div>
+				</div>`;
 		}
 
 		// -------------------------------------------------------- render
@@ -885,6 +1089,7 @@ window.avinash_ceo_dashboard = (function () {
 			const W = (st.W = windowSlots());
 			renderFilters();
 			renderChips();
+			ensurePeriodBalances();
 			renderKpis(W);
 			st.view = chartView();
 			ensureDaily(st.view);
@@ -892,6 +1097,7 @@ window.avinash_ceo_dashboard = (function () {
 			renderCompanies(W);
 			renderMatrix(W);
 			renderSegments(W);
+			renderScreen(W);
 			if (SHOW_PRICE_CHART) renderPrice();
 			renderColl();
 			renderMoney(W);
@@ -918,28 +1124,39 @@ window.avinash_ceo_dashboard = (function () {
 		// Picking companies FILTERS (the user's call, 2026-11-09): lists, tables and
 		// charts show only the picked companies, not all of them with the rest greyed.
 		const shownCompanies = () => (st.sel.co.size ? activeCompanies().filter((c) => st.sel.co.has(c.i)) : activeCompanies());
-		// One accent for every company; identity is the name beside the mark.
-		const coColor = () => "var(--ceo-cur)";
 
 		// "1 Shrawan 2083 – 11 Bhadra 2083": the exact first and last day of the
 		// period on screen (replaces "Data through", the CEO's call 2026-11-11; the
 		// last day is the data-through day whenever the period reaches it).
+		// When the figures were read from the books (the server caches them for 30
+		// minutes), so a bill entered a few minutes ago is not looked for in vain.
+		function updatedAt() {
+			const g = D().generated;
+			if (!g) return "";
+			const t = String(g).slice(11, 16), day = String(g).slice(0, 10);
+			return `<span class="ceo-upd" title="${esc(__("Figures read from the books at {0}. Refresh reads them again.", [frappe.datetime.str_to_user(g)]))}">${esc(__("Updated {0}", [day === frappe.datetime.get_today() ? t : frappe.datetime.str_to_user(g)]))}</span>`;
+		}
 		function periodRange() {
 			const [a, b] = st.W ? windowDates() : [D().through, D().through];
 			const full = (iso) => { const m = monthOfIso(iso); return m >= 0 ? `${bsShort(iso)} ${bsYear(m)}` : iso; };
 			return a === b ? `<strong>${esc(full(a))}</strong>` : `<strong>${esc(full(a))}</strong> <span>–</span> <strong>${esc(full(b))}</strong>`;
 		}
+		const navButtons = () => [["sales", "sales", __("Sales")], ["buying", "buy", __("Buying")], ["money", "money", __("Money")], ["credit", "credit", __("Credit and dues")], ["customers", "cust", __("Customers")]].filter(([k]) => k !== "credit" || !pastYear()).map(([k, z, l]) => `<button data-act="goto" data-val="${k}" data-zone="${z}"><i aria-hidden="true"></i>${esc(l)}</button>`).join("") +
+			(st.screen === "map" ? `<button class="ceo-navscreen is-on" data-act="screen" data-val="main">← ${esc(__("Dashboard"))}</button>` : `<button class="ceo-navscreen" data-act="screen" data-val="map"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 3.5l4-1.5 5 1.5 4-1.5v10.5l-4 1.5-5-1.5-4 1.5z M5.5 2v10.5 M10.5 3.5V14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>${esc(__("Map"))}</button>`);
 		function renderFilters() {
 			const d = D();
+			// On a phone the filter bar scrolls away (it is too tall to pin), so the
+			// section strip is repeated in its own bar that stays under the navbar.
+			const pn = slot("phonenav");
+			if (pn) pn.innerHTML = navButtons();
 			const seg = (act, items, cur, label) => `<div class="ceo-seg" role="group" aria-label="${esc(label)}">${items.map(([v, l]) => `<button data-act="${act}" data-val="${v}" aria-pressed="${cur === v}">${esc(__(l))}</button>`).join("")}</div>`;
 			slot("filters").innerHTML = `
 				${fyPicker()}
-				${multiYear() ? "" : periodDd()}
 				${seg("measure", [["kg", "Volume"], ["amt", "Rupees"]], st.measure, __("Measure"))}
 				${companyPicker()}
 				${seg("internal", [["0", "Excl. inter-company"], ["1", "Incl."]], st.internal ? "1" : "0", __("Sales between group companies"))}
-				<nav class="ceo-nav" aria-label="${esc(__("Sections"))}">${[["sales", "sales", __("Sales")], ["buying", "buy", __("Buying")], ["money", "money", __("Money")], ["credit", "credit", __("Credit and dues")], ["customers", "cust", __("Customers")]].filter(([k]) => k !== "credit" || !pastYear()).map(([k, z, l]) => `<button data-act="goto" data-val="${k}" data-zone="${z}"><i aria-hidden="true"></i>${esc(l)}</button>`).join("")}</nav>
-				<div class="ceo-asof" title="${esc(__("Data through {0}", [d.through_label]))}">${periodRange()}
+				<nav class="ceo-nav" aria-label="${esc(__("Sections"))}">${navButtons()}</nav>
+				<div class="ceo-asof" title="${esc(__("Data through {0}", [d.through_label]))}">${periodRange()}${updatedAt()}
 					<button class="ceo-icon" data-act="print" title="${esc(__("Print / PDF"))}" aria-label="${esc(__("Print / PDF"))}"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M4 6V2h8v4M4 12H2.5A1.5 1.5 0 0 1 1 10.5v-3A1.5 1.5 0 0 1 2.5 6h11A1.5 1.5 0 0 1 15 7.5v3a1.5 1.5 0 0 1-1.5 1.5H12M4 9.5h8V14H4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></button></div>`;
 		}
 
@@ -954,8 +1171,14 @@ window.avinash_ceo_dashboard = (function () {
 			}
 			if (st.period === "qtd") {
 				const cur = st.quarter == null ? curQuarter() : Math.min(st.quarter, curQuarter());
-				const ql = (q) => `Q${q + 1} · ${monthName(b + q * 3).slice(0, 3)} – ${monthName(b + q * 3 + 2).slice(0, 3)}`;
+				const ql = (q) => `Q${q + 1} · ${monthShort(b + q * 3)} – ${monthShort(b + q * 3 + 2)}`;
 				return { cur, label: ql(cur), opts: Array.from({ length: 4 }, (_, q) => [q, ql(q), q > curQuarter()]) };
+			}
+			if (st.period === "day") {
+				// The days of the picked day's month, up to "data through", latest first.
+				const cur = curDay(), x = bsDay(cur), out = [];
+				if (x) for (let t = D().month_bounds[x.m][0]; t <= D().month_bounds[x.m][1] && t <= D().through; t = isoAdd(t, 1)) out.push([t, dayLabel(t)]);
+				return { cur, label: dayLabel(cur), opts: out.reverse() };
 			}
 			if (st.period === "wk") {
 				const wk = fyWeeks(), cur = st.week == null ? wk.length : st.week;
@@ -970,7 +1193,6 @@ window.avinash_ceo_dashboard = (function () {
 			return `<div class="ceo-dd ${st.pdOpen ? "open" : ""}" data-dd="pd">
 				<button class="ceo-ddbtn" data-act="pd-toggle" aria-haspopup="dialog" aria-expanded="${st.pdOpen}"><span class="ceo-ddlbl">${__("Period")}</span><strong>${esc(label)}</strong><span class="ceo-ddcaret" aria-hidden="true">▾</span></button>
 				${st.pdOpen ? `<div class="ceo-ddpanel period">
-					<div class="ceo-seg small ceo-pdkinds" role="group" aria-label="${esc(__("Period"))}">${PERIODS.map(([v, l]) => `<button data-act="period" data-val="${v}" aria-pressed="${!st.sel.mo.size && st.period === v}">${esc(__(l))}</button>`).join("")}</div>
 					${sub ? `<div class="ceo-ddlist ceo-pdlist">${sub.opts.map(([v, l, off]) => `<button class="ceo-pdopt" data-act="pick" data-val="${v}" aria-pressed="${v === sub.cur}" ${off ? "disabled" : ""}>${esc(l)}</button>`).join("")}</div>` : ""}
 				</div>` : ""}
 			</div>`;
@@ -986,8 +1208,10 @@ window.avinash_ceo_dashboard = (function () {
 			if (!picked.length) return;
 			st.fys = picked.length > 1 ? picked : [];
 			st.fy = picked[picked.length - 1];
-			st.month = st.quarter = st.week = null;
+			st.month = st.quarter = st.week = st.day = null;
 			Object.values(st.sel).forEach((x) => x.clear());
+			Object.keys(st.drill).forEach((k) => (st.drill[k] = []));
+			st.custWant.clear();
 			closeDrawer();
 			load(false);
 		}
@@ -1024,6 +1248,7 @@ window.avinash_ceo_dashboard = (function () {
 			add("co", __("Company"), [...st.sel.co], (v) => d.companies[v].abbr);
 			add("mo", __("Month"), [...st.sel.mo].sort((a, b) => a - b), (v) => monthLabel(v, true));
 			add("seg", __("Segment"), [...st.sel.seg], (v) => d.segments[v]);
+			if (st.brk) add("dist", __("District"), [...st.sel.dist], (v) => st.brk.districts[v]);
 			add("cust", __("Customer"), [...st.sel.cust], (v) => d.customers[v][1]);
 			const el = slot("chips");
 			el.hidden = !parts.length;
@@ -1040,27 +1265,61 @@ window.avinash_ceo_dashboard = (function () {
 			const wm = winMonths(W), cmp = compareLabel();
 			const rateS = gasS.map((g, i) => (gkS[i] ? g / gkS[i] : null));
 			let bills = 0;
-			for (const r of D().sales) if (inWin(W, r[R_SLOT]) && pass(r)) bills += r[R_BILLS] || 0;
+			const coAmt = new Map(), coColl = new Set();
+			for (const r of D().sales) if (inWin(W, r[R_SLOT]) && pass(r)) { bills += r[R_BILLS] || 0; coAmt.set(r[R_CO], (coAmt.get(r[R_CO]) || 0) + r[R_AMT]); }
+			for (const r of D().coll) if (inWin(W, r[R_SLOT]) && passColl(r) && r[C_AMT]) coColl.add(r[R_CO]);
+			// Collected % as in the scorecard total: blank when companies that record no
+			// receipts hold a real share of the billing (COLL_GAP_MAX).
+			let gap = 0;
+			for (const [co, a] of coAmt) if (a > 0 && !coColl.has(co)) gap += a;
+			const amtColl = t.amt > 0 && gap / t.amt > COLL_GAP_MAX ? 0 : t.amt;
 			const tiles = [
-				{ hero: true, key: "kg", label: __("LP Gas volume"), value: mt(t.kg), d: delta(t.kg, t.kgP, { note: cmp }), sub: esc(`${mt(t.kgP)} ${__("in the comparison period")} · ${inr(t.cust.size)} ${__("customers")}`), foot: esc(`${inr(t.cust.size)} ${__("customers")} · ${inr(bills)} ${__("bills")}`), s: kgS },
-				{ key: "amt", label: __("Net sales"), value: rs(t.amt), d: delta(t.amt, t.amtP), sub: esc(`${rs(t.amtP)} ${__("before")} · Rs ${inr(t.rate, 2)}/kg`), foot: esc(`${__("Collected")} ${rs(t.coll)}${t.amt ? ` · ${inr((t.coll / t.amt) * 100, 0)}%` : ""}`), s: amtS },
+				{ hero: true, key: "kg", label: __("LP Gas volume"), value: mt(t.kg), d: delta(t.kg, t.kgP, { note: cmp }), sub: esc(`${mt(t.kgP)} ${__("in the comparison period")} · ${cnt(t.cust.size, "customer")}`), foot: esc(`${cnt(t.cust.size, "customer")} · ${cnt(bills, "bill")}`), ly: hasCmp(W) ? [lyShort(), mt(t.kgP)] : null, s: kgS },
+				{ key: "amt", label: __("Net sales"), value: rs(t.amt), d: delta(t.amt, t.amtP), sub: esc(`${rs(t.amtP)} ${__("before")} · Rs ${inr(t.rate, 2)}/kg`), foot: esc(`${__("Collected")} ${rs(t.coll)}${amtColl > 0 ? ` · ${inr((t.coll / amtColl) * 100, 0)}%` : ""}`), ly: hasCmp(W) ? [lyShort(), rs(t.amtP)] : null, s: amtS },
 				marginTile(W, t, rateS),
 				...moneyTiles(t, collS),
 				buyTile(W),
 			];
 			// Same order and tint as the panels: Sales, Buying, Money.
 			const [vol, amt, mg, cash, owed, pay, buy] = tiles;
-			Object.assign(vol, { zone: "sales" }); Object.assign(amt, { zone: "sales" });
-			Object.assign(mg, { zone: "buy", goto: mg.loading ? undefined : "buying" }); Object.assign(pay, { zone: "buy", goto: pay.loading ? undefined : "buying" });
-			Object.assign(cash, { zone: "money" }); Object.assign(owed, { zone: "money" });
+			Object.assign(vol, { zone: "sales", ico: "gas" }); Object.assign(amt, { zone: "sales", ico: "sales" });
+			Object.assign(mg, { zone: "buy", ico: "margin", goto: mg.loading ? undefined : "buying" }); Object.assign(pay, { zone: "buy", ico: "supplier", goto: pay.loading ? undefined : "buying" });
+			Object.assign(buy, { ico: "cart" }); Object.assign(cash, { zone: "money", ico: "bank" }); Object.assign(owed, { zone: "money", ico: "people" });
 			tiles.splice(0, tiles.length, ...[vol, amt, SHOW_MARGIN ? mg : null, buy, pay, cash, owed].filter(Boolean));
 			slot("kpis").classList.toggle("five", tiles.length === 5);
-			slot("kpis").innerHTML = tiles.map((x) => x.loading ? `<div class="ceo-kpi" data-zone="${x.zone}"><div class="ceo-kpi-label">${esc(x.label)}</div><div class="ceo-skel line"></div><div class="ceo-skel line short"></div></div>` : `<div class="ceo-kpi ${x.hero ? "hero" : ""} ${x.key === st.measure ? "is-measure" : ""} ${x.cls || ""}" data-zone="${x.zone || ""}" ${x.goto ? `data-act="goto" data-val="${x.goto}" tabindex="0" role="link"` : ""} ${x.tip != null ? `data-tip="${tip(x.tip)}"` : ""}>
+			slot("kpis").innerHTML = tiles.map((x) => x.loading ? `<div class="ceo-kpi" data-zone="${x.zone}" data-ico="${x.ico || ""}"><div class="ceo-kpi-label">${esc(x.label)}</div><div class="ceo-skel line"></div><div class="ceo-skel line short"></div></div>` : `<div class="ceo-kpi ${x.hero ? "hero" : ""} ${x.key === st.measure ? "is-measure" : ""} ${x.cls || ""}" data-zone="${x.zone || ""}" data-ico="${x.ico || ""}" ${x.goto ? `data-act="goto" data-val="${x.goto}" tabindex="0" role="link"` : ""} ${x.tip != null ? `data-tip="${tip(x.tip)}"` : ""}>
 				<div class="ceo-kpi-label">${esc(x.label)}</div>
 				<div class="ceo-kpi-value">${bigNum(x.value)}</div>
 				${SHOW_COMPARISON ? `<div class="ceo-kpi-delta">${x.d}</div><div class="ceo-kpi-foot">${x.sub}</div>` : x.foot ? `<div class="ceo-kpi-foot">${x.foot}</div>` : ""}
-				${x.s ? spark(x.s, wm, x.hero) : ""}
+				${x.ly ? lyLine(...x.ly) : ""}
+				${x.s ? spark(x.s, wm, x.hero, x.key === "kg" ? mt : x.tip != null ? null : rs) : ""}
 			</div>`).join("");
+			countUp(slot("kpis"));
+		}
+		// Tile figures run up from zero when they change (a new period or
+		// company), not on every redraw; skipped for reduced motion. The final
+		// text is always the formatted figure itself.
+		function countUp(box) {
+			if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+			const seen = st.kpiSeen || (st.kpiSeen = new Map());
+			box.querySelectorAll(".ceo-kpi").forEach((k) => {
+				const el = k.querySelector(".ceo-num"), key = k.querySelector(".ceo-kpi-label")?.textContent || "";
+				if (!el) return;
+				const txt = el.textContent;
+				if (seen.get(key) === txt) return;
+				seen.set(key, txt);
+				const to = parseFloat(txt.replace(/,/g, ""));
+				if (!isFinite(to) || to === 0) return;
+				const dec = (txt.split(".")[1] || "").length, grp = txt.includes(","), t0 = performance.now(), dur = 750;
+				const fmt = (n) => grp ? n.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec }) : n.toFixed(dec);
+				const step = (now) => {
+					if (!el.isConnected) return;
+					const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+					el.textContent = p < 1 ? fmt(to * e) : txt;
+					if (p < 1) requestAnimationFrame(step);
+				};
+				requestAnimationFrame(step);
+			});
 		}
 		function marginTile(W, t, rateS) {
 			const label = __("Gas margin");
@@ -1081,14 +1340,15 @@ window.avinash_ceo_dashboard = (function () {
 			};
 		}
 		function moneyTiles(t, collS) {
+			if (shortPeriod()) return periodMoneyTiles();
 			const labels = [__("Cash and bank"), __("Customers owe us"), __("We owe suppliers")];
 			if (!st.money) return labels.map((label) => ({ label, loading: true }));
 			if (st.money.failed || !st.mn) return labels.map((label) => ({ label, value: "—", d: "", sub: esc(__("The ledger could not be read.")) }));
 			const m = moneyTotals(), ser = moneySeries(), ly = st.money.through_ly_label;
 			return [
-				{ label: labels[0], goto: "money", value: rs(m.cash + m.bank), d: delta(m.cash + m.bank, m.cashLy + m.bankLy, { note: __("vs {0}", [ly]) }), sub: esc(`${__("Cash in hand")} ${rs(m.cash)} · ${__("bank")} ${rs(m.bank)}`), foot: esc(`${__("Cash")} ${rs(m.cash)} · ${__("bank")} ${rs(m.bank)}`), s: last24(ser.cash) },
-				{ label: labels[1], goto: "money", value: rs(m.owed), d: delta(m.owed, m.owedLy, { upGood: false }), sub: esc(`${__("Advances held")} ${rs(m.adv)}${t.amt ? ` · ${__("collected")} ${inr((t.coll / t.amt) * 100, 0)}% ${__("of billed")}` : ""}`), foot: esc(`${__("Advances held")} ${rs(m.adv)}`), s: st.sel.cust.size ? collS : last24(ser.owed) },
-				{ label: labels[2], goto: "money", value: rs(m.pay), d: delta(m.pay, m.payLy, { upGood: null }), sub: esc(`${__("Bank loans")} ${rs(m.loan)} · ${__("paid ahead")} ${rs(m.payAdv)}`), foot: esc(`${__("Bank loans")} ${rs(m.loan)}`), s: last24(ser.pay) },
+				{ label: labels[0], goto: "money", value: rs(m.cash + m.bank), d: delta(m.cash + m.bank, m.cashLy + m.bankLy, { note: __("vs {0}", [ly]) }), sub: esc(`${__("Cash in hand")} ${rs(m.cash)} · ${__("bank")} ${rs(m.bank)}`), foot: esc(`${__("Cash")} ${rs(m.cash)} · ${__("bank")} ${rs(m.bank)}`), ly: [__("A year earlier"), rs(m.cashLy + m.bankLy)], s: last24(ser.cash) },
+				{ label: labels[1], goto: "money", value: rs(m.owed), d: delta(m.owed, m.owedLy, { upGood: false }), sub: esc(`${__("Advances held")} ${rs(m.adv)}${t.amt ? ` · ${__("collected")} ${inr((t.coll / t.amt) * 100, 0)}% ${__("of billed")}` : ""}`), foot: esc(`${__("Advances held")} ${rs(m.adv)}`), ly: [__("A year earlier"), rs(m.owedLy)], s: st.sel.cust.size ? collS : last24(ser.owed) },
+				{ label: labels[2], goto: "money", value: rs(m.pay), d: delta(m.pay, m.payLy, { upGood: null }), sub: esc(`${__("Bank loans")} ${rs(m.loan)} · ${__("paid ahead")} ${rs(m.payAdv)}`), foot: esc(`${__("Bank loans")} ${rs(m.loan)}`), ly: [__("A year earlier"), rs(m.payLy)], s: last24(ser.pay) },
 			];
 		}
 		// 24-month sparkline; months inside the period are drawn in the accent.
@@ -1097,7 +1357,9 @@ window.avinash_ceo_dashboard = (function () {
 		// every day of the month. Leave that last point off; balances keep theirs.
 		const partMonth = () => D().through < D().month_bounds[PM()][1];
 		const flow = (a) => (partMonth() ? a.map((v, i) => (i === a.length - 1 ? null : v)) : a);
-		function spark(vals, inW, big) {
+		// fmt (top tiles): hovering the line names its span and the latest point, so
+		// the line reads as "24 months" and not as an unlabelled squiggle.
+		function spark(vals, inW, big, fmt) {
 			const pts = vals.map((v, i) => [i, v]).filter((p) => p[1] != null && isFinite(p[1]));
 			if (pts.length < 2) return "";
 			const w = 240, h = big ? 48 : 34, ys = pts.map((p) => p[1]);
@@ -1110,7 +1372,8 @@ window.avinash_ceo_dashboard = (function () {
 			});
 			const lp = pts[pts.length - 1];
 			const area = `${path}L${x(lp[0]).toFixed(1)},${h}L${x(pts[0][0]).toFixed(1)},${h}Z`;
-			return `<svg class="ceo-spark ${big ? "big" : ""}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="${area}"/><path class="all" d="${path}"/><path class="win" d="${win}"/><circle cx="${x(lp[0])}" cy="${y(lp[1])}" r="3.5"/></svg>`;
+			const from = PM() - 23, tipAttr = fmt ? ` data-tip="${tip(tipRows(__("Last 24 months, {0} to {1}", [monthLabel(from + pts[0][0]), monthLabel(from + lp[0])]), [["", __("Highest month"), esc(fmt(max))], ["", __("Lowest month"), esc(fmt(lo))], ["", monthLabel(from + lp[0]), esc(fmt(lp[1]))]]))}"` : "";
+			return `<svg class="ceo-spark ${big ? "big" : ""}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"${tipAttr}><path class="area" d="${area}"/><path class="all" d="${path}"/><path class="win" d="${win}"/><circle cx="${x(lp[0])}" cy="${y(lp[1])}" r="3.5"/></svg>`;
 		}
 
 		// -------------------------------------------------------- period charts
@@ -1126,26 +1389,26 @@ window.avinash_ceo_dashboard = (function () {
 		const minIso = (a, b) => (a < b ? a : b);
 		const isoMonth = new Map();   // AD date -> timeline month (for the purchase price of a day's gas)
 		const monthOfIso = (iso) => { let m = isoMonth.get(iso); if (m == null) { const x = bsDay(iso); m = x ? x.m : -1; isoMonth.set(iso, m); } return m; };
-		const bsDm = (iso) => { const x = bsDay(iso); return x ? `${x.day} ${monthName(x.m).slice(0, 3)}` : ""; };
+		const bsDm = (iso) => { const x = bsDay(iso); return x ? `${x.day} ${monthShort(x.m)}` : ""; };
 
 		function chartView() {
 			const d = D(), mb = d.month_bounds, pm = PM(), b = FY0(), thr = d.through;
 			const months = (ms, title, multi) => ({
 				grain: "month", n: ms.length, title, noun: __("month"), xTitle: __("Month (Nepali calendar)"), hint: __("Click a month to see it day by day."),
 				inCur: (i) => ms[i] <= pm, inPrev: (i) => ms[i] >= 12, month: (i) => ms[i],
-				label: (i, nar) => monthName(ms[i]).slice(0, nar ? 1 : 3),
+				label: (i, nar) => (nar ? monthName(ms[i]).slice(0, 1) : monthShort(ms[i])),
 				group: (i) => (i === 0 || ms[i] % 12 === 0 ? yearOf(ms[i]) : null),
 				long: (i) => monthLabel(ms[i]) + (ms[i] === pm ? ` (${__("to {0}", [d.through_label])})` : ""),
 				longPrev: (i) => monthLabel(ms[i] - 12),
 				band: (i) => (ms[i] <= pm ? `data-act="chart-month" data-val="${ms[i]}"` : ""),
 				dim: (i) => (multi ? dimState("mo", ms[i]) : ""),
 				shade: (i) => multi && monthIn(st.W, ms[i]),
-				last: (i) => ms[i] === pm,
+				last: (i) => ms[i] === pm && partMonth(),
 			});
 			const ranged = (o) => ({
 				band: () => "", dim: () => "", shade: () => false, last: () => false,
 				...o,
-				key: JSON.stringify([st.fy, yearsBack(), ...o.fetch, st.sel.cust.size ? D().customers[[...st.sel.cust][0]][0] : ""]),
+				key: JSON.stringify([st.fy, yearsBack(), ...o.fetch, st.sel.cust.size ? D().customers[[...st.sel.cust][0]][0] : "", distNames().join(",")]),
 			});
 			const range = (n) => Array.from({ length: n }, (_, i) => i);
 
@@ -1158,6 +1421,7 @@ window.avinash_ceo_dashboard = (function () {
 				const s = mb[m][0], e = mb[m][1], hasP = m >= 12, ps = hasP ? mb[m - 12][0] : s, pe = hasP ? mb[m - 12][1] : s;
 				const n = Math.max(daysBetween(s, e), hasP ? daysBetween(ps, pe) : 0) + 1;
 				return ranged({
+					band: (i) => { const x = isoAdd(s, i); return x <= e && x <= thr ? `data-act="pick-day" data-val="${x}"` : ""; },
 					grain: "day", n, from: s, title: __("Day by day · {0}", [monthLabel(m)]), noun: __("day"), xTitle: __("Day of {0}", [monthName(m)]), hint: "",
 					fetch: [s, minIso(e, thr), ps, pe], hasPrev: hasP,
 					pos: (iso, prev) => daysBetween(prev ? ps : s, iso),
@@ -1168,12 +1432,14 @@ window.avinash_ceo_dashboard = (function () {
 			};
 			if (st.sel.mo.size === 1) return dayView([...st.sel.mo][0]);
 			if (st.period === "mtd") return dayView(st.month == null ? pm : Math.min(pm, b + st.month));
-			if (st.period === "wk") {
-				const wks = fyWeeks(), w = wks[(st.week || wks.length) - 1];
+			if (slotPeriod()) {
+				const wks = fyWeeks(), day = st.period === "day" ? curDay() : null, wn = day ? weekOfDay(day) : st.week || wks.length, w = wks[wn - 1];
 				if (w) {
 					const vs = isoAdd(w[0], -dow(w[0])), back = (x) => isoAdd(x, -364);   // the Sunday the week's row starts on
 					return ranged({
-						grain: "day", n: 7, from: vs, title: __("Day by day · {0}", [weekLabel(st.week || wks.length, w)]), noun: __("day"), xTitle: __("Day of the week (Nepali date below)"), hint: "",
+						band: (i) => { const x = isoAdd(vs, i); return x >= w[0] && x <= w[1] ? `data-act="pick-day" data-val="${x}"` : ""; },
+						dim: (i) => (day && isoAdd(vs, i) !== day ? "is-dim" : ""),
+						grain: "day", n: 7, from: vs, title: __("Day by day · {0}", [weekLabel(wn, w)]), noun: __("day"), xTitle: __("Day of the week (Nepali date below)"), hint: "",
 						fetch: [w[0], w[1], back(w[0]), back(w[1])], hasPrev: true,
 						pos: (iso, prev) => daysBetween(prev ? back(vs) : vs, iso),
 						inCur: (i) => { const x = isoAdd(vs, i); return x >= w[0] && x <= w[1]; }, inPrev: (i) => { const x = isoAdd(vs, i); return x >= w[0] && x <= w[1]; },
@@ -1183,25 +1449,10 @@ window.avinash_ceo_dashboard = (function () {
 				}
 			}
 			if (st.period === "qtd") {
-				// Day by day across the quarter's three BS months; the line is the same
-				// BS days a year earlier (1 Shrawan against 1 Shrawan).
+				// The unit just below the period: a quarter is drawn month by month, as a
+				// year is (the CEO's call, 2026-11-11; days are under "Show by" > Day).
 				const q = st.quarter == null ? curQuarter() : Math.min(st.quarter, curQuarter()), qs = b + 3 * q;
-				const s = mb[qs][0], e = mb[qs + 2][1], hasP = qs >= 12, ps = hasP ? mb[qs - 12][0] : s, pe = hasP ? mb[qs - 10][1] : s;
-				const n = Math.max(daysBetween(s, e), hasP ? daysBetween(ps, pe) : 0) + 1;
-				const dayOf = (i) => bsDay(isoAdd(s, i));
-				return ranged({
-					grain: "day", n, from: s, title: `${__("Day by day")} · Q${q + 1} · ${yearOf(qs)}`, noun: __("day"),
-					xTitle: __("Day (Nepali calendar)"), hint: __("Click a day to see its month."),
-					fetch: [s, minIso(e, thr), ps, pe], hasPrev: hasP, every: 1,
-					pos: (iso, prev) => daysBetween(prev ? ps : s, iso),
-					inCur: (i) => { const x = isoAdd(s, i); return x <= e && x <= thr; }, inPrev: (i) => hasP && isoAdd(ps, i) <= pe,
-					// Day numbers on the 1st, 8th, 15th, 22nd and 29th only; month names where a month starts.
-					label: (i) => { const x = dayOf(i); return x && x.day % 7 === 1 ? String(x.day) : ""; },
-					group: (i) => { const x = dayOf(i); return x && x.day === 1 ? monthLabel(x.m) : null; },
-					band: (i) => { const x = isoAdd(s, i); return x <= thr ? `data-act="chart-month" data-val="${monthOfIso(x)}"` : ""; },
-					long: (i) => { const x = isoAdd(s, i); return `${bsShort(x)} ${bsYear(monthOfIso(x))} · ${WEEKDAY[dow(x)]}`; },
-					longPrev: (i) => { const x = isoAdd(ps, i); return `${bsShort(x)} ${bsYear(monthOfIso(x))}`; },
-				});
+				return months(range(3).map((i) => qs + i).filter((mo) => mo <= pm), `${__("Month by month")} · Q${q + 1} · ${yearOf(qs)}`);
 			}
 			if (st.period === "r12") return months(range(12).map((i) => pm - 11 + i), __("Last 12 months"));
 			// Only the months that have happened: a year that is two months old is two
@@ -1216,7 +1467,7 @@ window.avinash_ceo_dashboard = (function () {
 			st.daily = { key, data: null };
 			frappe.call({
 				method: "avinashgroup_app.ceo_dashboard.charts.get_daily",
-				args: { fiscal_year: st.fy, years_back: yearsBack(), from_date: a, to_date: b, prev_from: pa, prev_to: pb, customer: st.sel.cust.size ? D().customers[[...st.sel.cust][0]][0] : null },
+				args: { fiscal_year: st.fy, years_back: yearsBack(), from_date: a, to_date: b, prev_from: pa, prev_to: pb, districts: distNames().join(",") || null, customer: st.sel.cust.size ? D().customers[[...st.sel.cust][0]][0] : null },
 				callback: (r) => {
 					if (!st.daily || st.daily.key !== key || !r.message) return;
 					// Reshape to the fact table's columns where they overlap:
@@ -1266,10 +1517,10 @@ window.avinash_ceo_dashboard = (function () {
 			const pm = PM(), from = pm - 23;
 			return {
 				n: 24, val: (i) => from + i, xTitle: __("Month end (Nepali calendar)"),
-				label: (i, nar) => monthName(from + i).slice(0, nar ? 1 : 3),
+				label: (i, nar) => (nar ? monthName(from + i).slice(0, 1) : monthShort(from + i)),
 				group: (i) => ((from + i) % 12 === 0 || i === 0 ? yearOf(from + i) : null),
 				shade: (i) => monthIn(st.W, from + i),
-				dim: (i) => dimState("mo", from + i), last: (i) => from + i === pm,
+				dim: (i) => dimState("mo", from + i), last: (i) => from + i === pm && partMonth(),
 				band: (i) => `data-dim="mo" data-val="${from + i}"`, aria: (i) => monthLabel(from + i),
 			};
 		}
@@ -1281,12 +1532,12 @@ window.avinash_ceo_dashboard = (function () {
 			// Axis titles: x from the axis (what one bar is), y from the measure (its unit).
 			if (!SHOW_COMPARISON) series = series.filter((x) => x.cls !== "prev");
 			const A = axis || axis24(), N = A.n, hasSub = !!A.sub, xb = A.xTitle ? 24 : 0;
-			const W = Math.max(300, el.clientWidth || 600), H = (height || Math.max(230, Math.min(310, W * 0.38))) + (hasSub ? 12 : 0) + xb;
+			const W = Math.max(300, el.clientWidth || 600), H = (height || Math.max(200, Math.min(260, W * 0.3))) + (hasSub ? 12 : 0) + xb;
 			// Chart text is large (CEO_DASHBOARD css: ticks 13.5px, axis titles 15px), so the margins are wide.
 			let yT = yTitle || yTitleOf(kind);
 			const m = { t: 12, r: 8, b: (hasSub ? 62 : 48) + xb, l: 66 + (yT ? 24 : 0) }, iw = W - m.l - m.r, ih = H - m.t - m.b, band = iw / N;
 			// A short chart has no room for the long title: keep the first words ("Rupees").
-			if (yT && ih < 190) yT = yT.replace(/[,(].*$/, "").trim();
+			if (yT && (ih < 190 || yT.length * 7.8 > ih)) yT = yT.replace(/[,(].*$/, "").trim();
 			const all = series.flatMap((s) => [...s.vals, ...(s.full || [])]).filter((v) => v != null && isFinite(v));
 			if (!all.length) return `<div class="ceo-empty">${__("Nothing to show for this selection.")}</div>`;
 			let lo = Math.min(0, ...all), hi = Math.max(...all, 1);
@@ -1297,9 +1548,11 @@ window.avinash_ceo_dashboard = (function () {
 			const narrow = band < 32, every = A.every || (narrow ? Math.ceil(32 / band) : 1);
 			let s = `<svg class="ceo-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">`;
 			if (yT) s += `<text class="ceo-axis-title" transform="translate(16 ${m.t + ih / 2}) rotate(-90)" text-anchor="middle">${esc(yT)}</text>`;
-			if (A.xTitle) s += `<text class="ceo-axis-title" x="${m.l + iw / 2}" y="${H - 3}" text-anchor="middle">${esc(A.xTitle)}</text>`;
+			// A narrow chart has no room for the bracketed part of the x title either.
+			const xT = A.xTitle && A.xTitle.length * 7.8 > iw ? A.xTitle.replace(/\s*\(.*$/, "") : A.xTitle;
+			if (xT) s += `<text class="ceo-axis-title" x="${m.l + iw / 2}" y="${H - 3}" text-anchor="middle">${esc(xT)}</text>`;
 			for (let i = 0; i < N; i++) if (A.shade(i)) s += `<rect class="ceo-win" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ih}"/>`;
-			for (const t of ticks) s += `<line class="ceo-grid-l" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/><text class="ceo-tick" x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${esc(axisNum(t, kind))}</text>`;
+			for (const t of ticks) s += `<line class="ceo-grid-l" x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}"/><text class="ceo-tick" x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end">${esc(axisNum(t, kind, true))}</text>`;
 			s += `<line class="ceo-base" x1="${m.l}" x2="${W - m.r}" y1="${y(y0)}" y2="${y(y0)}"/>`;
 			for (let i = 0; i < N; i++) {
 				if (i % every === 0) {
@@ -1311,14 +1564,18 @@ window.avinash_ceo_dashboard = (function () {
 			}
 			const bars = series.filter((x) => x.type === "bar");
 			bars.forEach((se, bi) => {
-				const nb = bars.length, bw = Math.min(nb > 1 ? 24 : 46, band * (nb > 1 ? 0.36 : 0.62)), off = (bi - (nb - 1) / 2) * (bw + 3);
+				const nb = bars.length, few = N <= FEW_BARS, bw = Math.min(nb > 1 ? (few ? 38 : 24) : (few ? 76 : 46), band * (nb > 1 ? 0.36 : 0.62)), off = (bi - (nb - 1) / 2) * (bw + 3);
 				const base = y(Math.max(y0, 0)), labels = nb === 1 && N <= BAR_LABELS_MAX && bw >= 26 && !series.some((x) => x.type === "line" && x.vals.some((v) => v != null));
 				se.vals.forEach((v, i) => {
 					const x0 = xc(i) - bw / 2 + off;
 					if (se.full && se.full[i] > 0) s += `<path class="ceo-bar full ${se.cls}" d="${roundTop(x0, y(se.full[i]), bw, base - y(se.full[i]), 5)}"/>`;
-					if (v > 0) s += `<path class="ceo-bar ${se.cls} ${A.dim(i)} ${A.last(i) ? "is-last" : ""}" style="--i:${i}" d="${roundTop(x0, y(v), bw, base - y(v), Math.min(5, bw / 2))}"/>`;
+					// Frosted bar: a see-through body and a solid cap at its end (CSS .ceo-bar / .cap).
+					if (v > 0) s += `<path class="ceo-bar ${se.cls} ${A.dim(i)} ${A.last(i) ? "is-last" : ""}" style="--i:${i}" d="${roundTop(x0, y(v), bw, base - y(v), Math.min(5, bw / 2))}"/><path class="ceo-bar cap ${se.cls} ${A.dim(i)} ${A.last(i) ? "is-last" : ""}" d="${roundTop(x0, y(v), bw, Math.min(3, base - y(v)), Math.min(3, bw / 2))}"/>`;
+					// Below zero (a negative balance, returns above sales): a bar hanging from the zero line.
+					else if (v < 0 && y0 < 0) s += `<path class="ceo-bar ${se.cls} ${A.dim(i)} is-below" style="--i:${i}" d="M${x0},${base}h${bw}V${y(v)}h${-bw}Z"/><rect class="ceo-bar cap ${se.cls} ${A.dim(i)}" x="${x0}" y="${y(v) - Math.min(3, y(v) - base)}" width="${bw}" height="${Math.min(3, y(v) - base)}"/>`;
 					// The figure on top of each bar (single series, few bars): the chart reads without the axis.
 					if (labels && v > 0) s += `<text class="ceo-barlbl ${A.dim(i)}" x="${xc(i) + off}" y="${y(v) - 7}" text-anchor="middle">${esc(axisNum(v, kind))}</text>`;
+					else if (labels && v < 0 && y0 < 0) s += `<text class="ceo-barlbl ${A.dim(i)}" x="${xc(i) + off}" y="${base - 7}" text-anchor="middle">−${esc(axisNum(-v, kind))}</text>`;
 				});
 			});
 			const lines = series.filter((x) => x.type === "line");
@@ -1342,9 +1599,21 @@ window.avinash_ceo_dashboard = (function () {
 		}
 
 		const shapeOf = (name) => st.shape[name] || CHART_SHAPE[name];
-		const cmpActive = () => st.cmp.series.length > 1 || st.cmp.years.length > 0 || st.cmp.grain !== "auto";
+		// "Show by" works inside the period on screen, so a unit as large as the
+		// period or larger is not offered (Quarter: no Half-year or Quarter). Sizes:
+		const GRAIN_RANK = { half: 5, quarter: 4, month: 3, week: 1, day: 0 };
+		const periodRank = () => (st.sel.mo.size === 1 ? 3 : multiYear() || st.sel.mo.size > 1 ? 6 : { day: 1, wk: 1, mtd: 3, qtd: 4, ytd: 6, r12: 6 }[st.period]);
+		const grainAllowed = (g) => GRAIN_RANK[g] < periodRank();
+		// With nothing chosen the chart uses the unit just below the period.
+		const autoGrain = () => ({ 1: "day", 3: "day", 4: "month", 6: "month" })[periodRank()];
+		// The chosen unit, or "auto" when none is chosen or the choice no longer fits the period.
+		const cmpGrain = () => (st.cmp.grain !== "auto" && grainAllowed(st.cmp.grain) ? st.cmp.grain : "auto");
+		// The compare series (series.get_series) is not split by customer or
+		// district, so with one picked the chart stays the period chart, which is.
+		const cmpSplit = () => st.sel.cust.size > 0 || st.sel.dist.size > 0;
+		const cmpActive = () => !cmpSplit() && (st.cmp.series.length > 1 || st.cmp.years.length > 0 || cmpGrain() !== "auto");
 		function renderTrend() {
-			if (cmpActive()) return renderTrendCompare();
+			if (!cmpSplit()) return renderGearChart("trend");
 			const el = slot("trend"), v = st.view, sel = st.sel.seg.size > 0, line = shapeOf("trend") === "line";
 			const what = st.measure === "kg" ? __("LP Gas sold") : __("Net sales");
 			setTitle("trend", `${what} · ${v.title}`);
@@ -1384,10 +1653,9 @@ window.avinash_ceo_dashboard = (function () {
 			const days = daysBetween(fyStart, fyEnd) + 1, mname = (i) => monthName(m0 + i);
 			const monthStart = (mi) => mb[m0 + mi][0];
 			const specs = {
-				half: { n: 2, of: (x) => (x.mi < 6 ? 0 : 1), start: (i) => monthStart(i * 6), label: (i) => `${mname(i * 6).slice(0, 3)}–${mname(i * 6 + 5).slice(0, 3)}`, long: (i) => `${mname(i * 6)} – ${mname(i * 6 + 5)}`, xTitle: __("Half-year (Nepali calendar)") },
-				quarter: { n: 4, of: (x) => Math.floor(x.mi / 3), start: (i) => monthStart(i * 3), label: (i) => `Q${i + 1}`, sub: (i) => `${mname(i * 3).slice(0, 3)}–${mname(i * 3 + 2).slice(0, 3)}`, long: (i) => `Q${i + 1} · ${mname(i * 3)} – ${mname(i * 3 + 2)}`, xTitle: __("Quarter (Nepali calendar)") },
+				half: { n: 2, of: (x) => (x.mi < 6 ? 0 : 1), start: (i) => monthStart(i * 6), label: (i) => `${monthShort(m0 + i * 6)}–${monthShort(m0 + i * 6 + 5)}`, long: (i) => `${mname(i * 6)} – ${mname(i * 6 + 5)}`, xTitle: __("Half-year (Nepali calendar)") },
+				quarter: { n: 4, of: (x) => Math.floor(x.mi / 3), start: (i) => monthStart(i * 3), label: (i) => `Q${i + 1}`, sub: (i) => `${monthShort(m0 + i * 3)}–${monthShort(m0 + i * 3 + 2)}`, long: (i) => `Q${i + 1} · ${mname(i * 3)} – ${mname(i * 3 + 2)}`, xTitle: __("Quarter (Nepali calendar)") },
 				month: { n: 12, of: (x) => x.mi, start: (i) => monthStart(i), label: (i, nar) => mname(i).slice(0, nar ? 1 : 3), long: (i) => mname(i), xTitle: __("Month (Nepali calendar)") },
-				halfmonth: { n: 24, of: (x) => x.mi * 2 + (x.day > 15 ? 1 : 0), start: (i) => (i % 2 ? isoAdd(monthStart(i >> 1), 15) : monthStart(i >> 1)), label: (i) => (i % 2 ? "16+" : mname(i >> 1).slice(0, 3)), long: (i) => `${mname(i >> 1)} ${i % 2 ? "16 – " + __("end") : "1 – 15"}`, xTitle: __("Half-month (Nepali calendar)") },
 				week: { n: Math.ceil(days / 7), of: (x) => Math.floor(x.off / 7), start: (i) => isoAdd(fyStart, i * 7), label: (i) => (i % 4 === 0 ? `W${i + 1}` : ""), long: (i) => `${__("Week {0}", [i + 1])} · ${bsShort(isoAdd(fyStart, i * 7))} – ${bsShort(isoAdd(fyStart, Math.min(days - 1, i * 7 + 6)))}`, xTitle: __("Week of the fiscal year"), every: 1 },
 				day: { n: days, of: (x) => x.off, start: (i) => isoAdd(fyStart, i), label: (i) => { const x = bsDay(isoAdd(fyStart, i)); return x && x.day % 10 === 1 && x.day < 31 ? String(x.day) : ""; }, long: (i) => { const iso = isoAdd(fyStart, i); return `${bsShort(iso)} · ${WEEKDAY[dow(iso)]}`; }, xTitle: __("Day (Nepali calendar)"), every: 1 },
 			};
@@ -1410,9 +1678,10 @@ window.avinash_ceo_dashboard = (function () {
 			}
 			return x;
 		}
-		function cmpSeriesValues(key, grain, y) {
-			const B = cmpBuckets(grain, y), out = new Array(B.n).fill(0), ser = st.ser, kg = st.measure === "kg";
-			const put = (iso, v) => { const x = cmpInfo(iso); if (x && x.y === y) { const i = B.of(x); if (i >= 0 && i < B.n) out[i] += v; } };
+		// offs: [first, last] day of the fiscal year to count (a period inside the year), or null for the whole year.
+		function cmpSeriesValues(key, grain, y, offs = null, kgOv = null) {
+			const B = cmpBuckets(grain, y), out = new Array(B.n).fill(0), ser = st.ser, kg = kgOv == null ? st.measure === "kg" : kgOv;
+			const put = (iso, v) => { const x = cmpInfo(iso); if (x && x.y === y && (!offs || (x.off >= offs[0] && x.off <= offs[1]))) { const i = B.of(x); if (i >= 0 && i < B.n) out[i] += v; } };
 			if (key === "sales") for (const r of ser.sales) { if ((st.internal || !r[3]) && passCo(r[1]) && (!st.sel.seg.size || st.sel.seg.has(r[2]))) put(r[0], kg ? r[4] : r[5]); }
 			else if (key === "coll") for (const r of ser.coll) { if ((st.internal || !r[3]) && passCo(r[1]) && (!st.sel.seg.size || st.sel.seg.has(r[2]))) put(r[0], r[4]); }
 			else if (key === "buy") for (const r of ser.buy) { if ((st.internal || !r[2]) && passCo(r[1])) put(r[0], kg ? r[3] : r[4]); }
@@ -1423,20 +1692,199 @@ window.avinash_ceo_dashboard = (function () {
 		}
 		// The trend chart with options from its funnel panel: extra series,
 		// other fiscal years, a chosen grain. Bars or lines (shape).
+		// -------------------------------------------------------- gear charts
+		// The four time charts read series.get_series (day rows for every year of
+		// the timeline) and are bucketed here by their card's gear, so a switch is
+		// instant. Year = one bar per fiscal year (the current one up to "data
+		// through"); the other units cover the fiscal year picked at the top, up
+		// to "data through". Returns false when the card has no gear chart to draw.
+		const GEAR_CHART = {
+			trend: { keys: (kg) => [["sales", kg ? __("LP Gas sold") : __("Net sales"), "cur"]], kg: true, title: (kg) => (kg ? __("LP Gas sold") : __("Net sales")) },
+			coll: { keys: () => [["sales", __("Billed (net sales)"), "bill"], ["coll", __("Collected (received)"), "coll"]], kg: false, title: () => __("Billed and collected") },
+			buytrend: { keys: () => [["buy", __("Purchases"), "buyc"]], kg: false, title: () => __("Purchases"), yTitle: __("Purchases, rupees (L = lakh, Cr = crore)") },
+		};
+		function gearInto(name) {
+			const g = slot(`gear-${name}`);
+			if (!g) return;
+			if (name !== "buytrend" && cmpSplit()) { g.innerHTML = ""; return; }
+			const i = Math.max(0, GEAR.findIndex(([k]) => k === litGrain(name)));
+			let box = g.querySelector("[data-gear]");
+			if (!box) {
+				g.innerHTML = `<div class="ceo-gearbox" data-gear="${name}" role="radiogroup" aria-label="${esc(__("Show by"))}" style="--n:${GEAR.length};--i:${i}"><span class="ceo-gearthumb" aria-hidden="true"></span>${GEAR.map(([k, l, sh]) => `<button role="radio" data-act="gear" data-val="${k}"><span class="l">${esc(__(l))}</span><span class="s">${esc(__(sh))}</span></button>`).join("")}</div>`;
+				box = g.querySelector("[data-gear]");
+			}
+			box.style.setProperty("--i", i);
+			box.querySelectorAll("button").forEach((b, j) => { b.setAttribute("aria-checked", String(j === i)); b.tabIndex = j === i ? 0 : -1; });
+		}
+		// Drill: a bar (or pie slice) opens its parts one unit down: a year its
+		// quarters, a quarter its months, a month or a week its days. Each card
+		// keeps its own path (st.drill[name], a stack); "‹ Back" steps out, and
+		// moving the gear starts again from the whole fiscal year.
+		const GEAR_CHILD = { year: "quarter", quarter: "month", month: "day", week: "day" };
+		const PIE_MAX = 12;   // more slices than months in a year cannot be read as a pie
+		const gearCtx = (name) => { const s = st.drill[name]; return s && s.length ? s[s.length - 1] : null; };
+		const litGrain = (name) => (gearCtx(name) || {}).grain || st.grain[name];
+		function redrawGear(name) {
+			gearInto(name);
+			if (name === "trend") renderTrend(); else if (name === "coll") renderColl(); else renderBuying(st.W);
+		}
+		function setGear(name, k) {
+			if (!GEAR_CHART[name] || !GEAR.some(([g]) => g === k)) return;
+			if (st.grain[name] === k && !gearCtx(name)) return;
+			st.grain[name] = k;
+			st.drill[name] = [];
+			redrawGear(name);
+		}
+		function stepGear(name, dir) {
+			const j = GEAR.findIndex(([k]) => k === litGrain(name)) + dir;
+			if (j >= 0 && j < GEAR.length) setGear(name, GEAR[j][0]);
+		}
+		function gearDrill(name, i) {
+			const B = st.gearB[name];
+			if (!B || !GEAR_CHILD[B.grain] || i < 0 || i >= B.n) return;
+			const [ra, rb] = B.range(i);
+			st.drill[name] = [...(st.drill[name] || []), { grain: GEAR_CHILD[B.grain], y: B.yOf(i), a: ra, b: rb, label: B.crumb(i) }];
+			redrawGear(name);
+		}
+		function gearBack(name, to) {
+			const s = st.drill[name] || [];
+			st.drill[name] = to == null ? s.slice(0, -1) : s.slice(0, to);
+			redrawGear(name);
+		}
+		function gearBuckets(name) {
+			const d = D(), thr = st.ser.through, ctx = gearCtx(name), grain = ctx ? ctx.grain : st.grain[name], mb = d.month_bounds;
+			if (grain === "year") {
+				const ys = d.years.map((_, yy) => yy).filter((yy) => mb[yy * 12][0] <= thr);
+				const partial = (yy) => mb[yy * 12 + 11][1] > thr;
+				return {
+					grain, n: ys.length, ys, every: 1, xTitle: __("Fiscal year"), group: () => null,
+					label: (i) => d.years[ys[i]], sub: (i) => (partial(ys[i]) ? __("to {0}", [d.through_label]) : ""),
+					long: (i) => `${__("Fiscal year")} ${d.years[ys[i]]}${partial(ys[i]) ? ` (${__("to {0}", [d.through_label])})` : ""}`,
+					range: (i) => [mb[ys[i] * 12][0], minIso(mb[ys[i] * 12 + 11][1], thr)], yOf: (i) => ys[i], crumb: (i) => d.years[ys[i]],
+				};
+			}
+			const y = ctx ? ctx.y : d.years.indexOf(st.fy), F = cmpBuckets(grain, y), fyEnd = mb[y * 12 + 11][1];
+			const endOf = (k) => (k + 1 < F.n ? isoAdd(F.start(k + 1), -1) : fyEnd);
+			const lo = ctx ? ctx.a : F.fyStart, hi = minIso(ctx ? ctx.b : fyEnd, thr);
+			const keep = Array.from({ length: F.n }, (_, k) => k).filter((k) => F.start(k) <= hi && endOf(k) >= lo);
+			const drilledDays = ctx && grain === "day";
+			return {
+				...F, grain, y, keep, n: keep.length,
+				offs: ctx ? [daysBetween(F.fyStart, lo), daysBetween(F.fyStart, hi)] : null,   // only the opened period's days
+				every: drilledDays && keep.length <= 31 && window.innerWidth >= 760 ? 1 : Math.max(1, Math.ceil(keep.length / (window.innerWidth < 760 ? 6 : 16))),
+				start: (i) => F.start(keep[i]), long: (i) => F.long(keep[i]), sub: F.sub ? (i) => F.sub(keep[i]) : undefined,
+				label: (i, nar) => (grain === "week" ? `W${keep[i] + 1}` : grain === "day" ? String((bsDay(F.start(keep[i])) || {}).day || "") : F.label(keep[i], nar)),
+				group: (i) => (i === 0 ? (grain === "week" || grain === "day" ? monthLabel((bsDay(maxIso(F.start(keep[0]), lo)) || { m: y * 12 }).m) : d.years[y]) : F.group(keep[i])),
+				range: (i) => [maxIso(F.start(keep[i]), lo), minIso(endOf(keep[i]), hi)], yOf: () => y,
+				crumb: (i) => (grain === "month" ? monthLabel(y * 12 + keep[i]) : `${F.long(keep[i]).split(" · ")[0]} · ${d.years[y]}`),
+			};
+		}
+		const maxIso = (a, b) => (a > b ? a : b);
+		function gearValues(key, B, kg) {
+			if (B.grain === "year") return B.ys.map((yy) => cmpSeriesValues(key, "quarter", yy, null, kg).reduce((a, v) => (v == null ? a : a + v), 0));
+			const full = cmpSeriesValues(key, B.grain, B.y, B.offs, kg);
+			return B.keep.map((i) => full[i]);
+		}
+		// Donut per series: one slice per bucket, in time order, the series colour
+		// stepping from light (first) to full (last); the slices are named in the
+		// list beside it, so colour is never the only key.
+		function gearPie(B, lines, fmt, name) {
+			if (B.n > PIE_MAX) return `<div class="ceo-empty">${__("A pie can show up to {0} slices. Choose Year, Quarterly or Monthly, or open a period first.", [PIE_MAX])}</div>`;
+			const drill = GEAR_CHILD[B.grain];
+			const op = (i) => (B.n < 2 ? 1 : 0.45 + (0.55 * i) / (B.n - 1));   // lightest step still reads against the card
+			const one = (x) => {
+				const vals = x.vals.map((v) => (v > 0 ? v : 0)), tot = vals.reduce((a, v) => a + v, 0);
+				if (!tot) return `<div class="ceo-pieblock"><div class="ceo-empty small">${esc(x.label)}: ${__("nothing in this period")}</div></div>`;
+				const R = 92, r = 58, c = 100, pt = (rad, a) => `${(c + rad * Math.cos(a)).toFixed(2)} ${(c + rad * Math.sin(a)).toFixed(2)}`;
+				let a0 = -Math.PI / 2, svg = "";
+				vals.forEach((v, i) => {
+					if (!v) return;
+					const a1 = a0 + (v / tot) * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
+					const attrs = `class="ceo-pie ${x.cls}" style="fill-opacity:${op(i).toFixed(2)}" data-tip="${tip(tipRows(B.long(i), [["", x.label, esc(fmt(x.vals[i]))], ["", __("Share"), `${inr((v / tot) * 100, 1)}%`]]))}" ${drill ? `data-act="gdrill" data-name="${name}" data-val="${i}" tabindex="0"` : ""}`;
+					svg += v === tot
+						? `<path ${attrs} fill-rule="evenodd" d="M${pt(R, 0)}A${R} ${R} 0 1 1 ${pt(R, Math.PI)}A${R} ${R} 0 1 1 ${pt(R, 0)}ZM${pt(r, 0)}A${r} ${r} 0 1 0 ${pt(r, Math.PI)}A${r} ${r} 0 1 0 ${pt(r, 0)}Z"/>`
+						: `<path ${attrs} d="M${pt(R, a0)}A${R} ${R} 0 ${big} 1 ${pt(R, a1)}L${pt(r, a1)}A${r} ${r} 0 ${big} 0 ${pt(r, a0)}Z"/>`;
+					a0 = a1;
+				});
+				const list = vals.map((v, i) => `<li ${drill ? `data-act="gdrill" data-name="${name}" data-val="${i}" class="is-click"` : ""}><i class="ceo-lk rect ${x.cls}" style="opacity:${op(i).toFixed(2)}"></i><span>${esc(B.long(i).split(" · ")[0])}</span><b>${esc(fmt(x.vals[i]))}</b><small>${tot ? `${inr((v / tot) * 100, v / tot < 0.1 || (v / tot > 0.99 && v < tot) ? 1 : 0)}%` : ""}</small></li>`).join("");
+				return `<div class="ceo-pieblock"><svg class="ceo-piesvg" viewBox="0 0 200 200" role="img" aria-label="${esc(x.label)}">${svg}<text x="100" y="96" text-anchor="middle" class="ceo-pietot">${esc(fmt(tot))}</text><text x="100" y="116" text-anchor="middle" class="ceo-pielbl">${esc(x.label)}</text></svg><ul class="ceo-pielist">${list}</ul></div>`;
+			};
+			return `<div class="ceo-pies">${lines.map(one).join("")}</div>`;
+		}
+		function renderGearChart(name, host) {
+			const cfg = GEAR_CHART[name], el = host || slot(name);
+			if (!cfg || !el) return false;
+			gearInto(name);
+			const kg = cfg.kg && st.measure === "kg", ctx = gearCtx(name), grain = litGrain(name), word = (GEAR.find(([k]) => k === grain) || [])[1];
+			if (!host) setTitle(name, ctx ? `${cfg.title(kg)} · ${ctx.label} · ${__(word)}` : `${cfg.title(kg)} · ${__(word)}${grain === "year" ? "" : ` · ${st.fy}`}`);
+			const stale = !st.ser || st.ser.loading || (!st.ser.failed && (st.ser.fiscal_year !== st.fy || st.ser.years_back !== yearsBack()));
+			if (stale) { loadSeries(false); el.innerHTML = chartLoading(); return true; }
+			if (st.ser.failed) { el.innerHTML = `<div class="ceo-empty">${__("Not available.")}</div>`; return true; }
+			const B = (st.gearB[name] = gearBuckets(name));
+			const lines = cfg.keys(kg).map(([key, label, cls]) => ({ label, cls, vals: gearValues(key, B, key === "coll" ? false : kg) }));
+			const fmt = (v) => (v == null ? "—" : kg ? mt(v) : rs(v));
+			const path = st.drill[name] || [];
+			const bar = path.length ? `<div class="ceo-drillbar"><button class="ceo-drillback" data-act="gback" data-name="${name}">‹ ${__("Back")}</button><nav class="ceo-crumbs"><button data-act="gcrumb" data-name="${name}" data-val="0">${esc(st.grain[name] === "year" ? __("All years") : st.fy)}</button>${path.map((p, k) => k === path.length - 1 ? `<span>${esc(p.label)}</span>` : `<button data-act="gcrumb" data-name="${name}" data-val="${k + 1}">${esc(p.label)}</button>`).join("")}</nav></div>` : "";
+			const hint = GEAR_CHILD[B.grain] ? `<div class="ceo-drillhint">${__("Click a bar to open it")}</div>` : "";
+			if (st.tables.has(name)) {
+				el.innerHTML = bar + table([__("Period"), ...lines.map((x) => x.label)], Array.from({ length: B.n }, (_, i) => [esc(B.long(i)), ...lines.map((x) => esc(fmt(x.vals[i])))]).filter((r, i) => lines.some((x) => x.vals[i] != null)));
+				return true;
+			}
+			const sh = shapeOf(name);
+			if (sh === "pie") { el.innerHTML = bar + gearPie(B, lines, fmt, name); return true; }
+			const shape = sh === "line" ? "line" : "bar", lk = shape === "line" ? "line" : "rect";
+			const drillable = !!GEAR_CHILD[B.grain];
+			el.innerHTML = bar + (lines.length > 1 ? legend(lines.map((x) => [x.cls, x.label, lk])) : "") + timeAxis(el, {
+				axis: { n: B.n, val: () => undefined, label: B.label, sub: B.sub, group: B.group, shade: () => false, dim: () => "", last: () => false, band: (i) => (drillable ? `data-act="gdrill" data-name="${name}" data-val="${i}"` : ""), aria: B.long, xTitle: B.xTitle, every: B.every },
+				series: lines.map((x) => ({ type: shape, vals: x.vals, cls: x.cls, area: shape === "line" && lines.length === 1 })),
+				kind: kg ? "kg" : "amt", yTitle: cfg.yTitle, height: cfg.height,
+				tipFor: (i) => tipRows(B.long(i), [
+					...lines.map((x) => [`${x.cls} rect`, x.label, esc(fmt(x.vals[i]))]),
+					...(name === "coll" && lines[0].vals[i] ? [["", __("Collected / billed"), `${inr((lines[1].vals[i] / lines[0].vals[i]) * 100, 0)}%`]] : []),
+					...(drillable ? [["", "", esc(__("Click to open"))]] : []),
+				]),
+			}) + hint;
+			return true;
+		}
 		function renderTrendCompare() {
 			const el = slot("trend"), d = D(), c = st.cmp, kg = st.measure === "kg", line = shapeOf("trend") === "line";
 			const allowed = CMP_SERIES.filter(([, , hasKg]) => !kg || hasKg), active = allowed.filter(([k]) => c.series.includes(k));
 			const yBase = d.years.indexOf(st.fy), yrs = [st.fy, ...c.years.filter((y) => d.years.includes(y) && y !== st.fy)];
-			const grain = c.grain === "auto" ? "month" : c.grain, gl = (CMP_GRAINS.find(([g]) => g === grain) || [])[1];
-			setTitle("trend", `${active.map(([, l]) => __(l)).join(" · ")} · ${__("by {0}", [__(gl).toLowerCase()])} · ${yrs.join(" · ")}`);
+			const grain = cmpGrain() === "auto" ? autoGrain() : cmpGrain(), gl = (CMP_GRAINS.find(([g]) => g === grain) || [])[1];
+			// A week, month or quarter: only that period's buckets, and only its days in them.
+			const inPeriod = periodRank() < 6;
+			// Sales alone reads as the period chart does ("LP Gas sold · Week by week").
+			const what = active.length === 1 && active[0][0] === "sales" ? (kg ? __("LP Gas sold") : __("Net sales")) : active.map(([, l]) => __(l)).join(" · ");
+			setTitle("trend", `${what} · ${__("{0} by {1}", [__(gl), __(gl).toLowerCase()])} · ${inPeriod ? periodLabel(st.W) : yrs.join(" · ")}${inPeriod && yrs.length > 1 ? ` · ${yrs.join(" · ")}` : ""}`);
 			// Day rows must be for this fiscal year and timeline; otherwise fetch (loadSeries skips a fetch already running).
 			const stale = !st.ser || st.ser.loading || (!st.ser.failed && (st.ser.fiscal_year !== st.fy || st.ser.years_back !== yearsBack()));
 			if (stale) { loadSeries(false); el.innerHTML = chartLoading(); return; }
 			if (st.ser.failed || yBase < 0) { el.innerHTML = `<div class="ceo-empty">${__("Not available.")}</div>`; return; }
-			const B = cmpBuckets(grain, yBase), lines = [];
+			const F = cmpBuckets(grain, yBase), lines = [];
+			let B = F, keep = null, offs = null;
+			// Year to date with no other year: the axis stops at "data through", as the month chart does.
+			if (inPeriod || (yrs.length === 1 && !multiYear())) {
+				const [wa, wb] = windowDates(), fyEnd = d.month_bounds[yBase * 12 + 11][1];
+				const endOf = (i) => (i + 1 < F.n ? isoAdd(F.start(i + 1), -1) : fyEnd);
+				keep = Array.from({ length: F.n }, (_, i) => i).filter((i) => F.start(i) <= wb && endOf(i) >= wa);
+				offs = [daysBetween(F.fyStart, wa), daysBetween(F.fyStart, wb)];   // the same days of the year in every compared year
+				const first = keep.length ? bsDay(F.start(keep[0]) < wa ? wa : F.start(keep[0])) : null;
+				B = {
+					...F, n: keep.length, every: Math.max(1, Math.ceil(keep.length / (window.innerWidth < 760 ? 6 : 16))),   // labels a phone can fit
+					start: (i) => F.start(keep[i]), long: (i) => F.long(keep[i]), sub: F.sub ? (i) => F.sub(keep[i]) : undefined,
+					label: (i, nar) => (grain === "week" ? `W${keep[i] + 1}` : grain === "day" ? String((bsDay(F.start(keep[i])) || {}).day || "") : F.label(keep[i], nar)),
+					group: (i) => {
+						if (i === 0) return first ? (grain === "week" || grain === "day" ? (window.innerWidth < 760 ? monthName(first.m) : monthLabel(first.m)) : yearOf(first.m)) : null;
+						const x = bsDay(F.start(keep[i]));   // the first month is already named at the start
+						return x && first && x.m === first.m ? null : F.group(keep[i]);
+					},
+				};
+			}
 			for (const [k, l] of active) yrs.forEach((y, yi) => {
 				const yy = d.years.indexOf(y);
-				if (yy >= 0) lines.push({ key: k, label: `${__(l)}${yrs.length > 1 ? ` ${y}` : ""}`, year: y, yi, vals: cmpSeriesValues(k, grain, yy), dash: CMP_DASH[yi] });
+				if (yy < 0) return;
+				const full = cmpSeriesValues(k, grain, yy, offs);
+				lines.push({ key: k, label: `${__(l)}${yrs.length > 1 ? ` ${y}` : ""}`, year: y, yi, vals: keep ? keep.map((i) => full[i]) : full, dash: CMP_DASH[yi] });
 			});
 			lines.forEach((x, i) => (x.cls = `k${i % CMP_COLOURS}`));
 			const fmt = (v) => (v == null ? "—" : kg ? mt(v) : rs(v));
@@ -1463,9 +1911,9 @@ window.avinash_ceo_dashboard = (function () {
 		function popHtml(name) {
 			const d = D(), c = st.cmp, kg = st.measure === "kg";
 			const seg = (act, items, cur, extra = "") => `<div class="ceo-seg small">${items.map(([v, l]) => `<button data-act="${act}" data-val="${v}" ${extra} aria-pressed="${cur === v}">${esc(__(l))}</button>`).join("")}</div>`;
-			let h = `<section><h5>${__("Shape")}</h5>${seg("shape", [["bar", "Bars"], ["line", "Line"]], shapeOf(name), `data-name="${name}"`)}</section>`;
-			if (name !== "trend") return h;
-			h += `<section><h5>${__("Show by")}</h5>${seg("cmp-grain", [["auto", "Follow the period"], ...CMP_GRAINS], c.grain)}</section>`;
+			let h = `<section><h5>${__("Shape")}</h5>${seg("shape", [["bar", "Bars"], ["line", "Line"], ...(GEAR_CARDS.includes(name) ? [["pie", "Pie"]] : [])], shapeOf(name), `data-name="${name}"`)}</section>`;
+			return h;   // shape only: the card gears replaced Show by / Add / Compare with (2026-11-14)
+			if (cmpSplit()) return h + `<section><div class="ceo-muted">${__("Show by, Add and Compare with are not split by customer or district. Clear that filter to use them.")}</div></section>`;
 			const extra = CMP_SERIES.filter(([k, , hasKg]) => k !== "sales" && (!kg || hasKg));
 			h += `<section><h5>${__("Add")}</h5><div class="ceo-chips-row">${extra.map(([k, l]) => `<button class="ceo-chip ${c.series.includes(k) ? "on" : "add"}" data-act="cmp-tog" data-val="${k}"><i></i>${esc(__(l))}${c.series.includes(k) ? `<span aria-hidden="true">✕</span>` : ""}</button>`).join("")}</div></section>`;
 			const others = d.years.filter((y) => y !== st.fy).reverse();
@@ -1507,6 +1955,8 @@ window.avinash_ceo_dashboard = (function () {
 		}
 
 		function renderColl() {
+			if (!cmpSplit()) return renderGearChart("coll");
+			gearInto("coll");
 			const el = slot("coll"), v = st.view;
 			sub("coll", __("Blue bar = net sales billed in that {0}; green bar = money received from customers in that {0} (Payment Entries). Rupees.", [v.noun]));
 			const Bs = bucketSums(v, { ok: (r, day) => passX(r, "", day), val: (r) => r[R_AMT] });
@@ -1517,7 +1967,7 @@ window.avinash_ceo_dashboard = (function () {
 				el.innerHTML = table([__("Period"), __("Billed"), __("Collected"), "%"], B.map((x, i) => [esc(v.long(i)), x == null ? "—" : esc(rs(x)), C[i] == null ? "—" : esc(rs(C[i])), x ? `${inr((C[i] / x) * 100, 0)}%` : "—"]).filter((r, i) => B[i] != null));
 				return;
 			}
-			const shape = shapeOf("coll"), lk = shape === "line" ? "line" : "rect";
+			const shape = shapeOf("coll") === "line" ? "line" : "bar", lk = shape === "line" ? "line" : "rect";   // pie is for the gear chart only
 			el.innerHTML = legend([["bill", __("Billed (net sales)"), lk], ["coll", __("Collected (received)"), lk]]) + timeAxis(el, {
 				axis: viewAxis(v),
 				series: [{ type: shape, vals: B, cls: "bill" }, { type: shape, vals: C, cls: "coll" }],
@@ -1623,82 +2073,64 @@ window.avinash_ceo_dashboard = (function () {
 				el.innerHTML = !SHOW_COMPARISON ? table([__("Segment"), __("This period"), __("Share"), __("Customers"), otherName(), __("Per customer")], items.map((x) => [esc(x.label), esc(fmtM(x.cur)), total ? `${inr((x.cur / total) * 100, 1)}%` : "—", inr(x.cust.size), esc(otherVal(x)), x.cust.size ? esc(fmtM(x.cur / x.cust.size)) : "—"])) : table([__("Segment"), __("This period"), __("Before"), __("Change"), __("Share"), __("Customers"), __("Rs/kg"), __("Per customer")], items.map((x) => [esc(x.label), esc(fmtM(x.cur)), esc(fmtM(x.prev)), delta(x.cur, x.prev), total ? `${inr((x.cur / total) * 100, 1)}%` : "—", inr(x.cust.size), x.gasK ? `Rs ${inr(x.gas / x.gasK, 2)}` : "—", x.cust.size ? esc(fmtM(x.cur / x.cust.size)) : "—"]));
 				return;
 			}
-			const max = Math.max(1, ...items.map((x) => Math.max(x.cur, SHOW_COMPARISON ? x.prev : 0)));
-			const wm = winMonths(W);
+			// Compact (2026-11-14): three segments do not need a full-width card with a
+			// ring; one share bar and one line per segment, the rest on hover.
+			const shown = items.filter((x) => x.cur > 0);
+			const bar = total > 0 ? `<div class="ceo-segshare" role="img" aria-label="${esc(__("Segment split"))}">${shown.map((x) => `<span class="${dimState("seg", x.val)}" style="width:${(x.cur / total) * 100}%;background:var(--ceo-seg${x.val})"></span>`).join("")}</div>` : "";
 			const rows = items.map((x) => {
-				const share = total ? x.cur / total : 0, perCust = x.cust.size ? x.cur / x.cust.size : 0, perCustP = x.custP.size ? x.prev / x.custP.size : 0;
-				const rate = x.gasK ? x.gas / x.gasK : 0, rateP = x.gasKP ? x.gasP / x.gasKP : 0;
-				const third = SHOW_RATE ? `<div class="ceo-segstat"><span>${__("Rs/kg")}</span><strong>${rate ? inr(rate, 2) : "—"}</strong>${rateP ? delta(rate, rateP) : ""}</div>`
-					: `<div class="ceo-segstat"><span>${esc(otherName())}</span><strong>${esc(otherVal(x))}</strong></div>`;
-				return `<div class="ceo-segrow ${dimState("seg", x.val)}" data-dim="seg" data-val="${x.val}" tabindex="0" data-tip="${tip(tipRows(x.label, [["cur rect", __("This period"), esc(fmtM(x.cur))], ["prev", __("Comparison period"), esc(fmtM(x.prev))]], delta(x.cur, x.prev)))}">
-					<div class="ceo-segname"><span class="ceo-segkey" style="background:var(--ceo-seg${x.val})"></span><div><strong>${esc(x.label)}</strong><small>${inr(share * 100, 1)}% ${__("of the total")}</small></div></div>
-					<div class="ceo-segmain">
-						<div class="ceo-segval"><strong>${esc(fmtM(x.cur))}</strong>${SHOW_COMPARISON ? `${delta(x.cur, x.prev)}<span class="ceo-muted">${__("from")} ${esc(fmtM(x.prev))}</span>` : ""}</div>
-						<div class="ceo-bartrack big"><div class="ceo-barfill" style="width:${(Math.max(0, x.cur) / max) * 100}%;background:var(--ceo-seg${x.val});--i:${x.val}"></div>${SHOW_COMPARISON && x.prev > 0 ? `<div class="ceo-bartick" style="left:${(x.prev / max) * 100}%"></div>` : ""}</div>
-					</div>
-					<div class="ceo-segstat"><span>${__("Customers")}</span><strong>${inr(x.cust.size)}</strong>${delta(x.cust.size, x.custP.size)}</div>
-					<div class="ceo-segstat"><span>${__("Per customer")}</span><strong>${x.cust.size ? esc(fmtM(perCust)) : "—"}</strong>${perCustP ? delta(perCust, perCustP) : ""}</div>
-					${third}
-					<div class="ceo-segspark"><span>${__("24 months")}</span>${spark(flow(Array.from(x.spark)), wm, false)}</div>
-				</div>`;
+				const share = total ? x.cur / total : 0, perCust = x.cust.size ? x.cur / x.cust.size : 0;
+				return `<div class="ceo-segline ${dimState("seg", x.val)}" data-dim="seg" data-val="${x.val}" tabindex="0" data-tip="${tip(tipRows(x.label, [["", measureName(), esc(fmtM(x.cur))], ["", __("Share"), `${inr(share * 100, 1)}%`], ["", __("Customers"), inr(x.cust.size)], ["", __("Per customer"), x.cust.size ? esc(fmtM(perCust)) : "—"], ["", otherName(), esc(otherVal(x))]]))}">
+					<span class="ceo-segkey" style="background:var(--ceo-seg${x.val})"></span><span class="ceo-segnm">${esc(x.label)}<small>${esc(cnt(x.cust.size, "customer"))}</small></span><strong>${esc(fmtM(x.cur))}</strong><span class="ceo-segpc">${inr(share * 100, share < 0.1 ? 1 : 0)}%</span></div>`;
 			}).join("");
-			el.innerHTML = `<div class="ceo-segbig">${segDonut(items, total)}<div class="ceo-segrows">${rows}</div></div>`;
+			el.innerHTML = `${bar}<div class="ceo-seglines">${rows}</div>`;
 		}
 		// The measure not being shown: net sales beside volume, volume beside sales.
 		const otherName = () => (st.measure === "kg" ? __("Net sales") : __("Volume"));
 		const otherVal = (x) => (st.measure === "kg" ? rs(x.amt) : mt(x.kg));
-		// Ring showing the split; the rows beside it carry the values.
-		function segDonut(items, total) {
-			if (!(total > 0)) return "";
-			const r = 70, c = 2 * Math.PI * r, cx = 90;
-			let off = 0;
-			const segs = items.filter((x) => x.cur > 0).map((x) => {
-				const len = (x.cur / total) * c, gap = Math.min(3, len / 3);
-				const s = `<circle r="${r}" cx="${cx}" cy="${cx}" fill="none" class="ceo-ring ${dimState("seg", x.val)}" stroke="var(--ceo-seg${x.val})" stroke-width="20" stroke-dasharray="${Math.max(0.01, len - gap)} ${c}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cx})" data-dim="seg" data-val="${x.val}" data-tip="${tip(tipRows(x.label, [["", __("Share"), `${inr((x.cur / total) * 100, 1)}%`], ["", measureName(), esc(fmtM(x.cur))]]))}"/>`;
-				off += len;
-				return s;
-			}).join("");
-			return `<div class="ceo-donutwrap"><svg class="ceo-donut" viewBox="0 0 180 180" width="190" height="190" role="img" aria-label="${esc(__("Segment split"))}">${segs}<text x="${cx}" y="${cx - 4}" text-anchor="middle" class="ceo-donut-v">${esc(fmtM(total))}</text><text x="${cx}" y="${cx + 16}" text-anchor="middle" class="ceo-donut-l">${__("all segments")}</text></svg>
-				<div class="ceo-donutleg">${items.filter((x) => x.cur > 0).map((x) => `<span><i style="background:var(--ceo-seg${x.val})"></i>${esc(x.label)} <b>${inr((x.cur / total) * 100, 0)}%</b></span>`).join("")}</div></div>`;
-		}
 
 		// -------------------------------------------------------- scorecard
 		function renderMatrix(W) {
-			const d = D(), el = slot("matrix"), from = PM() - 23;
+			const d = D(), el = slot("matrix");
 			const per = new Map();
-			const get = (i) => per.get(i) || per.set(i, { kg: 0, kgP: 0, amt: 0, amtP: 0, gas: 0, gasK: 0, coll: 0, bills: 0, cust: new Set(), spark: new Float64Array(24) }).get(i);
+			const get = (i) => per.get(i) || per.set(i, { kg: 0, kgP: 0, amt: 0, amtP: 0, gas: 0, gasK: 0, coll: 0, bills: 0, cust: new Set() }).get(i);
 			for (const r of d.sales) {
 				if (!pass(r)) continue;
-				const s = r[R_SLOT], m = (s >> 1) - from, x = get(r[R_CO]);
-				if (m >= 0 && m < 24) x.spark[m] += mv(r);
+				const s = r[R_SLOT], x = get(r[R_CO]);
 				if (inWin(W, s)) { x.kg += r[R_KG]; x.amt += r[R_AMT]; x.gas += r[R_GAS]; x.gasK += r[R_GAS] ? r[R_KG] : 0; x.bills += r[R_BILLS] || 0; if (r[R_AMT] > 0) x.cust.add(r[R_CU]); }
 				if (inCmp(W, s)) { x.kgP += r[R_KG]; x.amtP += r[R_AMT]; }
 			}
 			for (const r of d.coll) if (inWin(W, r[R_SLOT]) && passColl(r)) get(r[R_CO]).coll += r[C_AMT];
-			const rows = shownCompanies().map((c) => ({ c, x: get(c.i) })).filter(({ x }) => x.kg || x.amt || x.kgP || x.coll).sort((a, b) => b.x.kg - a.x.kg || b.x.amt - a.x.amt);
-			const maxKg = Math.max(1, ...rows.map((r) => r.x.kg)), maxAmt = Math.max(1, ...rows.map((r) => r.x.amt));
-			const tot = rows.reduce((t, { x }) => { for (const k of ["kg", "kgP", "amt", "amtP", "gas", "gasK", "coll", "bills"]) t[k] += x[k]; x.cust.forEach((c) => t.cust.add(c)); x.spark.forEach((v, i) => (t.spark[i] += v)); return t; }, { kg: 0, kgP: 0, amt: 0, amtP: 0, gas: 0, gasK: 0, coll: 0, bills: 0, cust: new Set(), spark: new Float64Array(24) });
-			const wm = winMonths(W), totKg = tot.kg || 1;
+			const rows = shownCompanies().map((c) => ({ c, x: get(c.i) })).filter(({ x }) => x.kg || x.amt || x.coll || (hasCmp(W) && (x.kgP || x.amtP))).sort((a, b) => b.x.kg - a.x.kg || b.x.amt - a.x.amt);
+			const tot = rows.reduce((t, { x }) => { for (const k of ["kg", "kgP", "amt", "amtP", "gas", "gasK", "coll", "bills"]) t[k] += x[k]; x.cust.forEach((c) => t.cust.add(c)); return t; }, { kg: 0, kgP: 0, amt: 0, amtP: 0, gas: 0, gasK: 0, coll: 0, bills: 0, cust: new Set() });
+			// The total has a collected % only when every company that billed records
+			// receipts; one with none would count as nothing collected against its billing.
+			const gap = rows.reduce((a, { x }) => a + (x.amt > 0 && !x.coll ? x.amt : 0), 0);
+			tot.amtColl = tot.amt > 0 && gap / tot.amt > COLL_GAP_MAX ? 0 : tot.amt;
+			const totKg = tot.kg || 1;
+			// Under each value, the same period a year earlier (short: "82/83 5,910 MT").
+			const ly = hasCmp(W), lyName = ly ? lyShort() : "", lyYr = lyName.replace(/^(Same period|Same week) /, "");
 			const pctCell = (num, den) => (num && den ? `<span class="ceo-pct ${num / den < 0.5 ? "low" : ""}"><i><b style="width:${Math.min(100, (num / den) * 100)}%"></b></i>${inr((num / den) * 100, 0)}%</span>` : "—");
 			const cells = (x, isTotal) => `
-				<td class="num"><div class="ceo-cellbar"><span style="width:${(x.kg / (isTotal ? x.kg || 1 : maxKg)) * 100}%"></span></div>${esc(mt(x.kg))}</td>
+				<td class="num">${esc(mt(x.kg))}${ly ? `<small class="ceo-ly" title="${esc(lyName)}">${esc(lyYr)} ${esc(mt(x.kgP))}</small>` : ""}</td>
 				<td class="num">${isTotal ? "100%" : `${inr((x.kg / totKg) * 100, 1)}%`}</td>
 				${SHOW_COMPARISON ? `<td class="num">${delta(x.kg, x.kgP)}</td>` : ""}
-				<td class="num"><div class="ceo-cellbar amt"><span style="width:${(x.amt / (isTotal ? x.amt || 1 : maxAmt)) * 100}%"></span></div>${esc(rs(x.amt))}</td>
+				<td class="num">${esc(rs(x.amt))}${ly ? `<small class="ceo-ly" title="${esc(lyName)}">${esc(lyYr)} ${esc(rs(x.amtP))}</small>` : ""}</td>
 				${SHOW_COMPARISON ? `<td class="num">${delta(x.amt, x.amtP)}</td>` : ""}
 				${SHOW_RATE ? `<td class="num">${x.gasK ? "Rs " + inr(x.gas / x.gasK, 2) : "—"}</td>` : ""}
 				<td class="num">${x.coll ? esc(rs(x.coll)) : "—"}</td>
-				<td class="num">${pctCell(x.coll, x.amt)}</td>
+				<td class="num">${pctCell(x.coll, isTotal ? x.amtColl : x.amt)}</td>
 				<td class="num">${inr(x.cust.size)}</td>
-				<td class="num">${inr(x.bills)}</td>
-				<td class="ceo-sparkcell">${spark(flow(Array.from(x.spark)), wm, false)}</td>`;
-			sub("matrix", __("This period against the comparison period. Click a row to show only that company, › for details."));
+				<td class="num">${inr(x.bills)}</td>`;
+			// The scorecard is figures only (2026-11-14, "looks very cluttered"): the
+			// 24-month line and the bars over volume and net sales were removed; the
+			// Collected % bar stays, it is the one that flags a low rate.
+			sub("matrix", ly ? __("Small figures: {0}. Click a row to show only that company, › for details.", [lyName.toLowerCase()]) : __("Click a row to show only that company, › for details."));
 			el.innerHTML = `<div class="ceo-tablewrap"><table class="ceo-table ceo-matrix">
-				<thead><tr><th>${__("Company")}</th><th class="num">${__("Volume")}</th><th class="num">${__("Share")}</th>${SHOW_COMPARISON ? `<th class="num">${__("Change")}</th>` : ""}<th class="num">${__("Net sales")}</th>${SHOW_COMPARISON ? `<th class="num">${__("Change")}</th>` : ""}${SHOW_RATE ? `<th class="num">${__("Rs/kg")}</th>` : ""}<th class="num">${__("Collected")}</th><th class="num">${__("Collected %")}</th><th class="num">${__("Customers")}</th><th class="num">${__("Bills")}</th><th>${__("24 months")}</th><th></th></tr></thead>
+				<thead><tr><th>${__("Company")}</th><th class="num">${__("Volume")}</th><th class="num">${__("Share")}</th>${SHOW_COMPARISON ? `<th class="num">${__("Change")}</th>` : ""}<th class="num">${__("Net sales")}</th>${SHOW_COMPARISON ? `<th class="num">${__("Change")}</th>` : ""}${SHOW_RATE ? `<th class="num">${__("Rs/kg")}</th>` : ""}<th class="num">${__("Collected")}</th><th class="num" title="${esc(__("Received in the period divided by billed in the period. Receipts can pay bills from before the period."))}">${__("Collected %")}</th><th class="num">${__("Customers")}</th><th class="num">${__("Bills")}</th><th></th></tr></thead>
 				<tbody>${rows.map(({ c, x }) => `<tr class="ceo-click ${dimState("co", c.i)}" data-dim="co" data-val="${c.i}" tabindex="0">
 					<td><strong>${esc(c.abbr)}</strong> <span class="ceo-muted ceo-hide-sm">${esc(c.name)}</span></td>${cells(x)}
 					<td><button class="ceo-drill" data-act="drill" data-kind="co" data-val="${c.i}" title="${esc(__("Details"))}" aria-label="${esc(__("Details"))}">›</button></td></tr>`).join("")}</tbody>
-				<tfoot><tr><td><strong>${st.sel.co.size ? __("Picked companies") : __("All companies")}</strong></td>${cells(tot, true)}<td></td></tr></tfoot>
+				${rows.length > 1 ? `<tfoot><tr><td><strong>${st.sel.co.size ? __("Picked companies") : __("All companies")}</strong></td>${cells(tot, true)}<td></td></tr></tfoot>` : ""}
 			</table></div>`;
 		}
 
@@ -1719,7 +2151,7 @@ window.avinash_ceo_dashboard = (function () {
 		function renderCustomers() {
 			const d = D(), el = slot("customers"), W = st.W;
 			const q = st.custSearch.trim().toLowerCase();
-			let list = [...custAgg(W, "cust").values()].filter((x) => x.cur || x.prev);
+			let list = [...custAgg(W, "cust").values()].filter((x) => x.cur || (SHOW_COMPARISON && x.prev));
 			const total = list.reduce((a, x) => a + Math.max(0, x.cur), 0);
 			if (q) list = list.filter((x) => (d.customers[x.i][1] + " " + d.customers[x.i][0]).toLowerCase().includes(q));
 			const tabs = {
@@ -1734,7 +2166,7 @@ window.avinash_ceo_dashboard = (function () {
 			const [, sorter, keep] = tabs[st.custTab];
 			list = list.filter(keep).sort(sorter);
 			const tools = slot("custtools");
-			if (!tools.querySelector("input")) tools.innerHTML = `<input type="search" class="ceo-search" data-input="search" placeholder="${esc(__("Find customer"))}" aria-label="${esc(__("Find customer"))}"><div class="ceo-seg small" role="tablist"></div>`;
+			tools.innerHTML = `${custPicker()}<div class="ceo-seg small" role="tablist"></div>`;
 			tools.querySelector(".ceo-seg").hidden = !SHOW_COMPARISON;
 			tools.querySelector(".ceo-seg").innerHTML = Object.entries(tabs).map(([k, [l]]) => `<button data-act="custtab" data-val="${k}" role="tab" aria-pressed="${st.custTab === k}">${esc(l)}</button>`).join("");
 			sub("customers", `${measureName()}. ${__("Click a customer to see only them; › opens their bills.")}`);
@@ -1757,6 +2189,32 @@ window.avinash_ceo_dashboard = (function () {
 				<div class="ceo-foot">${__("Showing {0} of {1}", [inr(top.length), inr(list.length)])}</div>`;
 		}
 
+		// Customer dropdown (was a "Find customer" box that only filtered this
+		// table). Picking one shows only that customer across the page, like
+		// clicking their row. Lists this period's buyers, largest first; typing
+		// searches every customer by name or code. MAX rows keep the list quick.
+		const CUST_DD_MAX = 60;
+		function custPicker() {
+			const d = D(), sel = [...st.sel.cust][0];
+			const label = sel == null ? __("All customers") : d.customers[sel][1];
+			let panel = "";
+			if (st.custDd) {
+				const agg = custAgg(st.W, "cust"), q = st.custDdQ.trim().toLowerCase();
+				const cands = q
+					? d.customers.map((c, i) => i).filter((i) => (d.customers[i][1] + " " + d.customers[i][0]).toLowerCase().includes(q))
+					: [...agg.values()].filter((x) => x.cur > 0).map((x) => x.i);
+				const cur = (i) => (agg.get(i) || { cur: 0 }).cur;
+				const rows = cands.sort((a, b) => cur(b) - cur(a)).slice(0, CUST_DD_MAX);
+				panel = `<div class="ceo-ddpanel ceo-cddpanel" role="listbox">
+					<input type="search" class="ceo-search ceo-ddsearch ceo-cddsearch" data-input="cdd-search" value="${esc(st.custDdQ)}" placeholder="${esc(__("Type a name or code"))}" aria-label="${esc(__("Find customer"))}">
+					<div class="ceo-ddlist">${rows.map((i) => { const c = d.customers[i]; return `<button class="ceo-ddopt ceo-cddopt ${i === sel ? "is-on" : ""}" role="option" aria-selected="${i === sel}" data-act="cdd-pick" data-val="${i}"><span class="ceo-cddname"><strong>${esc(c[1])}</strong><small>${esc(d.segments[c[2]])}${c[0] !== c[1] ? ` · ${esc(c[0])}` : ""}</small></span><span class="ceo-cddval">${cur(i) ? esc(fmtM(cur(i))) : "—"}</span></button>`; }).join("") || `<div class="ceo-empty">${__("No match")}</div>`}</div>
+					<div class="ceo-ddfoot"><span class="ceo-muted">${cands.length > CUST_DD_MAX ? esc(__("First {0} of {1}; type to narrow", [CUST_DD_MAX, inr(cands.length)])) : esc(cnt(cands.length, "customer"))}</span><button class="ceo-ghost" data-act="cdd-all">${__("All customers")}</button></div>
+				</div>`;
+			}
+			return `<div class="ceo-dd ceo-cdd ${st.custDd ? "open" : ""}" data-dd="cust">
+				<button class="ceo-ddbtn ${sel != null ? "has-sel" : ""}" data-act="cdd-toggle" aria-haspopup="listbox" aria-expanded="${st.custDd}"><span class="ceo-ddlbl">${__("Customer")}</span><strong>${esc(label)}</strong><span class="ceo-ddcaret" aria-hidden="true">▾</span></button>${panel}</div>`;
+		}
+
 		function quietList() {
 			const d = D(), W = new Uint8Array(NS()); for (let s = 0; s <= P(); s++) W[s] = 1;   // the whole timeline up to now
 			const list = [];
@@ -1764,9 +2222,20 @@ window.avinash_ceo_dashboard = (function () {
 				const c = d.customers[x.i];
 				if (!c[3] || x.cur <= 0) continue;
 				const gap = daysBetween(c[3], d.through);
-				if (gap >= QUIET_DAYS && gap <= QUIET_MAX_DAYS) list.push({ ...x, gap, c });
+				if (gap >= QUIET_DAYS && gap <= QUIET_MAX_DAYS) list.push({ ...x, gap, c, usual: 0 });
 			}
-			return list.sort((a, b) => b.cur - a.cur);
+			// Ranked by what a quiet customer usually bought: the average of the months
+			// they bought in, over the 12 months up to their last bill. A three-year
+			// total ranked old big buyers above this year's regulars.
+			const by = new Map(list.map((x) => [x.i, { x, last: monthOfIso(x.c[3]), sum: 0, ms: new Set() }]));
+			for (const r of d.sales) {
+				const q = by.get(r[R_CU]);
+				if (!q || !pass(r, "cust")) continue;
+				const mo = r[R_SLOT] >> 1;
+				if (mo > q.last - 12 && mo <= q.last) { q.sum += mv(r); q.ms.add(mo); }
+			}
+			for (const q of by.values()) q.x.usual = q.ms.size ? q.sum / q.ms.size : 0;
+			return list.sort((a, b) => b.usual - a.usual || b.cur - a.cur);
 		}
 		function renderQuiet() {
 			const past = pastYear(), stack = root.querySelector(".ceo-stack"), custCard = root.querySelector("[data-card='customers']");
@@ -1774,13 +2243,13 @@ window.avinash_ceo_dashboard = (function () {
 			if (custCard) custCard.style.gridColumn = past ? "span 12" : "";
 			if (past) return;
 			const d = D(), el = slot("quiet"), list = quietList();
-			sub("quiet", __("Regular buyers with no bill for {0}+ days, largest first.", [QUIET_DAYS]));
+			sub("quiet", __("Regular buyers with no bill for {0}+ days, by what they usually bought a month.", [QUIET_DAYS]));
 			if (!list.length) { el.innerHTML = `<div class="ceo-empty">${__("Everyone here bought in the last {0} days.", [QUIET_DAYS])}</div>`; return; }
-			el.innerHTML = `<ol class="ceo-list">${list.slice(0, QUIET_ROWS).map((x) => `<li class="ceo-click ${dimState("cust", x.i)}" data-dim="cust" data-val="${x.i}" tabindex="0" data-tip="${tip(tipRows(x.c[1], [["", __("Last bill"), esc(x.c[4])], ["", __("Bought in three years"), esc(fmtM(x.cur))]]))}">
-				<div class="ceo-list-name"><span>${esc(x.c[1])}</span><small>${[...x.cos].map((i) => esc(d.companies[i].abbr)).join(", ")} · ${esc(d.segments[x.c[2]])} · ${__("last")} ${esc(x.c[4])}</small></div>
+			el.innerHTML = `<ol class="ceo-list">${list.slice(0, QUIET_ROWS).map((x) => `<li class="ceo-click ${dimState("cust", x.i)}" data-dim="cust" data-val="${x.i}" tabindex="0" data-tip="${tip(tipRows(x.c[1], [["", __("Last bill"), esc(x.c[4])], ["", __("Usual month"), esc(fmtM(x.usual))], ["", __("Bought in three years"), esc(fmtM(x.cur))]]))}">
+				<div class="ceo-list-name"><span>${esc(x.c[1])}</span><small>${[...x.cos].map((i) => esc(d.companies[i].abbr)).join(", ")} · ${esc(d.segments[x.c[2]])} · ${__("usually")} ${esc(fmtM(x.usual))}/${__("month")}</small></div>
 				<div class="ceo-badge ${x.gap > 90 ? "serious" : "warning"}"><span aria-hidden="true">${x.gap > 90 ? "!!" : "!"}</span><strong>${inr(x.gap)}</strong>&nbsp;${__("days")}</div>
 				<button class="ceo-drill" data-act="drill" data-kind="cust" data-val="${x.i}" aria-label="${esc(__("Details"))}">›</button>
-			</li>`).join("")}</ol><div class="ceo-foot">${__("{0} customers in all", [inr(list.length)])}</div>`;
+			</li>`).join("")}</ol><div class="ceo-foot">${__("{0} gone quiet", [inr(list.length)])}</div>`;
 		}
 
 		// Company-months whose Rs/kg is far from the typical company that month (last
@@ -1822,6 +2291,108 @@ window.avinash_ceo_dashboard = (function () {
 		}
 
 
+		// -------------------------------------------------------- money for a short period
+		// A week, month or quarter: the Money figures show what the period opened
+		// with and what happened in it (came in / went out), not the year's month
+		// ends and not a closing figure (the CEO's call, 2026-11-11). The ledger is
+		// read for the exact dates by period_balances.get_period_balances.
+		const shortPeriod = () => periodRank() < 6;
+		const fullBs = (iso) => { const m = monthOfIso(iso); return m >= 0 ? `${bsShort(iso)} ${bsYear(m)}` : iso; };
+		function periodDates() {
+			if (st.period === "day" && !st.sel.mo.size) return [curDay(), curDay()];
+			if (st.period === "wk" && !st.sel.mo.size) { const wk = fyWeeks(); return wk[(st.week || wk.length) - 1] || null; }
+			return windowDates();
+		}
+		function ensurePeriodBalances() {
+			if (!shortPeriod()) return;
+			const pd = periodDates();
+			if (!pd) return;
+			const [a, b] = pd, key = `${st.fy}|${yearsBack()}|${a}|${b}`;
+			if (st.pb && st.pb.key === key) return;
+			st.pb = { key, from: a, to: b, data: null };
+			frappe.call({
+				method: "avinashgroup_app.ceo_dashboard.period_balances.get_period_balances",
+				args: { fiscal_year: st.fy, years_back: yearsBack(), from_date: a, to_date: b },
+				callback: (r) => {
+					if (!st.pb || st.pb.key !== key) return;
+					const m = r.message, d = D();
+					if (!m) { st.pb.failed = true; render(false); return; }
+					const byCode = new Map(d.customers.map((x, i) => [x[0], i]));
+					st.pb.data = {
+						cash: m.cash.map((x) => ({ co: x[0], kind: x[1], open: x[3], in: x[4], out: x[5] })),
+						recv: m.recv.map((x) => {
+							let cu = byCode.get(x[1]);
+							if (cu == null) { cu = d.customers.length; d.customers.push([x[1], x[2], x[3], null, null, x[4], null]); byCode.set(x[1], cu); }
+							return { co: x[0], cu, seg: x[3], open: x[5], in: x[6], out: x[7] };
+						}),
+						pay: m.pay.map((x) => ({ co: x[0], internal: x[3], open: x[4], in: x[5], out: x[6] })),
+						transfers: m.transfers || [],
+					};
+					resolveCust();
+					render(false);
+				},
+				error: () => { if (st.pb && st.pb.key === key) { st.pb.failed = true; st.data && render(false); } },
+			});
+		}
+		// { cash, recv, pay }: each { open, in, out, byCo: Map(company -> { open, in, out }) } for the selection.
+		function periodTotals() {
+			const z = () => ({ open: 0, in: 0, out: 0, byCo: new Map() });
+			const out = { cash: z(), recv: z(), pay: z() };
+			const add = (t, co, open, i, o) => {
+				t.open += open; t.in += i; t.out += o;
+				const c = t.byCo.get(co) || t.byCo.set(co, { open: 0, in: 0, out: 0 }).get(co);
+				c.open += open; c.in += i; c.out += o;
+			};
+			const p = st.pb.data;
+			for (const x of p.cash) if (x.kind < 2 && passCo(x.co)) add(out.cash, x.co, x.open, x.in, x.out);
+			// Money moved between a company's own cash and bank accounts is neither in nor out.
+			for (const [co, amt] of p.transfers) if (passCo(co)) add(out.cash, co, 0, -amt, -amt);
+			// Owed = customers with a positive opening balance (advances are not netted off), as on the year view.
+			for (const x of p.recv) if (passRecv(x)) add(out.recv, x.co, Math.max(0, x.open), x.in, x.out);
+			for (const x of p.pay) if (passPay(x)) add(out.pay, x.co, Math.max(0, x.open), x.in, x.out);
+			return out;
+		}
+		const PERIOD_WORDS = () => ({
+			cash: [__("Came in"), __("Went out")],
+			recv: [__("Billed"), __("Received")],
+			pay: [__("Billed to us"), __("Paid")],
+		});
+		function periodMoneyTiles() {
+			const labels = [__("Cash and bank"), __("Customers owe us"), __("We owe suppliers")], keys = ["cash", "recv", "pay"];
+			if (!st.pb || (!st.pb.data && !st.pb.failed)) return labels.map((label) => ({ label, loading: true }));
+			if (st.pb.failed) return labels.map((label) => ({ label, value: "—", d: "", foot: esc(__("The ledger could not be read.")) }));
+			const t = periodTotals(), w = PERIOD_WORDS();
+			// The label stays the plain name (a long "· opening 10 Shrawan" was cut
+			// off in the tile); the opening date leads the foot instead. The 24-month
+			// month-end line is the same as on the year view, when the ledger is in.
+			const ser = st.mn && st.money && !st.money.failed ? moneySeries() : null;
+			const sers = ser ? [ser.cash, ser.owed, ser.pay] : [];
+			return keys.map((k, i) => ({
+				label: labels[i], goto: "money", value: rs(t[k].open), d: "", sub: "",
+				foot: `${esc(__("Opening, {0}", [bsShort(st.pb.from)]))}<br>${esc(`${w[k][0]} ${rs(t[k].in)} · ${w[k][1].toLowerCase()} ${rs(t[k].out)}`)}`,
+				s: sers[i] && sers[i].some((v) => v) ? last24(sers[i]) : null,
+			}));
+		}
+		function renderMoneyPeriod(W) {
+			const d = D(), cards = ["cash", "recv", "pay"];
+			slot("money-label").textContent = periodLabel(W);
+			if (!st.pb || (!st.pb.data && !st.pb.failed)) { cards.forEach((n) => (slot(n).innerHTML = chartLoading())); return; }
+			if (st.pb.failed) { cards.forEach((n) => (slot(n).innerHTML = `<div class="ceo-empty">${__("The ledger could not be read.")}</div>`)); return; }
+			const t = periodTotals(), w = PERIOD_WORDS();
+			const signed = (v) => `${v >= 0 ? "+" : "−"}${rs(Math.abs(v))}`;
+			const card = (k, openLabel) => {
+				const x = t[k], net = x.in - x.out;
+				const figs = [[`${openLabel} · ${fullBs(st.pb.from)}`, rs(x.open), "big"], [w[k][0], rs(x.in), ""], [w[k][1], rs(x.out), ""], [__("Net change"), signed(net), ""]];
+				const rows = [...x.byCo.entries()].filter(([, c]) => c.open || c.in || c.out).sort((p, q) => q[1].open - p[1].open);
+				return `<div class="ceo-pfig">${figs.map(([l, v, cls]) => `<div class="${cls === "big" ? "big" : ""}"><span>${esc(l)}</span><strong class="${cls === "big" ? "" : cls}">${esc(v)}</strong></div>`).join("")}</div>` +
+					(rows.length > 1 ? `<div class="ceo-tablewrap"><table class="ceo-table compact ceo-money"><thead><tr><th>${__("Company")}</th><th class="num">${__("Opening")}</th><th class="num">${esc(w[k][0])}</th><th class="num">${esc(w[k][1])}</th></tr></thead>
+					<tbody>${rows.map(([co, c]) => `<tr class="ceo-click ${dimState("co", co)}" data-dim="co" data-val="${co}" tabindex="0"><td><strong>${esc(d.companies[co].abbr)}</strong></td><td class="num"><span class="${c.open < 0 ? "ceo-neg" : ""}">${esc(rs(c.open))}</span></td><td class="num">${esc(rs(c.in))}</td><td class="num">${esc(rs(c.out))}</td></tr>`).join("")}</tbody></table></div>` : "");
+			};
+			slot("cash").innerHTML = card("cash", __("Opening balance"));
+			slot("recv").innerHTML = card("recv", __("Owed at the start"));
+			slot("pay").innerHTML = card("pay", __("Owed at the start"));
+		}
+
 		// -------------------------------------------------------- money
 		// Ledger balances (positions, so the period switch does not apply) and the
 		// gas margin (which does). Company selection applies everywhere; segment and
@@ -1829,6 +2400,7 @@ window.avinash_ceo_dashboard = (function () {
 		function renderMoney(W) {
 			const label = slot("money-label");
 			if (!label) return;
+			if (shortPeriod()) return renderMoneyPeriod(W);   // a week, month or quarter: opening and the period's movement only
 			const cards = ["cash", ...(SHOW_MARGIN ? ["margin"] : []), "recv", "pay"];
 			if (!st.money) {
 				label.textContent = __("Reading the ledger…");
@@ -1860,9 +2432,9 @@ window.avinash_ceo_dashboard = (function () {
 			const ptLabel = (i) => (isOpen(i) ? `${__("Opening")} · 1 ${monthLabel(ms[0])}` : `${__("End of")} ${monthLabel(pts[i])}${pts[i] === pmM && !pastYear() ? ` (${d.through_label})` : ""}`);
 			const balAxis = {
 				n: pts.length, val: (i) => i, xTitle: __("Opening, then each month end (Nepali calendar)"),
-				label: (i) => (isOpen(i) ? __("Opening") : monthName(pts[i]).slice(0, 3)),
+				label: (i) => (isOpen(i) ? (pts.length > 8 ? __("Open") : __("Opening")) : monthShort(pts[i])),
 				group: (i) => (!isOpen(i) && (i === (hasOpen ? 1 : 0) || pts[i] % 12 === 0) ? yearOf(pts[i]) : null),
-				shade: () => false, dim: () => "", last: (i) => pts[i] === pmM, band: () => "", aria: ptLabel,
+				shade: () => false, dim: () => "", last: (i) => pts[i] === pmM && partMonth(), band: () => "", aria: ptLabel,
 			};
 			const notSplit = st.sel.seg.size || st.sel.cust.size ? ` ${__("Not split by segment or customer.")}` : "";
 			const coName = (co) => `<strong>${esc(d.companies[co].abbr)}</strong>`;
@@ -1870,7 +2442,7 @@ window.avinash_ceo_dashboard = (function () {
 				const el = host || slot(name), cur = pts.map((mo) => vals[mo]), ly = pts.map((mo) => (mo >= 12 ? vals[mo - 12] : null));
 				// Opening, where it stands now (closing, for a past year) and the movement between them.
 				const open = hasOpen ? cur[0] : null, now = cur[cur.length - 1];
-				const sum = open != null && now != null ? `<div class="ceo-balsum"><span>${__("Opening")} <b>${esc(rs(open))}</b></span><span>${pastYear() ? __("Closing") : __("Now")} <b>${esc(rs(now))}</b></span><span>${__("Change")} <b class="${now - open < 0 ? "ceo-neg" : ""}">${now - open >= 0 ? "+" : "−"}${esc(rs(Math.abs(now - open)))}</b></span></div>` : "";
+				const sum = open != null && now != null ? `<div class="ceo-balsum"><span>${__("Opening")} <b>${esc(rs(open))}</b></span><span>${pastYear() ? __("Closing") : __("Now")} <b>${esc(rs(now))}</b></span><span>${__("Change")} <b>${now - open >= 0 ? "+" : "−"}${esc(rs(Math.abs(now - open)))}</b></span></div>` : "";
 				if (st.tables.has(name) && !SHOW_COMPARISON) return sum + table([__("Month end"), what], cur.map((v, i) => [esc(ptLabel(i)), v == null ? "—" : esc(rs(v))]).reverse());
 				if (st.tables.has(name)) return sum + table([__("Month end"), what, __("A year earlier"), __("Change")], cur.map((v, i) => [esc(ptLabel(i)), v == null ? "—" : esc(rs(v)), ly[i] == null ? "—" : esc(rs(ly[i])), v != null && ly[i] ? delta(v, ly[i], { upGood: null }) : ""]).reverse());
 				const shape = shapeOf(name);
@@ -1935,7 +2507,7 @@ window.avinash_ceo_dashboard = (function () {
 				if (x.ly > 0) y.ly += x.ly;
 			}
 			const rItems = [...rc.entries()].map(([co, y]) => ({ val: co, label: d.companies[co].abbr, title: d.companies[co].name, cur: y.now, prev: y.ly, tip: tipRows(d.companies[co].name, [["", __("Owed now"), esc(rs(y.now))], ["", __("A year earlier"), esc(rs(y.ly))], ["", __("Advances held"), esc(rs(y.adv))], ["", __("Customers owing"), inr(y.n)]]) })).filter((x) => x.cur || x.prev).sort((a, b) => b.cur - a.cur);
-			const recvChart = st.sel.cust.size ? `<div class="ceo-empty small">${__("Month-end trend is kept per company and segment, not per customer.")}</div>` : balChart("recv", ser.owed, __("Customers owe us"));
+			const recvChart = st.sel.cust.size || st.sel.dist.size ? `<div class="ceo-empty small">${__("Month-end trend is kept per company and segment, not per customer or district.")}</div>` : balChart("recv", ser.owed, __("Customers owe us"));
 			slot("recv").innerHTML = recvChart + (rItems.length ? `<h4 class="ceo-subh">${__("By company")}</h4>` + barList(capped(rItems, "recv"), { dim: "co", fill: "var(--ceo-cur)", fmt: rs, upGood: false }) + showAll(rItems, "recv") : "");
 
 			// We owe suppliers
@@ -1947,11 +2519,182 @@ window.avinash_ceo_dashboard = (function () {
 			// 2026-11-11); they stack on narrow screens (CSS .ceo-split).
 			slot("pay").innerHTML = `<div class="ceo-split"><div>${(sups.length ? `<h4 class="ceo-subh">${__("Largest balances")}</h4><div class="ceo-bars named wide">${sups.slice(0, 8).map((x) => `<div class="ceo-barrow nochg" data-tip="${tip(tipRows(x.name, [["", __("We owe"), esc(rs(x.now))], ["", __("Share"), totalPay ? `${inr((x.now / totalPay) * 100, 1)}%` : "—"]]))}">
 				<div class="ceo-barlabel"><span title="${esc(x.name)}">${esc(x.name)}<small>${esc(d.companies[x.co].abbr)}${x.bill ? ` · <button class="ceo-inl" data-act="open-doc" data-doctype="Purchase Invoice" data-val="${esc(x.bill[0])}">${esc(x.bill[0])}</button> ${esc(rs(x.bill[2]))}` : ""}</small></span></div>
-				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(x.now / maxS) * 100}%;background:var(--zone-key, var(--ceo-cur))"></div></div>
+				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(x.now / maxS) * 100}%;background:var(--ceo-cur)"></div></div>
 				<div class="ceo-barval">${esc(rs(x.now))}</div></div>`).join("")}</div><div class="ceo-foot">${__("{0} suppliers with a balance", [inr(sups.length)])}</div>` : `<div class="ceo-empty">${__("Nothing owed to suppliers.")}</div>`)}</div><div class="ceo-split-chart"><h4 class="ceo-subh">${__("Month end")}</h4><div data-chart="pay"></div></div></div>`;
 			const payHost = slot("pay").querySelector("[data-chart='pay']");
 			payHost.innerHTML = balChart("pay", ser.pay, __("We owe suppliers"), 340, payHost);   // about as tall as the eight-row list beside it
 
+		}
+
+		// -------------------------------------------------------- district, branch, returns
+		// sales_breakdowns.get_breakdowns: one district per customer (the map sums
+		// the sales rows already here, so it follows every filter), branch rows and
+		// sales-return rows (dated, with the sales slot, like buying). The map
+		// outlines are a static file, fetched once.
+		function loadBreakdowns(force) {
+			const fy = st.fy, gen = st.gen;
+			st.brkRaw = st.brk = null;
+			call({
+				method: "avinashgroup_app.ceo_dashboard.sales_breakdowns.get_breakdowns",
+				args: { fiscal_year: fy, force: force ? 1 : 0, years_back: yearsBack() },
+				callback: (r) => { if (st.gen !== gen || st.fy !== fy) return; st.brkRaw = r.message || { failed: true }; prepareBreakdowns(); st.data && render(false); },
+				error: () => { if (st.gen !== gen || st.fy !== fy) return; st.brkRaw = { failed: true }; st.data && render(false); },
+			});
+			if (!st.map && !st.mapLoading) {
+				st.mapLoading = true;
+				fetch(`/assets/avinashgroup_app/js/ceo_nepal_districts.json?v=${CEO_DASHBOARD_ASSET_VERSION}`)
+					.then((x) => x.json()).then((m) => { st.map = m; st.data && render(false); })
+					.catch(() => { st.map = { failed: true }; st.data && render(false); });
+			}
+		}
+		function prepareBreakdowns() {
+			const b = st.brkRaw, d = st.data;
+			if (!b || b.failed || !d || b.fiscal_year !== d.fiscal_year) return;
+			const dist = new Map();   // customer index -> district index
+			d.customers.forEach((c, i) => { const k = b.customer_district[c[0]]; if (k != null) dist.set(i, k); });
+			st.brk = { dist, districts: b.districts, branches: b.branches, branchRows: b.branch_rows, reasons: b.reasons, returns: b.returns, packs: b.packs || [], packRows: b.pack_rows || [] };
+			if (st.pendingDist) {   // districts from the link
+				st.pendingDist.split(",").forEach((n) => { const k = b.districts.indexOf(n.trim()); if (k >= 0) st.sel.dist.add(k); });
+				st.pendingDist = null;
+			}
+		}
+		const brkPending = (names) => {
+			if (st.brk) return false;
+			const failed = st.brkRaw && st.brkRaw.failed;
+			names.forEach((n) => { if (slot(n)) slot(n).innerHTML = failed ? `<div class="ceo-empty">${__("Could not be read.")}</div>` : chartLoading(); });
+			return true;
+		};
+
+		// Sales by district, drawn on the district map of Nepal. Five steps of one
+		// blue (--ceo-use0..4, the validated ordinal ramp): darker = more. Steps are
+		// on a square-root scale, because Kathmandu is several times any other
+		// district and a straight scale would leave the rest one colour.
+		const MAP_STEPS = 5;
+		// Kathmandu, Bhaktapur and Lalitpur are the biggest market and the smallest
+		// districts: Bhaktapur is ~20 px wide on the map and sat under the
+		// "Kathmandu" label (the CEO could not find it, 2026-11-11). They are drawn
+		// again, enlarged and named, in an inset in the map's empty top-right corner.
+		const VALLEY = ["Kathmandu", "Bhaktapur", "Lalitpur"], VALLEY_ZOOM = 3.4;
+		function valleyInset(pathOf) {
+			const ds = VALLEY.map((n) => st.map.districts.find((x) => x.name === n)).filter(Boolean);
+			if (ds.length < VALLEY.length) return "";
+			if (!st.map.valley) {
+				// Box of the three outlines, and each one's vertex average as its label point.
+				let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+				const at = ds.map((m) => {
+					const pts = (m.d.match(/[-\d.]+,[-\d.]+/g) || []).map((p) => p.split(",").map(Number));
+					for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+					return [pts.reduce((a, q) => a + q[0], 0) / pts.length, pts.reduce((a, q) => a + q[1], 0) / pts.length];
+				});
+				st.map.valley = { x: x0, y: y0, w: x1 - x0, h: y1 - y0, at };
+			}
+			const v = st.map.valley, k = VALLEY_ZOOM, pad = 12, side = 64;   // side: room for names beside the shapes
+			const bw = v.w * k + 2 * side, bh = v.h * k + 2 * pad + 20, bx = st.map.w - bw - 4, by = 4;
+			const ox = bx + side, oy = by + 20 + pad;
+			// The westmost name is right-aligned and the eastmost left-aligned, so neighbours' names do not collide.
+			const order = v.at.map((p, i) => [p[0], i]).sort((a, c) => a[0] - c[0]).map((x) => x[1]);
+			const anchor = (i) => (i === order[0] ? "end" : i === order[order.length - 1] ? "start" : "middle");
+			const names = ds.map((m, i) => `<text class="ceo-dist-label inset" x="${(ox + (v.at[i][0] - v.x) * k).toFixed(1)}" y="${(oy + (v.at[i][1] - v.y) * k + 4).toFixed(1)}" text-anchor="${anchor(i)}">${esc(m.name)}</text>`).join("");
+			return `<g class="ceo-inset">
+				<rect class="ceo-inset-src" x="${v.x - 4}" y="${v.y - 4}" width="${v.w + 8}" height="${v.h + 8}" rx="3"/>
+				<line class="ceo-inset-lead" x1="${v.x + v.w + 4}" y1="${v.y - 4}" x2="${bx + 10}" y2="${by + bh}"/>
+				<rect class="ceo-inset-box" x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="10"/>
+				<text class="ceo-inset-title" x="${bx + 12}" y="${by + 18}">${esc(__("Kathmandu Valley"))}</text>
+				<g transform="translate(${ox} ${oy}) scale(${k}) translate(${-v.x} ${-v.y})">${ds.map(pathOf).join("")}</g>${names}</g>`;
+		}
+		// -------------------------------------------------------- Map screen
+		// The district map left the dashboard (2026-11-14): it is a screen of its
+		// own, opened from "Map" in the section strip, with a choice of what to
+		// show per district. The filter bar applies as everywhere; clicking a
+		// district picks it (the map keeps showing all districts, the pick lit).
+		// Period figures follow the period; owed and on hold are positions from
+		// the credit snapshot (not shown for a past year).
+		const MAP_BY = [
+			["kg", "LP Gas sold", "period"], ["amt", "Net sales", "period"], ["cust", "Buying customers", "period"],
+			["coll", "Collected", "period"], ["owed", "Owed (credit check)", "credit"], ["hold", "Customers on hold", "credit"],
+		];
+		function renderScreen(W) {
+			const onMap = st.screen === "map", dash = slot("dash"), ms = slot("mapscreen");
+			if (dash) dash.hidden = onMap;
+			if (ms) ms.hidden = !onMap;
+			if (onMap) renderMapScreen(W);
+		}
+		function renderMapScreen(W) {
+			const el = slot("mapscreen");
+			if (!el || st.screen !== "map") return;
+			const creditOk = !pastYear() && st.cr && st.credit && !st.credit.missing;
+			const opts = MAP_BY.filter(([, , kind]) => kind === "period" || creditOk);
+			// Owed / on hold wait for the credit snapshot: show volume meanwhile, keep the choice.
+			const by = opts.some(([k]) => k === st.mapBy) ? st.mapBy : "kg", byLabel = __(MAP_BY.find(([k]) => k === by)[1]);
+			const head = `<div class="ceo-mshead"><div><h2>${esc(__("Map"))} · ${esc(byLabel)}</h2><span class="ceo-muted">${esc(MAP_BY.find(([k]) => k === by)[2] === "credit" ? __("On {0}", [st.credit.as_of_label]) : periodLabel(W))}</span></div>
+				<div class="ceo-seg" role="group" aria-label="${esc(__("Show on the map"))}">${opts.map(([k, l]) => `<button data-act="mapby" data-val="${k}" aria-pressed="${k === by}">${esc(__(l))}</button>`).join("")}</div></div>`;
+			if (!st.brk || !st.map) {
+				const failed = (st.brkRaw && st.brkRaw.failed) || (st.map && st.map.failed);
+				el.innerHTML = head + `<div class="ceo-card">${failed ? `<div class="ceo-empty">${__("The map could not be loaded.")}</div>` : chartLoading()}</div>`;
+				return;
+			}
+			const b = st.brk, n = b.districts.length;
+			const val = new Float64Array(n), aux = new Float64Array(n), custs = Array.from({ length: n }, () => new Set());
+			let none = 0, total = 0;
+			const isCount = by === "cust" || by === "hold";
+			const fmt = by === "kg" ? mt : isCount ? (v) => inr(v) : rs;
+			if (by === "kg" || by === "amt" || by === "cust") {
+				for (const r of D().sales) {
+					if (!inWin(W, r[R_SLOT]) || !pass(r, "dist")) continue;
+					const k = b.dist.get(r[R_CU]), v = by === "kg" ? r[R_KG] : r[R_AMT];
+					if (by === "cust") { if (r[R_AMT] > 0 && k != null) custs[k].add(r[R_CU]); continue; }
+					total += v;
+					if (k == null) none += v; else { val[k] += v; if (r[R_AMT] > 0) custs[k].add(r[R_CU]); }
+				}
+				if (by === "cust") custs.forEach((c, k) => { val[k] = c.size; total += c.size; });
+			} else if (by === "coll") {
+				for (const r of D().coll) {
+					if (!inWin(W, r[R_SLOT]) || !passColl(r, "dist")) continue;
+					const k = b.dist.get(r[R_CU]), v = r[C_AMT];
+					total += v;
+					if (k == null) none += v; else { val[k] += v; if (v > 0) custs[k].add(r[R_CU]); }
+				}
+			} else {
+				for (const x of st.cr) {
+					if (!passCredit(x, "dist")) continue;
+					const k = x.cu == null || x.cu < 0 ? null : b.dist.get(x.cu);
+					const v = by === "owed" ? Math.max(0, x.owed) : x.blocked ? 1 : 0;
+					if (!v) continue;
+					total += v;
+					if (k == null) none += v; else { val[k] += v; custs[k].add(x.cu); aux[k] += Math.max(0, x.owed); }
+				}
+			}
+			const small = (k) => (by === "cust" ? "" : by === "hold" ? `${__("owing")} ${rs(aux[k])}` : by === "owed" ? cnt(custs[k].size, "customer") : cnt(custs[k].size, "customer"));
+			const max = Math.max(0, ...val);
+			const step = (v) => (v > 0 && max > 0 ? Math.min(MAP_STEPS - 1, Math.floor(Math.sqrt(v / max) * MAP_STEPS)) : -1);
+			const share = (v) => (total > 0 ? `${inr((v / total) * 100, v / total < 0.1 ? 1 : 0)}%` : "—");
+			const tipOf = (k) => tip(tipRows(b.districts[k], [["", byLabel, esc(fmt(val[k]))], ["", __("Share"), share(val[k])], ...(small(k) ? [["", "", esc(small(k))]] : [])]));
+			const ranked = Array.from({ length: n }, (_, k) => k).filter((k) => val[k] > 0).sort((x, y) => val[y] - val[x]);
+			const byName = new Map(b.districts.map((name, k) => [name, k]));
+			const pathOf = (m) => {
+				const k = byName.get(m.name), s2 = k == null ? -1 : step(val[k]);
+				return `<path d="${m.d}" class="ceo-dist ${s2 < 0 ? "none" : `${dimState("dist", k)}`}" ${s2 < 0 ? "" : `style="fill:var(--ceo-use${s2})" data-dim="dist" data-val="${k}"`} data-tip="${k == null ? tip(tipRows(m.name, [])) : tipOf(k)}" tabindex="0" aria-label="${esc(m.name)}"/>`;
+			};
+			const placed = [];
+			const labels = ranked.slice(0, 12).map((k) => {
+				const m = st.map.districts.find((x) => x.name === b.districts[k]);
+				if (!m || VALLEY.includes(m.name) || placed.length >= 7 || placed.some((q) => Math.abs(q.x - m.x) < 90 && Math.abs(q.y - m.y) < 22)) return "";
+				placed.push(m);
+				return `<text class="ceo-dist-label" x="${m.x}" y="${m.y}" text-anchor="middle">${esc(m.name)}</text>`;
+			}).join("");
+			const edge = (s2) => Math.pow(s2 / MAP_STEPS, 2) * max;
+			const efmt = (v) => (isCount ? inr(Math.ceil(v)) : fmt(v));
+			const legend = Array.from({ length: MAP_STEPS }, (_, s2) => `<span><i style="background:var(--ceo-use${s2})"></i>${s2 === 0 ? `${__("under")} ${esc(efmt(edge(1)))}` : `${esc(efmt(edge(s2)))}${s2 === MAP_STEPS - 1 ? "+" : ` – ${esc(efmt(edge(s2 + 1)))}`}`}</span>`).join("");
+			const mapHtml = `<svg class="ceo-map" viewBox="-6 -6 ${st.map.w + 12} ${st.map.h + 12}" role="img" aria-label="${esc(__("Map of Nepal by district"))}">${st.map.districts.map(pathOf).join("")}${labels}${valleyInset(pathOf)}</svg>
+				<div class="ceo-maplegend"><span><i class="none"></i>${__("None")}</span>${legend}</div>`;
+			const top = ranked.slice(0, DISTRICT_ROWS), maxT = top.length ? val[top[0]] : 1;
+			const row = (label, sm, v, tipI, k) => `<div class="ceo-barrow nochg ${k != null ? `ceo-click ${dimState("dist", k)}` : ""}" ${k != null ? `data-dim="dist" data-val="${k}" tabindex="0"` : ""} ${tipI != null ? `data-tip="${tipI}"` : ""}>
+				<div class="ceo-barlabel"><span>${esc(label)}${sm ? `<small>${esc(sm)}</small>` : ""}</span></div>
+				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(Math.max(0, v) / maxT) * 100}%;background:var(--ceo-use3)"></div></div>
+				<div class="ceo-barval">${esc(fmt(v))}<small class="ceo-block ceo-muted">${share(v)}</small></div></div>`;
+			const list = top.length ? `<div class="ceo-bars named">${top.map((k) => row(b.districts[k], small(k), val[k], tipOf(k), k)).join("")}${none > 0 && !isCount ? row(__("No district on the customer"), "", none, null, null) : ""}</div>
+				<div class="ceo-foot">${__("{0} of {1} districts", [inr(top.length), inr(ranked.length)])}</div>` : `<div class="ceo-empty">${__("Nothing to show for this selection.")}</div>`;
+			el.innerHTML = head + `<div class="ceo-grid"><section class="ceo-card span-8"><div class="ceo-body">${mapHtml}</div></section><section class="ceo-card span-4"><header><div><h3>${__("Districts")}</h3></div></header><div class="ceo-body">${list}</div></section></div>`;
 		}
 
 		// -------------------------------------------------------- buying
@@ -1960,19 +2703,19 @@ window.avinash_ceo_dashboard = (function () {
 		// Same period and company / inter-company filters as sales; segment and
 		// customer do not apply (purchases have neither).
 		function loadBuying(force) {
-			const fy = st.fy;
+			const fy = st.fy, gen = st.gen;
 			st.buying = st.by = null;
-			frappe.call({
+			call({
 				method: "avinashgroup_app.ceo_dashboard.buying.get_buying",
 				args: { fiscal_year: fy, force: force ? 1 : 0, years_back: yearsBack() },
-				callback: (r) => { if (st.fy !== fy) return; st.buying = r.message || { failed: true }; prepareBuying(); st.data && render(false); },
-				error: () => { if (st.fy !== fy) return; st.buying = { failed: true }; st.data && render(false); },
+				callback: (r) => { if (st.gen !== gen || st.fy !== fy) return; st.buying = r.message || { failed: true }; prepareBuying(); st.data && render(false); },
+				error: () => { if (st.gen !== gen || st.fy !== fy) return; st.buying = { failed: true }; st.data && render(false); },
 			});
 		}
 		function prepareBuying() {
 			const b = st.buying;
 			if (!b || b.failed || !st.data || b.fiscal_year !== st.data.fiscal_year) return;
-			st.by = { rows: b.rows, pay: b.pay, sup: b.suppliers, cats: b.categories };
+			st.by = { rows: b.rows, pay: b.pay, sup: b.suppliers, cats: b.categories, heads: b.expense_heads || [], exp: b.expenses || [] };
 		}
 		const BR_SLOT = 0, BR_DATE = 1, BR_CO = 2, BR_SUP = 3, BR_CAT = 4, BR_KG = 5, BR_AMT = 6, BR_BILLS = 7;
 		const passBuy = (co, sup) => passCo(co) && (st.internal || !st.by.sup[sup][2]);
@@ -2028,11 +2771,12 @@ window.avinash_ceo_dashboard = (function () {
 			if (!st.buying) return { label, loading: true, zone: "buy" };
 			if (st.buying.failed || !st.by) return { label, value: "—", d: "", foot: esc(__("Purchases could not be read.")), zone: "buy" };
 			const t = buyTotals(W), m = new Float64Array(NM());
-			for (const r of st.by.rows) if (passBuy(r[BR_CO], r[BR_SUP])) m[r[BR_SLOT] >> 1] += r[BR_AMT];
-			return { label, value: rs(t.amt), d: "", sub: "", foot: esc(`${mt(t.kg)} ${__("LP Gas")} · ${inr(t.bills)} ${__("bills")}`), s: flow(last24(m)), zone: "buy", goto: "buying" };
+			let prev = 0;
+			for (const r of st.by.rows) if (passBuy(r[BR_CO], r[BR_SUP])) { m[r[BR_SLOT] >> 1] += r[BR_AMT]; if (buyIn(W, r[BR_SLOT], r[BR_DATE])[1]) prev += r[BR_AMT]; }
+			return { label, value: rs(t.amt), d: "", sub: "", foot: esc(`${mt(t.kg)} ${__("LP Gas")} · ${cnt(t.bills, "bill")}`), ly: hasCmp(W) ? [lyShort(), rs(prev)] : null, s: flow(last24(m)), zone: "buy", goto: "buying" };
 		}
 		function renderBuying(W) {
-			const cards = ["buytrend", "buyco", "buycat", "buysup"];
+			const cards = ["buytrend", "buyco"];   // What we buy, Top suppliers and Expenses were removed (2026-11-14)
 			if (!slot("buytrend")) return;
 			if (!st.buying || (!st.by && !st.buying.failed)) {
 				slot("buy-kpis").innerHTML = "";
@@ -2049,12 +2793,11 @@ window.avinash_ceo_dashboard = (function () {
 				tile(__("Purchases"), esc(rs(t.amt)), esc(__("net, before VAT"))) +
 				tile(__("LP Gas bought"), esc(mt(t.kg)), t.kg ? esc(`${__("average")} Rs ${inr(t.gasAmt / t.kg, 2)}/kg · ${rs(t.gasAmt)}`) : "") +
 				tile(__("Paid to suppliers"), esc(rs(t.paid)), esc(__("Payment Entries"))) +
-				tile(__("Suppliers"), inr(t.sups.size), esc(`${inr(t.bills)} ${__("bills")}`));
+				tile(__("Suppliers"), inr(t.sups.size), esc(`${cnt(t.bills, "bill")}`));
 
 			// Purchases over time (follows the period like the sales chart)
 			const el = slot("buytrend"), vals = buyBuckets(v);
-			setTitle("buytrend", `${__("Purchases")} · ${v.title}`);
-			el.innerHTML = st.tables.has("buytrend")
+			if (!renderGearChart("buytrend")) el.innerHTML = st.tables.has("buytrend")
 				? table([__("Period"), __("Purchases")], vals.map((x, i) => [esc(v.long(i)), x == null ? "—" : esc(rs(x))]).filter((r, i) => vals[i] != null))
 				: timeAxis(el, {
 					axis: viewAxis(v),
@@ -2065,33 +2808,12 @@ window.avinash_ceo_dashboard = (function () {
 
 			// By company
 			const coItems = shownCompanies().map((c) => ({ val: c.i, label: c.abbr, title: c.name, cur: t.byCo.get(c.i) || 0, prev: 0, tip: tipRows(c.name, [["", __("Purchases"), esc(rs(t.byCo.get(c.i) || 0))], ["", __("Share"), t.amt ? `${inr(((t.byCo.get(c.i) || 0) / t.amt) * 100, 1)}%` : "—"]]) })).filter((x) => x.cur).sort((a, b) => b.cur - a.cur);
-			slot("buyco").innerHTML = coItems.length ? barList(capped(coItems, "buyco"), { dim: "co", fill: "var(--zone-key, var(--ceo-cur))", fmt: rs }) + showAll(coItems, "buyco") : `<div class="ceo-empty">${__("No purchases in this period.")}</div>`;
-
-			// What we buy (fixed category order; bars on one scale)
-			const maxC = Math.max(1, ...t.byCat.map((c) => c.amt));
-			const catRow = (name, c, extra) => `<div class="ceo-barrow nochg" data-tip="${tip(tipRows(name, [["", __("Purchases"), esc(rs(c.amt))], ["", __("Share"), t.amt ? `${inr((c.amt / t.amt) * 100, 1)}%` : "—"], ...(extra ? [["", __("LP Gas"), esc(extra)]] : [])]))}">
-				<div class="ceo-barlabel"><span>${esc(name)}${extra ? `<small>${esc(extra)}</small>` : ""}</span></div>
-				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(Math.max(0, c.amt) / maxC) * 100}%;background:var(--zone-key, var(--ceo-cur))"></div></div>
-				<div class="ceo-barval">${esc(rs(c.amt))}<small class="ceo-block ceo-muted">${t.amt ? `${inr((c.amt / t.amt) * 100, c.amt / t.amt < 0.1 ? 1 : 0)}%` : ""}</small></div></div>`;
-			const cats = st.by.cats.map((name, i) => ({ name: __(name), c: t.byCat[i], i })).filter((x) => x.c.amt);
-			slot("buycat").innerHTML = cats.length ? `<div class="ceo-bars named">${cats.map((x) => catRow(x.name, x.c, x.i === 0 && x.c.kg ? `${mt(x.c.kg)} · Rs ${inr(x.c.amt / x.c.kg, 2)}/kg` : "")).join("")}</div>` : `<div class="ceo-empty">${__("No purchases in this period.")}</div>`;
-
-			// Top suppliers (click: their Purchase Invoices in this period)
-			const [wa, wb] = windowDates();
-			const sups = [...t.bySup.entries()].sort((a, b) => b[1].amt - a[1].amt);
-			const maxS = sups.length ? Math.max(1, sups[0][1].amt) : 1;
-			slot("buysup").innerHTML = sups.length ? `<div class="ceo-bars named wide">${sups.slice(0, 8).map(([i, s]) => {
-				const sp = st.by.sup[i], filters = { supplier: sp[0], docstatus: 1, posting_date: ["Between", [wa, wb]] };
-				return `<div class="ceo-barrow nochg ceo-click" data-act="open-list" data-doctype="Purchase Invoice" data-filters="${esc(JSON.stringify(filters))}" tabindex="0" data-tip="${tip(tipRows(sp[1], [["", __("Purchases"), esc(rs(s.amt))], ["", __("Share"), t.amt ? `${inr((s.amt / t.amt) * 100, 1)}%` : "—"], ["", __("Bills"), inr(s.bills)], ["", __("Last bill"), esc(bsShort(s.last))]]))}">
-					<div class="ceo-barlabel"><span title="${esc(sp[1])}">${esc(sp[1])}<small>${[...s.cos].map((c) => esc(d.companies[c].abbr)).join(", ")}${sp[2] ? ` · ${esc(__("group company"))}` : ""} · ${inr(s.bills)} ${esc(__("bills"))}</small></span></div>
-					<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(s.amt / maxS) * 100}%;background:var(--zone-key, var(--ceo-cur))"></div></div>
-					<div class="ceo-barval">${esc(rs(s.amt))}<small class="ceo-block ceo-muted">${t.amt ? `${inr((s.amt / t.amt) * 100, s.amt / t.amt < 0.1 ? 1 : 0)}%` : ""}</small></div></div>`;
-			}).join("")}</div><div class="ceo-foot">${__("{0} suppliers · click one to open their bills", [inr(sups.length)])}</div>` : `<div class="ceo-empty">${__("No purchases in this period.")}</div>`;
+			slot("buyco").innerHTML = coItems.length ? barList(capped(coItems, "buyco"), { dim: "co", fill: "var(--ceo-cur)", fmt: rs }) + showAll(coItems, "buyco") : `<div class="ceo-empty">${__("No purchases in this period.")}</div>`;
 		}
 
 		// -------------------------------------------------------- credit and dues
 		function renderCredit() {
-			const zone = root.querySelector("[data-zone='credit']");
+			const zone = root.querySelector("section.ceo-zone[data-zone='credit']");
 			if (zone) zone.style.display = pastYear() ? "none" : "";
 			if (pastYear()) return;
 			const c = st.credit, label = slot("credit-label");
@@ -2117,8 +2839,8 @@ window.avinash_ceo_dashboard = (function () {
 			const tile = (lbl, val, sub, cls = "") => `<div class="ceo-kpi ${cls}"><div class="ceo-kpi-label">${esc(lbl)}</div><div class="ceo-kpi-value">${val}</div><div class="ceo-kpi-foot">${sub}</div></div>`;
 			kpis.innerHTML =
 				tile(__("Customers on hold"), `<span class="ceo-status critical" aria-hidden="true">●</span>${inr(hold.length)}`, `${[3, 2, 1].filter((k) => byReason[k]).map((k) => `${inr(byReason[k])} ${esc(__(BLOCK_SHORT[k]).toLowerCase())}`).join(" · ") || __("nobody is blocked")}<br>${__("owing")} ${esc(rs(holdOwed))}`) +
-				tile(__("Owed after advances"), esc(rs(owed)), `${esc(rs(old30))} ${__("over 30 days")}`) +
-				tile(__("Advance held"), esc(rs(adv)), "") +
+				tile(__("Owed (credit check)"), esc(rs(owed)), `${esc(rs(old30))} ${__("over 30 days")}`) +
+				tile(__("Advance left (credit check)"), esc(rs(adv)), "") +
 				tile(__("Near the limit"), inr(near.length), `${__("{0}%+ of limit used", [NEAR_LIMIT * 100])}`);
 
 			// Ageing
@@ -2128,7 +2850,7 @@ window.avinash_ceo_dashboard = (function () {
 			const maxA = Math.max(1, ...ages.map((a) => a.owed));
 			sub("crage", __("Owed per customer, grouped by how old their oldest unpaid bill is. Click a row to list them."));
 			slot("crage").innerHTML = `<div class="ceo-bars">${ages.map((a, i) => (a.n || i < AGE_BUCKETS.length ? `<div class="ceo-barrow ${st.crBucket == null ? "" : st.crBucket === i ? "is-sel" : "is-dim"}" data-act="cr-bucket" data-val="${i}" tabindex="0" data-tip="${tip(tipRows(ageLabels[i], [["", __("Owed"), esc(rs(a.owed))], ["", __("Customers"), inr(a.n)]], i === AGE_BUCKETS.length ? `<div class="ceo-tip-note">${__("Money owed through Journal Entries with no Sales Invoice behind it; it has no bill date, so it cannot age.")}</div>` : ""))}">
-				<div class="ceo-barlabel"><span>${esc(ageLabels[i])}<small>${inr(a.n)} ${__("customers")}</small></span></div>
+				<div class="ceo-barlabel"><span>${esc(ageLabels[i])}<small>${cnt(a.n, "customer")}</small></span></div>
 				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(a.owed / maxA) * 100}%;background:${i < AGE_BUCKETS.length ? `var(--ceo-age${i})` : "var(--ceo-neutral)"}"></div></div>
 				<div class="ceo-barval">${esc(rs(a.owed))}</div><div></div></div>` : "")).join("")}</div>`;
 
@@ -2137,9 +2859,9 @@ window.avinash_ceo_dashboard = (function () {
 			st.cr.filter((x) => passCredit(x)).forEach((x) => { const k = x.co; const y = per.get(k) || per.set(k, { owed: 0, adv: 0, hold: 0, n: 0 }).get(k); y.owed += Math.max(0, x.owed); y.adv += x.adv; y.n++; if (x.blocked) y.hold++; });
 			const cos = [...per.entries()].filter(([k]) => k >= 0).sort((a, b) => b[1].owed - a[1].owed);
 			const maxC = Math.max(1, ...cos.map(([, y]) => y.owed));
-			sub("crco", __("Owed after advances, and how many customers are on hold. Hover for the advance held."));
+			sub("crco", __("Owed as the credit check counts it, and how many customers are on hold. Hover for the advance left."));
 			const coItems = cos.map(([k, y]) => ({ val: k, k, y }));
-			slot("crco").innerHTML = cos.length ? `<div class="ceo-bars">${capped(coItems, "crco").map(({ k, y }) => `<div class="ceo-barrow ${dimState("co", k)}" data-dim="co" data-val="${k}" tabindex="0" data-tip="${tip(tipRows(D().companies[k].name, [["", __("Owed"), esc(rs(y.owed))], ["", __("Advance held"), esc(rs(y.adv))], ["", __("On hold"), `${inr(y.hold)} ${__("of")} ${inr(y.n)}`]]))}">
+			slot("crco").innerHTML = cos.length ? `<div class="ceo-bars">${capped(coItems, "crco").map(({ k, y }) => `<div class="ceo-barrow ${dimState("co", k)}" data-dim="co" data-val="${k}" tabindex="0" data-tip="${tip(tipRows(D().companies[k].name, [["", __("Owed"), esc(rs(y.owed))], ["", __("Advance left"), esc(rs(y.adv))], ["", __("On hold"), `${inr(y.hold)} ${__("of")} ${inr(y.n)}`]]))}">
 				<div class="ceo-barlabel"><span title="${esc(D().companies[k].name)}">${esc(D().companies[k].abbr)}</span></div>
 				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(y.owed / maxC) * 100}%;background:var(--ceo-cur)"></div></div>
 				<div class="ceo-barval">${esc(rs(y.owed))}</div>
@@ -2287,7 +3009,7 @@ window.avinash_ceo_dashboard = (function () {
 			const stat = (l, v, dd) => `<div class="ceo-dstat"><span>${esc(l)}</span><strong>${v}</strong>${dd || ""}</div>`;
 			el.innerHTML = `<header><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div><button class="ceo-icon" data-act="close-drawer" aria-label="${esc(__("Close"))}">✕</button></header>
 				<div class="ceo-dbody">
-				<div class="ceo-dstats">${stat(__("Volume"), esc(mt(t.kg)), delta(t.kg, t.kgP))}${stat(__("Net sales"), esc(rs(t.amt)), delta(t.amt, t.amtP))}${stat(__("Rs/kg"), t.rate ? `Rs ${inr(t.rate, 2)}` : "—", delta(t.rate, t.rateP))}${stat(__("Collected"), esc(rs(t.coll)), t.amt ? `<span class="ceo-delta-note">${inr((t.coll / t.amt) * 100, 0)}% ${__("of billed")}</span>` : "")}</div>
+				<div class="ceo-dstats">${stat(__("Volume"), esc(mt(t.kg)), delta(t.kg, t.kgP))}${stat(__("Net sales"), esc(rs(t.amt)), delta(t.amt, t.amtP))}${SHOW_RATE ? stat(__("Rs/kg"), t.rate ? `Rs ${inr(t.rate, 2)}` : "—", delta(t.rate, t.rateP)) : ""}${stat(__("Collected"), esc(rs(t.coll)), t.amt ? `<span class="ceo-delta-note">${inr((t.coll / t.amt) * 100, 0)}% ${__("of billed")}</span>` : "")}</div>
 				<h4>${__("24 months")} · ${esc(measureName())}</h4>${spark(flow(ser), winMonths(W), true)}
 				${extra}
 				<button class="ceo-btn" data-act="open-list" data-filters="${esc(JSON.stringify(listFilters))}">${__("Open these Sales Invoices")} →</button>

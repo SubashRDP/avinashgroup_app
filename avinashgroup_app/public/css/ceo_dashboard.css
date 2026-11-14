@@ -845,3 +845,832 @@
 .ceo-balsum { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 10px; font-size: 13px; color: var(--ceo-ink-2); }
 .ceo-balsum b { color: var(--ceo-ink); font-weight: 650; font-variant-numeric: tabular-nums; margin-left: 4px; }
 .ceo-balsum b.ceo-neg { color: var(--ceo-bad); }
+
+/* ------------------------------------------------------------ district map
+   Choropleth on the validated blue ordinal ramp (--ceo-use0..4): darker = more.
+   Districts with no sales take the neutral track colour. The five largest are
+   named on the map; every district is named in its tooltip and the list. */
+.ceo-split.map { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.ceo-map { display: block; width: 100%; height: auto; }
+.ceo-dist { stroke: var(--ceo-card); stroke-width: 1.2; stroke-linejoin: round; cursor: default; transition: opacity .15s; }
+.ceo-dist.none { fill: var(--ceo-track); }
+.ceo-map:hover .ceo-dist { opacity: .78; }
+.ceo-map .ceo-dist:hover, .ceo-map .ceo-dist:focus-visible { opacity: 1; stroke: var(--ceo-ink); stroke-width: 1.6; outline: none; }
+.ceo-dist-label { font-size: 15px; font-weight: 650; fill: var(--ceo-ink); paint-order: stroke; stroke: var(--ceo-card); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.ceo-maplegend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 12px; color: var(--ceo-ink-2); font-variant-numeric: tabular-nums; }
+.ceo-maplegend span { display: inline-flex; align-items: center; gap: 6px; }
+.ceo-maplegend i { width: 14px; height: 10px; border-radius: 3px; }
+.ceo-maplegend i.none { background: var(--ceo-track); }
+@media (max-width: 1000px) { .ceo-split.map { grid-template-columns: 1fr; } }
+/* Returns: bars in the "serious" status colour's family, apart from sales. */
+.ceo-bar.ret { fill: var(--ceo-serious); }
+.ceo-key.ret, .ceo-lk.ret { background: var(--ceo-serious); }
+/* Kathmandu Valley inset: the three small districts enlarged in the map's empty corner. */
+.ceo-dist { vector-effect: non-scaling-stroke; }
+.ceo-inset-box { fill: var(--ceo-card); stroke: var(--ceo-line); stroke-width: 1.2; }
+.ceo-inset-src { fill: none; stroke: var(--ceo-ink-2); stroke-width: 1.2; }
+.ceo-inset-lead { stroke: var(--ceo-ink-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.ceo-inset-title { font-size: 13px; font-weight: 650; fill: var(--ceo-ink-2); }
+.ceo-dist-label.inset { font-size: 13px; }
+.ceo-map:hover .ceo-inset .ceo-dist { opacity: 1; }
+/* Districts picked on the map: the pick keeps its colour and gets a dark outline, the rest fade. */
+.ceo-dist[data-dim] { cursor: pointer; }
+.ceo-dist.is-dim { opacity: .3; }
+.ceo-map:hover .ceo-dist.is-dim { opacity: .45; }
+.ceo-dist.is-sel { stroke: var(--ceo-ink); stroke-width: 1.8; }
+/* "Show by": a unit as large as the period (or larger) cannot be chosen. */
+.ceo-seg button[disabled] { opacity: .38; cursor: not-allowed; text-decoration: line-through; }
+/* Money for a week, month or quarter: the opening balance and the period's movement, as figures. */
+.ceo-pfig { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 22px; margin: 2px 0 14px; }
+.ceo-pfig > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ceo-pfig > div.big { grid-column: 1 / -1; padding-bottom: 12px; border-bottom: 1px solid var(--ceo-grid); }
+.ceo-pfig span { font-size: 12px; color: var(--ceo-ink-2); }
+.ceo-pfig strong { font-size: 20px; font-weight: 650; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.ceo-pfig > div.big strong { font-size: 30px; }
+
+/* ------------------------------------------------------------ polish (2026-11-13)
+   The map sits level with the middle of its list instead of leaving a blank
+   block under it. */
+.ceo-split.map > div:first-child { align-self: center; }
+/* Top tiles never leave one tile alone on a row: on a phone the last tile
+   takes the full width. */
+@media (max-width: 760px) {
+	.ceo-kpis.six .ceo-kpi:last-child:nth-child(even) { grid-column: span 2; }
+	/* Bar lists on a phone: name and figure on one line, the bar full width
+	   under them. Side by side the bar had about 10px to draw in. */
+	.ceo-bars .ceo-barrow {
+		grid-template-columns: minmax(0, 1fr) auto auto !important;
+		grid-template-areas: "label val drill" "track track track"; row-gap: 6px; column-gap: 8px;
+	}
+	.ceo-barrow > .ceo-barlabel { grid-area: label; }
+	.ceo-barrow > .ceo-bartrack { grid-area: track; height: 10px; }
+	.ceo-barrow > .ceo-barval { grid-area: val; }
+	.ceo-barrow > .ceo-drill { grid-area: drill; }
+}
+@media (max-width: 760px) {
+	/* Small tiles: the figure fits its half-width tile. */
+	.ceo-kpis.small .ceo-kpi-value { font-size: 21px; }
+	/* Tables on a phone show the columns that fit without sideways scrolling;
+	   the row still opens the full detail. Hidden: scorecard Share, Collected,
+	   Customers, Bills, 24 months; credit list Company, Advance, Oldest bill,
+	   Unpaid bills, Limit used, Usual; customers Company, Last bill. */
+	[data-slot="matrix"] .ceo-table :is(th, td):is(:nth-child(3), :nth-child(5), :nth-child(7), :nth-child(8), :nth-child(9)),
+	[data-slot="crlist"] .ceo-table :is(th, td):is(:nth-child(2), :nth-child(5), :nth-child(6), :nth-child(7), :nth-child(8), :nth-child(9)),
+	[data-slot="customers"] .ceo-table :is(th, td):is(:nth-child(2), :nth-child(5)) { display: none; }
+	.ceo-custname { flex-wrap: wrap; gap: 0 6px; }
+	.ceo-custname span { white-space: normal; max-width: none; }
+	.ceo-table th, .ceo-table td { padding-left: 5px; padding-right: 5px; }
+}
+@media (max-width: 760px) {
+	/* Scorecard: figures without the bars over them; cash table: Total and Bank loans. */
+	[data-slot="matrix"] .ceo-table td:is(:nth-child(2), :nth-child(4)) .ceo-cellbar { display: none; }
+	[data-slot="cash"] .ceo-table :is(th, td):is(:nth-child(2), :nth-child(3)) { display: none; }
+	/* Credit list: one customer per block. Name and amount owed on the first
+	   line, the reason for the hold under the name. */
+	[data-slot="crlist"] .ceo-table, [data-slot="crlist"] .ceo-table :is(thead, tbody) { display: block; }
+	[data-slot="crlist"] .ceo-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto 22px; align-items: center; border-bottom: 1px solid var(--ceo-grid); }
+	[data-slot="crlist"] .ceo-table tbody tr:last-child { border-bottom: 0; }
+	[data-slot="crlist"] .ceo-table td { border-bottom: 0; }
+	[data-slot="crlist"] .ceo-table :is(th, td):nth-child(1) { grid-column: 1; grid-row: 1; }
+	[data-slot="crlist"] .ceo-table :is(th, td):nth-child(4) { grid-column: 2; grid-row: 1; }
+	[data-slot="crlist"] .ceo-table :is(th, td):nth-child(10) { grid-column: 3; grid-row: 1 / span 2; }
+	[data-slot="crlist"] .ceo-table td:nth-child(3) { grid-column: 1 / span 2; grid-row: 2; padding-top: 0; }
+	[data-slot="crlist"] .ceo-table th:nth-child(3) { display: none; }
+}
+@media (max-width: 760px) {
+	[data-slot="matrix"] .ceo-table { font-size: 12.5px; }
+	[data-slot="matrix"] .ceo-table :is(th, td) { padding-left: 2px; padding-right: 2px; }
+	[data-slot="matrix"] .ceo-table td:first-child { white-space: normal; }
+	[data-slot="matrix"] .ceo-pct i { display: none; }
+}
+@media (max-width: 760px) {
+	/* Column headings may wrap ("Collected %"), so the heading never sets the width. */
+	.ceo-table th, .ceo-table th.num { white-space: normal; font-size: 11px; letter-spacing: 0; vertical-align: bottom; }
+	[data-slot="matrix"] .ceo-table :is(th, td):last-child { padding: 0; }
+	[data-slot="matrix"] .ceo-drill { width: 18px; }
+}
+@media (max-width: 760px) {
+	/* Scorecard: no › column on a phone (the By company card above has the same
+	   drill), so the table fits with no sideways scroll. Credit list likewise fits. */
+	[data-slot="matrix"] .ceo-table :is(th, td):last-child { display: none; }
+	[data-slot="crlist"] .ceo-table :is(th, td):nth-child(10) { padding: 0; }
+	[data-slot="crlist"] .ceo-tablewrap { margin: 0; }
+}
+
+/* ------------------------------------------------------------ pack size, expenses (2026-11-13)
+   Expense heads are long and differ only at the end ("Vehicle Running
+   Expenses - S/D" / "- O/O"), so the name column is wide. */
+[data-slot="expenses"] .ceo-bars.named.wide .ceo-barrow.nochg { grid-template-columns: minmax(250px, 3fr) minmax(0, 2fr) 104px; }
+[data-slot="pack"] .ceo-bars.named.wide .ceo-barrow.nochg { grid-template-columns: minmax(220px, 2fr) minmax(0, 3fr) 92px; }
+
+/* ------------------------------------------------------------ review fixes (2026-11-14)
+   From an outside review: last-year line on tiles, a shorter page, a section
+   strip that stays on a phone, colours that follow the section. */
+
+/* Same period one year earlier, under the tile's own figures: quiet, no badge. */
+.ceo-kpi-ly { font-size: 12px; color: var(--ceo-ink-3); margin-top: 2px; line-height: 1.45; }
+.ceo-kpi-ly b { color: var(--ceo-ink-2); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ceo-ly { display: block; font-size: 11.5px; color: var(--ceo-ink-3); font-weight: 500; white-space: nowrap; }
+.ceo-kpi-label { flex-wrap: wrap; line-height: 1.3; }
+
+/* When the figures were read */
+.ceo-upd { font-size: 12px; color: var(--ceo-ink-3); margin-left: 8px; white-space: nowrap; }
+
+/* Show more: the monthly-review cards of a section */
+.ceo-zone:not(.is-more) .ceo-card.ceo-more { display: none; }
+.ceo-morebar { display: flex; justify-content: center; }
+.ceo-morebtn {
+	display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 10px;
+	border: 1px dashed var(--zone-line); background: var(--ceo-card); color: var(--zone-ink);
+	border-radius: 10px; padding: 9px 18px; font-size: 13.5px; font-weight: 650; cursor: pointer; width: 100%;
+}
+.ceo-morebtn span { font-weight: 500; color: var(--ceo-ink-3); font-size: 12.5px; }
+.ceo-morebtn:hover, .ceo-morebtn:focus-visible { border-style: solid; border-color: var(--zone-key); outline: none; }
+@media print { .ceo-morebar { display: none; } .ceo-zone .ceo-card.ceo-more { display: block !important; } }
+
+/* Bars and lines inside a section wear that section's colour (Money's cash
+   bars were Sales teal). Returns use a neutral grey, not the "serious" status
+   orange, which sat too close to Buying pink. */
+.ceo-zone:not([data-zone="sales"]) { --ceo-cur: var(--zone-key); }
+.ceo { --ceo-ret: #8b8f96; }
+[data-theme="dark"] .ceo { --ceo-ret: #8e939b; }
+.ceo-bar.ret { fill: var(--ceo-ret); }
+.ceo-key.ret, .ceo-lk.ret { background: var(--ceo-ret); }
+
+/* Phone: a section strip of its own that stays under the navbar */
+.ceo-phonenav { display: none; }
+@media (max-width: 760px) {
+	.ceo-filters .ceo-nav { display: none; }
+	.ceo-phonenav {
+		display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+		position: sticky; top: var(--navbar-height, 48px); z-index: 6;
+		margin: 0 -15px 10px; padding: 8px 15px; width: auto; border-top: 0;
+		background: var(--ceo-bg, var(--bg-color)); border-bottom: 1px solid var(--ceo-grid);
+	}
+	.ceo-phonenav::-webkit-scrollbar { display: none; }
+	.ceo-phonenav button { flex: none; }
+	[data-anchor] { scroll-margin-top: 110px; }
+	/* District names are unreadable at phone size: the tooltip names the district. */
+	.ceo-dist-label, .ceo-inset-title { display: none; }
+	.ceo-asof { flex-wrap: wrap; }
+	.ceo-upd { margin-left: 0; }
+	/* The scorecard only just fits a phone; the tiles carry the last-year figure there. */
+	.ceo-matrix .ceo-ly { display: none; }
+}
+@media print { .ceo-phonenav { display: none !important; } }
+
+/* ------------------------------------------------------------ glass bars + compact (2026-11-14)
+   A full frosted-glass theme (version 99) was tried and dropped: translucent
+   cards over coloured glows lowered contrast where the CEO reads figures, and
+   the research (NN/g; Few on decoration) says keep data on solid surfaces.
+   Glass stays only on the two bars content scrolls under: the sticky filter
+   bar and the phone section strip. Every card, tile, chart and table is solid.
+   Compact: tighter padding and gaps, smaller tile figures, shorter charts
+   (timeAxis default height in the JS). */
+.ceo {
+	--glass: rgba(255, 255, 255, .72); --glass-line: rgba(255, 255, 255, .8); --glass-edge: rgba(15, 30, 45, .08);
+	--glass-shadow: 0 8px 24px -14px rgba(20, 40, 60, .25);
+	--glass-blur: blur(14px) saturate(160%);
+}
+[data-theme="dark"] .ceo {
+	--glass: rgba(28, 30, 34, .72); --glass-line: rgba(255, 255, 255, .08); --glass-edge: rgba(0, 0, 0, .4);
+	--glass-shadow: 0 8px 24px -14px rgba(0, 0, 0, .7);
+}
+.ceo-filters, .ceo-phonenav {
+	background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+	box-shadow: var(--glass-shadow);
+}
+.ceo-filters { border: 1px solid var(--glass-line); outline: 1px solid var(--glass-edge); outline-offset: -1px; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+	.ceo-filters, .ceo-phonenav { background: var(--ceo-card); }
+}
+@media (prefers-reduced-transparency: reduce) {
+	.ceo-filters, .ceo-phonenav { background: var(--ceo-card); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media print { .ceo-filters { background: #fff !important; backdrop-filter: none !important; box-shadow: none !important; outline: 0; } }
+
+/* Compact */
+.ceo-filters { padding: 8px 12px; gap: 6px 10px; margin-bottom: 8px; }
+.ceo-nav { padding-top: 6px; }
+.ceo-kpis { gap: 10px; }
+.ceo-kpi { padding: 14px 16px 0; min-height: 150px; }
+.ceo-kpi-value { font-size: 30px; margin-top: 4px; }
+.ceo-kpi.hero .ceo-kpi-value { font-size: 48px; }
+.ceo-kpi-value small { font-size: 14px; }
+.ceo-kpis.small .ceo-kpi { min-height: 0; padding: 12px 16px; }
+.ceo-kpis.small .ceo-kpi-value { font-size: 24px; }
+.ceo-zone { margin-top: 12px; padding: 2px 12px 12px; border-radius: 20px; }
+.ceo-zone > .ceo-section { margin: 10px 2px 8px; }
+.ceo-grid, .ceo-stack { gap: 10px; }
+.ceo-zone .ceo-kpis.small { margin-bottom: 10px; }
+.ceo-card { padding: 14px 16px 12px; }
+.ceo-card > header { margin-bottom: 8px; }
+.ceo-barrow { padding-top: 5px; padding-bottom: 5px; }
+.ceo-table td, .ceo-table th { padding-top: 7px; padding-bottom: 7px; }
+@media (max-width: 760px) {
+	.ceo-kpi { min-height: 0; padding-bottom: 0; }
+	.ceo-kpi.hero .ceo-kpi-value { font-size: 40px; }
+	.ceo-kpi-value { font-size: 24px; }
+	.ceo-zone { padding: 2px 8px 8px; }
+}
+
+/* ------------------------------------------------------------ colour by meaning (2026-11-14)
+   Replaces the five tinted section panels (mint, pink, sand, lilac, sky): five
+   competing hues that said which section you were in, not what a figure means.
+   Now surfaces are neutral, like Frappe's own widgets, and colour has jobs:
+     teal   = the figure itself (any single series, in every section)
+     amber  = a second series beside it (collected, purchase price)
+     red    = a negative value (dark mode: pink-red, so it stays apart from amber)
+     grey   = other / not attributed / returns
+     teal, amber, plum = customer segments; orange and teal ramps = ageing, limit use
+   Section colour survives only as a small key: the dot on the heading, the
+   section strip and the top-tile label. Validated 2026-11-14 (dataviz
+   validator, light #00826d/#cf6f1d/#b42f2f, dark #16967f/#d27a2a/#e45f93: all pass). */
+.ceo { --ceo-negbar: #b42f2f; }
+[data-theme="dark"] .ceo { --ceo-negbar: #e45f93; }
+.ceo .ceo-zone[data-zone] { --ceo-cur: inherit; }
+.ceo-zone { background: transparent; border: 0; border-radius: 0; padding: 0; margin-top: 26px; box-shadow: none; }
+.ceo-zone > .ceo-section { margin: 0 2px 12px; padding-top: 16px; border-top: 1px solid var(--ceo-line); }
+.ceo-zone > .ceo-section h2 { color: var(--ceo-ink); }
+.ceo-zone .ceo-card, .ceo-zone .ceo-kpis.small .ceo-kpi { border-color: var(--ceo-line); }
+.ceo-kpi[data-zone]:not([data-zone=""]) { background: var(--ceo-card); border-color: var(--ceo-line); }
+.ceo-kpi[data-zone]:not([data-zone=""])::before { display: none; }
+.ceo-kpi[data-zone]:not([data-zone=""]) .ceo-kpi-label { color: var(--ceo-ink-2); }
+.ceo-kpi[data-zone]:not([data-zone=""]) .ceo-spark .area { fill: var(--ceo-cur); opacity: .08; }
+.ceo-kpi[data-zone]:not([data-zone=""]) .ceo-spark .win, .ceo-kpi[data-zone]:not([data-zone=""]) .ceo-spark circle { stroke: var(--ceo-cur); }
+.ceo-kpi[data-zone]:not([data-zone=""]) .ceo-spark circle { fill: var(--ceo-cur); stroke: var(--ceo-card); }
+.ceo-kpi[data-act][data-zone]:hover, .ceo-kpi[data-act][data-zone]:focus-visible { border-color: var(--ceo-ink-3); }
+.ceo-nav button { background: var(--ceo-card); border-color: var(--ceo-line); color: var(--ceo-ink); }
+.ceo-nav button:hover, .ceo-nav button:focus-visible { box-shadow: 0 0 0 2px var(--ceo-line); }
+.ceo-bar.buyc { fill: var(--ceo-cur); }
+.ceo-key.buyc, .ceo-lk.buyc { background: var(--ceo-cur); }
+.ceo-morebtn { color: var(--ceo-ink-2); border-color: var(--ceo-line); background: var(--ceo-card); }
+.ceo-morebtn:hover, .ceo-morebtn:focus-visible { border-color: var(--ceo-ink-3); }
+@media (max-width: 760px) { .ceo-zone { padding: 0; } }
+.ceo-kpi.is-measure[data-zone]:not([data-zone=""])::before { display: block; background: var(--ceo-cur); }   /* the tile the charts are measuring */
+
+/* ------------------------------------------------------------ frosted chart marks, compact segments (2026-11-14)
+   Bars are frosted glass: a see-through body with a solid cap at the end
+   (the cap is a second path drawn by timeAxis; bar lists use ::after). Text,
+   axes and cards stay solid, so the figures read as before. */
+.ceo-svg .ceo-bar:not(.cap):not(.full) { fill-opacity: .38; }
+.ceo-svg .ceo-bar.is-last:not(.cap):not(.full) { fill-opacity: .2; }
+.ceo-svg .ceo-bar.cap { fill-opacity: 1; pointer-events: none; }
+.ceo-svg .ceo-bar.cap.is-last { fill-opacity: .55; }
+.ceo-svg .ceo-bar.cap.is-dim { opacity: .25; }
+.ceo-area { opacity: .16; }
+.ceo-barfill { box-shadow: inset 0 0 0 999px rgba(255, 255, 255, .55); }
+[data-theme="dark"] .ceo-barfill { box-shadow: inset 0 0 0 999px rgba(24, 24, 23, .5); }
+.ceo-barfill::after { content: ""; position: absolute; top: 0; bottom: 0; right: 0; width: 3px; background: inherit; border-radius: 0 3px 3px 0; }
+.ceo-barfill.is-neg::after { right: auto; left: 0; border-radius: 3px 0 0 3px; }
+.ceo-share-part, .ceo-cellbar span, .ceo-pct b, .ceo-segshare span { box-shadow: none; }
+
+/* Customer segment: one share bar and a line per segment */
+.ceo-segshare { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; margin: 2px 0 12px; }
+.ceo-segshare span { display: block; height: 100%; }
+.ceo-segshare span.is-dim { opacity: .25; }
+.ceo-seglines { display: flex; flex-direction: column; }
+.ceo-segline { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 46px; align-items: center; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--ceo-grid); cursor: pointer; border-radius: 6px; }
+.ceo-segline:first-child { border-top: 0; }
+.ceo-segline:hover, .ceo-segline:focus-visible { background: var(--ceo-track); outline: none; }
+.ceo-segline.is-dim { opacity: .45; }
+.ceo-segline .ceo-segkey { width: 10px; height: 10px; border-radius: 3px; }
+.ceo-segnm { font-weight: 600; min-width: 0; }
+.ceo-segnm small { display: block; font-weight: 500; font-size: 11.5px; color: var(--ceo-ink-3); }
+.ceo-segline strong { font-variant-numeric: tabular-nums; font-weight: 650; }
+.ceo-segpc { text-align: right; color: var(--ceo-ink-2); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+
+/* Customer dropdown in the Top customers card (replaces the "Find customer" box) */
+.ceo-cdd .ceo-ddbtn { max-width: 320px; }
+.ceo-cddpanel { left: auto; right: 0; width: 380px; }
+.ceo-cddopt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; }
+.ceo-cddopt.is-on { background: var(--ceo-wash); }
+.ceo-cddname { display: flex; flex-direction: column; min-width: 0; }
+.ceo-cddname strong { font-weight: 600; color: var(--ceo-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ceo-ddopt .ceo-cddname small { color: var(--ceo-ink-3); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ceo-ddopt span.ceo-cddval { color: var(--ceo-ink-2); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.ceo-cddpanel .ceo-ddfoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+@media (max-width: 760px) { .ceo-cddpanel { left: 0; right: auto; width: calc(100vw - 48px); } }
+
+/* Map screen (2026-11-14): the district map on a screen of its own */
+.ceo-mapscreen[hidden], [data-slot="dash"][hidden] { display: none !important; }
+.ceo-mapscreen { margin-top: 4px; }
+.ceo-mshead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 6px 2px 12px; }
+.ceo-mshead h2 { font-size: 18px; font-weight: 650; margin: 0 0 2px; color: var(--ceo-ink); }
+.ceo-mshead .ceo-seg { flex-wrap: wrap; }
+.ceo-mapscreen .ceo-map { width: 100%; height: auto; max-height: 70vh; }
+.ceo-navscreen { margin-left: auto; }
+.ceo-nav button.ceo-navscreen { background: var(--ceo-card); border-color: var(--ceo-line); color: var(--ceo-ink); }
+.ceo-nav button.ceo-navscreen.is-on { background: var(--ceo-wash); border-color: var(--ceo-cur); }
+@media (max-width: 760px) {
+	.ceo-navscreen { margin-left: 0; }
+	.ceo-phonenav .ceo-navscreen { order: -1; }   /* first in the scrolling strip, not off the edge */
+	.ceo-mapscreen .ceo-dist-label { display: none; }
+}
+
+/* ------------------------------------------------------------ Microsoft look (2026-11-14)
+   Modelled on Fluent 2 and Power BI reports: a light grey canvas with white
+   cards on a soft shadow, an 8px radius, Segoe UI where the machine has it,
+   Microsoft brand blue for the figure, the Power BI orange and purple beside
+   it. Each section gets an Office-style colour of its own (Sales blue, Buying
+   orange-red, Money green, Credit purple, Customers teal) on its heading rule,
+   section button and top-tile edge; that colour is a key only, so a chart
+   reads the same in every section. The first top tile is a solid blue card.
+   Validated 2026-11-14 with the dataviz validator:
+     light #0F6CBD/#E66C37/#744EC2/#C4314B (white surface), dark #2886DE/#E66C37/#9A7FE0/#E45F93;
+     companies light 8 slots, dark 8 slots; compared lines 6 slots; blue
+     limit-use / map ramp --ordinal in both modes: all pass. */
+.ceo {
+	--ceo-c1: #0F6CBD; --ceo-c2: #E66C37; --ceo-c3: #744EC2; --ceo-c4: #B08F00;
+	--ceo-c5: #E044A7; --ceo-c6: #13A10E; --ceo-c7: #0099BC; --ceo-c8: #D64550; --ceo-c9: #a19f9d;
+	--ceo-seg0: #0F6CBD; --ceo-seg1: #E66C37; --ceo-seg2: #744EC2;
+	--ceo-use0: #7fb6ea; --ceo-use1: #4a96e0; --ceo-use2: #0f6cbd; --ceo-use3: #0c5394; --ceo-use4: #083a68;
+	--ceo-k0: #0F6CBD; --ceo-k1: #E66C37; --ceo-k2: #744EC2; --ceo-k3: #D64550; --ceo-k4: #0099BC; --ceo-k5: #9C8A00;
+	--ceo-cur: #0F6CBD; --ceo-coll: #E66C37; --ceo-prev: #8a8886;
+	--ceo-negbar: #C4314B;
+	--ceo-good: #107C10; --ceo-good-bg: rgba(16, 124, 16, .1);
+	--ceo-bad: #C4314B; --ceo-bad-bg: rgba(196, 49, 75, .1);
+	--ceo-grid: #edebe9; --ceo-base: #c8c6c4; --ceo-track: #f3f2f1;
+	--ceo-ink-3: #797775;
+	--ceo-card: #ffffff; --ceo-line: #edebe9;
+	--ceo-wash: rgba(15, 108, 189, .09); --ceo-win: rgba(15, 108, 189, .05);
+	--ceo-radius: 8px;
+	--ms-shadow: 0 1.6px 3.6px rgba(0, 0, 0, .11), 0 .3px .9px rgba(0, 0, 0, .09);
+	--ms-shadow-hi: 0 6.4px 14.4px rgba(0, 0, 0, .13), 0 1.2px 3.6px rgba(0, 0, 0, .11);
+	--ms-hero: #0F6CBD; --ms-hero-2: #115ea3;
+	font-family: "Segoe UI Variable Text", "Segoe UI", var(--font-stack, system-ui, -apple-system, sans-serif);
+}
+[data-theme="dark"] .ceo {
+	--ceo-c1: #2886DE; --ceo-c2: #E66C37; --ceo-c3: #9A7FE0; --ceo-c4: #A08E10;
+	--ceo-c5: #D94FA2; --ceo-c6: #2EA82A; --ceo-c7: #0FA3C4; --ceo-c8: #DE4F5B; --ceo-c9: #605e5c;
+	--ceo-seg0: #2886DE; --ceo-seg1: #E66C37; --ceo-seg2: #9A7FE0;
+	--ceo-use0: #185a9a; --ceo-use1: #1f72c4; --ceo-use2: #3f92e6; --ceo-use3: #7ab4f0; --ceo-use4: #b0d4f7;
+	--ceo-k0: #2886DE; --ceo-k1: #E66C37; --ceo-k2: #9A7FE0; --ceo-k3: #DE4F5B; --ceo-k4: #0FA3C4; --ceo-k5: #A08E10;
+	--ceo-cur: #2886DE; --ceo-coll: #E66C37;
+	--ceo-negbar: #E45F93;
+	--ceo-good: #54b054; --ceo-good-bg: rgba(84, 176, 84, .15);
+	--ceo-bad: #f1707b; --ceo-bad-bg: rgba(241, 112, 123, .15);
+	--ceo-grid: #2b2b2b; --ceo-base: #3d3d3d; --ceo-track: #262626;
+	--ceo-card: #1f1f1f; --ceo-line: #333333;
+	--ceo-wash: rgba(40, 134, 222, .16); --ceo-win: rgba(40, 134, 222, .08);
+	--ms-shadow: 0 1.6px 3.6px rgba(0, 0, 0, .4), 0 .3px .9px rgba(0, 0, 0, .3);
+	--ms-shadow-hi: 0 6.4px 14.4px rgba(0, 0, 0, .5), 0 1.2px 3.6px rgba(0, 0, 0, .4);
+	--ms-hero: #115ea3; --ms-hero-2: #0c3b5e;
+}
+
+/* Office colours per section (key only) */
+.ceo [data-zone="sales"]  { --zone-key: #0F6CBD; --zone-ink: #0c3b5e; --zone-bg: #ebf3fc; }
+.ceo [data-zone="buy"]    { --zone-key: #C43E1C; --zone-ink: #8a2a12; --zone-bg: #fcefea; }
+.ceo [data-zone="money"]  { --zone-key: #107C41; --zone-ink: #0b5a2f; --zone-bg: #eaf5ee; }
+.ceo [data-zone="credit"] { --zone-key: #7719AA; --zone-ink: #5a1380; --zone-bg: #f4ecfa; }
+.ceo [data-zone="cust"]   { --zone-key: #038387; --zone-ink: #025a5c; --zone-bg: #e6f4f4; }
+[data-theme="dark"] .ceo [data-zone="sales"]  { --zone-key: #479EF5; --zone-ink: #9ccbfa; --zone-bg: rgba(71, 158, 245, .12); }
+[data-theme="dark"] .ceo [data-zone="buy"]    { --zone-key: #E8734A; --zone-ink: #f3b39b; --zone-bg: rgba(232, 115, 74, .12); }
+[data-theme="dark"] .ceo [data-zone="money"]  { --zone-key: #3FAE6E; --zone-ink: #9ad7b2; --zone-bg: rgba(63, 174, 110, .12); }
+[data-theme="dark"] .ceo [data-zone="credit"] { --zone-key: #B26ADB; --zone-ink: #d9b5ef; --zone-bg: rgba(178, 106, 219, .13); }
+[data-theme="dark"] .ceo [data-zone="cust"]   { --zone-key: #2AACB0; --zone-ink: #93d6d8; --zone-bg: rgba(42, 172, 176, .12); }
+
+/* Canvas and cards */
+.page-container[data-page-route="ceo-dashboard"], .page-container[data-page-route="ceo-dashboard"] .page-body,
+.page-container[data-page-route="ceo-dashboard"] .layout-main-section { background: #f3f2f1; }
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"],
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] .page-body,
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] .layout-main-section { background: #141414; }
+.page-container[data-page-route="ceo-dashboard"] .layout-main-section { border: 0; box-shadow: none; }
+.ceo { --ceo-bg: #f3f2f1; }
+[data-theme="dark"] .ceo { --ceo-bg: #141414; }
+.ceo-card, .ceo-kpi, .ceo-zone .ceo-kpis.small .ceo-kpi, .ceo-insights {
+	background: var(--ceo-card); border: 1px solid transparent; box-shadow: var(--ms-shadow);
+}
+[data-theme="dark"] .ceo-card, [data-theme="dark"] .ceo-kpi, [data-theme="dark"] .ceo-insights { border-color: var(--ceo-line); }
+.ceo-zone .ceo-card, .ceo-zone .ceo-kpis.small .ceo-kpi { border-color: transparent; }
+[data-theme="dark"] .ceo-zone .ceo-card, [data-theme="dark"] .ceo-zone .ceo-kpis.small .ceo-kpi { border-color: var(--ceo-line); }
+.ceo-kpi[data-act], .ceo-segline, .ceo-card { transition: box-shadow .15s, border-color .15s; }
+.ceo-kpi[data-act]:hover, .ceo-kpi[data-act]:focus-visible { box-shadow: var(--ms-shadow-hi); }
+.ceo-card h3 { font-weight: 600; }
+
+/* Section heading: a 3px rule and a bar in the section's colour */
+.ceo-zone > .ceo-section { border-top: 3px solid var(--zone-key); padding-top: 12px; }
+.ceo-zone > .ceo-section h2 { color: var(--zone-ink); font-weight: 600; }
+[data-theme="dark"] .ceo-zone > .ceo-section h2 { color: var(--zone-ink); }
+.ceo-zone-key { width: 4px; height: 20px; border-radius: 2px; background: var(--zone-key); }
+
+/* Top tiles: a 4px edge in the section colour, label in its ink */
+.ceo-kpi[data-zone]:not([data-zone=""])::before { display: block; height: 4px; background: var(--zone-key); }
+.ceo-kpi[data-zone]:not([data-zone=""]) .ceo-kpi-label { color: var(--zone-ink); }
+.ceo-kpi.is-measure[data-zone]:not([data-zone=""]) { box-shadow: var(--ms-shadow), 0 0 0 2px var(--ceo-cur); }
+.ceo-kpi.is-measure[data-zone]:not([data-zone=""])::before { background: var(--zone-key); }
+
+/* The first top tile: a solid blue card, as in a Power BI report */
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) {
+	background: linear-gradient(135deg, var(--ms-hero), var(--ms-hero-2)); border-color: transparent; color: #fff;
+	--ceo-ink: #fff; --ceo-ink-2: rgba(255, 255, 255, .85); --ceo-ink-3: rgba(255, 255, 255, .72);
+	--ceo-good: #fff; --ceo-bad: #fff; --ceo-prev: rgba(255, 255, 255, .55); --ceo-card: var(--ms-hero);
+}
+.ceo-kpi.hero[data-zone]:not([data-zone=""])::before { display: none; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-label { color: rgba(255, 255, 255, .9); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-label::before { background: #fff; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-ly b { color: #fff; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark .area { fill: #fff; opacity: .16; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark .win { stroke: #fff; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark circle { fill: #fff; stroke: var(--ms-hero-2); }
+.ceo-kpi.hero.is-measure[data-zone]:not([data-zone=""]) { box-shadow: var(--ms-shadow), 0 0 0 2px var(--ceo-bg), 0 0 0 4px var(--ms-hero); }
+
+/* Controls: brand blue for the chosen button, Fluent-style focus */
+.ceo-seg { border-radius: 6px; background: var(--ceo-track); }
+.ceo-seg button { border-radius: 4px; }
+.ceo-seg button[aria-pressed="true"] { background: var(--ceo-cur); color: #fff; box-shadow: none; }
+.ceo-field select, .ceo-icon, .ceo-search { border-radius: 4px; border-color: #d1d1d1; }
+[data-theme="dark"] .ceo-field select, [data-theme="dark"] .ceo-icon, [data-theme="dark"] .ceo-search { border-color: #444; }
+.ceo-pill.is-sel { background: var(--ceo-wash); border-color: var(--ceo-cur); color: var(--ceo-cur); }
+[data-theme="dark"] .ceo-pill.is-sel { color: #9ccbfa; }
+.ceo-chip { border-color: var(--ceo-cur); }
+.ceo button:focus-visible { outline: 2px solid var(--ceo-ink); outline-offset: 1px; }
+
+/* Section strip: each button wears its section's colour */
+.ceo-nav button { background: var(--zone-bg); border-color: transparent; color: var(--zone-ink); border-radius: 4px; }
+.ceo-nav button:hover, .ceo-nav button:focus-visible { box-shadow: inset 0 -2px 0 var(--zone-key); }
+.ceo-nav button i { width: 4px; height: 14px; border-radius: 2px; }
+.ceo-nav button.ceo-navscreen { background: var(--ceo-track); color: var(--ceo-ink); border-color: transparent; }
+.ceo-nav button.ceo-navscreen.is-on { background: var(--ceo-cur); color: #fff; }
+
+/* Show more */
+.ceo-morebtn { border-radius: 4px; border: 1px solid transparent; background: var(--ceo-card); color: var(--zone-ink); box-shadow: var(--ms-shadow); }
+.ceo-morebtn:hover, .ceo-morebtn:focus-visible { border-color: var(--zone-key); }
+
+/* Tables: a Power BI header row */
+.ceo-table thead th { background: var(--ceo-track); color: var(--ceo-ink); font-weight: 600; }
+.ceo-table thead th:first-child { border-radius: 4px 0 0 4px; }
+.ceo-table thead th:last-child { border-radius: 0 4px 4px 0; }
+.ceo-table tbody tr:hover td { background: var(--ceo-win); }
+@media print {
+	.page-container[data-page-route="ceo-dashboard"], .page-container[data-page-route="ceo-dashboard"] .layout-main-section { background: #fff !important; }
+	.ceo-card, .ceo-kpi { box-shadow: none !important; border: 1px solid #e1dfdd !important; }
+	.ceo-kpi.hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ------------------------------------------------------------ sky glass (2026-11-14)
+   The user found the solid Microsoft blue heavy ("should be very light blue,
+   or glass blue"). Light, airy version on top of the Microsoft block: a pale
+   sky gradient canvas with two soft glows, cards of near-opaque white glass
+   (86% white, blur, white rim, blue-tinted shadow) so figures stay on a
+   solid-reading surface (the lesson of the dropped full-glass theme, v99),
+   the first tile in light blue glass with navy figures instead of solid blue,
+   chosen buttons light blue with blue text. Fluent's own guidance: a tinted
+   opaque base (Mica) for the window, acrylic for bars and menus.
+   Series blue #2F8FDF (light) validated 2026-11-14 with orange/purple/red on
+   #f7fbff: all pass; dark keeps #2886DE. */
+.ceo {
+	--ceo-cur: #2F8FDF; --ceo-seg0: #2F8FDF; --ceo-c1: #2F8FDF; --ceo-k0: #2F8FDF;
+	--sky-canvas: radial-gradient(1200px 600px at 8% -5%, #d3e8fc 0%, rgba(211, 232, 252, 0) 60%),
+		radial-gradient(900px 600px at 100% 20%, #d9f2f8 0%, rgba(217, 242, 248, 0) 60%),
+		linear-gradient(180deg, #eef6fe 0%, #f6faff 50%, #eef5fc 100%);
+	--sky-card: rgba(255, 255, 255, .86); --sky-rim: rgba(255, 255, 255, .95);
+	--sky-shadow: 0 1px 2px rgba(30, 90, 160, .06), 0 8px 24px -12px rgba(30, 100, 180, .22);
+	--sky-shadow-hi: 0 2px 4px rgba(30, 90, 160, .08), 0 14px 32px -12px rgba(30, 100, 180, .32);
+	--sky-hero: linear-gradient(140deg, rgba(219, 238, 254, .95) 0%, rgba(196, 226, 252, .92) 55%, rgba(205, 238, 247, .92) 100%);
+	--sky-hero-ink: #0b3a66; --sky-hero-val: #0b5cad; --sky-hero-line: #2F8FDF;
+	--sky-sel: #d6ebfd; --sky-sel-ink: #0b5cad; --sky-sel-line: #a9d1f7;
+	--sky-head: #eaf4fe;
+	--ceo-card: #ffffff; --ceo-track: #eef5fc; --ceo-grid: #e6eef7; --ceo-line: #dde9f5;
+	--ceo-wash: rgba(47, 143, 223, .10); --ceo-win: rgba(47, 143, 223, .06);
+	--ceo-bg: #eef6fe;
+	--ceo-radius: 14px;
+}
+[data-theme="dark"] .ceo {
+	--ceo-cur: #2886DE; --ceo-seg0: #2886DE; --ceo-c1: #2886DE; --ceo-k0: #2886DE;
+	--sky-canvas: radial-gradient(1200px 600px at 8% -5%, rgba(40, 134, 222, .18) 0%, rgba(40, 134, 222, 0) 60%),
+		radial-gradient(900px 600px at 100% 20%, rgba(22, 163, 196, .12) 0%, rgba(22, 163, 196, 0) 60%),
+		linear-gradient(180deg, #0c1622 0%, #0e1a28 100%);
+	--sky-card: rgba(20, 33, 50, .86); --sky-rim: rgba(140, 190, 240, .14);
+	--sky-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -12px rgba(0, 0, 0, .6);
+	--sky-shadow-hi: 0 2px 4px rgba(0, 0, 0, .45), 0 14px 32px -12px rgba(0, 0, 0, .7);
+	--sky-hero: linear-gradient(140deg, rgba(40, 134, 222, .30) 0%, rgba(40, 134, 222, .18) 60%, rgba(22, 163, 196, .18) 100%);
+	--sky-hero-ink: #cfe5fb; --sky-hero-val: #ffffff; --sky-hero-line: #7ab4f0;
+	--sky-sel: rgba(71, 158, 245, .22); --sky-sel-ink: #b8dafc; --sky-sel-line: rgba(122, 180, 240, .45);
+	--sky-head: rgba(71, 158, 245, .10);
+	--ceo-card: #142132; --ceo-track: #1a2a3e; --ceo-grid: #1f3046; --ceo-line: #24364d;
+	--ceo-bg: #0c1622;
+}
+
+/* Canvas */
+.page-container[data-page-route="ceo-dashboard"] { background: var(--sky-canvas, #eef6fe); background-attachment: fixed; }
+.page-container[data-page-route="ceo-dashboard"] {
+	--sky-canvas: radial-gradient(1200px 600px at 8% -5%, #d3e8fc 0%, rgba(211, 232, 252, 0) 60%),
+		radial-gradient(900px 600px at 100% 20%, #d9f2f8 0%, rgba(217, 242, 248, 0) 60%),
+		linear-gradient(180deg, #eef6fe 0%, #f6faff 50%, #eef5fc 100%);
+}
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] {
+	--sky-canvas: radial-gradient(1200px 600px at 8% -5%, rgba(40, 134, 222, .18) 0%, rgba(40, 134, 222, 0) 60%),
+		radial-gradient(900px 600px at 100% 20%, rgba(22, 163, 196, .12) 0%, rgba(22, 163, 196, 0) 60%),
+		linear-gradient(180deg, #0c1622 0%, #0e1a28 100%);
+}
+.page-container[data-page-route="ceo-dashboard"] .page-body,
+.page-container[data-page-route="ceo-dashboard"] .layout-main-section,
+.page-container[data-page-route="ceo-dashboard"] .page-head,
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] .page-body,
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] .layout-main-section,
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] .page-head { background: transparent; }
+
+/* Glass cards: near-opaque, white rim, soft blue shadow */
+.ceo-card, .ceo-kpi, .ceo-zone .ceo-kpis.small .ceo-kpi, .ceo-insights, .ceo-morebtn,
+[data-theme="dark"] .ceo-card, [data-theme="dark"] .ceo-kpi, [data-theme="dark"] .ceo-insights,
+[data-theme="dark"] .ceo-zone .ceo-card, [data-theme="dark"] .ceo-zone .ceo-kpis.small .ceo-kpi {
+	background: var(--sky-card); border: 1px solid var(--sky-rim); box-shadow: var(--sky-shadow);
+	-webkit-backdrop-filter: blur(12px) saturate(140%); backdrop-filter: blur(12px) saturate(140%);
+}
+.ceo-kpi[data-act]:hover, .ceo-kpi[data-act]:focus-visible { box-shadow: var(--sky-shadow-hi); transform: translateY(-1px); }
+.ceo-kpi { transition: box-shadow .15s, transform .15s; }
+.ceo-filters { background: rgba(255, 255, 255, .62); border-color: var(--sky-rim); border-radius: var(--ceo-radius); }
+[data-theme="dark"] .ceo-filters { background: rgba(20, 33, 50, .7); }
+.ceo-phonenav { background: rgba(238, 246, 254, .78); }
+[data-theme="dark"] .ceo-phonenav { background: rgba(12, 22, 34, .8); }
+@media (prefers-reduced-transparency: reduce) {
+	.ceo-card, .ceo-kpi, .ceo-insights { background: var(--ceo-card); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* First tile: light blue glass, navy figures */
+.ceo-kpi.hero[data-zone]:not([data-zone=""]),
+[data-theme="dark"] .ceo-kpi.hero[data-zone]:not([data-zone=""]) {
+	background: var(--sky-hero); border-color: var(--sky-rim); color: var(--sky-hero-ink);
+	--ceo-ink: var(--sky-hero-ink); --ceo-ink-2: var(--sky-hero-ink); --ceo-ink-3: var(--sky-hero-ink);
+	--ceo-good: var(--sky-hero-ink); --ceo-bad: var(--sky-hero-ink); --ceo-prev: rgba(47, 143, 223, .45); --ceo-card: #dbeefe;
+}
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-value { color: var(--sky-hero-val); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-label { color: var(--sky-hero-ink); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-label::before { background: var(--sky-hero-line); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-foot, .ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-ly { opacity: .85; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-ly b { color: var(--sky-hero-ink); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark .area { fill: var(--sky-hero-line); opacity: .22; }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark .win { stroke: var(--sky-hero-line); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark circle { fill: var(--sky-hero-line); stroke: #fff; }
+.ceo-kpi.hero.is-measure[data-zone]:not([data-zone=""]) { box-shadow: var(--sky-shadow), 0 0 0 2px var(--sky-sel-line); }
+.ceo-kpi.is-measure[data-zone]:not([data-zone=""]) { box-shadow: var(--sky-shadow), 0 0 0 2px var(--sky-sel-line); }
+[data-theme="dark"] .ceo-kpi.hero[data-zone]:not([data-zone=""]) { --ceo-card: #17324f; }
+
+/* Top-tile edges: a soft fade of the section colour instead of a hard band */
+.ceo-kpi[data-zone]:not([data-zone=""])::before { height: 3px; background: linear-gradient(90deg, var(--zone-key), color-mix(in srgb, var(--zone-key) 15%, transparent)); }
+
+/* Section heading: the rule fades out to the right */
+.ceo-zone > .ceo-section { border-top: 0; position: relative; }
+.ceo-zone > .ceo-section::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--zone-key), color-mix(in srgb, var(--zone-key) 0%, transparent) 70%); }
+
+/* Chosen buttons: light blue with blue text */
+.ceo-seg { background: rgba(47, 143, 223, .07); }
+.ceo-seg button[aria-pressed="true"] { background: var(--sky-sel); color: var(--sky-sel-ink); box-shadow: inset 0 0 0 1px var(--sky-sel-line); }
+.ceo-nav button.ceo-navscreen.is-on { background: var(--sky-sel); color: var(--sky-sel-ink); }
+.ceo-pill.is-sel, .ceo-chip { background: var(--sky-sel); border-color: var(--sky-sel-line); color: var(--sky-sel-ink); }
+.ceo-field select, .ceo-icon, .ceo-search { border-color: var(--ceo-line); background: rgba(255, 255, 255, .7); border-radius: 8px; }
+[data-theme="dark"] .ceo-field select, [data-theme="dark"] .ceo-icon, [data-theme="dark"] .ceo-search { background: rgba(20, 33, 50, .7); }
+.ceo-nav button { border-radius: 999px; background: color-mix(in srgb, var(--zone-bg) 70%, transparent); }
+.ceo-nav button i { width: 8px; height: 8px; border-radius: 50%; }
+.ceo-zone-key { width: 10px; height: 10px; border-radius: 50%; }
+
+/* Tables and share bars */
+.ceo-table thead th { background: var(--sky-head); }
+.ceo-segshare span, .ceo-share-part { opacity: .85; }
+
+@media print {
+	.page-container[data-page-route="ceo-dashboard"] { background: #fff !important; }
+	.ceo-card, .ceo-kpi { backdrop-filter: none !important; background: #fff !important; }
+}
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] { background: var(--sky-canvas); background-attachment: fixed; }
+
+
+/* ------------------------------------------------------------ banner design (2026-11-14)
+   "Still feels boring": a bolder layout on top of sky glass. A deep blue
+   banner runs behind the page title, the filter bar and the top half of the
+   top tiles, which float on it as white cards (the hero-banner pattern of
+   Azure / Microsoft 365 admin pages). Every tile and section heading gets an
+   icon badge in its section colour; bars and line areas are filled with a
+   vertical gradient (shared <linearGradient>s in .ceo-defs, mount() in the
+   JS); tile figures count up when they change (countUp in the JS). Text,
+   axes and figures stay solid ink on solid cards. */
+.ceo-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.ceo .g-cur-a { stop-color: var(--ceo-cur); stop-opacity: .95; }
+.ceo .g-cur-b { stop-color: var(--ceo-cur); stop-opacity: .38; }
+.ceo .g-coll-a { stop-color: var(--ceo-coll); stop-opacity: .95; }
+.ceo .g-coll-b { stop-color: var(--ceo-coll); stop-opacity: .38; }
+.ceo .g-area-a { stop-color: var(--ceo-cur); stop-opacity: .32; }
+.ceo .g-area-b { stop-color: var(--ceo-cur); stop-opacity: 0; }
+
+/* Banner behind the top of the page */
+.page-container[data-page-route="ceo-dashboard"] {
+	--band-h: 330px;
+	--band: radial-gradient(640px 300px at 90% -60px, rgba(125, 211, 252, .6), rgba(125, 211, 252, 0) 70%),
+		radial-gradient(560px 280px at 0% 120%, rgba(45, 212, 191, .35), rgba(45, 212, 191, 0) 70%),
+		linear-gradient(115deg, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, .07) 52%, rgba(255, 255, 255, .07) 68%, rgba(255, 255, 255, 0) 68%),
+		linear-gradient(115deg, #0a2f6b 0%, #0f4fa8 48%, #1d82e2 100%);
+	background: var(--band) top / 100% var(--band-h) no-repeat, var(--sky-canvas) !important;
+	background-attachment: scroll !important;
+}
+[data-theme="dark"] .page-container[data-page-route="ceo-dashboard"] {
+	--band: radial-gradient(640px 300px at 90% -60px, rgba(56, 152, 236, .45), rgba(56, 152, 236, 0) 70%),
+		radial-gradient(560px 280px at 0% 120%, rgba(20, 184, 166, .22), rgba(20, 184, 166, 0) 70%),
+		linear-gradient(115deg, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, .04) 52%, rgba(255, 255, 255, .04) 68%, rgba(255, 255, 255, 0) 68%),
+		linear-gradient(115deg, #06142c 0%, #0b2a5c 50%, #134f9c 100%);
+}
+@media (max-width: 760px) { .page-container[data-page-route="ceo-dashboard"] { --band-h: 470px; } }
+.page-container[data-page-route="ceo-dashboard"] .page-head .title-text,
+.page-container[data-page-route="ceo-dashboard"] .page-head .page-title { color: #fff; }
+.page-container[data-page-route="ceo-dashboard"] .page-head .btn {
+	background: rgba(255, 255, 255, .14); color: #fff; border: 1px solid rgba(255, 255, 255, .22); box-shadow: none;
+}
+.page-container[data-page-route="ceo-dashboard"] .page-head .btn:hover { background: rgba(255, 255, 255, .24); }
+.page-container[data-page-route="ceo-dashboard"] .page-head .btn svg, .page-container[data-page-route="ceo-dashboard"] .page-head .btn use { stroke: #fff; color: #fff; }
+
+/* Filter bar and tiles float on the banner */
+.ceo-filters { background: rgba(255, 255, 255, .94); box-shadow: 0 12px 32px -14px rgba(5, 30, 80, .45); border: 1px solid rgba(255, 255, 255, .9); outline: 0; }
+[data-theme="dark"] .ceo-filters { background: rgba(16, 28, 46, .9); border-color: rgba(140, 190, 240, .14); }
+.ceo-kpis.ceo-top .ceo-kpi { background: #fff; box-shadow: 0 14px 34px -16px rgba(5, 30, 80, .45), 0 1px 2px rgba(5, 30, 80, .08); border-color: rgba(255, 255, 255, .9); border-radius: 16px; }
+[data-theme="dark"] .ceo-kpis.ceo-top .ceo-kpi { background: #13233a; border-color: rgba(140, 190, 240, .14); }
+.ceo-kpi[data-zone]:not([data-zone=""])::before { display: none; }
+
+/* Icon badges */
+.ceo-kpi[data-ico]:not([data-ico=""]) .ceo-kpi-label { gap: 10px; }
+.ceo-kpi[data-ico]:not([data-ico=""]) .ceo-kpi-label::before,
+.ceo-kpi.hero[data-ico]:not([data-ico=""]) .ceo-kpi-label::before {
+	content: ""; width: 30px; height: 30px; border-radius: 9px; flex: none;
+	background: var(--ico) center / 17px no-repeat, linear-gradient(135deg, var(--zone-key), color-mix(in srgb, var(--zone-key) 55%, #7dd3fc));
+	box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--zone-key) 80%, transparent);
+}
+.ceo-zone-key {
+	width: 32px; height: 32px; border-radius: 10px;
+	background: var(--ico) center / 18px no-repeat, linear-gradient(135deg, var(--zone-key), color-mix(in srgb, var(--zone-key) 55%, #7dd3fc));
+	box-shadow: 0 6px 14px -6px color-mix(in srgb, var(--zone-key) 80%, transparent);
+}
+.ceo-zone > .ceo-section { gap: 4px 12px; }
+.ceo-zone > .ceo-section h2 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
+.ceo-zone > .ceo-section::before { height: 0; }
+.ceo-nav button i { width: 8px; height: 8px; }
+
+/* Hero tile: white card, gradient figure */
+.ceo-kpi.hero[data-zone]:not([data-zone=""]),
+[data-theme="dark"] .ceo-kpi.hero[data-zone]:not([data-zone=""]) {
+	background: linear-gradient(160deg, #ffffff 40%, #e6f2fe 100%); color: var(--ceo-ink);
+	--ceo-ink: #0b2545; --ceo-ink-2: #3c5674; --ceo-ink-3: #5d7591; --ceo-card: #fff;
+	--ceo-good: #107C10; --ceo-bad: #C4314B; --ceo-prev: #9fb3c8;
+}
+[data-theme="dark"] .ceo-kpi.hero[data-zone]:not([data-zone=""]) {
+	background: linear-gradient(160deg, #15294a 30%, #1a3d6e 100%);
+	--ceo-ink: #eaf3fd; --ceo-ink-2: #b9cfe6; --ceo-ink-3: #9db7d3; --ceo-card: #15294a; --ceo-prev: #5d7591;
+}
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-kpi-label { color: var(--ceo-ink-2); }
+.ceo-kpi.hero .ceo-kpi-value .ceo-num {
+	background: linear-gradient(100deg, #0b4fa0 0%, #1d82e2 55%, #0ea5c6 100%);
+	-webkit-background-clip: text; background-clip: text; color: transparent;
+}
+[data-theme="dark"] .ceo-kpi.hero .ceo-kpi-value .ceo-num { background-image: linear-gradient(100deg, #8cc8ff 0%, #5fb0ff 50%, #5ee0f0 100%); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark .win { stroke: var(--ceo-cur); }
+.ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark circle { fill: var(--ceo-cur); stroke: #fff; }
+.ceo-kpi.is-measure[data-zone]:not([data-zone=""]), .ceo-kpi.hero.is-measure[data-zone]:not([data-zone=""]) {
+	box-shadow: 0 14px 34px -16px rgba(5, 30, 80, .45), 0 0 0 2px #7dbcf3;
+}
+.ceo-kpi-value { font-weight: 700; }
+
+/* Gradient-filled bars and areas */
+.ceo-svg .ceo-bar.cur:not(.cap):not(.full), .ceo-svg .ceo-bar.bill:not(.cap):not(.full), .ceo-svg .ceo-bar.buyc:not(.cap):not(.full) { fill: url(#ceo-g-cur); fill-opacity: 1; }
+.ceo-svg .ceo-bar.coll:not(.cap):not(.full) { fill: url(#ceo-g-coll); fill-opacity: 1; }
+.ceo-svg .ceo-bar.is-last:not(.cap):not(.full) { fill-opacity: .55; }
+.ceo-area.cur, .ceo-area.bill { fill: url(#ceo-g-area); opacity: 1; }
+.ceo-spark .area, .ceo-kpi[data-zone]:not([data-zone=""]) .ceo-spark .area, .ceo-kpi.hero[data-zone]:not([data-zone=""]) .ceo-spark .area { fill: url(#ceo-g-area); opacity: 1; }
+.ceo-barfill { box-shadow: none; }
+[data-theme="dark"] .ceo-barfill { box-shadow: none; }
+.ceo-barfill::before { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .12)); pointer-events: none; }
+[data-theme="dark"] .ceo-barfill::before { background: linear-gradient(90deg, rgba(19, 35, 58, .6), rgba(19, 35, 58, .08)); }
+.ceo-barfill.faint::before { display: none; }
+
+/* Cards */
+.ceo-card { border-radius: 16px; }
+.ceo-card h3 { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+
+@media print {
+	.page-container[data-page-route="ceo-dashboard"] { background: #fff !important; }
+	.page-container[data-page-route="ceo-dashboard"] .page-head .title-text { color: #000; }
+	.ceo-kpi[data-ico] .ceo-kpi-label::before, .ceo-zone-key { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* Icons (white line icons on the badge) */
+.ceo-kpi[data-ico="gas"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 2.5h6v3H9z'/%3E%3Cpath d='M7 8.5a5 5 0 0 1 10 0V18a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3z'/%3E%3Cpath d='M7 13h10'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico="sales"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6-6 4 4 8-8'/%3E%3Cpath d='M15 7h6v6'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico="cart"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='20' r='1.4'/%3E%3Ccircle cx='18' cy='20' r='1.4'/%3E%3Cpath d='M2 3h3l2.6 12.2h10.9L21 7H6.1'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico="supplier"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='6' width='11' height='10' rx='1'/%3E%3Cpath d='M13 10h4l3 3v3h-7'/%3E%3Ccircle cx='6.5' cy='18' r='2'/%3E%3Ccircle cx='16.5' cy='18' r='2'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico="bank"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10l9-6 9 6'/%3E%3Cpath d='M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20.5h18'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico="people"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.5'/%3E%3Cpath d='M2.5 20a6.5 6.5 0 0 1 13 0'/%3E%3Cpath d='M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico="margin"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 19L19 5'/%3E%3Ccircle cx='7' cy='7' r='2.5'/%3E%3Ccircle cx='17' cy='17' r='2.5'/%3E%3C/svg%3E"); }
+.ceo-zone[data-zone="sales"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 17l6-6 4 4 8-8'/%3E%3Cpath d='M15 7h6v6'/%3E%3C/svg%3E"); }
+.ceo-zone[data-zone="buy"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='20' r='1.4'/%3E%3Ccircle cx='18' cy='20' r='1.4'/%3E%3Cpath d='M2 3h3l2.6 12.2h10.9L21 7H6.1'/%3E%3C/svg%3E"); }
+.ceo-zone[data-zone="money"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10l9-6 9 6'/%3E%3Cpath d='M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20.5h18'/%3E%3C/svg%3E"); }
+.ceo-zone[data-zone="credit"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z'/%3E%3Cpath d='M9 12l2 2 4-4'/%3E%3C/svg%3E"); }
+.ceo-zone[data-zone="cust"] { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.5'/%3E%3Cpath d='M2.5 20a6.5 6.5 0 0 1 13 0'/%3E%3Cpath d='M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6'/%3E%3C/svg%3E"); }
+.ceo-kpi[data-ico]:not([data-ico=""]) .ceo-kpi-label { flex-wrap: nowrap; line-height: 1.25; }
+@media (max-width: 760px) {
+	.ceo-kpi[data-ico]:not([data-ico=""]) .ceo-kpi-label { white-space: normal; gap: 8px; font-size: 11.5px; }
+	.ceo-kpi[data-ico]:not([data-ico=""]) .ceo-kpi-label::before { width: 26px; height: 26px; background-size: 15px, auto; }
+}
+
+/* ------------------------------------------------------------ gear (2026-11-14)
+   "Show by" as a drive-mode strip, like the gear selector of an electric car:
+   Quarterly · Monthly · Weekly · Daily on one pill, a thumb that springs to
+   the chosen notch. Click, drag, mouse wheel or arrow keys (renderGear,
+   setGear, stepGear in the JS). Units larger than the period are dimmed. */
+.ceo-gear { display: inline-flex; }
+.ceo-gear:empty { display: none; }
+.ceo-gearbox {
+	--gw: calc((100% - 8px) / var(--n));
+	position: relative; display: inline-grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+	padding: 4px; border-radius: 999px; user-select: none; touch-action: none; cursor: grab;
+	background: linear-gradient(180deg, #e3edf8, #f1f6fc);
+	box-shadow: inset 0 1px 3px rgba(10, 40, 90, .16), inset 0 -1px 0 rgba(255, 255, 255, .8);
+}
+.ceo-gearbox.is-drag { cursor: grabbing; }
+.ceo-gearthumb {
+	position: absolute; top: 4px; bottom: 4px; left: 4px; width: var(--gw); border-radius: 999px;
+	transform: translateX(calc(var(--i, 0) * 100%));
+	transition: transform .32s cubic-bezier(.34, 1.45, .55, 1);
+	background: linear-gradient(180deg, #ffffff, #e4f1fe);
+	box-shadow: 0 3px 8px -2px rgba(15, 80, 160, .35), 0 0 0 1px rgba(47, 143, 223, .35);
+}
+.ceo-gearthumb::after {   /* the lit notch */
+	content: ""; position: absolute; left: 50%; bottom: 3px; width: 16px; height: 3px; margin-left: -8px; border-radius: 2px;
+	background: var(--ceo-cur); box-shadow: 0 0 6px 1px color-mix(in srgb, var(--ceo-cur) 70%, transparent);
+}
+.ceo-gearbox.is-drag .ceo-gearthumb { transition-duration: .12s; }
+.ceo-gearbox button {
+	position: relative; z-index: 1; border: 0; background: transparent; cursor: inherit;
+	padding: 6px 14px 8px; font-size: 12.5px; font-weight: 600; letter-spacing: .01em; color: var(--ceo-ink-2);
+	white-space: nowrap; transition: color .2s;
+}
+.ceo-gearbox button[aria-checked="true"] { color: var(--sky-sel-ink, var(--ceo-cur)); }
+.ceo-gearbox button:disabled { opacity: .35; cursor: not-allowed; }
+.ceo-gearbox button:focus-visible { outline: 2px solid var(--ceo-cur); outline-offset: -2px; border-radius: 999px; }
+[data-theme="dark"] .ceo-gearbox { background: linear-gradient(180deg, #0f1c2e, #16263c); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5), inset 0 -1px 0 rgba(255, 255, 255, .04); }
+[data-theme="dark"] .ceo-gearthumb { background: linear-gradient(180deg, #24476f, #1a3556); box-shadow: 0 3px 8px -2px rgba(0, 0, 0, .6), 0 0 0 1px rgba(122, 180, 240, .35); }
+@media (max-width: 760px) {
+	.ceo-gearbox button { padding: 6px 9px 8px; font-size: 12px; }
+}
+@media print { .ceo-gear { display: none; } }
+.ceo-svg .ceo-bar.k0:not(.cap):not(.full) { fill: url(#ceo-g-cur); fill-opacity: 1; }   /* the gear views draw the first series as k0 */
+
+/* Period gear in the filter bar (2026-11-14): replaces the Period dropdown.
+   Year · Quarterly · Monthly · Weekly · Daily, then ‹ the picked one › . */
+.ceo-pgear { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ceo-pgear .ceo-gearbox button { padding: 6px 14px 8px; }
+.ceo-gearbox button .s { display: none; }
+.ceo-pstep { display: inline-flex; align-items: center; gap: 4px; }
+.ceo-pstep .ceo-icon { margin: 0; font-size: 18px; line-height: 1; font-weight: 600; color: var(--ceo-ink); }
+.ceo-pstep .ceo-icon:disabled { opacity: .35; cursor: default; }
+.ceo-pstep .ceo-ddlbl { display: none; }
+.ceo-pstep .ceo-ddbtn strong { color: var(--sky-sel-ink, var(--ceo-cur)); }
+@media (max-width: 760px) {
+	.ceo-pgear { width: 100%; }
+	.ceo-pgear .ceo-gearbox { width: 100%; }
+	.ceo-pgear .ceo-gearbox button { padding: 6px 4px 8px; }
+	.ceo-gearbox button .l { display: none; }
+	.ceo-gearbox button .s { display: inline; }
+	.ceo-pstep { width: 100%; }
+	.ceo-pstep .ceo-dd { flex: 1; min-width: 0; }
+	.ceo-pstep .ceo-ddbtn { width: 100%; }
+}
+/* Card gears (2026-11-14): one per time chart, in the card header. */
+.ceo-card > header .ceo-tools { flex-wrap: wrap; }
+.ceo-card .ceo-gearbox button { padding: 5px 12px 7px; font-size: 12px; }
+@media (max-width: 1200px) { .ceo-card .ceo-gearbox button .l { display: none; } .ceo-card .ceo-gearbox button .s { display: inline; } }
+
+/* Drill-down and pie on the gear charts (2026-11-14) */
+.ceo-drillbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; }
+.ceo-drillback {
+	border: 1px solid var(--sky-sel-line, var(--ceo-line)); background: var(--sky-sel, var(--ceo-wash)); color: var(--sky-sel-ink, var(--ceo-cur));
+	border-radius: 999px; padding: 4px 12px; font-size: 12.5px; font-weight: 650; cursor: pointer;
+}
+.ceo-drillback:hover { box-shadow: 0 2px 6px -2px rgba(15, 80, 160, .35); }
+.ceo-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-size: 13px; color: var(--ceo-ink-2); }
+.ceo-crumbs > * + *::before { content: "›"; margin: 0 6px; color: var(--ceo-ink-3); }
+.ceo-crumbs button { border: 0; background: transparent; padding: 0; color: var(--ceo-cur); cursor: pointer; font: inherit; }
+.ceo-crumbs button:hover { text-decoration: underline; }
+.ceo-crumbs span { color: var(--ceo-ink); font-weight: 650; }
+.ceo-drillhint { font-size: 11.5px; color: var(--ceo-ink-3); text-align: right; margin-top: -4px; }
+.ceo-band[data-act="gdrill"] { cursor: pointer; }
+
+.ceo-pies { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-start; }
+.ceo-pieblock { display: flex; align-items: center; gap: 18px; flex: 1 1 320px; min-width: 0; }
+.ceo-piesvg { width: 190px; height: 190px; flex: none; overflow: visible; }
+.ceo-pie { stroke: var(--ceo-card); stroke-width: 2; transition: transform .15s; transform-origin: 100px 100px; }
+.ceo-pie[data-act] { cursor: pointer; }
+.ceo-pie:hover, .ceo-pie:focus-visible { transform: scale(1.04); outline: none; }
+.ceo-pie.cur, .ceo-pie.bill, .ceo-pie.buyc { fill: var(--ceo-cur); }
+.ceo-pie.coll { fill: var(--ceo-coll); }
+.ceo-pietot { font-size: 17px; font-weight: 700; fill: var(--ceo-ink); font-variant-numeric: tabular-nums; }
+.ceo-pielbl { font-size: 11px; fill: var(--ceo-ink-2); }
+.ceo-pielist { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.ceo-pielist li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 44px; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 6px; }
+.ceo-pielist li.is-click { cursor: pointer; }
+.ceo-pielist li.is-click:hover { background: var(--ceo-track); }
+.ceo-pielist .ceo-lk { width: 10px; height: 10px; border-radius: 3px; }
+.ceo-pielist .ceo-lk.cur, .ceo-pielist .ceo-lk.bill, .ceo-pielist .ceo-lk.buyc { background: var(--ceo-cur); }
+.ceo-pielist .ceo-lk.coll { background: var(--ceo-coll); }
+.ceo-pielist span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ceo-pielist b { font-weight: 650; font-variant-numeric: tabular-nums; }
+.ceo-pielist small { color: var(--ceo-ink-3); text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) { .ceo-pieblock { flex-direction: column; align-items: stretch; } .ceo-piesvg { margin: 0 auto; } }
+.ceo-pielist { max-width: 380px; }

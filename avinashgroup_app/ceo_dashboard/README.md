@@ -13,7 +13,11 @@ segment or customer and every other chart narrows to it).
 | Chart day rows (whitelisted) | `charts.get_daily(fiscal_year, from_date, to_date, prev_from, prev_to, customer=None)`: per-day totals so week / month / quarter charts can be drawn day by day or week by week |
 | Money (whitelisted) | `money.get_money(fiscal_year=None, force=0)`: ledger balances (cash and bank, bank loans, customers, suppliers) at each month end, and gas purchase cost for the margin per kg |
 | Compare chart (whitelisted) | `series.get_series(fiscal_year, years_back, force)`: day rows for sales, collections, purchases and expenses over the timeline |
-| Buying (whitelisted) | `buying.get_buying(fiscal_year, years_back, force)`: Purchase Invoice rows per day x company x supplier x category (LP Gas / Direct expenses / Indirect expenses / Fixed assets / Other, from the Item Group name) and supplier payments, on the sales timeline |
+| Buying (whitelisted) | `buying.get_buying(fiscal_year, years_back, force)`: Purchase Invoice rows per day x company x supplier x category (LP Gas / Direct expenses / Indirect expenses / Fixed assets / Other, from the Item Group name), supplier payments, and expenses as booked per day x company x head (parent expense account), on the sales timeline |
+| District, branch, returns (whitelisted) | `sales_breakdowns.get_breakdowns(fiscal_year, years_back, force)`: one district per customer (for the Nepal map), branch sales rows, sales-return rows with a folded reason, LP Gas rows by pack size (unit of measure) |
+| Shared slot rule | `timeline.slotter(years, through)`: the half-month slot of a date, for any fact rows that must sit on the sales timeline |
+| Map outlines | `public/js/ceo_nepal_districts.json` (77 districts, 60 KB), built by `scripts/make_ceo_district_map.py` from the Survey Department's district boundaries (National GeoPortal of Nepal, via manishacharya60/nepal-geojson): the official 2020 map with Limpiyadhura, Lipulekh and Kalapani |
+| Money for a short period (whitelisted) | `period_balances.get_period_balances(fiscal_year, from_date, to_date, years_back)`: opening balance and debits / credits of a week, month or quarter, per account, customer and supplier |
 | Credit snapshot | `credit_snapshot.build()` (cron every 4 h via hooks.py, queues on long), `credit_snapshot.get_credit()`, `credit_snapshot.refresh()` |
 | Page (desk route, roles) | `avinash_group_app/page/ceo_dashboard/` |
 | Dashboard script / styles | `public/js/ceo_dashboard.js`, `public/css/ceo_dashboard.css` |

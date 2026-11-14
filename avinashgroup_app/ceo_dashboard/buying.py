@@ -21,11 +21,20 @@ What the figures are:
   the names do not): LP Gas, Direct expenses (mostly transport), Indirect
   expenses, Fixed assets (item flagged as fixed asset), Other.
 
+Expenses by head (added 2026-11-13): the page had purchases but not where the
+running costs go (interest, vehicles, staff, office). Sent per day x company
+x head, where a head is the parent of the expense ledger account with its
+number and company suffix removed ("553100 - Interest Expenses-Bank - NGI" ->
+"Interest Expenses-Bank"), so the same head adds up across companies. Period
+Closing Vouchers are left out, as in series.py. It is expenses as booked, not
+a profit figure: the cost of the gas sold is not booked through these accounts.
+
 Shown as the books have them. Read-only. See docs/ceo-dashboard.md.
 """
 
 import datetime
 import hashlib
+import re
 
 import frappe
 from frappe import _
@@ -62,7 +71,7 @@ def get_buying(fiscal_year=None, years_back=None, force=0):
 	if not companies:
 		frappe.throw(_("You do not have access to any company."))
 	years = api._fiscal_years(fiscal_year, years_back)
-	key = "ceo_dashboard:buying:v1:{}:{}:{}".format(
+	key = "ceo_dashboard:buying:v2:{}:{}:{}".format(
 		years[0].name, len(years), hashlib.md5("|".join(c["name"] for c in companies).encode()).hexdigest()
 	)
 	if not int(force or 0):
@@ -72,6 +81,16 @@ def get_buying(fiscal_year=None, years_back=None, force=0):
 	out = _build(years, companies)
 	frappe.cache.set_value(key, out, expires_in_sec=CACHE_SECONDS)
 	return out
+
+
+def _head(account, abbrs):
+	"""Parent account name without its number prefix and company suffix."""
+	name = account or ""
+	for a in abbrs:
+		if name.endswith(" - " + a):
+			name = name[: -len(a) - 3]
+			break
+	return re.sub(r"^[\d.\s]+-\s*", "", name).strip() or _("Other")
 
 
 def _build(years, companies):
@@ -144,6 +163,26 @@ def _build(years, companies):
 		k = (slot_of(d), d.isoformat(), co_idx[company], sup(party))
 		pay[k] = pay.get(k, 0.0) + float(amt or 0)
 
+	# Expenses as booked, by head (parent account).
+	abbrs = sorted(frappe.get_all("Company", pluck="abbr"), key=len, reverse=True)
+	heads, head_idx, expenses = [], {}, {}
+	for d, company, parent, amt in frappe.db.sql(
+		"""SELECT g.posting_date, g.company, a.parent_account, SUM(g.debit - g.credit)
+		FROM `tabGL Entry` g JOIN `tabAccount` a ON a.name = g.account
+		WHERE g.is_cancelled = 0 AND a.root_type = 'Expense' AND g.voucher_type != 'Period Closing Voucher'
+			AND g.company IN %(names)s AND g.posting_date BETWEEN %(a)s AND %(b)s
+		GROUP BY g.posting_date, g.company, a.parent_account""",
+		params,
+	):
+		h = _head(parent, abbrs)
+		i = head_idx.get(h)
+		if i is None:
+			i = head_idx[h] = len(heads)
+			heads.append(h)
+		d = getdate(d)
+		k = (slot_of(d), d.isoformat(), co_idx[company], i)
+		expenses[k] = expenses.get(k, 0.0) + float(amt or 0)
+
 	group_names = [api._name_tokens(n) for n in frappe.get_all("Company", pluck="name")]
 	info = {}
 	if suppliers:
@@ -154,7 +193,7 @@ def _build(years, companies):
 			info[code] = (sname or code, 1 if internal or api._is_group_company(sname, group_names) else 0)
 
 	return {
-		"version": 1,
+		"version": 2,
 		"fiscal_year": years[0].name,
 		"through": through.isoformat(),
 		"categories": list(CATEGORIES),
@@ -165,5 +204,8 @@ def _build(years, companies):
 		"rows": [[*k, round(v[0], 1), round(v[1]), v[2]] for k, v in rows.items()],
 		# [slot, AD date, company, supplier, paid Rs]
 		"pay": [[*k, round(v)] for k, v in pay.items()],
+		"expense_heads": heads,
+		# [slot, AD date, company, head, Rs (debit less credit)]
+		"expenses": [[*k, round(v)] for k, v in expenses.items() if round(v)],
 		"generated": frappe.utils.now(),
 	}

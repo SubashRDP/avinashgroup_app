@@ -98,6 +98,7 @@ def _build(years, companies):
 		"""SELECT g.posting_date, g.company, SUM(g.debit - g.credit)
 		FROM `tabGL Entry` g JOIN `tabAccount` a ON a.name = g.account
 		WHERE g.is_cancelled = 0 AND a.root_type = 'Expense'
+			AND g.voucher_type != 'Period Closing Voucher'
 			AND g.company IN %(names)s AND g.posting_date BETWEEN %(a)s AND %(b)s
 		GROUP BY g.posting_date, g.company""",
 		params,

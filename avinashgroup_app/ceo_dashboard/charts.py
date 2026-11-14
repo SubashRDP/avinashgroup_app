@@ -25,7 +25,7 @@ MAX_RANGE_DAYS = 100
 
 
 @frappe.whitelist()
-def get_daily(fiscal_year, from_date, to_date, prev_from, prev_to, customer=None, years_back=None):
+def get_daily(fiscal_year, from_date, to_date, prev_from, prev_to, customer=None, years_back=None, districts=None):
 	"""Day-by-day totals for the charts of a week, month or quarter, and for the
 	comparison range a year earlier: rows per day x company x segment x
 	inter-company (not per customer, so a quarter stays small). With
@@ -45,6 +45,16 @@ def get_daily(fiscal_year, from_date, to_date, prev_from, prev_to, customer=None
 			frappe.throw(_("Pick a period of up to {0} days between {1} and {2}.").format(MAX_RANGE_DAYS, first, through))
 	params = {"a": ranges[0][0], "b": ranges[0][1], "pa": ranges[1][0], "pb": ranges[1][1], "names": names, "cust": customer}
 	only = " AND si.customer = %(cust)s" if customer else ""
+	if districts and not customer:
+		# Districts picked on the map: only the customers placed in them
+		# (sales_breakdowns keeps one district per customer).
+		from avinashgroup_app.ceo_dashboard import sales_breakdowns
+
+		codes_in = sales_breakdowns.customers_in_districts(fiscal_year, years_back, [d.strip() for d in districts.split(",") if d.strip()])
+		if not codes_in:
+			return {"sales": [], "coll": []}
+		params["in_districts"] = tuple(codes_in)
+		only = " AND si.customer IN %(in_districts)s"
 
 	frappe.db.sql("SET SESSION SQL_BIG_SELECTS = 1")
 	raw = frappe.db.sql(

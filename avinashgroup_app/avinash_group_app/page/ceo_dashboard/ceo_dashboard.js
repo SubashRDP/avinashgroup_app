@@ -9,7 +9,7 @@
 // ceo_dashboard.json whenever either file changes; the stamp is what makes
 // browsers drop their cached copy of this loader.
 
-var CEO_DASHBOARD_ASSET_VERSION = 65; // var: the page script may be evaluated twice
+var CEO_DASHBOARD_ASSET_VERSION = 126; // var: the page script may be evaluated twice
 
 function ceo_dashboard_load_assets() {
 	const base = "/assets/avinashgroup_app";
