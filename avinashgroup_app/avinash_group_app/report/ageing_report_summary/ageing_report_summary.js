@@ -32,7 +32,7 @@ frappe.query_reports["Ageing Report Summary"] = {
 			default: frappe.defaults.get_user_default("Company"),
 			reqd: 1,
 			on_change: function () {
-				frappe.query_report.set_filter_value("party", []);
+				frappe.query_report.set_filter_value({ party: [], customer_group: [], supplier_group: [] });
 				ageing_set_default_accounts();
 			},
 		},
@@ -56,30 +56,20 @@ frappe.query_reports["Ageing Report Summary"] = {
 			},
 		},
 		{
-			fieldname: "party",
-			label: __("Party"),
-			fieldtype: "MultiSelectList",
-			// Same company-scoped list as Party Ledger's Party filter.
-			get_data: function (txt) {
-				if (!frappe.query_report.filters) return;
-				const party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
-				const company = frappe.query_report.get_filter_value("company");
-				if (!company) return frappe.db.get_link_options(party_type, txt);
-				return frappe
-					.call({
-						method: "avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger.get_company_parties",
-						args: { party_type, company, txt },
-					})
-					.then((r) => r.message || []);
-			},
-		},
-		{
 			fieldname: "customer_group",
 			label: __("Customer Group"),
 			fieldtype: "MultiSelectList",
 			depends_on: 'eval:doc.party_type == "Customer"',
+			// Only the selected company's groups.
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Customer Group", txt);
+				const company = frappe.query_report.get_filter_value("company");
+				if (!company) return [];
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.ageing_report.ageing_report.get_company_groups",
+						args: { party_type: "Customer", company, txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{
@@ -87,8 +77,36 @@ frappe.query_reports["Ageing Report Summary"] = {
 			label: __("Supplier Group"),
 			fieldtype: "MultiSelectList",
 			depends_on: 'eval:doc.party_type == "Supplier"',
+			// Only the selected company's groups.
 			get_data: function (txt) {
-				return frappe.db.get_link_options("Supplier Group", txt);
+				const company = frappe.query_report.get_filter_value("company");
+				if (!company) return [];
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.ageing_report.ageing_report.get_company_groups",
+						args: { party_type: "Supplier", company, txt },
+					})
+					.then((r) => r.message || []);
+			},
+		},
+		{
+			fieldname: "party",
+			label: __("Party"),
+			fieldtype: "MultiSelectList",
+			// Same company-scoped list as Party Ledger's Party filter.
+			// The company's parties, narrowed to the chosen Customer / Supplier Groups.
+			get_data: function (txt) {
+				if (!frappe.query_report.filters) return;
+				const party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
+				const company = frappe.query_report.get_filter_value("company");
+				if (!company) return frappe.db.get_link_options(party_type, txt);
+				const groups = frappe.query_report.get_filter_value(party_type === "Supplier" ? "supplier_group" : "customer_group") || [];
+				return frappe
+					.call({
+						method: "avinashgroup_app.avinash_group_app.report.ageing_report.ageing_report.get_group_parties",
+						args: { party_type, company, groups, txt },
+					})
+					.then((r) => r.message || []);
 			},
 		},
 		{

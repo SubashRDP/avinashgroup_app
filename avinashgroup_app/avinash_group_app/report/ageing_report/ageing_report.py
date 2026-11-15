@@ -285,3 +285,65 @@ def _as_list(value):
 			return [v for v in frappe.parse_json(value) if v]
 		return [value]
 	return [v for v in value if v]
+
+
+# ---------------------------------------------------------------------------
+# Filter dropdowns (both Ageing reports)
+# ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_company_groups(party_type, company, txt=None):
+	"""Customer / Supplier Groups of one company, for the group filter.
+
+	Both group doctypes carry a Company field (custom_company), which decides.
+	The group tree is not used for this: some groups sit under another
+	company's branch (NGI's "Bulk 14.2 KG" … "Bulk 450 KG" under NGN's
+	Bulk/Retail on mysite1). If the field is ever missing, the company
+	abbreviation at the start of the group id (NGK-CGR-0008) is used instead.
+	"""
+	if party_type not in GROUPS or not company:
+		return []
+	_filter, doctype, _field = GROUPS[party_type]
+	name_field = "customer_group_name" if party_type == "Customer" else "supplier_group_name"
+	parent_field = "parent_customer_group" if party_type == "Customer" else "parent_supplier_group"
+	filters = {}
+	if frappe.db.has_column(doctype, "custom_company"):
+		filters["custom_company"] = company
+	else:
+		abbr = frappe.get_cached_value("Company", company, "abbr")
+		filters["name"] = ["like", f"{abbr}-%"]
+	or_filters = None
+	if txt:
+		or_filters = {"name": ["like", f"%{txt}%"], name_field: ["like", f"%{txt}%"]}
+	rows = frappe.get_all(
+		doctype, filters=filters, or_filters=or_filters, fields=["name", name_field, parent_field], order_by="lft", limit=50
+	)
+	parents = dict(
+		frappe.get_all(doctype, filters={"name": ["in", [r[parent_field] for r in rows if r[parent_field]]]}, fields=["name", name_field], as_list=True)
+	) if rows else {}
+	# The parent's name tells "Bulk 14.2 KG" under Bulk/Retail apart from a same-named group elsewhere.
+	return [
+		{"value": r.name, "label": r[name_field], "description": parents.get(r[parent_field]) or ""}
+		for r in rows
+	]
+
+
+@frappe.whitelist()
+def get_group_parties(party_type, company, groups=None, txt=None):
+	"""Parties for the Party filter: the company's parties (same rule as Party
+	Ledger's Party filter), narrowed to the chosen groups and their sub-groups."""
+	from avinashgroup_app.avinash_group_app.report.party_ledger.party_ledger import get_company_parties
+
+	groups = _as_list(groups)
+	if not groups or party_type not in GROUPS:
+		return get_company_parties(party_type, company, txt)
+	_filter, doctype, field = GROUPS[party_type]
+	allowed = _with_sub_groups(doctype, groups)
+	name_field = "customer_name" if party_type == "Customer" else "supplier_name"
+	filters = {field: ["in", list(allowed)], "disabled": 0}
+	if frappe.db.has_column(party_type, "custom_company"):
+		filters["custom_company"] = ["in", [company, ""]]
+	or_filters = {"name": ["like", f"%{txt}%"], name_field: ["like", f"%{txt}%"]} if txt else None
+	rows = frappe.get_all(party_type, filters=filters, or_filters=or_filters, fields=["name", name_field], order_by=name_field, limit=50)
+	return [{"value": r.name, "label": r[name_field], "description": r.name} for r in rows]
+
