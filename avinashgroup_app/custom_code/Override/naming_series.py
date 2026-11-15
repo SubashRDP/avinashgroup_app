@@ -1794,11 +1794,16 @@ def validate_custom_name_unique(doc):
         "custom_name": custom_name,
         "docstatus": ["<", 2],
     }
+    # Same grain as the engine's check: one voucher number per company per
+    # fiscal year (the legacy series restarted every year).
+    filters.update(_number_scope_filters(doc, "custom_name"))
     doc_name = getattr(doc, "name", None)
     if doc_name:
         filters["name"] = ["!=", doc_name]
 
-    existing = frappe.db.get_value(doc.doctype, filters=filters, fieldname="name")
+    # serialize same-number saves, then a locking read that sees a peer's commit
+    _lock_number_scope(doc, "custom_name")
+    existing = frappe.db.get_value(doc.doctype, filters=filters, fieldname="name", for_update=True)
     if existing:
         frappe.throw(
             f"Document No. {getattr(doc, 'custom_document_no', '')} is already used "
@@ -2475,12 +2480,13 @@ def _number_scope_filters(doc, target, rule=None):
     than to nothing.
 
     Exception: when the target field carries a DB UNIQUE index the database
-    enforces group-wide uniqueness anyway (custom_name on Journal Entry /
-    Payment Entry / Purchase Invoice / Purchase Receipt — see
-    patches/add_unique_custom_name_index.py). Scoping the Python check below the
-    DB constraint would only trade a readable error for an IntegrityError, so
-    those fields stay group-wide. Doctypes without a company field also stay
-    group-wide (unchanged behaviour).
+    enforces group-wide uniqueness anyway, and scoping the Python check below
+    the constraint would only trade a readable error for an IntegrityError, so
+    such a field stays group-wide. custom_name on Journal Entry / Payment Entry
+    / Purchase Invoice / Purchase Receipt WAS unique, which silently disabled
+    this scope there (80/81 rows rejected for a 79/80 number);
+    patches/scope_custom_name_to_company_fiscal_year drops that index.
+    Doctypes without a company field also stay group-wide.
     """
     df = doc.meta.get_field(target)
     if df and df.get("unique"):
@@ -2519,11 +2525,16 @@ def _number_belongs_to_other_doc(doc, target, rule=None):
     return bool(_other_doc_with_number(doc, target, rule))
 
 
-def _other_doc_with_number(doc, target, rule=None):
+def _other_doc_with_number(doc, target, rule=None, for_update=False):
     """Name of the other document holding this number, or None.
 
     Cancelled documents (docstatus = 2) are ignored so an amendment can reuse
     a freed number, mirroring validate_custom_name_unique above.
+
+    for_update=True makes it a LOCKING read, which sees rows committed after
+    this transaction began (a plain SELECT reads the REPEATABLE READ snapshot
+    and would miss a peer that committed while we waited on
+    _lock_number_scope).
     """
     value = doc.get(target)
     if not value or value == doc.name:
@@ -2534,7 +2545,78 @@ def _other_doc_with_number(doc, target, rule=None):
     if doc.name:
         filters["name"] = ["!=", doc.name]
 
-    return frappe.db.get_value(doc.doctype, filters, "name")
+    return frappe.db.get_value(doc.doctype, filters, "name", for_update=for_update)
+
+
+# How long a save waits for a peer saving the SAME number in the same scope.
+# The peer holds the lock only until its commit — normally milliseconds — so
+# hitting this means a stuck transaction, not a busy one.
+NUMBER_LOCK_TIMEOUT_SECONDS = 10
+
+
+def _lock_number_scope(doc, target, rule=None):
+    """Serialize saves of one number within its uniqueness scope.
+
+    The duplicate check is a read-then-write: two users saving the same typed
+    voucher number at the same instant both read "free" and both save. A
+    DB UNIQUE index cannot close this — uniqueness is per company + fiscal
+    YEAR, matched as a date range (_number_scope_filters), which no index can
+    express without a stored, always-filled year column. Instead a MariaDB
+    named lock keyed on doctype + field + company + year + number makes the
+    second saver wait until the first commits; its locking read then sees the
+    first row and throws the normal duplicate error.
+
+    Named locks belong to the CONNECTION, not the transaction, so every lock
+    taken is released on the next commit or rollback (Data Import does one or
+    the other after each row). Held locks are tracked per request so a
+    re-validate inside the same save does not stack re-entrant counts.
+
+    Raises frappe.ValidationError when the lock is not granted in time.
+    """
+    scope = _number_scope_filters(doc, target, rule)
+    date_col, bounds = _fiscal_year_bounds(doc, rule)
+    raw = "|".join(frappe.utils.cstr(p) for p in (
+        doc.doctype,
+        target,
+        scope.get("company") or "",
+        bounds[0] if (bounds and date_col in scope) else "",
+        doc.get(target),
+    ))
+    # MariaDB caps lock names at 64 characters
+    lock_name = "vno:" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:40]
+
+    held = getattr(frappe.local, "_number_scope_locks", None)
+    if held is None:
+        held = frappe.local._number_scope_locks = set()
+    if lock_name in held:
+        return
+
+    got = frappe.db.sql("SELECT GET_LOCK(%s, %s)", (lock_name, NUMBER_LOCK_TIMEOUT_SECONDS))
+    if not (got and got[0][0] == 1):
+        frappe.throw(
+            f"Another user is saving number {doc.get(target)} right now. "
+            "Please try again in a moment.",
+            title="Number Busy",
+        )
+    if not held:
+        # first lock of this transaction: release everything at its end
+        frappe.db.after_commit.add(_release_number_scope_locks)
+        frappe.db.after_rollback.add(_release_number_scope_locks)
+    held.add(lock_name)
+
+
+def _release_number_scope_locks():
+    """after_commit / after_rollback callback for _lock_number_scope."""
+    held = getattr(frappe.local, "_number_scope_locks", None)
+    if not held:
+        return
+    for lock_name in list(held):
+        try:
+            frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_name,))
+        except Exception:
+            # the connection is going away; closing it frees the lock anyway
+            frappe.log_error(title="voucher number lock not released", message=lock_name)
+    held.clear()
 
 
 def _duplicate_number_hint(doc, rule):
@@ -2563,7 +2645,8 @@ def _validate_unique_number(doc, target, rule=None):
     if not value or value == doc.name:
         return
 
-    existing = _other_doc_with_number(doc, target, rule)
+    _lock_number_scope(doc, target, rule)
+    existing = _other_doc_with_number(doc, target, rule, for_update=True)
     if existing:
         scope_filters = _number_scope_filters(doc, target, rule)
         scope = ""

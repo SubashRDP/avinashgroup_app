@@ -106,10 +106,9 @@ class TestDocumentNumbering(FrappeTestCase):
         cls.has_rules = bool(frappe.db.exists("DocType", "Numbering Configuration"))
         if cls.has_rules:
             cls._heal_quarantine_leftovers()
-        # Company-scoped uniqueness only applies to targets WITHOUT a DB unique
-        # index, and custom_name carries one on every audited doctype
-        # (add_unique_custom_name_index). Create a plain non-unique Data field to
-        # act as the target for those tests, and remove it afterwards.
+        # A plain non-unique Data field as the target for the scope tests, so they
+        # run whatever the site's custom_name index looks like (it was DB-unique
+        # until scope_custom_name_to_company_fiscal_year). Removed afterwards.
         cls.scoped_target = "custom_test_voucher_no"
         cls._created_target_field = None
         if not frappe.get_meta("Journal Entry").has_field(cls.scoped_target):
@@ -1834,25 +1833,34 @@ class TestDocumentNumbering(FrappeTestCase):
         self.assertIn(a.name, str(cm.exception))
         self.assertEqual(b.get(target), value)     # NOT silently renumbered
 
-    def test_76_globally_unique_target_stays_group_wide(self):
-        # custom_name carries a DB UNIQUE index (add_unique_custom_name_index),
-        # so the database enforces group-wide uniqueness whatever Python thinks.
-        # The check must stay group-wide there — scoping it below the constraint
-        # would only turn a readable error into an IntegrityError.
+    def test_76_custom_name_repeats_in_another_fiscal_year(self):
+        # custom_name itself (not a stand-in field) is scoped company + fiscal
+        # year once patches/scope_custom_name_to_company_fiscal_year has dropped
+        # its DB UNIQUE index: Grishma's GEPL-CN00106 exists in 79/80 AND 80/81.
+        # A same-year repeat still throws.
         self._require(self.has_rules, "Numbering Configuration not installed")
         self._require(len(self.accounts) >= 2, "needs two accounts")
-        self._require(bool(self.company2), "needs a second company")
         self._require(
-            bool(frappe.get_meta("Journal Entry").get_field("custom_name").get("unique")),
-            "custom_name is not DB-unique on this site",
+            not frappe.get_meta("Journal Entry").get_field("custom_name").get("unique"),
+            "custom_name is still DB-unique — run the patch",
         )
+        prev = frappe.get_all(
+            "Fiscal Year", filters={"year_end_date": ["<", self.pdate]},
+            fields=["name", "year_start_date"], order_by="year_end_date desc", limit=1)
+        self._require(bool(prev), "needs an earlier fiscal year")
         self._legacy_passthrough_rule("custom_name")
         value = "RTN/" + frappe.generate_hash(length=6)
 
-        a = self._insert_je(custom_name=value)
+        a = self._insert_je(custom_name=value)                     # current year
         self.assertEqual(a.custom_name, value)
 
-        b = self._je(company=self.company2, custom_name=value)
+        # same company, same number, EARLIER fiscal year: kept
+        b = self._je(posting_date=prev[0].year_start_date, custom_name=value)
+        ns.set_custom_branch_name(b)
+        self.assertEqual(b.custom_name, value)
+
+        # same year still collides
+        c = self._je(custom_name=value)
         with self.assertRaises(frappe.ValidationError) as cm:
-            ns.set_custom_branch_name(b)
+            ns.set_custom_branch_name(c)
         self.assertIn("already used", str(cm.exception))
