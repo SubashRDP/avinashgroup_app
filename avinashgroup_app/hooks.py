@@ -96,6 +96,9 @@ app_include_js = [
     # Selling / Buying dashboards at the top of those stock workspaces; loads
     # trade_dashboard.js/.css only when one of them is opened.
     "/assets/avinashgroup_app/js/trade_workspace.js?v=2",
+    # "Audit Trail" entry in the ⋯ menu of tracked forms; opens the Document
+    # Audit Trail page (avinash_group_app/page/document_audit_trail).
+    "/assets/avinashgroup_app/js/document_audit_trail_menu.js?v=1",
 ]
 
 # report_print_portrait.css is no longer loaded globally — it would change every
