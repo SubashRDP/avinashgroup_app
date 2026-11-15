@@ -64,11 +64,6 @@
 	// it back; the per-side lists in TEXT are unchanged.
 	const SHOW_QUICK_ACTIONS = false;
 
-	// Report panel height limits (px): enough to show the filters and a few
-	// rows; past the max the report scrolls inside its panel.
-	const MIN_REPORT_HEIGHT = 420;
-	const MAX_REPORT_HEIGHT = 1400;
-
 	// Branch colours, by the branch's place in the user's branch list — never
 	// by rank, so a branch keeps its colour when a filter changes the order.
 	// Validated categorical palette, first six slots; "No branch" is grey.
@@ -145,46 +140,35 @@
 			</div>`).appendTo(container);
 			this.$main = this.$root.find(".tdb-main");
 			this.$reports = this.$root.find(".tdb-reports");
-			this.report = null; // the report open in the viewer, by name
 			this.load_reports();
 			this.refresh();
 		}
 
 		// ------------------------------------------------------------ reports
-		// The real report runs inside the dashboard, in a frame of the desk's own
-		// report page with the desk chrome hidden. It is the same report code
-		// running as the same user, so role permission, User Permissions, filters,
-		// totals, print and export are exactly those of the report page. The list
-		// holds only reports this user's role may open (get_menu checks).
+		// A list of the reports this user's role may open (get_menu checks). Each one
+		// is a plain link to the desk's report page, with the dashboard's company,
+		// branch and period filled in as filters. It opens in a new tab, so the
+		// dashboard stays where it is.
 		load_reports() {
 			frappe.xcall(API + "get_menu", { mode: this.mode }).then((groups) => {
 				this.groups = groups;
 				if (!groups.length) return;
 				this.$reports.prop("hidden", false).html(`
 					<div class="tdb-card-head"><div><h3>${icon("chart", "tdb-h-icon")}${__("Reports")}</h3>
-						<p class="tdb-rep-hint">${__("Pick a report — it opens here, with the company and period above")}</p></div>
-						<button type="button" class="tdb-rep-toggle" hidden>${icon("table")}<span>${__("All reports")}</span></button></div>
+						<p class="tdb-rep-hint">${__("Opens in a new tab, with the company and period above")}</p></div>
+						<label class="tdb-search">${icon("search")}
+							<input type="search" placeholder="${__("Find a report…")}" aria-label="${__("Find a report")}"></label></div>
 					<div class="tdb-rep">
-						<div class="tdb-rep-list">
-							<label class="tdb-search">${icon("search")}
-								<input type="search" placeholder="${__("Find a report…")}" aria-label="${__("Find a report")}"></label>
-							${groups
-								.map((g) => `<div class="tdb-rep-group"><h4>${icon(g.icon)}${esc(g.label)}</h4>
-									${g.items.map((i) => `<button type="button" data-report="${esc(i.name)}" data-search="${esc((i.label + " " + i.name).toLowerCase())}">${esc(i.label)}</button>`).join("")}
-								</div>`)
-								.join("")}
-						</div>
-						<div class="tdb-rep-view">
-							<div class="tdb-rep-empty">${icon("chart")}<p>${__("Choose a report on the left to see it here.")}</p></div>
-						</div>
+						${groups
+							.map((g) => `<div class="tdb-rep-group"><h4>${icon(g.icon)}${esc(g.label)}</h4>
+								${g.items.map((i) => `<a target="_blank" rel="noopener" data-report="${esc(i.name)}" data-search="${esc((i.label + " " + i.name).toLowerCase())}">${esc(i.label)}</a>`).join("")}
+							</div>`)
+							.join("")}
 					</div>`);
-				this.$reports.on("click", "[data-report]", (e) => this.open_report($(e.currentTarget).data("report")));
-				// With a report open the list folds away so the report gets the
-				// full width; this button brings the list back.
-				this.$reports.on("click", ".tdb-rep-toggle", () => this.$reports.find(".tdb-rep").toggleClass("show-list"));
+				this.update_report_links();
 				this.$reports.on("input", "input[type=search]", (e) => {
 					const q = e.target.value.trim().toLowerCase();
-					this.$reports.find("[data-report]").each((_, b) => $(b).toggle(!q || $(b).data("search").includes(q)));
+					this.$reports.find("[data-report]").each((_, a) => $(a).toggle(!q || $(a).data("search").includes(q)));
 					this.$reports.find(".tdb-rep-group").each((_, g) => $(g).toggle($(g).find("[data-report]:visible").length > 0));
 				});
 			});
@@ -210,82 +194,13 @@
 			return f;
 		}
 
-		open_report(name) {
-			this.report = name;
-			this.$reports.find("[data-report]").removeClass("is-on").filter((_, b) => $(b).data("report") === name).addClass("is-on");
-			this.$reports.find(".tdb-rep").addClass("has-report").removeClass("show-list");
-			this.$reports.find(".tdb-rep-toggle").prop("hidden", false);
-			this.$reports.find(".tdb-rep-hint").text(__("{0} — filtered by the company and period above", [name]));
-			const filters = this.report_filters();
-			this.report_key = JSON.stringify(filters);
-			const url = `/app/query-report/${encodeURIComponent(name)}?${new URLSearchParams(filters).toString()}`;
-			const $view = this.$reports.find(".tdb-rep-view").html(`
-				<div class="tdb-rep-loading"><span class="tdb-spinner"></span>${__("Opening {0}…", [esc(name)])}</div>
-				<iframe class="tdb-rep-frame" title="${esc(name)}" src="${url}"></iframe>`);
-			const frame = $view.find("iframe")[0];
-			frame.addEventListener("load", () => {
-				try {
-					this.strip_desk(frame);
-				} catch (e) {
-					// A cross-origin page (should not happen on the same site) cannot be
-					// restyled; it still shows, with the desk bars.
-				}
-				$view.find(".tdb-rep-loading").remove();
+		// Point every report link at the current company / branch / period.
+		// Called after the list is built and after each dashboard refresh.
+		update_report_links() {
+			const query = new URLSearchParams(this.report_filters()).toString();
+			this.$reports.find("[data-report]").each((_, a) => {
+				a.href = `/app/query-report/${encodeURIComponent($(a).data("report"))}?${query}`;
 			});
-			if (window.innerWidth < 900) this.$reports[0].scrollIntoView({ behavior: "smooth", block: "start" });
-		}
-
-		// Hide the desk's navbar and sidebar inside the frame so only the report
-		// (its title, filters, table, Print / Export menu) shows. Also keeps the
-		// frame on this report: a click that would leave it opens a new tab.
-		strip_desk(frame) {
-			const doc = frame.contentDocument;
-			if (!doc) return;
-			const style = doc.createElement("style");
-			style.textContent = `
-				.navbar, .layout-side-section, .page-head .sidebar-toggle-btn, footer { display: none !important; }
-				body { padding-top: 0 !important; background: var(--card-bg) !important; }
-				.page-head { position: static !important; top: 0 !important; }
-				.page-container, .container { max-width: none !important; }
-				.layout-main-section-wrapper { padding: 0 !important; }
-				.page-container .container, .page-body.container { padding-left: 12px !important; padding-right: 12px !important; }
-				.page-head .container { padding-left: 12px !important; padding-right: 12px !important; }`;
-			doc.head.appendChild(style);
-			// Grow the frame to the report's own height, so a short report leaves
-			// no empty space and a long one needs no scroll bar inside the frame.
-			const fit = () => {
-				// The page itself is never shorter than the frame, so measure the
-				// report's own section instead.
-				const main = doc.querySelector(".layout-main-section") || doc.body;
-				const h = Math.ceil(main.getBoundingClientRect().bottom + frame.contentWindow.scrollY + 24);
-				frame.style.height = Math.max(MIN_REPORT_HEIGHT, Math.min(h, MAX_REPORT_HEIGHT)) + "px";
-			};
-			new frame.contentWindow.ResizeObserver(fit).observe(doc.body);
-			fit();
-			doc.documentElement.setAttribute("data-theme", document.documentElement.getAttribute("data-theme") || "light");
-			const win = frame.contentWindow;
-			const start = win.location.pathname;
-			// The desk router changes the URL with pushState; anything that is not
-			// this report goes to a new tab and the frame goes back.
-			const keep = () => {
-				const now = win.location.pathname;
-				if (now !== start && !now.startsWith("/app/query-report/")) {
-					window.open(win.location.href, "_blank");
-					win.history.back();
-				}
-			};
-			win.addEventListener("popstate", keep);
-			const push = win.history.pushState.bind(win.history);
-			win.history.pushState = function () {
-				push.apply(null, arguments);
-				keep();
-			};
-		}
-
-		// After the company or period changes, show the open report for the new one.
-		sync_report() {
-			if (!this.report) return;
-			if (JSON.stringify(this.report_filters()) !== this.report_key) this.open_report(this.report);
 		}
 
 		// ------------------------------------------------------------ data
@@ -300,7 +215,7 @@
 					const p = d.period;
 					this.period = p.kind === "year" ? { fiscal_year: p.fiscal_year } : { bs_year: p.bs_year, bs_month: p.bs_month };
 					this.render();
-					this.sync_report();
+					this.update_report_links();
 				})
 				.catch(() => {
 					// A saved company/branch the user has lost access to: start clean.

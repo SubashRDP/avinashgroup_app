@@ -13,23 +13,20 @@ Code: `avinashgroup_app/sales_purchase/` (see its README for entry points).
 [ Trend: columns = this period, grey line = previous ]     [ Top customers / suppliers ]
 [ By branch | By company ]
 [ Top items ]
-[ Reports: list of the user's reports → the chosen report runs right here ]
+[ Reports: list of the user's reports → each opens in a new tab ]
 ```
 
 - Amounts are excl. VAT (`base_net_total`); the hero also shows incl. VAT.
 - "Same days of" compares only as far into the previous period as we are into
   this one (day 19 of Kartik vs days 1–19 of Ashwin).
-- **No shortcuts.** Nothing on the page jumps to another page: tiles and
-  customer rows are information only; clicking a company bar only narrows the
-  dashboard itself.
-- **Reports open inside the dashboard.** The list shows only reports the user's
-  role may open (Report roles + Custom Role, same check as the report page).
-  The chosen report runs in a frame of the desk's own report page with the desk
-  bars hidden, so its filters, totals, print and export are the real ones, and
-  it runs as the same user (same role / User Permission checks). The dashboard's
-  company, branch (`branch` filter) and period are filled in; a report sets only
-  the filters it has. With a report open, the list folds away ("All reports"
-  brings it back) and the panel grows to the report's height.
+- **No shortcuts.** Tiles and customer rows are information only; clicking a
+  company bar only narrows the dashboard itself.
+- **Reports open in a new tab.** The list shows only reports the user's role
+  may open (Report roles + Custom Role, same check as the report page). Each
+  report is a link to the desk's own report page, opened in a new tab, with the
+  dashboard's company, branch (`branch` filter) and period filled in; a report
+  sets only the filters it has. The links follow the dashboard: change the
+  company or period and the next report opened uses the new values.
 - Selling = blue, Buying = violet; light and dark desk themes both work.
 
 ## Hidden for now (kept in code, switched off)

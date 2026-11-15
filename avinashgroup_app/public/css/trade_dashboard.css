@@ -428,15 +428,14 @@
 .tdb-kpi { cursor: default; }
 .tdb-kpi:hover { transform: none; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); border-color: var(--border-color); }
 
-/* ------------------------------------------------------------ reports viewer */
+/* ------------------------------------------------------------ reports list */
 .tdb-reports { padding: 20px; }
-.tdb-rep { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
-.tdb-rep-list {
-	position: sticky; top: calc(var(--navbar-height, 48px) + 12px);
-	max-height: 760px; overflow-y: auto;
-	padding-right: 4px; scrollbar-width: thin;
+.tdb-reports .tdb-search { max-width: 260px; margin: 0; }
+/* Report groups side by side; each group is a column of links. */
+.tdb-rep {
+	display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 4px 16px; align-items: start;
 }
-.tdb-rep-list .tdb-search { max-width: none; margin: 0 0 10px; }
 .tdb-rep-group h4 {
 	display: flex; align-items: center; gap: 6px;
 	margin: 12px 0 4px; padding: 0 8px;
@@ -444,53 +443,15 @@
 	color: var(--tdb-muted);
 }
 .tdb-rep-group h4 .tdb-icon { width: 14px; height: 14px; color: var(--tdb-accent); }
-.tdb-rep-group button {
-	display: block; width: 100%;
+.tdb-rep-group a {
+	display: block;
 	padding: 8px 10px; margin: 1px 0;
-	border: 0; border-radius: 9px; background: none;
-	font-size: 13px; text-align: left; color: var(--text-color);
-	cursor: pointer;
+	border-radius: 9px;
+	font-size: 13px; color: var(--text-color); text-decoration: none;
 }
-.tdb-rep-group button:hover { background: var(--tdb-soft); }
-.tdb-rep-group button.is-on {
-	background: color-mix(in srgb, var(--tdb-accent) 13%, transparent);
-	color: var(--tdb-accent); font-weight: 600;
-}
-.tdb-rep-view {
-	position: relative; min-height: 420px;
-	border: 1px solid var(--border-color); border-radius: 12px;
-	overflow: hidden; background: var(--card-bg);
-}
-.tdb-rep-frame { display: block; width: 100%; height: 820px; border: 0; }
-/* A report is open: the list folds away, the report takes the full width. */
-.tdb-rep.has-report { grid-template-columns: minmax(0, 1fr); }
-.tdb-rep.has-report .tdb-rep-list { display: none; }
-.tdb-rep.has-report.show-list { grid-template-columns: 250px minmax(0, 1fr); }
-.tdb-rep.has-report.show-list .tdb-rep-list { display: block; }
-.tdb-rep-toggle {
-	display: flex; align-items: center; gap: 6px;
-	height: 34px; padding: 0 12px;
-	border: 1px solid var(--border-color); border-radius: 10px;
-	background: var(--card-bg); color: var(--text-color);
-	font-size: 13px; font-weight: 500; cursor: pointer;
-}
-.tdb-rep-toggle:hover { background: var(--tdb-soft); }
-.tdb-rep-toggle .tdb-icon { width: 15px; height: 15px; color: var(--tdb-accent); }
-.tdb-rep-empty {
-	display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
-	min-height: 420px; color: var(--tdb-muted); text-align: center;
-}
-.tdb-rep-empty .tdb-icon { width: 30px; height: 30px; opacity: .6; }
-.tdb-rep-empty p { margin: 0; }
-.tdb-rep-loading {
-	position: absolute; inset: 0; z-index: 2;
-	display: flex; align-items: center; justify-content: center; gap: 10px;
-	background: var(--card-bg); color: var(--tdb-muted);
-}
+.tdb-rep-group a:hover { background: var(--tdb-soft); color: var(--tdb-accent); text-decoration: none; }
 @container tdb (max-width: 760px) {
-	.tdb-rep { grid-template-columns: 1fr; }
-	.tdb-rep-list { position: static; max-height: 260px; }
-	.tdb-rep-frame { height: 640px; }
+	.tdb-reports .tdb-search { max-width: none; width: 100%; }
 }
 
 /* ------------------------------------------------------------ on the stock workspace */
