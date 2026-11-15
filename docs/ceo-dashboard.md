@@ -797,3 +797,60 @@ it simple").
   bars over Volume and Net sales were removed because the table looked
   cluttered. The small Collected % bar stays, since it is what flags a low
   rate in red.
+
+### Supplier advances shown (asset version 128)
+
+"We owe suppliers" did not seem to match the Buying figures: opening Rs 1,139
+Cr + purchases − Rs 80.59 Cr paid should be about Rs 1,061 Cr, yet it stood at
+Rs 1,137 Cr. The figures were right. Most supplier payments this year were
+booked to the "Advance Paid" accounts. Those are Payable-type accounts, so
+an advance sits as a debit balance on the supplier. It raises "advances paid"
+and does not lower what we owe on other bills. On demo-nggroup, advances went
+from Rs 43 Cr to Rs 156 Cr in 83/84 while the amount owed stayed near Rs
+1,137 Cr.
+
+`money.get_money` already sent the debit side (`pay_m[k][3]`). The page now
+shows it in two places:
+- **Top tile:** "Advances paid Rs … · bank loans Rs …".
+- **"We owe suppliers" card:** a second summary line under the owed one,
+  "Advances paid to suppliers: Opening · Now · Change"
+  (`moneySeries().payAdv`).
+
+The books are not changed and nothing is flagged.
+
+- "Largest balances" was removed from the "We owe suppliers" card (asset version 129). The month-end chart and the two summary lines now take its full width.
+
+### Corporate finance wording (asset version 131)
+
+Money labels now use standard finance terms:
+
+| Before | Now |
+|---|---|
+| We owe suppliers | Accounts payable |
+| Customers owe us | Accounts receivable |
+| Advances held | Customer advances |
+| Advances paid (to suppliers) / paid ahead | Supplier advances |
+| Owed at the start | Opening balance |
+| Owed now | Receivable now |
+| Billed to us | Supplier bills |
+| Came in / Went out | Receipts / Payments |
+
+The Credit and dues section keeps credit control's own words ("Owed (credit
+check)"). Long tile labels now wrap instead of being clipped.
+
+### Several fiscal years on the gear charts (asset version 133)
+
+With two or more fiscal years ticked, the tiles and the scorecard already
+added the years together. The three gear charts, however, drew only the last
+year. They now run every picked year on one axis, oldest first:
+- Quarterly, Monthly, Weekly and Daily show each year's buckets, with the
+  year named where it starts.
+- Year shows only the picked years.
+- The title and the crumbs read "82/83 + 83/84".
+- On a long weekly or daily axis (more than 26 buckets), only the year starts
+  are named, because month names would collide.
+
+Opening a period still works per bar. `gearBuckets` now returns `items`
+({ y, k }) across years, and `gearValues` reads each year once.
+
+- Weekly was removed from the chart gears (asset version 134). The notches are now Year · Quarterly · Monthly · Daily, and a month opens into its days.

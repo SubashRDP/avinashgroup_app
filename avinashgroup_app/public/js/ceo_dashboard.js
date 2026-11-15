@@ -126,7 +126,7 @@ window.avinash_ceo_dashboard = (function () {
 	// picked at the top. Each card has its own (st.grain). Click, drag, mouse
 	// wheel or arrow keys. The top bar has only the fiscal year: the dashboard
 	// shows that year (the Period dropdown and the 12-month view are gone).
-	const GEAR = [["year", "Year", "Year"], ["quarter", "Quarterly", "Qtr"], ["month", "Monthly", "Month"], ["week", "Weekly", "Week"], ["day", "Daily", "Day"]];
+	const GEAR = [["year", "Year", "Year"], ["quarter", "Quarterly", "Qtr"], ["month", "Monthly", "Month"], ["day", "Daily", "Day"]];   // Weekly removed at the user's request (2026-11-15)
 	const GEAR_CARDS = ["trend", "coll", "buytrend"];
 	const GEAR_WHEEL_GAP = 180;   // ms between wheel steps, so one flick moves one notch
 	// Dash patterns for the 2nd and 3rd fiscal year on the same chart. Every
@@ -909,7 +909,7 @@ window.avinash_ceo_dashboard = (function () {
 				recvM: m.recv_m.map((r) => ({ co: r[0], seg: r[1], internal: r[2], owed: padM(r[3]) })),
 				cash: m.cash.map((r) => ({ co: r[0], kind: r[1], name: r[2], m: padM(r[3]), now: r[4], ly: r[5] })),
 				pay: m.pay.map((r) => ({ co: r[0], code: r[1], name: r[2], internal: r[3], now: r[4], ly: r[5], bill: r[6] })),
-				payM: m.pay_m.map((r) => ({ co: r[0], internal: r[1], owed: padM(r[2]) })),
+				payM: m.pay_m.map((r) => ({ co: r[0], internal: r[1], owed: padM(r[2]), adv: padM((r[3] || []).map((v) => -v)) })),   // adv: suppliers we paid ahead (debit balances), as a positive figure
 				buy,
 			};
 			resolveCust();
@@ -967,11 +967,11 @@ window.avinash_ceo_dashboard = (function () {
 		// receivable trend is per company x segment, so it is not drawn for one customer.
 		function moneySeries() {
 			const pm = PM(), z = (on) => Array.from({ length: NM() }, (_, i) => (on && i <= pm ? 0 : null));
-			const out = { cash: z(true), owed: z(!st.sel.cust.size && !st.sel.dist.size), pay: z(true) };
+			const out = { cash: z(true), owed: z(!st.sel.cust.size && !st.sel.dist.size), pay: z(true), payAdv: z(true) };
 			const add = (arr, vals) => vals.forEach((v, i) => { if (v != null && arr[i] != null) arr[i] += v; });
 			for (const x of st.mn.cash) if (x.kind < 2 && passCo(x.co)) add(out.cash, x.m);
 			for (const x of st.mn.recvM) if (passRecvM(x)) add(out.owed, x.owed);
-			for (const x of st.mn.payM) if (passPay(x)) add(out.pay, x.owed);
+			for (const x of st.mn.payM) if (passPay(x)) { add(out.pay, x.owed); add(out.payAdv, x.adv); }
 			return out;
 		}
 		// Map snapshot rows onto the dashboard's customer and company indexes.
@@ -1043,14 +1043,14 @@ window.avinash_ceo_dashboard = (function () {
 						${card("buytrend", "span-8", __("Purchases"), tbl("buytrend"))}
 						${card("buyco", "span-4", __("Purchases by company"))}
 						${SHOW_MARGIN ? card("margin", "span-6", __("Gas margin per kg"), tbl("margin")) : ""}
-						${card("pay", SHOW_MARGIN ? "span-6" : "span-12", __("We owe suppliers"), tools("pay"))}
+						${card("pay", SHOW_MARGIN ? "span-6" : "span-12", __("Accounts payable"), tools("pay"))}
 					</div>
 				</section>
 				<section class="ceo-zone" data-zone="money" data-anchor="money">
 					<div class="ceo-section">${zoneHead(__("Money"))}<span data-slot="money-label"></span></div>
 					<div class="ceo-grid">
 						${card("cash", "span-6", __("Cash and bank"), tools("cash"))}
-						${card("recv", "span-6", __("Customers owe us"), tools("recv"))}
+						${card("recv", "span-6", __("Accounts receivable"), tools("recv"))}
 					</div>
 				</section>
 				<section class="ceo-zone" data-zone="credit" data-anchor="credit">
@@ -1341,14 +1341,14 @@ window.avinash_ceo_dashboard = (function () {
 		}
 		function moneyTiles(t, collS) {
 			if (shortPeriod()) return periodMoneyTiles();
-			const labels = [__("Cash and bank"), __("Customers owe us"), __("We owe suppliers")];
+			const labels = [__("Cash and bank"), __("Accounts receivable"), __("Accounts payable")];
 			if (!st.money) return labels.map((label) => ({ label, loading: true }));
 			if (st.money.failed || !st.mn) return labels.map((label) => ({ label, value: "—", d: "", sub: esc(__("The ledger could not be read.")) }));
 			const m = moneyTotals(), ser = moneySeries(), ly = st.money.through_ly_label;
 			return [
 				{ label: labels[0], goto: "money", value: rs(m.cash + m.bank), d: delta(m.cash + m.bank, m.cashLy + m.bankLy, { note: __("vs {0}", [ly]) }), sub: esc(`${__("Cash in hand")} ${rs(m.cash)} · ${__("bank")} ${rs(m.bank)}`), foot: esc(`${__("Cash")} ${rs(m.cash)} · ${__("bank")} ${rs(m.bank)}`), ly: [__("A year earlier"), rs(m.cashLy + m.bankLy)], s: last24(ser.cash) },
-				{ label: labels[1], goto: "money", value: rs(m.owed), d: delta(m.owed, m.owedLy, { upGood: false }), sub: esc(`${__("Advances held")} ${rs(m.adv)}${t.amt ? ` · ${__("collected")} ${inr((t.coll / t.amt) * 100, 0)}% ${__("of billed")}` : ""}`), foot: esc(`${__("Advances held")} ${rs(m.adv)}`), ly: [__("A year earlier"), rs(m.owedLy)], s: st.sel.cust.size ? collS : last24(ser.owed) },
-				{ label: labels[2], goto: "money", value: rs(m.pay), d: delta(m.pay, m.payLy, { upGood: null }), sub: esc(`${__("Bank loans")} ${rs(m.loan)} · ${__("paid ahead")} ${rs(m.payAdv)}`), foot: esc(`${__("Bank loans")} ${rs(m.loan)}`), ly: [__("A year earlier"), rs(m.payLy)], s: last24(ser.pay) },
+				{ label: labels[1], goto: "money", value: rs(m.owed), d: delta(m.owed, m.owedLy, { upGood: false }), sub: esc(`${__("Customer advances")} ${rs(m.adv)}${t.amt ? ` · ${__("collected")} ${inr((t.coll / t.amt) * 100, 0)}% ${__("of billed")}` : ""}`), foot: esc(`${__("Customer advances")} ${rs(m.adv)}`), ly: [__("A year earlier"), rs(m.owedLy)], s: st.sel.cust.size ? collS : last24(ser.owed) },
+				{ label: labels[2], goto: "money", value: rs(m.pay), d: delta(m.pay, m.payLy, { upGood: null }), sub: esc(`${__("Bank loans")} ${rs(m.loan)} · ${__("supplier advances")} ${rs(m.payAdv)}`), foot: esc(`${__("Supplier advances")} ${rs(m.payAdv)} · ${__("bank loans")} ${rs(m.loan)}`), ly: [__("A year earlier"), rs(m.payLy)], s: last24(ser.pay) },
 			];
 		}
 		// 24-month sparkline; months inside the period are drawn in the accent.
@@ -1720,7 +1720,7 @@ window.avinash_ceo_dashboard = (function () {
 		// quarters, a quarter its months, a month or a week its days. Each card
 		// keeps its own path (st.drill[name], a stack); "‹ Back" steps out, and
 		// moving the gear starts again from the whole fiscal year.
-		const GEAR_CHILD = { year: "quarter", quarter: "month", month: "day", week: "day" };
+		const GEAR_CHILD = { year: "quarter", quarter: "month", month: "day" };
 		const PIE_MAX = 12;   // more slices than months in a year cannot be read as a pie
 		const gearCtx = (name) => { const s = st.drill[name]; return s && s.length ? s[s.length - 1] : null; };
 		const litGrain = (name) => (gearCtx(name) || {}).grain || st.grain[name];
@@ -1754,7 +1754,7 @@ window.avinash_ceo_dashboard = (function () {
 		function gearBuckets(name) {
 			const d = D(), thr = st.ser.through, ctx = gearCtx(name), grain = ctx ? ctx.grain : st.grain[name], mb = d.month_bounds;
 			if (grain === "year") {
-				const ys = d.years.map((_, yy) => yy).filter((yy) => mb[yy * 12][0] <= thr);
+				const ys = d.years.map((_, yy) => yy).filter((yy) => mb[yy * 12][0] <= thr && (!multiYear() || st.fys.includes(d.years[yy])));
 				const partial = (yy) => mb[yy * 12 + 11][1] > thr;
 				return {
 					grain, n: ys.length, ys, every: 1, xTitle: __("Fiscal year"), group: () => null,
@@ -1763,27 +1763,45 @@ window.avinash_ceo_dashboard = (function () {
 					range: (i) => [mb[ys[i] * 12][0], minIso(mb[ys[i] * 12 + 11][1], thr)], yOf: (i) => ys[i], crumb: (i) => d.years[ys[i]],
 				};
 			}
-			const y = ctx ? ctx.y : d.years.indexOf(st.fy), F = cmpBuckets(grain, y), fyEnd = mb[y * 12 + 11][1];
-			const endOf = (k) => (k + 1 < F.n ? isoAdd(F.start(k + 1), -1) : fyEnd);
-			const lo = ctx ? ctx.a : F.fyStart, hi = minIso(ctx ? ctx.b : fyEnd, thr);
-			const keep = Array.from({ length: F.n }, (_, k) => k).filter((k) => F.start(k) <= hi && endOf(k) >= lo);
-			const drilledDays = ctx && grain === "day";
+			// The fiscal years drawn: the opened period's year, else every picked year
+			// (several fiscal years ticked at the top run on one axis, oldest first).
+			const yrs = ctx ? [ctx.y] : (multiYear() ? st.fys : [st.fy]).map((f) => d.years.indexOf(f)).filter((yy) => yy >= 0);
+			const items = [];   // { y, k, F, lo, hi, end }: bucket k of year y
+			for (const yy of yrs) {
+				const F = cmpBuckets(grain, yy), fyEnd = mb[yy * 12 + 11][1];
+				const endOf = (k) => (k + 1 < F.n ? isoAdd(F.start(k + 1), -1) : fyEnd);
+				const lo = ctx ? ctx.a : F.fyStart, hi = minIso(ctx ? ctx.b : fyEnd, thr);
+				for (let k = 0; k < F.n; k++) if (F.start(k) <= hi && endOf(k) >= lo) items.push({ y: yy, k, F, lo, hi, end: endOf(k) });
+			}
+			const F0 = items.length ? items[0].F : cmpBuckets(grain, yrs[0] ?? d.years.indexOf(st.fy)), at = (i) => items[i];
+			const drilledDays = ctx && grain === "day", multi = yrs.length > 1;
 			return {
-				...F, grain, y, keep, n: keep.length,
-				offs: ctx ? [daysBetween(F.fyStart, lo), daysBetween(F.fyStart, hi)] : null,   // only the opened period's days
-				every: drilledDays && keep.length <= 31 && window.innerWidth >= 760 ? 1 : Math.max(1, Math.ceil(keep.length / (window.innerWidth < 760 ? 6 : 16))),
-				start: (i) => F.start(keep[i]), long: (i) => F.long(keep[i]), sub: F.sub ? (i) => F.sub(keep[i]) : undefined,
-				label: (i, nar) => (grain === "week" ? `W${keep[i] + 1}` : grain === "day" ? String((bsDay(F.start(keep[i])) || {}).day || "") : F.label(keep[i], nar)),
-				group: (i) => (i === 0 ? (grain === "week" || grain === "day" ? monthLabel((bsDay(maxIso(F.start(keep[0]), lo)) || { m: y * 12 }).m) : d.years[y]) : F.group(keep[i])),
-				range: (i) => [maxIso(F.start(keep[i]), lo), minIso(endOf(keep[i]), hi)], yOf: () => y,
-				crumb: (i) => (grain === "month" ? monthLabel(y * 12 + keep[i]) : `${F.long(keep[i]).split(" · ")[0]} · ${d.years[y]}`),
+				grain, items, n: items.length, xTitle: F0.xTitle,
+				offs: ctx && items.length ? [daysBetween(items[0].F.fyStart, items[0].lo), daysBetween(items[0].F.fyStart, items[0].hi)] : null,   // only the opened period's days
+				every: drilledDays && items.length <= 31 && window.innerWidth >= 760 ? 1 : Math.max(1, Math.ceil(items.length / (window.innerWidth < 760 ? 6 : 16))),
+				start: (i) => at(i).F.start(at(i).k),
+				long: (i) => `${at(i).F.long(at(i).k)}${multi && grain !== "day" ? ` · ${d.years[at(i).y]}` : ""}`,
+				sub: F0.sub ? (i) => at(i).F.sub(at(i).k) : undefined,
+				label: (i, nar) => { const x = at(i); return grain === "week" ? `W${x.k + 1}` : grain === "day" ? String((bsDay(x.F.start(x.k)) || {}).day || "") : x.F.label(x.k, nar); },
+				// The year at the start of each fiscal year (quarters, months); the month where one starts (weeks, days).
+				group: (i) => {
+					const x = at(i), prev = i ? at(i - 1) : null;
+					if ((grain === "week" || grain === "day") && items.length > 26) return !prev || prev.y !== x.y ? d.years[x.y] : null;   // too many for month names
+					if (grain === "week" || grain === "day") {
+						const m = (bsDay(maxIso(x.F.start(x.k), x.lo)) || { m: x.y * 12 }).m, pm2 = prev ? (bsDay(maxIso(prev.F.start(prev.k), prev.lo)) || { m: -1 }).m : -1;
+						return m !== pm2 ? (i === 0 || m % 12 === 0 ? monthLabel(m) : monthName(m)) : null;
+					}
+					return !prev || prev.y !== x.y ? d.years[x.y] : null;
+				},
+				range: (i) => [maxIso(at(i).F.start(at(i).k), at(i).lo), minIso(at(i).end, at(i).hi)], yOf: (i) => at(i).y,
+				crumb: (i) => { const x = at(i); return grain === "month" ? monthLabel(x.y * 12 + x.k) : `${x.F.long(x.k).split(" · ")[0]} · ${d.years[x.y]}`; },
 			};
 		}
 		const maxIso = (a, b) => (a > b ? a : b);
 		function gearValues(key, B, kg) {
 			if (B.grain === "year") return B.ys.map((yy) => cmpSeriesValues(key, "quarter", yy, null, kg).reduce((a, v) => (v == null ? a : a + v), 0));
-			const full = cmpSeriesValues(key, B.grain, B.y, B.offs, kg);
-			return B.keep.map((i) => full[i]);
+			const full = new Map();   // one pass per fiscal year on the axis
+			return B.items.map((x) => { if (!full.has(x.y)) full.set(x.y, cmpSeriesValues(key, B.grain, x.y, B.offs, kg)); return full.get(x.y)[x.k]; });
 		}
 		// Donut per series: one slice per bucket, in time order, the series colour
 		// stepping from light (first) to full (last); the slices are named in the
@@ -1816,7 +1834,7 @@ window.avinash_ceo_dashboard = (function () {
 			if (!cfg || !el) return false;
 			gearInto(name);
 			const kg = cfg.kg && st.measure === "kg", ctx = gearCtx(name), grain = litGrain(name), word = (GEAR.find(([k]) => k === grain) || [])[1];
-			if (!host) setTitle(name, ctx ? `${cfg.title(kg)} · ${ctx.label} · ${__(word)}` : `${cfg.title(kg)} · ${__(word)}${grain === "year" ? "" : ` · ${st.fy}`}`);
+			if (!host) setTitle(name, ctx ? `${cfg.title(kg)} · ${ctx.label} · ${__(word)}` : `${cfg.title(kg)} · ${__(word)}${grain === "year" ? "" : ` · ${multiYear() ? st.fys.join(" + ") : st.fy}`}`);
 			const stale = !st.ser || st.ser.loading || (!st.ser.failed && (st.ser.fiscal_year !== st.fy || st.ser.years_back !== yearsBack()));
 			if (stale) { loadSeries(false); el.innerHTML = chartLoading(); return true; }
 			if (st.ser.failed) { el.innerHTML = `<div class="ceo-empty">${__("Not available.")}</div>`; return true; }
@@ -1824,7 +1842,7 @@ window.avinash_ceo_dashboard = (function () {
 			const lines = cfg.keys(kg).map(([key, label, cls]) => ({ label, cls, vals: gearValues(key, B, key === "coll" ? false : kg) }));
 			const fmt = (v) => (v == null ? "—" : kg ? mt(v) : rs(v));
 			const path = st.drill[name] || [];
-			const bar = path.length ? `<div class="ceo-drillbar"><button class="ceo-drillback" data-act="gback" data-name="${name}">‹ ${__("Back")}</button><nav class="ceo-crumbs"><button data-act="gcrumb" data-name="${name}" data-val="0">${esc(st.grain[name] === "year" ? __("All years") : st.fy)}</button>${path.map((p, k) => k === path.length - 1 ? `<span>${esc(p.label)}</span>` : `<button data-act="gcrumb" data-name="${name}" data-val="${k + 1}">${esc(p.label)}</button>`).join("")}</nav></div>` : "";
+			const bar = path.length ? `<div class="ceo-drillbar"><button class="ceo-drillback" data-act="gback" data-name="${name}">‹ ${__("Back")}</button><nav class="ceo-crumbs"><button data-act="gcrumb" data-name="${name}" data-val="0">${esc(st.grain[name] === "year" ? (multiYear() ? st.fys.join(" + ") : __("All years")) : multiYear() ? st.fys.join(" + ") : st.fy)}</button>${path.map((p, k) => k === path.length - 1 ? `<span>${esc(p.label)}</span>` : `<button data-act="gcrumb" data-name="${name}" data-val="${k + 1}">${esc(p.label)}</button>`).join("")}</nav></div>` : "";
 			const hint = GEAR_CHILD[B.grain] ? `<div class="ceo-drillhint">${__("Click a bar to open it")}</div>` : "";
 			if (st.tables.has(name)) {
 				el.innerHTML = bar + table([__("Period"), ...lines.map((x) => x.label)], Array.from({ length: B.n }, (_, i) => [esc(B.long(i)), ...lines.map((x) => esc(fmt(x.vals[i])))]).filter((r, i) => lines.some((x) => x.vals[i] != null)));
@@ -2353,12 +2371,12 @@ window.avinash_ceo_dashboard = (function () {
 			return out;
 		}
 		const PERIOD_WORDS = () => ({
-			cash: [__("Came in"), __("Went out")],
+			cash: [__("Receipts"), __("Payments")],
 			recv: [__("Billed"), __("Received")],
-			pay: [__("Billed to us"), __("Paid")],
+			pay: [__("Supplier bills"), __("Paid")],
 		});
 		function periodMoneyTiles() {
-			const labels = [__("Cash and bank"), __("Customers owe us"), __("We owe suppliers")], keys = ["cash", "recv", "pay"];
+			const labels = [__("Cash and bank"), __("Accounts receivable"), __("Accounts payable")], keys = ["cash", "recv", "pay"];
 			if (!st.pb || (!st.pb.data && !st.pb.failed)) return labels.map((label) => ({ label, loading: true }));
 			if (st.pb.failed) return labels.map((label) => ({ label, value: "—", d: "", foot: esc(__("The ledger could not be read.")) }));
 			const t = periodTotals(), w = PERIOD_WORDS();
@@ -2389,8 +2407,8 @@ window.avinash_ceo_dashboard = (function () {
 					<tbody>${rows.map(([co, c]) => `<tr class="ceo-click ${dimState("co", co)}" data-dim="co" data-val="${co}" tabindex="0"><td><strong>${esc(d.companies[co].abbr)}</strong></td><td class="num"><span class="${c.open < 0 ? "ceo-neg" : ""}">${esc(rs(c.open))}</span></td><td class="num">${esc(rs(c.in))}</td><td class="num">${esc(rs(c.out))}</td></tr>`).join("")}</tbody></table></div>` : "");
 			};
 			slot("cash").innerHTML = card("cash", __("Opening balance"));
-			slot("recv").innerHTML = card("recv", __("Owed at the start"));
-			slot("pay").innerHTML = card("pay", __("Owed at the start"));
+			slot("recv").innerHTML = card("recv", __("Opening balance"));
+			slot("pay").innerHTML = card("pay", __("Opening balance"));
 		}
 
 		// -------------------------------------------------------- money
@@ -2498,7 +2516,7 @@ window.avinash_ceo_dashboard = (function () {
 			}
 
 			// Customers owe us
-			sub("recv", __("Blue line = total that customers owed us at the end of each month (ledger balances, advances not subtracted), in rupees; grey line = a year earlier. Credit and dues below is credit control's view of customers with limits."));
+			sub("recv", __("Blue line = accounts receivable at each month end (ledger balances, customer advances not subtracted), in rupees; grey line = a year earlier. Credit and dues below is credit control's view of customers with limits."));
 			const rc = new Map();
 			for (const x of st.mn.recv) {
 				if (!passRecv(x)) continue;
@@ -2506,23 +2524,22 @@ window.avinash_ceo_dashboard = (function () {
 				if (x.now > 0) { y.now += x.now; y.n++; } else y.adv -= x.now;
 				if (x.ly > 0) y.ly += x.ly;
 			}
-			const rItems = [...rc.entries()].map(([co, y]) => ({ val: co, label: d.companies[co].abbr, title: d.companies[co].name, cur: y.now, prev: y.ly, tip: tipRows(d.companies[co].name, [["", __("Owed now"), esc(rs(y.now))], ["", __("A year earlier"), esc(rs(y.ly))], ["", __("Advances held"), esc(rs(y.adv))], ["", __("Customers owing"), inr(y.n)]]) })).filter((x) => x.cur || x.prev).sort((a, b) => b.cur - a.cur);
-			const recvChart = st.sel.cust.size || st.sel.dist.size ? `<div class="ceo-empty small">${__("Month-end trend is kept per company and segment, not per customer or district.")}</div>` : balChart("recv", ser.owed, __("Customers owe us"));
+			const rItems = [...rc.entries()].map(([co, y]) => ({ val: co, label: d.companies[co].abbr, title: d.companies[co].name, cur: y.now, prev: y.ly, tip: tipRows(d.companies[co].name, [["", __("Receivable now"), esc(rs(y.now))], ["", __("A year earlier"), esc(rs(y.ly))], ["", __("Customer advances"), esc(rs(y.adv))], ["", __("Customers owing"), inr(y.n)]]) })).filter((x) => x.cur || x.prev).sort((a, b) => b.cur - a.cur);
+			const recvChart = st.sel.cust.size || st.sel.dist.size ? `<div class="ceo-empty small">${__("Month-end trend is kept per company and segment, not per customer or district.")}</div>` : balChart("recv", ser.owed, __("Accounts receivable"));
 			slot("recv").innerHTML = recvChart + (rItems.length ? `<h4 class="ceo-subh">${__("By company")}</h4>` + barList(capped(rItems, "recv"), { dim: "co", fill: "var(--ceo-cur)", fmt: rs, upGood: false }) + showAll(rItems, "recv") : "");
 
 			// We owe suppliers
-			const sups = st.mn.pay.filter((x) => passPay(x) && x.now > 0).sort((a, b) => b.now - a.now);
-			const totalPay = sups.reduce((a, x) => a + x.now, 0);
-			sub("pay", `${__("Blue line = total we owed suppliers at the end of each month (ledger balances), in rupees; grey line = a year earlier. Inter-company suppliers follow the inter-company switch.")}${notSplit}`);
-			const maxS = sups.length ? sups[0].now : 1;
-			// Largest balances and the month-end trend side by side (the CEO's call,
-			// 2026-11-11); they stack on narrow screens (CSS .ceo-split).
-			slot("pay").innerHTML = `<div class="ceo-split"><div>${(sups.length ? `<h4 class="ceo-subh">${__("Largest balances")}</h4><div class="ceo-bars named wide">${sups.slice(0, 8).map((x) => `<div class="ceo-barrow nochg" data-tip="${tip(tipRows(x.name, [["", __("We owe"), esc(rs(x.now))], ["", __("Share"), totalPay ? `${inr((x.now / totalPay) * 100, 1)}%` : "—"]]))}">
-				<div class="ceo-barlabel"><span title="${esc(x.name)}">${esc(x.name)}<small>${esc(d.companies[x.co].abbr)}${x.bill ? ` · <button class="ceo-inl" data-act="open-doc" data-doctype="Purchase Invoice" data-val="${esc(x.bill[0])}">${esc(x.bill[0])}</button> ${esc(rs(x.bill[2]))}` : ""}</small></span></div>
-				<div class="ceo-bartrack"><div class="ceo-barfill" style="width:${(x.now / maxS) * 100}%;background:var(--ceo-cur)"></div></div>
-				<div class="ceo-barval">${esc(rs(x.now))}</div></div>`).join("")}</div><div class="ceo-foot">${__("{0} suppliers with a balance", [inr(sups.length)])}</div>` : `<div class="ceo-empty">${__("Nothing owed to suppliers.")}</div>`)}</div><div class="ceo-split-chart"><h4 class="ceo-subh">${__("Month end")}</h4><div data-chart="pay"></div></div></div>`;
+			sub("pay", `${__("Blue line = accounts payable at each month end (ledger balances), in rupees; grey line = a year earlier. Inter-company suppliers follow the inter-company switch.")}${notSplit}`);
+			// The month-end trend alone, full width (2026-11-14: "Largest balances"
+			// removed at the user's request; one Rs 1,130 Cr balance flattened it anyway).
+			slot("pay").innerHTML = `<div data-chart="pay"></div>`;
 			const payHost = slot("pay").querySelector("[data-chart='pay']");
-			payHost.innerHTML = balChart("pay", ser.pay, __("We owe suppliers"), 340, payHost);   // about as tall as the eight-row list beside it
+			payHost.innerHTML = balChart("pay", ser.pay, __("Accounts payable"), 260, payHost);
+			// Advances paid to suppliers sit on the same payable accounts as debit
+			// balances: a payment booked as an advance raises them and does not lower
+			// "we owe" (2026-11-14: the Buying "Paid" figure looked unmatched without it).
+			const advOpen = hasOpen ? ser.payAdv[pts[0]] : null, advNow = ser.payAdv[pts[pts.length - 1]];
+			if (advNow != null) (payHost.querySelector(".ceo-balsum") || payHost).insertAdjacentHTML(payHost.querySelector(".ceo-balsum") ? "afterend" : "afterbegin", `<div class="ceo-balsum ceo-advsum"><span>${__("Supplier advances")}</span>${advOpen != null ? `<span>${__("Opening")} <b>${esc(rs(advOpen))}</b></span>` : ""}<span>${pastYear() ? __("Closing") : __("Now")} <b>${esc(rs(advNow))}</b></span>${advOpen != null ? `<span>${__("Change")} <b>${advNow - advOpen >= 0 ? "+" : "−"}${esc(rs(Math.abs(advNow - advOpen)))}</b></span>` : ""}</div>`);
 
 		}
 
@@ -2914,7 +2931,7 @@ window.avinash_ceo_dashboard = (function () {
 						<td class="num">${x.adv > 0 ? esc(rs(x.adv)) : "—"}</td>
 						<td class="num">${journalOnly(x) ? `<span class="ceo-muted" title="${esc(__("Owed through Journal Entries with no Sales Invoice behind it"))}">${__("journal only")}</span>` : x.owed > 0 ? lim(x.days, x.dlim, " d") : "—"}</td>
 						<td class="num">${lim(x.bills, x.blim, "")}</td>
-						<td class="num">${u == null ? `<span class="ceo-muted">${cashOnly(x) ? __("cash only") : __("no limit")}</span>` : `<div class="ceo-usebar"><span style="width:${Math.min(100, Math.max(0, u * 100))}%" class="${u > 1 ? "over" : u >= NEAR_LIMIT ? "near" : ""}"></span></div>${u < 0 ? __("paid ahead") : inr(u * 100, 0) + "%"}`}</td>
+						<td class="num">${u == null ? `<span class="ceo-muted">${cashOnly(x) ? __("cash only") : __("no limit")}</span>` : `<div class="ceo-usebar"><span style="width:${Math.min(100, Math.max(0, u * 100))}%" class="${u > 1 ? "over" : u >= NEAR_LIMIT ? "near" : ""}"></span></div>${u < 0 ? __("supplier advances") : inr(u * 100, 0) + "%"}`}</td>
 						<td class="num">${usual.get(x.cu) ? esc(fmtM(usual.get(x.cu))) : "—"}</td>
 						<td><button class="ceo-drill" data-act="drill" data-kind="cust" data-val="${x.cu}" aria-label="${esc(__("Details"))}">›</button></td></tr>`;
 				}).join("")}</tbody></table></div>
@@ -2930,7 +2947,7 @@ window.avinash_ceo_dashboard = (function () {
 			const g = SHOW_MARGIN ? marginTotals(W, (r) => r[R_CO] === co && pass(r, "co")).cur : null;
 			return `<h4>${__("Money")} <span class="ceo-muted">· ${esc(D().through_label)}</span></h4><div class="ceo-crbox"><dl>
 				<dt>${__("Cash and bank")}</dt><dd>${esc(rs(cash))}</dd><dt>${__("Bank loans")}</dt><dd>${esc(rs(loan))}</dd>
-				<dt>${__("Customers owe")}</dt><dd>${esc(rs(owed))}</dd><dt>${__("We owe suppliers")}</dt><dd>${esc(rs(pay))}</dd>
+				<dt>${__("Accounts receivable")}</dt><dd>${esc(rs(owed))}</dd><dt>${__("Accounts payable")}</dt><dd>${esc(rs(pay))}</dd>
 				${SHOW_MARGIN ? `<dt>${__("Gas margin")}</dt><dd>${g.m != null ? `Rs ${inr(g.m, 2)}/kg${g.share < MARGIN_PARTIAL ? ` <span class="ceo-muted">(${inr(g.share * 100, 0)}% ${__("of volume")})</span>` : ""}` : "—"}</dd>` : ""}</dl></div>`;
 		}
 

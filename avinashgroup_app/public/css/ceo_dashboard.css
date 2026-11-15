@@ -1674,3 +1674,6 @@
 .ceo-pielist small { color: var(--ceo-ink-3); text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 760px) { .ceo-pieblock { flex-direction: column; align-items: stretch; } .ceo-piesvg { margin: 0 auto; } }
 .ceo-pielist { max-width: 380px; }
+.ceo-advsum { margin-top: -4px; font-size: 12.5px; color: var(--ceo-ink-2); }   /* supplier advances under the owed summary */
+.ceo-advsum > span:first-child { font-weight: 650; color: var(--ceo-ink); }
+.ceo-kpi[data-ico]:not([data-ico=""]) .ceo-kpi-label { white-space: normal; min-width: 0; }   /* "Accounts receivable" wraps instead of clipping */
