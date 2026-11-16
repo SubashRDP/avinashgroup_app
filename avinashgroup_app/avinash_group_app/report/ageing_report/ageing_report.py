@@ -13,23 +13,24 @@ as a separate advance row: on mysite1 ~2.4 lakh of ~2.9 lakh submitted Sales
 Invoices still carry an outstanding amount. The bills look overdue even when
 the party owes nothing.
 
-"Merged" fixes the picture without touching the books. For each party, only
-invoices count as bills (Sales Invoice for Customer, Purchase Invoice for
-Supplier). Every other row — payments, journal entries (also opening-balance
-journals), credit notes — is added into one amount for the party. When that
-amount is a credit, it is knocked off the party's bills oldest first (FIFO).
-A bill paid down to zero is not shown; a partly paid bill shows what is left,
-in the range of its own age. So the list is the invoices still unpaid.
+Every row with a positive outstanding is a bill: invoices, journal debits,
+opening balances. Every row with a negative outstanding (unallocated payment,
+journal credit, credit note) is an advance.
 
-Credit bigger than all the bills: nothing is owed, the party has no rows.
-Debit (journals owe more than the credits pay): the bills stay in full, and the
-journal debits not covered by the credits also show, oldest credit used on
-the oldest journal first, so the party total stays right.
+Merged: the party's advances are knocked off its bills oldest first (FIFO).
+A bill paid down to zero is not shown; a partly paid bill shows only what is
+left, in the range of its own age. The advance is already taken off, so there
+are no Total Due / Total Advance columns: Total Outstanding = sum of the age
+columns. Advance bigger than all the bills: nothing is owed, the party has no
+rows.
 
-(The Summary report still uses _merge: every debit row is a bill there.)
+Not merged, for every row and total:
+  Total Due         = sum of the age columns
+  Total Outstanding = Total Due - Total Advance
 
-Not merged: the bill-wise outstanding exactly as Accounts Receivable /
-Payable has it, advance rows included.
+Not merged: bills as Accounts Receivable / Payable has them, in the age
+columns. Advances are not in the age columns: each shows on its own row, after
+the party's bills, in Total Advance, and is taken off in Total Outstanding.
 
 Accounts
 --------
@@ -57,9 +58,6 @@ from frappe.utils import cint, flt, getdate, nowdate
 from erpnext.accounts.report.accounts_receivable.accounts_receivable import ReceivablePayableReport
 
 DEFAULT_RANGE = "30, 60, 90, 120"
-
-# What counts as a bill in Merged.
-BILL_TYPES = {"Customer": "Sales Invoice", "Supplier": "Purchase Invoice"}
 
 # Amounts smaller than this are rounding left-overs, not money owed.
 ZERO = 0.005
@@ -89,7 +87,7 @@ def execute(filters=None):
 		return columns, []
 
 	rows = _ar_rows(filters, party_type, ranges)
-	rows = _merge_invoice_wise(rows, ranges, BILL_TYPES[party_type]) if merged else _not_merged(rows)
+	rows = _merged(rows, ranges) if merged else _not_merged(rows, ranges)
 	return columns, _with_totals(rows, ranges, merged)
 
 
@@ -101,6 +99,14 @@ def _ranges(text):
 
 def _range_fields(ranges):
 	return [f"range{i}" for i in range(1, len(ranges) + 2)]
+
+
+def _amount_fields(ranges, merged):
+	"""The amount columns that are added up in total rows."""
+	fields = [*_range_fields(ranges), "outstanding"]
+	if not merged:
+		fields += ["total_due", "total_advance"]
+	return fields
 
 
 def _columns(party_type, ranges, merged):
@@ -121,7 +127,9 @@ def _columns(party_type, ranges, merged):
 		columns.append({"label": f"{low}-{high}", "fieldname": field, "fieldtype": "Currency", "width": 110})
 		if str(high).isdigit():
 			low = cint(high) + 1
-	if merged:
+	if not merged:
+		# Merged has already taken the advance off the bills, so its
+		# Total Outstanding is the sum of the age columns.
 		columns += [
 			{"label": _("Total Due"), "fieldname": "total_due", "fieldtype": "Currency", "width": 120},
 			{"label": _("Total Advance"), "fieldname": "total_advance", "fieldtype": "Currency", "width": 120},
@@ -200,111 +208,62 @@ def _with_sub_groups(doctype, groups):
 	return allowed
 
 
-def _not_merged(rows):
-	"""AR's rows as they are, party by party, oldest first."""
-	return sorted(rows, key=lambda r: ((r.party_name or "").lower(), r.party, getdate(r.posting_date), r.voucher_no))
-
-
-def _merge_invoice_wise(rows, ranges, bill_type):
-	"""Each party's unpaid invoices after its other rows are used FIFO.
-
-	Bills = rows of bill_type with a positive outstanding. All other rows are
-	summed into `other`. Negative `other` (a credit) pays the bills oldest
-	first. Positive `other` (more owed than the bills): bills stay in full and
-	the other debit rows are shown, after the other credit rows are used on
-	them oldest first. Per row: Total Due = outstanding before, Total Advance =
-	amount used on it, Total Outstanding = what is left.
-	"""
-	fields = _range_fields(ranges)
+def _by_party(rows):
+	"""Rows grouped by party, parties in name order, each party's rows oldest first."""
 	by_party = {}
 	for r in rows:
 		by_party.setdefault(r.party, []).append(r)
-
 	out = []
 	for party in sorted(by_party, key=lambda p: ((by_party[p][0].party_name or "").lower(), p)):
-		party_rows = by_party[party]
-		bills = [r for r in party_rows if r.voucher_type == bill_type and r.outstanding > ZERO]
-		others = [r for r in party_rows if not (r.voucher_type == bill_type and r.outstanding > ZERO)]
-		other_total = sum(r.outstanding for r in others)
-
-		if other_total < -ZERO:
-			# Credit: pay the bills with it.
-			debits, credit = bills, -other_total
-		else:
-			# Debit or zero: bills stay in full; other credits pay the other debits.
-			out.extend(_left_after(bills, 0.0, fields, ranges))
-			debits = [r for r in others if r.outstanding > ZERO]
-			credit = -sum(r.outstanding for r in others if r.outstanding < -ZERO)
-		out.extend(_left_after(debits, credit, fields, ranges))
+		out.append(sorted(by_party[party], key=lambda r: (getdate(r.posting_date), r.voucher_no)))
 	return out
 
 
-def _left_after(debits, credit, fields, ranges):
-	"""Use `credit` on the debit rows oldest first; return the rows with something left."""
-	out = []
-	for d in sorted(debits, key=lambda r: (getdate(r.posting_date), r.voucher_no)):
-		used = min(credit, d.outstanding)
-		credit -= used
-		left = flt(d.outstanding - used, 2)
-		if left <= ZERO:
-			continue
-		row = frappe._dict(d, total_due=d.outstanding, total_advance=used, outstanding=left)
-		for f in fields:
-			row[f] = 0.0
-		row[_range_field_for_age(d.age, ranges)] = left
-		out.append(row)
-	return out
+def _not_merged(rows, ranges):
+	"""Per party: its bills as AR has them, then its advances on their own rows.
 
-
-def _merge(rows, ranges):
-	"""Knock each party's advance rows off its bills, oldest bill first.
-
-	Per bill: Total Due = what AR says is outstanding on it, Total Advance =
-	the part of the party's advance used on it, Total Outstanding = the rest,
-	placed in the range of the bill's own age. Bills paid to zero are dropped.
+	Bill row: age columns as AR, Total Due = outstanding, Total Advance = 0.
+	Advance row: age columns 0, Total Due = 0, Total Advance = the advance,
+	Total Outstanding = minus the advance.
 	"""
 	fields = _range_fields(ranges)
-	by_party = {}
-	for r in rows:
-		by_party.setdefault(r.party, []).append(r)
-
 	out = []
-	for party in sorted(by_party, key=lambda p: ((by_party[p][0].party_name or "").lower(), p)):
-		party_rows = by_party[party]
-		bills = sorted((r for r in party_rows if r.outstanding > ZERO), key=lambda r: (getdate(r.posting_date), r.voucher_no))
+	for party_rows in _by_party(rows):
+		bills = [r for r in party_rows if r.outstanding > ZERO]
+		advances = [r for r in party_rows if r.outstanding < -ZERO]
+		for bill in bills:
+			out.append(frappe._dict(bill, total_due=bill.outstanding, total_advance=0.0))
+		for adv in advances:
+			row = frappe._dict(adv, total_due=0.0, total_advance=-adv.outstanding, outstanding=adv.outstanding)
+			for f in fields:
+				row[f] = 0.0
+			out.append(row)
+	return out
+
+
+def _merged(rows, ranges):
+	"""Per party: its advances knocked off its bills oldest first (FIFO).
+
+	A bill paid to zero is dropped. A partly paid bill shows only what is left,
+	in the range of its own age, and as its Total Outstanding.
+	Advance left over after all the bills is not shown.
+	"""
+	fields = _range_fields(ranges)
+	out = []
+	for party_rows in _by_party(rows):
+		bills = [r for r in party_rows if r.outstanding > ZERO]
 		advance_left = -sum(r.outstanding for r in party_rows if r.outstanding < -ZERO)
-
 		for bill in bills:
 			used = min(advance_left, bill.outstanding)
 			advance_left -= used
 			left = flt(bill.outstanding - used, 2)
 			if left <= ZERO:
 				continue
-			row = frappe._dict(bill, total_due=bill.outstanding, total_advance=used, outstanding=left)
+			row = frappe._dict(bill, outstanding=left)
 			for f in fields:
 				row[f] = 0.0
 			row[_range_field_for_age(bill.age, ranges)] = left
 			out.append(row)
-
-		if advance_left > ZERO:
-			# More advance than bills: what is left is owed back to / by the party.
-			first = party_rows[0]
-			out.append(
-				frappe._dict(
-					party=party,
-					party_name=first.party_name,
-					party_group=first.party_group,
-					party_group_name=first.party_group_name,
-					voucher_type=None,
-					voucher_no=_("Advance"),
-					posting_date=None,
-					age=None,
-					total_due=0.0,
-					total_advance=advance_left,
-					outstanding=-advance_left,
-					**{f: 0.0 for f in fields},
-				)
-			)
 	return out
 
 
@@ -318,7 +277,7 @@ def _range_field_for_age(age, ranges):
 
 def _with_totals(rows, ranges, merged):
 	"""One total row per party (when it has more than one row) and a grand total."""
-	fields = [*_range_fields(ranges), "outstanding"] + (["total_due", "total_advance"] if merged else [])
+	fields = _amount_fields(ranges, merged)
 	out, grand = [], {f: 0.0 for f in fields}
 	i = 0
 	while i < len(rows):

@@ -21,6 +21,55 @@ function ageing_set_default_accounts() {
 		});
 }
 
+// A MultiSelectList filter shows a chosen item by its label only while that
+// item is in the dropdown's loaded list; otherwise it shows the id
+// (NGI-CUS-01203). This looks up the chosen items' names and puts them back,
+// so the filter shows "Rasmi Store" / the group's name.
+const AGEING_NAME_SOURCES = {
+	customer_group: ["Customer Group", "customer_group_name"],
+	supplier_group: ["Supplier Group", "supplier_group_name"],
+	party: null, // Customer or Supplier, from the Party Type filter
+};
+
+function ageing_show_names(fieldname) {
+	const filter = frappe.query_report.get_filter(fieldname);
+	const values = (filter && filter.get_value()) || [];
+	if (!values.length) return;
+	let source = AGEING_NAME_SOURCES[fieldname];
+	if (!source) {
+		const party_type = frappe.query_report.get_filter_value("party_type") || "Customer";
+		source = [party_type, party_type === "Supplier" ? "supplier_name" : "customer_name"];
+	}
+	const [doctype, name_field] = source;
+	frappe.db
+		.get_list(doctype, { filters: { name: ["in", values] }, fields: ["name", name_field], limit: values.length })
+		.then((rows) => {
+			const names = Object.fromEntries(rows.map((r) => [r.name, r[name_field] || r.name]));
+			const named = values.map((v) => ({ value: v, label: names[v] || v, description: v }));
+			filter._options = named.concat((filter._options || []).filter((o) => !values.includes(o.value)));
+			filter._selected_values = named;
+			filter.update_status();
+		});
+}
+
+// Make each name filter look the names up whenever its shown text is
+// refreshed with an id it has no name for — whatever set the value (a click,
+// the URL, a saved Prepared Report, the Summary / Ageing Report button).
+function ageing_patch_name_filters(report) {
+	Object.keys(AGEING_NAME_SOURCES).forEach((fieldname) => {
+		const filter = report.get_filter(fieldname);
+		if (!filter || filter._ageing_names_patched) return;
+		filter._ageing_names_patched = true;
+		const frappe_update_status = filter.update_status.bind(filter);
+		filter.update_status = function () {
+			frappe_update_status();
+			const known = (this._options || []).map((o) => o.value);
+			if ((this.values || []).some((v) => !known.includes(v))) ageing_show_names(fieldname);
+		};
+		ageing_show_names(fieldname); // a value set before this ran
+	});
+}
+
 frappe.query_reports["Ageing Report"] = {
 	filters: [
 		{
@@ -141,6 +190,7 @@ frappe.query_reports["Ageing Report"] = {
 
 	onload: function (report) {
 		ageing_set_default_accounts();
+		ageing_patch_name_filters(report);
 		// Jump to the party-wise summary with the same filters, as Accounts
 		// Receivable does for its Summary.
 		report.page.add_inner_button(__("Ageing Report Summary"), function () {

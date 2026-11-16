@@ -19,11 +19,11 @@ from frappe.utils import cint, flt
 from avinashgroup_app.avinash_group_app.report.ageing_report.ageing_report import (
 	SIDES,
 	ZERO,
+	_amount_fields,
 	_ar_rows,
 	_columns,
-	_merge,
+	_merged,
 	_not_merged,
-	_range_fields,
 	_ranges,
 )
 
@@ -40,17 +40,16 @@ def execute(filters=None):
 		return columns, []
 
 	rows = _ar_rows(filters, party_type, ranges)
-	rows = _merge(rows, ranges) if merged else _not_merged(rows)
+	rows = _merged(rows, ranges) if merged else _not_merged(rows, ranges)
 	return columns, _by_party(rows, ranges, merged)
 
 
 def _by_party(rows, ranges, merged):
 	"""One row per party (rows arrive grouped by party), then a grand total.
 
-	A party whose amounts all add up to zero is left out — in Not-merged mode
-	that is a party whose advance exactly covers its bills.
+	A party whose amounts all add up to zero is left out.
 	"""
-	fields = [*_range_fields(ranges), "outstanding"] + (["total_due", "total_advance"] if merged else [])
+	fields = _amount_fields(ranges, merged)
 	out, grand = [], {f: 0.0 for f in fields}
 	i = 0
 	while i < len(rows):
