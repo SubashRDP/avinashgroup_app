@@ -1,0 +1,148 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:mobile_no",
+ "creation": "2026-11-17 12:00:00.000000",
+ "description": "One portal login for a dealer, linked to every customer record that dealer buys under.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "login_section",
+  "full_name",
+  "mobile_no",
+  "email",
+  "column_break_login",
+  "enabled",
+  "send_password_by_sms",
+  "user",
+  "last_login",
+  "password_sent_on",
+  "customers_section",
+  "customers"
+ ],
+ "fields": [
+  {
+   "fieldname": "login_section",
+   "fieldtype": "Section Break",
+   "label": "Login"
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full Name",
+   "reqd": 1
+  },
+  {
+   "description": "The dealer logs in with this number. 10 digits, e.g. 9841234567.",
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Mobile No (Login)",
+   "options": "Phone",
+   "reqd": 1,
+   "set_only_once": 1,
+   "unique": 1
+  },
+  {
+   "description": "Optional. Leave blank if the dealer has no email.",
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email",
+   "set_only_once": 1
+  },
+  {
+   "fieldname": "column_break_login",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Untick to block this login. The customer links are kept.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Portal Access Enabled"
+  },
+  {
+   "default": "1",
+   "description": "When a password is created or reset, text it to the mobile number.",
+   "fieldname": "send_password_by_sms",
+   "fieldtype": "Check",
+   "label": "Send Password by SMS"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_login",
+   "fieldtype": "Datetime",
+   "is_virtual": 1,
+   "label": "Last Login",
+   "read_only": 1
+  },
+  {
+   "fieldname": "password_sent_on",
+   "fieldtype": "Datetime",
+   "label": "Password Last Set On",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "customers_section",
+   "fieldtype": "Section Break",
+   "label": "Customers this login can use"
+  },
+  {
+   "fieldname": "customers",
+   "fieldtype": "Table",
+   "label": "Customers",
+   "options": "Customer Portal Access Customer",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-17 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Customer Portal Access",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "write": 1
+  }
+ ],
+ "search_fields": "full_name",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
+ "track_changes": 1
+}
