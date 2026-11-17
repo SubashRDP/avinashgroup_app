@@ -150,6 +150,8 @@ doctype_js = {
     "Customer": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
     "Supplier": ["public/js/party_duplicate_check.js", "public/js/party_default_account.js"],
     "Item": "public/js/item_default_account.js",
+    # New Bank-type Account → popup to create its Bank Account. See custom_code/bank_account_from_account.py.
+    "Account": "public/js/account.js",
 }
 
 purchase_invoice_specific_events = {
