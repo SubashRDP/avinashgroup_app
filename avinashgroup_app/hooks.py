@@ -359,6 +359,12 @@ _je["before_insert"] = [
 # "Name of Transportor" on PI / PR. See custom_code/transporter.py.
 _add_doc_event("Supplier", "on_update", "avinashgroup_app.custom_code.transporter.add_supplier_as_transporter")
 
+# Accounts ticked "Is Vehicle Account" keep their Sub type list filled with the
+# company's vehicles. See custom_code/vehicle_account.py.
+_add_doc_event("Vehicle", "after_insert", "avinashgroup_app.custom_code.vehicle_account.add_vehicle_to_accounts")
+_add_doc_event("Account", "validate", "avinashgroup_app.custom_code.vehicle_account.fill_vehicles_when_ticked")
+_add_doc_event("Account", "validate", "avinashgroup_app.custom_code.vehicle_account.block_duplicate_vehicles")
+
 for _event, _handler in attendance_events.items():
     _add_doc_event("Attendance", _event, _handler)
 # Leave approved for a day the person already punched on: HRMS updates an
