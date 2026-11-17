@@ -66,5 +66,19 @@ function show_bank_account_dialog(frm) {
 				});
 		},
 	});
+	dialog.add_custom_action(__("Edit Full Form"), () => {
+		const values = dialog.get_values();
+		if (!values) return;
+
+		dialog.hide();
+		frappe.new_doc("Bank Account", {
+			account_name: frm.doc.account_name,
+			bank: values.bank,
+			bank_account_no: values.bank_account_no,
+			is_company_account: 1,
+			company: frm.doc.company,
+			account: frm.doc.name,
+		});
+	});
 	dialog.show();
 }
