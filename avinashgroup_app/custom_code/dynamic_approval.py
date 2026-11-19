@@ -40,19 +40,13 @@ _NOTIFY_FIELDS = [
 	"enable_reject_notification", "reject_email_template",
 ]
 
-# Doctypes that borrow ANOTHER doctype's Dynamic Approval Settings (rules +
-# approvers) instead of having their own. Memo Log uses the Purchase Order rules
-# (custom_created_by + custom_department) until memo-only settings are made;
-# then delete its entry here. Workflow and approval fields still live on the
-# borrowing doctype itself (see patches/setup_memo_log_approval.py).
-RULES_FROM_DOCTYPE = {
-	"Memo Log": "Purchase Order",
-}
-
-
-def _rules_doctype(doctype):
-	"""The doctype whose Dynamic Approval Settings apply to `doctype`."""
-	return RULES_FROM_DOCTYPE.get(doctype, doctype)
+# Doctypes whose approval sections need NO match criteria: a section that has
+# approvers but no criteria applies to every document of that company (score 0,
+# so a section whose criteria do match still wins). For every other doctype a
+# section without criteria matches nothing, as before. Kept to an explicit list
+# because the old Leave Application settings hold ~160 criteria-less sections
+# that must not turn into catch-alls.
+NO_CONDITION_DOCTYPES = {"Memo Log"}
 
 
 def _is_managed_doctype(doc):
@@ -74,7 +68,7 @@ def has_approval_config(doctype, company):
 		return False
 	return bool(frappe.db.get_all(
 		"Dynamic Approval Setting",
-		filters={"document_type": _rules_doctype(doctype), "company": company, "is_active": 1},
+		filters={"document_type": doctype, "company": company, "is_active": 1},
 		limit=1,
 	))
 
@@ -104,7 +98,7 @@ def _get_config_for_doc(doc):
 
 	settings = frappe.get_all(
 		"Dynamic Approval Setting",
-		filters={"document_type": _rules_doctype(doc.doctype), "company": company, "is_active": 1},
+		filters={"document_type": doc.doctype, "company": company, "is_active": 1},
 		fields=["name", "approver_table_fieldname", "current_level_fieldname", *_NOTIFY_FIELDS],
 	)
 	if not settings:
@@ -147,8 +141,13 @@ def _get_config_for_doc(doc):
 
 		for sec in all_sections:
 			criteria = criteria_by_section.get(sec, [])
-			# A section with zero criteria matches nothing.
 			if not criteria:
+				# Zero criteria matches nothing, except on NO_CONDITION_DOCTYPES
+				# where a section with approvers applies to every document.
+				if doc.doctype in NO_CONDITION_DOCTYPES and approvers_by_section.get(sec):
+					if best_score < 0:
+						best_score = 0
+						best_section = sec
 				continue
 
 			if all(
@@ -621,6 +620,7 @@ def _dispatch_notifications(doc, config):
 				# Comparison — same data as the View button, preferred quotations
 				# only, attached as a PDF (inline table if PDF generation fails).
 				attachments, comparison_inline = _get_comparison_for_email(doc)
+				attachments = (attachments or []) + _get_memo_pdf_for_email(doc)
 				approver_name = frappe.db.get_value("User", approver_user, "full_name") or approver_user
 				ctx = _notification_context(doc, approver_name=approver_name, current_level=current_level)
 				_send_templated_email(
@@ -714,6 +714,7 @@ def _dispatch_notifications(doc, config):
 			ctx,
 			doc,
 			extra_html=status_html,
+			attachments=_get_memo_pdf_for_email(doc),
 		)
 
 
@@ -813,6 +814,27 @@ def _build_status_table_html(doc, config):
 # Quotations are raised before the PO, so look back this many months from the
 # PO date. The Material Request + preferred filters do the precise scoping.
 _COMPARISON_LOOKBACK_MONTHS = 6
+
+
+def _get_memo_pdf_for_email(doc):
+	"""
+	Memo Log only: the memo itself as a PDF (the "Memo Log" print format), for
+	the approval-request and final mails. The mail still has its "Click here"
+	link. The approval box shows only on the final mail's PDF, because the print
+	format draws it only once the memo is approved (docstatus 1).
+	Returns [] for other doctypes, or if the PDF fails (the mail goes without it).
+	"""
+	if doc.doctype != "Memo Log":
+		return []
+	try:
+		pdf = frappe.attach_print(doc.doctype, doc.name, print_format="Memo Log", doc=doc)
+		return [pdf]
+	except Exception:
+		frappe.log_error(
+			title=f"Dynamic Approval: memo PDF failed for {doc.name}",
+			message=frappe.get_traceback(),
+		)
+		return []
 
 
 def _get_comparison_for_email(doc):

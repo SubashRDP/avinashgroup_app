@@ -73,10 +73,16 @@ def get_memo_template(template):
 
 
 @frappe.whitelist()
-def preview_memo(data):
-	"""Paper HTML for unsaved page values. Shows no approval table, because the
-	approvers are only worked out when the memo is generated (saved)."""
-	doc = frappe.new_doc("Memo Log")
+def preview_memo(data, name=None):
+	"""Paper HTML for unsaved values. Shows no approval table, because the box
+	prints only on an approved memo.
+	With `name` (the Memo Log form's live preview), it starts from that saved
+	memo so the Memo No stays; the unsaved values are laid on top, nothing is saved."""
+	if name and frappe.db.exists("Memo Log", name):
+		doc = frappe.get_doc("Memo Log", name)
+		doc.check_permission("read")
+	else:
+		doc = frappe.new_doc("Memo Log")
 	_apply(doc, data)
 	doc.set_table_data()
 	return render_memo_html(doc)
@@ -88,8 +94,8 @@ def generate_memo(data, name=None):
 	if it is still a draft. Returns the name, Memo No and final paper HTML."""
 	if name and frappe.db.exists("Memo Log", name):
 		doc = frappe.get_doc("Memo Log", name)
-		if doc.docstatus != 0:
-			frappe.throw(_("Memo {0} is already submitted and cannot be changed.").format(name))
+		if doc.docstatus != 0 or (doc.get("workflow_state") or "Draft") != "Draft":
+			frappe.throw(_("Memo {0} was already sent for approval and cannot be changed.").format(name))
 		_apply(doc, data)
 		doc.save()
 	else:

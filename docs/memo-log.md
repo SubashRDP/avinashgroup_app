@@ -30,16 +30,19 @@ field `custom_branch_name`). With no rule, it falls back to the doc name
 Flow: **Save** → Draft → **Actions → Submit for Approval** → Pending Approval → each approver
 **Approve**s in order → **Approved** (docstatus 1, locked). Reject cancels the memo, and Amend makes a new draft.
 
-- **Rules come from Purchase Order (for now).** Memo Log has no Dynamic Approval Setting of its own.
-  `RULES_FROM_DOCTYPE = {"Memo Log": "Purchase Order"}` in `custom_code/dynamic_approval.py` makes the
-  engine read the company's PO settings. When the memo's `custom_created_by` + `custom_department` match
-  a rule's criteria, that rule's approvers are the approvers, in order. The rule with more criteria wins.
-  If no rule matches, Submit for Approval auto-approves (engine behaviour).
-- **To switch to memo-only rules later:** create Dynamic Approval Settings with Document Type = Memo Log,
-  then delete the Memo Log entry from `RULES_FROM_DOCTYPE`.
+- **Editing:** only while Draft. From Submit for Approval onward the memo is locked for everyone (the
+  form goes read-only, and the server blocks changes made any other way). Approve/Reject still work. To fix
+  a mistake: Reject, then Amend.
+- **Its own settings, no conditions.** Create a **Dynamic Approval Setting** with Document Type =
+  **Memo Log** per company. Use fieldnames `custom_approval_approvers` / `custom_current_approval_level`.
+  Add a section with only **Approvers** (no match criteria), and every memo of that company goes through
+  that chain. Memo Log is in `NO_CONDITION_DOCTYPES` in `custom_code/dynamic_approval.py`; for every other
+  doctype a section without criteria still matches nothing. If a section WITH criteria matches (e.g.
+  Department = IT), it wins over the no-condition one.
+- **No Memo Log setting for the company** means Submit for Approval auto-approves (engine behaviour).
 - **Workflow + approval fields** are created by `patches/setup_memo_log_approval.py`. It runs the same
   steps as the Setup Workflow button, and it also runs on live during migrate.
-- **Access:** PO approvers usually have no Memo Log role. On Pending Approval, the memo is shared
+- **Access:** approvers usually have no Memo Log role. On Pending Approval, the memo is shared
   (read/write/submit) with everyone in its approver list, so they can open it from the email and approve.
   The memo creator still needs the Document Template User role.
 - **Testing from code:** call `avinashgroup_app.custom_code.workflow_admin_bypass.apply_workflow`, which
@@ -50,8 +53,8 @@ Flow: **Save** → Draft → **Actions → Submit for Approval** → Pending App
 blank row is for hand signing. The columns are:
 
 1. Requested By (the creator).
-2. The doc's own Approval Hierarchy rows.
-3. The rule's approvers.
+2. The setting section's approvers, in order. (The Approval Hierarchy table, for extra approvers, is
+   hidden and kept empty on memos.)
 
 The headings are Forwarded / Checked / Reviewed / Verified, and the last column is always Approved By.
 The designation comes from the Employee linked to each user, or failing that, the Employee with the same

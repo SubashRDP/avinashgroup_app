@@ -14,11 +14,18 @@ frappe.ui.form.on("Memo Log", {
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Generate Memo"), () => show_memo_paper(frm)).addClass("btn-primary");
 		}
+		lock_after_draft(frm);
+		// Extra approvers are not used on memos (the server empties this table).
+		// Hidden here too, because "Setup Workflow" on a setting un-hides it.
+		["custom_section_approval_hierarchy", "custom_approval_approvers"].forEach((f) => {
+			if (frm.fields_dict[f]) frm.toggle_display(f, false);
+		});
 		try {
 			render_table_editor(frm);
 		} catch (e) {
 			console.error("Memo Log: could not draw the table editor", e);
 		}
+		render_memo_preview(frm);
 	},
 
 	company(frm) {
@@ -88,9 +95,6 @@ function show_memo_paper(frm) {
 		args: { name: frm.doc.name },
 		freeze: true,
 		callback: (r) => {
-			const page = `<!doctype html><html><head><meta charset="utf-8">
-				<style>body{margin:0;padding:38px 45px;background:#fff}</style></head>
-				<body>${r.message || ""}</body></html>`;
 			const dialog = new frappe.ui.Dialog({
 				title: frm.doc.custom_branch_name || frm.doc.name,
 				size: "extra-large",
@@ -100,16 +104,111 @@ function show_memo_paper(frm) {
 				secondary_action: () =>
 					window.open(`/api/method/frappe.utils.print_format.download_pdf?${print_params({})}`, "_blank"),
 			});
-			dialog.$body.html(
-				`<div style="background:#f0f0f0;padding:12px">
-					<iframe style="display:block;width:100%;max-width:794px;height:75vh;margin:0 auto;border:0;
-						background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18)"
-						srcdoc="${frappe.utils.escape_html(page)}"></iframe>
-				</div>`
-			);
+			dialog.$body.html(memo_paper_html(r.message, "height:75vh"));
 			dialog.show();
 		},
 	});
+}
+
+// The "Memo Preview" tab, so there is no need to press Generate Memo to look at it.
+// Draft: drawn from the values on screen, unsaved edits included (nothing is saved).
+// Sent for approval / approved: the content is locked, so the saved memo is shown,
+// with the approval box once approved.
+function render_memo_preview(frm) {
+	const field = frm.get_field("memo_preview");
+	if (!field) return;
+	const wrapper = field.$wrapper;
+	if (frm.is_new()) {
+		wrapper.empty();
+		return;
+	}
+	const name = frm.doc.name;
+	const is_draft = frm.doc.docstatus === 0 && !is_sent_for_approval(frm);
+	const call = is_draft
+		? {
+				method: "avinashgroup_app.custom_code.document_generator.memo.preview_memo",
+				args: { name, data: preview_values(frm) },
+		  }
+		: {
+				method: "avinashgroup_app.custom_code.document_generator.memo.get_memo_html",
+				args: { name },
+		  };
+	frappe.call({
+		...call,
+		callback: (r) => {
+			// the user may have moved to another memo while this was loading
+			if (frm.doc.name !== name) return;
+			const note = frm.is_dirty()
+				? `<div class="text-warning small" style="margin-bottom:6px">${__("Showing unsaved changes. Save to keep them.")}</div>`
+				: "";
+			wrapper.html(note + memo_paper_html(r.message, "height:1123px"));
+			// grow the frame to the paper's real height (a long table can go past one page)
+			const frame = wrapper.find("iframe")[0];
+			frame.onload = () => {
+				const h = frame.contentDocument && frame.contentDocument.documentElement.scrollHeight;
+				if (h) frame.style.height = `${h + 10}px`;
+			};
+		},
+	});
+}
+
+// The on-screen memo content, for preview_memo.
+function preview_values(frm) {
+	const values = {};
+	PREVIEW_FIELDS.forEach((f) => (values[f] = frm.doc[f]));
+	return values;
+}
+
+// Redraw the preview shortly after the last change, not on every key press.
+function schedule_memo_preview(frm) {
+	clearTimeout(frm._memo_preview_timer);
+	frm._memo_preview_timer = setTimeout(() => render_memo_preview(frm), 500);
+}
+
+// A grey backdrop with the memo as one white A4-wide sheet in an iframe, so the
+// desk's CSS cannot change how the memo looks (Bootstrap's .label, see memo_log.html).
+function memo_paper_html(body, height_css) {
+	const page = `<!doctype html><html><head><meta charset="utf-8">
+		<style>body{margin:0;padding:38px 45px;background:#fff}</style></head>
+		<body>${body || ""}</body></html>`;
+	return `<div style="background:#f0f0f0;padding:12px">
+		<iframe style="display:block;width:100%;max-width:794px;${height_css};margin:0 auto;border:0;
+			background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18)"
+			srcdoc="${frappe.utils.escape_html(page)}"></iframe>
+	</div>`;
+}
+
+// The memo content is editable only while Draft (the server enforces this too,
+// see MemoLog.block_edits_after_draft).
+const MEMO_CONTENT_FIELDS = [
+	"memo_template", "company", "posting_date", "custom_department", "memo_title", "memo_to",
+	"memo_from", "memo_cc", "subject", "text_above", "text_below", "table_rows", "table_columns",
+];
+
+// Fields that change the paper; table_data holds the table cells.
+const PREVIEW_FIELDS = MEMO_CONTENT_FIELDS.concat(["table_data"]);
+
+// Any change to them redraws the preview. These run next to the handlers above.
+frappe.ui.form.on(
+	"Memo Log",
+	Object.fromEntries(PREVIEW_FIELDS.map((f) => [f, (frm) => schedule_memo_preview(frm)]))
+);
+
+function is_sent_for_approval(frm) {
+	return frm.doc.docstatus === 0 && !!frm.doc.workflow_state && frm.doc.workflow_state !== "Draft";
+}
+
+function lock_after_draft(frm) {
+	const locked = is_sent_for_approval(frm);
+	MEMO_CONTENT_FIELDS.forEach((f) => frm.set_df_property(f, "read_only", locked ? 1 : 0));
+	if (locked) {
+		// dashboard comment, not set_intro: the intro holds the approval level banner
+		frm.dashboard.add_comment(
+			__("This memo was sent for approval and can no longer be edited. To correct it, Reject it and then Amend."),
+			"orange",
+			true
+		);
+	}
 }
 
 function read_grid(frm) {
@@ -155,7 +254,7 @@ function render_table_editor(frm) {
 	}
 
 	const grid = make_grid(read_grid(frm), rows, cols);
-	const read_only = frm.doc.docstatus !== 0 || !frm.perm[0] || !frm.perm[0].write;
+	const read_only = frm.doc.docstatus !== 0 || is_sent_for_approval(frm) || !frm.perm[0] || !frm.perm[0].write;
 
 	let html = `<div style="overflow-x:auto"><table class="table table-bordered" style="margin:0">`;
 	grid.forEach((row, r) => {

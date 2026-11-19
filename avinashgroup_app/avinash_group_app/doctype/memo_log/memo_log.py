@@ -11,10 +11,12 @@ people come from Dynamic Approval Setting and approve in the system.
 
 Approval:
 - Memo Log is submittable and runs on the shared engine in
-  custom_code/dynamic_approval.py. For now it BORROWS the Purchase Order
-  Dynamic Approval Settings (RULES_FROM_DOCTYPE there): a rule whose
-  custom_created_by + custom_department match the memo gives the approvers,
-  in order. The workflow and approval fields are set up by
+  custom_code/dynamic_approval.py, with its OWN Dynamic Approval Settings
+  (Document Type = Memo Log, one per company). Memo Log is in the engine's
+  NO_CONDITION_DOCTYPES: a section with approvers and no match criteria applies
+  to every memo of that company. A section whose criteria match still wins.
+  No setting for the company = Submit for Approval auto-approves (engine).
+  The workflow and approval fields are set up by
   patches/setup_memo_log_approval.py.
 - The printed approver list asks the engine for its config (_get_config_for_doc),
   so the paper always shows the same people the workflow will ask. The paper
@@ -23,7 +25,7 @@ Approval:
   cleared, so a changed department picks the right rule. From Submit for
   Approval onward, the pinned rule is kept.
 - On Pending Approval the memo is shared with its approvers (read/write/submit),
-  because PO approvers usually have no Memo Log role.
+  because approvers usually have no Memo Log role.
 
 Boundary:
 - The memo number (custom_branch_name) comes from Numbering Configuration
@@ -37,6 +39,7 @@ See docs/memo-log.md.
 import json
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from avinashgroup_app.custom_code.dynamic_approval import (
@@ -56,12 +59,53 @@ FIRST_LABEL = "Requested By"
 LAST_LABEL = "Approved By"
 MIDDLE_LABELS = ["Forwarded By", "Checked By", "Reviewed By", "Verified By"]
 
+# The memo's own content. It can be changed only while the memo is Draft; from
+# Submit for Approval onward it is locked for everyone (approvers too).
+CONTENT_FIELDS = (
+	"memo_template",
+	"company",
+	"posting_date",
+	"custom_created_by",
+	"custom_department",
+	"memo_title",
+	"memo_to",
+	"memo_from",
+	"memo_cc",
+	"subject",
+	"text_above",
+	"text_below",
+	"table_rows",
+	"table_columns",
+	"table_data",
+)
+
 
 class MemoLog(Document):
 	def validate(self):
+		self.block_edits_after_draft()
 		self.set_table_data()
 		self.clear_extra_approvers()
 		self.set_approvers()
+
+	def block_edits_after_draft(self):
+		"""Throw if the memo content is changed after it left Draft. Workflow
+		saves (Approve / Reject) pass, because they change no content field.
+		To fix a mistake: Reject, then Amend (a new draft)."""
+		before = self.get_doc_before_save()
+		if not before or (before.get("workflow_state") or "Draft") == "Draft":
+			return
+		changed = [
+			self.meta.get_label(f)
+			for f in CONTENT_FIELDS
+			if str(self.get(f) if self.get(f) is not None else "") != str(before.get(f) if before.get(f) is not None else "")
+		]
+		if changed:
+			frappe.throw(
+				_("This memo is {0} and can no longer be changed ({1}). To correct it, Reject it and then Amend.").format(
+					_(before.get("workflow_state")), ", ".join(changed)
+				),
+				title=_("Memo is locked"),
+			)
 
 	def clear_extra_approvers(self):
 		"""Only the approval rule decides who approves a memo, so the engine's

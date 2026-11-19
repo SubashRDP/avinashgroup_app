@@ -4,6 +4,9 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "preview_tab",
+  "memo_preview",
+  "details_tab",
   "naming_series",
   "custom_branch_name",
   "memo_template",
@@ -37,6 +40,22 @@
   "approvers"
  ],
  "fields": [
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "preview_tab",
+   "fieldtype": "Tab Break",
+   "label": "Memo Preview"
+  },
+  {
+   "fieldname": "memo_preview",
+   "fieldtype": "HTML",
+   "label": "Memo Preview"
+  },
+  {
+   "fieldname": "details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Details"
+  },
   {
    "default": "MEMO-.YYYY.-.#####",
    "fieldname": "naming_series",
@@ -238,7 +257,7 @@
   }
  ],
  "links": [],
- "modified": "2026-11-18 14:00:00.000000",
+ "modified": "2026-11-19 13:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Memo Log",

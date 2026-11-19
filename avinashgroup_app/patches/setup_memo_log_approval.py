@@ -1,14 +1,15 @@
 """Put Memo Log under the Dynamic Approval workflow.
 
 Normally this is the "Setup Workflow" button on a Dynamic Approval Setting.
-Memo Log has no setting of its own: it borrows the Purchase Order rules
-(RULES_FROM_DOCTYPE in custom_code/dynamic_approval.py). Nobody would press that
-button for it, so this patch runs the same setup steps for Memo Log.
+This patch runs the same steps for Memo Log on every site during migrate, so
+the workflow exists before anyone creates a Memo Log setting. Pressing the
+button later is harmless (it is idempotent), but it un-hides the Approval
+Hierarchy table; the Memo Log form hides it again in its own JS.
 
 It adds the hidden level/approver fields, the Approval Hierarchy and History
 tables, and the workflow: Draft → Submit for Approval → Pending Approval →
-Approve (each level) → Approved. The fieldnames match the Purchase Order
-settings (custom_approval_approvers / custom_current_approval_level).
+Approve (each level) → Approved. Fieldnames: custom_approval_approvers /
+custom_current_approval_level (use the same on the Memo Log settings).
 
 It is idempotent, and safe to run again.
 """
