@@ -258,6 +258,7 @@ def _context(filters):
 		precision=UNIT_PRECISION.get(unit, OTHER_PRECISION),
 		show_value=cint(filters.get("show_value", 1)),
 		show_cylinders=cint(filters.get("show_cylinders", 1)),
+		show_narration=cint(filters.get("show_narration", 1)),
 		category_filter=_category_key(filters.get("voucher_category")),
 		customer=filters.get("customer"),
 		supplier=filters.get("supplier"),
@@ -531,6 +532,7 @@ def _enrich(ctx, sections):
 		or ctx.refinery
 	)
 	headers = _headers(ctx, moves) if needs_headers else {}
+	narrations = _narrations(moves) if ctx.show_narration and ctx.view in (VIEW_DETAIL, VIEW_STOCK_BOOK) else {}
 	lines = _item_lines(ctx, moves) if ctx.show_cylinders or ctx.view == VIEW_DETAIL else {}
 	ctx.sizes = {}
 	ctx.factor_mismatch = {}
@@ -552,12 +554,38 @@ def _enrich(ctx, sections):
 			)
 			if head.get(field)
 		)
+		move.narration = narrations.get((move.voucher_type, move.voucher_no), "")
 		move.cylinders = {}
 		move.remarks = []
 		for line in (lines.get(name) for name in move.detail_nos):
 			if line:
 				_count_cylinders(ctx, move, line)
 		move.visible = _visible(ctx, move)
+
+
+def _narrations(moves):
+	"""(voucher_type, voucher_no) -> the remark written on the voucher itself.
+
+	The same source fields and the same cleaning as General Ledger Posting
+	Detail (Sales / Purchase Invoice `remarks`, Purchase Receipt `custom_remark`,
+	...), so a voucher reads alike in both reports and a bare "No Remarks" or
+	"Note:" is dropped rather than printed.
+	"""
+	from avinashgroup_app.avinash_group_app.report.general_ledger_posting_detail import (
+		general_ledger_posting_detail as glpd,
+	)
+
+	raw = glpd._source_narrations(moves)
+	out = {}
+	for key, text in raw.items():
+		text = glpd._clean_narration(text)
+		if text:
+			# Tanker remarks are typed as one comma-joined run ("Sr.n.PK955,PDO.13257,
+			# Vn.no.NL01L2459,Challan no...."): with no space there is nowhere to wrap
+			# but mid-word, so the print cut "Chall / an". A space after each comma
+			# lets it wrap between the items.
+			out[key] = re.sub(r",(?=\S)", ", ", text)
+	return out
 
 
 def _joined(ctx, voucher_type, table, on, fields):
@@ -794,8 +822,10 @@ def _detail_view(ctx, sections):
 	columns += [
 		{"fieldname": "vehicle", "label": _("Vehicle"), "fieldtype": "Data", "width": 110},
 		{"fieldname": "reference", "label": _("Tanker / Reference"), "fieldtype": "Data", "width": 220},
-		{"fieldname": "remarks", "label": _("Remarks"), "fieldtype": "Data", "width": 200},
 	]
+	if ctx.show_narration:
+		columns.append({"fieldname": "narration", "label": _("Narration"), "fieldtype": "Data", "width": 260})
+	columns.append({"fieldname": "remarks", "label": _("Data Notes"), "fieldtype": "Data", "width": 200})
 
 	data = []
 	blocks = _blocks(ctx, sections)
@@ -839,6 +869,7 @@ def _move_row(ctx, move, running):
 		"out_value": flt(-move.value, 2) if not inward else 0,
 		"vehicle": move.vehicle,
 		"reference": move.reference,
+		"narration": move.narration,
 		"remarks": "; ".join(move.remarks),
 		"category": move.category,
 	}
@@ -1074,7 +1105,7 @@ def _stock_book_view(ctx, sections):
 				"balance_qty": _q(ctx, move.balance_qty),
 				"rate": _r(ctx, move.rate),
 				"balance_value": flt(move.balance_value, 2),
-				"remarks": "; ".join(move.remarks),
+				"remarks": "; ".join([move.narration] + move.remarks if move.narration else move.remarks),
 				"category": move.category,
 			})
 		data.append({

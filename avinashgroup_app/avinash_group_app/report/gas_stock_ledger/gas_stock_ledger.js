@@ -235,6 +235,14 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 			fieldtype: "Check",
 			default: 1,
 		},
+		{
+			// the remark written on each voucher (Sales / Purchase Invoice
+			// remarks), on screen and in both prints
+			fieldname: "show_narration",
+			label: __("Show Narration"),
+			fieldtype: "Check",
+			default: 1,
+		},
 	],
 
 	formatter: function (value, row, column, data, default_formatter) {
@@ -457,18 +465,26 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 		// item, blocks, Report Parameters), as General Ledger Posting Detail
 		// prints. The desk's own Menu > Print / PDF would dump the bare table with
 		// no company and no filters, so both are pointed here too.
-		const open_print = function () {
+		const open_print = function (style) {
 			const filters = report.get_values();
 			if (!filters || !filters.company || !filters.item_code) {
 				frappe.msgprint(__("Please select a Company and an Item."));
 				return;
 			}
 			window.open(
-				"/api/method/" + GSL_PRINT_METHOD + "?filters=" + encodeURIComponent(JSON.stringify(filters))
+				"/api/method/" + GSL_PRINT_METHOD +
+					"?filters=" + encodeURIComponent(JSON.stringify(filters)) +
+					"&style=" + (style || "standard")
 			);
 		};
-		report.print_report = open_print;
-		report.pdf_report = open_print;
-		report.page.add_inner_button(__("Print"), open_print);
+		report.print_report = () => open_print("standard");
+		report.pdf_report = () => open_print("standard");
+		report.page.add_inner_button(__("Print"), () => open_print("standard"));
+		report.page.add_inner_button(__("Standard"), () => open_print("standard"), __("Download PDF"));
+		report.page.add_inner_button(
+			__("Legacy Posting Detail"),
+			() => open_print("legacy"),
+			__("Download PDF")
+		);
 	},
 };
