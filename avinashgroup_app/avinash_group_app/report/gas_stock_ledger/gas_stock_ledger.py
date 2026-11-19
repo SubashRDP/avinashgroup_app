@@ -9,8 +9,21 @@ Why ERPNext's own Stock Ledger is not enough for Nepal Gas (measured on avinas1,
 * **One item, many units.** Each gas company keeps a single "LP Gas" item in Kg,
   buys it in 1 MT tanker loads and sells it as 14.2 / 7.1 / 5 / 19 / 47.5 / 50 /
   425 / 450 kg cylinders, 1 MT bulk and loose Kg. People read stock in MT and
-  sales in cylinders; the stock ledger only speaks Kg. This report shows Kg or
-  MT, and how many cylinders of each size moved.
+  sales in cylinders; the stock ledger only speaks Kg. This report shows the
+  quantity in MT, Kg or any UOM on the item (a balance of "14.2 KG" reads as
+  that many domestic cylinders' worth), and how many cylinders of each size moved.
+* **Where the gas came from.** Each tanker's Purchase Invoice names its
+  refinery (custom_refinery). Detail shows it per load, the Refinery filter
+  narrows to one, and the Refinery Summary view totals loads, quantity and cost
+  per refinery.
+* **Grouped like GL Posting Detail.** Group By decides what each block of the
+  Detail view (and the printed Posting Detail) is headed by: the Item (every
+  warehouse as one stock -- the default, because the warehouses are only an
+  accounting split), each Warehouse, each Party, each Refinery, or each
+  Movement type. Item and Warehouse blocks carry a running balance; the others
+  total their own in/out and close on the stock's opening and closing.
+* **Nepali dates.** Periods are picked as BS mitis (From/To Miti, synced to the
+  AD dates in the desk); Miti leads every row, days and months are labelled in BS.
 * **Two warehouses that never meet.** Purchases land in "Gas Purchase / Stock",
   sales leave "Gas Purchase / Stock (Sales)", and nothing ever transfers between
   them. Per warehouse, one only grows and the other is deeply negative. The
@@ -55,10 +68,31 @@ VIEW_DETAIL = "Detail"
 VIEW_DAILY = "Daily Summary"
 VIEW_MONTHLY = "Monthly Summary (BS)"
 VIEW_STOCK_BOOK = "Stock Book (मौज्दात खाता)"
+VIEW_REFINERY = "Refinery Summary"
 
-# Display unit -> kg in one unit. Stock UOM of every gas item is Kg.
+# Display units every Kg item offers, -> kg in one unit. The item's own UOMs
+# ("14.2 KG", "425 KG", ...) are added per item by _units().
 UNIT_FACTORS = {"MT": 1000.0, "Kg": 1.0}
 UNIT_PRECISION = {"MT": 3, "Kg": 2}
+# any other unit (a cylinder size, a non-weight UOM)
+OTHER_PRECISION = 2
+
+# The "1 MT" UOM is the MT unit under another name; offering both is noise.
+UNIT_ALIASES = {"1 MT": "MT"}
+
+# Shown for a purchase whose invoice names no refinery.
+NO_REFINERY = "(Not recorded)"
+
+# Group By: what each block of the Detail view and the print is headed by.
+GROUP_ITEM = "Item"
+GROUP_WAREHOUSE = "Warehouse"
+GROUP_PARTY = "Party"
+GROUP_REFINERY = "Refinery"
+GROUP_MOVEMENT = "Movement"
+GROUPS = (GROUP_ITEM, GROUP_WAREHOUSE, GROUP_PARTY, GROUP_REFINERY, GROUP_MOVEMENT)
+# Item and Warehouse blocks are stock pools with a balance of their own; a party,
+# a refinery or a movement type has no stock, only what moved through it.
+RUNNING_GROUPS = (GROUP_ITEM, GROUP_WAREHOUSE)
 
 # Every gas company's single stock item is named this on avinas1 (NGI-ITEM-00167,
 # NGG-ITEM-00152, NGK-ITEM-00008, NGN-ITEM-00150, GEPL-ITEM-00066).
@@ -149,6 +183,8 @@ def execute(filters=None):
 		columns, data = _summary_view(ctx, sections, by="month")
 	elif view == VIEW_STOCK_BOOK:
 		columns, data = _stock_book_view(ctx, sections)
+	elif view == VIEW_REFINERY:
+		columns, data = _refinery_view(ctx, sections)
 	else:
 		columns, data = _detail_view(ctx, sections)
 
@@ -163,6 +199,12 @@ def _context(filters):
 
 	Raises if company/item/dates are missing or the user cannot see the company.
 	"""
+	# A caller that sends only BS mitis (the API, a saved report from the desk
+	# whose AD dates were cleared) still gets its period.
+	for ad_field, miti_field in (("from_date", "from_miti"), ("to_date", "to_miti")):
+		if not filters.get(ad_field) and filters.get(miti_field):
+			filters[ad_field] = _miti_to_ad(filters[miti_field])
+
 	for field in ("company", "item_code", "from_date", "to_date"):
 		if not filters.get(field):
 			frappe.throw(_("{0} is required").format(frappe.unscrub(field)))
@@ -189,12 +231,16 @@ def _context(filters):
 	if not warehouses:
 		frappe.throw(_("{0} has no warehouses").format(company))
 
-	unit = filters.get("unit") if filters.get("unit") in UNIT_FACTORS else "MT"
-	# Kg/MT only make sense for an item stocked in Kg; anything else is shown
-	# in its own stock UOM.
-	weight_item = (item.stock_uom or "").lower() in ("kg", "kgs", "kilogram")
-	if not weight_item:
-		unit = item.stock_uom
+	weight_item = _is_weight(item.stock_uom)
+	units = OrderedDict(_units(item.name, item.stock_uom))
+	unit = UNIT_ALIASES.get(filters.get("unit"), filters.get("unit"))
+	if unit not in units:
+		unit = "MT" if weight_item else item.stock_uom
+
+	group_by = filters.get("group_by")
+	if group_by not in GROUPS:
+		# saved reports from before Group By carried the Warehouses switch
+		group_by = GROUP_WAREHOUSE if filters.get("warehouse_mode") == "By Warehouse" else GROUP_ITEM
 
 	return frappe._dict(
 		filters=filters,
@@ -203,18 +249,60 @@ def _context(filters):
 		to_date=to_date,
 		item=item,
 		warehouses=warehouses,
-		by_warehouse=filters.get("warehouse_mode") == "By Warehouse",
+		group_by=group_by,
+		by_warehouse=group_by == GROUP_WAREHOUSE,
 		view=filters.get("view") or VIEW_DETAIL,
 		unit=unit,
-		factor=UNIT_FACTORS.get(unit, 1.0),
-		precision=UNIT_PRECISION.get(unit, 3),
+		weight_item=weight_item,
+		factor=units[unit],
+		precision=UNIT_PRECISION.get(unit, OTHER_PRECISION),
 		show_value=cint(filters.get("show_value", 1)),
 		show_cylinders=cint(filters.get("show_cylinders", 1)),
 		category_filter=_category_key(filters.get("voucher_category")),
 		customer=filters.get("customer"),
 		supplier=filters.get("supplier"),
 		branch=filters.get("branch"),
+		refinery=filters.get("refinery"),
 	)
+
+
+def _is_weight(uom):
+	return (uom or "").lower() in ("kg", "kgs", "kilogram")
+
+
+def _units(item_code, stock_uom):
+	"""[(unit, stock-UOM qty in one unit)] the item's quantity can be shown in.
+
+	A Kg item offers MT and Kg, then each of its own UOMs by size ("5 KG" ...
+	"450 KG"). Another item offers its stock UOM and its UOMs. The item's own
+	conversion factor is used, so a mis-set one ("7.1 KG" = 7 on GEPL) shows
+	the item's view of that unit -- the same factor every invoice line used.
+	"""
+	units = OrderedDict()
+	if _is_weight(stock_uom):
+		units.update(UNIT_FACTORS)
+	else:
+		units[stock_uom] = 1.0
+	for uom, factor in frappe.get_all(
+		"UOM Conversion Detail",
+		filters={"parent": item_code, "parenttype": "Item"},
+		fields=["uom", "conversion_factor"],
+		order_by="conversion_factor",
+		as_list=True,
+	):
+		uom = UNIT_ALIASES.get(uom, uom) if _is_weight(stock_uom) else uom
+		if uom not in units and flt(factor) > 0:
+			units[uom] = flt(factor)
+	return list(units.items())
+
+
+def _miti_to_ad(miti):
+	from avinashgroup_app.utils.bs_miti import miti_to_ad
+
+	try:
+		return miti_to_ad(miti)
+	except Exception:
+		frappe.throw(_("{0} is not a valid Miti (use YYYY-MM-DD in BS)").format(miti))
 
 
 def _as_list(value):
@@ -435,7 +523,13 @@ def _enrich(ctx, sections):
 	moves = [m for s in sections.values() for m in s.movements]
 	# Summaries need party/branch only to apply those filters; skipping the
 	# header join saves ~4s on a year of NGI invoices.
-	needs_headers = ctx.view in (VIEW_DETAIL, VIEW_STOCK_BOOK) or ctx.customer or ctx.supplier or ctx.branch
+	needs_headers = (
+		ctx.view in (VIEW_DETAIL, VIEW_STOCK_BOOK, VIEW_REFINERY)
+		or ctx.customer
+		or ctx.supplier
+		or ctx.branch
+		or ctx.refinery
+	)
 	headers = _headers(ctx, moves) if needs_headers else {}
 	lines = _item_lines(ctx, moves) if ctx.show_cylinders or ctx.view == VIEW_DETAIL else {}
 	ctx.sizes = {}
@@ -447,13 +541,13 @@ def _enrich(ctx, sections):
 		move.party_id = head.get("party_id")
 		move.branch = head.get("branch")
 		move.vehicle = head.get("vehicle") or ""
+		move.refinery = head.get("refinery") or ""
 		move.number = head.get("number") or move.voucher_no
 		move.reference = " · ".join(
 			"{}: {}".format(label, head[field])
 			for field, label in (
 				("pdo", "PDO"),
 				("challan", "Challan"),
-				("refinery", "Refinery"),
 				("transporter", "Transporter"),
 			)
 			if head.get(field)
@@ -569,6 +663,8 @@ def _visible(ctx, move):
 		return False
 	if ctx.branch and move.branch != ctx.branch:
 		return False
+	if ctx.refinery and move.refinery != ctx.refinery:
+		return False
 	return True
 
 
@@ -601,17 +697,87 @@ def _miti(date):
 	return bs_date_str(date)
 
 
+def _blocks(ctx, sections):
+	"""The blocks Detail and the print show, in order, and whether they run a balance.
+
+	Item / Warehouse: one block per stock section, with its own opening, running
+	balance and closing. Party / Refinery / Movement: the pooled stock's visible
+	movements split by that key; each block totals what moved through it.
+	"""
+	if ctx.group_by in RUNNING_GROUPS:
+		blocks = []
+		for section in sections.values():
+			blocks.append(
+				frappe._dict(
+					code="" if section.key else ctx.item.name,
+					desc=section.key or ctx.item.item_name,
+					sub=bool(section.key),
+					running=True,
+					opening=section.opening,
+					closing=section.closing,
+					moves=[m for m in section.movements if m.visible],
+				)
+			)
+		return blocks
+
+	groups = {}
+	for section in sections.values():
+		for move in section.movements:
+			if not move.visible:
+				continue
+			key, code, desc, order = _group_of(ctx, move)
+			block = groups.get(key)
+			if not block:
+				block = groups[key] = frappe._dict(
+					code=code, desc=desc, order=order, sub=True, running=False, moves=[]
+				)
+			block.moves.append(move)
+	return sorted(groups.values(), key=lambda b: b.order)
+
+
+def _group_of(ctx, move):
+	"""(key, code, description, sort order) of the block a movement belongs to."""
+	if ctx.group_by == GROUP_PARTY:
+		if not (move.party_id or move.party):
+			return ("", "", _("No Party"), (1, ""))
+		return (move.party_id or move.party, move.party_id or "", move.party or move.party_id, (0, (move.party or "").lower()))
+	if ctx.group_by == GROUP_REFINERY:
+		if move.category in ("purchase", "purchase_return"):
+			if move.refinery:
+				return (move.refinery, move.refinery, _("{0} Refinery").format(move.refinery), (0, move.refinery))
+			return (NO_REFINERY, "", _("Purchases, refinery not recorded"), (1, ""))
+		return ("~other", "", _("Sales and other movements"), (2, ""))
+	# Movement
+	english, nepali = CATEGORIES[move.category]
+	return (move.category, _(english), nepali, (list(CATEGORIES).index(move.category), ""))
+
+
+def _pool_totals(sections):
+	"""Opening and closing of the whole stock, across every section."""
+	def total(attr):
+		qty = sum(s[attr].qty for s in sections.values())
+		value = sum(s[attr].value for s in sections.values())
+		if len(sections) == 1:
+			rate = next(iter(sections.values()))[attr].rate
+		else:
+			rate = value / qty if qty > EPS else 0.0
+		return frappe._dict(qty=qty, value=value, rate=rate)
+
+	return total("opening"), total("closing")
+
+
 def _detail_view(ctx, sections):
 	u = ctx.unit
 	columns = [
-		{"fieldname": "posting_date", "label": _("Date"), "fieldtype": "Date", "width": 95},
 		{"fieldname": "miti", "label": _("Miti"), "fieldtype": "Data", "width": 95},
+		{"fieldname": "posting_date", "label": _("Date (AD)"), "fieldtype": "Date", "width": 95},
 		{"fieldname": "type", "label": _("Type"), "fieldtype": "Data", "width": 120},
 		{"fieldname": "voucher_no", "label": _("Voucher No"), "fieldtype": "HTML", "width": 150},
 		{"fieldname": "party", "label": _("Party"), "fieldtype": "Data", "width": 200},
 	]
-	if ctx.by_warehouse:
-		columns.append({"fieldname": "warehouse", "label": _("Warehouse"), "fieldtype": "Data", "width": 160})
+	# only when a load in the period names one: a sales-only period stays as it was
+	if any(m.refinery for s in sections.values() for m in s.movements if m.visible):
+		columns.append({"fieldname": "refinery", "label": _("Refinery"), "fieldtype": "Data", "width": 100})
 	columns += _size_columns(ctx)
 	columns += [
 		{"fieldname": "in_qty", "label": _("In ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 105},
@@ -632,42 +798,60 @@ def _detail_view(ctx, sections):
 	]
 
 	data = []
-	for section in sections.values():
-		if ctx.by_warehouse:
-			data.append({"party": section.key, "is_heading": 1, "bold": 1})
-		data.append(_balance_row(ctx, _("Opening Balance"), section.opening, ctx.from_date))
+	blocks = _blocks(ctx, sections)
+	for block in blocks:
+		if block.sub or len(blocks) > 1:
+			heading = "{0}   {1}".format(block.code, block.desc).strip() if block.code else block.desc
+			data.append({"type": heading, "is_heading": 1, "bold": 1})
+		if block.running:
+			data.append(_balance_row(ctx, _("Opening Balance"), block.opening, ctx.from_date))
 		total = _Totals()
-		for move in section.movements:
-			if not move.visible:
-				continue
+		for move in block.moves:
 			total.add(move)
-			inward = move.qty > 0
-			row = {
-				"posting_date": move.posting_date,
-				"miti": _miti(move.posting_date),
-				"type": CATEGORIES[move.category][0],
-				"voucher_no": voucher_link(move.voucher_type, move.voucher_no, move.number),
-				"voucher_number": move.number,
-				"party": move.party,
-				"warehouse": move.warehouse,
-				"in_qty": _q(ctx, move.qty) if inward else 0,
-				"out_qty": _q(ctx, -move.qty) if not inward else 0,
-				"balance_qty": _q(ctx, move.balance_qty),
-				"rate": _r(ctx, move.rate),
-				"in_value": flt(move.value, 2) if inward else 0,
-				"out_value": flt(-move.value, 2) if not inward else 0,
-				"balance_value": flt(move.balance_value, 2),
-				"vehicle": move.vehicle,
-				"reference": move.reference,
-				"remarks": "; ".join(move.remarks),
-				"category": move.category,
-			}
-			for key, count in move.cylinders.items():
-				row["cyl_" + key] = count
-			data.append(row)
+			data.append(_move_row(ctx, move, block.running))
 		data.append(total.row(ctx, _("Period Total")))
-		data.append(_balance_row(ctx, _("Closing Balance"), section.closing, ctx.to_date))
+		if block.running:
+			data.append(_balance_row(ctx, _("Closing Balance"), block.closing, ctx.to_date))
+
+	if ctx.group_by not in RUNNING_GROUPS or len(blocks) > 1:
+		# the stock as a whole, under blocks that are not themselves the stock
+		opening, closing = _pool_totals(sections)
+		data.append({"type": _("Stock"), "is_heading": 1, "bold": 1})
+		data.append(_balance_row(ctx, _("Opening Balance"), opening, ctx.from_date))
+		data.append(_balance_row(ctx, _("Closing Balance"), closing, ctx.to_date))
 	return columns, data
+
+
+def _move_row(ctx, move, running):
+	inward = move.qty > 0
+	row = {
+		"posting_date": move.posting_date,
+		"miti": _miti(move.posting_date),
+		"type": CATEGORIES[move.category][0],
+		"voucher_no": voucher_link(move.voucher_type, move.voucher_no, move.number),
+		"voucher_number": move.number,
+		"party": move.party,
+		"refinery": move.refinery,
+		"warehouse": move.warehouse,
+		"in_qty": _q(ctx, move.qty) if inward else 0,
+		"out_qty": _q(ctx, -move.qty) if not inward else 0,
+		"in_value": flt(move.value, 2) if inward else 0,
+		"out_value": flt(-move.value, 2) if not inward else 0,
+		"vehicle": move.vehicle,
+		"reference": move.reference,
+		"remarks": "; ".join(move.remarks),
+		"category": move.category,
+	}
+	if running:
+		# a party or refinery has no stock of its own; its rows carry no balance
+		row.update(
+			balance_qty=_q(ctx, move.balance_qty),
+			rate=_r(ctx, move.rate),
+			balance_value=flt(move.balance_value, 2),
+		)
+	for key, count in move.cylinders.items():
+		row["cyl_" + key] = count
+	return row
 
 
 def _balance_row(ctx, label, bal, date):
@@ -723,10 +907,10 @@ def _summary_view(ctx, sections, by):
 	"""One row per day (AD + Miti) or per BS month, with the period's flow."""
 	u = ctx.unit
 	columns = [
-		{"fieldname": "period", "label": _("Date") if by == "day" else _("Month (BS)"), "fieldtype": "Data", "width": 130},
+		{"fieldname": "period", "label": _("Miti") if by == "day" else _("Month (BS)"), "fieldtype": "Data", "width": 130},
 	]
 	if by == "day":
-		columns.append({"fieldname": "miti", "label": _("Miti"), "fieldtype": "Data", "width": 95})
+		columns.append({"fieldname": "ad_date", "label": _("Date (AD)"), "fieldtype": "Data", "width": 95})
 	columns.append({"fieldname": "opening_qty", "label": _("Opening ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 115})
 	for key, (english, _nepali) in CATEGORIES.items():
 		columns.append({"fieldname": key, "label": "{} ({})".format(_(english), u), "fieldtype": "Float", "precision": ctx.precision, "width": 115})
@@ -752,7 +936,7 @@ def _summary_view(ctx, sections, by):
 		for bucket in buckets:
 			row = {
 				"period": bucket.label,
-				"miti": bucket.get("miti"),
+				"ad_date": bucket.get("ad_date"),
 				"opening_qty": _q(ctx, bucket.opening.qty),
 				"closing_qty": _q(ctx, bucket.closing.qty),
 				"in_value": flt(bucket.totals.in_value, 2),
@@ -815,8 +999,8 @@ def _buckets(ctx, section, by):
 		bucket = buckets.get(key)
 		if bucket is None:
 			bucket = buckets[key] = frappe._dict(
-				label=frappe.format(move.posting_date, "Date"),
-				miti=_miti(move.posting_date),
+				label=_miti(move.posting_date),
+				ad_date=frappe.format(move.posting_date, "Date"),
 				moves=[],
 			)
 		bucket.setdefault("opening", balance)
@@ -908,6 +1092,82 @@ def _stock_book_view(ctx, sections):
 	return columns, data
 
 
+def _refinery_view(ctx, sections):
+	"""Where the gas came from: loads, quantity and landed cost per refinery.
+
+	Counts purchases and purchase returns only (a return nets against its
+	refinery's loads). Purchases whose invoice names no refinery are one row of
+	their own, so the total always equals the period's purchases.
+	"""
+	u = ctx.unit
+	columns = [
+		{"fieldname": "refinery", "label": _("Refinery"), "fieldtype": "Data", "width": 160},
+		{"fieldname": "loads", "label": _("Loads"), "fieldtype": "Int", "width": 80},
+		{"fieldname": "received", "label": _("Received ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 125},
+		{"fieldname": "returned", "label": _("Returned ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 125},
+		{"fieldname": "net", "label": _("Net ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 125},
+		{"fieldname": "share", "label": _("Share %"), "fieldtype": "Percent", "width": 90},
+	]
+	if ctx.show_value:
+		columns += [
+			{"fieldname": "value", "label": _("Net Cost"), "fieldtype": "Currency", "width": 140},
+			{"fieldname": "rate", "label": _("Avg Cost / {0}").format(u), "fieldtype": "Currency", "width": 125},
+		]
+	columns += [
+		{"fieldname": "first_miti", "label": _("First Load (Miti)"), "fieldtype": "Data", "width": 120},
+		{"fieldname": "last_miti", "label": _("Last Load (Miti)"), "fieldtype": "Data", "width": 120},
+	]
+
+	rows = {}
+	for section in sections.values():
+		for move in section.movements:
+			if not move.visible or move.category not in ("purchase", "purchase_return"):
+				continue
+			key = move.refinery or NO_REFINERY
+			row = rows.setdefault(key, frappe._dict(refinery=key, loads=0, in_kg=0.0, out_kg=0.0, value=0.0, first=None, last=None))
+			if move.category == "purchase":
+				row.loads += 1
+				row.in_kg += move.qty
+				row.first = min(row.first or move.posting_date, move.posting_date)
+				row.last = max(row.last or move.posting_date, move.posting_date)
+			else:
+				row.out_kg -= move.qty
+			row.value += move.value
+
+	net_total = sum(r.in_kg - r.out_kg for r in rows.values())
+	# biggest supplier of gas first, "(Not recorded)" always last
+	ordered = sorted(rows.values(), key=lambda r: (r.refinery == NO_REFINERY, -(r.in_kg - r.out_kg)))
+	data = [_refinery_row(ctx, r, net_total) for r in ordered]
+	if data:
+		total = frappe._dict(
+			refinery=_("Total"),
+			loads=sum(r.loads for r in rows.values()),
+			in_kg=sum(r.in_kg for r in rows.values()),
+			out_kg=sum(r.out_kg for r in rows.values()),
+			value=sum(r.value for r in rows.values()),
+			first=min((r.first for r in rows.values() if r.first), default=None),
+			last=max((r.last for r in rows.values() if r.last), default=None),
+		)
+		data.append(dict(_refinery_row(ctx, total, net_total), bold=1, is_total=1))
+	return columns, data
+
+
+def _refinery_row(ctx, r, net_total):
+	net = r.in_kg - r.out_kg
+	return {
+		"refinery": r.refinery,
+		"loads": r.loads,
+		"received": _q(ctx, r.in_kg),
+		"returned": _q(ctx, r.out_kg),
+		"net": _q(ctx, net),
+		"share": flt(net / net_total * 100, 2) if abs(net_total) > EPS else 0,
+		"value": flt(r.value, 2),
+		"rate": _r(ctx, r.value / net) if abs(net) > EPS else 0,
+		"first_miti": _miti(r.first) if r.first else "",
+		"last_miti": _miti(r.last) if r.last else "",
+	}
+
+
 # ----------------------------------------------- message, chart, cards
 
 
@@ -981,7 +1241,7 @@ def _cards(ctx, sections):
 		{"label": _("Closing ({0})").format(ctx.unit), "value": q(closing), "datatype": "Data",
 		 "indicator": "Red" if closing < -EPS else "Green"},
 	]
-	if ctx.unit in UNIT_FACTORS:
+	if ctx.weight_item:
 		cards.append({"label": _("Sold as 14.2 kg cylinders"), "value": cint(sold / DOMESTIC_CYLINDER_KG), "datatype": "Int"})
 	if ctx.show_value:
 		cards.append({"label": _("Closing Value"), "value": value, "datatype": "Currency"})
@@ -989,6 +1249,24 @@ def _cards(ctx, sections):
 
 
 # ------------------------------------------------------------ filter helpers
+
+
+@frappe.whitelist()
+def get_units(item_code):
+	"""The units the Show Quantity In filter offers: MT and Kg, then the item's UOMs by size."""
+	stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
+	if not stock_uom:
+		return []
+	return [unit for unit, _factor in _units(item_code, stock_uom)]
+
+
+@frappe.whitelist()
+def get_refineries():
+	"""The Refinery options, read from the Purchase Invoice field itself."""
+	df = frappe.get_meta("Purchase Invoice").get_field(HEADER_FIELDS["Purchase Invoice"]["refinery"])
+	if not df or df.fieldtype != "Select":
+		return []
+	return [o for o in (df.options or "").split("\n") if o]
 
 
 @frappe.whitelist()
