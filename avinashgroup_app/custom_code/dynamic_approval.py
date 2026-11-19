@@ -40,6 +40,20 @@ _NOTIFY_FIELDS = [
 	"enable_reject_notification", "reject_email_template",
 ]
 
+# Doctypes that borrow ANOTHER doctype's Dynamic Approval Settings (rules +
+# approvers) instead of having their own. Memo Log uses the Purchase Order rules
+# (custom_created_by + custom_department) until memo-only settings are made;
+# then delete its entry here. Workflow and approval fields still live on the
+# borrowing doctype itself (see patches/setup_memo_log_approval.py).
+RULES_FROM_DOCTYPE = {
+	"Memo Log": "Purchase Order",
+}
+
+
+def _rules_doctype(doctype):
+	"""The doctype whose Dynamic Approval Settings apply to `doctype`."""
+	return RULES_FROM_DOCTYPE.get(doctype, doctype)
+
 
 def _is_managed_doctype(doc):
 	"""
@@ -60,7 +74,7 @@ def has_approval_config(doctype, company):
 		return False
 	return bool(frappe.db.get_all(
 		"Dynamic Approval Setting",
-		filters={"document_type": doctype, "company": company, "is_active": 1},
+		filters={"document_type": _rules_doctype(doctype), "company": company, "is_active": 1},
 		limit=1,
 	))
 
@@ -90,7 +104,7 @@ def _get_config_for_doc(doc):
 
 	settings = frappe.get_all(
 		"Dynamic Approval Setting",
-		filters={"document_type": doc.doctype, "company": company, "is_active": 1},
+		filters={"document_type": _rules_doctype(doc.doctype), "company": company, "is_active": 1},
 		fields=["name", "approver_table_fieldname", "current_level_fieldname", *_NOTIFY_FIELDS],
 	)
 	if not settings:

@@ -1,0 +1,80 @@
+{#- Internal Memo print for Memo Log.
+    Top: heading + company, Memo No (left) and BS date (right).
+    Middle: To/From/CC, subject, text above, editable table, text below.
+    Bottom: approval table, only after the memo is fully approved (submitted). -#}
+{%- set grid = doc.get_table_grid() -%}
+{%- set memo_no = doc.custom_branch_name or doc.name or "(not generated yet)" -%}
+<style>
+	.memo { font-family: Calibri, Arial, sans-serif; font-size: 13px; color: #000; }
+	/* Frappe print theme greys th and tints labels; memo text is all black */
+	.memo, .memo th, .memo td, .memo p, .memo div { color: #000 !important; }
+	.memo .title { text-align: center; font-weight: bold; font-size: 17px; margin: 0; }
+	.memo .company { text-align: center; font-weight: bold; font-size: 17px; margin: 0 0 4px; }
+	.memo hr { border: 0; border-top: 1.5px solid #000; margin: 0 0 10px; }
+	.memo .ref-row { width: 100%; margin-bottom: 14px; font-weight: bold; }
+	.memo .ref-row td { padding: 0; }
+	/* Class names are memo-lbl / memo-val, NOT label / value: the desk print view
+	   loads Bootstrap, whose .label draws a small boxed badge. Sizes are pinned so
+	   the print theme cannot make the label and value cells differ. */
+	.memo .head-table td { font-size: 13px !important; line-height: 1.6 !important;
+		padding: 0 10px 0 0 !important; vertical-align: baseline !important; border: 0 !important; }
+	.memo .head-table td.memo-lbl { font-weight: bold; width: 55px; }
+	.memo .head-table td.memo-val { font-weight: bold; }
+	/* Paper margins for the browser Print button (the PDF uses the print format margins). */
+	@page { size: A4; margin: 12mm 14mm; }
+	.memo .subject { text-align: center; font-weight: bold; margin: 14px 0 8px; }
+	.memo .rich p { margin: 0 0 6px; }
+	/* separate (not collapse): Firefox print drops collapsed borders */
+	.memo table.grid { width: 100%; border-collapse: separate; border-spacing: 0;
+		border-top: 1px solid #000; border-left: 1px solid #000; margin: 4px 0 8px; }
+	.memo table.grid td, .memo table.grid th { border-right: 1px solid #000;
+		border-bottom: 1px solid #000; padding: 2px 5px; vertical-align: middle; }
+	.memo table.grid th { font-weight: bold; text-align: center; }
+	.memo table.approval td { text-align: center; font-size: 12px; }
+	.memo table.approval td.sign { height: 70px; }
+	.memo table.approval .bold { font-weight: bold; }
+</style>
+
+<div class="memo">
+	<p class="title">{{ doc.memo_title or "Internal Memo" }}</p>
+	<p class="company">{{ doc.company }}</p>
+	<hr>
+
+	<table class="ref-row">
+		<tr>
+			<td style="text-align:left">Ref. {{ memo_no }}</td>
+			<td style="text-align:right">Date: {{ bs_date_str(doc.posting_date, ".") if doc.posting_date else "" }}</td>
+		</tr>
+	</table>
+
+	<table class="head-table">
+		{%- if doc.memo_to %}<tr><td class="memo-lbl">To:</td><td class="memo-val">{{ doc.memo_to }}</td></tr>{% endif %}
+		{%- if doc.memo_from %}<tr><td class="memo-lbl">From:</td><td class="memo-val">{{ doc.memo_from }}</td></tr>{% endif %}
+		{%- if doc.memo_cc %}<tr><td class="memo-lbl">CC:</td><td class="memo-val">{{ doc.memo_cc }}</td></tr>{% endif %}
+	</table>
+
+	<div class="subject">Subject: {{ doc.subject or "" }}</div>
+
+	{%- if doc.text_above %}<div class="rich">{{ doc.text_above }}</div>{% endif %}
+
+	{%- if grid and grid[0] %}
+	<table class="grid">
+		<tr>{% for cell in grid[0] %}<th>{{ cell | e }}</th>{% endfor %}</tr>
+		{%- for row in grid[1:] %}
+		<tr>{% for cell in row %}<td>{{ cell | e }}</td>{% endfor %}</tr>
+		{%- endfor %}
+	</table>
+	{%- endif %}
+
+	{%- if doc.text_below %}<div class="rich">{{ doc.text_below }}</div>{% endif %}
+
+	{#- Shown only once fully approved (Approved state = docstatus 1). No signature images; the blank row is for hand signing. -#}
+	{%- if doc.approvers and doc.docstatus == 1 %}
+	<table class="grid approval">
+		<tr>{% for a in doc.approvers %}<td class="bold">{{ a.label or "" }}</td>{% endfor %}</tr>
+		<tr>{% for a in doc.approvers %}<td class="sign"></td>{% endfor %}</tr>
+		<tr>{% for a in doc.approvers %}<td>{{ a.full_name or "" }}</td>{% endfor %}</tr>
+		<tr>{% for a in doc.approvers %}<td class="bold">{{ a.designation or "" }}</td>{% endfor %}</tr>
+	</table>
+	{%- endif %}
+</div>

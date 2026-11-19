@@ -1,0 +1,304 @@
+{
+ "actions": [],
+ "creation": "2026-11-18 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "custom_branch_name",
+  "memo_template",
+  "company",
+  "company_abbr",
+  "column_break_top",
+  "posting_date",
+  "custom_created_by",
+  "custom_department",
+  "amended_from",
+  "memo_section",
+  "memo_title",
+  "memo_to",
+  "memo_from",
+  "memo_cc",
+  "column_break_memo",
+  "subject",
+  "text_above_section",
+  "text_above",
+  "table_section",
+  "table_rows",
+  "column_break_table",
+  "table_columns",
+  "table_editor_section",
+  "table_editor",
+  "table_data",
+  "text_below_section",
+  "text_below",
+  "approval_section",
+  "approval_rule",
+  "approvers"
+ ],
+ "fields": [
+  {
+   "default": "MEMO-.YYYY.-.#####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "MEMO-.YYYY.-.#####",
+   "no_copy": 1,
+   "print_hide": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "custom_branch_name",
+   "fieldtype": "Data",
+   "label": "Memo No",
+   "read_only": 1,
+   "no_copy": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Set on save from Numbering Configuration (Document Type = Memo Log)."
+  },
+  {
+   "fieldname": "memo_template",
+   "fieldtype": "Link",
+   "label": "Memo Template",
+   "options": "Document Template",
+   "reqd": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "in_standard_filter": 1,
+   "remember_last_selected_value": 1
+  },
+  {
+   "fetch_from": "company.abbr",
+   "fieldname": "company_abbr",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Company Abbr",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_top",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Today",
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "default": "__user",
+   "fieldname": "custom_created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "custom_department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Memo Log",
+   "no_copy": 1,
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "memo_section",
+   "fieldtype": "Section Break",
+   "label": "Memo"
+  },
+  {
+   "fieldname": "memo_title",
+   "fieldtype": "Data",
+   "label": "Memo Heading"
+  },
+  {
+   "fieldname": "memo_to",
+   "fieldtype": "Data",
+   "label": "To"
+  },
+  {
+   "fieldname": "memo_from",
+   "fieldtype": "Data",
+   "label": "From"
+  },
+  {
+   "fieldname": "memo_cc",
+   "fieldtype": "Data",
+   "label": "CC"
+  },
+  {
+   "fieldname": "column_break_memo",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Data",
+   "label": "Subject",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "text_above_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "text_above",
+   "fieldtype": "Text Editor",
+   "label": "Text Above Table"
+  },
+  {
+   "fieldname": "table_section",
+   "fieldtype": "Section Break",
+   "label": "Table"
+  },
+  {
+   "default": "0",
+   "description": "Including the heading row. 0 = no table.",
+   "fieldname": "table_rows",
+   "fieldtype": "Int",
+   "label": "Rows"
+  },
+  {
+   "fieldname": "column_break_table",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "table_columns",
+   "fieldtype": "Int",
+   "label": "Columns"
+  },
+  {
+   "fieldname": "table_editor_section",
+   "fieldtype": "Section Break",
+   "depends_on": "eval:doc.table_rows>0 && doc.table_columns>0"
+  },
+  {
+   "fieldname": "table_editor",
+   "fieldtype": "HTML",
+   "label": "Table Editor"
+  },
+  {
+   "fieldname": "table_data",
+   "fieldtype": "Code",
+   "options": "JSON",
+   "hidden": 1,
+   "label": "Table Data"
+  },
+  {
+   "fieldname": "text_below_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "text_below",
+   "fieldtype": "Text Editor",
+   "label": "Text Below Table"
+  },
+  {
+   "depends_on": "eval:!doc.__islocal",
+   "fieldname": "approval_section",
+   "fieldtype": "Section Break",
+   "label": "Approval"
+  },
+  {
+   "fieldname": "approval_rule",
+   "fieldtype": "Data",
+   "label": "Matched Approval Rule",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Filled on save from the Dynamic Approval Setting for Memo Log (Created By + Department). Empty = no rule matched, so no approval table is printed."
+  },
+  {
+   "fieldname": "approvers",
+   "fieldtype": "Table",
+   "label": "Approvers",
+   "options": "Memo Log Approver",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-18 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Memo Log",
+ "owner": "Administrator",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "naming_series:",
+ "title_field": "subject",
+ "show_title_field_in_link": 0,
+ "track_changes": 1,
+ "search_fields": "custom_branch_name,subject",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template Manager",
+   "share": 1,
+   "write": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Document Template User",
+   "share": 0,
+   "write": 1,
+   "if_owner": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1
+  }
+ ],
+ "default_print_format": "Memo Log",
+ "is_submittable": 1
+}

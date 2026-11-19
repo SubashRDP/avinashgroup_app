@@ -1,0 +1,69 @@
+/* Copyright (c) 2026, Raindrop and contributors */
+
+/* Left: memo inputs. Right: the paper preview. Stacks on narrow screens. */
+.mg-wrap {
+	display: grid;
+	grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.1fr);
+	gap: 14px;
+	align-items: start;
+}
+@media (max-width: 1100px) {
+	.mg-wrap {
+		grid-template-columns: 1fr;
+	}
+}
+.mg-card {
+	background: var(--card-bg, #fff);
+	border: 1px solid var(--border-color, #e2e2e2);
+	border-radius: var(--border-radius-md, 6px);
+	padding: 12px;
+	margin-bottom: 12px;
+}
+.mg-card h6 {
+	margin: 0 0 8px;
+	font-weight: 600;
+}
+.mg-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+.mg-row > .mg-field {
+	flex: 1 1 180px;
+	min-width: 160px;
+}
+.mg-card .awesomplete > ul {
+	z-index: 30;
+}
+.mg-grid td {
+	padding: 2px !important;
+}
+.mg-grid input {
+	min-width: 80px;
+}
+.mg-grid tr:first-child input {
+	font-weight: bold;
+	text-align: center;
+}
+
+/* Paper preview: an A4-like white sheet. */
+.mg-paper-col {
+	position: sticky;
+	top: 60px;
+}
+.mg-status {
+	margin-bottom: 6px;
+}
+.mg-paper {
+	background: #fff;
+	box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+	width: 100%;
+	max-width: 794px; /* 210mm at 96dpi */
+	margin: 0 auto;
+}
+.mg-paper iframe {
+	width: 100%;
+	height: 1000px;
+	border: 0;
+	display: block;
+}

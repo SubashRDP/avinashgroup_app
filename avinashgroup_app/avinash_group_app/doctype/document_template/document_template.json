@@ -14,6 +14,20 @@
   "print_orientation",
   "default_recipient_field",
   "is_active",
+  "is_memo",
+  "memo_section",
+  "memo_title",
+  "memo_to",
+  "memo_from",
+  "memo_cc",
+  "memo_subject",
+  "column_break_memo",
+  "memo_table_rows",
+  "memo_table_columns",
+  "memo_table_headers",
+  "memo_text_section",
+  "memo_text_above",
+  "memo_text_below",
   "email_section",
   "email_subject",
   "data_section",
@@ -85,9 +99,89 @@
    "label": "Is Active"
   },
   {
+   "default": "0",
+   "description": "Tick for an Internal Memo template. Memo templates are used by Memo Log, not by the Document Generator page.",
+   "fieldname": "is_memo",
+   "fieldtype": "Check",
+   "label": "Is Memo"
+  },
+  {
+   "collapsible": 0,
+   "depends_on": "is_memo",
+   "fieldname": "memo_section",
+   "fieldtype": "Section Break",
+   "label": "Memo Template"
+  },
+  {
+   "default": "Internal Memo",
+   "fieldname": "memo_title",
+   "fieldtype": "Data",
+   "label": "Memo Heading"
+  },
+  {
+   "fieldname": "memo_to",
+   "fieldtype": "Data",
+   "label": "To"
+  },
+  {
+   "fieldname": "memo_from",
+   "fieldtype": "Data",
+   "label": "From"
+  },
+  {
+   "fieldname": "memo_cc",
+   "fieldtype": "Data",
+   "label": "CC"
+  },
+  {
+   "fieldname": "memo_subject",
+   "fieldtype": "Data",
+   "label": "Subject"
+  },
+  {
+   "fieldname": "column_break_memo",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Rows in the middle table, including the heading row. 0 = no table.",
+   "fieldname": "memo_table_rows",
+   "fieldtype": "Int",
+   "label": "Table Rows"
+  },
+  {
+   "default": "0",
+   "fieldname": "memo_table_columns",
+   "fieldtype": "Int",
+   "label": "Table Columns"
+  },
+  {
+   "description": "Column headings, one per line (e.g. SN, Particular, Qty).",
+   "fieldname": "memo_table_headers",
+   "fieldtype": "Small Text",
+   "label": "Table Headings"
+  },
+  {
+   "depends_on": "is_memo",
+   "fieldname": "memo_text_section",
+   "fieldtype": "Section Break",
+   "label": "Memo Text"
+  },
+  {
+   "fieldname": "memo_text_above",
+   "fieldtype": "Text Editor",
+   "label": "Text Above Table"
+  },
+  {
+   "fieldname": "memo_text_below",
+   "fieldtype": "Text Editor",
+   "label": "Text Below Table"
+  },
+  {
    "fieldname": "email_section",
    "fieldtype": "Section Break",
-   "label": "Email"
+   "label": "Email",
+   "depends_on": "eval:!doc.is_memo"
   },
   {
    "description": "Subject line for the email. Supports Jinja placeholders.",
@@ -98,7 +192,8 @@
   {
    "fieldname": "data_section",
    "fieldtype": "Section Break",
-   "label": "Data (inputs the user fills + queries that fetch data)"
+   "label": "Data (inputs the user fills + queries that fetch data)",
+   "depends_on": "eval:!doc.is_memo"
   },
   {
    "description": "Inputs the user fills at generation. Each fieldname binds into every query as a named parameter, e.g. company -> %(company)s.",
@@ -118,7 +213,8 @@
    "collapsible": 1,
    "fieldname": "header_footer_section",
    "fieldtype": "Section Break",
-   "label": "Header & Footer"
+   "label": "Header & Footer",
+   "depends_on": "eval:!doc.is_memo"
   },
   {
    "fieldname": "hf_help",
@@ -160,7 +256,8 @@
   {
    "fieldname": "body_section",
    "fieldtype": "Section Break",
-   "label": "Document Body (HTML + Jinja)"
+   "label": "Document Body (HTML + Jinja)",
+   "depends_on": "eval:!doc.is_memo"
   },
   {
    "fieldname": "body_help",
@@ -176,7 +273,7 @@
   }
  ],
  "links": [],
- "modified": "2026-06-01 00:00:00.000000",
+ "modified": "2026-11-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Document Template",

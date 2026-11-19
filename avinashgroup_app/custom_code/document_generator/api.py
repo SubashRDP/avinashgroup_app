@@ -40,10 +40,11 @@ def _scrub(html):
 
 @frappe.whitelist()
 def get_matching_templates(company=None):
-	"""Active templates, optionally scoped to a company (for the selector)."""
+	"""Active letter templates, optionally scoped to a company (for the selector).
+	Memo templates are left out; they are used from Memo Log."""
 	templates = frappe.get_all(
 		"Document Template",
-		filters={"is_active": 1},
+		filters={"is_active": 1, "is_memo": 0},
 		fields=["name", "template_name"],
 		order_by="template_name asc",
 	)

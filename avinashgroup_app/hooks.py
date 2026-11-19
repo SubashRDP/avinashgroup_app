@@ -785,7 +785,7 @@ fixtures = [
     {
         "dt": "Document Template",
         "filters": {
-            "name": ["in", ["Customer Balance Confirmation", "Vendor Balance Confirmation"]]
+            "name": ["in", ["Customer Balance Confirmation", "Vendor Balance Confirmation", "Memo"]]
         },
     },
     # Company-wise link filtering rules. Exported so a new site gets the same
