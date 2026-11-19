@@ -1257,16 +1257,67 @@ def _cards(ctx, sections):
 # ------------------------------------------------------------ filter helpers
 
 
+# BS months in fiscal-year order: Shrawan (4) opens the year, Ashadh (3) closes it.
+BS_FY_MONTHS = (4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3)
+
+# Period choices around the months, in the order the dropdown lists them.
+PERIODS_BEFORE_MONTHS = ("Fiscal Year", "Last Fiscal Year", "This Fiscal Quarter", "Last Fiscal Quarter")
+PERIODS_AFTER_MONTHS = ("Today", "Yesterday", "Custom Dates")
+
+
+def _bs_month_number(name):
+	"""1-12 for a BS month name ("Shrawan" -> 4), else 0."""
+	from rdp_common_app.utils.bs_boundaries import BS_MONTH_NAMES
+
+	return next((number for number, month in BS_MONTH_NAMES.items() if month == name), 0)
+
+
+def _fy_start_bs_year(fiscal_year=None):
+	"""The BS year a fiscal year's Shrawan falls in (FY 83/84 -> 2083)."""
+	from rdp_common_app.utils.bs_boundaries import ad_to_bs
+
+	start = fiscal_year and frappe.db.get_value("Fiscal Year", fiscal_year, "year_start_date")
+	if start:
+		return ad_to_bs(getdate(start)).year
+	today = ad_to_bs(getdate(frappe.utils.nowdate()))
+	return today.year if today.month >= 4 else today.year - 1
+
+
 @frappe.whitelist()
-def get_bs_month_period(preset=None, bs_year=None, bs_month=None):
+def get_period_options(fiscal_year=None):
+	"""The Period dropdown: the fixed choices, with the selected fiscal year's
+	twelve Nepali months (Shrawan .. Ashadh) in it, and This / Last Month saying
+	which month they are."""
+	from rdp_common_app.utils.bs_boundaries import get_bs_month_name
+
+	this, last = get_bs_month_period("This Month"), get_bs_month_period("Last Month")
+	first_year = _fy_start_bs_year(fiscal_year)
+	options = [{"value": p, "label": _(p)} for p in PERIODS_BEFORE_MONTHS]
+	options.append({"value": "This Month", "label": _("This Month ({0})").format(this["label"])})
+	options.append({"value": "Last Month", "label": _("Last Month ({0})").format(last["label"])})
+	for month in BS_FY_MONTHS:
+		year = first_year if month >= 4 else first_year + 1
+		name = get_bs_month_name(month)
+		options.append({"value": name, "label": "{0} {1}".format(name, year)})
+	options += [{"value": p, "label": _(p)} for p in PERIODS_AFTER_MONTHS]
+	return options
+
+
+@frappe.whitelist()
+def get_bs_month_period(preset=None, fiscal_year=None, bs_year=None, bs_month=None):
 	"""AD dates of a Nepali month, and which month it is.
 
-	"This Month" / "Last Month" are today's BS month and the one before it; any
-	other call takes the BS year and month given (month 1 = Baisakh).
+	`preset` is "This Month", "Last Month", or a month's name ("Kartik"), which
+	is that month of `fiscal_year` (the current one if none). A caller may give
+	`bs_year` and `bs_month` (1 = Baisakh) instead.
 	"""
 	from rdp_common_app.utils.bs_boundaries import ad_to_bs, get_bs_month_range
 
-	if preset in ("This Month", "Last Month") or not (cint(bs_year) and cint(bs_month)):
+	named = _bs_month_number(preset)
+	if named:
+		first_year = _fy_start_bs_year(fiscal_year)
+		year, month = (first_year if named >= 4 else first_year + 1), named
+	elif preset in ("This Month", "Last Month") or not (cint(bs_year) and cint(bs_month)):
 		today = ad_to_bs(getdate(frappe.utils.nowdate()))
 		year, month = today.year, today.month
 		if preset == "Last Month":
