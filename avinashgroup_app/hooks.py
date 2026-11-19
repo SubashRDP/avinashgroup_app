@@ -573,6 +573,7 @@ _add_doc_event("*", "on_update", "avinashgroup_app.sparrow_sms.sms_dispatch.on_u
 # imports or the API came out blank. Cached map; cleared when a record changes.
 # See utils/bs_miti.py.
 _add_doc_event("*", "validate", "avinashgroup_app.utils.bs_miti.set_mitis")
+_add_doc_event("*", "on_update_after_submit", "avinashgroup_app.utils.bs_miti.set_mitis_after_submit")
 for _event in ("on_update", "on_submit", "on_cancel", "on_trash"):
     _add_doc_event("Bs Conversion", _event, "avinashgroup_app.utils.bs_miti.clear_cache")
 
