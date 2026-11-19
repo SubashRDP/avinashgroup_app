@@ -15,7 +15,13 @@ nepali_datetime — no time-of-day anchor):
 * AD date set → miti written from it. AD is authoritative, so a miti can never
   disagree with the date it mirrors.
 * AD date empty, miti set → AD date written from the miti (imports that carry
-  only the Nepali date), as the desk's initial populate does.
+  only the Nepali date), as the desk's initial populate does — but only when the
+  AD date was empty before this save too. An AD date that had a value and was
+  cleared (a rehired employee's relieving_date, by script or API) clears its miti,
+  as the desk does; reading it back from the stale miti would undo the clear.
+* An AD date editable after submit (Material Request schedule_date) changes
+  without validate, and its miti is not editable after submit, so
+  `set_mitis_after_submit` writes the miti straight to the row afterwards.
 
 Rows switched off (`enabled` unticked) are skipped.
 
@@ -76,25 +82,58 @@ def miti_to_ad(value):
 	return nepali_to_english_converter(year, month, day)
 
 
-def set_mitis(doc, method=None):
-	"""Fill the doc's miti fields from its AD dates (or the reverse). Never raises."""
+def _pairs(doc):
+	"""The doc's (ad_field, miti_field) pairs whose fields both exist on it."""
 	fields = _mappings().get(doc.doctype)
 	if not fields:
-		return
+		return []
 	meta = frappe.get_meta(doc.doctype)
-	for ad_field, miti_field in fields:
-		if not (meta.has_field(ad_field) and meta.has_field(miti_field)):
-			continue
+	return [(a, m) for a, m in fields if meta.has_field(a) and meta.has_field(m)]
+
+
+def _log_failure(doc, ad_field, miti_field):
+	frappe.log_error(
+		title=f"Miti conversion failed: {doc.doctype}.{ad_field}",
+		message=f"{doc.name or '(new)'}: {ad_field}={doc.get(ad_field)!r} {miti_field}={doc.get(miti_field)!r}\n"
+		+ frappe.get_traceback(),
+	)
+
+
+def set_mitis(doc, method=None):
+	"""Fill the doc's miti fields from its AD dates (or the reverse). Never raises."""
+	pairs = _pairs(doc)
+	if not pairs:
+		return
+	before = None if doc.is_new() else doc.get_doc_before_save()
+	for ad_field, miti_field in pairs:
 		try:
 			if doc.get(ad_field):
 				miti = ad_to_miti(doc.get(ad_field))
 				if miti:
 					doc.set(miti_field, miti)
 			elif doc.get(miti_field):
-				doc.set(ad_field, miti_to_ad(doc.get(miti_field)))
+				if before and before.get(ad_field):
+					doc.set(miti_field, None)  # AD date was cleared: the miti follows
+				else:
+					doc.set(ad_field, miti_to_ad(doc.get(miti_field)))
 		except Exception:
-			frappe.log_error(
-				title=f"Miti conversion failed: {doc.doctype}.{ad_field}",
-				message=f"{doc.name or '(new)'}: {ad_field}={doc.get(ad_field)!r} {miti_field}={doc.get(miti_field)!r}\n"
-				+ frappe.get_traceback(),
-			)
+			_log_failure(doc, ad_field, miti_field)
+
+
+def set_mitis_after_submit(doc, method=None):
+	"""on_update_after_submit: re-derive mitis whose AD date is editable after submit.
+
+	Only fields marked Allow on Submit can change here, so only their mitis can
+	go stale. Written with db_set: the miti itself is not Allow on Submit, so
+	setting it on the doc would fail the update-after-submit check.
+	"""
+	meta = frappe.get_meta(doc.doctype)
+	for ad_field, miti_field in _pairs(doc):
+		if not meta.get_field(ad_field).allow_on_submit:
+			continue
+		try:
+			miti = ad_to_miti(doc.get(ad_field)) if doc.get(ad_field) else None
+			if miti != (doc.get(miti_field) or None):
+				doc.db_set(miti_field, miti, update_modified=False)
+		except Exception:
+			_log_failure(doc, ad_field, miti_field)
