@@ -82,6 +82,8 @@ def _frame(ctx, head, page_no, total_pages):
 		at(pt(right, "Stock Ledger - Detail - Posting Detail", size=14.0, bold=True, align="r"), 18.2),
 		at(pt(right, "Accounting Period : {0}".format(head.period) if head.period else "", bold=True, align="r"), 36.6),
 		at(pt(right, "Page {0}/{1}".format(page_no, total_pages), bold=True, align="r"), 75.4),
+		# the Nepali month, when the period is exactly one -- "Month : Kartik 2083"
+		at(pt(X.code, "Month : {0}".format(head.month) if head.month else "", bold=True), 75.4),
 		at(pt(X.code, "From {0} To {1}".format(head.from_bs, head.to_bs)), 88.2),
 		at(pt(151.2, "(All parameters listed at end of report)"), 88.2),
 		at(
@@ -321,7 +323,8 @@ def _parameters(ctx):
 		[
 			("Show Value", "Yes" if ctx.show_value else "No"),
 			("Cylinder Detail", "Yes" if ctx.show_cylinders else "No"),
-			None,
+			# its own slot: inside Date Range it would run into the next column
+			("Month", gsl.period_label(ctx.from_date, ctx.to_date) or "-"),
 		],
 	]
 
@@ -364,6 +367,7 @@ def build_html(filters):
 		frappe.throw(_("Nothing to print for these filters."))
 
 	head = glpd._print_masthead(frappe._dict(company=ctx.company, from_date=ctx.from_date, to_date=ctx.to_date, fiscal_year=filters.get("fiscal_year")))
+	head.month = gsl.period_label(ctx.from_date, ctx.to_date)
 	sheets = [_frame(ctx, head, index + 1, len(pages)) + body for index, body in enumerate(pages)]
 	metrics = glpd._carlito()
 	template_path = os.path.join(os.path.dirname(glpd.__file__), "general_ledger_posting_detail_pdf.html")

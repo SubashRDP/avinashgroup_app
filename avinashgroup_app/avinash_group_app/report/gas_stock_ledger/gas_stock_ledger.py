@@ -1234,7 +1234,13 @@ def _cards(ctx, sections):
 	received = total.by_category["purchase"] - total.by_category["purchase_return"]
 	sold = total.by_category["sale"] - total.by_category["sale_return"]
 	q = lambda kg: frappe.format(_q(ctx, kg), {"fieldtype": "Float", "precision": ctx.precision})
+	month = period_label(ctx.from_date, ctx.to_date)
 	cards = [
+		{
+			"label": _("Period"),
+			"value": month or "{0} – {1}".format(_miti(ctx.from_date), _miti(ctx.to_date)),
+			"datatype": "Data",
+		},
 		{"label": _("Opening ({0})").format(ctx.unit), "value": q(opening), "datatype": "Data"},
 		{"label": _("Purchased, net ({0})").format(ctx.unit), "value": q(received), "datatype": "Data", "indicator": "Green"},
 		{"label": _("Sold, net ({0})").format(ctx.unit), "value": q(sold), "datatype": "Data", "indicator": "Blue"},
@@ -1249,6 +1255,53 @@ def _cards(ctx, sections):
 
 
 # ------------------------------------------------------------ filter helpers
+
+
+@frappe.whitelist()
+def get_bs_month_period(preset=None, bs_year=None, bs_month=None):
+	"""AD dates of a Nepali month, and which month it is.
+
+	"This Month" / "Last Month" are today's BS month and the one before it; any
+	other call takes the BS year and month given (month 1 = Baisakh).
+	"""
+	from rdp_common_app.utils.bs_boundaries import ad_to_bs, get_bs_month_range
+
+	if preset in ("This Month", "Last Month") or not (cint(bs_year) and cint(bs_month)):
+		today = ad_to_bs(getdate(frappe.utils.nowdate()))
+		year, month = today.year, today.month
+		if preset == "Last Month":
+			year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+	else:
+		year, month = cint(bs_year), cint(bs_month)
+		if not 1 <= month <= 12:
+			frappe.throw(_("Month must be 1 to 12"))
+	start, end = get_bs_month_range(year, month)
+	return {
+		"from_date": str(start),
+		"to_date": str(end),
+		"bs_year": year,
+		"bs_month": month,
+		"label": _month_label(year, month),
+	}
+
+
+def _month_label(year, month):
+	from rdp_common_app.utils.bs_boundaries import get_bs_month_name
+
+	return "{0} {1}".format(get_bs_month_name(month), year)
+
+
+def period_label(from_date, to_date):
+	"""'Kartik 2083' when the period is exactly one Nepali month, else ''."""
+	from rdp_common_app.utils.bs_boundaries import ad_to_bs, get_bs_month_range
+
+	start = ad_to_bs(getdate(from_date))
+	if start.day != 1:
+		return ""
+	first, last = get_bs_month_range(start.year, start.month)
+	if getdate(first) == getdate(from_date) and getdate(last) == getdate(to_date):
+		return _month_label(start.year, start.month)
+	return ""
 
 
 @frappe.whitelist()

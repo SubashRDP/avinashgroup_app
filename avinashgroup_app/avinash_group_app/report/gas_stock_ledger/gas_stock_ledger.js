@@ -7,6 +7,23 @@ const GSL_METHOD =
 const GSL_PRINT_METHOD =
 	"avinashgroup_app.avinash_group_app.report.gas_stock_ledger.gas_stock_ledger_print.download_pdf";
 const GSL_BS_FORMAT = "YYYY-MM-DD";
+// Same labels as Debtors Summary's month filter. Index + 1 is the BS month.
+const GSL_BS_MONTHS = [
+	"01 - Baisakh",
+	"02 - Jestha",
+	"03 - Ashadh",
+	"04 - Shrawan",
+	"05 - Bhadra",
+	"06 - Ashwin",
+	"07 - Kartik",
+	"08 - Mangsir",
+	"09 - Poush",
+	"10 - Magh",
+	"11 - Falgun",
+	"12 - Chaitra",
+];
+// Presets that are one Nepali month, and so show the Month / Year it is.
+const GSL_MONTH_PRESETS = ["This Month", "Last Month", "Nepali Month"];
 
 // Text colour per movement type, so a long ledger scans by eye.
 const GSL_TYPE_COLOURS = {
@@ -97,6 +114,7 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 				"Last Fiscal Quarter",
 				"This Month",
 				"Last Month",
+				"Nepali Month",
 				"Today",
 				"Yesterday",
 				"Custom Dates",
@@ -104,6 +122,25 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 			default: "This Month",
 			on_change: function (report) {
 				frappe.query_reports[GAS_STOCK_LEDGER].apply_period(report);
+			},
+		},
+		{
+			// Which Nepali month the period is. This / Last Month fill it in;
+			// picking another month (or year) switches to "Nepali Month".
+			fieldname: "bs_month",
+			label: __("Month (BS)"),
+			fieldtype: "Select",
+			options: GSL_BS_MONTHS.join("\n"),
+			on_change: function (report) {
+				frappe.query_reports[GAS_STOCK_LEDGER].bs_month_changed(report);
+			},
+		},
+		{
+			fieldname: "bs_year",
+			label: __("Year (BS)"),
+			fieldtype: "Int",
+			on_change: function (report) {
+				frappe.query_reports[GAS_STOCK_LEDGER].bs_month_changed(report);
 			},
 		},
 		{
@@ -249,7 +286,11 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 		// to the AD dates rather than leave Custom Dates with no way in.
 		const bs = me.has_bs();
 
+		const by_month = GSL_MONTH_PRESETS.includes(preset);
+
 		report.get_filter("fiscal_year").toggle(by_year);
+		report.get_filter("bs_month").toggle(by_month);
+		report.get_filter("bs_year").toggle(by_month);
 		report.get_filter("from_miti").toggle(custom && bs);
 		report.get_filter("to_miti").toggle(custom && bs);
 		report.get_filter("from_date").toggle(custom && !bs);
@@ -272,6 +313,31 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 			return;
 		}
 
+		if (by_month) {
+			const month = GSL_BS_MONTHS.indexOf(report.get_filter_value("bs_month")) + 1;
+			frappe
+				.call({
+					method: GSL_METHOD + "get_bs_month_period",
+					args: {
+						preset: preset,
+						bs_year: preset === "Nepali Month" ? report.get_filter_value("bs_year") : null,
+						bs_month: preset === "Nepali Month" ? month : null,
+					},
+				})
+				.then((r) => {
+					const p = r.message;
+					if (!p) return;
+					// remembered first, so the Month / Year change events this
+					// causes are recognised as ours and ignored
+					me._bs_shown = p.bs_year + "-" + p.bs_month;
+					me.set_period(report, p.from_date, p.to_date, {
+						bs_year: p.bs_year,
+						bs_month: GSL_BS_MONTHS[p.bs_month - 1],
+					});
+				});
+			return;
+		}
+
 		frappe
 			.call({
 				method:
@@ -283,6 +349,20 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 					me.set_period(report, r.message.from_date, r.message.to_date);
 				}
 			});
+	},
+
+	// The user picked a month or year: show that month. A value this report
+	// just set (This / Last Month resolving) is an echo and changes nothing.
+	bs_month_changed: function (report) {
+		const month = GSL_BS_MONTHS.indexOf(report.get_filter_value("bs_month")) + 1;
+		const year = report.get_filter_value("bs_year");
+		if (!month || !year || this._bs_shown === year + "-" + month) return;
+		if (report.get_filter_value("period_preset") === "Nepali Month") {
+			this.apply_period(report);
+		} else {
+			// its own on_change runs apply_period
+			report.set_filter_value("period_preset", "Nepali Month");
+		}
 	},
 
 	has_bs: function () {
