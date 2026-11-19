@@ -246,27 +246,135 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 	],
 
 	formatter: function (value, row, column, data, default_formatter) {
+		if (!data) return default_formatter(value, row, column, data);
+
+		// Detail, laid out as General Ledger Posting Detail's screen. The
+		// sub-line and the narration sit whole in the Voucher Type cell and
+		// spill right across the empty cells (the datatable has no colspan);
+		// absolutely positioned so Fit Columns does not size a column by them.
+		if (data._narration || data._subline) {
+			if (column.fieldname === "voucher_type") {
+				const italic = data._narration ? "font-style:italic;" : "";
+				return `<span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);
+					white-space:nowrap;color:#6b7280;${italic}pointer-events:none;">${frappe.utils.escape_html(
+					data.voucher_type || ""
+				)}</span>`;
+			}
+			return "";
+		}
+		if (data._spacer) return "";
+		if (data._section) {
+			return column.fieldname === "party_name"
+				? `<b>${frappe.utils.escape_html(data.party_name || "")}</b>`
+				: "";
+		}
+		// a band carries only the figures it means; a missing one is blank,
+		// not a 0.000 that reads as a real zero
+		if (data._band && (value === undefined || value === null) && column.fieldname !== "party_name") {
+			return "";
+		}
+		if (["in_qty", "out_qty"].includes(column.fieldname) && !data._band && !value) {
+			return "";
+		}
+
 		value = default_formatter(value, row, column, data);
-		if (!data) return value;
 
 		if (data.is_heading) {
 			return `<b style="color: var(--heading-color)">${value}</b>`;
 		}
-		if (column.fieldname === "type" && data.category && value) {
+		if (["type", "voucher_type"].includes(column.fieldname) && data.category && value) {
 			value = `<span style="color:${GSL_TYPE_COLOURS[data.category]};font-weight:500">${value}</span>`;
 		}
 		if (
-			["balance_qty", "closing_qty", "opening_qty", "balance_value", "closing_value"].includes(
+			["balance", "balance_qty", "closing_qty", "opening_qty", "balance_value", "closing_value"].includes(
 				column.fieldname
 			) &&
 			data[column.fieldname] < 0
 		) {
 			value = `<span style="color: var(--red-600)">${value}</span>`;
 		}
-		if (data.bold) {
+		if (data.bold || data._bold) {
 			value = `<b>${value}</b>`;
 		}
 		return value;
+	},
+
+	// Sizes columns to their content, leaving the spill-over lines out of the
+	// measure (they are meant to overflow), and gives the slack to Party
+	// Name/Description -- General Ledger Posting Detail's own Fit Columns.
+	// Defining autoFitColumns makes rdp_common_app's shared control step aside.
+	autoFitColumns: function (dt) {
+		const wrapper = dt && dt.datatableWrapper;
+		const report = frappe.query_report;
+		if (!wrapper || !report || report.get_filter_value("view") !== "Detail") return;
+
+		const columns = dt.datamanager.getColumns(true) || [];
+		const data = report.data || [];
+		const spill = new Set();
+		data.forEach((row, i) => {
+			if (row && (row._narration || row._subline)) spill.add(i);
+		});
+
+		const FLOOR = { in_qty: 100, out_qty: 100, balance: 120, value: 130 };
+		const widths = {};
+		columns.forEach((col) => {
+			let width = FLOOR[col.fieldname] || 80;
+			const header = wrapper.querySelector(".dt-cell__content--header-" + col.colIndex);
+			if (header) width = Math.max(width, header.scrollWidth + 20);
+			const cells = wrapper.querySelectorAll(".dt-cell__content--col-" + col.colIndex);
+			for (let i = 0; i < Math.min(100, cells.length); i++) {
+				const rowEl = cells[i].closest("[class*='dt-row-']");
+				const match = rowEl && /dt-row-(\d+)/.exec(rowEl.className);
+				if (match && spill.has(parseInt(match[1], 10))) continue;
+				width = Math.max(width, cells[i].scrollWidth + 20);
+			}
+			widths[col.colIndex] = Math.min(width, 340);
+		});
+
+		const available = (dt.bodyScrollable && dt.bodyScrollable.clientWidth) || 0;
+		const used = Object.values(widths).reduce((a, b) => a + b, 0);
+		const description = columns.find((c) => c.fieldname === "party_name");
+		if (description && available && used < available - 24) {
+			widths[description.colIndex] += available - used - 24;
+		}
+		columns.forEach((col) => {
+			dt.datamanager.updateColumn(col.colIndex, { width: widths[col.colIndex] });
+			dt.columnmanager.setColumnHeaderWidth(col.colIndex);
+			dt.columnmanager.setColumnWidth(col.colIndex);
+		});
+		if (dt.style && dt.style.setBodyStyle) dt.style.setBodyStyle();
+	},
+
+	// Lift overflow on the spill-over rows so their line can run across.
+	tagSpillRows: function (dt) {
+		const data = (frappe.query_report && frappe.query_report.data) || [];
+		const container = dt && dt.bodyScrollable;
+		if (!container) return;
+		data.forEach((row, i) => {
+			if (!row || !(row._narration || row._subline)) return;
+			const rowEl = container.querySelector(".dt-row-" + i);
+			if (rowEl) rowEl.classList.add("gsl-spill-row");
+		});
+	},
+
+	after_datatable_render: function (dt) {
+		const me = frappe.query_reports[GAS_STOCK_LEDGER];
+		me.tagSpillRows(dt);
+		// after the datatable's own sizing pass, or these widths are overwritten
+		window.requestAnimationFrame(() => setTimeout(() => me.autoFitColumns(dt), 150));
+		// rows are virtualised: scrolling recreates them without the class
+		const container = dt && dt.bodyScrollable;
+		if (!container || container._gslBound) return;
+		container._gslBound = true;
+		let scheduled = false;
+		container.addEventListener("scroll", () => {
+			if (scheduled) return;
+			scheduled = true;
+			window.requestAnimationFrame(() => {
+				scheduled = false;
+				me.tagSpillRows(dt);
+			});
+		});
 	},
 
 	// Show only the date fields the chosen Period needs, and resolve its dates
@@ -453,6 +561,16 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 
 	onload: function (report) {
 		const me = frappe.query_reports[GAS_STOCK_LEDGER];
+		if (!document.getElementById("gsl-spill-style")) {
+			const style = document.createElement("style");
+			style.id = "gsl-spill-style";
+			style.textContent = `
+				.gsl-spill-row .dt-cell { overflow: visible !important; }
+				.gsl-spill-row .dt-cell__content {
+					overflow: visible !important; white-space: nowrap; position: relative; z-index: 5;
+				}`;
+			document.head.appendChild(style);
+		}
 		me.attach_bs_picker(report, "from_miti");
 		me.attach_bs_picker(report, "to_miti");
 		me.load_refineries(report);

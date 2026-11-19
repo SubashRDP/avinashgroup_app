@@ -795,107 +795,151 @@ def _pool_totals(sections):
 
 
 def _detail_view(ctx, sections):
-	u = ctx.unit
-	columns = [
-		{"fieldname": "miti", "label": _("Miti"), "fieldtype": "Data", "width": 95},
-		{"fieldname": "posting_date", "label": _("Date (AD)"), "fieldtype": "Date", "width": 95},
-		{"fieldname": "type", "label": _("Type"), "fieldtype": "Data", "width": 120},
-		{"fieldname": "voucher_no", "label": _("Voucher No"), "fieldtype": "HTML", "width": 150},
-		{"fieldname": "party", "label": _("Party"), "fieldtype": "Data", "width": 200},
-	]
-	# only when a load in the period names one: a sales-only period stays as it was
-	if any(m.refinery for s in sections.values() for m in s.movements if m.visible):
-		columns.append({"fieldname": "refinery", "label": _("Refinery"), "fieldtype": "Data", "width": 100})
-	columns += _size_columns(ctx)
-	columns += [
-		{"fieldname": "in_qty", "label": _("In ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 105},
-		{"fieldname": "out_qty", "label": _("Out ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 105},
-		{"fieldname": "balance_qty", "label": _("Balance ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 120},
-	]
-	if ctx.show_value:
-		columns += [
-			{"fieldname": "rate", "label": _("Avg Rate / {0}").format(u), "fieldtype": "Currency", "width": 115},
-			{"fieldname": "in_value", "label": _("In Value"), "fieldtype": "Currency", "width": 130},
-			{"fieldname": "out_value", "label": _("Out Value (Cost)"), "fieldtype": "Currency", "width": 130},
-			{"fieldname": "balance_value", "label": _("Balance Value"), "fieldtype": "Currency", "width": 140},
-		]
-	columns += [
-		{"fieldname": "vehicle", "label": _("Vehicle"), "fieldtype": "Data", "width": 110},
-		{"fieldname": "reference", "label": _("Tanker / Reference"), "fieldtype": "Data", "width": 220},
-	]
-	if ctx.show_narration:
-		columns.append({"fieldname": "narration", "label": _("Narration"), "fieldtype": "Data", "width": 260})
-	columns.append({"fieldname": "remarks", "label": _("Data Notes"), "fieldtype": "Data", "width": 200})
+	"""The ledger as General Ledger Posting Detail lays its screen out.
 
+	Same columns in the same order (Posting Date, Posting Miti, Voucher Type,
+	Voucher No., Party Name/Description) with In / Out / Balance where that
+	report has Debit / Credit / Balance; a bold heading per block, Opening
+	Balance / Period Total / Closing Balance bands, a date stated only where it
+	changes, and under each movement a grey sub-line (sizes, refinery, tanker,
+	vehicle) and the voucher's own narration, both spilling across the row
+	(the JS does that, as GL Posting Detail's does).
+	"""
+	columns = _detail_columns(ctx)
 	data = []
 	blocks = _blocks(ctx, sections)
-	for block in blocks:
-		if block.sub or len(blocks) > 1:
-			heading = "{0}   {1}".format(block.code, block.desc).strip() if block.code else block.desc
-			data.append({"type": heading, "is_heading": 1, "bold": 1})
-		if block.running:
-			data.append(_balance_row(ctx, _("Opening Balance"), block.opening, ctx.from_date))
-		total = _Totals()
-		for move in block.moves:
-			total.add(move)
-			data.append(_move_row(ctx, move, block.running))
-		data.append(total.row(ctx, _("Period Total")))
-		if block.running:
-			data.append(_balance_row(ctx, _("Closing Balance"), block.closing, ctx.to_date))
+	whole_stock = ctx.group_by not in RUNNING_GROUPS or len(blocks) > 1
+	opening, closing = _pool_totals(sections)
 
-	if ctx.group_by not in RUNNING_GROUPS or len(blocks) > 1:
-		# the stock as a whole, under blocks that are not themselves the stock
-		opening, closing = _pool_totals(sections)
-		data.append({"type": _("Stock"), "is_heading": 1, "bold": 1})
-		data.append(_balance_row(ctx, _("Opening Balance"), opening, ctx.from_date))
-		data.append(_balance_row(ctx, _("Closing Balance"), closing, ctx.to_date))
+	if whole_stock:
+		# the stock's own opening heads the ledger, as GL Posting Detail's
+		# grand Opening Balance does
+		data.append(_band(ctx, _("Opening Balance"), balance=opening))
+		data.append({"_spacer": 1})
+
+	for block in blocks:
+		heading = "{0}   {1}".format(block.code, block.desc).strip() if block.code else block.desc
+		data.append({"_section": 1, "party_name": heading})
+		if block.running:
+			data.append(_band(ctx, _("Opening Balance"), balance=block.opening))
+		in_kg = out_kg = in_value = out_value = 0.0
+		last_date = None
+		for move in block.moves:
+			same_day = move.posting_date == last_date
+			last_date = move.posting_date
+			data.append(_move_row(ctx, move, block.running, same_day))
+			subline = _subline(ctx, move)
+			if subline:
+				data.append({"voucher_type": subline, "_subline": 1})
+			if ctx.show_narration and move.narration:
+				data.append({"voucher_type": "Narr: {0}".format(move.narration[:400]), "narration": move.narration, "_narration": 1})
+			if move.qty > 0:
+				in_kg += move.qty
+				in_value += move.value
+			else:
+				out_kg -= move.qty
+				out_value -= move.value
+		data.append(_band(ctx, _("Period Total"), in_kg=in_kg, out_kg=out_kg, value=in_value - out_value))
+		if block.running:
+			data.append(_band(ctx, _("Closing Balance"), balance=block.closing))
+		data.append({"_spacer": 1})
+
+	if whole_stock:
+		data.append(_band(ctx, _("Closing Balance"), balance=closing))
+	while data and data[-1].get("_spacer"):
+		data.pop()
 	return columns, data
 
 
-def _move_row(ctx, move, running):
+def _detail_columns(ctx):
+	u = ctx.unit
+	# Budgeted like GL Posting Detail (~1230px) so Balance lands on screen.
+	columns = [
+		{"fieldname": "date", "label": _("Posting Date"), "fieldtype": "Date", "width": 92},
+		{"fieldname": "miti", "label": _("Posting Miti"), "fieldtype": "Data", "width": 88},
+		{"fieldname": "voucher_type", "label": _("Voucher Type"), "fieldtype": "Data", "width": 108},
+		{"fieldname": "voucher_no", "label": _("Voucher No."), "fieldtype": "HTML", "width": 168},
+		{"fieldname": "party_name", "label": _("Party Name/Description"), "fieldtype": "Data", "width": 280},
+		{"fieldname": "in_qty", "label": _("In ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 110},
+		{"fieldname": "out_qty", "label": _("Out ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 110},
+		{"fieldname": "balance", "label": _("Balance ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 130},
+	]
+	if ctx.show_value:
+		columns.append({"fieldname": "value", "label": _("Value"), "fieldtype": "Currency", "width": 140})
+	return columns
+
+
+def _band(ctx, label, balance=None, in_kg=None, out_kg=None, value=None):
+	"""An Opening / Period Total / Closing line: only the figures it means.
+
+	A balance band states the balance (and its value); Period Total states the
+	period's in and out, and the net change where the balance would be -- so
+	opening + period = closing reads straight down the Balance column, as in
+	GL Posting Detail.
+	"""
+	row = {"party_name": label, "_band": 1, "_bold": 1}
+	if balance is not None:
+		row["balance"] = _q(ctx, balance.qty)
+		if ctx.show_value:
+			row["value"] = flt(balance.value, 2)
+	else:
+		row["in_qty"] = _q(ctx, in_kg or 0.0)
+		row["out_qty"] = _q(ctx, out_kg or 0.0)
+		row["balance"] = _q(ctx, (in_kg or 0.0) - (out_kg or 0.0))
+		if ctx.show_value and value is not None:
+			row["value"] = flt(value, 2)
+	return row
+
+
+def _move_row(ctx, move, running, same_day=False):
+	english, _nepali = CATEGORIES[move.category]
+	by_party = ctx.group_by == GROUP_PARTY and (move.party or move.party_id)
 	inward = move.qty > 0
 	row = {
-		"posting_date": move.posting_date,
-		"miti": _miti(move.posting_date),
-		"type": CATEGORIES[move.category][0],
+		"date": "" if same_day else move.posting_date,
+		"miti": "" if same_day else _miti(move.posting_date),
+		"voucher_type": move.voucher_type,
 		"voucher_no": voucher_link(move.voucher_type, move.voucher_no, move.number),
 		"voucher_number": move.number,
-		"party": move.party,
-		"refinery": move.refinery,
-		"warehouse": move.warehouse,
-		"in_qty": _q(ctx, move.qty) if inward else 0,
-		"out_qty": _q(ctx, -move.qty) if not inward else 0,
-		"in_value": flt(move.value, 2) if inward else 0,
-		"out_value": flt(-move.value, 2) if not inward else 0,
-		"vehicle": move.vehicle,
-		"reference": move.reference,
-		"narration": move.narration,
-		"remarks": "; ".join(move.remarks),
+		# under a party's own heading its name would only repeat; say what moved
+		"party_name": english if by_party else (move.party or english),
+		"in_qty": _q(ctx, move.qty) if inward else None,
+		"out_qty": _q(ctx, -move.qty) if not inward else None,
 		"category": move.category,
+		"refinery": move.refinery,
+		"narration": move.narration,
 	}
 	if running:
 		# a party or refinery has no stock of its own; its rows carry no balance
-		row.update(
-			balance_qty=_q(ctx, move.balance_qty),
-			rate=_r(ctx, move.rate),
-			balance_value=flt(move.balance_value, 2),
-		)
+		row["balance"] = _q(ctx, move.balance_qty)
+	if ctx.show_value:
+		row["value"] = flt(move.value, 2)
 	for key, count in move.cylinders.items():
 		row["cyl_" + key] = count
 	return row
 
 
-def _balance_row(ctx, label, bal, date):
-	return {
-		"posting_date": date,
-		"miti": _miti(date),
-		"type": label,
-		"balance_qty": _q(ctx, bal.qty),
-		"rate": _r(ctx, bal.rate),
-		"balance_value": flt(bal.value, 2),
-		"bold": 1,
-		"is_balance": 1,
-	}
+def _subline(ctx, move):
+	"""What moved and the tanker's papers, as one grey line under the movement."""
+	parts = []
+	if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"}:
+		sizes = []
+		for key, count in sorted(move.cylinders.items(), key=lambda kv: ctx.sizes.get(kv[0], ("", 0))[1]):
+			label = ctx.sizes.get(key, (key, 0))[0]
+			shown = flt(count, 3 if key in ("bulk", "loose") else 0)
+			if shown:
+				sizes.append("{0} × {1}".format(label, frappe.format(shown, {"fieldtype": "Float", "precision": 3 if key in ("bulk", "loose") else 0})))
+		if sizes:
+			parts.append(", ".join(sizes))
+	if move.refinery:
+		parts.append(_("Refinery: {0}").format(move.refinery))
+	if move.reference:
+		parts.append(move.reference)
+	if move.vehicle:
+		parts.append(_("Vehicle: {0}").format(move.vehicle))
+	if move.remarks:
+		parts.append("⚠ " + "; ".join(move.remarks))
+	return " · ".join(parts)
 
 
 class _Totals:
