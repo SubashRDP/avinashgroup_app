@@ -588,6 +588,14 @@ _add_doc_event("Payment Entry", "before_cancel", "avinashgroup_app.pdc.payment_e
 _add_doc_event("Payment Entry", "on_cancel", "avinashgroup_app.pdc.payment_entry_bounce.on_cancel")
 _add_doc_event("Payment Entry", "on_submit", "avinashgroup_app.pdc.payment_entry_bounce.on_submit")
 
+# Party account on save: default account, or advance account when there is an
+# Unallocated Amount; an account the user picked is kept.
+_add_doc_event(
+	"Payment Entry",
+	"validate",
+	"avinashgroup_app.custom_code.payment_entry.advance_account_patch.set_party_account_by_unallocated",
+)
+
 # LC: a Purchase Receipt / Invoice linked to a Letter of Credit shipment, or a JE
 # an LC posted, cannot be cancelled out from under the LC. See lc/guards.py.
 _add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
