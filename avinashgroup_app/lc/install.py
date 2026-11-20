@@ -47,7 +47,11 @@ def apply_settings_defaults():
 
 
 def ensure_miti_mapping():
-	if not frappe.db.exists("DocType", "Bs Conversion") or frappe.db.exists("Bs Conversion", "Letter of Credit"):
+	# Bs Conversion is hash-named: look the record up by the doctype it maps, not
+	# by name, or every migrate adds another copy (demo-nggroup had 13).
+	if not frappe.db.exists("DocType", "Bs Conversion") or frappe.db.exists(
+		"Bs Conversion", {"doctype_names": "Letter of Credit"}
+	):
 		return
 	doc = frappe.get_doc({
 		"doctype": "Bs Conversion",
