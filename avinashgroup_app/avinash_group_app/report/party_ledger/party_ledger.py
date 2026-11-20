@@ -1404,6 +1404,8 @@ def _apply_custom_voucher_names(rows):
 			continue
 		custom = (type_map.get(vt) or {}).get(vn)
 		if custom:
+			# Keep the document name for lookups done after this swap (remarks).
+			r.setdefault("voucher_link", vn)
 			r["voucher_no"] = custom
 
 
@@ -1521,12 +1523,18 @@ def _apply_voucher_remarks(rows):
 		if value is None:
 			return ""
 		# Keep as string; strip newline noise from editors.
-		return str(value).strip()
+		value = str(value).strip()
+		# ERPNext writes "No Remarks" into an empty Remarks field; show a blank cell.
+		if value == "No Remarks":
+			return ""
+		return value
 
+	# voucher_no may already hold the display number (custom_name); the document
+	# name is in voucher_link.
 	vouchers_by_type = {}
 	for r in rows:
 		vt = r.get("voucher_type")
-		vn = r.get("voucher_no")
+		vn = r.get("voucher_link") or r.get("voucher_no")
 		if not vt or not vn:
 			continue
 		vouchers_by_type.setdefault(vt, set()).add(vn)
@@ -1547,21 +1555,23 @@ def _apply_voucher_remarks(rows):
 			out.update({d["name"]: d.get(fieldname) for d in res})
 		return out
 
-	si_map = _get_field_map("Sales Invoice", "custom_narration", vouchers_by_type.get("Sales Invoice"))
-	pi_map = _get_field_map("Purchase Invoice", "memo", vouchers_by_type.get("Purchase Invoice"))
+	si_map = _get_field_map("Sales Invoice", "remarks", vouchers_by_type.get("Sales Invoice"))
+	pi_map = _get_field_map("Purchase Invoice", "remarks", vouchers_by_type.get("Purchase Invoice"))
+	# Payment Entry: the "Remark" custom field, else the standard Remarks.
+	pe_custom_map = _get_field_map("Payment Entry", "custom_remark", vouchers_by_type.get("Payment Entry"))
 	pe_map = _get_field_map("Payment Entry", "remarks", vouchers_by_type.get("Payment Entry"))
 	je_map = _get_field_map("Journal Entry", "user_remark", vouchers_by_type.get("Journal Entry"))
 
 	for r in rows:
 		vt = r.get("voucher_type")
-		vn = r.get("voucher_no")
+		vn = r.get("voucher_link") or r.get("voucher_no")
 		if not vt or not vn:
 			continue
 
 		# The reversal shares the receipt's voucher_no, so Payment Entry.remarks would
 		# label it with the original "Amount NPR ... received from ..." narration.
 		if r.get("is_bounce"):
-			r["remarks"] = _("Cheque bounced against {0}").format(vn)
+			r["remarks"] = _("Cheque bounced against {0}").format(r.get("voucher_no") or vn)
 			continue
 
 		if vt == "Sales Invoice":
@@ -1569,6 +1579,6 @@ def _apply_voucher_remarks(rows):
 		elif vt == "Purchase Invoice":
 			r["remarks"] = _normalize(pi_map.get(vn))
 		elif vt == "Payment Entry":
-			r["remarks"] = _normalize(pe_map.get(vn))
+			r["remarks"] = _normalize(pe_custom_map.get(vn)) or _normalize(pe_map.get(vn))
 		elif vt == "Journal Entry":
 			r["remarks"] = _normalize(je_map.get(vn))
