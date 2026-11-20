@@ -3,7 +3,7 @@
 rdp_common_app's **Bs Conversion** records say, per doctype, which AD date
 field has a BS twin (Journal Entry: posting_date → custom_posting_miti,
 cheque_date → custom_reference_miti; Sales Invoice: posting_date →
-custom_invoice_miti; …). Its desk script, nepali_date_trigger.js, applies them
+custom_invoice_miti; …). Its desk script, common_nepali_date.js, applies them
 only in the browser, as a user picks a date. A document made anywhere else —
 a cheque bounce entry, a Payroll Entry's journal, an import, the API, a
 scheduled job — was saved with its mitis blank.
