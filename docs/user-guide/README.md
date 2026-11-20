@@ -29,6 +29,7 @@ Last checked against the system: 9 October 2026 (23 Ashwin 2083).
 | 11 | [Glossary](11-glossary.md) | You meet a word you do not know (O/O, SSF Addition, Miti…) |
 | 12 | [Post-dated cheques (PDC)](12-post-dated-cheques.md) | For accounts: a customer gives a cheque with a future date, or we write one to a supplier |
 | 13 | [Letters of credit (LC)](13-letters-of-credit.md) | For accounts: an import is paid through a bank letter of credit |
+| 14 | [Monthly Attendance BS: the illustrated guide](14-monthly-attendance-bs-illustrated.md) | You fix attendance before payroll: screenshots of every button, what it changes, how to undo it, and where each rule is set |
 
 ---
 

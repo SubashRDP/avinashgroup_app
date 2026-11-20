@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 310" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14">
+  <rect width="900" height="310" fill="#ffffff"/>
+  <text x="20" y="28" font-size="17" font-weight="700" fill="#1f2328">Field Duty: the hours away are added to the punches (Asha Goyal, 21 Aug 2026)</text>
+  <!-- 08:00 at x=200, 18:00 at x=840 => 64px per hour -->
+  <g fill="#57606a" font-size="12" text-anchor="middle">
+    <text x="200" y="60">08:00</text><text x="264" y="60">09:00</text><text x="328" y="60">10:00</text><text x="392" y="60">11:00</text><text x="456" y="60">12:00</text>
+    <text x="520" y="60">13:00</text><text x="584" y="60">14:00</text><text x="648" y="60">15:00</text><text x="712" y="60">16:00</text><text x="776" y="60">17:00</text><text x="840" y="60">18:00</text>
+  </g>
+  <g stroke="#d0d7de"><line x1="264" y1="66" x2="264" y2="250"/><line x1="776" y1="66" x2="776" y2="250"/></g>
+
+  <text x="20" y="96" font-weight="600" fill="#1f2328">Shift</text>
+  <rect x="264" y="80" width="512" height="24" rx="4" fill="#d8dee4"/>
+  <text x="520" y="97" text-anchor="middle" fill="#1f2328">09:00 → 17:00</text>
+
+  <text x="20" y="144" font-weight="600" fill="#1f2328">Device punches</text>
+  <rect x="260" y="128" width="154" height="24" rx="4" fill="#9fc5a8"/>
+  <text x="337" y="145" text-anchor="middle" fill="#1f2328">08:56 → 11:20</text>
+  <text x="430" y="145" fill="#a64e5b">alone: 339 min "left early", fined</text>
+
+  <text x="20" y="192" font-weight="600" fill="#1f2328">Field Duty row</text>
+  <rect x="424" y="176" width="384" height="24" rx="4" fill="#b9cfe0"/>
+  <text x="616" y="193" text-anchor="middle" fill="#1f2328">11:30 → 17:30  Butwal, bank deposit</text>
+
+  <text x="20" y="240" font-weight="600" fill="#1f2328">Measured as</text>
+  <rect x="260" y="224" width="548" height="24" rx="4" fill="#2e6b45"/>
+  <text x="534" y="241" text-anchor="middle" fill="#fff">08:56 → 17:30   (earlier start, later end)</text>
+  <text x="20" y="278" fill="#57606a">Late 0 · left early 0. The 30 min after 17:00 is overtime only if an Overtime Sheet covers the day.</text><text x="20" y="298" fill="#57606a">The punches themselves are not changed.</text>
+</svg>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 350" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="14">
+  <rect width="900" height="350" fill="#ffffff"/>
+  <text x="20" y="28" font-size="17" font-weight="700" fill="#1f2328">Half-day leave on the 9:00–17:00 shift: which hours are owed</text>
+  <!-- axis: 9:00 at x=200, 17:00 at x=840 => 80px per hour -->
+  <g fill="#57606a" font-size="12" text-anchor="middle">
+    <text x="200" y="60">09:00</text><text x="280" y="60">10:00</text><text x="360" y="60">11:00</text><text x="440" y="60">12:00</text>
+    <text x="520" y="60">13:00</text><text x="600" y="60">14:00</text><text x="680" y="60">15:00</text><text x="760" y="60">16:00</text><text x="840" y="60">17:00</text>
+  </g>
+  <g stroke="#d0d7de"><line x1="200" y1="66" x2="200" y2="300"/><line x1="520" y1="66" x2="520" y2="300"/><line x1="560" y1="66" x2="560" y2="300"/><line x1="840" y1="66" x2="840" y2="300"/></g>
+
+  <text x="20" y="96" font-weight="600" fill="#1f2328">Whole shift</text>
+  <rect x="200" y="80" width="320" height="24" rx="4" fill="#9fc5a8"/>
+  <rect x="520" y="80" width="40" height="24" fill="#f3d58a"/>
+  <rect x="560" y="80" width="280" height="24" rx="4" fill="#9fc5a8"/>
+  <text x="540" y="97" text-anchor="middle" font-size="11" fill="#5c4300">break</text>
+  <text x="540" y="122" text-anchor="middle" font-size="11" fill="#57606a">30 min from the halfway point</text>
+
+  <text x="20" y="162" font-weight="600" fill="#1f2328">Morning half</text>
+  <rect x="200" y="146" width="320" height="24" rx="4" fill="#2e6b45"/>
+  <text x="360" y="163" text-anchor="middle" fill="#fff">owed 09:00 → 13:00</text>
+  <text x="570" y="163" fill="#57606a" font-size="13">out 13:00 = 0 · out 12:30 = 30 min early</text>
+
+  <text x="20" y="214" font-weight="600" fill="#1f2328">Afternoon half</text>
+  <rect x="560" y="198" width="280" height="24" rx="4" fill="#2e6b45"/>
+  <text x="700" y="215" text-anchor="middle" fill="#fff">owed 13:30 → 17:00</text>
+  <text x="200" y="215" fill="#57606a" font-size="13">in 13:30 = 0 · in 13:50 = 20 min late</text>
+
+  <text x="20" y="262" font-weight="600" fill="#1f2328">Which half?</text>
+  <text x="200" y="262" fill="#1f2328">The system measures the day both ways and keeps the half the punches fit better.</text>
+  <text x="200" y="284" fill="#1f2328">Minutes outside the owed half go into Late Time, minute for minute (seconds dropped).</text>
+  <text x="200" y="310" fill="#57606a">Other shifts: 6–2 break 10:00–10:30 · 7–3 break 11:00–11:30</text><text x="200" y="330" fill="#57606a">8–4 break 12:00–12:30 · 12–8 break 16:00–16:30</text>
+</svg>

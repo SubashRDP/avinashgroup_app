@@ -764,6 +764,7 @@ window.avinash_ceo_dashboard = (function () {
 		}).observe(root);
 
 		if (page) {
+			page.set_primary_action(__("Daily Business Review"), () => frappe.set_route("daily-review"), "calendar");
 			page.set_secondary_action(__("Refresh"), () => { load(true); loadCredit(); }, "refresh");
 			page.add_menu_item(__("Print / PDF"), () => window.print());
 		}

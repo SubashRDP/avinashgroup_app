@@ -83,6 +83,8 @@ The journal check only runs when **Slips = 1 - Submitted**.
 
 **What it is for.** Checking attendance before payroll; answering "what happened on this day?".
 
+For a picture-by-picture tour of the screen and every button on it, see [Chapter 14](14-monthly-attendance-bs-illustrated.md).
+
 **Filters**
 
 | Filter | What to choose |

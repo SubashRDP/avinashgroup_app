@@ -854,3 +854,24 @@ Opening a period still works per bar. `gearBuckets` now returns `items`
 ({ y, k }) across years, and `gearValues` reads each year once.
 
 - Weekly was removed from the chart gears (asset version 134). The notches are now Year · Quarterly · Monthly · Daily, and a month opens into its days.
+
+## Daily Business Review (2026-11-17)
+
+A separate page, `/app/daily-review`, opened from the **Daily Business Review** button at the top of the CEO Dashboard. It is built for the daily management meeting and shows the six topics in agenda order, for one day:
+
+| # | Card | Source report (run by the page, nothing recomputed) |
+|---|---|---|
+| 1 | Bank Balance | Net Position of Cash and Bank, each company, From = To = the day |
+| 2 | Loan Summary | Loan Summary, balance on the day (and the day before, for the change) |
+| 3 | Today's Sales | Sales Report Summary, all companies, the day |
+| 4 | Collection | Receipt Register, Customer Wise Summary, each company |
+| 5 | Gas Stock (MT) | Stock Balance (With Zero Values), each company's "LP Gas" item group, Kg ÷ 1000 |
+| 6 | Debtors Summary | Debtors Summary, Monthly view of the day's BS month (the day's row and the one before) |
+
+- Files: `ceo_dashboard/daily_review.py` (endpoints `get_section`, `get_meta`), `public/js/daily_review.js`, `public/css/daily_review.css`, page `avinash_group_app/page/daily_review/`. Same roles as the CEO Dashboard.
+- Each card's **Report ↗** opens the source report with the same filters; clicking a company row opens it for that company.
+- Results are cached 10 minutes per section and day; **Refresh** reads the reports again. Slowest cards on demo-nggroup: Gas Stock (~10 s), Bank (~1–2 s).
+- **Present** shows one topic full screen for the meeting room: arrow keys or 1–6 move, Esc closes.
+- Layout: centred header and toolbar, six equal cards, centred figures in each card, so nothing piles up on the left (the user's request).
+- Asset loading follows the CEO Dashboard rule: bump `DAILY_REVIEW_ASSET_VERSION` and the Page `modified` stamp on every change.
+- Named "Morning Meeting" for its first hour; renamed to Daily Business Review (`/app/daily-review`) at the user's request, and the old Page record was deleted.

@@ -73,6 +73,8 @@ Leaving at or after the closing time is no longer counted as leaving early, so i
 
 ## 3.4 Fixing attendance
 
+Most fixes are made from **Monthly Attendance BS**; [Chapter 14](14-monthly-attendance-bs-illustrated.md) shows each one with screenshots.
+
 ### One person, one day: Repair from Check-ins
 1. Open the **Attendance** row (or create it if it is missing, from the Attendance list).
 2. Click **Repair from Check-ins**.
