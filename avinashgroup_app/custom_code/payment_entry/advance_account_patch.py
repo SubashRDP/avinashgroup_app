@@ -7,7 +7,7 @@ from erpnext.accounts.party import get_party_account, get_party_advance_account
 PARTY_TYPES = frozenset(("Customer", "Supplier"))
 
 # Account numbers (same in every company) that may switch to the advance account
-# on save. Any other default account stays as it is, even with an Unallocated Amount.
+# on save. Any other account stays as it is, even with an Unallocated Amount.
 TRADE_ACCOUNT_NUMBERS = {
 	"Customer": {"143101"},  # Debtors A/c - Domestic
 	"Supplier": {"343100", "343201"},  # Trade Payables - Domestic / Foreign
@@ -63,12 +63,12 @@ def set_party_account_by_unallocated(doc, method=None):
 	Runs after core validate, so doc.unallocated_amount is up to date.
 	Only when the Company has "Book Advance Payments in Separate Party Account" on.
 
-	- account in the field is neither the party's default nor its advance account
-	  -> the user picked it: keep it, book as a normal payment
-	- otherwise, default account is a trade account (TRADE_ACCOUNT_NUMBERS) and
-	  Unallocated Amount > 0 -> advance account (party's own, then party group's,
-	  then Company default advance received / paid account)
-	- otherwise -> party's default account
+	Looks at the account in the field (filled by the form or changed by the user);
+	the party's advance account or an empty field counts as the default account.
+	- that account is a trade account (TRADE_ACCOUNT_NUMBERS) and Unallocated
+	  Amount > 0 -> advance account (party's own, then party group's, then Company
+	  default advance received / paid account)
+	- otherwise -> that account, booked as a normal payment
 	"""
 	if doc.docstatus != 0:
 		return
@@ -82,15 +82,18 @@ def set_party_account_by_unallocated(doc, method=None):
 	default_account = get_party_account(doc.party_type, doc.party, doc.company)
 	advance_account = get_party_advance_account(doc.party_type, doc.party, doc.company)
 
-	user_picked = current_account and current_account not in (default_account, advance_account)
-	default_number = frappe.db.get_value("Account", default_account, "account_number") if default_account else None
-	is_trade_account = default_number in TRADE_ACCOUNT_NUMBERS[doc.party_type]
+	# The advance account here was put in by an earlier save: start again from the default.
+	if not current_account or current_account == advance_account:
+		current_account = default_account
 
-	if not user_picked and is_trade_account and doc.unallocated_amount > 0 and advance_account:
+	account_number = frappe.db.get_value("Account", current_account, "account_number") if current_account else None
+	is_trade_account = account_number in TRADE_ACCOUNT_NUMBERS[doc.party_type]
+
+	if is_trade_account and doc.unallocated_amount > 0 and advance_account:
 		account = advance_account
 		doc.book_advance_payments_in_separate_party_account = 1
 	else:
-		account = current_account if user_picked else default_account
+		account = current_account
 		doc.book_advance_payments_in_separate_party_account = 0
 		# Same as core does for every payment that is not booked as an advance
 		doc.is_opening = "No"
