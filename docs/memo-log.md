@@ -4,7 +4,7 @@
 
 - **Memo Generator page** (`/app/memo-generator`): the main way to make a memo.
   1. Pick a template, edit the memo, and watch the paper preview.
-  2. **Generate Memo** saves a draft Memo Log and shows the paper with its Memo No. (The approval box appears only after the final approval.)
+  2. **Generate Memo** saves a draft Memo Log and shows the paper with its Memo No and the approval box (if a rule matched).
   3. Then use Print, Download PDF or Open Memo Log.
 
   Pressing Generate again updates the same draft. You reach the page from the **Memo Generator** button
@@ -33,13 +33,13 @@ Flow: **Save** → Draft → **Actions → Submit for Approval** → Pending App
 - **Editing:** only while Draft. From Submit for Approval onward the memo is locked for everyone (the
   form goes read-only, and the server blocks changes made any other way). Approve/Reject still work. To fix
   a mistake: Reject, then Amend.
-- **Its own settings, no conditions.** Create a **Dynamic Approval Setting** with Document Type =
-  **Memo Log** per company. Use fieldnames `custom_approval_approvers` / `custom_current_approval_level`.
-  Add a section with only **Approvers** (no match criteria), and every memo of that company goes through
-  that chain. Memo Log is in `NO_CONDITION_DOCTYPES` in `custom_code/dynamic_approval.py`; for every other
-  doctype a section without criteria still matches nothing. If a section WITH criteria matches (e.g.
-  Department = IT), it wins over the no-condition one.
-- **No Memo Log setting for the company** means Submit for Approval auto-approves (engine behaviour).
+- **Its own settings, matched by Created By + Department.** Create a **Dynamic Approval Setting** with
+  Document Type = **Memo Log** per company. Use fieldnames `custom_approval_approvers` /
+  `custom_current_approval_level`. Per section, add match criteria `custom_created_by` = the user and
+  `custom_department` = the department, plus the **Approvers** in order. A memo uses the section whose
+  criteria all match (more criteria wins). A section with no criteria matches nothing.
+- **No Memo Log setting, or no matching section,** means no approvers and no box: Submit for Approval
+  auto-approves (engine behaviour).
 - **Workflow + approval fields** are created by `patches/setup_memo_log_approval.py`. It runs the same
   steps as the Setup Workflow button, and it also runs on live during migrate.
 - **Access:** approvers usually have no Memo Log role. On Pending Approval, the memo is shared
@@ -49,7 +49,9 @@ Flow: **Save** → Draft → **Actions → Submit for Approval** → Pending App
   is the desk's override. Frappe's core `apply_workflow` never fires the engine's
   `before_workflow_action`, so the levels stay at 0.
 
-**Approval box on the paper:** it prints ONLY after the final approval. It has no signature images; the
+**Approval box on the paper:** it prints as soon as the memo is saved with a matching rule (Draft too,
+and in the PDF attached to approval mails). The Ref. line prints `custom_name` (a Memo Log field on
+live/demo), else Memo No, else the ID. It has no signature images; the
 blank row is for hand signing. The columns are:
 
 1. Requested By (the creator).

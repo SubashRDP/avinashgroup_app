@@ -40,15 +40,6 @@ _NOTIFY_FIELDS = [
 	"enable_reject_notification", "reject_email_template",
 ]
 
-# Doctypes whose approval sections need NO match criteria: a section that has
-# approvers but no criteria applies to every document of that company (score 0,
-# so a section whose criteria do match still wins). For every other doctype a
-# section without criteria matches nothing, as before. Kept to an explicit list
-# because the old Leave Application settings hold ~160 criteria-less sections
-# that must not turn into catch-alls.
-NO_CONDITION_DOCTYPES = {"Memo Log"}
-
-
 def _is_managed_doctype(doc):
 	"""
 	A doctype is managed by Dynamic Approval only if `setup_workflow` has created
@@ -142,13 +133,7 @@ def _get_config_for_doc(doc):
 		for sec in all_sections:
 			criteria = criteria_by_section.get(sec, [])
 			if not criteria:
-				# Zero criteria matches nothing, except on NO_CONDITION_DOCTYPES
-				# where a section with approvers applies to every document.
-				if doc.doctype in NO_CONDITION_DOCTYPES and approvers_by_section.get(sec):
-					if best_score < 0:
-						best_score = 0
-						best_section = sec
-				continue
+				continue  # a section with no criteria matches nothing
 
 			if all(
 				str(doc.get(c.field_name) or "").strip() == str(c.field_value or "").strip()
@@ -820,8 +805,7 @@ def _get_memo_pdf_for_email(doc):
 	"""
 	Memo Log only: the memo itself as a PDF (the "Memo Log" print format), for
 	the approval-request and final mails. The mail still has its "Click here"
-	link. The approval box shows only on the final mail's PDF, because the print
-	format draws it only once the memo is approved (docstatus 1).
+	link. The PDF carries the approval box (names of the whole chain).
 	Returns [] for other doctypes, or if the PDF fails (the mail goes without it).
 	"""
 	if doc.doctype != "Memo Log":

@@ -1,9 +1,10 @@
 {#- Internal Memo print for Memo Log.
     Top: heading + company, Memo No (left) and BS date (right).
     Middle: To/From/CC, subject, text above, editable table, text below.
-    Bottom: approval table, only after the memo is fully approved (submitted). -#}
+    Bottom: approval table, once the memo is saved and an approval rule matched.
+    Ref: custom_name (the Memo Log field on live/demo); falls back to Memo No, then the ID. -#}
 {%- set grid = doc.get_table_grid() -%}
-{%- set memo_no = doc.custom_branch_name or doc.name or "(not generated yet)" -%}
+{%- set memo_no = doc.get("custom_name") or doc.custom_branch_name or doc.name or "(not generated yet)" -%}
 <style>
 	.memo { font-family: Calibri, Arial, sans-serif; font-size: 13px; color: #000; }
 	/* Frappe print theme greys th and tints labels; memo text is all black */
@@ -31,8 +32,9 @@
 		border-bottom: 1px solid #000; padding: 2px 5px; vertical-align: middle; }
 	.memo table.grid th { font-weight: bold; text-align: center; }
 	.memo table.approval td { text-align: center; font-size: 12px; }
-	.memo table.approval td.sign { height: 70px; }
+	.memo table.approval td.sign { height: 70px; vertical-align: top; padding-top: 3px; }
 	.memo table.approval .bold { font-weight: bold; }
+	.memo table.approval .status { font-size: 11px; font-style: italic; }
 </style>
 
 <div class="memo">
@@ -68,11 +70,15 @@
 
 	{%- if doc.text_below %}<div class="rich">{{ doc.text_below }}</div>{% endif %}
 
-	{#- Shown only once fully approved (Approved state = docstatus 1). No signature images; the blank row is for hand signing. -#}
-	{%- if doc.approvers and doc.docstatus == 1 %}
+	{#- Shown once saved: the approvers list is filled on save when a rule matched
+	    (no match = empty list = no box). No signature images; the sign row is for hand signing.
+	    The sign cell shows "Pending Review" / "Approved On: <BS date>" at its top, under the
+	    title (blank under Requested By). -#}
+	{%- if doc.approvers %}
+	{%- set statuses = doc.get_approval_status() %}
 	<table class="grid approval">
 		<tr>{% for a in doc.approvers %}<td class="bold">{{ a.label or "" }}</td>{% endfor %}</tr>
-		<tr>{% for a in doc.approvers %}<td class="sign"></td>{% endfor %}</tr>
+		<tr>{% for s in statuses %}<td class="sign"><span class="status">{{ s }}</span></td>{% endfor %}</tr>
 		<tr>{% for a in doc.approvers %}<td>{{ a.full_name or "" }}</td>{% endfor %}</tr>
 		<tr>{% for a in doc.approvers %}<td class="bold">{{ a.designation or "" }}</td>{% endfor %}</tr>
 	</table>

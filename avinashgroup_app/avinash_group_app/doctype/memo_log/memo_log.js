@@ -78,8 +78,7 @@ frappe.ui.form.on("Memo Log", {
 });
 
 // Show this memo's paper (saved values) in a popup, with Print and PDF buttons.
-// Same Jinja template as the "Memo Log" print format; the approval box appears
-// once the memo is approved.
+// Same Jinja template as the "Memo Log" print format, approval box included.
 function show_memo_paper(frm) {
 	if (frm.is_dirty()) {
 		frappe.msgprint(__("Please save the memo first."));
@@ -112,8 +111,8 @@ function show_memo_paper(frm) {
 
 // The "Memo Preview" tab, so there is no need to press Generate Memo to look at it.
 // Draft: drawn from the values on screen, unsaved edits included (nothing is saved).
-// Sent for approval / approved: the content is locked, so the saved memo is shown,
-// with the approval box once approved.
+// Sent for approval / approved: the content is locked, so the saved memo is shown.
+// The approval box is the one worked out at the last save.
 function render_memo_preview(frm) {
 	const field = frm.get_field("memo_preview");
 	if (!field) return;

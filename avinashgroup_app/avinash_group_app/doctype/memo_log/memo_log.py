@@ -12,15 +12,16 @@ people come from Dynamic Approval Setting and approve in the system.
 Approval:
 - Memo Log is submittable and runs on the shared engine in
   custom_code/dynamic_approval.py, with its OWN Dynamic Approval Settings
-  (Document Type = Memo Log, one per company). Memo Log is in the engine's
-  NO_CONDITION_DOCTYPES: a section with approvers and no match criteria applies
-  to every memo of that company. A section whose criteria match still wins.
-  No setting for the company = Submit for Approval auto-approves (engine).
+  (Document Type = Memo Log, one per company). A section applies when its
+  match criteria (Created By = custom_created_by, Department = custom_department)
+  all match the memo; the one with more criteria wins. A section with no
+  criteria matches nothing. No setting, or no matching section = no approvers,
+  and Submit for Approval auto-approves (engine).
   The workflow and approval fields are set up by
   patches/setup_memo_log_approval.py.
 - The printed approver list asks the engine for its config (_get_config_for_doc),
   so the paper always shows the same people the workflow will ask. The paper
-  shows it only after the final approval (see the print template).
+  shows it as soon as the memo is saved (see the print template).
 - While Draft, the list is rebuilt on every save and the engine's pinned rule is
   cleared, so a changed department picks the right rule. From Submit for
   Approval onward, the pinned rule is kept.
@@ -41,6 +42,7 @@ import json
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import cint, getdate
 
 from avinashgroup_app.custom_code.dynamic_approval import (
 	APPROVAL_SECTION_FIELD,
@@ -139,6 +141,35 @@ class MemoLog(Document):
 				submit=1,
 				flags={"ignore_share_permission": True},
 			)
+
+	def get_approval_status(self):
+		"""One status text per row of the approvers list, for the printed box:
+		"" for the requester (row 1), "Approved On: <BS date>" once that level has
+		approved, else "Pending Review". Used by the print format.
+
+		Row N+1 is approval level N. The dates come from the engine's approval
+		history, which logs "Approved (Level N)" and, on the last level,
+		"Approved (Final)"."""
+		from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+
+		last_level = len(self.approvers or []) - 1
+		approved_on = {}
+		for h in self.get("custom_approval_history") or []:
+			action = h.action or ""
+			if action.startswith("Approved (Level ") and action.endswith(")"):
+				approved_on[cint(action[len("Approved (Level ") : -1])] = h.timestamp
+			elif action == "Approved (Final)":
+				approved_on[last_level] = h.timestamp
+
+		status = []
+		for level, _row in enumerate(self.approvers or []):
+			if level == 0:
+				status.append("")
+			elif approved_on.get(level):
+				status.append("Approved On: " + bs_date_str(getdate(approved_on[level]), "."))
+			else:
+				status.append("Pending Review")
+		return status
 
 	def get_table_grid(self):
 		"""The table as a list of rows (row 0 = headings). Used by the print format."""
