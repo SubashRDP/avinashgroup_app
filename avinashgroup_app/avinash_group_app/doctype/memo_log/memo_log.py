@@ -144,7 +144,8 @@ class MemoLog(Document):
 
 	def get_approval_status(self):
 		"""One status text per row of the approvers list, for the printed box:
-		"" for the requester (row 1), "Approved On: <BS date>" once that level has
+		"Requested On: <BS date>" for the requester (row 1) once it was Submitted
+		for Approval (blank before), "Approved On: <BS date>" once that level has
 		approved, else "Pending Review". Used by the print format.
 
 		Row N+1 is approval level N. The dates come from the engine's approval
@@ -154,9 +155,12 @@ class MemoLog(Document):
 
 		last_level = len(self.approvers or []) - 1
 		approved_on = {}
+		requested_on = None
 		for h in self.get("custom_approval_history") or []:
 			action = h.action or ""
-			if action.startswith("Approved (Level ") and action.endswith(")"):
+			if action == "Submitted for Approval":
+				requested_on = h.timestamp  # latest submit wins
+			elif action.startswith("Approved (Level ") and action.endswith(")"):
 				approved_on[cint(action[len("Approved (Level ") : -1])] = h.timestamp
 			elif action == "Approved (Final)":
 				approved_on[last_level] = h.timestamp
@@ -164,7 +168,8 @@ class MemoLog(Document):
 		status = []
 		for level, _row in enumerate(self.approvers or []):
 			if level == 0:
-				status.append("")
+				# Requester: the day it was sent for approval (blank while Draft).
+				status.append("Requested On: " + bs_date_str(getdate(requested_on), ".") if requested_on else "")
 			elif approved_on.get(level):
 				status.append("Approved On: " + bs_date_str(getdate(approved_on[level]), "."))
 			else:

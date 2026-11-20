@@ -73,7 +73,7 @@
 	{#- Shown once saved: the approvers list is filled on save when a rule matched
 	    (no match = empty list = no box). No signature images; the sign row is for hand signing.
 	    The sign cell shows "Pending Review" / "Approved On: <BS date>" at its top, under the
-	    title (blank under Requested By). -#}
+	    title ("Requested On: <BS date>" under Requested By once submitted for approval). -#}
 	{%- if doc.approvers %}
 	{%- set statuses = doc.get_approval_status() %}
 	<table class="grid approval">
