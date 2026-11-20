@@ -6,6 +6,13 @@ from erpnext.accounts.party import get_party_account, get_party_advance_account
 # core behaviour.
 PARTY_TYPES = frozenset(("Customer", "Supplier"))
 
+# Account numbers (same in every company) that may switch to the advance account
+# on save. Any other default account stays as it is, even with an Unallocated Amount.
+TRADE_ACCOUNT_NUMBERS = {
+	"Customer": {"143101"},  # Debtors A/c - Domestic
+	"Supplier": {"343100", "343201"},  # Trade Payables - Domestic / Foreign
+}
+
 
 def apply_patch():
 	"""Stop core set_liability_account from switching the party account during validate.
@@ -58,9 +65,10 @@ def set_party_account_by_unallocated(doc, method=None):
 
 	- account in the field is neither the party's default nor its advance account
 	  -> the user picked it: keep it, book as a normal payment
-	- otherwise, Unallocated Amount > 0 -> advance account (party's own, then party
-	  group's, then Company default advance received / paid account)
-	- otherwise -> party's default receivable / payable account
+	- otherwise, default account is a trade account (TRADE_ACCOUNT_NUMBERS) and
+	  Unallocated Amount > 0 -> advance account (party's own, then party group's,
+	  then Company default advance received / paid account)
+	- otherwise -> party's default account
 	"""
 	if doc.docstatus != 0:
 		return
@@ -75,8 +83,10 @@ def set_party_account_by_unallocated(doc, method=None):
 	advance_account = get_party_advance_account(doc.party_type, doc.party, doc.company)
 
 	user_picked = current_account and current_account not in (default_account, advance_account)
+	default_number = frappe.db.get_value("Account", default_account, "account_number") if default_account else None
+	is_trade_account = default_number in TRADE_ACCOUNT_NUMBERS[doc.party_type]
 
-	if not user_picked and doc.unallocated_amount > 0 and advance_account:
+	if not user_picked and is_trade_account and doc.unallocated_amount > 0 and advance_account:
 		account = advance_account
 		doc.book_advance_payments_in_separate_party_account = 1
 	else:
