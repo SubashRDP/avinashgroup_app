@@ -9,9 +9,9 @@ const P_TYPE_TO_PAYMENT_TYPE = {
 };
 
 // Fill the party-side account (Paid From on Receive, Paid To on Pay) of a
-// Customer/Supplier entry from the party's Accounts table:
-//   no invoice tagged -> party's Advance Account (Default Account if it has none)
-//   invoice tagged    -> party's Default Account
+// Customer/Supplier entry with the party's Default Account. On save the server
+// (advance_account_patch.set_party_account_by_unallocated) switches it to the
+// advance account when there is an Unallocated Amount.
 // Runs after core's own party / reference handlers have finished, so it is not
 // overwritten by the account core sets from get_party_details.
 //
@@ -42,13 +42,7 @@ function set_party_account_from_party(frm, party_changed) {
 			const accounts = r.message;
 			if (!party_changed && user_changed_party_account(frm, account_field, accounts)) return;
 
-			const has_tagged_bills = (frm.doc.references || []).some((row) => row.reference_name);
-			const account = has_tagged_bills
-				? accounts.default_account
-				: accounts.advance_account || accounts.default_account;
-
-			// Remember what we filled, so a later change by the user can be told apart.
-			frm.__auto_party_account = account;
+			const account = accounts.default_account;
 			if (account && frm.doc[account_field] !== account) {
 				frm.set_value(account_field, account);
 			}
@@ -56,14 +50,12 @@ function set_party_account_from_party(frm, party_changed) {
 	});
 }
 
-// True when the account now in the field was picked by the user, not by us.
-//   - we filled it in this form session -> user changed it if it differs from ours
-//   - draft opened fresh (we filled nothing yet) -> user's own choice if it is
-//     neither the party's Advance nor Default account
+// True when the account now in the field was picked by the user: it is neither
+// the party's Default account nor its advance account (the advance account is
+// put there by the server on save). Same check as the server does on save.
 function user_changed_party_account(frm, account_field, accounts) {
 	const current = frm.doc[account_field];
 	if (!current) return false;
-	if (frm.__auto_party_account) return current !== frm.__auto_party_account;
 	return current !== accounts.advance_account && current !== accounts.default_account;
 }
 
