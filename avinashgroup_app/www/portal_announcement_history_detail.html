@@ -1,33 +1,114 @@
 {% extends "templates/web.html" %}
 
 {% block title %}{{ announcement.title or announcement.name }}{% endblock %}
+{% block header %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
 
 {% block style %}
 {{ super() }}
 <style>
-.ag-ann-back { display: inline-block; margin-bottom: 14px; font-size: .88rem; }
-.ag-ann-detail { border: 1px solid var(--border-color, #e2e6ee); border-radius: 10px; overflow: hidden; background: #fff; }
-.ag-ann-detail-img { display: block; width: 100%; height: auto; }
-.ag-ann-detail-body { padding: 18px 20px 24px; }
-.ag-ann-detail-title { font-size: 1.25rem; font-weight: 600; margin: 0 0 4px; }
-.ag-ann-detail-date { font-size: .82rem; color: #6b7280; margin-bottom: 14px; }
+/* NG portal identity (same tokens as /orders and Customer Statement); this page only. */
+body { background: #EDF0F7; }
+.page-content, .page_content, .container { max-width: 1460px !important; padding-left: 28px !important; padding-right: 28px !important; }
+.page_content { padding-left: 0 !important; padding-right: 0 !important; }
+@media (max-width: 767px) {
+	.page-content, .page_content, .container { padding-left: 15px !important; padding-right: 15px !important; }
+	.page_content { padding-left: 0 !important; padding-right: 0 !important; }
+}
+.page-content-wrapper main.container { margin-top: 0 !important; }
+.page-content-wrapper .page_content { margin-top: 0 !important; padding-top: 0 !important; }
+.ntc {
+	--ntc-navy-900: #141F4A; --ntc-navy-700: #233A86; --ntc-navy-500: #435CA8;
+	--ntc-red-600: #D6202A; --ntc-red-700: #AE1720;
+	--ntc-surface: #FFFFFF; --ntc-field: #F5F7FC; --ntc-line: #D8DFEE; --ntc-line-soft: #E9EDF6; --ntc-muted: #56628C;
+	--ntc-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--ntc-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--ntc-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+	container-type: inline-size;
+	font-family: var(--ntc-sans); color: var(--ntc-navy-900);
+	padding-bottom: 40px; -webkit-font-smoothing: antialiased;
+}
+.ntc *, .ntc *::before, .ntc *::after { box-sizing: border-box; }
+.ntc a:focus-visible { outline: 3px solid var(--ntc-navy-500); outline-offset: 2px; }
+.ntc-head {
+	position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px;
+	padding: 22px 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--ntc-line);
+}
+.ntc-head::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 96px; height: 3px; background: var(--ntc-red-600); }
+.ntc-mark {
+	flex: none; width: 46px; height: 46px; display: grid; place-items: center; color: #fff;
+	background: var(--ntc-red-600); border-radius: 10px; box-shadow: 0 6px 16px -8px rgba(214, 32, 42, .8);
+}
+.ntc-mark svg { width: 24px; height: 24px; display: block; }
+.ntc-head-text { flex: 1 1 180px; min-width: 0; }
+.ntc-eyebrow {
+	margin: 0 0 2px; font-family: var(--ntc-cond); font-size: 12px; font-weight: 600;
+	letter-spacing: .16em; text-transform: uppercase; color: var(--ntc-navy-500);
+}
+.ntc-title { margin: 0; font-size: clamp(27px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.02em; line-height: 1.05; color: var(--ntc-navy-900); overflow-wrap: anywhere; }
+.ntc-board { background: var(--ntc-surface); border: 1px solid var(--ntc-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45); overflow: hidden; }
+.ntc-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: #E9EDF6; color: #233A86; }
+.ntc-badge.is-stop { background: #FDEDEE; color: #AE1720; }
+.ntc-badge.is-ok { background: #DDF3E4; color: #17603A; }
+.ntc-date { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 13px; color: var(--ntc-muted); }
+.ntc-date span { white-space: nowrap; }
+.ntc-miti { font-family: var(--ntc-mono); font-weight: 600; color: var(--ntc-navy-700); }
+@media (prefers-reduced-motion: reduce) { .ntc * { transition: none !important; } }
+
+.ntc-back {
+	display: inline-flex; align-items: center; min-height: 42px; padding: 9px 16px; font-size: 14.5px; font-weight: 600;
+	border-radius: 9px; border: 1px solid var(--ntc-line); background: var(--ntc-surface); color: var(--ntc-navy-700); text-decoration: none;
+}
+.ntc-back:hover { background: var(--ntc-field); border-color: var(--ntc-navy-500); color: var(--ntc-navy-700); text-decoration: none; }
+.ntc-article { display: grid; grid-template-columns: minmax(0, 1fr); }
+.ntc-figure { margin: 0; background: var(--ntc-field); border-bottom: 1px solid var(--ntc-line); }
+.ntc-figure img { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; }
+.ntc-content { min-width: 0; padding: 18px 16px 24px; }
+.ntc-content .ntc-date:not(:last-child) { padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--ntc-line-soft); }
 /* Announcement bodies are authored elsewhere and can carry wide tables or long
-   unbroken strings — keep them inside the card instead of scrolling the page. */
-.ag-ann-detail-msg { overflow-wrap: anywhere; }
-.ag-ann-detail-msg img { max-width: 100%; height: auto; }
-.ag-ann-detail-msg table { max-width: 100%; }
+   unbroken strings; keep them inside the card instead of scrolling the page. */
+.ntc-body { max-width: 72ch; font-size: 16px; line-height: 1.6; color: var(--ntc-navy-900); overflow-wrap: anywhere; overflow-x: auto; }
+.ntc-body img, .ntc-body iframe, .ntc-body video { max-width: 100%; height: auto; }
+.ntc-body table { display: block; max-width: 100%; overflow-x: auto; }
+.ntc-body a { color: var(--ntc-navy-700); text-decoration: underline; }
+.ntc-body > :first-child { margin-top: 0; }
+.ntc-body > :last-child { margin-bottom: 0; }
+@container (min-width: 760px) {
+	.ntc-article.has-image { grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); }
+	.has-image .ntc-figure { border-bottom: 0; border-right: 1px solid var(--ntc-line); }
+	.ntc-content { padding: 24px 28px 30px; }
+}
 </style>
 {% endblock %}
 
 {% block page_content %}
-<a class="ag-ann-back" href="/portal_announcement_history">&larr; {{ _("All announcements") }}</a>
+<script>document.querySelector(".page-header-wrapper")?.remove();</script>
+<div class="ntc">
+	<header class="ntc-head">
+		<div class="ntc-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg></div>
+		<div class="ntc-head-text">
+			<p class="ntc-eyebrow">{{ _("Notice") }}</p>
+			<h1 class="ntc-title">{{ announcement.title | e }}</h1>
+		</div>
+		<a class="ntc-back" href="/portal_announcement_history">&larr; {{ _("All notices") }}</a>
+	</header>
 
-<article class="ag-ann-detail">
-	{% if image %}<img class="ag-ann-detail-img" src="{{ image | e }}" alt="">{% endif %}
-	<div class="ag-ann-detail-body">
-		<h1 class="ag-ann-detail-title">{{ announcement.title | e }}</h1>
-		<div class="ag-ann-detail-date">{{ frappe.format(announcement.sent_on, {"fieldtype": "Datetime"}) }}</div>
-		{% if body_html %}<div class="ag-ann-detail-msg">{{ body_html }}</div>{% endif %}
-	</div>
-</article>
+	<article class="ntc-board ntc-article {{ 'has-image' if image else '' }}">
+		{% if image %}<figure class="ntc-figure"><img src="{{ image | e }}" alt=""></figure>{% endif %}
+		<div class="ntc-content">
+			<div class="ntc-date">
+				{% if sent_on_bs %}<span class="ntc-miti">{{ sent_on_bs }} {{ _("BS") }}</span>{% endif %}
+				<span>{{ frappe.format(announcement.sent_on, {"fieldtype": "Datetime"}) }}</span>
+			</div>
+			{% if body_html %}<div class="ntc-body">{{ body_html }}</div>{% endif %}
+		</div>
+	</article>
+</div>
 {% endblock %}

@@ -2,6 +2,13 @@
 
 {% block title %}Sales Order Analysis{% endblock %}
 
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
 {% block script %}
 <!-- Nepali (BS) date picker — reuse rdp_common_app's library + NepaliFunctions converter -->
 <link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
@@ -282,7 +289,7 @@ class SalesOrderAnalysis {
 	load_report() {
 		var me = this;
 		if (!this.checked("company").length) {
-			$("#soa-result").html('<p class="text-muted">Please select at least one Company.</p>');
+			$("#soa-result").html('<div class="soa-state">Please select at least one Company.</div>');
 			return;
 		}
 		if (this.period_type() === "fiscal_year") {
@@ -291,27 +298,30 @@ class SalesOrderAnalysis {
 			return;
 		}
 
-		$("#soa-loading").show();
+		$("#soa-loading").css("display", "flex");
+		$("#soa-result").addClass("is-loading");
 		frappe.call({
 			method: "avinashgroup_app.templates.pages.sales_order_analysis.get_report",
 			args: this.report_args(),
 			callback: function (r) {
 				$("#soa-loading").hide();
+				$("#soa-result").removeClass("is-loading");
 				if (!r || !r.message) {
-					$("#soa-result").html('<p class="text-danger">No response from server.</p>');
+					$("#soa-result").html('<div class="soa-state soa-state--error" role="alert">No response from server.</div>');
 					return;
 				}
 				try {
 					me.render(r.message);
 				} catch (e) {
 					console.error("[sales_order_analysis] render error:", e);
-					$("#soa-result").html('<p class="text-danger">Render error: ' + (e && e.message) + '</p>');
+					$("#soa-result").html($('<div class="soa-state soa-state--error" role="alert">').text("Render error: " + (e && e.message)));
 				}
 			},
 			error: function (xhr) {
 				$("#soa-loading").hide();
+				$("#soa-result").removeClass("is-loading");
 				console.error("[sales_order_analysis] call error:", xhr);
-				$("#soa-result").html('<p class="text-danger">Call failed (see console). Status: ' + (xhr && xhr.status) + '</p>');
+				$("#soa-result").html('<div class="soa-state soa-state--error" role="alert">Call failed (see console). Status: ' + (xhr && xhr.status) + '</div>');
 			}
 		});
 	}
@@ -342,19 +352,19 @@ class SalesOrderAnalysis {
 		$('<button type="button" class="btn btn-default btn-sm soa-download-btn">')
 			.text("Download PDF").appendTo($bar);
 
-		const $pl = $('<div class="pl">');
-
 		// No Company/Customer/period header block on screen — the filter bar
 		// directly above already states all of it. The PDF still carries it,
 		// since a downloaded file travels away from those filters.
 
 		const rows = res.rows || [];
 		if (!rows.length) {
-			$('<p class="text-muted">').text("No sales orders found for the selected filters.").appendTo($pl);
-			$wrap.append($pl);
+			$('<div class="soa-state">').text("No sales orders found for the selected filters.").appendTo($wrap);
 			return;
 		}
 
+		this.render_summary(res.totals || {}).appendTo($wrap);
+
+		const $pl = $('<div class="pl">');
 		const $table = $('<table>').appendTo($pl);
 		$table.append(
 			'<thead><tr>' +
@@ -367,19 +377,27 @@ class SalesOrderAnalysis {
 		);
 		const $tb = $('<tbody>').appendTo($table);
 
+		// Figure columns: class + the label a phone card shows above the value.
+		const NUM_COLS = [
+			["qty", "soa-c-qty", "Qty"], ["billed_qty", "soa-c-bqty", "Billed Qty"],
+			["qty_to_bill", "soa-c-tqty", "Qty to Bill"], ["amount", "soa-c-amt", "Amount"],
+			["billed_amount", "soa-c-bamt", "Billed Amount"], ["pending_amount", "soa-c-pending", "Pending Amount"]
+		];
+		const num_td = function (col, value) {
+			return $('<td class="r soa-num">').addClass(col[1]).attr("data-label", col[2]).text(value);
+		};
+
 		function appendDetail(row) {
-			const $tr = $('<tr class="pl-row-main">');
-			$('<td class="nowrap">').text(row.miti).appendTo($tr);
-			$('<td class="nowrap">').text(row.sales_order).appendTo($tr);
-			$('<td>').text(row.status).appendTo($tr);
-			$('<td>').text(row.item_name).appendTo($tr);
-			$('<td class="r">').text(row.qty).appendTo($tr);
-			$('<td class="r">').text(row.billed_qty).appendTo($tr);
-			$('<td class="r">').text(row.qty_to_bill).appendTo($tr);
-			$('<td class="r">').text(row.amount).appendTo($tr);
-			$('<td class="r">').text(row.billed_amount).appendTo($tr);
-			$('<td class="r">').text(row.pending_amount).appendTo($tr);
-			$('<td class="r">').text(row.delay).appendTo($tr);
+			const $tr = $('<tr class="soa-row-main">');
+			$('<td class="nowrap soa-c-miti">').text(row.miti).appendTo($tr);
+			$('<td class="nowrap soa-c-so">').text(row.sales_order).appendTo($tr);
+			const slug = String(row.status || "").toLowerCase().replace(/[^a-z]+/g, "-");
+			$('<td class="soa-c-status">')
+				.append($('<span class="soa-badge">').addClass("soa-badge--" + slug).text(row.status))
+				.appendTo($tr);
+			$('<td class="soa-c-item">').text(row.item_name).appendTo($tr);
+			NUM_COLS.forEach(function (col) { num_td(col, row[col[0]]).appendTo($tr); });
+			$('<td class="r soa-num soa-c-delay" data-label="Delay (Days)">').text(row.delay).appendTo($tr);
 			$tb.append($tr);
 		}
 
@@ -387,13 +405,12 @@ class SalesOrderAnalysis {
 		// the page; Delay is left blank because summing per-order ages says nothing.
 		function appendTotal(label, t, cls) {
 			const $tot = $('<tr class="' + cls + '">');
-			$('<td>').appendTo($tot);
-			$('<td>').text(label).appendTo($tot);
-			$('<td>').appendTo($tot);
-			$('<td>').appendTo($tot);
-			[t.qty, t.billed_qty, t.qty_to_bill, t.amount, t.billed_amount, t.pending_amount]
-				.forEach(function (v) { $('<td class="r">').text(v || "").appendTo($tot); });
-			$('<td class="r">').appendTo($tot);
+			$('<td class="soa-c-miti">').appendTo($tot);
+			$('<td class="soa-c-so">').text(label).appendTo($tot);
+			$('<td class="soa-c-status">').appendTo($tot);
+			$('<td class="soa-c-item">').appendTo($tot);
+			NUM_COLS.forEach(function (col) { num_td(col, t[col[0]] || "").appendTo($tot); });
+			$('<td class="r soa-c-delay">').appendTo($tot);
 			$tb.append($tot);
 		}
 
@@ -402,19 +419,37 @@ class SalesOrderAnalysis {
 			// More than one customer in the result: a heading naming the customer, that
 			// customer's orders, then its own total — closed by a grand total.
 			groups.forEach(function (g) {
-				const $head = $('<tr class="pl-row-section">');
+				const $head = $('<tr class="soa-row-section">');
 				$('<td colspan="11">').text(g.customer).appendTo($head);
 				$tb.append($head);
 				g.rows.forEach(appendDetail);
-				appendTotal("Total", g.totals || {}, "pl-row-subtotal");
+				appendTotal("Total", g.totals || {}, "soa-row-subtotal");
 			});
-			appendTotal("Grand Total", res.totals || {}, "pl-row-closing");
+			appendTotal("Grand Total", res.totals || {}, "soa-row-closing");
 		} else {
 			rows.forEach(appendDetail);
-			appendTotal("Total", res.totals || {}, "pl-row-closing");
+			appendTotal("Total", res.totals || {}, "soa-row-closing");
 		}
 
 		$wrap.append($pl);
+	}
+
+	// Headline figures, exactly as the server formatted them for the total row;
+	// nothing is added up in the browser.
+	render_summary(totals) {
+		const $s = $('<div class="soa-summary">');
+		[
+			["Qty to Bill", totals.qty_to_bill],
+			["Amount", totals.amount],
+			["Billed Amount", totals.billed_amount],
+			["Pending Amount", totals.pending_amount, "soa-stat--key"]
+		].forEach(function (s) {
+			$('<div class="soa-stat">').addClass(s[2] || "")
+				.append($('<div class="soa-stat-label">').text(s[0]))
+				.append($('<div class="soa-stat-value">').text(s[1] || "–"))
+				.appendTo($s);
+		});
+		return $s;
 	}
 }
 </script>
@@ -422,86 +457,200 @@ class SalesOrderAnalysis {
 
 {% block page_content %}
 <style>
-.soa-section-label { font-size: 14px; color: #000; font-weight: 600; margin-bottom: 4px; white-space: nowrap; }
-.page-content, .page_content, .container { max-width: 100% !important; padding-left: 80px !important; padding-right: 80px !important; }
+/* ──────────────────────────────────────────────────────────────────────────
+   Sales Order Analysis — Nepal Gas portal look. Same colour and type values as
+   Customer Statement, kept here so this page needs no asset build. The layout
+   responds to .soa's own width (container queries), so it stays right whether
+   the portal menu beside it is open, collapsed or absent.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+	--soa-navy-900: #141F4A; --soa-navy-700: #233A86; --soa-navy-500: #435CA8;
+	--soa-red-600: #D6202A; --soa-red-700: #AE1720; --soa-red-050: #FDEDEE;
+	--soa-paper: #EDF0F7; --soa-surface: #FFFFFF; --soa-field: #F5F7FC;
+	--soa-line: #D8DFEE; --soa-line-soft: #E9EDF6; --soa-muted: #64719B;
+	--soa-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--soa-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--soa-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+	--soa-radius: 14px;
+	--soa-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
+}
+body { background: var(--soa-paper); }
 
-@media (max-width: 1199px) {
-	.page-content, .page_content, .container { padding-left: 24px !important; padding-right: 24px !important; }
-}
+.page-content, .page_content, .container { max-width: 1460px !important; padding-left: 28px !important; padding-right: 28px !important; }
+.page_content { padding-left: 0 !important; padding-right: 0 !important; }
 @media (max-width: 640px) {
-	.page-content, .page_content, .container { padding-left: 12px !important; padding-right: 12px !important; }
+	/* 15px, not less: the footer's Bootstrap .row has -15px margins and would overflow. */
+	.page-content, .page_content, .container { padding-left: 15px !important; padding-right: 15px !important; }
+	.page_content { padding-left: 0 !important; padding-right: 0 !important; }
 }
-/* Bootstrap holds four col-sm-3 filters across from 576px up — too narrow for a
-   long company name. Two per row until there is genuinely room for four. */
-@media (min-width: 576px) and (max-width: 1199px) {
-	.row.mb-2 > .col-sm-3, .row.mb-3 > .col-sm-3 { flex: 0 0 50%; max-width: 50%; }
-}
+.page-content-wrapper main.container { margin-top: 0 !important; }
+.page-content-wrapper .page-header-wrapper { margin: 0 !important; padding: 0 !important; }
+.page-content-wrapper .page-header-wrapper:not(:has(h1, h2, h3, a, button)) { display: none; }
+.page-content-wrapper .page_content { margin-top: 0 !important; padding-top: 0 !important; }
+
+.soa-frame { container: soa / inline-size; min-width: 0; }
+.soa { font-family: var(--soa-sans); color: var(--soa-navy-900); padding: 14px 0 40px; -webkit-font-smoothing: antialiased; }
+.soa *, .soa *::before, .soa *::after { box-sizing: border-box; }
+
+.soa-head { position: relative; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--soa-line); }
+.soa-head::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 96px; height: 3px; background: var(--soa-red-600); }
+.soa-title { margin: 0; font-family: var(--soa-sans); font-size: clamp(25px, 3cqi, 34px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; color: var(--soa-navy-900); }
+
+/* ── Filters ─────────────────────────────────────────────────────────── */
+.soa-filters { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 12px; padding: 16px 18px;
+	background: var(--soa-surface); border: 1px solid var(--soa-line); border-radius: var(--soa-radius); box-shadow: var(--soa-shadow); }
+.soa-field { grid-column: span 6; min-width: 0; }
+.soa-field--period { grid-column: span 3; }
+.soa-field--date { grid-column: span 4; }
+.soa-field--quick { grid-column: -6 / -1; align-self: end; }
+.soa-section-label { display: block; margin: 0 0 5px; font-family: var(--soa-cond); font-size: 12.5px; font-weight: 600; letter-spacing: .07em;
+	text-transform: uppercase; color: var(--soa-navy-500); white-space: nowrap; }
+.soa-section-label .text-danger { color: var(--soa-red-600) !important; }
+.soa .form-control { height: 40px; padding: 8px 12px; font-family: var(--soa-sans); font-size: 14.5px; font-weight: 500; color: var(--soa-navy-900);
+	background-color: var(--soa-field); border: 1px solid var(--soa-line); border-radius: 10px; box-shadow: none; }
+.soa .form-control:hover { background-color: #EFF2F9; }
+.soa input.form-control { font-family: var(--soa-mono); font-size: 13.5px; }
+.soa select.form-control { text-overflow: ellipsis; }
+
+.soa .ag-quick-dates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.soa .ag-quick-date-btn { height: 40px; padding: 0 4px; font-size: 13.5px; font-weight: 600; color: var(--soa-navy-700);
+	background: var(--soa-surface); border: 1px solid var(--soa-line); border-radius: 10px; box-shadow: none; }
+.soa .ag-quick-date-btn:hover { background: var(--soa-field); border-color: var(--soa-navy-500); }
+.soa .ag-quick-date-btn.btn-primary { color: #fff; background: var(--soa-navy-700); border-color: var(--soa-navy-700); }
+
+.soa :is(a, button, input, select):focus-visible { outline: 2px solid var(--soa-navy-700) !important; outline-offset: 2px; box-shadow: none !important; }
 
 /* Checkbox multi-select dropdown */
 .soa-ms { position: relative; min-width: 0; }
-/* A summary of the selection, not a value to read in full: it ellipses at any
-   width rather than dictating how wide its column has to be. */
-.soa-ms-btn { text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis;
-	white-space: nowrap; width: 100%; max-width: 100%; min-width: 0; display: block; }
-/* An unfiltered Sales Order / Status button carries no text. Without a line box
-   it would collapse to its padding and sit shorter than the controls beside it. */
+/* A summary of the selection, not a value to read in full: it ellipses at any width. */
+.soa-ms-btn { display: block; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+/* An unfiltered Sales Order / Status button carries no text; keep its line box. */
 .soa-ms-btn:empty::before { content: "\00a0"; }
-.soa-ms-panel { display: none; position: absolute; z-index: 1000; background: #fff; border: 1px solid #ddd;
-	border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); min-width: 100%;
-	max-height: 260px; overflow-y: auto; padding: 4px 0; margin-top: 2px; }
-.soa-ms-opt { display: block; padding: 5px 12px; margin: 0; cursor: pointer; font-weight: 400; white-space: nowrap; }
-.soa-ms-opt:hover { background: #f0f0f0; }
-.soa-ms-opt input { margin-right: 8px; }
-.soa-ms-search { width: calc(100% - 16px); margin: 4px 8px 6px; padding: 3px 6px; font-size: 12px;
-	border: 1px solid #ddd; border-radius: 3px; }
+.soa-ms-panel { display: none; position: absolute; z-index: 1000; min-width: 100%; max-width: min(420px, 90cqi); max-height: 260px; overflow-y: auto; margin-top: 4px; padding: 4px;
+	background: var(--soa-surface); border: 1px solid var(--soa-line); border-radius: 10px; box-shadow: 0 14px 30px -14px rgba(20, 31, 74, .4); }
+.soa-ms-opt { display: block; margin: 0; padding: 7px 10px; font-size: 14px; font-weight: 500; white-space: nowrap; border-radius: 7px; cursor: pointer; }
+.soa-ms-opt:hover { background: var(--soa-field); }
+.soa-ms-opt input { margin-right: 8px; accent-color: var(--soa-navy-700); }
+.soa-ms-search { display: block; width: calc(100% - 8px); height: 34px; margin: 2px 4px 6px; padding: 4px 9px; font-family: var(--soa-sans) !important; font-size: 13.5px !important;
+	color: var(--soa-navy-900); background: var(--soa-field); border: 1px solid var(--soa-line); border-radius: 7px; }
 
-.soa-print-bar { display: flex; justify-content: flex-end; margin: -8px 0 10px; }
-.soa-download-btn { background: #000; color: #fff; border: 1px solid #000;
-	padding: 7px 22px; font-size: 14px; font-weight: 600; border-radius: 4px; }
-.soa-download-btn:hover, .soa-download-btn:focus { background: #222; color: #fff; border-color: #222; }
+/* ── States ──────────────────────────────────────────────────────────── */
+.soa-loading { display: flex; align-items: center; gap: 8px; margin: 14px 2px 0; font-size: 14px; font-weight: 500; color: var(--soa-muted); }
+.soa-loading::before { content: ""; width: 15px; height: 15px; border: 2px solid var(--soa-line); border-top-color: var(--soa-red-600); border-radius: 50%; animation: soa-spin .8s linear infinite; }
+@keyframes soa-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .soa-loading::before { animation-duration: 2.4s; } }
+#soa-result { transition: opacity .15s ease; }
+#soa-result.is-loading { opacity: .5; pointer-events: none; }
+.soa-state { margin-top: 16px; padding: 36px 20px; text-align: center; font-size: 15px; font-weight: 500; color: var(--soa-muted);
+	background: var(--soa-surface); border: 1px dashed var(--soa-line); border-radius: var(--soa-radius); }
+.soa-state--error { color: var(--soa-red-700); background: var(--soa-red-050); border: 1px solid #F6C9CC; }
 
-/* ── Report look (mirrors the Customer Statement page) ── */
-.pl { font-family: Arial, sans-serif; font-size: 12px; color: #222; line-height: 1.7; width: 100%; margin-top: 8px; }
-.pl table { width: 100%; border-collapse: collapse; }
-/* Column titles stay pinned to the top of the window while long results scroll
-   under them. A collapsed table's borders don't travel with a stuck cell, so the
-   top/bottom rules are repeated as inset shadows. */
-.pl thead th { background: #f0f2f5; color: #222; font-size: 12px; font-weight: bold; padding: 6px 8px;
-	border-top: 1.5px solid #aaa; border-bottom: 1.5px solid #aaa;
-	position: sticky; top: 0; z-index: 2;
-	box-shadow: inset 0 1.5px 0 #aaa, inset 0 -1.5px 0 #aaa; }
-.pl thead th.r { text-align: right; }
-.pl thead th.l { text-align: left; }
-.pl td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
-.pl-row-main td { background: #fff; }
-.pl-row-closing td { font-weight: bold; border-top: 2px solid #555; border-bottom: 2px solid #555; }
-/* Customer blocks, shown only when the result covers more than one customer. The
-   heading is shaded so a block is findable at a glance; its subtotal is bold but
-   ruled more lightly than the closing grand total, so the two do not compete. */
-.pl-row-section td { background: #f1f1f1; font-weight: bold; border-top: 1px solid #999; }
-.pl-row-subtotal td { font-weight: bold; border-top: 1px solid #999; }
-.pl .r { text-align: right; }
-.pl .l { text-align: left; }
-.pl .nowrap { white-space: nowrap; }
+/* ── Summary figures (the server's own totals, as formatted) ─────────── */
+.soa-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.soa-stat { min-width: 0; padding: 13px 16px; background: var(--soa-surface); border: 1px solid var(--soa-line); border-radius: 12px; }
+.soa-stat-label { font-family: var(--soa-cond); font-size: 12.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--soa-muted); }
+.soa-stat-value { margin-top: 3px; font-family: var(--soa-mono); font-size: clamp(16px, 1.9cqi, 22px); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.soa-stat--key { color: #fff; background: var(--soa-navy-900); border-color: var(--soa-navy-900); border-bottom: 3px solid var(--soa-red-600); }
+.soa-stat--key .soa-stat-label { color: #C5CEE6; }
 
-@media (max-width: 767px) {
-	/* the report scrolls inside its own box rather than dragging the page sideways;
-	   the box also scrolls vertically so the sticky column titles pin inside it */
-	.pl { overflow: auto; max-height: 80vh; -webkit-overflow-scrolling: touch; }
-	.pl table { min-width: 900px; }
-	.soa-print-bar { justify-content: stretch; }
-	.soa-download-btn { width: 100%; }
+/* ── Report table ────────────────────────────────────────────────────── */
+.soa .pl { width: 100%; margin-top: 12px; font-family: var(--soa-sans); font-size: 14px; line-height: 1.4; color: var(--soa-navy-900);
+	background: var(--soa-surface); border: 1px solid var(--soa-line); border-radius: var(--soa-radius); box-shadow: var(--soa-shadow); }
+.soa .pl table { width: 100%; border-collapse: separate; border-spacing: 0; }
+/* Column titles stay pinned while long results scroll under them. */
+.soa .pl thead th { position: sticky; top: 0; z-index: 2; padding: 9px 8px; font-family: var(--soa-cond); font-size: 12.5px; font-weight: 600; line-height: 1.15;
+	letter-spacing: .05em; text-transform: uppercase; vertical-align: bottom; color: #fff; background: var(--soa-navy-900); border: 0; }
+.soa .pl thead th:first-child { padding-left: 14px; border-top-left-radius: 13px; }
+.soa .pl thead th:last-child { padding-right: 14px; border-top-right-radius: 13px; }
+.soa .pl thead th.r { text-align: right; }
+.soa .pl thead th.l { text-align: left; }
+.soa .pl td { padding: 8px; vertical-align: top; border-bottom: 1px solid var(--soa-line-soft); }
+.soa .pl td:first-child { padding-left: 14px; }
+.soa .pl td:last-child { padding-right: 14px; }
+.soa .pl .r { text-align: right; }
+.soa .pl .nowrap { white-space: nowrap; }
+.soa .pl .soa-c-miti { font-family: var(--soa-mono); font-size: 12.5px; color: var(--soa-muted); }
+.soa .pl .soa-c-so { font-family: var(--soa-mono); font-size: 12.5px; font-weight: 500; color: var(--soa-navy-700); }
+.soa .pl .soa-c-item { min-width: 130px; font-weight: 500; overflow-wrap: anywhere; }
+.soa .pl .soa-num { font-family: var(--soa-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.soa .pl .soa-c-pending { font-weight: 600; }
+.soa-row-main:hover td { background: var(--soa-field); }
+
+.soa-badge { display: inline-block; padding: 2px 8px; font-family: var(--soa-cond); font-size: 12.5px; font-weight: 600; line-height: 1.35; letter-spacing: .02em; white-space: nowrap;
+	color: var(--soa-navy-700); background: var(--soa-line-soft); border: 1px solid var(--soa-line); border-radius: 999px; }
+.soa-badge--not-billed { color: var(--soa-red-700); background: var(--soa-red-050); border-color: #F6C9CC; }
+.soa-badge--partly-billed { color: var(--soa-navy-700); background: #E3E8F4; border-color: #C5CEE6; }
+.soa-badge--fully-billed { color: #fff; background: var(--soa-navy-700); border-color: var(--soa-navy-700); }
+.soa-badge--closed { color: var(--soa-muted); background: var(--soa-field); border-color: var(--soa-line); }
+
+/* Customer blocks, shown only when the result covers more than one customer. */
+.soa .pl .soa-row-section td { font-size: 14px; font-weight: 700; color: var(--soa-navy-900); background: var(--soa-line-soft); border-top: 2px solid var(--soa-navy-500); }
+.soa .pl .soa-row-subtotal td { font-weight: 600; background: var(--soa-field); border-bottom-color: var(--soa-line); }
+.soa .pl .soa-row-subtotal .soa-c-so, .soa .pl .soa-row-closing .soa-c-so { font-family: var(--soa-sans); font-size: 14px; font-weight: 700; color: var(--soa-navy-900); white-space: nowrap; }
+.soa .pl .soa-row-closing td { font-weight: 700; color: var(--soa-navy-900); background: #E3E8F4; border-top: 2px solid var(--soa-navy-900); border-bottom: 0; }
+.soa .pl .soa-row-closing:last-child td:first-child { border-bottom-left-radius: 13px; }
+.soa .pl .soa-row-closing:last-child td:last-child { border-bottom-right-radius: 13px; }
+
+.soa-print-bar { display: flex; justify-content: flex-end; margin-top: 14px; }
+.soa .soa-download-btn { padding: 9px 20px; font-size: 14.5px; font-weight: 600; color: #fff; background: var(--soa-red-600); border: 1px solid var(--soa-red-600); border-radius: 10px; }
+.soa .soa-download-btn:hover { color: #fff; background: var(--soa-red-700); border-color: var(--soa-red-700); }
+
+@container soa (max-width: 1040px) {
+	.soa-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px; }
+	.soa-field, .soa-field--date { grid-column: span 1; }
+	.soa-field--period, .soa-field--quick, .soa-fy-col { grid-column: 1 / -1; }
+	.soa-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.soa-ms-opt { white-space: normal; }
+	.soa .soa-download-btn { width: 100%; }
+
+	/* Each order line becomes a card, so nothing scrolls sideways. */
+	.soa .pl table, .soa .pl tbody { display: block; }
+	.soa .pl thead { display: none; }
+	.soa .pl tbody tr { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; padding: 11px 14px; border-top: 1px solid var(--soa-line-soft); }
+	.soa .pl tbody tr:first-child { border-top: 0; }
+	.soa .pl tbody td, .soa .pl tbody td:first-child, .soa .pl tbody td:last-child,
+	.soa .pl .soa-row-subtotal td, .soa .pl .soa-row-closing td { display: block; min-width: 0; padding: 0; background: none; border: 0; border-radius: 0 !important; }
+	.soa .pl .soa-c-so { grid-column: 1 / -1; order: 1; padding-right: 104px; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+	.soa .pl tbody td.soa-c-status { position: absolute; top: 10px; right: 14px; }
+	.soa .pl .soa-c-item { grid-column: 1 / -1; order: 3; min-width: 0; font-size: 14.5px; }
+	.soa .pl .soa-c-miti { grid-column: 1 / -1; order: 4; font-size: 12px; }
+	.soa .pl .soa-c-qty { order: 5; } .soa .pl .soa-c-bqty { order: 6; } .soa .pl .soa-c-tqty { order: 7; } .soa .pl .soa-c-delay { order: 8; }
+	.soa .pl .soa-c-amt { grid-column: span 2; order: 9; } .soa .pl .soa-c-bamt { grid-column: span 2; order: 10; }
+	.soa .pl .soa-c-pending { grid-column: 1 / -1; order: 11; padding-top: 5px; border-top: 1px dashed var(--soa-line); }
+	.soa .pl .soa-num { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+	.soa .pl .soa-c-pending { display: flex; justify-content: space-between; gap: 10px; text-align: right; }
+	.soa .pl td[data-label]::before { content: attr(data-label); display: block; font-family: var(--soa-sans); font-size: 11.5px; font-weight: 600; line-height: 1.25; color: var(--soa-muted); }
+	.soa .pl td.soa-c-pending[data-label]::before { display: inline; font-size: 12.5px; line-height: 1.5; }
+	.soa .pl td.soa-num[data-label]:empty::after { content: "–"; color: var(--soa-muted); }
+
+	.soa .pl tbody tr.soa-row-section { display: block; background: var(--soa-line-soft); border-top: 2px solid var(--soa-navy-500); }
+	.soa .pl tbody tr.soa-row-subtotal { background: var(--soa-field); border-top: 1px solid var(--soa-line); }
+	.soa .pl tbody tr.soa-row-closing { background: #E3E8F4; border-top: 2px solid var(--soa-navy-900); border-radius: 0 0 13px 13px; }
+	/* Totals: the label leads; slots that are always blank on a total row go. */
+	.soa .pl tr:is(.soa-row-subtotal, .soa-row-closing) :is(.soa-c-miti, .soa-c-status, .soa-c-item, .soa-c-delay) { display: none; }
+	.soa .pl tbody tr:is(.soa-row-subtotal, .soa-row-closing) td.soa-c-so { padding-right: 0; }
+	.soa .pl tr:is(.soa-row-subtotal, .soa-row-closing) .soa-c-qty,
+	.soa .pl tr:is(.soa-row-subtotal, .soa-row-closing) .soa-c-bqty { grid-column: span 1; }
+	.soa .pl tr:is(.soa-row-subtotal, .soa-row-closing) .soa-c-tqty { grid-column: span 2; }
+}
+@container soa (max-width: 420px) {
+	.soa-summary { gap: 8px; }
+	.soa-stat { padding: 10px 12px; }
+	.soa-stat-value { font-size: 15px; }
+	.soa-field--wide { grid-column: 1 / -1; }
 }
 </style>
 
-<h2 class="mb-4">Sales Order Analysis</h2>
+<div class="soa-frame">
+<div class="soa">
+<header class="soa-head"><h1 class="soa-title">Sales Order Analysis</h1></header>
 
 <!-- Filters -->
-<div class="row mb-2">
-	<div class="col-sm-3 mb-3">
-		<div class="soa-section-label">Company <span class="text-danger">*</span></div>
+<section class="soa-filters" aria-label="Report filters">
+	<div class="soa-field soa-field--wide">
+		<div class="soa-section-label" id="soa-company-label">Company <span class="text-danger">*</span></div>
 		<div class="soa-ms">
-			<button type="button" class="form-control soa-ms-btn" id="soa-company-btn">All companies</button>
+			<button type="button" class="form-control soa-ms-btn" id="soa-company-btn" aria-describedby="soa-company-label">All companies</button>
 			<div class="soa-ms-panel" id="soa-company-panel">
 				{% for co in company_list %}
 				<label class="soa-ms-opt"><input type="checkbox" class="soa-company-cb" value="{{ co }}" {% if co in default_companies %}checked{% endif %}>{{ co }}</label>
@@ -509,10 +658,10 @@ class SalesOrderAnalysis {
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-3 mb-3">
-		<div class="soa-section-label">Customer</div>
+	<div class="soa-field soa-field--wide">
+		<div class="soa-section-label" id="soa-customer-label">Customer</div>
 		<div class="soa-ms">
-			<button type="button" class="form-control soa-ms-btn" id="soa-customer-btn">All customers</button>
+			<button type="button" class="form-control soa-ms-btn" id="soa-customer-btn" aria-describedby="soa-customer-label">All customers</button>
 			<div class="soa-ms-panel" id="soa-customer-panel">
 				{% for c in customer_list %}
 				<label class="soa-ms-opt"><input type="checkbox" class="soa-customer-cb" value="{{ c.name }}" data-company="{{ c.company }}" checked>{{ c.customer_name }}</label>
@@ -520,58 +669,19 @@ class SalesOrderAnalysis {
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-3 mb-3">
-		{# empty label keeps the buttons level with the Customer box beside them #}
-		<div class="soa-section-label">&nbsp;</div>
-		<div id="soa-quick-dates"></div>
-	</div>
-	<div class="col-sm-3 mb-3">
-		<div class="soa-section-label">Period <span class="text-danger">*</span></div>
-		<select class="form-control" id="soa-period-type">
-			<option value="fiscal_year">Fiscal Year</option>
-			<option value="date_wise" selected>Date-wise</option>
-		</select>
-	</div>
-	<div class="col-sm-3 mb-3 soa-fy-col">
-		<div class="soa-section-label">Fiscal Year <span class="text-danger">*</span></div>
-		<select class="form-control" id="soa-fiscal-year">
-			{% for fy in fiscal_year_list %}
-			<option value="{{ fy }}" {% if fy == default_fiscal_year %}selected{% endif %}>{{ fy }}</option>
-			{% endfor %}
-		</select>
-	</div>
-	<div class="col-sm-3 mb-3 soa-date-col" style="display:none;">
-		<div class="soa-section-label">From Date (AD) <span class="text-danger">*</span></div>
-		<input type="text" class="form-control" id="soa-from-date" value="{{ from_date }}" placeholder="YYYY-MM-DD" autocomplete="off">
-	</div>
-	<div class="col-sm-3 mb-3 soa-date-col soa-bs-col" style="display:none;">
-		<div class="soa-section-label">From Miti (BS)</div>
-		<input type="text" class="form-control" id="soa-from-miti" placeholder="YYYY-MM-DD" autocomplete="off">
-	</div>
-	<div class="col-sm-3 mb-3 soa-date-col" style="display:none;">
-		<div class="soa-section-label">To Date (AD) <span class="text-danger">*</span></div>
-		<input type="text" class="form-control" id="soa-to-date" value="{{ to_date }}" placeholder="YYYY-MM-DD" autocomplete="off">
-	</div>
-	<div class="col-sm-3 mb-3 soa-date-col soa-bs-col" style="display:none;">
-		<div class="soa-section-label">To Miti (BS)</div>
-		<input type="text" class="form-control" id="soa-to-miti" placeholder="YYYY-MM-DD" autocomplete="off">
-	</div>
-</div>
-
-<div class="row mb-3">
-	<div class="col-sm-3 mb-3">
-		<div class="soa-section-label">Sales Order</div>
+	<div class="soa-field">
+		<div class="soa-section-label" id="soa-so-label">Sales Order</div>
 		<div class="soa-ms">
-			<button type="button" class="form-control soa-ms-btn" id="soa-so-btn"></button>
+			<button type="button" class="form-control soa-ms-btn" id="soa-so-btn" aria-label="Sales Order filter"></button>
 			<div class="soa-ms-panel" id="soa-so-panel">
-				<input type="text" class="soa-ms-search" id="soa-so-search" placeholder="Search…" autocomplete="off">
+				<input type="text" class="soa-ms-search" id="soa-so-search" placeholder="Search…" aria-label="Search sales orders" autocomplete="off">
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-3 mb-3">
-		<div class="soa-section-label">Status</div>
+	<div class="soa-field">
+		<div class="soa-section-label" id="soa-status-label">Status</div>
 		<div class="soa-ms">
-			<button type="button" class="form-control soa-ms-btn" id="soa-status-btn"></button>
+			<button type="button" class="form-control soa-ms-btn" id="soa-status-btn" aria-label="Status filter"></button>
 			<div class="soa-ms-panel" id="soa-status-panel">
 				{% for s in status_list %}
 				<label class="soa-ms-opt"><input type="checkbox" class="soa-status-cb" value="{{ s }}">{{ s }}</label>
@@ -579,10 +689,46 @@ class SalesOrderAnalysis {
 			</div>
 		</div>
 	</div>
-</div>
+	<div class="soa-field soa-field--period">
+		<label class="soa-section-label" for="soa-period-type">Period <span class="text-danger">*</span></label>
+		<select class="form-control" id="soa-period-type">
+			<option value="fiscal_year">Fiscal Year</option>
+			<option value="date_wise" selected>Date-wise</option>
+		</select>
+	</div>
+	<div class="soa-field soa-field--date soa-fy-col">
+		<label class="soa-section-label" for="soa-fiscal-year">Fiscal Year <span class="text-danger">*</span></label>
+		<select class="form-control" id="soa-fiscal-year">
+			{% for fy in fiscal_year_list %}
+			<option value="{{ fy }}" {% if fy == default_fiscal_year %}selected{% endif %}>{{ fy }}</option>
+			{% endfor %}
+		</select>
+	</div>
+	<div class="soa-field soa-field--date soa-date-col" style="display:none;">
+		<label class="soa-section-label" for="soa-from-date">From Date (AD) <span class="text-danger">*</span></label>
+		<input type="text" class="form-control" id="soa-from-date" value="{{ from_date }}" placeholder="YYYY-MM-DD" autocomplete="off">
+	</div>
+	<div class="soa-field soa-field--date soa-date-col soa-bs-col" style="display:none;">
+		<label class="soa-section-label" for="soa-from-miti">From Miti (BS)</label>
+		<input type="text" class="form-control" id="soa-from-miti" placeholder="YYYY-MM-DD" autocomplete="off">
+	</div>
+	<div class="soa-field soa-field--date soa-date-col" style="display:none;">
+		<label class="soa-section-label" for="soa-to-date">To Date (AD) <span class="text-danger">*</span></label>
+		<input type="text" class="form-control" id="soa-to-date" value="{{ to_date }}" placeholder="YYYY-MM-DD" autocomplete="off">
+	</div>
+	<div class="soa-field soa-field--date soa-date-col soa-bs-col" style="display:none;">
+		<label class="soa-section-label" for="soa-to-miti">To Miti (BS)</label>
+		<input type="text" class="form-control" id="soa-to-miti" placeholder="YYYY-MM-DD" autocomplete="off">
+	</div>
+	<div class="soa-field soa-field--quick">
+		<div id="soa-quick-dates"></div>
+	</div>
+</section>
 
-<div id="soa-loading" class="text-muted mb-2" style="display:none;">Loading…</div>
+<div id="soa-loading" class="soa-loading" role="status" style="display:none;">Loading sales orders…</div>
 
 <!-- Result: report-style table -->
 <div id="soa-result"></div>
+</div>
+</div>
 {% endblock %}

@@ -51,6 +51,7 @@ def get_context(context):
 
 	context.announcement = announcement
 	context.image = image
+	context.sent_on_bs = _bs_date(announcement.sent_on)
 	# Custom HTML replaces the message, exactly as the login popup does it — the
 	# image still shows. Keeping the rule here means the list's snippet, the popup
 	# and this page all summarise the same text.
@@ -66,3 +67,13 @@ def get_context(context):
 	# but a read receipt has no other moment to fire, and mark_read is idempotent.
 	mark_read(name)
 	frappe.db.commit()
+
+
+def _bs_date(value):
+	"""BS date for display only; a date that will not convert just shows AD."""
+	try:
+		from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+
+		return bs_date_str(value) or ""
+	except Exception:
+		return ""

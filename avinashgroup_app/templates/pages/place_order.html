@@ -135,6 +135,11 @@ body { background: var(--po-paper); }
 	color: var(--po-muted);
 }
 
+/* Breakpoints below read this container, not the viewport: the portal menu
+   rail takes width the viewport does not know about. Each is the old viewport
+   value minus the page gutters. */
+.po { container: po / inline-size; }
+
 /* ── Layout ────────────────────────────────────────────────────────────── */
 .po-grid {
 	display: grid;
@@ -143,17 +148,17 @@ body { background: var(--po-paper); }
 	align-items: start;
 	margin-top: 22px;
 }
-.po-main { display: grid; gap: 18px; min-width: 0; }
+.po-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
 .po-side { position: sticky; top: 22px; }
-@media (min-width: 992px) and (max-width: 1319px) {
+@container po (min-width: 936px) and (max-width: 1263px) {
 	.po-grid { grid-template-columns: minmax(0, 1fr) 292px; gap: 16px; }
-	.po-items-table { min-width: 830px; }
+	.po-items-table { min-width: 100%; }
 	.po-items-table th, .po-items-table td { padding-left: 7px; padding-right: 7px; }
 	.po .form-control { padding-left: 9px; padding-right: 9px; }
 	.po .po-vat-apply-on { min-width: 78px; padding-left: 8px; padding-right: 8px; }
 }
 
-@media (max-width: 991px) {
+@container po (max-width: 935px) {
 	.po-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 	.po-side { position: static; }
 }
@@ -165,7 +170,7 @@ body { background: var(--po-paper); }
 	box-shadow: var(--po-shadow);
 	padding: 20px 22px 22px;
 }
-@media (max-width: 640px) { .po-card { padding: 16px 14px 18px; } }
+@container po (max-width: 612px) { .po-card { padding: 16px 14px 18px; } }
 
 .po-card-head {
 	display: flex;
@@ -195,7 +200,7 @@ body { background: var(--po-paper); }
 	grid-template-columns: 1.35fr 1.35fr 1fr 1fr;
 	gap: 16px 18px;
 }
-@media (max-width: 1319px) { .po-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container po (max-width: 1263px) { .po-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .po-field { position: relative; min-width: 0; }
 .po-label {
 	display: block;
@@ -310,7 +315,7 @@ body { background: var(--po-paper); }
 	font-size: 12px;
 	color: #97A2C2;
 }
-@media (max-width: 700px) { .po-credit-note { margin-left: 0; } }
+@container po (max-width: 672px) { .po-credit-note { margin-left: 0; } }
 
 /* ── Line items ────────────────────────────────────────────────────────── */
 .po-table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
@@ -693,7 +698,7 @@ body { background: var(--po-paper); }
 @media (max-width: 640px) { .po-done-card { padding: 26px 18px 22px; } }
 
 /* ── Line items become cards on small screens ──────────────────────────── */
-@media (max-width: 991px) {
+@container po (max-width: 935px) {
 	.po-table-wrap { overflow: visible; margin: 0; padding: 0; }
 	.po-items-table thead { display: none; }
 	.po-items-table, .po-items-table tbody, .po-items-table tr, .po-items-table td { display: block; width: 100%; }
@@ -766,7 +771,7 @@ body { background: var(--po-paper); }
 	.po-btn--primary { padding: 13px 18px; }
 }
 
-@media (max-width: 640px) {
+@container po (max-width: 612px) {
 	.po-head { gap: 12px; padding: 20px 0 14px; }
 	.po-head-aside { display: none; }
 	.po-fields { grid-template-columns: minmax(0, 1fr) !important; gap: 14px; }
@@ -774,11 +779,11 @@ body { background: var(--po-paper); }
 
 /* On a laptop the form is read at laptop scale, not stretched at phone scale. */
 /* the scaled-up register needs ~950px; give it that before widening the stub */
-@media (min-width: 1320px) and (max-width: 1499px) {
+@container po (min-width: 1264px) and (max-width: 1443px) {
 	.po-grid { grid-template-columns: minmax(0, 1fr) 304px; }
 }
 
-@media (min-width: 1320px) {
+@container po (min-width: 1264px) {
 	.po-items-table { min-width: 900px; }
 	.po-head { padding: 32px 0 20px; }
 	.po-title { font-size: 40px; }

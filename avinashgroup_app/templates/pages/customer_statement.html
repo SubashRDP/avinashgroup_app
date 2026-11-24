@@ -2,6 +2,13 @@
 
 {% block title %}Customer Statement{% endblock %}
 
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
 {% block script %}
 <!-- Nepali (BS) date picker — reuse rdp_common_app's library + NepaliFunctions converter -->
 <link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
@@ -237,7 +244,8 @@ class CustomerStatement {
 		const to_date = this.get_date("to");
 		if (!company || !from_date || !to_date) return;
 
-		$("#cs-loading").show();
+		$("#cs-loading").css("display", "flex");
+		$("#cs-result").addClass("is-loading");
 		frappe.call({
 			method: "avinashgroup_app.templates.pages.customer_statement.get_statement",
 			args: {
@@ -248,22 +256,24 @@ class CustomerStatement {
 			},
 			callback: function (r) {
 				$("#cs-loading").hide();
+				$("#cs-result").removeClass("is-loading");
 				console.log("[customer_statement] response:", r);
 				if (!r || !r.message) {
-					$("#cs-result").html('<p class="text-danger">No response from server (r.message empty).</p>');
+					$("#cs-result").html('<div class="cs-state cs-state--error" role="alert">No response from server (r.message empty).</div>');
 					return;
 				}
 				try {
 					me.render(r.message);
 				} catch (e) {
 					console.error("[customer_statement] render error:", e);
-					$("#cs-result").html('<p class="text-danger">Render error: ' + (e && e.message) + '</p>');
+					$("#cs-result").html($('<div class="cs-state cs-state--error" role="alert">').text('Render error: ' + (e && e.message)));
 				}
 			},
 			error: function (xhr) {
 				$("#cs-loading").hide();
+				$("#cs-result").removeClass("is-loading");
 				console.error("[customer_statement] call error:", xhr);
-				$("#cs-result").html('<p class="text-danger">Call failed (see console). Status: ' + (xhr && xhr.status) + '</p>');
+				$("#cs-result").html('<div class="cs-state cs-state--error" role="alert">Call failed (see console). Status: ' + (xhr && xhr.status) + '</div>');
 			}
 		});
 	}
@@ -302,7 +312,7 @@ class CustomerStatement {
 		const rows = res.rows || [];
 		const hasTxn = rows.some(function (r) { return r.sr_no; });
 		if (!hasTxn) {
-			$wrap.append('<p class="text-muted">No transactions found for the selected filters.</p>');
+			$wrap.append('<div class="cs-state">No transactions found for the selected filters.</div>');
 			return;
 		}
 
@@ -310,6 +320,8 @@ class CustomerStatement {
 		// never part of the printed output.
 		const $bar = $('<div class="cs-print-bar">').appendTo($wrap);
 		$('<button type="button" class="btn btn-default btn-sm cs-download-btn">').text("Download PDF").appendTo($bar);
+
+		this.render_summary(rows).appendTo($wrap);
 
 		// Subheading lists the customers chosen in the filter (not just those with rows).
 		const parties = res.customer_names || [];
@@ -357,12 +369,7 @@ class CustomerStatement {
 			if (row.is_customer_header) {
 				const $h = $('<tr class="pl-row-cust-header">');
 				$('<td class="nowrap">').text(row.cust_code).appendTo($h);
-				$('<td>').text(row.cust_label).appendTo($h);
-				$('<td>').appendTo($h);   // Voucher No
-				$('<td>').appendTo($h);   // Description
-				$('<td>').appendTo($h);   // Debit
-				$('<td>').appendTo($h);   // Credit
-				$('<td>').appendTo($h);   // Balance
+				$('<td colspan="6">').text(row.cust_label).appendTo($h);
 				$tb.append($h);
 				return;
 			}
@@ -375,18 +382,45 @@ class CustomerStatement {
 				if (row.is_section) cls += " pl-sub";
 			}
 			const $tr = $('<tr>').addClass(cls);
-			$('<td class="nowrap">').text(row.date).appendTo($tr);
-			$('<td class="nowrap">').text(row.miti).appendTo($tr);
-			$('<td>').text(row.voucher_no).appendTo($tr);
-			$('<td>').text(row.description).appendTo($tr);
-			$('<td class="r">').text(row.debit).appendTo($tr);
-			$('<td class="r">').text(row.credit).appendTo($tr);
+			$('<td class="nowrap cs-c-date">').text(row.date).appendTo($tr);
+			$('<td class="nowrap cs-c-miti">').text(row.miti).appendTo($tr);
+			$('<td class="cs-c-voucher">').text(row.voucher_no).appendTo($tr);
+			$('<td class="cs-c-desc">').text(row.description).appendTo($tr);
+			$('<td class="r cs-c-dr" data-label="Debit">').text(row.debit).appendTo($tr);
+			$('<td class="r cs-c-cr" data-label="Credit">').text(row.credit).appendTo($tr);
 			// balance is server-generated safe HTML (bold value + DB/CR suffix)
-			$('<td class="r nowrap">').html(row.balance).appendTo($tr);
+			$('<td class="r nowrap cs-c-bal" data-label="Balance">').html(row.balance).appendTo($tr);
 			$tb.append($tr);
 		});
 
 		$wrap.append($pl);
+	}
+
+	// Four headline figures, shown exactly as the server formatted them on the
+	// statement's own total rows; nothing is added up in the browser. With several
+	// customers the grand-total rows are the ones that apply.
+	render_summary(rows) {
+		const total = function (kind) {
+			const grand = rows.find(function (r) { return r.kind === "grand_" + kind; });
+			if (grand) return grand;
+			const own = rows.filter(function (r) { return r.kind === kind; });
+			return own.length === 1 ? own[0] : null;
+		};
+		const opening = total("opening"), period = total("period"), closing = total("closing");
+		const $s = $('<div class="cs-summary">');
+		const stat = function (label, value, is_html, cls) {
+			const $v = $('<div class="cs-stat-value">');
+			if (!value) $v.text("–");
+			else if (is_html) $v.html(value);   // server-generated balance markup
+			else $v.text(value);
+			$('<div class="cs-stat">').addClass(cls || "")
+				.append($('<div class="cs-stat-label">').text(label)).append($v).appendTo($s);
+		};
+		stat("Opening Balance", opening && opening.balance, true);
+		stat("Debit This Period", period && period.debit);
+		stat("Credit This Period", period && period.credit);
+		stat("Closing Balance", closing && closing.balance, true, "cs-stat--closing");
+		return $s;
 	}
 }
 </script>
@@ -394,116 +428,210 @@ class CustomerStatement {
 
 {% block page_content %}
 <style>
-.cs-section-label { font-size: 14px; color: #000; font-weight: 600; margin-bottom: 4px; }
-.page-content, .page_content, .container { max-width: 100% !important; padding-left: 80px !important; padding-right: 80px !important; }
-
-/* ── Phone ──────────────────────────────────────────────────────────────
-   80px of padding either side is 160px of a 390px screen — 41% of the
-   display — which squeezed the filters to 185px (truncating "Nepal Gas
-   Ud…") and wrapped the statement header one word per line. */
-@media (max-width: 1199px) {
-	.page-content, .page_content, .container { padding-left: 24px !important; padding-right: 24px !important; }
+/* ──────────────────────────────────────────────────────────────────────────
+   Customer Statement — Nepal Gas portal look. Colours and type are the same
+   values as Place Order (.po-*), kept here so this page needs no asset build.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+	--cs-navy-900: #141F4A; --cs-navy-700: #233A86; --cs-navy-500: #435CA8;
+	--cs-red-600: #D6202A; --cs-red-700: #AE1720; --cs-red-050: #FDEDEE;
+	--cs-paper: #EDF0F7; --cs-surface: #FFFFFF; --cs-field: #F5F7FC;
+	--cs-line: #D8DFEE; --cs-line-soft: #E9EDF6; --cs-muted: #64719B;
+	--cs-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--cs-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--cs-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+	--cs-radius: 14px;
+	--cs-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
 }
+body { background: var(--cs-paper); }
+
+/* Use the page width, same frame as Place Order. */
+.page-content, .page_content, .container { max-width: 1460px !important; padding-left: 28px !important; padding-right: 28px !important; }
+.page_content { padding-left: 0 !important; padding-right: 0 !important; }
 @media (max-width: 640px) {
-	.page-content, .page_content, .container { padding-left: 12px !important; padding-right: 12px !important; }
+	/* 15px, not less: the footer's Bootstrap .row has -15px margins and would overflow. */
+	.page-content, .page_content, .container { padding-left: 15px !important; padding-right: 15px !important; }
+	.page_content { padding-left: 0 !important; padding-right: 0 !important; }
 }
+/* The shell's empty header and margins pushed the title 80px below the navbar. */
+.page-content-wrapper main.container { margin-top: 0 !important; }
+.page-content-wrapper .page-header-wrapper { margin: 0 !important; padding: 0 !important; }
+.page-content-wrapper .page-header-wrapper:not(:has(h1, h2, h3, a, button)) { display: none; }
+.page-content-wrapper .page_content { margin-top: 0 !important; padding-top: 0 !important; }
 
-/* a label and its required mark belong on one line */
-.cs-section-label { white-space: nowrap; }
+.cs { font-family: var(--cs-sans); color: var(--cs-navy-900); padding: 14px 0 40px; -webkit-font-smoothing: antialiased; }
+.cs *, .cs *::before, .cs *::after { box-sizing: border-box; }
 
-/* Bootstrap holds four col-sm-3 filters across from 576px up, giving each 146px
-   on a tablet — too narrow for a long customer name.
-   Two per row until there is genuinely room for four. */
-@media (min-width: 576px) and (max-width: 1199px) {
-	.row.mb-2 > .col-sm-3 { flex: 0 0 50%; max-width: 50%; }
-}
+.cs-head { position: relative; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--cs-line); }
+.cs-head::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 96px; height: 3px; background: var(--cs-red-600); }
+.cs-title { margin: 0; font-family: var(--cs-sans); font-size: clamp(25px, 3vw, 34px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; color: var(--cs-navy-900); }
 
-@media (max-width: 767px) {
-	/* the report scrolls inside its own box rather than dragging the page sideways;
-	   the box also scrolls vertically so the sticky column titles pin inside it */
-	.pl { overflow: auto; max-height: 80vh; -webkit-overflow-scrolling: touch; }
-	.pl table { min-width: 560px; }
+/* ── Filters ─────────────────────────────────────────────────────────── */
+.cs-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; padding: 16px 18px;
+	background: var(--cs-surface); border: 1px solid var(--cs-line); border-radius: var(--cs-radius); box-shadow: var(--cs-shadow); }
+.cs-field { min-width: 0; }
+.cs-field--quick { grid-column: span 2; align-self: end; }
+.cs-section-label { margin-bottom: 5px; font-family: var(--cs-cond); font-size: 12.5px; font-weight: 600; letter-spacing: .07em;
+	text-transform: uppercase; color: var(--cs-navy-500); white-space: nowrap; }
+.cs-section-label .text-danger { color: var(--cs-red-600) !important; }
+.cs .form-control { height: 40px; padding: 8px 12px; font-family: var(--cs-sans); font-size: 14.5px; font-weight: 500; color: var(--cs-navy-900);
+	background-color: var(--cs-field); border: 1px solid var(--cs-line); border-radius: 10px; box-shadow: none; }
+.cs .form-control:hover { background-color: #EFF2F9; }
+.cs input.form-control, #cs-from-date input, #cs-to-date input { font-family: var(--cs-mono); font-size: 13.5px; }
+.cs select.form-control { text-overflow: ellipsis; }
+/* Frappe's Date control appends its fieldname in a .tooltip-content span, which the
+   desk stylesheet hides. Website pages don't load that stylesheet. */
+#cs-from-date .tooltip-content, #cs-to-date .tooltip-content { display: none; }
+#cs-from-date .form-group, #cs-to-date .form-group, #cs-from-date .frappe-control, #cs-to-date .frappe-control { margin-bottom: 0; }
 
-	/* company name and report title stack instead of fighting for a narrow column */
-	.pl-page-header { flex-direction: column; align-items: flex-start; gap: 6px; }
-	.pl-right-header { text-align: left; }
+.cs .ag-quick-dates { gap: 8px; }
+.cs .ag-quick-date-btn { height: 40px; padding: 0 16px; font-size: 14px; font-weight: 600; color: var(--cs-navy-700);
+	background: var(--cs-surface); border: 1px solid var(--cs-line); border-radius: 10px; box-shadow: none; }
+.cs .ag-quick-date-btn:hover { background: var(--cs-field); border-color: var(--cs-navy-500); }
+.cs .ag-quick-date-btn.btn-primary { color: #fff; background: var(--cs-navy-700); border-color: var(--cs-navy-700); }
 
-	.cs-print-bar { justify-content: stretch; }
-	.cs-download-btn { width: 100%; }
-}
+.cs :is(a, button, input, select):focus-visible { outline: 2px solid var(--cs-navy-700) !important; outline-offset: 2px; box-shadow: none !important; }
 
 /* Customer multi-select dropdown */
-.cs-ms { position: relative; }
-.cs-ms { min-width: 0; }
-/* A summary of the selection, not a value to read in full: it ellipses at any
-   width rather than dictating how wide its column has to be. */
-.cs-ms-btn { text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis;
-	white-space: nowrap; width: 100%; max-width: 100%; min-width: 0; display: block; }
-.cs-ms-panel { display: none; position: absolute; z-index: 1000; background: #fff; border: 1px solid #ddd;
-	border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); min-width: 100%;
-	max-height: 260px; overflow-y: auto; padding: 4px 0; margin-top: 2px; }
-.cs-ms-opt { display: block; padding: 5px 12px; margin: 0; cursor: pointer; font-weight: 400; white-space: nowrap; }
-.cs-ms-opt:hover { background: #f0f0f0; }
-.cs-ms-opt input { margin-right: 8px; }
+.cs-ms { position: relative; min-width: 0; }
+/* A summary of the selection, not a value to read in full: it ellipses at any width. */
+.cs-ms-btn { display: block; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.cs-ms-panel { display: none; position: absolute; z-index: 1000; min-width: 100%; max-height: 260px; overflow-y: auto; margin-top: 4px; padding: 4px;
+	background: var(--cs-surface); border: 1px solid var(--cs-line); border-radius: 10px; box-shadow: 0 14px 30px -14px rgba(20, 31, 74, .4); }
+.cs-ms-opt { display: block; margin: 0; padding: 7px 10px; font-weight: 500; white-space: nowrap; border-radius: 7px; cursor: pointer; }
+.cs-ms-opt:hover { background: var(--cs-field); }
+.cs-ms-opt input { margin-right: 8px; accent-color: var(--cs-navy-700); }
 
-/* Print bar above the report */
-.cs-print-bar { display: flex; justify-content: flex-end; margin: -8px 0 10px; }
-.cs-download-btn { background: #000; color: #fff; border: 1px solid #000;
-	padding: 7px 22px; font-size: 14px; font-weight: 600; border-radius: 4px; }
-.cs-download-btn:hover, .cs-download-btn:focus { background: #222; color: #fff; border-color: #222; }
+/* ── States ──────────────────────────────────────────────────────────── */
+.cs-loading { display: flex; align-items: center; gap: 8px; margin: 14px 2px 0; font-size: 14px; font-weight: 500; color: var(--cs-muted); }
+.cs-loading::before { content: ""; width: 15px; height: 15px; border: 2px solid var(--cs-line); border-top-color: var(--cs-red-600); border-radius: 50%; animation: cs-spin .8s linear infinite; }
+@keyframes cs-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cs-loading::before { animation-duration: 2.4s; } }
+#cs-result { transition: opacity .15s ease; }
+#cs-result.is-loading { opacity: .5; pointer-events: none; }
+.cs-state { margin-top: 16px; padding: 36px 20px; text-align: center; font-size: 15px; font-weight: 500; color: var(--cs-muted);
+	background: var(--cs-surface); border: 1px dashed var(--cs-line); border-radius: var(--cs-radius); }
+.cs-state--error { color: var(--cs-red-700); background: var(--cs-red-050); border: 1px solid #F6C9CC; }
 
-/* ── Report look (mirrors Party Ledger's party_ledger.html) ── */
-.pl { font-family: Arial, sans-serif; font-size: 12px; color: #222; line-height: 1.7; width: 100%; margin-top: 8px; }
-.pl-page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
-.pl-company-name { font-size: 14px; font-weight: bold; }
-.pl-right-header { text-align: right; }
-.pl-report-title { font-size: 16px; font-weight: bold; }
-.pl-subheadings { margin: 2px 0 4px; }
-.pl-subheading { font-size: 13px; font-weight: bold; line-height: 1.3; }
-.pl-subheading-taxid { font-size: 12px; font-weight: normal; line-height: 1.3; color: #333; }
-.pl-meta-bar { display: flex; justify-content: space-between; font-size: 12px; color: #555; margin-bottom: 8px; }
-.pl-divider { border: none; border-top: 1.5px solid #ccc; margin: 6px 0 8px; }
-.pl table { width: 100%; border-collapse: collapse; }
-/* Frappe's Date control appends its fieldname in a .tooltip-content span, which the
-   desk stylesheet hides. Website pages don't load that stylesheet, so it printed
-   "cs_from_date" / "cs_to_date" under the date boxes. */
-#cs-from-date .tooltip-content, #cs-to-date .tooltip-content { display: none; }
-/* Column titles stay pinned to the top of the window while long statements scroll
-   under them. A collapsed table's borders don't travel with a stuck cell, so the
-   top/bottom rules are repeated as inset shadows. */
-.pl thead th { background: #f0f2f5; color: #222; font-size: 12px; font-weight: bold; padding: 6px 8px;
-	border-top: 1.5px solid #aaa; border-bottom: 1.5px solid #aaa;
-	position: sticky; top: 0; z-index: 2;
-	box-shadow: inset 0 1.5px 0 #aaa, inset 0 -1.5px 0 #aaa; }
+/* ── Summary figures ─────────────────────────────────────────────────── */
+.cs-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.cs-stat { min-width: 0; padding: 13px 16px; background: var(--cs-surface); border: 1px solid var(--cs-line); border-radius: 12px; }
+.cs-stat-label { font-family: var(--cs-cond); font-size: 12.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--cs-muted); }
+.cs-stat-value { margin-top: 3px; font-family: var(--cs-mono); font-size: clamp(16px, 1.7vw, 22px); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.cs-stat-value b { font-weight: 600; }
+.cs-stat-value small { font-size: .62em; font-weight: 500; opacity: .75; }
+.cs-stat--closing { color: #fff; background: var(--cs-navy-900); border-color: var(--cs-navy-900); border-bottom: 3px solid var(--cs-red-600); }
+.cs-stat--closing .cs-stat-label { color: #C5CEE6; }
+
+/* ── Statement ───────────────────────────────────────────────────────── */
+.pl { width: 100%; margin-top: 12px; font-family: var(--cs-sans); font-size: 14px; line-height: 1.45; color: var(--cs-navy-900);
+	background: var(--cs-surface); border: 1px solid var(--cs-line); border-radius: var(--cs-radius); box-shadow: var(--cs-shadow); }
+.pl-screen-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 20px; align-items: start; padding: 15px 18px 13px; }
+.pl-page-header { grid-column: 1; min-width: 0; }
+.pl-company-name { font-size: 18px; font-weight: 700; line-height: 1.25; }
+.pl-right-header, .pl-divider { display: none; } /* the page title already says it */
+.pl-subheadings { grid-column: 1; min-width: 0; }
+.pl-subheading { font-size: 14.5px; font-weight: 600; color: var(--cs-navy-700); }
+.pl-subheading-taxid { font-family: var(--cs-mono); font-size: 12.5px; color: var(--cs-muted); }
+.pl-meta-bar { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 13px; color: var(--cs-muted); }
+.pl-meta-bar b { font-family: var(--cs-mono); font-size: 12.5px; font-weight: 600; color: var(--cs-navy-900); }
+
+.pl table { width: 100%; border-collapse: separate; border-spacing: 0; }
+/* Column titles stay pinned while long statements scroll under them. */
+.pl thead th { position: sticky; top: 0; z-index: 2; padding: 9px 12px; font-family: var(--cs-cond); font-size: 13px; font-weight: 600;
+	letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--cs-navy-900); border: 0; }
 .pl thead th.r { text-align: right; }
 .pl thead th.l { text-align: left; }
-.pl td { padding: 5px 8px; vertical-align: top; border-bottom: 1px solid #e8e8e8; }
-.pl-row-opening td { font-weight: bold; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }
-.pl-row-main td { background: #fff; }
-.pl-row-period td { font-weight: bold; border-top: 1.5px solid #aaa; border-bottom: 1px solid #ccc; }
-.pl-row-closing td { font-weight: bold; border-top: 2px solid #555; border-bottom: 2px solid #555; }
-/* Customer header (grouped): Code | Name (VAT/PAN No.); top border separates customers. */
-.pl-row-cust-header td { font-weight: bold; font-size: 13px; background: #f2f2f2; border-top: 1px solid #999; white-space: normal; }
+.pl td { padding: 8px 12px; vertical-align: top; border-bottom: 1px solid var(--cs-line-soft); }
+.pl .cs-c-date, .pl .cs-c-miti { font-family: var(--cs-mono); font-size: 12.5px; color: var(--cs-muted); }
+.pl .cs-c-voucher { font-family: var(--cs-mono); font-size: 12.5px; font-weight: 500; color: var(--cs-navy-700); overflow-wrap: anywhere; }
+.pl .cs-c-dr, .pl .cs-c-cr, .pl .cs-c-bal { font-family: var(--cs-mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pl .cs-c-bal b { font-weight: 600; }
+.pl .cs-c-bal small { font-size: 10.5px; font-weight: 500; color: var(--cs-muted); }
+.pl-row-main:hover td { background: var(--cs-field); }
+.pl-row-opening td { font-weight: 600; background: var(--cs-field); border-bottom-color: var(--cs-line); }
+.pl-row-period td { font-weight: 700; background: var(--cs-field); border-top: 1px solid var(--cs-line); border-bottom-color: var(--cs-line); }
+.pl-row-closing td { font-weight: 700; color: var(--cs-navy-900); background: #E3E8F4; border-top: 2px solid var(--cs-navy-900); border-bottom: 0; }
+.pl-row-closing td.cs-c-voucher, .pl-row-closing td.cs-c-date, .pl-row-closing td.cs-c-miti { color: var(--cs-navy-900); }
+.pl-row-closing:last-child td:first-child { border-bottom-left-radius: 13px; }
+.pl-row-closing:last-child td:last-child { border-bottom-right-radius: 13px; }
+/* Customer header (grouped). */
+.pl-row-cust-header td { font-size: 14px; font-weight: 700; color: var(--cs-navy-900); background: var(--cs-line-soft); border-top: 2px solid var(--cs-navy-500); white-space: normal; }
 /* Per-customer subtotals stay light; heavy rules only on the grand totals. */
-.pl-row-opening.pl-sub td, .pl-row-period.pl-sub td, .pl-row-closing.pl-sub td { font-weight: bold; border-top: none; }
+.pl-row-opening.pl-sub td, .pl-row-period.pl-sub td, .pl-row-closing.pl-sub td { font-weight: 600; background: var(--cs-surface); border-top: 0; border-bottom: 1px solid var(--cs-line-soft); }
 .pl .r { text-align: right; }
 .pl .l { text-align: left; }
 .pl .nowrap { white-space: nowrap; }
+
+/* Print bar above the report */
+.cs-print-bar { display: flex; justify-content: flex-end; margin-top: 14px; }
+.cs .cs-download-btn { padding: 9px 20px; font-size: 14.5px; font-weight: 600; color: #fff; background: var(--cs-red-600); border: 1px solid var(--cs-red-600); border-radius: 10px; }
+.cs .cs-download-btn:hover { color: #fff; background: var(--cs-red-700); border-color: var(--cs-red-700); }
+
+@media (max-width: 1099px) {
+	.cs-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.cs-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* ── Phone and small tablet: each entry becomes a card, so nothing scrolls sideways ── */
+@media (max-width: 860px) {
+	.cs-filters { padding: 14px; }
+	.cs-field--wide { grid-column: span 2; }
+	.cs .ag-quick-dates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.cs .ag-quick-date-btn { padding: 0 4px; }
+	.cs-ms-panel { width: 100%; }
+	.cs-ms-opt { white-space: normal; }
+	.cs .cs-download-btn { width: 100%; }
+	.pl-screen-header { display: block; padding: 13px 14px 11px; }
+	.pl-meta-bar { display: block; margin-top: 4px; }
+	.pl-meta-bar span { display: block; }
+
+	.pl table, .pl tbody { display: block; }
+	.pl thead { display: none; }
+	.pl tbody tr { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px 8px; padding: 10px 14px; border-top: 1px solid var(--cs-line-soft); }
+	.pl tbody td, .pl tbody .pl-sub td { display: block; min-width: 0; padding: 0; background: none; border: 0; }
+	.pl-row-opening, .pl-row-period { background: var(--cs-field); }
+	.pl tbody tr.pl-row-closing { background: #E3E8F4; border-top: 2px solid var(--cs-navy-900); border-radius: 0 0 13px 13px; }
+	.pl tbody tr.pl-sub { background: var(--cs-surface); border-top: 1px solid var(--cs-line-soft); border-radius: 0; }
+	.pl tbody tr.pl-row-cust-header { display: block; background: var(--cs-line-soft); border-top: 2px solid var(--cs-navy-500); }
+	.pl tbody .pl-row-cust-header td { display: inline; font-size: 14px; }
+	.pl tbody .pl-row-cust-header td:first-child { margin-right: 8px; font-family: var(--cs-mono); font-size: 12.5px; }
+	.pl .cs-c-voucher { grid-column: 1 / -1; order: 1; font-size: 13px; }
+	.pl .cs-c-date { grid-column: span 2; order: 2; font-size: 11.5px; }
+	.pl .cs-c-miti { grid-column: span 2; order: 3; font-size: 11.5px; }
+	.pl .cs-c-desc { grid-column: span 2; order: 4; font-size: 13px; font-weight: 500; text-align: right; }
+	.pl .cs-c-dr { grid-column: span 3; order: 5; }
+	.pl .cs-c-cr { grid-column: span 3; order: 6; }
+	.pl .cs-c-bal { grid-column: 1 / -1; order: 7; text-align: right; margin-top: 2px; padding-top: 4px; border-top: 1px dashed var(--cs-line); }
+	.pl td[data-label]::before { content: attr(data-label); display: block; font-family: var(--cs-cond); font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--cs-muted); }
+	.pl .cs-c-cr { text-align: right; }
+	.pl .cs-c-dr { text-align: left; }
+	.pl td.cs-c-bal[data-label]::before { display: inline; float: left; line-height: 1.7; }
+	.pl td[data-label]:empty::after { content: "–"; color: var(--cs-muted); }
+	/* Totals rows: their label leads, the empty date/voucher slots go. */
+	.pl tr:is(.pl-row-opening, .pl-row-period, .pl-row-closing) :is(.cs-c-date, .cs-c-miti, .cs-c-voucher) { display: none; }
+	.pl tr:is(.pl-row-opening, .pl-row-period, .pl-row-closing) .cs-c-desc { grid-column: 1 / -1; font-size: 14px; font-weight: 700; text-align: left; }
+}
+@media (max-width: 420px) {
+	.cs-summary { gap: 8px; }
+	.cs-stat { padding: 10px 12px; }
+	.cs-stat-value { font-size: 15px; }
+}
 </style>
 
-<h2 class="mb-4">Customer Statement</h2>
+<div class="cs">
+<header class="cs-head"><h1 class="cs-title">Customer Statement</h1></header>
 
 <!-- Filters -->
-<div class="row mb-2">
-	<div class="col-sm-3 mb-3">
-		<div class="cs-section-label">Company <span class="text-danger">*</span></div>
+<section class="cs-filters" aria-label="Statement filters">
+	<div class="cs-field cs-field--wide">
+		<label class="cs-section-label d-block" for="cs-company">Company <span class="text-danger">*</span></label>
 		<select class="form-control" id="cs-company">
 			{% for co in company_list %}
 			<option value="{{ co }}" {% if co == default_company %}selected{% endif %}>{{ co }}</option>
 			{% endfor %}
 		</select>
 	</div>
-	<div class="col-sm-3 mb-3">
+	<div class="cs-field cs-field--wide">
 		<div class="cs-section-label">Customer</div>
 		<div class="cs-ms">
 			<button type="button" class="form-control cs-ms-btn" id="cs-customer-btn">All customers</button>
@@ -514,33 +642,30 @@ class CustomerStatement {
 			</div>
 		</div>
 	</div>
-	<div class="col-sm-3 mb-3">
-		{# empty label keeps the buttons level with the Customer box beside them #}
-		<div class="cs-section-label">&nbsp;</div>
+	<div class="cs-field cs-field--quick cs-field--wide">
 		<div id="cs-quick-dates"></div>
 	</div>
-</div>
-<div class="row mb-3">
-	<div class="col-sm-3 mb-3">
+	<div class="cs-field">
 		<div class="cs-section-label">From Date (AD) <span class="text-danger">*</span></div>
 		<div id="cs-from-date"></div>
 	</div>
-	<div class="col-sm-3 mb-3 cs-bs-col">
-		<div class="cs-section-label">From Miti (BS)</div>
+	<div class="cs-field cs-bs-col">
+		<label class="cs-section-label d-block" for="cs-from-miti">From Miti (BS)</label>
 		<input type="text" class="form-control cs-bs-field" id="cs-from-miti" placeholder="YYYY-MM-DD" autocomplete="off">
 	</div>
-	<div class="col-sm-3 mb-3">
+	<div class="cs-field">
 		<div class="cs-section-label">To Date (AD) <span class="text-danger">*</span></div>
 		<div id="cs-to-date"></div>
 	</div>
-	<div class="col-sm-3 mb-3 cs-bs-col">
-		<div class="cs-section-label">To Miti (BS)</div>
+	<div class="cs-field cs-bs-col">
+		<label class="cs-section-label d-block" for="cs-to-miti">To Miti (BS)</label>
 		<input type="text" class="form-control cs-bs-field" id="cs-to-miti" placeholder="YYYY-MM-DD" autocomplete="off">
 	</div>
-</div>
+</section>
 
-<div id="cs-loading" class="text-muted mb-2" style="display:none;">Loading…</div>
+<div id="cs-loading" class="cs-loading" role="status" style="display:none;">Loading statement…</div>
 
 <!-- Result: report-style statement -->
 <div id="cs-result"></div>
+</div>
 {% endblock %}

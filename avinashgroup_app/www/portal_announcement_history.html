@@ -1,56 +1,149 @@
 {% extends "templates/web.html" %}
 
-{% block title %}{{ _("My Announcements") }}{% endblock %}
+{% block title %}{{ _("Notices") }}{% endblock %}
+{% block header %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
 
 {% block style %}
 {{ super() }}
 <style>
-.ag-ann-list { display: flex; flex-direction: column; gap: 10px; padding-block: 8px 32px; }
-.ag-ann-row {
-	display: flex; gap: 14px; align-items: flex-start;
-	border: 1px solid var(--border-color, #e2e6ee); border-radius: 10px;
-	padding: 12px 14px; background: #fff; text-decoration: none; color: inherit;
+/* NG portal identity (same tokens as /orders and Customer Statement); this page only. */
+body { background: #EDF0F7; }
+.page-content, .page_content, .container { max-width: 1460px !important; padding-left: 28px !important; padding-right: 28px !important; }
+.page_content { padding-left: 0 !important; padding-right: 0 !important; }
+@media (max-width: 767px) {
+	.page-content, .page_content, .container { padding-left: 15px !important; padding-right: 15px !important; }
+	.page_content { padding-left: 0 !important; padding-right: 0 !important; }
 }
-.ag-ann-row:hover { border-color: #b9c2d0; background: #fbfcfe; text-decoration: none; color: inherit; }
-/* Fixed box so rows line up whether or not an announcement carries an image. */
-.ag-ann-thumb { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 6px; object-fit: cover; background: #f1f3f7; }
-.ag-ann-main { min-width: 0; }
-.ag-ann-title { font-size: 1rem; font-weight: 600; margin: 0 0 2px; }
-.ag-ann-date { font-size: .78rem; color: #6b7280; margin-bottom: 6px; }
-.ag-ann-snippet { font-size: .88rem; color: #4b5563; overflow-wrap: anywhere; }
-.ag-ann-empty { padding: 24px 0; color: #6b7280; }
+.page-content-wrapper main.container { margin-top: 0 !important; }
+.page-content-wrapper .page_content { margin-top: 0 !important; padding-top: 0 !important; }
+.ntc {
+	--ntc-navy-900: #141F4A; --ntc-navy-700: #233A86; --ntc-navy-500: #435CA8;
+	--ntc-red-600: #D6202A; --ntc-red-700: #AE1720;
+	--ntc-surface: #FFFFFF; --ntc-field: #F5F7FC; --ntc-line: #D8DFEE; --ntc-line-soft: #E9EDF6; --ntc-muted: #56628C;
+	--ntc-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--ntc-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--ntc-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+	container-type: inline-size;
+	font-family: var(--ntc-sans); color: var(--ntc-navy-900);
+	padding-bottom: 40px; -webkit-font-smoothing: antialiased;
+}
+.ntc *, .ntc *::before, .ntc *::after { box-sizing: border-box; }
+.ntc a:focus-visible { outline: 3px solid var(--ntc-navy-500); outline-offset: 2px; }
+.ntc-head {
+	position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px;
+	padding: 22px 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--ntc-line);
+}
+.ntc-head::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 96px; height: 3px; background: var(--ntc-red-600); }
+.ntc-mark {
+	flex: none; width: 46px; height: 46px; display: grid; place-items: center; color: #fff;
+	background: var(--ntc-red-600); border-radius: 10px; box-shadow: 0 6px 16px -8px rgba(214, 32, 42, .8);
+}
+.ntc-mark svg { width: 24px; height: 24px; display: block; }
+.ntc-head-text { flex: 1 1 180px; min-width: 0; }
+.ntc-eyebrow {
+	margin: 0 0 2px; font-family: var(--ntc-cond); font-size: 12px; font-weight: 600;
+	letter-spacing: .16em; text-transform: uppercase; color: var(--ntc-navy-500);
+}
+.ntc-title { margin: 0; font-size: clamp(27px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.02em; line-height: 1.05; color: var(--ntc-navy-900); overflow-wrap: anywhere; }
+.ntc-board { background: var(--ntc-surface); border: 1px solid var(--ntc-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45); overflow: hidden; }
+.ntc-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: #E9EDF6; color: #233A86; }
+.ntc-badge.is-stop { background: #FDEDEE; color: #AE1720; }
+.ntc-badge.is-ok { background: #DDF3E4; color: #17603A; }
+.ntc-date { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: 13px; color: var(--ntc-muted); }
+.ntc-date span { white-space: nowrap; }
+.ntc-miti { font-family: var(--ntc-mono); font-weight: 600; color: var(--ntc-navy-700); }
+@media (prefers-reduced-motion: reduce) { .ntc * { transition: none !important; } }
 
-/* Unread: a dot in the left gutter plus a heavier title, the way a mail list
-   marks one. The gutter is reserved on every row so titles stay aligned whether
-   or not the row is unread. */
-.ag-ann-dot { width: 8px; flex: 0 0 8px; align-self: center; }
-.ag-ann-row.is-unread { background: #f8fbff; border-color: #cfe0f5; }
-.ag-ann-row.is-unread .ag-ann-dot {
-	height: 8px; border-radius: 50%; background: #2563eb;
+.ntc-list { margin: 0; padding: 0; list-style: none; }
+.ntc-item + .ntc-item { border-top: 1px solid var(--ntc-line-soft); }
+.ntc-row {
+	position: relative; display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 6px 12px;
+	padding: 14px 34px 14px 14px; color: inherit; text-decoration: none; transition: background .12s ease;
 }
-.ag-ann-row.is-unread .ag-ann-title { font-weight: 700; }
-.ag-ann-row.is-unread .ag-ann-snippet { color: #374151; }
-.ag-ann-unread-count { font-size: .85rem; color: #6b7280; font-weight: 400; }
+.ntc-row:hover { background: var(--ntc-field); color: inherit; text-decoration: none; }
+.ntc-row:focus-visible { outline-offset: -3px !important; background: var(--ntc-field); }
+.ntc-row.is-unread { box-shadow: inset 3px 0 0 var(--ntc-red-600); }
+.ntc-thumb {
+	grid-row: span 3; width: 48px; height: 48px; display: grid; place-items: center; object-fit: cover;
+	border-radius: 9px; background: var(--ntc-line-soft); color: var(--ntc-navy-500);
+}
+.ntc-thumb svg { width: 22px; height: 22px; }
+.ntc-main { min-width: 0; }
+.ntc-row-title { margin: 0 0 3px; font-size: 16px; font-weight: 600; line-height: 1.25; color: var(--ntc-navy-900); overflow-wrap: anywhere; }
+.is-unread .ntc-row-title { font-weight: 700; }
+.ntc-snippet {
+	margin: 5px 0 0; font-size: 14.5px; line-height: 1.45; color: var(--ntc-muted); overflow-wrap: anywhere;
+	display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.is-unread .ntc-snippet { color: var(--ntc-navy-900); }
+.ntc-state { grid-column: 2; }
+.ntc-chevron { position: absolute; right: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--ntc-muted); }
+.ntc-empty { padding: 44px 20px; text-align: center; }
+.ntc-empty svg { width: 38px; height: 38px; color: var(--ntc-navy-500); }
+.ntc-empty h2 { margin: 12px 0 4px; font-size: 20px; font-weight: 700; color: var(--ntc-navy-900); }
+.ntc-empty p { margin: 0 auto; max-width: 380px; font-size: 14.5px; color: var(--ntc-muted); }
+@container (min-width: 760px) {
+	.ntc-row { grid-template-columns: 56px minmax(0, 1fr) 190px 76px; gap: 16px; align-items: center; padding: 14px 38px 14px 18px; }
+	.ntc-thumb { grid-row: auto; width: 56px; height: 56px; }
+	.ntc-row .ntc-date { flex-direction: column; }
+	.ntc-state { grid-column: auto; }
+}
 </style>
 {% endblock %}
 
 {% block page_content %}
-<h3>{{ _("My Announcements") }}
-	{% if unread_count %}<span class="ag-ann-unread-count">({{ unread_count }} {{ _("unread") }})</span>{% endif %}
-</h3>
-<div class="ag-ann-list">
-	{% for a in announcements %}
-	<a class="ag-ann-row {{ 'is-unread' if a.unread else '' }}" href="{{ a.route }}">
-		<span class="ag-ann-dot"></span>
-		{% if a.image %}<img class="ag-ann-thumb" src="{{ a.image | e }}" alt="">{% endif %}
-		<div class="ag-ann-main">
-			<p class="ag-ann-title">{{ a.title | e }}</p>
-			<div class="ag-ann-date">{{ frappe.format(a.sent_on, {"fieldtype": "Datetime"}) }}</div>
-			{% if a.snippet %}<div class="ag-ann-snippet">{{ a.snippet | e }}</div>{% endif %}
+<script>document.querySelector(".page-header-wrapper")?.remove();</script>
+<div class="ntc">
+	<header class="ntc-head">
+		<div class="ntc-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg></div>
+		<div class="ntc-head-text">
+			<p class="ntc-eyebrow">{{ _("Customer Portal") }}</p>
+			<h1 class="ntc-title">{{ _("Notices") }}</h1>
 		</div>
-	</a>
-	{% else %}
-	<div class="ag-ann-empty">{{ _("No announcements yet.") }}</div>
-	{% endfor %}
+		{% if unread_count %}<span class="ntc-badge is-stop">{{ unread_count }} {{ _("unread") }}</span>
+		{% elif announcements %}<span class="ntc-badge is-ok">{{ _("All read") }}</span>{% endif %}
+	</header>
+
+	<div class="ntc-board">
+		{% if announcements %}
+		<ul class="ntc-list">
+			{% for a in announcements %}
+			<li class="ntc-item">
+				<a class="ntc-row {{ 'is-unread' if a.unread else '' }}" href="{{ a.route }}">
+					{% if a.image %}<img class="ntc-thumb" src="{{ a.image | e }}" alt="" loading="lazy">
+					{% else %}<span class="ntc-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg></span>{% endif %}
+					<div class="ntc-main">
+						<h2 class="ntc-row-title">{{ a.title | e }}</h2>
+						{% if a.snippet %}<p class="ntc-snippet">{{ a.snippet | e }}</p>{% endif %}
+					</div>
+					<div class="ntc-date">
+						{% if a.sent_on_bs %}<span class="ntc-miti">{{ a.sent_on_bs }} {{ _("BS") }}</span>{% endif %}
+						<span>{{ frappe.format(a.sent_on, {"fieldtype": "Datetime"}) }}</span>
+					</div>
+					<div class="ntc-state">
+						{% if a.unread %}<span class="ntc-badge is-stop">{{ _("Unread") }}</span>
+						{% else %}<span class="ntc-badge">{{ _("Read") }}</span>{% endif %}
+					</div>
+					<svg class="ntc-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>
+				</a>
+			</li>
+			{% endfor %}
+		</ul>
+		{% else %}
+		<div class="ntc-empty">
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></svg>
+			<h2>{{ _("No notices yet") }}</h2>
+			<p>{{ _("Notices from Nepal Gas will appear here when they are sent to you.") }}</p>
+		</div>
+		{% endif %}
+	</div>
 </div>
 {% endblock %}

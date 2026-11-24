@@ -2,6 +2,13 @@
 
 {% block title %}Product Wise Invoice Details{% endblock %}
 
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
 {% block script %}
 <link rel="stylesheet" href="/assets/rdp_common_app/css/nepali.datepicker.v5.0.4.min.css">
 <script src="/assets/rdp_common_app/js/nepali.datepicker.v5.0.4.min.js"></script>
@@ -31,6 +38,7 @@ class ProductWiseInvoiceDetails {
 		this.setup_bs_dates();
 		this.bind_dates();
 		this.mount_quick_dates();
+		this.bind_filter_toggle();
 		$("#pw-include-return").on("change", () => this.schedule_reload());
 		this.load();
 	}
@@ -127,6 +135,18 @@ class ProductWiseInvoiceDetails {
 		});
 	}
 
+	// Phone only (CSS): the filters fold behind a one-line summary of what is applied.
+	bind_filter_toggle() {
+		const $box = $("#pw-filters");
+		$("#pw-filter-toggle").on("click", function () {
+			const collapsed = $box.toggleClass("is-collapsed").hasClass("is-collapsed");
+			$(this).attr("aria-expanded", collapsed ? "false" : "true");
+		});
+	}
+	update_filter_summary() {
+		$("#pw-filter-summary").text(`${$("#pw-from-date").val()} to ${$("#pw-to-date").val()}`);
+	}
+
 	// ── Load + render ─────────────────────────────────────────────────────
 	schedule_reload() {
 		// Every date change passes through here, so the quick-range highlight follows it.
@@ -139,12 +159,14 @@ class ProductWiseInvoiceDetails {
 		const company = this.selected_company();
 		const from_date = $("#pw-from-date").val();
 		const to_date = $("#pw-to-date").val();
+		this.update_filter_summary();
 		if (!company || !from_date || !to_date) {
-			if (!company) $("#pw-result").html('<p class="text-muted">Select a company.</p>');
+			if (!company) $("#pw-result").html('<div class="pw-state">Select a company.</div>');
 			return;
 		}
 
-		$("#pw-loading").show();
+		$("#pw-loading").css("display", "flex");
+		$("#pw-result").addClass("is-loading");
 		frappe.call({
 			method: "avinashgroup_app.templates.pages.product_wise_invoice_details.get_data",
 			args: {
@@ -157,77 +179,121 @@ class ProductWiseInvoiceDetails {
 			},
 			callback: function (r) {
 				$("#pw-loading").hide();
-				if (!r || !r.message) { $("#pw-result").html('<p class="text-danger">No response from server.</p>'); return; }
+				$("#pw-result").removeClass("is-loading");
+				if (!r || !r.message) { $("#pw-result").html('<div class="pw-state pw-state--error" role="alert">No response from server.</div>'); return; }
 				try { me.render(r.message); }
-				catch (e) { console.error(e); $("#pw-result").html('<p class="text-danger">Render error: ' + (e && e.message) + '</p>'); }
+				catch (e) { console.error(e); $("#pw-result").empty().append($('<div class="pw-state pw-state--error" role="alert">').text('Render error: ' + (e && e.message))); }
 			},
 			error: function (xhr) {
 				$("#pw-loading").hide();
-				$("#pw-result").html('<p class="text-danger">Call failed (status ' + (xhr && xhr.status) + ').</p>');
+				$("#pw-result").removeClass("is-loading");
+				$("#pw-result").html('<div class="pw-state pw-state--error" role="alert">Call failed (status ' + (xhr && xhr.status) + ').</div>');
 			}
 		});
 	}
 
+	// Quantities come formatted to 3 places. Only trailing zeros go: 1.000 -> 1, 1.500 -> 1.5, 1.125 stays.
+	clean_qty(q) {
+		return String(q === null || q === undefined ? "" : q).replace(/\.(\d*?)0+$/, (m, d) => (d ? "." + d : ""));
+	}
+
+	// A lone "Invoice" label says nothing; it is only needed to tell sales from a Return list.
+	// Anything else (a lone Return list, or a translated label we can't recognise) stays visible.
+	section_needed(rows, i) {
+		const text = rows[i].text;
+		if (text !== "Invoice" && text !== __("Invoice")) return true;
+		for (let j = i + 1; j < rows.length; j++) {
+			if (rows[j].type === "section") return true;
+			if (rows[j].type === "customer" || rows[j].type === "product") break;
+		}
+		return false;
+	}
+
+	render_summary(rows) {
+		// Figures of the report's own last grand-total row, as the server formatted them.
+		const grand = rows.filter((r) => r.type === "summary" && r.kind === "grand");
+		const final = grand[grand.length - 1];
+		if (!final) return null;
+		const $s = $('<div class="pw-summary-cards">');
+		[["Qty", this.clean_qty(final.qty)], ["Value", final.value], ["VAT 13%", final.vat], ["Total Incl. VAT", final.total]]
+			.forEach(function (c, i) {
+				$('<div class="pw-stat">').toggleClass("pw-stat--total", i === 3)
+					.append($('<div class="pw-stat-label">').text(c[0]))
+					.append($('<div class="pw-stat-value">').text(c[1] || "–"))
+					.append($('<div class="pw-stat-note">').text(final.label))
+					.appendTo($s);
+			});
+		return $s;
+	}
+
 	render(res) {
+		var me = this;
 		const $wrap = $("#pw-result").empty();
 		const rows = res.rows || [];
-		if (!rows.length) { $wrap.append('<p class="text-muted">No invoices found for the selected filters.</p>'); return; }
+		if (!rows.length) { $wrap.append('<div class="pw-state">No invoices found for the selected filters.</div>'); return; }
 
-		// Header
-		const $hdr = $('<div class="pw-head">').appendTo($wrap);
+		const $cards = this.render_summary(rows);
+		if ($cards) $cards.appendTo($wrap);
+
+		const $report = $('<div class="pw-report">').appendTo($wrap);
+		const $hdr = $('<div class="pw-head">').appendTo($report);
 		$('<div class="pw-company">').text(res.company).appendTo($hdr);
 		$('<div class="pw-meta">')
 			.append($('<span>').append(document.createTextNode("From ")).append($('<b>').text(res.from_date_disp)).append(document.createTextNode("  To ")).append($('<b>').text(res.to_date_disp)))
 			.append($('<span>').text("Amount in Nepalese Rupee ( NPR )"))
 			.appendTo($hdr);
 
-		const $t = $('<table class="pw-table">').appendTo($wrap);
+		// Not named .pw-table: the shared portal menu CSS restyles that class on small screens.
+		const $t = $('<table class="pw-grid">').appendTo($report);
 		$t.append(
 			'<thead><tr>' +
-			'<th class="l">Product / Customer Code</th><th>Invoice Miti</th><th>Invoice Number</th>' +
+			'<th>Invoice Miti</th><th>Invoice Number</th>' +
 			'<th class="r">Qty</th><th class="r">Value</th><th class="r">VAT 13%</th><th class="r">Total Incl. VAT</th>' +
 			'</tr></thead>'
 		);
-		const $b = $('<tbody>').appendTo($t);
+		// One tbody per product, so each becomes a single card on a phone.
+		let $b = $('<tbody>').appendTo($t);
+		const figures = function ($tr, row) {
+			$tr.append($('<td class="r pw-n pw-n-qty" data-label="Qty">').text(me.clean_qty(row.qty)))
+			   .append($('<td class="r pw-n pw-n-value" data-label="Value">').text(row.value))
+			   .append($('<td class="r pw-n pw-n-vat" data-label="VAT 13%">').text(row.vat))
+			   .append($('<td class="r pw-n pw-n-total" data-label="Total Incl. VAT">').text(row.total));
+		};
+		const heading = function (cls, row) {
+			return $('<tr>').addClass(cls).append(
+				$('<td colspan="6">')
+					.append($('<span class="pw-code">').text(row.code))
+					.append(document.createTextNode(" "))
+					.append($('<span class="pw-name">').text(row.name))
+			);
+		};
 
-		rows.forEach(function (row) {
-			let $tr = $('<tr>');
+		rows.forEach(function (row, i) {
+			const next = rows[i + 1];
+			let $tr;
 			if (row.type === "product") {
-				$tr.addClass("pw-product")
-				   .append($('<td>').text(row.code))
-				   .append($('<td colspan="2">').text(row.name))
-				   .append($('<td>')).append($('<td>')).append($('<td>')).append($('<td>'));
+				if ($b.children().length) $b = $('<tbody>').appendTo($t);
+				$tr = heading("pw-product", row);
 			} else if (row.type === "customer") {
-				$tr.addClass("pw-customer")
-				   .append($('<td>').text(row.code))
-				   .append($('<td colspan="2">').text(row.name))
-				   .append($('<td>')).append($('<td>')).append($('<td>')).append($('<td>'));
+				$tr = heading("pw-customer", row);
 			} else if (row.type === "section") {
-				// Label sits in the Invoice Number column, heading the invoice list.
-				$tr.addClass("pw-section")
-				   .append($('<td class="l">').text(""))
-				   .append($('<td>').text(""))
-				   .append($('<td>').text(row.text))
-				   .append($('<td>').text("")).append($('<td>').text(""))
-				   .append($('<td>').text("")).append($('<td>').text(""));
+				if (!me.section_needed(rows, i)) return;
+				$tr = $('<tr class="pw-section">').append($('<td colspan="6">').text(row.text));
 			} else if (row.type === "invoice") {
-				$tr.append($('<td class="l">').text(""))
-				   .append($('<td>').text(row.miti))
-				   .append($('<td>').text(row.invoice_no))
-				   .append($('<td class="r">').text(row.qty))
-				   .append($('<td class="r">').text(row.value))
-				   .append($('<td class="r">').text(row.vat))
-				   .append($('<td class="r">').text(row.total));
+				$tr = $('<tr class="pw-invoice">')
+					.append($('<td class="pw-miti">').text(row.miti))
+					.append($('<td class="pw-inv">').text(row.invoice_no));
+				figures($tr, row);
 			} else if (row.type === "summary") {
-				$tr.addClass("pw-summary pw-" + row.kind);
+				if (row.kind === "grand" && !$b.hasClass("pw-grand-group")) {
+					$b = $('<tbody class="pw-grand-group">').appendTo($t);
+				}
+				$tr = $('<tr class="pw-summary">').addClass("pw-s-" + row.kind);
 				if (row.bold) $tr.addClass("pw-bold");
-				$tr.append($('<td class="l">').text(""))
-				   .append($('<td>').text(""))
-				   .append($('<td>').text(row.label))
-				   .append($('<td class="r">').text(row.qty))
-				   .append($('<td class="r">').text(row.value))
-				   .append($('<td class="r">').text(row.vat))
-				   .append($('<td class="r">').text(row.total));
+				// Last row of a totals block carries the block's result.
+				if (!next || next.type !== "summary" || next.kind !== row.kind) $tr.addClass("pw-s-result");
+				$tr.append($('<td colspan="2" class="pw-s-label">').text(row.label));
+				figures($tr, row);
 			} else { return; }
 			$b.append($tr);
 		});
@@ -236,105 +302,226 @@ class ProductWiseInvoiceDetails {
 </script>
 
 <style>
-	.pw-filters { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
-	.pw-filters .pw-field { display: flex; flex-direction: column; }
-	.pw-filters label { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #000; }
-	.pw-filters input:not([type="checkbox"]), .pw-filters select { min-width: 200px; color: #000; }
-	.pw-inline { flex-direction: row !important; align-items: center; gap: 6px; }
-	#pw-include-return {
-		-webkit-appearance: checkbox; -moz-appearance: checkbox; appearance: auto;
-		width: 16px; height: 16px; min-width: 16px; margin: 0; cursor: pointer;
-		accent-color: #000;   /* checked fill = black instead of browser blue */
-	}
-	.pw-checkbox-group {
-		display: flex; flex-direction: column; gap: 2px; min-width: 240px;
-		max-height: 120px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px;
-		padding: 6px 8px; background: #fff;
-	}
-	.pw-chk { font-weight: 400; font-size: 12px; margin: 0; display: flex; align-items: center; gap: 6px; cursor: pointer; color: #000; }
-	.pw-chk input { accent-color: #000; width: 14px; height: 14px; }
-	/* Customer collapsible multi-select (button + dropdown panel) */
-	.pw-ms { position: relative; min-width: 240px; }
-	.pw-ms-btn { text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #000; width: 100%; }
-	.pw-ms-panel { display: none; position: absolute; z-index: 1000; background: #fff; border: 1px solid #ddd;
-		border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); min-width: 100%;
-		max-height: 260px; overflow-y: auto; padding: 4px 0; margin-top: 2px; }
-	.pw-ms-opt { display: block; padding: 5px 12px; margin: 0; cursor: pointer; font-weight: 400; white-space: nowrap; color: #000; }
-	.pw-ms-opt:hover { background: #f0f0f0; }
-	.pw-ms-opt input { margin-right: 8px; accent-color: #000; }
-	.pw-head { margin: 6px 0 10px; }
-	.pw-company { font-weight: 700; font-size: 15px; }
-	.pw-meta { display: flex; justify-content: space-between; font-size: 12px; color: #000; margin-top: 2px; }
-	.pw-table { width: 100%; border-collapse: collapse; font-size: 12px; color: #000; }
-	.pw-table td { color: #000; }
-	/* Column titles stay pinned to the top of the window while long results scroll under them. */
-	.pw-table th { background: #6c757d; color: #fff; padding: 6px 8px; text-align: left;
-		position: sticky; top: 0; z-index: 2; }
-	.pw-table td { padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
-	.pw-table th.r, .pw-table td.r { text-align: right; }
-	.pw-table th.l, .pw-table td.l { width: 150px; white-space: nowrap; }
-	/* Gap above each product block (white border) so products don't blend together. */
-	.pw-product td { background: #e2e6ea; font-weight: 700; border-top: 12px solid #fff; padding-top: 7px; padding-bottom: 7px; }
-	/* Customer header sits just under its product — lighter, plain white, so the two read as separate rows. */
-	.pw-customer td { background: #fff; font-weight: 600; border-bottom: 1px solid #ddd; }
-	.pw-section td { color: #000; font-weight: 600; }
-	.pw-summary td { font-weight: 600; }
-	.pw-product.pw-bold td, .pw-summary.pw-bold td { font-weight: 700; }
-	.pw-grand td { border-top: 1px solid #999; }
-	#pw-loading { display: none; color: #888; font-size: 12px; }
+/* Same colours, type and frame as Customer Statement (values kept here so no asset build). */
+:root {
+	--pw-navy-900: #141F4A; --pw-navy-700: #233A86; --pw-navy-500: #435CA8;
+	--pw-red-600: #D6202A; --pw-red-700: #AE1720; --pw-red-050: #FDEDEE;
+	--pw-paper: #EDF0F7; --pw-surface: #FFFFFF; --pw-field: #F5F7FC;
+	--pw-line: #D8DFEE; --pw-line-soft: #E9EDF6; --pw-muted: #64719B;
+	--pw-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--pw-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--pw-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+	--pw-radius: 14px;
+	--pw-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45);
+}
+body { background: var(--pw-paper); }
+
+/* Frame: 1460px, title close under the navbar. Gutter 15px on a phone, 28px from about 700px. */
+.page-content, .page_content, .container { max-width: 1460px !important; padding-left: clamp(15px, 4vw, 28px) !important; padding-right: clamp(15px, 4vw, 28px) !important; }
+.page_content { padding-left: 0 !important; padding-right: 0 !important; }
+.page-content-wrapper main.container { margin-top: 0 !important; }
+.page-content-wrapper .page-header-wrapper { margin: 0 !important; padding: 0 !important; }
+.page-content-wrapper .page-header-wrapper:not(:has(h1, h2, h3, a, button)) { display: none; }
+.page-content-wrapper .page_content { margin-top: 0 !important; padding-top: 0 !important; }
+
+/* Layout follows this box, not the window, so it still fits when the portal menu is open. */
+.pw { container: pw / inline-size; font-family: var(--pw-sans); color: var(--pw-navy-900); padding: 14px 0 40px; -webkit-font-smoothing: antialiased; }
+.pw *, .pw *::before, .pw *::after { box-sizing: border-box; }
+.pw-page-head { position: relative; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--pw-line); }
+.pw-page-head::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 96px; height: 3px; background: var(--pw-red-600); }
+.pw-title { margin: 0; font-family: var(--pw-sans); font-size: clamp(25px, 3cqi, 34px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; color: var(--pw-navy-900); }
+
+/* Filters */
+.pw-filters { background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: var(--pw-radius); box-shadow: var(--pw-shadow); }
+.pw-filter-toggle { display: none; }
+.pw-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; padding: 16px 18px; }
+.pw-field { min-width: 0; }
+.pw-field--quick { grid-column: span 2; align-self: end; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.pw-label { display: block; margin: 0 0 5px; font-family: var(--pw-cond); font-size: 12.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--pw-navy-500); white-space: nowrap; }
+.pw-label .pw-req { color: var(--pw-red-600); }
+.pw .form-control { width: 100%; height: 40px; padding: 8px 12px; font-family: var(--pw-sans); font-size: 14.5px; font-weight: 500; color: var(--pw-navy-900); background-color: var(--pw-field); border: 1px solid var(--pw-line); border-radius: 10px; box-shadow: none; }
+.pw .form-control:hover { background-color: #EFF2F9; }
+.pw input.form-control { font-family: var(--pw-mono); font-size: 13.5px; }
+.pw select.form-control { text-overflow: ellipsis; }
+.pw .ag-quick-dates { gap: 8px; }
+.pw .ag-quick-date-btn { height: 40px; padding: 0 16px; font-size: 14px; font-weight: 600; color: var(--pw-navy-700); background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: 10px; box-shadow: none; }
+.pw .ag-quick-date-btn:hover { background: var(--pw-field); border-color: var(--pw-navy-500); }
+.pw .ag-quick-date-btn.btn-primary { color: #fff; background: var(--pw-navy-700); border-color: var(--pw-navy-700); }
+.pw-return { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; margin: 0; font-size: 14.5px; font-weight: 500; color: var(--pw-navy-900); cursor: pointer; white-space: nowrap; }
+#pw-include-return { -webkit-appearance: checkbox; -moz-appearance: checkbox; appearance: auto; width: 16px; height: 16px; min-width: 16px; margin: 0; cursor: pointer; accent-color: var(--pw-navy-700); }
+.pw :is(a, button, input, select):focus-visible { outline: 2px solid var(--pw-navy-700) !important; outline-offset: 2px; box-shadow: none !important; }
+
+/* Customer multi-select */
+.pw-ms { position: relative; min-width: 0; }
+.pw-ms-btn { display: block; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.pw-ms-panel { display: none; position: absolute; z-index: 1000; min-width: 100%; max-width: min(560px, 92cqi); max-height: 260px; overflow-y: auto; margin-top: 4px; padding: 4px; background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: 10px; box-shadow: 0 14px 30px -14px rgba(20, 31, 74, .4); }
+.pw-ms-opt { display: block; margin: 0; padding: 7px 10px; font-weight: 500; white-space: nowrap; border-radius: 7px; cursor: pointer; color: var(--pw-navy-900); }
+.pw-ms-opt:hover { background: var(--pw-field); }
+.pw-ms-opt input { margin-right: 8px; accent-color: var(--pw-navy-700); }
+
+/* States */
+#pw-loading { display: none; align-items: center; gap: 8px; margin: 14px 2px 0; font-size: 14px; font-weight: 500; color: var(--pw-muted); }
+#pw-loading::before { content: ""; width: 15px; height: 15px; border: 2px solid var(--pw-line); border-top-color: var(--pw-red-600); border-radius: 50%; animation: pw-spin .8s linear infinite; }
+@keyframes pw-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #pw-loading::before { animation-duration: 2.4s; } }
+#pw-result { transition: opacity .15s ease; }
+#pw-result.is-loading { opacity: .5; pointer-events: none; }
+.pw-state { margin-top: 16px; padding: 36px 20px; text-align: center; font-size: 15px; font-weight: 500; color: var(--pw-muted); background: var(--pw-surface); border: 1px dashed var(--pw-line); border-radius: var(--pw-radius); }
+.pw-state--error { color: var(--pw-red-700); background: var(--pw-red-050); border: 1px solid #F6C9CC; }
+
+/* Summary cards */
+.pw-summary-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.pw-stat { min-width: 0; padding: 13px 16px; background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: 12px; }
+.pw-stat-label { font-family: var(--pw-cond); font-size: 12.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--pw-muted); }
+.pw-stat-value { margin-top: 3px; font-family: var(--pw-mono); font-size: clamp(16px, 1.7cqi, 22px); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pw-stat-note { margin-top: 2px; font-size: 12.5px; color: var(--pw-muted); }
+.pw-stat--total { color: #fff; background: var(--pw-navy-900); border-color: var(--pw-navy-900); border-bottom: 3px solid var(--pw-red-600); }
+.pw-stat--total :is(.pw-stat-label, .pw-stat-note) { color: #C5CEE6; }
+
+/* Report */
+.pw-report { width: 100%; margin-top: 12px; font-size: 14px; line-height: 1.45; background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: var(--pw-radius); box-shadow: var(--pw-shadow); }
+.pw-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px 20px; padding: 15px 18px 13px; }
+.pw-company { min-width: 0; font-size: 18px; font-weight: 700; line-height: 1.25; }
+.pw-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; font-size: 13px; color: var(--pw-muted); }
+.pw-meta b { font-family: var(--pw-mono); font-size: 12.5px; font-weight: 600; color: var(--pw-navy-900); }
+.pw-grid { width: 100%; border-collapse: separate; border-spacing: 0; }
+.pw-grid thead th { position: sticky; top: 0; z-index: 2; padding: 9px 12px; font-family: var(--pw-cond); font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; text-align: left; color: #fff; background: var(--pw-navy-900); border: 0; }
+.pw-grid thead th.r { text-align: right; }
+.pw-grid td { padding: 8px 12px; vertical-align: top; border-bottom: 1px solid var(--pw-line-soft); }
+.pw-grid .r { text-align: right; }
+.pw-n { font-family: var(--pw-mono); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pw-miti { width: 150px; font-family: var(--pw-mono); font-size: 12.5px; color: var(--pw-muted); white-space: nowrap; }
+.pw-inv { font-family: var(--pw-mono); font-size: 12.5px; font-weight: 500; color: var(--pw-navy-700); overflow-wrap: anywhere; }
+.pw-invoice:hover td { background: var(--pw-field); }
+
+/* Hierarchy: product band > customer > invoices, then subtotals rising to the grand total. */
+.pw-product td { padding-top: 11px; padding-bottom: 11px; font-size: 15.5px; font-weight: 700; background: #E3E8F4; border-top: 2px solid var(--pw-navy-700); border-bottom: 1px solid var(--pw-line); }
+.pw-product .pw-code { margin-right: 8px; font-family: var(--pw-mono); font-size: 13px; font-weight: 600; color: var(--pw-navy-700); }
+.pw-customer td { font-size: 14px; font-weight: 600; color: var(--pw-navy-700); background: var(--pw-field); }
+.pw-customer .pw-code { margin-right: 8px; font-family: var(--pw-mono); font-size: 12.5px; font-weight: 500; color: var(--pw-muted); }
+.pw-section td { padding-top: 7px; padding-bottom: 3px; font-family: var(--pw-cond); font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--pw-muted); border-bottom: 0; }
+.pw-summary td { color: var(--pw-muted); font-size: 13px; font-weight: 500; }
+.pw-s-label { font-family: var(--pw-sans); text-align: right; }
+.pw-s-cust.pw-s-result td { border-bottom-color: var(--pw-line); }
+.pw-s-product td { color: var(--pw-navy-900); background: var(--pw-field); }
+.pw-s-product.pw-s-result td { font-weight: 700; border-top: 1px solid var(--pw-line); border-bottom-color: var(--pw-line); }
+.pw-s-grand td { color: var(--pw-navy-900); font-weight: 600; background: var(--pw-field); }
+.pw-grand-group tr:first-child td { border-top: 2px solid var(--pw-navy-900); }
+.pw-s-grand.pw-s-result td { font-size: 14.5px; font-weight: 700; background: #E3E8F4; border-top: 2px solid var(--pw-navy-900); border-bottom: 0; }
+.pw-s-grand.pw-s-result td:first-child { border-bottom-left-radius: 13px; }
+.pw-s-grand.pw-s-result td:last-child { border-bottom-right-radius: 13px; }
+
+@container pw (max-width: 1000px) {
+	.pw-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.pw-summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Narrow: every product is a stack of cards, so nothing scrolls sideways. */
+@container pw (max-width: 760px) {
+	.pw-head { display: block; padding: 13px 14px 11px; }
+	.pw-meta { display: block; margin-top: 4px; }
+	.pw-meta span { display: block; }
+	.pw-report { background: none; border: 0; box-shadow: none; }
+	.pw-head { background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: 12px; }
+	.pw-grid, .pw-grid tbody { display: block; }
+	.pw-grid thead { display: none; }
+	.pw-grid tbody { margin-top: 10px; overflow: hidden; background: var(--pw-surface); border: 1px solid var(--pw-line); border-radius: 12px; }
+	.pw-grid tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; padding: 9px 13px; border-bottom: 1px solid var(--pw-line-soft); }
+	.pw-grid tr:last-child { border-bottom: 0; }
+	.pw-grid td, .pw-grand-group tr:first-child td, .pw-s-product.pw-s-result td, .pw-s-grand.pw-s-result td { display: block; min-width: 0; width: auto; padding: 0; background: none; border: 0; border-radius: 0 !important; }
+	.pw-product, .pw-customer, .pw-section { display: block !important; }
+	.pw-product { background: #E3E8F4; border-top: 2px solid var(--pw-navy-700); }
+	.pw-customer { background: var(--pw-field); }
+	.pw-section { padding-bottom: 0 !important; border-bottom: 0 !important; }
+	.pw-product td { font-size: 15px; }
+	.pw-code { display: block; margin: 0 0 1px; }
+	.pw-inv { order: -2; grid-column: 1 / -1; font-size: 13px; }
+	.pw-miti { order: -1; grid-column: 1 / -1; font-size: 12px; }
+	.pw-s-label { grid-column: 1 / -1; text-align: left; font-weight: 600; color: var(--pw-navy-900); }
+	.pw-grid td.pw-n::before { content: attr(data-label); display: block; font-family: var(--pw-cond); font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pw-muted); }
+	.pw-grid td.pw-n { white-space: normal; overflow-wrap: anywhere; }
+	.pw-grid td.pw-n-qty, .pw-grid td.pw-n-vat { text-align: left; }
+	.pw-grid td.pw-n-value, .pw-grid td.pw-n-total { text-align: right; }
+	.pw-grid td.pw-n-total { font-weight: 600; color: var(--pw-navy-900); }
+	.pw-s-product { background: var(--pw-field); }
+	.pw-s-grand { background: var(--pw-field); }
+	.pw-s-grand.pw-s-result { background: #E3E8F4; border-top: 2px solid var(--pw-navy-900); }
+}
+/* Phone: filters fold behind a one-line summary. */
+@container pw (max-width: 560px) {
+	.pw-filter-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px; padding: 8px 14px; font-family: var(--pw-sans); color: var(--pw-navy-900); text-align: left; background: none; border: 0; border-radius: var(--pw-radius); cursor: pointer; }
+	.pw-filter-toggle-title { flex: none; font-size: 14.5px; font-weight: 700; }
+	#pw-filter-summary { min-width: 0; margin-left: auto; overflow: hidden; font-family: var(--pw-mono); font-size: 12px; color: var(--pw-muted); text-overflow: ellipsis; white-space: nowrap; }
+	.pw-filter-chev { flex: none; width: 8px; height: 8px; margin: -3px 3px 0 0; border-right: 2px solid var(--pw-navy-700); border-bottom: 2px solid var(--pw-navy-700); transform: rotate(45deg); }
+	.pw-filters:not(.is-collapsed) .pw-filter-chev { margin-top: 3px; transform: rotate(225deg); }
+	.pw-filters.is-collapsed .pw-filter-grid { display: none; }
+	.pw-filter-grid { gap: 10px 10px; padding: 4px 14px 14px; }
+	.pw-field--wide, .pw-field--quick { grid-column: 1 / -1; }
+	.pw .ag-quick-dates { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.pw .ag-quick-date-btn { padding: 0 4px; }
+	.pw-ms-panel { width: 100%; }
+	.pw-ms-opt { white-space: normal; }
+	.pw-label { font-size: 11.5px; letter-spacing: .04em; }
+	.pw-summary-cards { gap: 8px; margin-top: 12px; }
+	.pw-stat { padding: 10px 12px; }
+	.pw-stat-value { font-size: 15px; }
+}
 </style>
 {% endblock %}
 
 {% block page_content %}
-<h1>Product Wise Invoice Details</h1>
+<div class="pw">
+<header class="pw-page-head"><h1 class="pw-title">Product Wise Invoice Details</h1></header>
 
-<div class="pw-filters">
-	<div class="pw-field">
-		<label for="pw-company">Company *</label>
-		<select id="pw-company" class="form-control">
-			{% for c in company_list %}
-			<option value="{{ c }}" {% if c == default_company %}selected{% endif %}>{{ c }}</option>
-			{% endfor %}
-		</select>
-	</div>
-	<div class="pw-field">
-		<label>Customer</label>
-		<div class="pw-ms">
-			<button type="button" class="form-control pw-ms-btn" id="pw-customer-btn">All customers</button>
-			<div class="pw-ms-panel" id="pw-customer-panel">
-				{% for c in customer_list %}
-				<label class="pw-ms-opt"><input type="checkbox" class="pw-customer-cb" value="{{ c.name }}" data-company="{{ c.company }}" checked>{{ c.name }} — {{ c.customer_name }}</label>
+<section class="pw-filters is-collapsed" id="pw-filters" aria-label="Report filters">
+	<button type="button" class="pw-filter-toggle" id="pw-filter-toggle" aria-expanded="false" aria-controls="pw-filter-grid">
+		<span class="pw-filter-toggle-title">Filters</span>
+		<span id="pw-filter-summary"></span>
+		<span class="pw-filter-chev" aria-hidden="true"></span>
+	</button>
+	<div class="pw-filter-grid" id="pw-filter-grid">
+		<div class="pw-field pw-field--wide">
+			<label class="pw-label" for="pw-company">Company <span class="pw-req">*</span></label>
+			<select id="pw-company" class="form-control">
+				{% for c in company_list %}
+				<option value="{{ c }}" {% if c == default_company %}selected{% endif %}>{{ c }}</option>
 				{% endfor %}
+			</select>
+		</div>
+		<div class="pw-field pw-field--wide">
+			<div class="pw-label">Customer</div>
+			<div class="pw-ms">
+				<button type="button" class="form-control pw-ms-btn" id="pw-customer-btn">All customers</button>
+				<div class="pw-ms-panel" id="pw-customer-panel">
+					{% for c in customer_list %}
+					<label class="pw-ms-opt"><input type="checkbox" class="pw-customer-cb" value="{{ c.name }}" data-company="{{ c.company }}" checked>{{ c.name }} — {{ c.customer_name }}</label>
+					{% endfor %}
+				</div>
 			</div>
 		</div>
+		<div class="pw-field pw-field--quick">
+			<div id="pw-quick-dates"></div>
+			<label class="pw-return" for="pw-include-return"><input type="checkbox" id="pw-include-return" checked>Include Return</label>
+		</div>
+		<div class="pw-field">
+			<label class="pw-label" for="pw-from-date">From Date (AD) <span class="pw-req">*</span></label>
+			<input type="text" id="pw-from-date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+		</div>
+		<div class="pw-field pw-bs-col">
+			<label class="pw-label" for="pw-from-miti">From Miti (BS)</label>
+			<input type="text" id="pw-from-miti" class="form-control" autocomplete="off">
+		</div>
+		<div class="pw-field">
+			<label class="pw-label" for="pw-to-date">To Date (AD) <span class="pw-req">*</span></label>
+			<input type="text" id="pw-to-date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+		</div>
+		<div class="pw-field pw-bs-col">
+			<label class="pw-label" for="pw-to-miti">To Miti (BS)</label>
+			<input type="text" id="pw-to-miti" class="form-control" autocomplete="off">
+		</div>
 	</div>
-	<div class="pw-field">
-		{# empty label keeps the buttons level with the Customer box beside them #}
-		<label>&nbsp;</label>
-		<div id="pw-quick-dates"></div>
-	</div>
-	<div class="pw-field">
-		<label for="pw-from-date">From Date (AD) *</label>
-		<input type="text" id="pw-from-date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
-	</div>
-	<div class="pw-field pw-bs-col">
-		<label for="pw-from-miti">From Miti (BS)</label>
-		<input type="text" id="pw-from-miti" class="form-control" autocomplete="off">
-	</div>
-	<div class="pw-field">
-		<label for="pw-to-date">To Date (AD) *</label>
-		<input type="text" id="pw-to-date" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
-	</div>
-	<div class="pw-field pw-bs-col">
-		<label for="pw-to-miti">To Miti (BS)</label>
-		<input type="text" id="pw-to-miti" class="form-control" autocomplete="off">
-	</div>
-	<div class="pw-field pw-inline">
-		<input type="checkbox" id="pw-include-return" checked>
-		<label for="pw-include-return" style="margin-bottom:0;">Include Return</label>
-	</div>
-</div>
+</section>
 
-<div id="pw-loading">Loading…</div>
+<div id="pw-loading" role="status">Loading…</div>
 <div id="pw-result"></div>
+</div>
 {% endblock %}

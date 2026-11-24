@@ -1,0 +1,151 @@
+{% extends "avinashgroup_app/www/Sales Order.html" %}
+{# Inherits the /orders stylesheet. The Actions menu keeps the class that
+   portal_orders_buttons.js looks for to add "Customer Statement". #}
+
+{% block title %}{{ number | e }}{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+/* Stock detail pages sit on a white panel; here the cards are the surface, as on /orders. */
+.page-content-wrapper > main.container { background: transparent !important; box-shadow: none !important; }
+.dt-back { display: inline-flex; align-items: center; gap: 4px; margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--ol-navy-700); text-decoration: none; }
+.dt-back:hover { color: var(--ol-red-700); text-decoration: none; }
+.ol .dt-title { font-family: var(--ol-mono); font-size: clamp(19px, 5cqi, 27px); font-weight: 600; letter-spacing: -.01em; line-height: 1.2; overflow-wrap: anywhere; }
+.dt-ref { margin: 3px 0 0; font-family: var(--ol-mono); font-size: 12.5px; color: var(--ol-muted); overflow-wrap: anywhere; }
+.dt-head-state { margin-top: 7px; }
+.dt-actions { align-items: center; }
+.dt-actions .dropdown-menu { min-width: 190px; }
+.dt-grid { display: grid; gap: 14px; margin-top: 18px; }
+.dt-card { min-width: 0; padding: 16px; background: var(--ol-surface); border: 1px solid var(--ol-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45); }
+.dt-label { margin: 0 0 6px; font-family: var(--ol-cond); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ol-muted); }
+.dt-party { margin: 0; font-size: 18px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.dt-sub { margin: 3px 0 0; font-size: 14px; color: var(--ol-muted); overflow-wrap: anywhere; }
+.dt-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px 16px; margin: 0; }
+.dt-facts dt { font-family: var(--ol-cond); font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ol-muted); }
+.dt-facts dd { margin: 1px 0 0; font-size: 14.5px; font-weight: 600; overflow-wrap: anywhere; }
+.dt-board { margin-top: 14px; background: var(--ol-surface); border: 1px solid var(--ol-line); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45); }
+.dt-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.dt-table th { padding: 10px 14px; background: var(--ol-field); border-bottom: 1px solid var(--ol-line); font-family: var(--ol-cond); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ol-muted); text-align: left; }
+.dt-table td { padding: 12px 14px; border-top: 1px solid var(--ol-line-soft); vertical-align: top; font-size: 14px; }
+.dt-table tbody tr:first-child td { border-top: 0; }
+.dt-table .is-num { text-align: right; font-family: var(--ol-mono); white-space: nowrap; }
+.dt-col-amount { width: 118px; }
+.dt-col-qty, .dt-col-rate, .dt-table .dt-qty, .dt-table .dt-rate { display: none; }
+.dt-item { font-weight: 600; overflow-wrap: anywhere; }
+.dt-code { display: block; font-family: var(--ol-mono); font-size: 12px; font-weight: 400; color: var(--ol-muted); }
+.dt-desc { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--ol-muted); }
+.dt-inline { display: block; margin-top: 3px; font-family: var(--ol-mono); font-size: 12.5px; font-weight: 500; color: var(--ol-navy-700); }
+.dt-totals { margin: 0 0 0 auto; padding: 12px 14px; border-top: 1px solid var(--ol-line); background: var(--ol-field); }
+.dt-total { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; font-size: 14px; }
+.dt-total span:first-child { min-width: 0; color: var(--ol-muted); overflow-wrap: anywhere; }
+.dt-total span:last-child { flex: none; font-family: var(--ol-mono); font-weight: 600; }
+.dt-total.is-grand { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--ol-line); font-size: 16px; font-weight: 700; }
+.dt-total.is-grand span:first-child { color: var(--ol-navy-900); }
+.dt-total.is-due span { color: var(--ol-red-700); font-weight: 700; }
+.dt-note { margin-top: 14px; font-size: 13.5px; color: var(--ol-muted); overflow-wrap: anywhere; }
+@container (min-width: 620px) {
+	.dt-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+	.dt-col-qty { display: table-column; width: 96px; }
+	.dt-col-rate { display: table-column; width: 118px; }
+	.dt-table .dt-qty, .dt-table .dt-rate { display: table-cell; }
+	.dt-inline { display: none; }
+	.dt-totals { max-width: 400px; border-left: 1px solid var(--ol-line); border-top-left-radius: 10px; }
+}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<script>document.querySelector(".page-header-wrapper")?.remove();</script>
+<div class="ol">
+	<a class="dt-back" href="{{ list_route }}"><span aria-hidden="true">‹</span> {{ list_label }}</a>
+	<header class="ol-head">
+		<div class="ol-mark" aria-hidden="true">
+			<svg viewBox="0 0 20 30" fill="none">
+				<path d="M8.4 2.2h3.2v2.4H8.4z" fill="#fff"/>
+				<path d="M10 4.6c-3.6 0-5.4 2.2-5.4 5.2v14.4c0 2 1.2 3.4 3 3.4h4.8c1.8 0 3-1.4 3-3.4V9.8c0-3-1.8-5.2-5.4-5.2Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>
+				<path d="M5.2 12.6h9.6" stroke="#fff" stroke-width="1.5" opacity=".65"/>
+			</svg>
+		</div>
+		<div class="ol-head-text">
+			<p class="ol-eyebrow">{{ kind_label }}</p>
+			<h1 class="ol-title dt-title">{{ number | e }}</h1>
+			{% if number != doc.name %}<p class="dt-ref">{{ doc.name | e }}</p>{% endif %}
+			<div class="dt-head-state"><span class="ol-badge is-{{ tone }}">{{ status_label | e }}</span></div>
+		</div>
+		<div class="ol-actions dt-actions page-header-actions-block">
+			{% if show_pay_button %}
+			<a class="ol-btn is-primary" id="pay-for-order" href="/api/method/erpnext.accounts.doctype.payment_request.payment_request.make_payment_request?dn={{ doc.name | urlencode }}&dt={{ doc.doctype | urlencode }}&submit_doc=1&order_type=Shopping%20Cart">{{ _("Pay", null, "Amount") }} {{ pay_amount }}</a>
+			{% endif %}
+			<a class="ol-btn" target="_blank" rel="noopener noreferrer" href="/printview?doctype={{ doc.doctype | urlencode }}&name={{ doc.name | urlencode }}&format={{ print_format | urlencode }}">{{ _("Print") }}</a>
+			<a class="ol-btn" href="/api/method/frappe.utils.print_format.download_pdf?doctype={{ doc.doctype | urlencode }}&name={{ doc.name | urlencode }}&format={{ print_format | urlencode }}">{{ _("PDF") }}</a>
+			<div class="dropdown">
+				<button class="ol-btn dropdown-toggle" type="button" data-toggle="dropdown" aria-expanded="false">{{ _("Actions") }}</button>
+				<div class="dropdown-menu dropdown-menu-right" role="menu">
+					<a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="/printview?doctype={{ doc.doctype | urlencode }}&name={{ doc.name | urlencode }}&format={{ print_format | urlencode }}">{{ _("Print") }}</a>
+					{# Here, not left to portal_orders_buttons.js: its URL match misses names containing "/". #}
+					{% if doc.doctype == "Sales Order" %}<a class="dropdown-item ag-cs-link" href="/customer_statement?order={{ doc.name | urlencode }}">{{ _("Customer Statement") }}</a>{% endif %}
+				</div>
+			</div>
+		</div>
+	</header>
+
+	<div class="dt-grid">
+		<section class="dt-card" aria-label="{{ _('Customer') }}">
+			<p class="dt-label">{{ _("Customer") }}</p>
+			<p class="dt-party">{{ (doc.customer_name or doc.customer) | e }}</p>
+			{% if doc.contact_display and doc.contact_display != doc.customer_name %}<p class="dt-sub">{{ doc.contact_display | e }}</p>{% endif %}
+			<p class="dt-sub">{{ doc.company | e }}</p>
+		</section>
+		<section class="dt-card" aria-label="{{ _('Details') }}">
+			<dl class="dt-facts">
+				{% for label, value in facts %}<div><dt>{{ label | e }}</dt><dd>{{ value | e }}</dd></div>{% endfor %}
+			</dl>
+		</section>
+	</div>
+
+	{% if doc._header %}<div class="dt-note">{{ doc._header }}</div>{% endif %}
+
+	<section class="dt-board" aria-label="{{ _('Items') }}">
+		<table class="dt-table">
+			<colgroup><col><col class="dt-col-qty"><col class="dt-col-rate"><col class="dt-col-amount"></colgroup>
+			<thead><tr>
+				<th scope="col">{{ _("Item") }}</th>
+				<th scope="col" class="dt-qty is-num">{{ _("Qty") }}</th>
+				<th scope="col" class="dt-rate is-num">{{ _("Rate") }}</th>
+				<th scope="col" class="is-num">{{ _("Amount") }}</th>
+			</tr></thead>
+			<tbody>
+				{% for d in doc.items %}
+				<tr>
+					<td>
+						<span class="dt-item">{{ (d.item_name or d.item_code) | e }}</span>
+						{% if d.item_name and d.item_code != d.item_name %}<span class="dt-code">{{ d.item_code | e }}</span>{% endif %}
+						{% set description = html2text(d.description or "") | trim %}
+						{% if description and description != d.item_name %}<span class="dt-desc">{{ description | truncate(140) | e }}</span>{% endif %}
+						<span class="dt-inline">{{ d.get_formatted("qty") }} × {{ d.get_formatted("rate") }}</span>
+					</td>
+					<td class="dt-qty is-num">{{ d.get_formatted("qty") }}</td>
+					<td class="dt-rate is-num">{{ d.get_formatted("rate") }}</td>
+					<td class="is-num">{{ d.get_formatted("amount") }}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+		<div class="dt-totals">
+			{% for label, value, cls in totals %}
+			<div class="dt-total {{ cls }}"><span>{{ label | e }}</span><span>{{ value | e }}</span></div>
+			{% endfor %}
+		</div>
+	</section>
+
+	{% if attachments %}
+	<section class="dt-card" style="margin-top:14px" aria-label="{{ _('Attachments') }}">
+		<p class="dt-label">{{ _("Attachments") }}</p>
+		{% for attachment in attachments %}<p class="dt-sub"><a href="{{ attachment.file_url | e }}" target="_blank" rel="noopener noreferrer">{{ attachment.file_name | e }}</a></p>{% endfor %}
+	</section>
+	{% endif %}
+
+	{% if doc.terms %}<div class="dt-note">{{ doc.terms }}</div>{% endif %}
+</div>
+{% endblock %}

@@ -146,12 +146,11 @@ def _miti(date):
 
 
 def _recent_activity(customer_names, labels, exposure):
-	"""The customer's last few submitted bills and orders, newest first.
+	"""The last few submitted bills and orders of the given customers, newest first.
 
-	Deliberately across ALL of this login's accounts rather than following the
-	stat row's account switch: the credit position is a property of one account,
-	but "what have I done lately" is not. Rows carry the account name only when
-	there is more than one to tell apart.
+	The page calls this for ONE customer at a time, so Recent always describes
+	the account selected on the card. Listing every account here is what put
+	GEPL's 20,57,940 bill directly under a card showing NGG with nothing owed.
 
 	Scoped by an explicit `customer IN (...)` over the links resolved for
 	frappe.session.user, which is the same guard get_credit_snapshot applies --
@@ -237,8 +236,16 @@ def _recent_activity(customer_names, labels, exposure):
 			# printing it under the amount stacked the same figure twice. Only
 			# a part-paid bill has a second number worth stating.
 			part_paid = abs(due - float(r.grand_total or 0)) > 0.01
-			state = _("{0} due").format(fmt_money(due, 2)) if part_paid else _("Due")
-			tone = "due"
+			# Overdue is the invoice's own status, the word /invoices prints for
+			# the same bill. It follows the due date, not the credit limits.
+			overdue = (r.status or "").startswith("Overdue")
+			word = "Overdue" if overdue else "Due"
+			if part_paid:
+				amount = fmt_money(due, 2, currency=r.currency)
+				state = _("{0} overdue").format(amount) if overdue else _("{0} due").format(amount)
+			else:
+				state = _(word)
+			tone = "stop" if overdue else "due"
 
 		out.append({
 			"number": numbers.get((r.doctype, r.name)) or r.name,
@@ -246,7 +253,8 @@ def _recent_activity(customer_names, labels, exposure):
 			"kind": _("Bill") if is_invoice else _("Order"),
 			"icon": "invoice" if is_invoice else "cart",
 			"miti": _miti(r.date) or frappe.utils.formatdate(r.date, "d MMM yyyy"),
-			"amount": fmt_money(r.grand_total or 0, 2),
+			"date": frappe.utils.formatdate(r.date, "d MMM yyyy"),
+			"amount": fmt_money(r.grand_total or 0, 2, currency=r.currency),
 			"state": state,
 			"tone": tone,
 			# only worth printing when the customer holds more than one account
@@ -274,7 +282,7 @@ def _portal_customers():
 		WHERE pu.user = %s
 		  AND pu.parenttype = 'Customer'
 		  AND c.disabled = 0
-		ORDER BY c.customer_name
+		ORDER BY c.customer_name, c.name
 		""",
 		frappe.session.user,
 		as_dict=True,
@@ -292,6 +300,29 @@ def _portal_customers():
 			else row.customer_name
 		)
 	return rows
+
+
+def _account_view(customer, labels):
+	"""One customer's card figures and Recent list, always computed together."""
+	snapshot = get_credit_snapshot(customer) or {}
+	exposure = {customer: snapshot.get("outstanding")} if snapshot else {}
+	return {"snapshot": snapshot, "recent": _recent_activity([customer], labels, exposure)}
+
+
+@frappe.whitelist()
+def get_account_view(customer):
+	"""The account view for a chip beyond the ones computed with the page.
+
+	Only a customer linked to this login through Portal User is served; staff
+	get no wider reach here than the page itself gives them.
+	"""
+	if frappe.session.user == "Guest":
+		frappe.throw(_("You need to be logged in to access this page"), frappe.PermissionError)
+
+	labels = {row.name: row.label for row in _portal_customers()}
+	if customer not in labels:
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	return _account_view(customer, labels)
 
 
 def get_context(context):
@@ -327,15 +358,22 @@ def get_context(context):
 	# renderer draws the card, in the browser, for both the accounts fetched
 	# here and the ones fetched on tap. Rendering it twice -- once in Jinja and
 	# once in JS -- is how the two drift.
-	snapshots = {}
-	for row in customers[:MAX_EAGER_SNAPSHOTS]:
-		snapshots[row.name] = get_credit_snapshot(row.name) or {}
-
-	context.credit_snapshots = snapshots
-	context.active_customer = customers[0].name if customers else ""
 	# The strip names the account it is describing even when there is only one
 	# and no switcher is drawn, so the renderer needs the labels too.
 	context.customer_labels = {row.name: row.label for row in customers}
+	context.account_views = {
+		row.name: _account_view(row.name, context.customer_labels)
+		for row in customers[:MAX_EAGER_SNAPSHOTS]
+	}
+	context.active_customer = customers[0].name if customers else ""
+	currencies = {
+		view["snapshot"].get("currency")
+		for view in context.account_views.values()
+		if view["snapshot"].get("currency")
+	}
+	context.currency_symbols = {
+		code: frappe.db.get_value("Currency", code, "symbol") or code for code in currencies
+	}
 
 	# The strip formats its own figures client-side (same helper Place Order
 	# uses), so it needs the site's number format -- Nepal reads 12,34,567.89.
@@ -346,16 +384,5 @@ def get_context(context):
 	)
 
 	context.primary_links, context.more_links = _split_links(_quick_links())
-	context.recent = _recent_activity(
-		[row.name for row in customers],
-		context.customer_labels,
-		{name: snap.get("outstanding") for name, snap in snapshots.items() if snap},
-	)
 
-	# The sidebar IS the portal's navigation and it stays. What was wrong was
-	# printing it twice: the tile grid this page used to carry listed the very
-	# same routes beside it. Now the two never coexist -- the sidebar is the nav
-	# from 768px up, and the "More" list below only appears where the sidebar is
-	# hidden, on a phone, where a column of links stacked above the profile
-	# would push the account itself under the fold.
 	context.show_sidebar = True

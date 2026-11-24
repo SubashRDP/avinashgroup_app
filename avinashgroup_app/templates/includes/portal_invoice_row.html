@@ -1,0 +1,19 @@
+<li class="ol-item" data-name="{{ row.name | e }}">
+	<a class="ol-row" href="{{ row.route | e }}">
+		<span class="ol-cell ol-id">
+			<span class="ol-number">{{ row.number | e }}</span>
+			<span class="ol-date">{% if row.miti %}<span class="ol-miti">{{ row.miti | e }} BS</span>{% endif %}<span>{{ row.date | e }}</span></span>
+		</span>
+		<span class="ol-cell ol-party">
+			<span class="ol-customer">{{ row.customer | e }}</span>
+			<span class="ol-company">{{ row.company | e }}</span>
+		</span>
+		<span class="ol-cell ol-items">
+			{% for label, qty in row["items"] %}<span class="ol-line"><span class="ol-item-name">{{ label | e }}</span> <b>× {{ qty | e }}</b></span>{% endfor %}
+			{% if row.extra_items %}<span class="ol-more-items">{{ _("+{0} more · {1} total").format(row.extra_items, row.total_qty) | e }}</span>{% endif %}
+		</span>
+		<span class="ol-cell ol-total">{{ row.total | e }}{% if row.outstanding %}<span class="il-due">{{ _("Due") }} {{ row.outstanding | e }}</span>{% endif %}</span>
+		<span class="ol-cell ol-state"><span class="ol-badge is-{{ row.tone }}">{{ row.status | e }}</span></span>
+		<svg class="ol-chevron" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+	</a>
+</li>

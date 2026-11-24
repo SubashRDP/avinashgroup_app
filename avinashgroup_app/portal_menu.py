@@ -9,6 +9,8 @@ their wide layouts, so their ☰ menu opened empty.
 
 public/js/portal_mobile_menu.js asks this for the same list and adds it to the
 ☰ menu, only on pages that don't already have it.
+
+The standard menu on customer pages is portal_nav.py.
 """
 
 import frappe

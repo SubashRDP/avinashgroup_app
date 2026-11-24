@@ -57,6 +57,7 @@ def get_context(context):
 		if row.image and not row.image.startswith("http"):
 			row.image = get_url(row.image)
 		row.snippet = _snippet(row)
+		row.sent_on_bs = _bs_date(row.sent_on)
 		row.unread = row.name not in read
 
 	context.announcements = announcements
@@ -77,3 +78,13 @@ def _snippet(row):
 	if len(text) <= SNIPPET_CHARS:
 		return text
 	return text[:SNIPPET_CHARS].rstrip() + "…"
+
+
+def _bs_date(value):
+	"""BS date for display only; a date that will not convert just shows AD."""
+	try:
+		from avinashgroup_app.custom_code.CBMS.utils import bs_date_str
+
+		return bs_date_str(value) or ""
+	except Exception:
+		return ""

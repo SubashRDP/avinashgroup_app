@@ -14,6 +14,9 @@ page_renderer = ["avinashgroup_app.biometric.iclock.IclockRenderer"]
 # ?v= is a cache buster. Plain files under public/ are served without a content
 # hash, so a phone that has the file keeps it — the bell reached a customer's
 # handset in a half-finished state for exactly this reason. Bump on every edit.
+# One standard menu on every customer portal page — see portal_nav.py.
+update_website_context = "avinashgroup_app.portal_nav.update_website_context"
+
 web_include_js = [
     "/assets/avinashgroup_app/js/portal_notifications.js?v=2",
     # login popup for customer portal users — see doctype "Portal Announcement".
@@ -21,9 +24,8 @@ web_include_js = [
     "/assets/avinashgroup_app/js/portal_announcement.js?v=14",
     # "(n) unread" badge on the portal sidebar's Announcements link. Website only —
     # the link lives in Portal Settings, so there is nothing to decorate on the desk.
-    "/assets/avinashgroup_app/js/portal_announcement_badge.js?v=1",
-    # "Place Order" + "Customer Statement" buttons on /orders, and "Customer
-    # Statement" in a Sales Order's Actions menu.
+    "/assets/avinashgroup_app/js/portal_announcement_badge.js?v=2",
+    # "Customer Statement" in a Sales Order's Actions menu (/orders has its own header).
     "/assets/avinashgroup_app/js/portal_orders_buttons.js?v=1",
     # Portal pages in the phone ☰ menu on custom pages (Place Order, Product Wise
     # Invoice Details, ...), which keep show_sidebar off — see portal_menu.py.

@@ -1,0 +1,268 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Orders") }}{% endblock %}
+{% block header %}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block head_include %}
+{{ super() }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+/* Same identity as Place Order and /me; loaded only on this page. */
+body { background: #EDF0F7; }
+.ol {
+	--ol-navy-900: #141F4A; --ol-navy-700: #233A86; --ol-navy-500: #435CA8;
+	--ol-red-600: #D6202A; --ol-red-700: #AE1720;
+	--ol-surface: #FFFFFF; --ol-field: #F5F7FC; --ol-line: #D8DFEE; --ol-line-soft: #E9EDF6; --ol-muted: #56628C;
+	--ol-sans: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--ol-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
+	--ol-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+	container-type: inline-size;
+	font-family: var(--ol-sans); color: var(--ol-navy-900);
+	padding-bottom: 40px; -webkit-font-smoothing: antialiased;
+}
+.ol *, .ol *::before, .ol *::after { box-sizing: border-box; }
+.ol a:focus-visible, .ol button:focus-visible {
+	outline: 3px solid var(--ol-navy-500); outline-offset: 2px;
+}
+
+.ol-head {
+	position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px;
+	padding: 22px 0 18px; border-bottom: 1px solid var(--ol-line);
+}
+.ol-head::after {
+	content: ""; position: absolute; left: 0; bottom: -1px; width: 96px; height: 3px; background: var(--ol-red-600);
+}
+.ol-mark {
+	flex: none; width: 46px; height: 46px; display: grid; place-items: center;
+	background: var(--ol-red-600); border-radius: 10px; box-shadow: 0 6px 16px -8px rgba(214, 32, 42, .8);
+}
+.ol-mark svg { width: 22px; height: 28px; display: block; }
+.ol-head-text { flex: 1 1 180px; min-width: 0; }
+.ol-eyebrow {
+	margin: 0 0 2px; font-family: var(--ol-cond); font-size: 12px; font-weight: 600;
+	letter-spacing: .16em; text-transform: uppercase; color: var(--ol-navy-500);
+}
+.ol-title { margin: 0; font-size: clamp(27px, 3.4vw, 36px); font-weight: 700; letter-spacing: -.02em; line-height: 1.05; color: var(--ol-navy-900); }
+.ol-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.ol-btn {
+	display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 9px 16px;
+	font-size: 14.5px; font-weight: 600; border-radius: 9px; border: 1px solid var(--ol-line);
+	background: var(--ol-surface); color: var(--ol-navy-700); text-decoration: none; cursor: pointer;
+	transition: background .14s ease, border-color .14s ease;
+}
+.ol-btn:hover { background: var(--ol-field); border-color: var(--ol-navy-500); color: var(--ol-navy-700); text-decoration: none; }
+.ol-btn.is-primary { background: var(--ol-red-600); border-color: var(--ol-red-600); color: #fff; }
+.ol-btn.is-primary:hover { background: var(--ol-red-700); border-color: var(--ol-red-700); color: #fff; }
+.ol-btn[disabled] { opacity: .6; cursor: progress; }
+
+.ol-tools { display: grid; gap: 12px; margin: 18px 0 14px; }
+.ol-search { position: relative; display: flex; gap: 8px; }
+.ol-search-field { position: relative; flex: 1; min-width: 0; }
+.ol-search-field svg { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--ol-muted); pointer-events: none; }
+.ol-search input {
+	width: 100%; height: 42px; padding: 8px 12px 8px 36px; font: 500 15px var(--ol-sans); color: var(--ol-navy-900);
+	background: var(--ol-surface); border: 1px solid var(--ol-line); border-radius: 9px;
+}
+.ol-search input::placeholder { color: var(--ol-muted); font-weight: 400; }
+.ol-search input:focus { outline: none; border-color: var(--ol-navy-500); box-shadow: 0 0 0 3px rgba(67, 92, 168, .22); }
+.ol-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ol-tab {
+	display: inline-flex; align-items: center; min-height: 34px; padding: 5px 13px; border-radius: 999px;
+	font-size: 13.5px; font-weight: 600; color: var(--ol-navy-700); background: var(--ol-surface);
+	border: 1px solid var(--ol-line); text-decoration: none;
+}
+.ol-tab:hover { border-color: var(--ol-navy-500); color: var(--ol-navy-700); text-decoration: none; }
+.ol-tab[aria-current="true"] { background: var(--ol-navy-900); border-color: var(--ol-navy-900); color: #fff; }
+
+.ol-board { background: var(--ol-surface); border: 1px solid var(--ol-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(20, 31, 74, .05), 0 18px 38px -28px rgba(20, 31, 74, .45); overflow: hidden; }
+.ol-columns { display: none; }
+.ol-list { margin: 0; padding: 0; list-style: none; }
+.ol-item + .ol-item { border-top: 1px solid var(--ol-line-soft); }
+.ol-row {
+	position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px;
+	padding: 14px 34px 14px 14px; color: inherit; text-decoration: none; transition: background .12s ease;
+}
+.ol-row:hover { background: var(--ol-field); color: inherit; text-decoration: none; }
+.ol-row:focus-visible { outline-offset: -3px !important; background: var(--ol-field); }
+.ol-cell { display: flex; flex-direction: column; min-width: 0; }
+.ol-id { grid-column: 1; }
+.ol-state { grid-column: 2; grid-row: 1; align-items: flex-end; }
+.ol-party { grid-column: 1 / -1; }
+.ol-items { grid-column: 1; }
+.ol-total { grid-column: 2; align-self: end; text-align: right; }
+.ol-number { font-family: var(--ol-mono); font-size: 13.5px; font-weight: 600; color: var(--ol-navy-700); overflow-wrap: anywhere; }
+.ol-date { display: flex; flex-wrap: wrap; gap: 0 8px; }
+.ol-date span { white-space: nowrap; }
+.ol-miti { font-weight: 600; color: var(--ol-navy-700); }
+.ol-date, .ol-company { font-size: 13px; color: var(--ol-muted); }
+.ol-customer { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.ol-company { overflow-wrap: anywhere; }
+.ol-line { display: block; font-size: 13.5px; color: var(--ol-navy-900); overflow-wrap: anywhere; }
+.ol-line b { font-family: var(--ol-mono); font-weight: 600; white-space: nowrap; }
+.ol-more-items { font-size: 12.5px; color: var(--ol-muted); }
+.ol-total { font-family: var(--ol-mono); font-size: 15px; font-weight: 600; white-space: nowrap; }
+.ol-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: #E9EDF6; color: #233A86; }
+.ol-badge.is-warn { background: #FDECD8; color: #8A4300; }
+.ol-badge.is-part { background: #FBF3C8; color: #6B5400; }
+.ol-badge.is-ok { background: #DDF3E4; color: #17603A; }
+.ol-badge.is-stop { background: #FDEDEE; color: #AE1720; }
+.ol-chevron { position: absolute; right: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--ol-muted); }
+
+@container (min-width: 760px) {
+	.ol-search { max-width: 460px; }
+	.ol-columns, .ol-row {
+		display: grid; grid-template-columns: minmax(166px, 1fr) minmax(150px, 1.35fr) minmax(104px, .8fr) 128px 104px;
+		gap: 14px; align-items: center;
+	}
+	.ol-columns {
+		padding: 10px 38px 10px 18px; background: var(--ol-field); border-bottom: 1px solid var(--ol-line);
+		font-family: var(--ol-cond); font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ol-muted);
+	}
+	.ol-columns .is-end { text-align: right; }
+	.ol-row { padding: 13px 38px 13px 18px; }
+	.ol-id, .ol-party, .ol-items, .ol-total, .ol-state { grid-column: auto; grid-row: auto; }
+	.ol-total { align-self: center; }
+	.ol-state { align-items: flex-start; }
+}
+
+.ol-empty { padding: 44px 20px; text-align: center; }
+.ol-empty svg { width: 34px; height: 46px; color: var(--ol-navy-500); }
+.ol-empty h2 { margin: 12px 0 4px; font-size: 20px; font-weight: 700; color: var(--ol-navy-900); }
+.ol-empty p { margin: 0 auto 16px; max-width: 380px; font-size: 14.5px; color: var(--ol-muted); }
+.ol-foot { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 16px; }
+.ol-note { min-height: 18px; font-size: 13px; color: var(--ol-muted); }
+@media (max-width: 640px) {
+	/* The portal shell's gutter is 44px here; leave 16px so a card has room. */
+	.ol { margin-inline: -28px; }
+	.ol-actions { width: 100%; }
+	.ol-actions .ol-btn { flex: 1 1 auto; }
+}
+@media (prefers-reduced-motion: reduce) { .ol * { transition: none !important; } }
+</style>
+{% endblock %}
+
+{% block page_content %}
+{# Stock web.html's empty header strip: it adds a gap, and a browser still holding
+   the old portal_orders_buttons.js would inject duplicate buttons into it. #}
+<script>document.querySelector(".page-header-wrapper")?.remove();</script>
+<div class="ol">
+	<header class="ol-head">
+		<div class="ol-mark" aria-hidden="true">
+			<svg viewBox="0 0 20 30" fill="none">
+				<path d="M8.4 2.2h3.2v2.4H8.4z" fill="#fff"/>
+				<path d="M10 4.6c-3.6 0-5.4 2.2-5.4 5.2v14.4c0 2 1.2 3.4 3 3.4h4.8c1.8 0 3-1.4 3-3.4V9.8c0-3-1.8-5.2-5.4-5.2Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>
+				<path d="M5.2 12.6h9.6" stroke="#fff" stroke-width="1.5" opacity=".65"/>
+			</svg>
+		</div>
+		<div class="ol-head-text">
+			<p class="ol-eyebrow">{{ _("Customer Portal") }}</p>
+			<h1 class="ol-title">{{ _("Orders") }}</h1>
+		</div>
+		<div class="ol-actions">
+			<a class="ol-btn is-primary" href="/place_order">{{ _("Place Order") }}</a>
+			<a class="ol-btn" href="/customer_statement">{{ _("Customer Statement") }}</a>
+		</div>
+	</header>
+
+	<div class="ol-tools">
+		<form class="ol-search" method="get" action="/orders" role="search">
+			{% if status %}<input type="hidden" name="status" value="{{ status | e }}">{% endif %}
+			<div class="ol-search-field">
+				<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/><path d="m10.6 10.6 3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+				<input type="search" name="q" value="{{ query | e }}" maxlength="80" aria-label="{{ _('Search orders') }}" placeholder="{{ _('Order, customer or item') }}">
+			</div>
+			<button class="ol-btn" type="submit">{{ _("Search") }}</button>
+		</form>
+		<nav aria-label="{{ _('Filter by status') }}">
+			<ul class="ol-tabs">
+				{% for tab in status_tabs %}
+				{% set params = [] %}
+				{% if query %}{% set _x = params.append("q=" ~ (query | urlencode)) %}{% endif %}
+				{% if tab.key %}{% set _x = params.append("status=" ~ tab.key) %}{% endif %}
+				<li><a class="ol-tab" href="/orders{% if params %}?{{ params | join('&') | e }}{% endif %}"{% if tab.key == status %} aria-current="true"{% endif %}>{{ tab.label }}</a></li>
+				{% endfor %}
+			</ul>
+		</nav>
+	</div>
+
+	<section class="ol-board" aria-label="{{ _('Your orders') }}">
+		{% if rows %}
+		<div class="ol-columns" aria-hidden="true">
+			<span>{{ _("Order") }}</span><span>{{ _("Customer") }}</span><span>{{ _("Items") }}</span><span class="is-end">{{ _("Total") }}</span><span>{{ _("Status") }}</span>
+		</div>
+		<ul class="ol-list" id="ol-list">
+			{% for row in rows %}{% include "templates/includes/portal_order_row.html" %}{% endfor %}
+		</ul>
+		{% else %}
+		<div class="ol-empty">
+			<svg viewBox="0 0 20 30" fill="none" aria-hidden="true"><path d="M8.4 2.2h3.2v2.4H8.4z" fill="currentColor"/><path d="M10 4.6c-3.6 0-5.4 2.2-5.4 5.2v14.4c0 2 1.2 3.4 3 3.4h4.8c1.8 0 3-1.4 3-3.4V9.8c0-3-1.8-5.2-5.4-5.2Z" stroke="currentColor" stroke-width="1.5"/></svg>
+			{% if query or status %}
+			<h2>{{ _("No matching orders") }}</h2>
+			<p>{{ _("Try another search or status.") }}</p>
+			<a class="ol-btn" href="/orders">{{ _("Show all orders") }}</a>
+			{% else %}
+			<h2>{{ _("No orders yet") }}</h2>
+			<p>{{ _("Orders you place will appear here with their billing status.") }}</p>
+			<a class="ol-btn is-primary" href="/place_order">{{ _("Place your first order") }}</a>
+			{% endif %}
+		</div>
+		{% endif %}
+	</section>
+
+	{% if has_more %}
+	<div class="ol-foot">
+		<button class="ol-btn" type="button" id="ol-more" data-start="{{ next_start }}">{{ _("Load more") }}</button>
+		<span class="ol-note" id="ol-note" role="status"></span>
+	</div>
+	{% endif %}
+</div>
+{% endblock %}
+
+{% block script %}
+{{ super() }}
+<script>
+frappe.ready(function () {
+	const button = document.getElementById("ol-more");
+	if (!button) return;
+	const list = document.getElementById("ol-list");
+	const note = document.getElementById("ol-note");
+	const params = new URLSearchParams(window.location.search);
+
+	function fail() {
+		button.disabled = false;
+		button.textContent = __("Try again");
+		note.textContent = __("Could not load more orders.");
+	}
+
+	button.addEventListener("click", function () {
+		button.disabled = true;
+		button.textContent = __("Loading...");
+		note.textContent = "";
+		frappe.call({
+			method: "avinashgroup_app.portal_orders.get_orders",
+			args: { q: params.get("q") || "", status: params.get("status") || "", start: button.dataset.start },
+			callback: function (r) {
+				if (!r.message) return fail();
+				const before = list.children.length;
+				list.insertAdjacentHTML("beforeend", r.message.html);
+				const first = list.children[before] && list.children[before].querySelector("a");
+				if (first) first.focus({ preventScroll: true });
+				note.textContent = __("{0} orders shown", [list.children.length]);
+				if (!r.message.has_more) { button.remove(); return; }
+				button.dataset.start = r.message.next_start;
+				button.disabled = false;
+				button.textContent = __("Load more");
+			},
+			error: fail,
+		});
+	});
+});
+</script>
+{% endblock %}

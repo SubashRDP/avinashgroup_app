@@ -1,0 +1,35 @@
+{%- set icons = {
+	"plus": '<path d="M12 5v14M5 12h14"/>',
+	"cart": '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2.5l2.4 11.5h10.6L20.5 8H6.4"/>',
+	"receipt": '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+	"ledger": '<path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z"/><path d="M5 17a2 2 0 0 1 2-2h12M9 8h6"/>',
+	"box": '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+	"chart": '<path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/>',
+	"bell": '<path d="M6 10a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+	"user": '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+	"dot": '<circle cx="12" cy="12" r="3"/>'
+} -%}
+<link rel="stylesheet" href="/assets/avinashgroup_app/css/portal_nav.css?v=2">
+<script>try{if(localStorage.getItem("ag_portal_nav")==="collapsed")document.body.classList.add("ag-pn-collapsed")}catch(e){}</script>
+<nav class="ag-pn" id="ag-pn" aria-label="{{ _('Customer portal') | e }}">
+	<button type="button" class="ag-pn-toggle" aria-controls="ag-pn-list" aria-expanded="true" aria-label="{{ _('Collapse menu') | e }}"
+		data-collapse-label="{{ _('Collapse menu') | e }}" data-expand-label="{{ _('Expand menu') | e }}">
+		<svg class="ag-pn-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+			<rect x="3" y="4" width="18" height="16" rx="3"/>
+			<path d="M9 4v16"/>
+			<path class="ag-pn-toggle-chevron" d="M16 9l-3 3 3 3"/>
+		</svg>
+	</button>
+	<ul class="ag-pn-list" id="ag-pn-list">
+		{%- for item in menu %}
+		<li>
+			<a href="{{ item.route | e }}" title="{{ item.title | e }}"{% if item.target %} target="{{ item.target | e }}"{% endif %}
+				{%- if item.route == active %} class="active" aria-current="page"{% endif %}>
+				<svg viewBox="0 0 24 24" aria-hidden="true">{{ icons[item.icon] }}</svg>
+				<span class="ag-pn-label">{{ item.title | e }}</span>
+			</a>
+		</li>
+		{%- endfor %}
+	</ul>
+</nav>
+<script defer src="/assets/avinashgroup_app/js/portal_nav.js?v=2"></script>

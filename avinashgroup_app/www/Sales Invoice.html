@@ -1,0 +1,126 @@
+{% extends "avinashgroup_app/www/Sales Order.html" %}
+{# Inherits the /orders stylesheet, so the two lists cannot drift apart. #}
+
+{% block title %}{{ _("Invoices") }}{% endblock %}
+
+{% block style %}
+{{ super() }}
+<style>
+.il-due { display: block; margin-top: 1px; font-size: 12px; font-weight: 500; color: var(--ol-red-700); }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<script>document.querySelector(".page-header-wrapper")?.remove();</script>
+<div class="ol">
+	<header class="ol-head">
+		<div class="ol-mark" aria-hidden="true">
+			<svg viewBox="0 0 20 30" fill="none">
+				<path d="M8.4 2.2h3.2v2.4H8.4z" fill="#fff"/>
+				<path d="M10 4.6c-3.6 0-5.4 2.2-5.4 5.2v14.4c0 2 1.2 3.4 3 3.4h4.8c1.8 0 3-1.4 3-3.4V9.8c0-3-1.8-5.2-5.4-5.2Z" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/>
+				<path d="M5.2 12.6h9.6" stroke="#fff" stroke-width="1.5" opacity=".65"/>
+			</svg>
+		</div>
+		<div class="ol-head-text">
+			<p class="ol-eyebrow">{{ _("Customer Portal") }}</p>
+			<h1 class="ol-title">{{ _("Invoices") }}</h1>
+		</div>
+		<div class="ol-actions">
+			<a class="ol-btn" href="/customer_statement">{{ _("Customer Statement") }}</a>
+		</div>
+	</header>
+
+	<div class="ol-tools">
+		<form class="ol-search" method="get" action="/invoices" role="search">
+			{% if status %}<input type="hidden" name="status" value="{{ status | e }}">{% endif %}
+			<div class="ol-search-field">
+				<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.6" stroke="currentColor" stroke-width="1.6"/><path d="m10.6 10.6 3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+				<input type="search" name="q" value="{{ query | e }}" maxlength="80" aria-label="{{ _('Search invoices') }}" placeholder="{{ _('Invoice, customer or item') }}">
+			</div>
+			<button class="ol-btn" type="submit">{{ _("Search") }}</button>
+		</form>
+		<nav aria-label="{{ _('Filter by status') }}">
+			<ul class="ol-tabs">
+				{% for tab in status_tabs %}
+				{% set params = [] %}
+				{% if query %}{% set _x = params.append("q=" ~ (query | urlencode)) %}{% endif %}
+				{% if tab.key %}{% set _x = params.append("status=" ~ tab.key) %}{% endif %}
+				<li><a class="ol-tab" href="/invoices{% if params %}?{{ params | join('&') | e }}{% endif %}"{% if tab.key == status %} aria-current="true"{% endif %}>{{ tab.label }}</a></li>
+				{% endfor %}
+			</ul>
+		</nav>
+	</div>
+
+	<section class="ol-board" aria-label="{{ _('Your invoices') }}">
+		{% if rows %}
+		<div class="ol-columns" aria-hidden="true">
+			<span>{{ _("Invoice") }}</span><span>{{ _("Customer") }}</span><span>{{ _("Items") }}</span><span class="is-end">{{ _("Total") }}</span><span>{{ _("Status") }}</span>
+		</div>
+		<ul class="ol-list" id="il-list">
+			{% for row in rows %}{% include "templates/includes/portal_invoice_row.html" %}{% endfor %}
+		</ul>
+		{% else %}
+		<div class="ol-empty">
+			<svg viewBox="0 0 20 30" fill="none" aria-hidden="true"><path d="M8.4 2.2h3.2v2.4H8.4z" fill="currentColor"/><path d="M10 4.6c-3.6 0-5.4 2.2-5.4 5.2v14.4c0 2 1.2 3.4 3 3.4h4.8c1.8 0 3-1.4 3-3.4V9.8c0-3-1.8-5.2-5.4-5.2Z" stroke="currentColor" stroke-width="1.5"/></svg>
+			{% if query or status %}
+			<h2>{{ _("No matching invoices") }}</h2>
+			<p>{{ _("Try another search or status.") }}</p>
+			<a class="ol-btn" href="/invoices">{{ _("Show all invoices") }}</a>
+			{% else %}
+			<h2>{{ _("No invoices yet") }}</h2>
+			<p>{{ _("Your invoices will appear here once they are billed.") }}</p>
+			{% endif %}
+		</div>
+		{% endif %}
+	</section>
+
+	{% if has_more %}
+	<div class="ol-foot">
+		<button class="ol-btn" type="button" id="il-more" data-start="{{ next_start }}">{{ _("Load more") }}</button>
+		<span class="ol-note" id="il-note" role="status"></span>
+	</div>
+	{% endif %}
+</div>
+{% endblock %}
+
+{% block script %}
+{{ super() }}
+<script>
+frappe.ready(function () {
+	const button = document.getElementById("il-more");
+	if (!button) return;
+	const list = document.getElementById("il-list");
+	const note = document.getElementById("il-note");
+	const params = new URLSearchParams(window.location.search);
+
+	function fail() {
+		button.disabled = false;
+		button.textContent = __("Try again");
+		note.textContent = __("Could not load more invoices.");
+	}
+
+	button.addEventListener("click", function () {
+		button.disabled = true;
+		button.textContent = __("Loading...");
+		note.textContent = "";
+		frappe.call({
+			method: "avinashgroup_app.portal_invoices.get_invoices",
+			args: { q: params.get("q") || "", status: params.get("status") || "", start: button.dataset.start },
+			callback: function (r) {
+				if (!r.message) return fail();
+				const before = list.children.length;
+				list.insertAdjacentHTML("beforeend", r.message.html);
+				const first = list.children[before] && list.children[before].querySelector("a");
+				if (first) first.focus({ preventScroll: true });
+				note.textContent = __("{0} invoices shown", [list.children.length]);
+				if (!r.message.has_more) { button.remove(); return; }
+				button.dataset.start = r.message.next_start;
+				button.disabled = false;
+				button.textContent = __("Load more");
+			},
+			error: fail,
+		});
+	});
+});
+</script>
+{% endblock %}

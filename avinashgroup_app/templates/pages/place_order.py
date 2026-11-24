@@ -62,15 +62,10 @@ def get_context(context):
 	if "Customer" not in frappe.get_roles(frappe.session.user):
 		frappe.throw(_("Only customers can access this page."), frappe.PermissionError)
 
-	# NO sidebar here, deliberately. Every breakpoint on this page is keyed to
-	# the VIEWPORT -- .po-grid is `minmax(0,1fr) 356px` until 991px, .po-fields
-	# is four columns above 1320px, .po-items-table carries a 900px min-width --
-	# and all of it assumes the page IS the viewport. Behind a col-sm-2 sidebar
-	# the content column is ~17% narrower while the media queries still read the
-	# full window, so the field grid and the register keep their wide layout,
-	# .po-main overflows its column, and the order summary ends up printed on
-	# top of the form. Turning the menu on here needs those queries moved to
-	# container queries first.
+	# No Frappe show_sidebar column here: the standard portal rail (portal_nav.py)
+	# sits beside the page instead. This page's breakpoints are container queries
+	# on .po, so the field grid and order summary follow the width actually left
+	# with the rail open or collapsed.
 	gas_companies = _lp_gas_companies()
 
 	# Fetch ALL customers linked to this portal user

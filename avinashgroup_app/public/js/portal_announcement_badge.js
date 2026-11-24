@@ -20,6 +20,11 @@
 
 	function sidebarLinks() {
 		return Array.from(document.querySelectorAll("a[href]")).filter((a) => {
+			// href="#" (the navbar avatar's dropdown toggle) resolves to the current
+			// page, so on the announcements page it would look like the menu link.
+			if ((a.getAttribute("href") || "").startsWith("#")) {
+				return false;
+			}
 			let path;
 			try {
 				path = new URL(a.href, window.location.origin).pathname;

@@ -1,0 +1,146 @@
+/* Standard customer portal menu. Loaded only on pages portal_nav.py marks. */
+body.ag-pn-page { --ag-pn-w: 236px; }
+body.ag-pn-page.ag-pn-collapsed { --ag-pn-w: 52px; }
+
+.ag-pn { display: none; }
+
+@media (min-width: 992px) {
+	body.ag-pn-page { padding-left: var(--ag-pn-w); }
+
+	.ag-pn {
+		display: flex;
+		flex-direction: column;
+		position: fixed;
+		inset: 0 auto 0 0;
+		z-index: 1020;
+		width: var(--ag-pn-w);
+		padding: 10px 8px;
+		overflow-x: hidden;
+		overflow-y: auto;
+		background: #fff;
+		border-right: 1px solid #e2e6ee;
+		font-size: 14px;
+	}
+	.ag-pn-toggle {
+		align-self: flex-end;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		flex: none;
+		padding: 0;
+		margin-bottom: 8px;
+		border: 1px solid #d8dfee;
+		border-radius: 8px;
+		background: #fff;
+		color: #414b63;
+		line-height: 1;
+		cursor: pointer;
+		transition: background-color .15s, border-color .15s, color .15s;
+	}
+	.ag-pn-toggle:hover { background: #f1f4fa; border-color: #b9c4dc; color: #14213d; }
+	.ag-pn-toggle-icon {
+		width: 20px;
+		height: 20px;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	.ag-pn-toggle-chevron {
+		transform-box: fill-box;
+		transform-origin: center;
+		transition: transform .18s ease;
+	}
+	.ag-pn-collapsed .ag-pn-toggle-chevron { transform: rotate(180deg); }
+	@media (prefers-reduced-motion: reduce) {
+		.ag-pn-toggle, .ag-pn-toggle-chevron { transition: none; }
+	}
+	.ag-pn-list { list-style: none; margin: 0; padding: 0; }
+	.ag-pn-list a {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		min-height: 38px;
+		padding: 7px 9px;
+		border-radius: 6px;
+		color: #414b63;
+		line-height: 1.25;
+		text-decoration: none;
+	}
+	.ag-pn-list a:hover { background: #f1f4fa; color: #141f4a; }
+	.ag-pn-list a.active { background: #e8edf8; color: #141f4a; font-weight: 600; }
+	.ag-pn-toggle:focus-visible, .ag-pn-list a:focus-visible {
+		outline: 2px solid #233a86;
+		outline-offset: -2px;
+	}
+	.ag-pn svg, .ag-pn-mobile svg {
+		width: 18px;
+		height: 18px;
+		flex: none;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+
+	/* The Notice "(n)" badge has no room beside an icon: show it as a dot. */
+	.ag-pn-collapsed .ag-pn-list a { position: relative; }
+	.ag-pn-collapsed .ag-pn-list .ag-ann-badge {
+		position: absolute;
+		top: 7px;
+		right: 7px;
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: #d6202a;
+		font-size: 0;
+	}
+
+	.ag-pn-collapsed .ag-pn-toggle { align-self: center; }
+	.ag-pn-collapsed .ag-pn-list a { justify-content: center; padding: 7px 0; }
+	.ag-pn-collapsed .ag-pn-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+}
+
+/* Phone: the same entries, in Frappe's ☰ menu (added by portal_nav.js). */
+.ag-pn-mobile .nav-link { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.ag-pn-mobile .nav-link.active { color: #141f4a !important; font-weight: 600; border-bottom: 0; }
+.ag-pn-mobile svg {
+	width: 18px;
+	height: 18px;
+	flex: none;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.8;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+/* Phones. The footer's Bootstrap .row is wider than pages that narrow .container;
+   clip, not hidden, and only there, because a report's columns must stay reachable. */
+@media (max-width: 991px) {
+	body.ag-pn-page .web-footer { overflow-x: clip; }
+	body.ag-pn-page .page_content b { overflow-wrap: anywhere; }
+	/* Wide report table scrolls inside itself instead of moving the whole page. */
+	body.ag-pn-page .pw-table { display: block; max-width: 100%; overflow-x: auto; }
+}
+/* /orders offsets a 44px gutter from Frappe's sidebar column; without it the gutter
+   is 24px. Keeps the 16px that page asks for. */
+@media (max-width: 640px) {
+	body.ag-pn-page .ol { margin-inline: -8px; }
+}
+
+@media print {
+	body.ag-pn-page { padding-left: 0 !important; }
+	.ag-pn { display: none !important; }
+}
