@@ -1,12 +1,14 @@
 
 
 import copy
+import hashlib
 import json
 import logging
 import logging.handlers
 import os
 import platform
 import re
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -45,7 +47,7 @@ START_HIDDEN = any(a in ("--background", "--hidden") for a in sys.argv[1:])
 # ============================================
 # CONSTANTS
 # ============================================
-VERSION = "1.6.7"
+VERSION = "1.6.8"
 
 # The only endpoint the bridge uses to deliver punches.
 # Takes a JSON list of {user_id, timestamp} dicts. A batch of size 1 is
@@ -140,6 +142,10 @@ KEY_FILE = os.path.join(APP_DIR, "secret.key")
 # with it (synced / skipped / error). Lets you verify a sync without trawling
 # the log — open it with any SQLite tool, or run `k40_bridge.py --synclog`.
 SYNC_DB_FILE = os.path.join(APP_DIR, "k40_sync_log.db")
+# Devices whose last login was rejected, keyed by device name. While a device
+# is listed here (with the same credentials) the scheduled sync does NOT log in
+# to it again — see SyncEngine._auth_blocked for why.
+AUTH_BLOCK_FILE = os.path.join(APP_DIR, "auth_blocked.json")
 
 # One-time migration: if old config sits next to the exe, copy it into APP_DIR
 def _migrate_old_config():
@@ -1156,7 +1162,8 @@ class HtmsClient(_BaseClient):
         # NOTE: COM is initialized once per fetch in fetch_attendance() (and
         # balanced with CoUninitialize there), not here — so this can be called
         # repeatedly (master DB + each year file) without nesting init counts.
-        # Open read-only AND share-deny-none so we never take a lock that could
+        # db_path is our private snapshot (see _snapshot), not the live file.
+        # Still open read-only AND share-deny-none so we never take a lock that could
         # shut out HTMS-86 / Swastik, which write to these .mdb files live. A
         # plain read/write (or even read-only) open still makes Jet contend for
         # the file lock and can throw an unhandled "Cannot open database" in
@@ -1197,19 +1204,90 @@ class HtmsClient(_BaseClient):
         import shutil
         return shutil.which("mdb-export") is not None
 
+    # ── Snapshot: never open HTMS's live files with a database engine ──
+    # Even a read-only, share-deny-none Jet open of the live .mdb makes Jet
+    # create/update a HAMS.ldb lock file in the HTMS folder and take byte-range
+    # locks HTMS-86 / Swastik can trip over. So we copy each file (a plain file
+    # read that denies nobody anything) into our own temp folder and point Jet
+    # at the copy. HTMS never sees a second database user at all.
+    _SNAP_RETRIES = 4
+
+    def _snapshot_dir(self):
+        tag = hashlib.sha1(os.path.abspath(self._folder()).lower().encode("utf-8")).hexdigest()[:12]
+        d = os.path.join(tempfile.gettempdir(), "k40_htms_snapshot", tag)
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    @staticmethod
+    def _file_sig(path):
+        st = os.stat(path)
+        return [st.st_size, st.st_mtime_ns]
+
+    def _snapshot(self, src):
+        """Return the path of an up-to-date private copy of `src`. Reuses the
+        previous copy while the source's size+mtime are unchanged; otherwise
+        re-copies, and retries if HTMS modified the file mid-copy (a torn copy
+        would read as a corrupt database)."""
+        dest = os.path.join(self._snapshot_dir(), os.path.basename(src))
+        sig_path = dest + ".sig"
+        last_err = None
+        for attempt in range(self._SNAP_RETRIES):
+            try:
+                before = self._file_sig(src)
+                try:
+                    with open(sig_path) as f:
+                        if json.load(f) == before and os.path.isfile(dest):
+                            return dest
+                except Exception:
+                    pass
+                part = dest + ".part"
+                # Python's open() on Windows shares read+write+delete with other
+                # processes, so this copy never blocks HTMS from writing.
+                with open(src, "rb") as fin, open(part, "wb") as fout:
+                    shutil.copyfileobj(fin, fout, 1024 * 1024)
+                if self._file_sig(src) != before:
+                    raise OSError("source changed while copying")
+                os.replace(part, dest)
+                with open(sig_path, "w") as f:
+                    json.dump(before, f)
+                return dest
+            except OSError as e:
+                last_err = e
+                if attempt < self._SNAP_RETRIES - 1:
+                    time.sleep(min(2 ** attempt, 4))
+        raise RuntimeError(f"could not copy {os.path.basename(src)}: {last_err}")
+
+    def _discard_snapshot(self, src):
+        dest = os.path.join(self._snapshot_dir(), os.path.basename(src))
+        for p in (dest, dest + ".sig"):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
     def _read_table(self, db_path, table, columns):
         """Return rows (lists of the requested column values) from an Access
-        table. Uses the OLEDB/Jet provider on Windows — the same one HTMS-86
-        uses — and falls back to the `mdbtools` CLI on Linux/macOS so the source
-        also works off-Windows (dev boxes, Linux hosts)."""
+        table — read from a private snapshot of the file, never the live one.
+        Uses the OLEDB/Jet provider on Windows — the same one HTMS-86 uses —
+        and falls back to the `mdbtools` CLI on Linux/macOS so the source also
+        works off-Windows (dev boxes, Linux hosts)."""
         if self._has_win32com():
-            return self._read_oledb(db_path, table, columns)
-        if self._mdbtools_available():
-            return self._read_mdbtools(db_path, table, columns)
-        raise RuntimeError(
-            "no Access .mdb reader available — install pywin32 (Windows) or "
-            "mdbtools (Linux/macOS)"
-        )
+            reader = self._read_oledb
+        elif self._mdbtools_available():
+            reader = self._read_mdbtools
+        else:
+            raise RuntimeError(
+                "no Access .mdb reader available — install pywin32 (Windows) or "
+                "mdbtools (Linux/macOS)"
+            )
+        snap = self._snapshot(db_path)
+        try:
+            return reader(snap, table, columns)
+        except Exception:
+            # A copy that won't open is most likely torn — force a fresh copy
+            # next cycle instead of failing on the same bad snapshot forever.
+            self._discard_snapshot(db_path)
+            raise
 
     def _read_oledb(self, db_path, table, columns, retries=3):
         sql = f"SELECT {', '.join(columns)} FROM {table}"
@@ -1821,7 +1899,7 @@ class SyncEngine:
                     from_date = self.force_from_date
                     self.force_subset = None
                     self.force_from_date = None
-                    self.run_sync(subset, from_date_override=from_date)
+                    self.run_sync(subset, from_date_override=from_date, forced=True)
                     # Force-sync does NOT reset the scheduled time —
                     # the regular cycle stays on its rhythm.
                 elif not self.paused:
@@ -1836,7 +1914,7 @@ class SyncEngine:
                 if self.next_sync_at is None or self.next_sync_at <= time.time():
                     self.next_sync_at = time.time() + interval
 
-    def run_sync(self, device_names=None, from_date_override=None):
+    def run_sync(self, device_names=None, from_date_override=None, forced=False):
         # Hold the lock for the whole run so a force-sync from the command
         # thread can't interleave with the scheduled cycle. Per-device errors
         # are caught here so one bad device can never kill the sync thread.
@@ -1848,7 +1926,8 @@ class SyncEngine:
                 if self.stop_event.is_set():
                     return
                 try:
-                    self._sync_one(device, from_date_override=from_date_override)
+                    self._sync_one(device, from_date_override=from_date_override,
+                                   forced=forced)
                 except Exception as e:
                     name = device.get("name", device.get("ip", "?"))
                     self.logger.exception(f"[{name}] sync crashed (recovered)")
@@ -1857,8 +1936,63 @@ class SyncEngine:
                     except Exception:
                         pass
 
-    def _sync_one(self, device, from_date_override=None):
+    # ── Login-failure guard ────────────────────────────────────────────
+    # Hikvision NVRs, cameras and access terminals lock the client IP (and on
+    # some firmware the whole account) for ~30 min after a handful of failed
+    # logins. A bridge with a wrong password that retried every cycle would
+    # keep that lock on permanently — and since the lock is per IP, the NVR
+    # client (iVMS etc.) on the same PC is shut out too. So after ONE rejected
+    # login the scheduled sync stops logging in to that device until either
+    # its credentials change in the settings or the user clicks Force Sync.
+    @staticmethod
+    def _credential_fingerprint(device):
+        parts = [str(device.get(k, "")) for k in ("type", "ip", "port", "username", "password")]
+        return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _load_auth_blocks():
+        try:
+            with open(AUTH_BLOCK_FILE) as f:
+                return json.load(f) or {}
+        except Exception:
+            return {}
+
+    def _auth_blocked(self, device):
+        entry = self._load_auth_blocks().get(device["name"])
+        return bool(entry) and entry.get("fingerprint") == self._credential_fingerprint(device)
+
+    def _set_auth_block(self, device, blocked):
+        blocks = self._load_auth_blocks()
+        if blocked:
+            blocks[device["name"]] = {
+                "fingerprint": self._credential_fingerprint(device),
+                "since": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+        elif device["name"] in blocks:
+            del blocks[device["name"]]
+        else:
+            return
+        try:
+            _atomic_write_json(AUTH_BLOCK_FILE, blocks, indent=2)
+        except Exception:
+            self.logger.exception("could not save auth-block state")
+
+    def _sync_one(self, device, from_date_override=None, forced=False):
         name = device["name"]
+
+        if self._auth_blocked(device):
+            if not forced:
+                self.logger.warning(
+                    f"[{name}] skipped: the device rejected the last login. Not retrying "
+                    f"so it does not lock this PC out — fix the username/password in "
+                    f"Settings, or click Force Sync to try once."
+                )
+                self.status_callback(
+                    name, "auth_fail", "login rejected — paused (fix password or Force Sync)"
+                )
+                return
+            self.logger.info(f"[{name}] Force Sync: retrying login once despite last failure")
+
         self.status_callback(name, "syncing", "connecting…")
         self.logger.info(f"[{name}] sync_cycle: starting")
 
@@ -1909,10 +2043,24 @@ class SyncEngine:
                 self.status_callback(name, "unreachable", f"{device['ip']} not on network")
             return
 
+        if status == "AUTH_FAIL":
+            self._set_auth_block(device, True)
+            self.logger.error(
+                f"[{name}] device rejected the login ({device_address(device)}). Pausing "
+                f"logins to it until the credentials are fixed, so it cannot lock this PC out."
+            )
+            self.status_callback(
+                name, "auth_fail", "login rejected — paused (fix password or Force Sync)"
+            )
+            return
+
         if status != "OK":
             self.logger.error(f"[{name}] fetch failed: {status}")
             self.status_callback(name, "error", status[:80])
             return
+
+        # The device accepted us — drop any earlier login-failure pause.
+        self._set_auth_block(device, False)
 
         self.logger.info(f"[{name}] fetched {len(attendances)} records")
         self.status_callback(

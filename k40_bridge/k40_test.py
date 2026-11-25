@@ -260,6 +260,125 @@ def test_synclog_clear_by_date_and_all():
     assert s.summary() == {}
 
 
+# ── HTMS reads a private snapshot, never the live .mdb ───────────────────
+class SnapHtms(kb.HtmsClient):
+    """HtmsClient whose Access reader just returns the path it was handed, so a
+    test can see which file the engine would have opened."""
+    def __init__(self, folder):
+        super().__init__({"type": "htms", "db_folder": folder})
+        self.opened = []
+
+    @staticmethod
+    def _has_win32com():
+        return True
+
+    def _read_oledb(self, db_path, table, columns):
+        self.opened.append(db_path)
+        with open(db_path, "rb") as f:
+            return [[f.read().decode()]]
+
+
+def test_htms_reads_snapshot_not_live_file():
+    folder = tempfile.mkdtemp(prefix="k40htms_")
+    live = os.path.join(folder, "HAMS.mdb")
+    with open(live, "w") as f:
+        f.write("v1")
+    c = SnapHtms(folder)
+    assert c._read_table(live, "Emp", ["x"]) == [["v1"]]
+    opened = c.opened[-1]
+    assert os.path.abspath(opened) != os.path.abspath(live)
+    assert not opened.startswith(folder)               # nothing touched in the HTMS folder
+    assert sorted(os.listdir(folder)) == ["HAMS.mdb"]  # no .ldb / temp files left there
+
+    # unchanged source -> the same snapshot is reused (no re-copy)
+    mtime_before = os.stat(opened).st_mtime_ns
+    c._read_table(live, "Emp", ["x"])
+    assert os.stat(opened).st_mtime_ns == mtime_before
+
+    # changed source -> fresh copy picks up the new content
+    with open(live, "w") as f:
+        f.write("v2-longer")
+    assert c._read_table(live, "Emp", ["x"]) == [["v2-longer"]]
+
+
+def test_htms_bad_snapshot_is_discarded():
+    folder = tempfile.mkdtemp(prefix="k40htms_")
+    live = os.path.join(folder, "HAMS.mdb")
+    with open(live, "w") as f:
+        f.write("v1")
+
+    class Broken(SnapHtms):
+        def _read_oledb(self, db_path, table, columns):
+            raise RuntimeError("Unrecognized database format")
+
+    c = Broken(folder)
+    try:
+        c._read_table(live, "Emp", ["x"])
+        assert False, "should have raised"
+    except RuntimeError:
+        pass
+    snap = os.path.join(c._snapshot_dir(), "HAMS.mdb")
+    assert not os.path.exists(snap) and not os.path.exists(snap + ".sig")
+
+
+# ── A rejected login pauses scheduled syncs (no NVR / camera lockout) ─────
+class _AuthFailClient:
+    calls = 0
+
+    def __init__(self, *a, **k):
+        pass
+
+    def fetch_attendance(self, date_from=None, date_to=None):
+        _AuthFailClient.calls += 1
+        return [], "AUTH_FAIL"
+
+
+def _engine():
+    _temp_env()
+    kb.AUTH_BLOCK_FILE = os.path.join(os.path.dirname(kb.CONFIG_FILE), "auth_blocked.json")
+    kb.LAST_SYNC_DATES_FILE = os.path.join(os.path.dirname(kb.CONFIG_FILE), "last.json")
+    states = []
+    eng = kb.SyncEngine({"devices": []}, logging.getLogger("k40_test"),
+                        lambda n, st, m: states.append(st))
+    return eng, states
+
+
+def test_auth_fail_pauses_until_credentials_change():
+    eng, states = _engine()
+    dev = {"name": "Gate", "type": "hikvision", "ip": "10.0.0.5", "port": 80,
+           "username": "admin", "password": "wrong", "serial": "S1"}
+    orig = kb.make_device_client
+    kb.make_device_client = _AuthFailClient
+    _AuthFailClient.calls = 0
+    try:
+        eng._sync_one(dev)                      # 1st scheduled cycle: one login attempt
+        assert _AuthFailClient.calls == 1 and states[-1] == "auth_fail"
+        eng._sync_one(dev)                      # later cycles: no login at all
+        eng._sync_one(dev)
+        assert _AuthFailClient.calls == 1, _AuthFailClient.calls
+        assert states[-1] == "auth_fail"
+
+        eng._sync_one(dev, forced=True)         # Force Sync retries exactly once
+        assert _AuthFailClient.calls == 2
+
+        fixed = dict(dev, password="right")     # new password -> tried again
+        eng._sync_one(fixed)
+        assert _AuthFailClient.calls == 3
+    finally:
+        kb.make_device_client = orig
+
+
+def test_successful_login_clears_pause():
+    eng, states = _engine()
+    dev = {"name": "Gate", "type": "hikvision", "ip": "10.0.0.5", "port": 80,
+           "username": "admin", "password": "pw", "serial": "S1"}
+    eng._set_auth_block(dev, True)
+    assert eng._auth_blocked(dev)
+    eng._set_auth_block(dev, False)
+    assert not eng._auth_blocked(dev)
+    assert eng._load_auth_blocks() == {}
+
+
 class _CaptureHandler(logging.Handler):
     def __init__(self):
         super().__init__()

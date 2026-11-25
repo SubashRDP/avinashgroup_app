@@ -117,6 +117,7 @@ Before each device sync, the bridge does a fast TCP probe (5-second timeout, 3 r
 | Problem | Check |
 |---------|-------|
 | Status: AUTH FAIL | Verify API Key + Secret in `config.json`. Test on ERPNext: `curl -H "Authorization: token KEY:SECRET" https://your-site/api/method/frappe.auth.get_logged_user` |
+| Status: Auth failed — "login rejected — paused" | A Hikvision device refused the username/password. The bridge stops logging in to it (repeated bad logins make Hikvision NVRs/cameras lock this PC's IP for ~30 min, which also breaks iVMS on this PC). Fix the credentials in Settings, or click **Force Sync** to try once. |
 | Status: UNREACHABLE | Ping the device IP from this Windows machine. Verify port 4370 is open. |
 | Status: ERROR (HTTP 404) | ERPNext URL is wrong, or `avinashgroup_app` is not installed on that site. |
 | No punches appearing | Verify Employee record has `attendance_device_id` matching the K40's user ID. |
