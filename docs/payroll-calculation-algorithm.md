@@ -79,7 +79,7 @@ Runs on **Create Salary Slips** and again on **Submit Salary Slips**, so attenda
 ### 3.1 The hourly rate
 
 ```text
-month_days = days in the BS month (29 to 32)
+month_days = Days per Month for Pay (30, Nepal HRMS Settings); 0 there = days in the BS month (29 to 32)
 hourly     = Basic ÷ month_days ÷ 8
 ```
 
@@ -149,6 +149,13 @@ absent_days   = Absent days + ½ for each Half Day
 payment_days  = working_days − absent_days
 factor        = payment_days ÷ working_days
 ```
+
+**Since 2026-11-25 the group pays on a fixed 30-day month** (Nepal HRMS
+Settings → Days per Month for Pay = 30). With it set, the factor is
+`1 − (working_days − payment_days) ÷ 30` instead: one unpaid day always costs
+monthly ÷ 30, a half day ÷ 60, and the hourly basic for overtime and the late
+fine is monthly ÷ 30 ÷ 8, in every BS month. The worked example below predates
+that and divides by the month's own days; 0 in the setting restores it.
 
 A day with no attendance counts as **Present**. Over 2 hours late makes the day a **Half Day** (½ absent), unless it is excused.
 

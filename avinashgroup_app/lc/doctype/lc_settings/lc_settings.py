@@ -20,12 +20,16 @@ class LCSettings(Document):
 			if row.company in seen:
 				frappe.throw(_("Row {0}: {1} is listed twice.").format(row.idx, row.company))
 			seen.add(row.company)
-			for field in ("margin_account", "charges_account"):
+			for field in ("margin_account", "transit_account", "vat_account"):
 				account = row.get(field)
 				if account and frappe.get_cached_value("Account", account, "company") != row.company:
 					frappe.throw(_("Row {0}: {1} does not belong to {2}.").format(row.idx, account, row.company))
-			if row.margin_account == row.charges_account:
-				frappe.throw(_("Row {0}: LC Margin and LC Charges Clearing must be different accounts.").format(row.idx))
+			if row.margin_account == row.transit_account:
+				frappe.throw(_("Row {0}: LC Margin and LC Goods in Transit must be different accounts.").format(row.idx))
+			if row.transit_account and frappe.get_cached_value("Account", row.transit_account, "account_type") == "Stock":
+				# The transfer's Stock Entry credits this account as its Difference
+				# Account, which ERPNext refuses for a Stock-type account.
+				frappe.throw(_("Row {0}: LC Goods in Transit must not be a Stock-type account.").format(row.idx))
 
 
 @frappe.whitelist()

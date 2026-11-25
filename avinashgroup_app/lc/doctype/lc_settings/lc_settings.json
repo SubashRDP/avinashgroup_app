@@ -11,21 +11,19 @@
   "margin_section",
   "margin_industry",
   "margin_trading",
-  "column_break_margin",
+  "cb_margin",
   "margin_industry_epay",
   "margin_trading_epay",
   "rules_section",
   "trading_usance_cap_days",
   "bci_threshold_usd",
+  "cb_rules",
   "bci_validity_days",
-  "column_break_rules",
-  "india_lc_threshold_inr",
-  "draft_tt_limit_usd",
   "customs_proof_days",
   "digest_section",
   "send_daily_digest",
   "alert_days_ahead",
-  "column_break_digest",
+  "cb_digest",
   "digest_role"
  ],
  "fields": [
@@ -43,21 +41,18 @@
   {
    "fieldname": "create_missing_accounts",
    "fieldtype": "Button",
-   "label": "Create Missing Accounts",
-   "description": "Adds 'LC Margin' and 'LC Charges Clearing' under Current Assets for every company that has no row yet"
+   "label": "Create Missing Accounts"
   },
   {
    "fieldname": "jv_type",
    "fieldtype": "Link",
    "label": "JV Type for LC Entries",
-   "options": "JV Type",
-   "description": "custom_p_type on the Journal Entries this module posts. Its numbering rule numbers them"
+   "options": "JV Type"
   },
   {
    "fieldname": "margin_section",
    "fieldtype": "Section Break",
-   "label": "NRB Margin",
-   "description": "From NRB Unified Foreign Exchange Circular 2082 (amended 6 Apr 2026, Circular 10/2082/83). NRB changes these often: check the current circular and your bank."
+   "label": "NRB Margin"
   },
   {
    "fieldname": "margin_industry",
@@ -72,7 +67,7 @@
    "default": "10"
   },
   {
-   "fieldname": "column_break_margin",
+   "fieldname": "cb_margin",
    "fieldtype": "Column Break"
   },
   {
@@ -90,22 +85,23 @@
   {
    "fieldname": "rules_section",
    "fieldtype": "Section Break",
-   "label": "NRB Limits",
-   "description": "From NRB Unified Foreign Exchange Circular 2082 (amended 6 Apr 2026, Circular 10/2082/83) and banks' published LC terms. Blank or 0 switches a check off."
+   "label": "NRB Limits"
   },
   {
    "fieldname": "trading_usance_cap_days",
    "fieldtype": "Int",
    "label": "Usance Limit for Trading Firms (Days)",
-   "default": "180",
-   "description": "A trading firm's usance LC may not exceed this. Industries follow their supplier contract"
+   "default": "180"
   },
   {
    "fieldname": "bci_threshold_usd",
    "fieldtype": "Currency",
    "label": "BCI Report Needed From (USD)",
-   "default": "50000",
-   "description": "Sight LCs at or above this USD value need a BCI report on the beneficiary"
+   "default": "50000"
+  },
+  {
+   "fieldname": "cb_rules",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "bci_validity_days",
@@ -114,29 +110,10 @@
    "default": "365"
   },
   {
-   "fieldname": "column_break_rules",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "india_lc_threshold_inr",
-   "fieldtype": "Currency",
-   "label": "India: LC Mandatory Above (INR)",
-   "default": "30000000",
-   "description": "INR imports above this must go through an LC. Shown as a hint on Purchase Orders"
-  },
-  {
-   "fieldname": "draft_tt_limit_usd",
-   "fieldtype": "Currency",
-   "label": "Third Country: Draft / TT Limit (USD)",
-   "default": "50000",
-   "description": "Imports above this need an LC or documentary collection. Shown as a hint on Purchase Orders"
-  },
-  {
    "fieldname": "customs_proof_days",
    "fieldtype": "Int",
-   "label": "Customs Proof Due Within (Days)",
-   "default": "120",
-   "description": "Days after settlement by which the bank expects the customs declaration. Not confirmed from the NRB text: set what your bank enforces"
+   "label": "Customs Proof Due Within (Days of Payment)",
+   "default": "120"
   },
   {
    "fieldname": "digest_section",
@@ -156,7 +133,7 @@
    "default": "15"
   },
   {
-   "fieldname": "column_break_digest",
+   "fieldname": "cb_digest",
    "fieldtype": "Column Break"
   },
   {
@@ -168,7 +145,7 @@
   }
  ],
  "links": [],
- "modified": "2026-10-27 12:00:00.000000",
+ "modified": "2026-11-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "LC",
  "name": "LC Settings",
@@ -201,6 +178,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "issingle": 1,
- "track_changes": 1
+ "issingle": 1
 }

@@ -1,0 +1,202 @@
+{
+ "actions": [],
+ "creation": "2026-11-25 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "item_group",
+  "item_code",
+  "item_name",
+  "description",
+  "cb_qty",
+  "qty",
+  "uom",
+  "rate",
+  "amount",
+  "currency",
+  "transfer_section",
+  "transfer_to",
+  "warehouse",
+  "asset_category",
+  "cb_transfer",
+  "allocated_cost",
+  "landed_rate",
+  "stock_entry",
+  "asset",
+  "asset_journal_entry"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_group",
+   "fieldtype": "Link",
+   "label": "Item Group",
+   "options": "Item Group",
+   "in_list_view": 1,
+   "columns": 2,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "label": "Item",
+   "options": "Item",
+   "in_list_view": 1,
+   "columns": 2,
+   "description": "Needed to transfer: a stock item for Stock, a fixed-asset item for Fixed Asset",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Item Name",
+   "fetch_from": "item_code.item_name",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "in_list_view": 1,
+   "columns": 2,
+   "reqd": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cb_qty",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "label": "Qty",
+   "in_list_view": 1,
+   "columns": 1,
+   "reqd": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "UOM",
+   "options": "UOM",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "label": "Rate",
+   "options": "currency",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "options": "currency",
+   "in_list_view": 1,
+   "columns": 1,
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "hidden": 1,
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "transfer_section",
+   "fieldtype": "Section Break",
+   "label": "Transfer"
+  },
+  {
+   "fieldname": "transfer_to",
+   "fieldtype": "Select",
+   "label": "Transfer To",
+   "options": "Stock\nFixed Asset",
+   "default": "Stock",
+   "reqd": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Warehouse",
+   "options": "Warehouse",
+   "depends_on": "eval:doc.transfer_to=='Stock'",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "asset_category",
+   "fieldtype": "Link",
+   "label": "Asset Category",
+   "options": "Asset Category",
+   "depends_on": "eval:doc.transfer_to=='Fixed Asset'",
+   "fetch_from": "item_code.asset_category",
+   "fetch_if_empty": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cb_transfer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allocated_cost",
+   "fieldtype": "Currency",
+   "label": "Landed Cost",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "landed_rate",
+   "fieldtype": "Currency",
+   "label": "Landed Rate",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "stock_entry",
+   "fieldtype": "Link",
+   "label": "Stock Entry",
+   "options": "Stock Entry",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "asset",
+   "fieldtype": "Link",
+   "label": "Asset",
+   "options": "Asset",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "asset_journal_entry",
+   "fieldtype": "Link",
+   "label": "Asset Journal Entry",
+   "options": "Journal Entry",
+   "read_only": 1,
+   "no_copy": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Item",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1,
+ "editable_grid": 1
+}

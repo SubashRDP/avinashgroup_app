@@ -7,7 +7,8 @@
   "company",
   "firm_type",
   "margin_account",
-  "charges_account"
+  "transit_account",
+  "vat_account"
  ],
  "fields": [
   {
@@ -16,8 +17,7 @@
    "label": "Company",
    "options": "Company",
    "reqd": 1,
-   "in_list_view": 1,
-   "columns": 2
+   "in_list_view": 1
   },
   {
    "fieldname": "firm_type",
@@ -25,9 +25,7 @@
    "label": "Firm Type",
    "options": "Industry\nTrading",
    "default": "Industry",
-   "in_list_view": 1,
-   "columns": 1,
-   "description": "NRB margin and usance rules differ for industries and trading firms"
+   "in_list_view": 1
   },
   {
    "fieldname": "margin_account",
@@ -35,23 +33,28 @@
    "label": "LC Margin",
    "options": "Account",
    "reqd": 1,
-   "in_list_view": 1,
-   "columns": 3,
-   "description": "Asset account holding margin money the bank blocks"
+   "in_list_view": 1
   },
   {
-   "fieldname": "charges_account",
+   "fieldname": "transit_account",
    "fieldtype": "Link",
-   "label": "LC Charges Clearing",
+   "label": "LC Goods in Transit",
    "options": "Account",
    "reqd": 1,
    "in_list_view": 1,
-   "columns": 3,
-   "description": "Holds bank charges until a Landed Cost Voucher moves them into stock"
+   "description": "Every cost of the LC is debited here until the goods are transferred to stock or assets"
+  },
+  {
+   "fieldname": "vat_account",
+   "fieldtype": "Link",
+   "label": "Input VAT",
+   "options": "Account",
+   "in_list_view": 1,
+   "description": "Where VAT paid at customs or on a bill is claimed"
   }
  ],
  "links": [],
- "modified": "2026-10-27 12:00:00.000000",
+ "modified": "2026-11-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "LC",
  "name": "LC Company Account",

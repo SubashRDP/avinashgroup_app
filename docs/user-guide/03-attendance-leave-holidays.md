@@ -156,6 +156,13 @@ Use this when the government announces a new holiday, so that no list is forgott
 
 **If the date is already past**, the system also tidies attendance for that day: "Worked on Holiday" is ticked for everyone who came, Absent rows with no punches are removed, and anyone whose salary for that month is already paid is skipped and named. Approved Overtime Sheets for that date are listed for you to check.
 
+### Special holidays (Dashain, Tihar): extra pay for working
+Anyone who comes in on a holiday ticked **Special Holiday** gets the **Special Holiday Allowance** for that day, on top of their overtime (or replacement leave). Saturdays and ordinary public holidays do not earn it.
+
+- **Mark the days:** on Holiday Bulk Update, type the date, tick **Special Holiday** and Apply. A date already on the lists is simply marked special. Or tick **Special Holiday** on the row in the Holiday List itself.
+- **The amount** is the **Special Holiday Rate** on the **Special Holiday Allowance** salary component (200 when it was set up). Change it there; nothing else needs touching.
+- It is paid by the Payroll Entry's allowance button, like tea and overtime, to everyone, with no row needed on their salary assignment. Half Day counts as the day worked. The Monthly Attendance BS summary shows it in a **Special Holiday** column.
+
 ### Removing a holiday
 The bulk screen only adds. To remove a holiday, open the **Holiday List** itself and delete the row. Then run **Attendance Fix** for that date so the day is marked again as a working day.
 

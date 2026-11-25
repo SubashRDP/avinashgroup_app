@@ -94,12 +94,14 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 			default: "Item",
 		},
 		{
-			// Filled per item from its UOMs (load_units): MT, Kg, 5 KG ... 450 KG.
+			// Filled per item from its UOMs (load_units): Transaction UOM, MT, Kg,
+			// 5 KG ... 450 KG. Transaction UOM shows each movement in the UOM its
+			// voucher was booked in; totals and the balance stay in MT.
 			fieldname: "unit",
 			label: __("Show Quantity In"),
 			fieldtype: "Select",
-			options: "MT\nKg",
-			default: "MT",
+			options: "Transaction UOM\nMT\nKg",
+			default: "Transaction UOM",
 		},
 		{
 			fieldname: "period_preset",
@@ -277,6 +279,10 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 			return "";
 		}
 
+		if (["in_qty", "out_qty"].includes(column.fieldname) && data.qty_precision !== undefined) {
+			// Transaction UOM: a cylinder count reads 120, a weight 18.000
+			column = Object.assign({}, column, { precision: data.qty_precision });
+		}
 		value = default_formatter(value, row, column, data);
 
 		if (data.is_heading) {
@@ -525,7 +531,7 @@ frappe.query_reports[GAS_STOCK_LEDGER] = {
 	},
 
 	// The units the chosen item can be read in. Keeps the current unit when
-	// the new item has it, else falls back to the first (MT for gas).
+	// the new item has it, else falls back to the first (Transaction UOM).
 	load_units: function (report) {
 		const item = report.get_filter_value("item_code");
 		if (!item) return Promise.resolve();

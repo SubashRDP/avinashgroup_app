@@ -60,9 +60,6 @@ app_include_js = [
     # "Create > PDC Cheque" on submitted Sales / Purchase Invoices. Global for the
     # same reason as sales_invoice.js above. See pdc/lifecycle.py make_from_invoice.
     "/assets/avinashgroup_app/js/invoice_pdc.js?v=1.0",
-    # "Create > Letter of Credit" and the NRB LC hint on foreign-currency
-    # Purchase Orders. See lc/lifecycle.py make_from_purchase_order.
-    "/assets/avinashgroup_app/js/purchase_order_lc.js?v=1.0",
     # Get Items From > Sales Order picker with Miti / ID / Customer / Qty / Amount.
     "/assets/avinashgroup_app/js/sales_invoice_so_picker.js?v=1.3",
     # Billing nudges toward invoicing from the Sales Order: customer popup,
@@ -598,11 +595,10 @@ _add_doc_event(
 	"avinashgroup_app.custom_code.payment_entry.advance_account_patch.set_party_account_by_unallocated",
 )
 
-# LC: a Purchase Receipt / Invoice linked to a Letter of Credit shipment, or a JE
-# an LC posted, cannot be cancelled out from under the LC. See lc/guards.py.
-_add_doc_event("Purchase Invoice", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
-_add_doc_event("Purchase Receipt", "before_cancel", "avinashgroup_app.lc.guards.block_purchase_cancel")
-_add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.block_je_cancel")
+# LC: a Journal Entry or Stock Entry a Letter of Credit posted cannot be
+# cancelled out from under the LC (use its Undo Last Step). See lc/guards.py.
+_add_doc_event("Journal Entry", "before_cancel", "avinashgroup_app.lc.guards.block_cancel")
+_add_doc_event("Stock Entry", "before_cancel", "avinashgroup_app.lc.guards.block_cancel")
 
 # Income Tax Act Schedule-2 depreciation: yearly WDV, first year by the thirds
 # rule, first date at fiscal year end. See fixed_assets/nepal_wdv.py.
@@ -896,11 +892,12 @@ fixtures = [
                     "Payment Entry-pdc_replacement_of",
                     # Bounce / re-present JE -> the Payment Entry it is about.
                     "Journal Entry-pdc_payment_entry",
-                    # Which Letter of Credit posted this JE / whose bank
-                    # charges this Landed Cost Voucher capitalises. Read by
-                    # lc/guards.py, lc/accounting.py and the LC's Connections.
+                    # Which Letter of Credit posted this JE / Stock Entry, or
+                    # made this Asset. Read by lc/guards.py, lc/accounting.py
+                    # (transit_balance) and the LC's Connections.
                     "Journal Entry-letter_of_credit",
-                    "Landed Cost Voucher-letter_of_credit",
+                    "Stock Entry-letter_of_credit",
+                    "Asset-letter_of_credit",
                 ],
             ]
         },

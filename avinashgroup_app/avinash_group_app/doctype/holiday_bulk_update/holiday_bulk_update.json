@@ -9,6 +9,7 @@
   "naming_series",
   "holiday_date",
   "description",
+  "special_holiday",
   "column_break_main",
   "all_holiday_lists",
   "holiday_lists",
@@ -37,6 +38,13 @@
    "label": "Holiday",
    "description": "Name shown on the holiday, e.g. Haritalika Teej",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Dashain, Tihar: everyone who works this day gets the Special Holiday Allowance on top of overtime",
+   "fieldname": "special_holiday",
+   "fieldtype": "Check",
+   "label": "Special Holiday"
   },
   {
    "fieldname": "column_break_main",
@@ -76,7 +84,7 @@
   }
  ],
  "links": [],
- "modified": "2026-09-16 10:00:00.000000",
+ "modified": "2026-11-25 04:00:44.631772",
  "module": "Avinash Group App",
  "name": "Holiday Bulk Update",
  "owner": "Administrator",

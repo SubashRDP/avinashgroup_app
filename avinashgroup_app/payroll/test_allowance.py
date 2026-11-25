@@ -130,6 +130,11 @@ class TestAllowance(FrappeTestCase):
 	def setUp(self):
 		frappe.clear_messages()
 		_clear_request_caches()
+		# These price on the BS month's own length (Days per Month for Pay left
+		# blank); the fixed 30-day month is test_pay_30_day_month's.
+		fixed = patch.object(attendance_allowance, "get_pay_days_per_month", return_value=0)
+		fixed.start()
+		self.addCleanup(fixed.stop)
 
 	def _employee(
 		self, allowances=(), department=ADMIN_DEPT, company=COMPANY, structure=None, initial_basic=0, **values

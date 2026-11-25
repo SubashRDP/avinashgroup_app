@@ -12,6 +12,9 @@ Why ERPNext's own Stock Ledger is not enough for Nepal Gas (measured on avinas1,
   sales in cylinders; the stock ledger only speaks Kg. This report shows the
   quantity in MT, Kg or any UOM on the item (a balance of "14.2 KG" reads as
   that many domestic cylinders' worth), and how many cylinders of each size moved.
+  The default, "Transaction UOM", shows each movement in the UOM its voucher
+  line was booked in (120 x 14.2 KG, 18 x 1 MT, 40 Kg) with the UOM beside it;
+  totals and the balance, which add different sizes together, stay in MT.
 * **Where the gas came from.** Each tanker's Purchase Invoice names its
   refinery (custom_refinery). Detail shows it per load, the Refinery filter
   narrows to one, and the Refinery Summary view totals loads, quantity and cost
@@ -76,6 +79,10 @@ UNIT_FACTORS = {"MT": 1000.0, "Kg": 1.0}
 UNIT_PRECISION = {"MT": 3, "Kg": 2}
 # any other unit (a cylinder size, a non-weight UOM)
 OTHER_PRECISION = 2
+
+# Show Quantity In's first (default) choice: each movement in its voucher
+# line's own UOM. Not a unit of its own -- totals and balances use BALANCE_UNIT.
+UNIT_TXN = "Transaction UOM"
 
 # The "1 MT" UOM is the MT unit under another name; offering both is noise.
 UNIT_ALIASES = {"1 MT": "MT"}
@@ -233,6 +240,8 @@ def _context(filters):
 
 	weight_item = _is_weight(item.stock_uom)
 	units = OrderedDict(_units(item.name, item.stock_uom))
+	# no unit at all (the API, an old link) means the default, Transaction UOM
+	txn_uom = filters.get("unit") in (None, "", UNIT_TXN)
 	unit = UNIT_ALIASES.get(filters.get("unit"), filters.get("unit"))
 	if unit not in units:
 		unit = "MT" if weight_item else item.stock_uom
@@ -253,6 +262,7 @@ def _context(filters):
 		by_warehouse=group_by == GROUP_WAREHOUSE,
 		view=filters.get("view") or VIEW_DETAIL,
 		unit=unit,
+		txn_uom=txn_uom,
 		weight_item=weight_item,
 		factor=units[unit],
 		precision=UNIT_PRECISION.get(unit, OTHER_PRECISION),
@@ -482,7 +492,7 @@ def _build_sections(ctx):
 		move.booked_value += booked_value
 		if qty < 0 and not booked_qty:
 			move.stored_zero += 1
-		if sle.voucher_detail_no:
+		if sle.voucher_detail_no and sle.voucher_detail_no not in move.detail_nos:
 			move.detail_nos.append(sle.voucher_detail_no)
 
 	# Value each movement in order and drop the ones that net to nothing.
@@ -533,6 +543,8 @@ def _enrich(ctx, sections):
 	)
 	headers = _headers(ctx, moves) if needs_headers else {}
 	narrations = _narrations(moves) if ctx.show_narration and ctx.view in (VIEW_DETAIL, VIEW_STOCK_BOOK) else {}
+	# Transaction UOM only changes the Detail rows (and the print, which is Detail);
+	# the summaries add sizes together in MT and need no voucher lines for it.
 	lines = _item_lines(ctx, moves) if ctx.show_cylinders or ctx.view == VIEW_DETAIL else {}
 	ctx.sizes = {}
 	ctx.factor_mismatch = {}
@@ -557,9 +569,10 @@ def _enrich(ctx, sections):
 		move.narration = narrations.get((move.voucher_type, move.voucher_no), "")
 		move.cylinders = {}
 		move.remarks = []
-		for line in (lines.get(name) for name in move.detail_nos):
-			if line:
-				_count_cylinders(ctx, move, line)
+		move_lines = [line for line in (lines.get(name) for name in move.detail_nos) if line]
+		for line in move_lines:
+			_count_cylinders(ctx, move, line)
+		move.txn = _txn_qty(ctx, move, move_lines) if ctx.txn_uom and ctx.view == VIEW_DETAIL else None
 		move.visible = _visible(ctx, move)
 
 
@@ -680,6 +693,47 @@ def _count_cylinders(ctx, move, line):
 		note = _("{0} booked as {1} kg each").format(line.uom, flt(line.conversion_factor))
 		if note not in move.remarks:
 			move.remarks.append(note)
+
+
+def _txn_qty(ctx, move, lines):
+	"""(qty, uom) of a movement in the UOM its voucher booked it in, or None.
+
+	None -- and the row falls back to the balance unit -- when the voucher has
+	no item lines (a Stock Reconciliation), mixes UOMs (13 of ~294k invoices on
+	avinas1, e.g. 14.2 KG and 5 KG on one bill), or its lines do not account
+	for the whole movement (part of a transfer inside the pool).
+	"""
+	if not lines:
+		return None
+	uoms = {UNIT_ALIASES.get(line.uom, line.uom) or ctx.item.stock_uom for line in lines}
+	if len(uoms) != 1:
+		return None
+	booked_kg = sum(abs(flt(line.stock_qty) or flt(line.qty) * flt(line.conversion_factor)) for line in lines)
+	if abs(booked_kg - abs(move.qty)) > max(0.001, abs(move.qty) * 1e-6):
+		return None
+	uom = uoms.pop()
+	if uom == "MT":
+		# "1 MT" lines carry qty in MT already; state it at MT's precision
+		return (flt(booked_kg / 1000.0, UNIT_PRECISION["MT"]), "MT")
+	return (flt(sum(abs(flt(line.qty)) for line in lines), 3), uom)
+
+
+def _txn_precision(ctx, uom):
+	"""Decimals a Transaction UOM figure is shown at: none for a cylinder count."""
+	if uom in UNIT_PRECISION:
+		return UNIT_PRECISION[uom]
+	if uom == ctx.item.stock_uom:
+		return OTHER_PRECISION
+	return 0
+
+
+def _txn_text(ctx, move):
+	"""'120 × 14.2 KG' / '18.000 MT' -- a movement's Transaction UOM figure as text."""
+	qty, uom = move.txn
+	shown = frappe.format(qty, {"fieldtype": "Float", "precision": _txn_precision(ctx, uom)})
+	if uom in UNIT_PRECISION or uom == ctx.item.stock_uom:
+		return "{0} {1}".format(shown, uom)
+	return "{0} × {1}".format(shown, uom)
 
 
 def _visible(ctx, move):
@@ -864,6 +918,11 @@ def _detail_columns(ctx):
 		{"fieldname": "out_qty", "label": _("Out ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 110},
 		{"fieldname": "balance", "label": _("Balance ({0})").format(u), "fieldtype": "Float", "precision": ctx.precision, "width": 130},
 	]
+	if ctx.txn_uom:
+		# each row's In / Out is in its own UOM, named in the column after them;
+		# the JS formats each figure at its row's precision (qty_precision)
+		columns[5]["label"], columns[6]["label"] = _("In"), _("Out")
+		columns.insert(7, {"fieldname": "uom", "label": _("UOM"), "fieldtype": "Data", "width": 80})
 	if ctx.show_value:
 		columns.append({"fieldname": "value", "label": _("Value"), "fieldtype": "Currency", "width": 140})
 	return columns
@@ -878,6 +937,9 @@ def _band(ctx, label, balance=None, in_kg=None, out_kg=None, value=None):
 	GL Posting Detail.
 	"""
 	row = {"party_name": label, "_band": 1, "_bold": 1}
+	if ctx.txn_uom and balance is None:
+		# a total adds different sizes together, so it is stated in the balance unit
+		row["uom"] = ctx.unit
 	if balance is not None:
 		row["balance"] = _q(ctx, balance.qty)
 		if ctx.show_value:
@@ -909,6 +971,12 @@ def _move_row(ctx, move, running, same_day=False):
 		"refinery": move.refinery,
 		"narration": move.narration,
 	}
+	if ctx.txn_uom:
+		if move.txn:
+			qty, uom = move.txn
+			row["in_qty" if inward else "out_qty"] = qty
+			row["qty_precision"] = _txn_precision(ctx, uom)
+		row["uom"] = move.txn[1] if move.txn else ctx.unit
 	if running:
 		# a party or refinery has no stock of its own; its rows carry no balance
 		row["balance"] = _q(ctx, move.balance_qty)
@@ -922,7 +990,8 @@ def _move_row(ctx, move, running, same_day=False):
 def _subline(ctx, move):
 	"""What moved and the tanker's papers, as one grey line under the movement."""
 	parts = []
-	if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"}:
+	# a single-UOM movement already states its sizes in In / Out
+	if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"} and not (ctx.txn_uom and move.txn):
 		sizes = []
 		for key, count in sorted(move.cylinders.items(), key=lambda kv: ctx.sizes.get(kv[0], ("", 0))[1]):
 			label = ctx.sizes.get(key, (key, 0))[0]
@@ -1432,11 +1501,12 @@ def period_label(from_date, to_date):
 
 @frappe.whitelist()
 def get_units(item_code):
-	"""The units the Show Quantity In filter offers: MT and Kg, then the item's UOMs by size."""
+	"""The units the Show Quantity In filter offers: Transaction UOM (the default),
+	MT and Kg, then the item's UOMs by size."""
 	stock_uom = frappe.db.get_value("Item", item_code, "stock_uom")
 	if not stock_uom:
 		return []
-	return [unit for unit, _factor in _units(item_code, stock_uom)]
+	return [UNIT_TXN] + [unit for unit, _factor in _units(item_code, stock_uom)]
 
 
 @frappe.whitelist()

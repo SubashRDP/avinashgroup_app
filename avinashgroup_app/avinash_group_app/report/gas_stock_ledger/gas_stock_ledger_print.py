@@ -70,6 +70,21 @@ def _capped(lines, limit=None):
 	return lines
 
 
+def _flow_label(ctx, label):
+	"""'In (MT)' -- or bare 'In' under Transaction UOM, where each row names its own UOM."""
+	return label if ctx.txn_uom else "{0} ({1})".format(label, ctx.unit)
+
+
+def _unit_label(ctx):
+	"""What the quantities are in, for a print's masthead and parameters."""
+	return _("Transaction UOM (totals in {0})").format(ctx.unit) if ctx.txn_uom else ctx.unit
+
+
+def _flow_text(ctx, text):
+	"""A band's In / Out figure; under Transaction UOM it says its unit."""
+	return "{0} {1}".format(text, ctx.unit) if text and ctx.txn_uom else text
+
+
 def _fmt_qty(value, precision):
 	"""Nepali digit grouping at the unit's precision -- 1,23,456.789. Blank for zero."""
 	value = flt(value, precision)
@@ -103,7 +118,7 @@ def _frame(ctx, head, page_no, total_pages):
 		at(
 			pt(
 				right,
-				"Quantity in {0}{1}".format(u, " · Amount in Nepalese Rupee ( NPR )" if ctx.show_value else ""),
+				"Quantity in {0}{1}".format(_unit_label(ctx), " · Amount in Nepalese Rupee ( NPR )" if ctx.show_value else ""),
 				align="r",
 			),
 			88.2,
@@ -117,8 +132,8 @@ def _frame(ctx, head, page_no, total_pages):
 		at(pt(X.date, "Date", bold=True), 134.5),
 		at(pt(X.voucher, "Voucher Number", bold=True), 134.5),
 		at(pt(X.text, "Party / Description", bold=True), 134.5),
-		at(pt(X.qty_in, "In ({0})".format(u), bold=True, align="r"), 134.5),
-		at(pt(X.qty_out, "Out ({0})".format(u), bold=True, align="r"), 134.5),
+		at(pt(X.qty_in, _flow_label(ctx, "In"), bold=True, align="r"), 134.5),
+		at(pt(X.qty_out, _flow_label(ctx, "Out"), bold=True, align="r"), 134.5),
 		at(pt(578.0, "Balance ({0})".format(u), bold=True, align="r"), 134.5),
 	]
 	label = "Design Name : "
@@ -150,6 +165,12 @@ def _pages(ctx, sections):
 	def amount_run(x, text, bold=False):
 		return pt(x, text, size=glpd._fit(text, QTY_W, 9.0, bold), bold=bold, align="r")
 
+	def moved(move):
+		"""A movement's In / Out figure: its own UOM under Transaction UOM."""
+		if ctx.txn_uom:
+			return gsl._txn_text(ctx, move) if move.txn else _flow_text(ctx, qty(abs(move.qty)))
+		return qty(abs(move.qty))
+
 	def heading(code, desc):
 		runs = []
 		if code:
@@ -180,9 +201,9 @@ def _pages(ctx, sections):
 				side = "{0} {1}".format(ctx.unit, "IN" if net_kg > 0 else "OUT")
 			runs.append(pt(X.side, side, bold=True))
 		if qty(in_kg):
-			runs.append(amount_run(X.qty_in, qty(in_kg)))
+			runs.append(amount_run(X.qty_in, _flow_text(ctx, qty(in_kg))))
 		if qty(out_kg):
-			runs.append(amount_run(X.qty_out, qty(out_kg)))
+			runs.append(amount_run(X.qty_out, _flow_text(ctx, qty(out_kg))))
 		if bal is not None:
 			runs.append(amount_run(X.balance, balance(bal.qty), bold=True))
 		lines = [runs] + (value_line(bal) if bal is not None else [])
@@ -206,7 +227,7 @@ def _pages(ctx, sections):
 		# What moved, in which sizes, at what cost -- one line where it fits.
 		detail = [english]
 		# a load booked only in bulk or loose kg would just repeat the In / Out figure
-		if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"}:
+		if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"} and not (ctx.txn_uom and move.txn):
 			detail.append(cylinders(move))
 		if ctx.show_value and abs(move.value) >= 0.005:
 			from avinashgroup_app.avinash_group_app.report.custom_ledger.custom_ledger import _fmt_npr
@@ -225,10 +246,8 @@ def _pages(ctx, sections):
 			pt(X.voucher, voucher, size=min(9.0, round(9.0 * glpd.PRINT_VOUCHER_W / max(glpd._text_pt(voucher), 1), 2))),
 			pt(X.text, desc[0]),
 		]
-		if move.qty > 0:
-			first.append(amount_run(X.qty_in, qty(move.qty)))
-		else:
-			first.append(amount_run(X.qty_out, qty(-move.qty)))
+		figure = moved(move)
+		first.append(amount_run(X.qty_in if move.qty > 0 else X.qty_out, figure))
 		if running:
 			first.append(amount_run(X.balance, balance(move.balance_qty)))
 		fields = [{"lines": [first] + [[pt(X.text, line)] for line in desc[1:]]}]
@@ -328,7 +347,7 @@ def _parameters(ctx):
 			("Group By", ctx.group_by),
 		],
 		[
-			("Quantity In", ctx.unit),
+			("Quantity In", _unit_label(ctx)),
 			("Warehouses", listed(chosen_warehouses) if chosen_warehouses else "All (one stock)"),
 			("Movement", f.get("voucher_category") or "All"),
 		],
@@ -411,7 +430,7 @@ def _std_info(ctx, filters):
 	pairs = [
 		(_("Item"), "{0}  {1}".format(ctx.item.name, ctx.item.item_name or "")),
 		(_("Group by"), ctx.group_by),
-		(_("Quantity in"), ctx.unit),
+		(_("Quantity in"), _unit_label(ctx)),
 		(_("Warehouses"), listed(chosen) if chosen else _("All, as one stock")),
 		(_("Movement"), filters.get("voucher_category") or _("All")),
 		(_("Party"), ctx.customer or ctx.supplier or _("All")),
@@ -426,7 +445,7 @@ def _std_info(ctx, filters):
 	return frappe._dict(
 		company=ctx.company,
 		left="   ·   ".join(
-			p for p in (_("Fiscal Year {0}").format(fy) if fy else "", _("Quantity in {0}").format(ctx.unit),
+			p for p in (_("Fiscal Year {0}").format(fy) if fy else "", _("Quantity in {0}").format(_unit_label(ctx)),
 			            _("Amounts in NPR") if ctx.show_value else "") if p
 		),
 		period="{0}{1} – {2} BS   ·   {3} – {4} AD".format(
@@ -467,8 +486,8 @@ def _std_frame(ctx, info, page_no, total_pages):
 		(S.date, _("Miti / Date"), "l"),
 		(S.voucher, _("Voucher"), "l"),
 		(S.text, _("Particulars"), "l"),
-		(S.debit, _("In ({0})").format(u), "r"),
-		(S.credit, _("Out ({0})").format(u), "r"),
+		(S.debit, _flow_label(ctx, _("In")), "r"),
+		(S.credit, _flow_label(ctx, _("Out")), "r"),
 		(S.balance, _("Balance ({0})").format(u), "r"),
 	):
 		items.append(at(pt(x, label, size=glpd._fit(label, 64.0, 7.5, True), bold=True, align=align, colour=S.ink), head_y + 4.25))
@@ -496,8 +515,11 @@ def _std_pages(ctx, sections, info):
 	def qty_text(kg):
 		return _fmt_qty(gsl._q(ctx, kg), ctx.precision)
 
-	def amt(kg, x, bold=False, colour=None):
+	def amt(kg, x, bold=False, colour=None, move=None):
 		text = qty_text(kg)
+		if ctx.txn_uom:
+			# a movement in its own UOM; a total (or a mixed voucher) says MT
+			text = gsl._txn_text(ctx, move) if move is not None and move.txn else _flow_text(ctx, text)
 		if not text:
 			return None
 		return pt(x, text, size=glpd._fit(text, S.amount_w, 8.0, bold), bold=bold, align="r", colour=colour or S.ink)
@@ -576,7 +598,7 @@ def _std_pages(ctx, sections, info):
 	def movement_lines(move, running):
 		english, _nepali = gsl.CATEGORIES[move.category]
 		detail = [english]
-		if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"}:
+		if ctx.show_cylinders and set(move.cylinders) - {"bulk", "loose"} and not (ctx.txn_uom and move.txn):
 			detail.append(cylinders(move))
 		if ctx.show_value and abs(move.value) >= 0.005:
 			detail.append("{0} {1}".format(_("value") if move.qty > 0 else _("cost"), _fmt_npr(abs(move.value))))
@@ -608,7 +630,7 @@ def _std_pages(ctx, sections, info):
 				line_runs += runs(
 					pt(S.date, gsl._miti(move.posting_date).replace("-", "/"), size=8.0, colour=S.ink),
 					pt(S.voucher, voucher, size=glpd._fit(voucher, S.voucher_w, 8.0), colour=S.ink),
-					amt(move.qty, S.debit) if move.qty > 0 else amt(-move.qty, S.credit),
+					amt(move.qty, S.debit, move=move) if move.qty > 0 else amt(-move.qty, S.credit, move=move),
 					bal(move.balance_qty) if running else None,
 				)
 			elif index == 1:

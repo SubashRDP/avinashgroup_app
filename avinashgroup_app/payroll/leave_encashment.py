@@ -76,6 +76,10 @@ from frappe.utils import flt, getdate, strip_html
 from hrms.hr.doctype.leave_application.leave_application import get_leave_balance_on
 from hrms.hr.doctype.leave_encashment.leave_encashment import LeaveEncashment
 
+from rdp_common_app.nepal_hrms_common.doctype.nepal_hrms_settings.nepal_hrms_settings import (
+	get_pay_days_per_month,
+)
+
 from avinashgroup_app.payroll.allowance import current_assignment
 
 SOURCE_TAG = "Leave Encashment"
@@ -95,8 +99,11 @@ def _bs_month_days(on_date) -> int:
 def per_day_rate(employee: str, leave_type: str, on_date) -> tuple:
 	"""(monthly basic, divisor, rate per day) for this person and type on `on_date`."""
 	basic = flt((current_assignment(employee, on_date) or {}).get("base"))
-	divisor = flt(frappe.get_cached_value("Leave Type", leave_type, "custom_encashment_days_per_month")) or _bs_month_days(
-		on_date
+	# The Leave Type's own days, else the group's pay month (30), else the BS month.
+	divisor = (
+		flt(frappe.get_cached_value("Leave Type", leave_type, "custom_encashment_days_per_month"))
+		or get_pay_days_per_month()
+		or _bs_month_days(on_date)
 	)
 	return basic, divisor, (basic / divisor if divisor else 0.0)
 

@@ -3,13 +3,12 @@
 <h4 style="margin:18px 0 6px">{{ title }} ({{ items|length }})</h4>
 <table style="border-collapse:collapse;width:100%;font-size:13px" border="1" cellpadding="5">
 	<tr style="background:#f3f3f3">
-		<th align="left">LC</th><th align="left">Bank LC No.</th><th align="left">Supplier</th>
+		<th align="left">LC</th><th align="left">LC No.</th><th align="left">Supplier</th>
 		<th align="left">Company</th><th align="right">Amount</th><th align="left">{{ date_label }}</th>
 	</tr>
 	{% for r in items %}
 	<tr>
-		<td><a href="{{ frappe.utils.get_url_to_form('Letter of Credit', r.name) }}">{{ r.name }}</a>
-			{% if r.shipment_no %} / shipment {{ r.shipment_no }}{% endif %}</td>
+		<td><a href="{{ frappe.utils.get_url_to_form('Letter of Credit', r.name) }}">{{ r.name }}</a></td>
 		<td>{{ r.lc_no or "" }}</td>
 		<td>{{ r.supplier_name or "" }}</td>
 		<td>{{ r.company }}</td>

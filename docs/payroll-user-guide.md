@@ -198,7 +198,7 @@ For every field, every Allowance Kind and a filled-in recipe for each component,
 | Field | What it does | Set it to |
 |---|---|---|
 | **Type** | Earning or Deduction | See section 3 |
-| **Depends on Payment Days** | Cuts the amount for unpaid days: amount × payment days ÷ days in the BS month | On for Basic and Monthly / % of Initial Basic allowances. Off for SSF Addition, SSF, tax, and everything priced from attendance (the system turns it off for those) |
+| **Depends on Payment Days** | Cuts the amount for unpaid days: amount − amount × unpaid days ÷ 30 (Days per Month for Pay), in every month | On for Basic and Monthly / % of Initial Basic allowances. Off for SSF Addition, SSF, tax, and everything priced from attendance (the system turns it off for those) |
 | **Is Tax Applicable** | The earning is taxed | On for every earning |
 | **Exempted from Income Tax** | The deduction lowers taxable income | On for SSF (and a CIT component, if one is made). **Never** on Overtime or Late Fine: the save refuses it |
 | **Variable Based On Taxable Salary** | This is the income tax line | On for **Income Tax** only |
@@ -220,7 +220,7 @@ For every field, every Allowance Kind and a filled-in recipe for each component,
 | **Only OT-Eligible Staff** | Meal: only people ticked Overtime Eligible. Overtime is always OT-eligible only; the late fine ignores this tick |
 | **Attendance Month** | Same as Salary, or Previous Month (count last month's attendance) |
 | **Rate Basis** / **Multiplier** | Price from basic. The late fine is always priced from basic with Multiplier 1. Overtime is always 1.5; its Multiplier field is ignored |
-| **Rate: Days per Month** | Blank = the real BS month length (29-32). Type 30 to use the old Excel rule |
+| **Rate: Days per Month** | Blank = Days per Month for Pay in Nepal HRMS Settings (30). Fill only for a component that must differ |
 | **Rate: Hours per Day** | Blank = 8 |
 | **Festival Allowance** section | Dashain only (section 11) |
 
@@ -338,6 +338,7 @@ Check these once. IT normally sets them.
 | Payroll Based On | **Desk → HR → Payroll Settings** | Attendance | Payment days come from attendance |
 | Consider Unmarked Attendance As | Payroll Settings | Present | A day with no attendance is paid. Change only with management approval |
 | Email Salary Slip to Employee | Payroll Settings | On | Slips are emailed on submit |
+| Days per Month for Pay | **Nepal HRMS Settings** | 30 | One day = monthly ÷ 30 in every month: absent, half day, overtime and late fine all use it. 0 = divide by the BS month's own length |
 | Process payroll in Nepali month | **Nepal HRMS Settings** | On | The month is the BS month (29-32 days) and holidays are paid. If it is off, everyone shows 26 of 31 working days |
 | Auto Leave Encashment | HR Settings | Off | Encashment is paid by its own payout entry |
 | Scheduler | System Settings → Enable Scheduler | On | Overtime is measured and leave is credited every night (section 18) |
@@ -348,13 +349,13 @@ Check these once. IT normally sets them.
 
 | Component | Earning / Deduction | Kind | Where the rate is entered | Cut for unpaid days | Taxed | Example (Basic 30,000, Ashwin 2083 = 31 days, 29.5 payment days) |
 |---|---|---|---|---|---|---|
-| **Basic Salary** | Earning | Structure formula | **Base** on the assignment | Yes | Yes | 30,000 × 29.5 ÷ 31 = 28,548.39 |
+| **Basic Salary** | Earning | Structure formula | **Base** on the assignment | Yes | Yes | 30,000 − 30,000 × 1.5 ÷ 30 = 28,500.00 |
 | **SSF Addition** | Earning | Structure formula | **SSF Applicable** tick on the assignment | No (taken from the already-cut Basic) | Yes | 28,548.39 × 20 % = 5,709.68 |
 | **SSF** | Deduction | Structure formula | **SSF Applicable** tick | No | Lowers taxable income (up to the cap) | 28,548.39 × 31 % = 8,850.00 |
-| **House Rent Allowance** | Earning | % of Initial Basic | Assignment Allowances row: Rate 25 (NGI), 27 (NGN) | Yes | Yes | 24,000 × 25 % = 6,000 × 29.5 ÷ 31 = 5,709.68 |
-| **Dearness Allowance** | Earning | Monthly | Assignment Allowances row, per person | Yes | Yes | 2,000 × 29.5 ÷ 31 = 1,903.23 |
-| **Gas Allowance** | Earning | Monthly | Assignment row (usual 1,690) | Yes | Yes | 1,690 × 29.5 ÷ 31 = 1,608.23 |
-| **Education Allowance** | Earning | Monthly | Assignment row (NGI 2,780, NGN 1,250) | Yes | Yes | 2,780 × 29.5 ÷ 31 = 2,645.48 |
+| **House Rent Allowance** | Earning | % of Initial Basic | Assignment Allowances row: Rate 25 (NGI), 27 (NGN) | Yes | Yes | 24,000 × 25 % = 6,000 − 6,000 × 1.5 ÷ 30 = 5,700.00 |
+| **Dearness Allowance** | Earning | Monthly | Assignment Allowances row, per person | Yes | Yes | 2,000 − 2,000 × 1.5 ÷ 30 = 1,900.00 |
+| **Gas Allowance** | Earning | Monthly | Assignment row (usual 1,690) | Yes | Yes | 1,690 − 1,690 × 1.5 ÷ 30 = 1,605.50 |
+| **Education Allowance** | Earning | Monthly | Assignment row (NGI 2,780, NGN 1,250) | Yes | Yes | 2,780 − 2,780 × 1.5 ÷ 30 = 2,641.00 |
 | **Fuel, Other, Fixed, Maintenance, Transport** | Earning | Monthly | Assignment row, per person | Yes | Yes | as Dearness |
 | **Tea & Conveyance** | Earning | Per Day Present | Assignment row (NGI 235 old staff, 40 new; NGN 265) | No (counts days present) | Yes, in full that month | 26 days × 235 = 6,110 |
 | **Meal** | Earning | Per Meal | Assignment row (NGI/NGN 75, NGG 100) | No | Yes, in full that month | 1 meal × 75 = 75 |
@@ -650,7 +651,7 @@ For someone left out (an assignment made late): new Payroll Entry, same month, a
 
 ### 6.1 Basic, SSF Addition, SSF
 
-- Basic = Base × payment days ÷ days in the BS month.
+- Basic = Base − Base × unpaid days ÷ 30. One day is always Base ÷ 30, whatever the month length (Nepal HRMS Settings → Days per Month for Pay). An absent day cuts one day, a half day half of one.
 - SSF Addition = 20 % of that Basic. It is the employer's share, shown as an earning so it is in the gross and taxed.
 - SSF = 31 % of that Basic (20 % employer + 11 % employee). All of it goes to SSF Payable.
 - The person's take-home goes down by 11 % of Basic.
@@ -699,10 +700,10 @@ Then:
 ### 6.5 Overtime
 
 - Hours = the Worked Hours on submitted Overtime Sheets for the month, Earns = Overtime.
-- Rate per hour = Base ÷ days in the BS month ÷ 8 × 1.5.
-- Example: 30,000 ÷ 31 ÷ 8 = 120.9677; × 1.5 = 181.4516; × 4.5 h = **816.53**. In a 30-day month: 187.50 an hour.
+- Rate per hour = Base ÷ 30 ÷ 8 × 1.5: the same day's value an absent day costs.
+- Example: 30,000 ÷ 30 ÷ 8 = 125; × 1.5 = 187.50; × 4.5 h = **843.75**, in every month.
 - Needs **Overtime Eligible**. No Overtime row on the assignment is needed.
-- The 1.5 is fixed. Rate: Days per Month (blank = real days) and Rate: Hours per Day (8) are on the Overtime component. Change them only with management approval.
+- The 1.5 is fixed. Rate: Days per Month (blank = Days per Month for Pay, 30) and Rate: Hours per Day (8) are on the Overtime component. Change them only with management approval.
 
 **Not available yet:** a warning above 4 hours a day or 24 a week.
 
@@ -712,7 +713,7 @@ Then:
 - Not on a day marked **Late Excused**.
 - Not for staff ticked **Late Fine Exempt**. Everyone else is fined; no structure row is needed.
 - Rate per minute = Base ÷ BS month days ÷ 8 ÷ 60. One minute is charged.
-- Example: 37 minutes × (30,000 ÷ 31 ÷ 8 ÷ 60 = 2.0161) = **74.60**.
+- Example: 37 minutes × (30,000 ÷ 30 ÷ 8 ÷ 60 = 2.0833) = **77.08**.
 - There is no cap. **Not available yet:** a cap on the late fine.
 - The fine does not lower taxable income.
 
@@ -975,17 +976,17 @@ On submit, each person gets a new assignment from the effective date, carrying o
 
 **How arrears are worked out:**
 
-- Monthly pay (Basic, Dearness, HRA, Gas …): the monthly increase × payment days ÷ month days, for each paid month.
+- Monthly pay (Basic, Dearness, HRA, Gas …): the monthly increase less 1/30 of it per unpaid day, for each paid month (the slip's own rule).
 - Tea and meal: (new rate − old rate) × the days or meals each paid month counted.
 
 **Example.** A raise from 1 Shrawan, agreed in Ashwin. +2,000 Basic and +500 Dearness = 2,500 a month. Shrawan paid 31 of 31 days, Bhadra 29.5 of 31.
 
 | Part | Working | Amount |
 |---|---|---|
-| Shrawan | 2,500 × 31 ÷ 31 | 2,500.00 |
-| Bhadra | 2,500 × 29.5 ÷ 31 | 2,379.03 |
+| Shrawan | 2,500, nothing unpaid | 2,500.00 |
+| Bhadra | 2,500 − 2,500 × 1.5 ÷ 30 | 2,375.00 |
 | Tea 235 → 250 | 15 × (26 + 24 days) | 750.00 |
-| **Arrears** | | **5,629.03**, shown as 5,629 |
+| **Arrears** | | **5,625.00** |
 
 > **Known issue: no SSF on arrears.** The arrears leave out SSF Addition and SSF. The 20 % and 31 % on the raise for the back months are never paid or deducted. Until fixed, the accountant must post the SSF difference by hand (a Payroll Adjustment row for SSF Addition and one for SSF).
 

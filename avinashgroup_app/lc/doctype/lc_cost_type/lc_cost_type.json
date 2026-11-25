@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "creation": "2026-11-25 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "cost_type_name",
+  "cost_group",
+  "cb_type",
+  "default_paid_via",
+  "disabled",
+  "sort_order",
+  "desc_section",
+  "description"
+ ],
+ "fields": [
+  {
+   "fieldname": "cost_type_name",
+   "fieldtype": "Data",
+   "label": "Cost",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cost_group",
+   "fieldtype": "Select",
+   "label": "Group",
+   "options": "Bank Charges\nInsurance\nCustoms\nClearing\nFreight\nVAT\nOther",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "VAT: the whole amount is claimable input VAT, booked to the VAT account and kept out of the cost"
+  },
+  {
+   "fieldname": "cb_type",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_paid_via",
+   "fieldtype": "Select",
+   "label": "Usually Paid Via",
+   "options": "Bank\nParty",
+   "default": "Bank"
+  },
+  {
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  },
+  {
+   "fieldname": "desc_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Cost Type",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  },
+  {
+   "role": "Purchase Manager",
+   "read": 1,
+   "print": 1,
+   "report": 1
+  }
+ ],
+ "sort_field": "sort_order",
+ "sort_order": "DESC",
+ "states": [],
+ "autoname": "field:cost_type_name",
+ "naming_rule": "By fieldname",
+ "title_field": "cost_type_name",
+ "quick_entry": 1
+}

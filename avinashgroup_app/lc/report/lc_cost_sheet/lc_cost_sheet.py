@@ -1,15 +1,21 @@
-"""LC Cost Sheet — what each import under an LC really cost in company currency.
+"""LC Cost Sheet — what one import really cost, line by line, and per unit of each item.
 
-Per shipment: the bank's debit for the goods (at its rate), the exchange
-difference against the invoice rate, and the shipment's share of the LC's bank
-charges (by amount); then the Landed Cost Vouchers linked to the LC (customs
-duty, freight, clearing and the capitalised charges) for the whole LC. The
-landed rate per unit of LC currency is the figure to compare across suppliers.
+Two parts on one sheet. First every cost booked on the LC, grouped the way the
+accounts team reads an LC file (goods, bank charges, insurance, customs,
+clearing, freight, other), with a subtotal per group and the total landed cost;
+VAT paid is shown beside each line but kept out of the cost, because it is
+claimed back. Then each goods row with its share of that cost and its landed
+rate per unit: after the transfer the figures the Stock Entry / Asset used,
+before it what the transfer would use now.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt
+
+from avinashgroup_app.lc import transfer
+
+GROUP_ORDER = ("Goods", "Bank Charges", "Insurance", "Customs", "Clearing", "Freight", "VAT", "Other")
 
 
 def execute(filters=None):
@@ -18,45 +24,70 @@ def execute(filters=None):
 		return columns(), []
 	lc = frappe.get_doc("Letter of Credit", filters.letter_of_credit)
 	lc.check_permission("read")
-	shipped = sum(flt(s.amount) for s in lc.shipments) or 1
-	lcv_total = flt(frappe.db.sql(
-		"select sum(total_taxes_and_charges) from `tabLanded Cost Voucher` where docstatus = 1 and letter_of_credit = %s",
-		lc.name)[0][0])
-	clearing = frappe.db.sql(
-		"""select sum(t.base_amount) from `tabLanded Cost Taxes and Charges` t
-		join `tabLanded Cost Voucher` v on v.name = t.parent
-		join `tabLC Company Account` a on a.charges_account = t.expense_account
-		where v.docstatus = 1 and v.letter_of_credit = %s""", lc.name)[0][0]
-	# LCV totals include the LC charges they capitalise; count those once.
-	other_landed = lcv_total - flt(clearing)
+	return columns(), cost_rows(lc) + [{}] + item_rows(lc)
 
+
+def cost_rows(lc):
 	rows = []
-	for s in lc.shipments:
-		share = flt(s.amount) / shipped
-		r = frappe._dict(
-			shipment_no=s.shipment_no, transport_doc_no=s.transport_doc_no, status=s.status,
-			amount=s.amount, exchange_rate=s.exchange_rate, goods=flt(s.amount_npr),
-			exchange_difference=flt(s.exchange_difference),
-			charges=flt(lc.charges_total) * share, other_landed=other_landed * share,
-		)
-		r.total = r.goods + r.charges + r.other_landed
-		r.landed_rate = r.total / flt(s.amount) if flt(s.amount) and r.goods else None
-		rows.append(r)
-	return columns(), rows
+	total = vat = 0
+	for group in GROUP_ORDER:
+		lines = [c for c in lc.costs if c.cost_group == group]
+		if not lines:
+			continue
+		g_cost = sum(flt(c.amount) for c in lines)
+		g_vat = sum(flt(c.vat_amount) for c in lines)
+		rows.append({"particulars": _(group), "indent": 0, "amount": g_cost, "vat": g_vat, "bold": 1})
+		for c in lines:
+			rows.append({
+				"particulars": c.cost_type or c.description, "indent": 1, "date": c.posting_date,
+				"detail": c.description if c.cost_type else (c.bill_no or ""),
+				"party": c.party, "qty": c.fc_amount or None, "rate": c.exchange_rate or None,
+				"amount": flt(c.amount), "vat": flt(c.vat_amount), "voucher": c.journal_entry,
+			})
+		total += g_cost
+		vat += g_vat
+	rows.append({"particulars": _("Total Landed Cost"), "indent": 0, "amount": total, "vat": vat, "bold": 1})
+	if flt(lc.exchange_difference):
+		rows.append({"particulars": _("Exchange Loss / (Gain) at Maturity (to profit and loss, not in cost)"),
+			"indent": 0, "amount": flt(lc.exchange_difference)})
+	return rows
+
+
+def item_rows(lc):
+	if not lc.items:
+		return []
+	transferred = bool(lc.transferred_on)
+	if transferred:
+		shares = [flt(i.allocated_cost) for i in lc.items]
+	else:
+		shares = transfer.allocate(lc, flt(lc.total_cost)) if flt(lc.total_cost) > 0 else [0] * len(lc.items)
+	head = _("Landed Cost per Item") + (
+		_(" (transferred {0})").format(frappe.format(lc.transferred_on, "Date")) if transferred else _(" (estimate, not transferred yet)"))
+	rows = [{"particulars": head, "indent": 0, "bold": 1}]
+	for i, share in zip(lc.items, shares):
+		rows.append({
+			"particulars": i.item_code or i.item_group or "", "indent": 1,
+			"detail": i.description, "party": i.transfer_to, "qty": flt(i.qty),
+			"rate": flt(i.rate), "fc_value": flt(i.amount), "amount": share,
+			"landed_rate": flt(share / flt(i.qty), 4) if flt(i.qty) else None,
+			"voucher": i.stock_entry or i.asset or "",
+		})
+	rows.append({"particulars": _("Total"), "indent": 0, "qty": sum(flt(i.qty) for i in lc.items),
+		"fc_value": sum(flt(i.amount) for i in lc.items), "amount": sum(shares), "bold": 1})
+	return rows
 
 
 def columns():
-	cur = lambda f, l, w=130: {"fieldname": f, "label": l, "fieldtype": "Currency", "width": w}
 	return [
-		{"fieldname": "shipment_no", "label": _("Shipment"), "fieldtype": "Int", "width": 80},
-		{"fieldname": "transport_doc_no", "label": _("B/L No."), "fieldtype": "Data", "width": 120},
-		{"fieldname": "status", "label": _("Status"), "fieldtype": "Data", "width": 100},
-		{"fieldname": "amount", "label": _("Amount (LC Cur.)"), "fieldtype": "Float", "precision": 2, "width": 120},
-		{"fieldname": "exchange_rate", "label": _("Bank Rate"), "fieldtype": "Float", "precision": 4, "width": 90},
-		cur("goods", _("Goods (Bank Debit)")),
-		cur("exchange_difference", _("of which Exch. Loss/(Gain)")),
-		cur("charges", _("LC Bank Charges")),
-		cur("other_landed", _("Duty, Freight, Clearing")),
-		cur("total", _("Landed Cost")),
+		{"fieldname": "particulars", "label": _("Particulars"), "fieldtype": "Data", "width": 230},
+		{"fieldname": "date", "label": _("Date"), "fieldtype": "Date", "width": 95},
+		{"fieldname": "detail", "label": _("Detail"), "fieldtype": "Data", "width": 200},
+		{"fieldname": "party", "label": _("Party / To"), "fieldtype": "Data", "width": 140},
+		{"fieldname": "qty", "label": _("Qty / LC Cur. Amount"), "fieldtype": "Float", "precision": 2, "width": 120},
+		{"fieldname": "rate", "label": _("Rate"), "fieldtype": "Float", "precision": 4, "width": 90},
+		{"fieldname": "fc_value", "label": _("Value (LC Cur.)"), "fieldtype": "Float", "precision": 2, "width": 110},
+		{"fieldname": "amount", "label": _("Cost"), "fieldtype": "Currency", "width": 130},
+		{"fieldname": "vat", "label": _("VAT (Claimable)"), "fieldtype": "Currency", "width": 110},
 		{"fieldname": "landed_rate", "label": _("Landed per Unit"), "fieldtype": "Float", "precision": 4, "width": 110},
+		{"fieldname": "voucher", "label": _("Voucher"), "fieldtype": "Data", "width": 150},
 	]

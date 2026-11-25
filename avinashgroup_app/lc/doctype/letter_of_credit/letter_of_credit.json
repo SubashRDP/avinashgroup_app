@@ -5,91 +5,102 @@
  "engine": "InnoDB",
  "field_order": [
   "company",
-  "posting_date",
-  "posting_miti",
+  "lc_no",
   "supplier",
   "supplier_name",
-  "column_break_head",
+  "cb_head1",
+  "posting_date",
+  "posting_miti",
+  "expiry_date",
+  "expiry_miti",
+  "cb_head2",
   "status",
-  "lc_no",
-  "issue_date",
-  "company_currency",
-  "amended_from",
-  "credit_section",
-  "form_of_credit",
+  "drafts_at",
+  "usance_days",
+  "maturity_date",
+  "maturity_miti",
+  "incoterm",
+  "named_place",
+  "amount_section",
   "currency",
   "lc_amount",
   "tolerance_plus",
-  "tolerance_minus",
-  "column_break_credit",
-  "available_by",
-  "drafts_at",
-  "usance_days",
-  "usance_basis",
-  "confirmation",
-  "charges_borne_by",
-  "incoterm",
-  "named_place",
-  "shipment_terms_section",
-  "expiry_date",
-  "expiry_miti",
-  "expiry_place",
-  "latest_shipment_date",
-  "latest_shipment_miti",
-  "presentation_days",
-  "column_break_ship",
-  "partial_shipment",
-  "transhipment",
-  "shipment_mode",
-  "port_of_loading",
-  "port_of_discharge",
-  "customs_point",
+  "cb_amount",
+  "exchange_rate",
+  "base_lc_amount",
+  "company_currency",
   "bank_section",
   "bank_account",
   "bank",
   "bank_gl_account",
-  "column_break_bank",
-  "advising_bank",
-  "confirming_bank",
-  "compliance_section",
+  "cb_bank",
   "firm_type",
-  "e_payment_customs",
   "margin_percent",
   "required_margin",
-  "column_break_compliance",
-  "bbn_form",
-  "bbn_form_no",
-  "bci_reference",
-  "bci_date",
+  "margin_amount",
   "goods_section",
-  "purchase_orders",
+  "set_warehouse",
+  "cb_goods",
+  "allocate_by",
+  "goods_table_section",
+  "items",
+  "total_qty",
+  "cb_goods_total",
+  "items_total",
+  "goods_desc_section",
   "goods_description",
-  "documents",
-  "additional_conditions",
-  "position_section",
-  "max_amount",
-  "shipped_amount",
-  "settled_amount",
-  "available_amount",
-  "column_break_position",
+  "shipment_section",
+  "shipment_mode",
+  "transport_doc_no",
+  "port_of_loading",
+  "customs_point",
+  "cb_ship1",
+  "latest_shipment_date",
+  "departure_date",
+  "departure_miti",
+  "arrival_date",
+  "arrival_miti",
+  "cb_ship2",
+  "has_customs",
+  "pragyapan_no",
+  "pragyapan_date",
+  "customs_proof_submitted_on",
+  "costs_section",
+  "costs",
+  "cost_summary_section",
+  "goods_cost",
+  "bank_charges",
+  "insurance_cost",
+  "customs_cost",
+  "clearing_cost",
+  "freight_cost",
+  "other_cost",
+  "cb_cost1",
+  "total_cost",
+  "vat_total",
+  "goods_booked_fc",
+  "goods_pending_fc",
+  "acceptance_outstanding_fc",
+  "transferred_cost",
+  "cb_cost2",
   "margin_deposited",
   "margin_applied",
   "margin_released",
   "margin_balance",
-  "column_break_position2",
-  "charges_total",
-  "settled_npr",
   "exchange_difference",
+  "transferred_on",
   "closed_on",
-  "shipments_section",
-  "shipments",
-  "charges_section",
-  "charges",
-  "amendments_section",
-  "amendments",
+  "nrb_section",
+  "bbn_form",
+  "bbn_form_no",
+  "e_payment_customs",
+  "cb_nrb",
+  "bci_reference",
+  "bci_date",
   "events_section",
   "events",
-  "remarks"
+  "remarks",
+  "amended_from"
  ],
  "fields": [
   {
@@ -99,187 +110,116 @@
    "options": "Company",
    "reqd": 1,
    "in_standard_filter": 1,
-   "remember_last_selected_value": 1
+   "remember_last_selected_value": 1,
+   "search_index": 1
   },
   {
-   "fieldname": "posting_date",
-   "fieldtype": "Date",
-   "label": "Application Date",
-   "reqd": 1,
-   "default": "Today",
-   "description": "The day the LC application went to the bank. Names the LC's fiscal year"
-  },
-  {
-   "fieldname": "posting_miti",
+   "fieldname": "lc_no",
    "fieldtype": "Data",
-   "label": "Application Miti",
-   "read_only": 1,
-   "no_copy": 1
+   "label": "LC No.",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "no_copy": 1,
+   "bold": 1,
+   "description": "The number the bank issued. Needed to submit",
+   "search_index": 1
   },
   {
    "fieldname": "supplier",
    "fieldtype": "Link",
-   "label": "Beneficiary (Supplier)",
+   "label": "Supplier (Beneficiary)",
    "options": "Supplier",
    "reqd": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "search_index": 1
   },
   {
    "fieldname": "supplier_name",
    "fieldtype": "Data",
-   "label": "Beneficiary Name",
+   "label": "Supplier Name",
    "fetch_from": "supplier.supplier_name",
-   "read_only": 1,
-   "in_list_view": 1
+   "in_list_view": 1,
+   "read_only": 1
   },
   {
-   "fieldname": "column_break_head",
+   "fieldname": "cb_head1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "LC Open Date",
+   "reqd": 1,
+   "default": "Today",
+   "in_list_view": 1,
+   "description": "The day the bank opened the LC. Names the LC's fiscal year"
+  },
+  {
+   "fieldname": "posting_miti",
+   "fieldtype": "Data",
+   "label": "LC Open Miti",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Expiry Date",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "expiry_miti",
+   "fieldtype": "Data",
+   "label": "Expiry Miti",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "cb_head2",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "Draft\nApplied\nOpened\nPartly Settled\nSettled\nClosed\nExpired\nCancelled",
+   "options": "Draft\nOpen\nIn Transit\nArrived\nTransferred\nClosed\nCancelled",
    "default": "Draft",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "bold": 1
-  },
-  {
-   "fieldname": "lc_no",
-   "fieldtype": "Data",
-   "label": "Bank LC Number",
    "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "description": "Field 20 of the bank's MT700. Filled by the Open step"
-  },
-  {
-   "fieldname": "issue_date",
-   "fieldtype": "Date",
-   "label": "Issue Date",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "description": "Field 31C. Filled by the Open step"
-  },
-  {
-   "fieldname": "company_currency",
-   "fieldtype": "Link",
-   "label": "Company Currency",
-   "options": "Currency",
-   "read_only": 1,
-   "hidden": 1
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "options": "Letter of Credit",
-   "read_only": 1,
-   "no_copy": 1,
-   "print_hide": 1
-  },
-  {
-   "fieldname": "credit_section",
-   "fieldtype": "Section Break",
-   "label": "Credit (MT700)"
-  },
-  {
-   "fieldname": "form_of_credit",
-   "fieldtype": "Select",
-   "label": "Form of Credit",
-   "options": "Irrevocable\nIrrevocable Transferable\nIrrevocable Standby",
-   "default": "Irrevocable",
-   "description": "Field 40A"
-  },
-  {
-   "fieldname": "currency",
-   "fieldtype": "Link",
-   "label": "LC Currency",
-   "options": "Currency",
-   "reqd": 1,
-   "description": "Field 32B. USD, INR or any other"
-  },
-  {
-   "fieldname": "lc_amount",
-   "fieldtype": "Currency",
-   "label": "LC Amount",
-   "options": "currency",
-   "reqd": 1,
-   "in_list_view": 1,
-   "description": "Field 32B"
-  },
-  {
-   "fieldname": "tolerance_plus",
-   "fieldtype": "Percent",
-   "label": "Tolerance + %",
-   "description": "Field 39A. Shipments may total up to amount \u00d7 (1 + this)"
-  },
-  {
-   "fieldname": "tolerance_minus",
-   "fieldtype": "Percent",
-   "label": "Tolerance \u2212 %",
-   "description": "Field 39A"
-  },
-  {
-   "fieldname": "column_break_credit",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "available_by",
-   "fieldtype": "Select",
-   "label": "Available By",
-   "options": "Payment\nAcceptance\nNegotiation\nDeferred Payment",
-   "default": "Payment",
-   "description": "Field 41a"
+   "no_copy": 1
   },
   {
    "fieldname": "drafts_at",
    "fieldtype": "Select",
-   "label": "Drafts At",
+   "label": "Payment Terms",
    "options": "Sight\nUsance",
    "default": "Sight",
    "reqd": 1,
-   "in_standard_filter": 1,
-   "description": "Field 42C. Usance = the bank pays N days after the basis date"
+   "description": "Sight: the bank pays on the documents. Usance: you accept the bill and the bank pays on the maturity date"
   },
   {
    "fieldname": "usance_days",
    "fieldtype": "Int",
    "label": "Usance Days",
    "depends_on": "eval:doc.drafts_at=='Usance'",
-   "mandatory_depends_on": "eval:doc.drafts_at=='Usance'"
+   "allow_on_submit": 1
   },
   {
-   "fieldname": "usance_basis",
-   "fieldtype": "Select",
-   "label": "Usance Counted From",
-   "options": "B/L Date\nAcceptance Date\nInvoice Date",
-   "default": "B/L Date",
-   "depends_on": "eval:doc.drafts_at=='Usance'"
+   "fieldname": "maturity_date",
+   "fieldtype": "Date",
+   "label": "Maturity Date",
+   "depends_on": "eval:doc.drafts_at=='Usance'",
+   "allow_on_submit": 1,
+   "description": "Blank: the usance days from the depart date"
   },
   {
-   "fieldname": "confirmation",
-   "fieldtype": "Select",
-   "label": "Confirmation",
-   "options": "Without\nConfirm\nMay Add",
-   "default": "Without",
-   "description": "Field 49"
-  },
-  {
-   "fieldname": "charges_borne_by",
-   "fieldtype": "Select",
-   "label": "Charges",
-   "options": "Outside Nepal on Beneficiary\nAll on Applicant\nAll on Beneficiary",
-   "default": "Outside Nepal on Beneficiary",
-   "description": "Field 71D"
+   "fieldname": "maturity_miti",
+   "fieldtype": "Data",
+   "label": "Maturity Miti",
+   "depends_on": "eval:doc.drafts_at=='Usance'",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "incoterm",
@@ -290,122 +230,83 @@
   {
    "fieldname": "named_place",
    "fieldtype": "Data",
-   "label": "Named Place"
+   "label": "Incoterm Place"
   },
   {
-   "fieldname": "shipment_terms_section",
+   "fieldname": "amount_section",
    "fieldtype": "Section Break",
-   "label": "Dates and Shipment"
+   "label": "Amount"
   },
   {
-   "fieldname": "expiry_date",
-   "fieldtype": "Date",
-   "label": "Expiry Date",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "lc_amount",
+   "fieldtype": "Currency",
+   "label": "LC Amount",
+   "options": "currency",
    "reqd": 1,
    "in_list_view": 1,
-   "description": "Field 31D"
+   "allow_on_submit": 1,
+   "description": "Changed after submit only by a bank amendment (book its charge as Amendment Charge)"
   },
   {
-   "fieldname": "expiry_miti",
-   "fieldtype": "Data",
-   "label": "Expiry Miti",
-   "read_only": 1,
-   "no_copy": 1
+   "fieldname": "tolerance_plus",
+   "fieldtype": "Percent",
+   "label": "Tolerance + %",
+   "allow_on_submit": 1
   },
   {
-   "fieldname": "expiry_place",
-   "fieldtype": "Data",
-   "label": "Expiry Place",
-   "description": "Field 31D, e.g. Nepal or the beneficiary's country"
-  },
-  {
-   "fieldname": "latest_shipment_date",
-   "fieldtype": "Date",
-   "label": "Latest Shipment Date",
-   "reqd": 1,
-   "description": "Field 44C"
-  },
-  {
-   "fieldname": "latest_shipment_miti",
-   "fieldtype": "Data",
-   "label": "Latest Shipment Miti",
-   "read_only": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "presentation_days",
-   "fieldtype": "Int",
-   "label": "Presentation Period (Days)",
-   "default": "21",
-   "description": "Field 48. Days after shipment the documents must reach the bank. UCP 600 art. 14(c) default is 21"
-  },
-  {
-   "fieldname": "column_break_ship",
+   "fieldname": "cb_amount",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "partial_shipment",
-   "fieldtype": "Select",
-   "label": "Partial Shipment",
-   "options": "Allowed\nNot Allowed",
-   "default": "Allowed",
-   "description": "Field 43P"
+   "fieldname": "exchange_rate",
+   "fieldtype": "Float",
+   "label": "Estimated Exchange Rate",
+   "precision": "6",
+   "description": "For the margin and the estimates only. Each payment carries the bank's own rate"
   },
   {
-   "fieldname": "transhipment",
-   "fieldtype": "Select",
-   "label": "Transhipment",
-   "options": "Allowed\nNot Allowed",
-   "default": "Allowed",
-   "description": "Field 43T"
+   "fieldname": "base_lc_amount",
+   "fieldtype": "Currency",
+   "label": "LC Amount (Company Currency, Est.)",
+   "options": "company_currency",
+   "read_only": 1,
+   "allow_on_submit": 1
   },
   {
-   "fieldname": "shipment_mode",
-   "fieldtype": "Select",
-   "label": "Mode of Transport",
-   "options": "\nRoad\nRail\nSea and Road\nAir\nMultimodal"
-  },
-  {
-   "fieldname": "port_of_loading",
-   "fieldtype": "Data",
-   "label": "Port / Place of Loading",
-   "description": "Field 44E / 44A"
-  },
-  {
-   "fieldname": "port_of_discharge",
-   "fieldtype": "Data",
-   "label": "Port of Discharge",
-   "description": "Field 44F, e.g. Kolkata, Visakhapatnam"
-  },
-  {
-   "fieldname": "customs_point",
-   "fieldtype": "Data",
-   "label": "Nepal Customs Point",
-   "reqd": 1,
-   "in_standard_filter": 1,
-   "description": "The border customs office named in the LC (NRB requires it), e.g. Birgunj, Bhairahawa, Chobhar Dry Port"
+   "fieldname": "company_currency",
+   "fieldtype": "Link",
+   "label": "Company Currency",
+   "options": "Currency",
+   "hidden": 1,
+   "read_only": 1
   },
   {
    "fieldname": "bank_section",
    "fieldtype": "Section Break",
-   "label": "Banks"
+   "label": "Bank and Margin"
   },
   {
    "fieldname": "bank_account",
    "fieldtype": "Link",
    "label": "Issuing Bank Account",
    "options": "Bank Account",
-   "reqd": 1,
-   "description": "The company's account at the bank opening the LC"
+   "reqd": 1
   },
   {
    "fieldname": "bank",
    "fieldtype": "Link",
-   "label": "Issuing Bank",
+   "label": "Bank",
    "options": "Bank",
    "fetch_from": "bank_account.bank",
-   "read_only": 1,
-   "in_standard_filter": 1
+   "in_standard_filter": 1,
+   "read_only": 1
   },
   {
    "fieldname": "bank_gl_account",
@@ -416,64 +317,405 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_bank",
+   "fieldname": "cb_bank",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "advising_bank",
-   "fieldtype": "Data",
-   "label": "Advising Bank"
-  },
-  {
-   "fieldname": "confirming_bank",
-   "fieldtype": "Data",
-   "label": "Confirming Bank",
-   "depends_on": "eval:doc.confirmation!='Without'"
-  },
-  {
-   "fieldname": "compliance_section",
-   "fieldtype": "Section Break",
-   "label": "Nepal Rastra Bank Requirements",
-   "collapsible": 0
   },
   {
    "fieldname": "firm_type",
    "fieldtype": "Select",
    "label": "Firm Type",
    "options": "Industry\nTrading",
-   "description": "From LC Settings for the company. Sets the NRB margin and the usance limit",
    "read_only": 1
-  },
-  {
-   "fieldname": "e_payment_customs",
-   "fieldtype": "Check",
-   "label": "Customs Point Collects Revenue Electronically",
-   "description": "NRB's lower margin (1% industry / 3% trading) applies at these customs offices"
   },
   {
    "fieldname": "margin_percent",
    "fieldtype": "Percent",
    "label": "Margin %",
-   "description": "Defaults from LC Settings; the bank may ask for more"
+   "description": "Blank: the NRB default from LC Settings"
   },
   {
    "fieldname": "required_margin",
    "fieldtype": "Currency",
-   "label": "Required Margin (Approx.)",
+   "label": "Required Margin (Est.)",
    "options": "company_currency",
    "read_only": 1,
-   "description": "LC amount \u00d7 today's rate \u00d7 margin %. The bank's own figure wins"
+   "allow_on_submit": 1
   },
   {
-   "fieldname": "column_break_compliance",
+   "fieldname": "margin_amount",
+   "fieldtype": "Currency",
+   "label": "Margin Taken at Opening",
+   "options": "company_currency",
+   "description": "Posted on submit: Dr LC Margin / Cr the bank. 0 if the bank took none"
+  },
+  {
+   "fieldname": "goods_section",
+   "fieldtype": "Section Break",
+   "label": "Goods"
+  },
+  {
+   "fieldname": "set_warehouse",
+   "fieldtype": "Link",
+   "label": "Default Warehouse",
+   "options": "Warehouse",
+   "description": "For goods rows that go to stock and name no warehouse of their own"
+  },
+  {
+   "fieldname": "cb_goods",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "allocate_by",
+   "fieldtype": "Select",
+   "label": "Share Costs By",
+   "options": "Value\nQuantity",
+   "default": "Value",
+   "description": "How the total landed cost is spread over the goods rows on transfer"
+  },
+  {
+   "fieldname": "goods_table_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "items",
+   "fieldtype": "Table",
+   "label": "Goods",
+   "options": "LC Item",
+   "reqd": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "total_qty",
+   "fieldtype": "Float",
+   "label": "Total Quantity",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cb_goods_total",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "items_total",
+   "fieldtype": "Currency",
+   "label": "Goods Total",
+   "options": "currency",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "goods_desc_section",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "goods_description",
+   "fieldtype": "Small Text",
+   "label": "Goods Description (as Written in the LC)"
+  },
+  {
+   "fieldname": "shipment_section",
+   "fieldtype": "Section Break",
+   "label": "Shipment and Customs",
+   "description": "Fill these as the goods move. They can be changed after submit"
+  },
+  {
+   "fieldname": "shipment_mode",
+   "fieldtype": "Select",
+   "label": "Mode of Transport",
+   "options": "\nRoad\nRail\nSea and Road\nAir\nMultimodal",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "transport_doc_no",
+   "fieldtype": "Data",
+   "label": "B/L / AWB / CN No.",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "port_of_loading",
+   "fieldtype": "Data",
+   "label": "Port / Place of Loading",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "customs_point",
+   "fieldtype": "Data",
+   "label": "Nepal Customs Point",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cb_ship1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "latest_shipment_date",
+   "fieldtype": "Date",
+   "label": "Latest Shipment Date",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "departure_date",
+   "fieldtype": "Date",
+   "label": "Depart Date",
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "departure_miti",
+   "fieldtype": "Data",
+   "label": "Depart Miti",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "arrival_date",
+   "fieldtype": "Date",
+   "label": "Reach Date",
+   "allow_on_submit": 1,
+   "no_copy": 1,
+   "description": "The day the goods reached the company. Needed to transfer them"
+  },
+  {
+   "fieldname": "arrival_miti",
+   "fieldtype": "Data",
+   "label": "Reach Miti",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "cb_ship2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "has_customs",
+   "fieldtype": "Check",
+   "label": "Goes Through Nepal Customs",
+   "default": "1",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "pragyapan_no",
+   "fieldtype": "Data",
+   "label": "Customs Declaration (Pragyapan) No.",
+   "depends_on": "has_customs",
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "pragyapan_date",
+   "fieldtype": "Date",
+   "label": "Pragyapan Date",
+   "depends_on": "has_customs",
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "customs_proof_submitted_on",
+   "fieldtype": "Date",
+   "label": "Customs Proof Given to Bank On",
+   "depends_on": "has_customs",
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "costs_section",
+   "fieldtype": "Section Break",
+   "label": "Costs",
+   "description": "Add a row for each bank charge, insurance, duty, clearing or freight bill, then Save / Update: each new row posts its own entry. Goods payments come from the Goods buttons"
+  },
+  {
+   "fieldname": "costs",
+   "fieldtype": "Table",
+   "label": "Costs",
+   "options": "LC Cost",
+   "allow_on_submit": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "cost_summary_section",
+   "fieldtype": "Section Break",
+   "label": "Cost Summary"
+  },
+  {
+   "fieldname": "goods_cost",
+   "fieldtype": "Currency",
+   "label": "Goods (Paid / Accepted)",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "bank_charges",
+   "fieldtype": "Currency",
+   "label": "Bank Charges",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "insurance_cost",
+   "fieldtype": "Currency",
+   "label": "Insurance",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "customs_cost",
+   "fieldtype": "Currency",
+   "label": "Customs Duty",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "clearing_cost",
+   "fieldtype": "Currency",
+   "label": "Clearing and Handling",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "freight_cost",
+   "fieldtype": "Currency",
+   "label": "Freight",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "other_cost",
+   "fieldtype": "Currency",
+   "label": "Other",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "cb_cost1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_cost",
+   "fieldtype": "Currency",
+   "label": "Total Landed Cost",
+   "options": "company_currency",
+   "bold": 1,
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "vat_total",
+   "fieldtype": "Currency",
+   "label": "VAT Paid (Claimable, Not in Cost)",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "goods_booked_fc",
+   "fieldtype": "Currency",
+   "label": "Goods Paid / Accepted",
+   "options": "currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "goods_pending_fc",
+   "fieldtype": "Currency",
+   "label": "Goods Still to Pay",
+   "options": "currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "acceptance_outstanding_fc",
+   "fieldtype": "Currency",
+   "label": "Accepted, Due at Maturity",
+   "options": "currency",
+   "depends_on": "eval:doc.drafts_at=='Usance'",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "transferred_cost",
+   "fieldtype": "Currency",
+   "label": "Transferred to Stock / Assets",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "cb_cost2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "margin_deposited",
+   "fieldtype": "Currency",
+   "label": "Margin Deposited",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "margin_applied",
+   "fieldtype": "Currency",
+   "label": "Margin Used in Payments",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "margin_released",
+   "fieldtype": "Currency",
+   "label": "Margin Released",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "margin_balance",
+   "fieldtype": "Currency",
+   "label": "Margin Held",
+   "options": "company_currency",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "exchange_difference",
+   "fieldtype": "Currency",
+   "label": "Exchange Loss / (Gain) at Maturity",
+   "options": "company_currency",
+   "depends_on": "eval:doc.drafts_at=='Usance'",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "transferred_on",
+   "fieldtype": "Date",
+   "label": "Transferred On",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "closed_on",
+   "fieldtype": "Date",
+   "label": "Closed On",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "nrb_section",
+   "fieldtype": "Section Break",
+   "label": "Nepal Rastra Bank",
+   "collapsible": 1
   },
   {
    "fieldname": "bbn_form",
    "fieldtype": "Select",
    "label": "Bi.Bi.Ni Form",
-   "options": "\nBi.Bi.Ni 3\nBi.Bi.Ni 4\nBi.Bi.Ni 4 (Ga)",
-   "description": "Form 3: LC application. Form 4 / 4 (Ga): INR transactions"
+   "options": "\nBi.Bi.Ni 3\nBi.Bi.Ni 4\nBi.Bi.Ni 4 (Ga)"
   },
   {
    "fieldname": "bbn_form_no",
@@ -481,212 +723,24 @@
    "label": "Bi.Bi.Ni Form No."
   },
   {
+   "fieldname": "e_payment_customs",
+   "fieldtype": "Check",
+   "label": "Customs Point Collects Revenue Electronically",
+   "description": "Lower NRB margin applies"
+  },
+  {
+   "fieldname": "cb_nrb",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "bci_reference",
    "fieldtype": "Data",
-   "label": "BCI Report Reference",
-   "description": "Business Credibility Information on the beneficiary. NRB requires it for a sight LC at or above the LC Settings threshold"
+   "label": "BCI Report Reference"
   },
   {
    "fieldname": "bci_date",
    "fieldtype": "Date",
    "label": "BCI Report Date"
-  },
-  {
-   "fieldname": "goods_section",
-   "fieldtype": "Section Break",
-   "label": "Goods and Documents"
-  },
-  {
-   "fieldname": "purchase_orders",
-   "fieldtype": "Table",
-   "label": "Purchase Orders",
-   "options": "LC Purchase Order"
-  },
-  {
-   "fieldname": "goods_description",
-   "fieldtype": "Text",
-   "label": "Description of Goods",
-   "description": "Field 45A"
-  },
-  {
-   "fieldname": "documents",
-   "fieldtype": "Table",
-   "label": "Documents Required",
-   "options": "LC Document",
-   "allow_on_submit": 1,
-   "description": "Field 46A as a checklist. Tick Received / Discrepant as the bank hands documents over"
-  },
-  {
-   "fieldname": "additional_conditions",
-   "fieldtype": "Text",
-   "label": "Additional Conditions",
-   "description": "Field 47A"
-  },
-  {
-   "fieldname": "position_section",
-   "fieldtype": "Section Break",
-   "label": "Position"
-  },
-  {
-   "fieldname": "max_amount",
-   "fieldtype": "Currency",
-   "label": "Maximum Drawable",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "currency",
-   "description": "LC amount + tolerance"
-  },
-  {
-   "fieldname": "shipped_amount",
-   "fieldtype": "Currency",
-   "label": "Shipped",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "currency"
-  },
-  {
-   "fieldname": "settled_amount",
-   "fieldtype": "Currency",
-   "label": "Settled",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "currency"
-  },
-  {
-   "fieldname": "available_amount",
-   "fieldtype": "Currency",
-   "label": "Available",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "currency",
-   "in_list_view": 1
-  },
-  {
-   "fieldname": "column_break_position",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "margin_deposited",
-   "fieldtype": "Currency",
-   "label": "Margin Deposited",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "margin_applied",
-   "fieldtype": "Currency",
-   "label": "Margin Used in Settlements",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "margin_released",
-   "fieldtype": "Currency",
-   "label": "Margin Released",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "margin_balance",
-   "fieldtype": "Currency",
-   "label": "Margin Held",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "column_break_position2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "charges_total",
-   "fieldtype": "Currency",
-   "label": "Bank Charges",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "settled_npr",
-   "fieldtype": "Currency",
-   "label": "Paid to Supplier (Company Currency)",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "exchange_difference",
-   "fieldtype": "Currency",
-   "label": "Exchange Loss / (Gain)",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1,
-   "options": "company_currency"
-  },
-  {
-   "fieldname": "closed_on",
-   "fieldtype": "Date",
-   "label": "Closed On",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "shipments_section",
-   "fieldtype": "Section Break",
-   "label": "Shipments"
-  },
-  {
-   "fieldname": "shipments",
-   "fieldtype": "Table",
-   "label": "Shipments",
-   "options": "LC Shipment",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "charges_section",
-   "fieldtype": "Section Break",
-   "label": "Bank Charges",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "charges",
-   "fieldtype": "Table",
-   "label": "Charges",
-   "options": "LC Charge",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1
-  },
-  {
-   "fieldname": "amendments_section",
-   "fieldtype": "Section Break",
-   "label": "Amendments",
-   "collapsible": 1
-  },
-  {
-   "fieldname": "amendments",
-   "fieldtype": "Table",
-   "label": "Amendments",
-   "options": "LC Amendment",
-   "read_only": 1,
-   "allow_on_submit": 1,
-   "no_copy": 1
   },
   {
    "fieldname": "events_section",
@@ -700,7 +754,6 @@
    "label": "History",
    "options": "LC Event",
    "read_only": 1,
-   "allow_on_submit": 1,
    "no_copy": 1
   },
   {
@@ -708,10 +761,19 @@
    "fieldtype": "Small Text",
    "label": "Remarks",
    "allow_on_submit": 1
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "Letter of Credit",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
   }
  ],
  "links": [],
- "modified": "2026-10-27 12:00:00.000000",
+ "modified": "2026-11-25 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "LC",
  "name": "Letter of Credit",
@@ -719,6 +781,21 @@
  "permissions": [
   {
    "role": "Accounts Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "submit": 1,
+   "cancel": 1,
+   "amend": 1,
+   "print": 1,
+   "email": 1,
+   "export": 1,
+   "report": 1,
+   "share": 1
+  },
+  {
+   "role": "System Manager",
    "read": 1,
    "write": 1,
    "create": 1,
@@ -751,19 +828,10 @@
    "report": 1
   },
   {
-   "role": "System Manager",
+   "role": "Stock Manager",
    "read": 1,
-   "write": 1,
-   "create": 1,
-   "delete": 1,
-   "submit": 1,
-   "cancel": 1,
-   "amend": 1,
    "print": 1,
-   "email": 1,
-   "export": 1,
-   "report": 1,
-   "share": 1
+   "report": 1
   }
  ],
  "sort_field": "posting_date",
@@ -773,6 +841,6 @@
  "is_submittable": 1,
  "track_changes": 1,
  "title_field": "supplier_name",
- "search_fields": "lc_no,supplier,lc_amount,expiry_date",
+ "search_fields": "lc_no,supplier_name,lc_amount",
  "show_title_field_in_link": 0
 }

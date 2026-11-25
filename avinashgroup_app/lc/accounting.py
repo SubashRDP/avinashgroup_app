@@ -1,41 +1,38 @@
 """LC accounting — the Journal Entry behind every money step of a Letter of Credit.
 
-ERPNext has no LC: an import paid through a bank LC shows up only as a bank
-payment to the supplier, so the margin the bank blocks, the commission, SWIFT
-and amendment charges, and the exchange difference between the invoice rate and
-the bank's settlement rate are all booked by hand, if at all — and the charges
-rarely reach the stock's landed cost. Each money step here posts one Journal
-Entry through two accounts set per company in LC Settings:
+An import LC is kept the way Nepali importers keep an "LC account": every rupee
+the import costs is debited to one ledger, LC Goods in Transit, until the goods
+arrive; then the whole balance moves into stock or fixed assets at landed cost
+(lc/transfer.py). Without it the bank's commission, SWIFT and amendment
+charges, the marine insurance, the duty and the freight to the border land in
+expense accounts and never reach the stock's value.
 
-    margin deposit    Dr LC Margin               / Cr Bank
-    bank charge       Dr LC Charges Clearing     / Cr Bank
-    settlement        Dr Supplier (at the invoice's booked rate, against the
-                         Purchase Invoice — or as an advance when none is linked)
-                      Dr/Cr Exchange Gain/Loss   (bank rate − booked rate)
-                                                 / Cr LC Margin (margin used)
-                                                 / Cr Bank (the rest)
-    margin release    Dr Bank                    / Cr LC Margin
-    landed cost       a Landed Cost Voucher credits LC Charges Clearing and
-                      loads the stock (`make_landed_cost_voucher`)
+    margin deposit       Dr LC Margin                  / Cr Bank
+    a cost (Add Cost)    Dr LC Goods in Transit (cost)
+                         Dr Input VAT (VAT, if any)    / Cr Bank, or Cr the party on credit
+    goods, sight         Dr LC Goods in Transit (LC amount × bank rate)
+                                                       / Cr LC Margin (margin used) / Cr Bank
+    goods, usance        accept the bill:  Dr LC Goods in Transit / Cr Supplier (at the acceptance rate)
+                         pay at maturity:  Dr Supplier (acceptance rate)
+                                           Dr/Cr Exchange Gain/Loss (bank rate − acceptance rate)
+                                                       / Cr LC Margin / Cr Bank
+    margin release       Dr Bank                       / Cr LC Margin
+    residual on close    Dr/Cr the chosen account      / Cr/Dr LC Goods in Transit
 
-Usance acceptance posts nothing: the supplier stays in Accounts Payable at the
-invoice rate until the bank pays at maturity, and the maturity is tracked on the
-shipment row. Opening the LC posts nothing either — an LC is a bank promise,
-not a payment.
+The exchange difference of a usance bill goes to profit and loss, not into the
+cost: the goods are valued at the rate on the day the liability arose.
 
 Boundary: this module only builds and posts entries. Which step may run when,
-and the LC's status and totals, belong to `lc/lifecycle.py`.
+and the LC's totals, belong to `lc/lifecycle.py`; the transfer to stock or
+assets to `lc/transfer.py`.
 
 Landmines:
 * Every entry goes through the app's Journal Entry numbering (`custom_p_type`
   → Numbering Configuration). LC Settings → JV Type picks the rule; without one
   the JE's mandatory `custom_document_no` stays empty and the step fails.
-* The supplier row of a settlement against a Purchase Invoice is valued by
-  ERPNext at the *invoice's* conversion rate whatever we pass
-  (JournalEntry.set_exchange_rate), so the exchange row is computed from that
-  same rate or the entry would not balance.
-* The Company's Exchange Gain/Loss account must be set (one demo company has
-  none) — the settlement refuses to post without it.
+* A supplier payable in the LC's currency (a USD creditor) is valued at the
+  rate we pass; ERPNext only overrides the rate on rows that reference an
+  invoice, and these never do.
 """
 
 import frappe
@@ -44,11 +41,11 @@ from frappe.utils import flt
 
 # Accounts made by "Create Missing Accounts": (LC Company Account field, account
 # name, parent group's account_name, root type). Both are current assets: margin
-# is the company's money held by the bank, and charges wait there to be
-# capitalised into stock by a Landed Cost Voucher.
+# is the company's money held by the bank, and goods in transit is the import's
+# cost waiting to become stock or an asset.
 LC_ACCOUNTS = (
 	("margin_account", "LC Margin", "Current Assets", "Asset"),
-	("charges_account", "LC Charges Clearing", "Current Assets", "Asset"),
+	("transit_account", "LC Goods in Transit", "Current Assets", "Asset"),
 )
 
 # Lets lc/guards.py tell this module's own cancel from a user's.
@@ -60,12 +57,20 @@ def get_company_accounts(company):
 		(r for r in frappe.get_cached_doc("LC Settings").company_accounts if r.company == company),
 		None,
 	)
-	if not row or not row.margin_account or not row.charges_account:
+	if not row or not row.margin_account or not row.transit_account:
 		frappe.throw(
-			_("Set the LC Margin and LC Charges Clearing accounts for {0} in LC Settings first.").format(company),
+			_("Set the LC Margin and LC Goods in Transit accounts for {0} in LC Settings first.").format(company),
 			title=_("LC accounts missing"),
 		)
 	return row
+
+
+def vat_account(company):
+	account = get_company_accounts(company).vat_account
+	if not account:
+		frappe.throw(_("Set the Input VAT account for {0} in LC Settings first.").format(company),
+			title=_("VAT account missing"))
+	return account
 
 
 def _row(account, amount, side, cost_center, **extra):
@@ -74,8 +79,20 @@ def _row(account, amount, side, cost_center, **extra):
 	return row
 
 
-def _cost_center(lc):
+def cost_center(lc):
 	return frappe.get_cached_value("Company", lc.company, "cost_center")
+
+
+def supplier_payable(company, supplier, lc_currency, company_currency):
+	"""(account, account currency) of a supplier's payable, refusing a third currency."""
+	from erpnext.accounts.party import get_party_account
+
+	account = get_party_account("Supplier", supplier, company)
+	currency = frappe.get_cached_value("Account", account, "account_currency")
+	if currency not in (company_currency, lc_currency):
+		frappe.throw(_("Supplier account {0} is in {1}; it must be in {2} or {3}.").format(
+			account, currency, company_currency, lc_currency))
+	return account, currency
 
 
 # ── Posting ───────────────────────────────────────────────────────────────────
@@ -94,7 +111,7 @@ def make_journal_entry(lc, posting_date, rows, event, bank_entry=True):
 			"cheque_no": lc.lc_no or lc.name,
 			"cheque_date": posting_date,
 			"user_remark": _("LC {0} ({1}), {2}: {3}").format(
-				lc.lc_no or _("not opened"), lc.name, lc.supplier_name or lc.supplier, event
+				lc.lc_no or "-", lc.name, lc.supplier_name or lc.supplier, event
 			),
 			"letter_of_credit": lc.name,
 			"multi_currency": int(any(
@@ -123,14 +140,15 @@ def make_journal_entry(lc, posting_date, rows, event, bank_entry=True):
 			title=_("Journal Type not numbered"),
 		)
 	je.submit()
-	# The bank's advice is the statement line: nothing left to reconcile.
-	frappe.db.set_value("Journal Entry", je.name, "clearance_date", posting_date)
+	if bank_entry:
+		# The bank's advice is the statement line: nothing left to reconcile.
+		frappe.db.set_value("Journal Entry", je.name, "clearance_date", posting_date)
 	return je.name
 
 
 def post_margin(lc, posting_date, amount, bank_account):
 	"""Margin the bank blocks out of the company's account."""
-	cc = _cost_center(lc)
+	cc = cost_center(lc)
 	margin = get_company_accounts(lc.company).margin_account
 	rows = [_row(margin, amount, "debit", cc), _row(bank_account, amount, "credit", cc)]
 	return make_journal_entry(lc, posting_date, rows, _("Margin deposited"))
@@ -138,113 +156,138 @@ def post_margin(lc, posting_date, amount, bank_account):
 
 def post_margin_release(lc, posting_date, amount, bank_account):
 	"""Unused margin back into the company's account when the LC closes."""
-	cc = _cost_center(lc)
+	cc = cost_center(lc)
 	margin = get_company_accounts(lc.company).margin_account
 	rows = [_row(bank_account, amount, "debit", cc), _row(margin, amount, "credit", cc)]
 	return make_journal_entry(lc, posting_date, rows, _("Margin released"))
 
 
-def post_charge(lc, posting_date, amount, bank_account, label):
-	cc = _cost_center(lc)
-	clearing = get_company_accounts(lc.company).charges_account
-	rows = [_row(clearing, amount, "debit", cc), _row(bank_account, amount, "credit", cc)]
+def post_cost(lc, posting_date, label, amount, vat_amount, bank_account=None, party=None):
+	"""One cost: the cost into Goods in Transit, VAT to input VAT; paid by bank or owed to a party.
+
+	`amount` is the part that goes into the landed cost, `vat_amount` the
+	claimable VAT; either may be 0 but not both.
+	"""
+	cc = cost_center(lc)
+	accounts = get_company_accounts(lc.company)
+	total = flt(flt(amount, 2) + flt(vat_amount, 2), 2)
+	rows = []
+	if flt(amount) > 0:
+		rows.append(_row(accounts.transit_account, amount, "debit", cc))
+	if flt(vat_amount) > 0:
+		rows.append(_row(vat_account(lc.company), vat_amount, "debit", cc))
+	if party:
+		account, currency = supplier_payable(lc.company, party, lc.company_currency, lc.company_currency)
+		rows.append(_row(account, total, "credit", cc, party_type="Supplier", party=party))
+		return make_journal_entry(lc, posting_date, rows, label, bank_entry=False)
+	rows.append(_row(bank_account, total, "credit", cc))
 	return make_journal_entry(lc, posting_date, rows, label)
 
 
-def settlement_values(lc, shipment, exchange_rate, margin_applied):
-	"""What a settlement would post, without posting it.
+def post_goods_payment(lc, posting_date, fc_amount, exchange_rate, margin_used, bank_account):
+	"""Sight: the bank pays the supplier; the goods' value goes into Goods in Transit."""
+	cc = cost_center(lc)
+	accounts = get_company_accounts(lc.company)
+	total = flt(flt(fc_amount) * flt(exchange_rate), 2)
+	margin_used = flt(margin_used, 2)
+	if margin_used > total:
+		frappe.throw(_("Margin used ({0}) cannot be more than the payment ({1}).").format(margin_used, total))
+	rows = [_row(accounts.transit_account, total, "debit", cc)]
+	if margin_used > 0:
+		rows.append(_row(accounts.margin_account, margin_used, "credit", cc))
+	if total - margin_used > 0:
+		rows.append(_row(bank_account, total - margin_used, "credit", cc))
+	je = make_journal_entry(lc, posting_date, rows,
+		_("Goods paid: {0} {1} at {2}").format(lc.currency, flt(fc_amount, 2), flt(exchange_rate)))
+	return je, total
 
-	Returns a dict: supplier account and the amount in its currency, the
-	booked rate, the bank's debit in company currency (margin included), the
-	part taken from the bank account, and the exchange difference (+ = loss).
-	"""
-	from erpnext.accounts.party import get_party_account
 
-	fc_amount = flt(shipment.amount, 2)
-	bank_total = flt(fc_amount * flt(exchange_rate), 2)
-	margin_applied = flt(margin_applied, 2)
-	if margin_applied > bank_total:
-		frappe.throw(_("Margin used ({0}) cannot be more than the bank's debit ({1}).").format(margin_applied, bank_total))
+def post_acceptance(lc, posting_date, fc_amount, exchange_rate):
+	"""Usance: the company accepts the bill; the supplier is owed it until maturity."""
+	cc = cost_center(lc)
+	accounts = get_company_accounts(lc.company)
+	total = flt(flt(fc_amount) * flt(exchange_rate), 2)
+	account, currency = supplier_payable(lc.company, lc.supplier, lc.currency, lc.company_currency)
+	supplier_amount = flt(fc_amount, 2) if currency == lc.currency else total
+	rows = [
+		_row(accounts.transit_account, total, "debit", cc),
+		_row(account, supplier_amount, "credit", cc, party_type="Supplier", party=lc.supplier,
+			exchange_rate=flt(exchange_rate) if currency == lc.currency else 1),
+	]
+	je = make_journal_entry(lc, posting_date, rows,
+		_("Bill accepted: {0} {1} at {2}").format(lc.currency, flt(fc_amount, 2), flt(exchange_rate)),
+		bank_entry=False)
+	return je, total
 
-	invoice = None
-	if shipment.purchase_invoice:
-		invoice = frappe.db.get_value(
-			"Purchase Invoice", shipment.purchase_invoice,
-			["credit_to", "conversion_rate", "currency", "docstatus", "outstanding_amount"], as_dict=True,
-		)
-		if not invoice or invoice.docstatus != 1:
-			frappe.throw(_("Purchase Invoice {0} is not submitted.").format(shipment.purchase_invoice))
-		account = invoice.credit_to
-		booked_rate = flt(invoice.conversion_rate)
-	else:
-		account = get_party_account("Supplier", lc.supplier, lc.company)
-		booked_rate = flt(exchange_rate)
 
-	account_currency = frappe.get_cached_value("Account", account, "account_currency")
-	if account_currency == lc.company_currency:
-		supplier_amount = flt(fc_amount * booked_rate, 2)
-		supplier_company_amount = supplier_amount
-	elif account_currency == lc.currency:
-		supplier_amount = fc_amount
-		supplier_company_amount = flt(fc_amount * booked_rate, 2)
-	else:
-		frappe.throw(
-			_("Supplier account {0} is in {1}; an LC in {2} can only settle a payable in {2} or {3}.").format(
-				account, account_currency, lc.currency, lc.company_currency
-			)
-		)
-
+def maturity_values(lc, acceptance, exchange_rate, margin_used):
+	"""What paying an accepted bill at `exchange_rate` would post, without posting it."""
+	booked = flt(acceptance.amount, 2)
+	bank_total = flt(flt(acceptance.fc_amount) * flt(exchange_rate), 2)
+	margin_used = flt(margin_used, 2)
+	if margin_used > bank_total:
+		frappe.throw(_("Margin used ({0}) cannot be more than the bank's debit ({1}).").format(margin_used, bank_total))
 	return frappe._dict(
-		account=account,
-		account_currency=account_currency,
-		booked_rate=booked_rate,
-		supplier_amount=supplier_amount,
-		supplier_company_amount=supplier_company_amount,
-		bank_total=bank_total,
-		bank_paid=flt(bank_total - margin_applied, 2),
-		margin_applied=margin_applied,
-		exchange_difference=flt(bank_total - supplier_company_amount, 2),
-		invoice=shipment.purchase_invoice,
+		booked=booked, booked_rate=flt(acceptance.exchange_rate), bank_total=bank_total,
+		margin_used=margin_used, bank_paid=flt(bank_total - margin_used, 2),
+		exchange_difference=flt(bank_total - booked, 2),
 	)
 
 
-def post_settlement(lc, shipment, posting_date, exchange_rate, bank_account, margin_applied):
-	"""The bank pays the supplier for one shipment. Returns (je_name, values)."""
-	cc = _cost_center(lc)
-	v = settlement_values(lc, shipment, exchange_rate, margin_applied)
-
+def post_maturity_payment(lc, acceptance, posting_date, exchange_rate, margin_used, bank_account):
+	"""The bank pays an accepted bill at maturity. Returns (je_name, values)."""
+	cc = cost_center(lc)
+	accounts = get_company_accounts(lc.company)
+	v = maturity_values(lc, acceptance, exchange_rate, margin_used)
+	account, currency = supplier_payable(lc.company, lc.supplier, lc.currency, lc.company_currency)
 	supplier_row = _row(
-		v.account, v.supplier_amount, "debit", cc,
-		party_type="Supplier", party=lc.supplier, exchange_rate=v.booked_rate if v.account_currency != lc.company_currency else 1,
+		account, flt(acceptance.fc_amount, 2) if currency == lc.currency else v.booked, "debit", cc,
+		party_type="Supplier", party=lc.supplier,
+		exchange_rate=v.booked_rate if currency == lc.currency else 1,
+		reference_type="Journal Entry", reference_name=acceptance.journal_entry,
 	)
-	if v.invoice:
-		supplier_row.update(reference_type="Purchase Invoice", reference_name=v.invoice)
-	else:
-		supplier_row["is_advance"] = "Yes"
 	rows = [supplier_row]
-
 	if abs(v.exchange_difference) >= 0.01:
 		gain_loss = frappe.get_cached_value("Company", lc.company, "exchange_gain_loss_account")
 		if not gain_loss:
 			frappe.throw(
-				_("Set the Exchange Gain / Loss Account on Company {0}: this settlement has an exchange difference of {1}.").format(
-					lc.company, v.exchange_difference
-				),
+				_("Set the Exchange Gain / Loss Account on Company {0}: this payment has an exchange difference of {1}.").format(
+					lc.company, v.exchange_difference),
 				title=_("Exchange account missing"),
 			)
-		side = "debit" if v.exchange_difference > 0 else "credit"
-		rows.append(_row(gain_loss, abs(v.exchange_difference), side, cc))
-
-	if v.margin_applied > 0:
-		rows.append(_row(get_company_accounts(lc.company).margin_account, v.margin_applied, "credit", cc))
+		rows.append(_row(gain_loss, abs(v.exchange_difference), "debit" if v.exchange_difference > 0 else "credit", cc))
+	if v.margin_used > 0:
+		rows.append(_row(accounts.margin_account, v.margin_used, "credit", cc))
 	if v.bank_paid > 0:
 		rows.append(_row(bank_account, v.bank_paid, "credit", cc))
+	je = make_journal_entry(lc, posting_date, rows,
+		_("Bill paid at maturity: {0} {1} at {2}").format(lc.currency, flt(acceptance.fc_amount, 2), flt(exchange_rate)))
+	return je, v
 
-	name = make_journal_entry(
-		lc, posting_date, rows,
-		_("Shipment {0} settled at {1}").format(shipment.shipment_no, flt(exchange_rate)),
-	)
-	return name, v
+
+def transit_balance(lc):
+	"""What LC Goods in Transit still holds for this LC, from the GL (Dr − Cr)."""
+	account = get_company_accounts(lc.company).transit_account
+	return flt(frappe.db.sql(
+		"""select sum(g.debit) - sum(g.credit) from `tabGL Entry` g
+		where g.account = %(account)s and g.is_cancelled = 0 and (
+			(g.voucher_type = 'Journal Entry' and g.voucher_no in
+				(select name from `tabJournal Entry` where letter_of_credit = %(lc)s and docstatus = 1))
+			or (g.voucher_type = 'Stock Entry' and g.voucher_no in
+				(select name from `tabStock Entry` where letter_of_credit = %(lc)s and docstatus = 1)))""",
+		{"account": account, "lc": lc.name},
+	)[0][0], 2)
+
+
+def post_residual(lc, posting_date, amount, account):
+	"""Clear what is left in Goods in Transit (a late cost, rounding) to `account` on close."""
+	cc = cost_center(lc)
+	transit = get_company_accounts(lc.company).transit_account
+	if amount > 0:
+		rows = [_row(account, amount, "debit", cc), _row(transit, amount, "credit", cc)]
+	else:
+		rows = [_row(transit, -amount, "debit", cc), _row(account, -amount, "credit", cc)]
+	return make_journal_entry(lc, posting_date, rows, _("Goods in Transit cleared on close"), bank_entry=False)
 
 
 def cancel_journal_entry(name):
@@ -254,67 +297,7 @@ def cancel_journal_entry(name):
 	try:
 		je = frappe.get_doc("Journal Entry", name)
 		je.flags.ignore_permissions = True
+		je.flags.ignore_links = True  # the LC's own rows still point at it
 		je.cancel()
 	finally:
 		frappe.flags[INTERNAL_CANCEL_FLAG] = False
-
-
-# ── Landed cost ───────────────────────────────────────────────────────────────
-
-
-def capitalised_charges(lc):
-	"""Charges already moved into stock by submitted Landed Cost Vouchers of this LC."""
-	clearing = get_company_accounts(lc.company).charges_account
-	return flt(frappe.db.sql(
-		"""select sum(t.base_amount) from `tabLanded Cost Taxes and Charges` t
-		join `tabLanded Cost Voucher` v on v.name = t.parent
-		where v.docstatus = 1 and v.letter_of_credit = %s and t.expense_account = %s""",
-		(lc.name, clearing),
-	)[0][0])
-
-
-@frappe.whitelist()
-def make_landed_cost_voucher(name):
-	"""Draft Landed Cost Voucher: the LC's receipts, and its charges not yet capitalised."""
-	lc = frappe.get_doc("Letter of Credit", name)
-	lc.check_permission("read")
-	frappe.has_permission("Landed Cost Voucher", "create", throw=True)
-	clearing = get_company_accounts(lc.company).charges_account
-	pending = flt(lc.charges_total) - capitalised_charges(lc)
-	if pending < 0.01:
-		frappe.throw(_("All bank charges of {0} are already in a Landed Cost Voucher.").format(lc.name))
-
-	receipts = []
-	for s in lc.shipments:
-		if s.purchase_receipt:
-			receipts.append(("Purchase Receipt", s.purchase_receipt))
-		elif s.purchase_invoice and frappe.db.get_value("Purchase Invoice", s.purchase_invoice, "update_stock"):
-			receipts.append(("Purchase Invoice", s.purchase_invoice))
-	if not receipts:
-		frappe.throw(_("Link a Purchase Receipt (or a stock-updating Purchase Invoice) to a shipment first."))
-
-	lcv = frappe.new_doc("Landed Cost Voucher")
-	lcv.company = lc.company
-	lcv.letter_of_credit = lc.name
-	lcv.distribute_charges_based_on = "Amount"
-	for doctype, docname in dict.fromkeys(receipts):
-		doc = frappe.db.get_value(doctype, docname, ["supplier", "posting_date", "base_grand_total"], as_dict=True)
-		lcv.append("purchase_receipts", {
-			"receipt_document_type": doctype, "receipt_document": docname,
-			"supplier": doc.supplier, "posting_date": doc.posting_date, "grand_total": doc.base_grand_total,
-		})
-	lcv.append("taxes", {
-		"description": _("Bank charges of LC {0} ({1})").format(lc.lc_no or lc.name, lc.name),
-		"expense_account": clearing,
-		"account_currency": lc.company_currency,
-		"exchange_rate": 1,
-		"amount": pending,
-		"base_amount": pending,
-	})
-	lcv.get_items_from_purchase_receipts()
-	out = lcv.as_dict()
-	out.update({"name": None, "__islocal": 1, "__unsaved": 1, "docstatus": 0})
-	for table in lcv.meta.get_table_fields():
-		for row in out.get(table.fieldname) or []:
-			row.update({"name": None, "parent": None, "__islocal": 1, "docstatus": 0})
-	return out

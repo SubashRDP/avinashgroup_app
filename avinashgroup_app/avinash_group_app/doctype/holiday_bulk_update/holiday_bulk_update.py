@@ -8,7 +8,9 @@ rest of the group had off.
 
 Put the date and the name on this document, leave "All Holiday Lists" ticked for
 the whole group, or untick it and pick the lists — a women-only day takes only the
-(Women) lists, a single branch's festival only that company's two.
+(Women) lists, a single branch's festival only that company's two. Tick Special
+Holiday for Dashain / Tihar days: whoever works them is paid the Special Holiday
+Allowance on top of overtime; a date already on a list is just marked special.
 
 The writing lives in `avinashgroup_app.hr.holiday_lists`; this controller holds
 the form and records what the last run did.
@@ -46,6 +48,7 @@ class HolidayBulkUpdate(Document):
 			holiday_date=self.holiday_date,
 			description=self.description,
 			holiday_lists=self.chosen_lists(),
+			special_holiday=self.special_holiday,
 		)
 
 		# Every chosen list that now carries the date, whether this run added it or

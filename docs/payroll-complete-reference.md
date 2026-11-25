@@ -214,7 +214,7 @@ The two entries are independent. HRMS's `check_existing` (`hrms:…/salary_slip.
 
 1. `before_cancel`: nothing of ours.
 2. HRMS `on_cancel` (`:107`): `delete_linked_salary_slips` (`:135`). Each submitted slip is **cancelled** (Salary Slip `on_cancel` `hrms:…/salary_slip.py:249`: status, linked Leave Encashment back to Unpaid, loan) and then **deleted**.
-3. `cancel_linked_journal_entries` (`:144`): every **submitted** JE with an account row referencing the entry, i.e. the accrual JE and a submitted bank entry. Our JE `before_cancel` guards (`pdc.invoice_guard.block_je_cancel`, `lc.guards.block_je_cancel`) run; HRMS `unlink_ref_doc_from_salary_slip` runs on JE cancel.
+3. `cancel_linked_journal_entries` (`:144`): every **submitted** JE with an account row referencing the entry, i.e. the accrual JE and a submitted bank entry. Our JE `before_cancel` guards (`pdc.invoice_guard.block_je_cancel`, `lc.guards.block_cancel`) run; HRMS `unlink_ref_doc_from_salary_slip` runs on JE cancel.
 4. Flags reset: `salary_slips_created` = `salary_slips_submitted` = 0, status Cancelled.
 
 **What it leaves behind (no code of ours handles any of this):**

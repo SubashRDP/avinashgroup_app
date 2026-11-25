@@ -412,7 +412,11 @@ def validate_salary_component(doc, method=None):
 #: The slip section a condition's amount belongs in. HRMS files a component's
 #: Additional Salary under the component's Type, so "Overtime" created by hand
 #: as a Deduction (demo-nggroup, 2026-10-13) took every OT hour off the pay.
-TYPE_FOR_CONDITION = {"Authorised Overtime": "Earning", "Late Time": "Deduction"}
+TYPE_FOR_CONDITION = {
+	"Authorised Overtime": "Earning",
+	"Late Time": "Deduction",
+	"Worked on Special Holiday": "Earning",
+}
 
 
 def _check_type_for_condition(doc):

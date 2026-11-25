@@ -2,16 +2,17 @@
 
 frappe.ui.form.on("LC Settings", {
 	setup(frm) {
-		const assets = (doc, cdt, cdn) => ({
-			filters: { company: locals[cdt][cdn].company, is_group: 0, root_type: "Asset" },
+		const of_company = (root_type) => (doc, cdt, cdn) => ({
+			filters: Object.assign({ company: locals[cdt][cdn].company, is_group: 0 }, root_type ? { root_type } : {}),
 		});
-		frm.set_query("margin_account", "company_accounts", assets);
-		frm.set_query("charges_account", "company_accounts", assets);
+		frm.set_query("margin_account", "company_accounts", of_company("Asset"));
+		frm.set_query("transit_account", "company_accounts", of_company("Asset"));
+		frm.set_query("vat_account", "company_accounts", of_company());
 	},
 
 	create_missing_accounts(frm) {
 		frappe.confirm(
-			__("Create LC Margin and LC Charges Clearing accounts for every company that has no row yet?"),
+			__("Create the LC Margin and LC Goods in Transit accounts (and pick the VAT account) for every company that has no row yet?"),
 			() =>
 				frappe.call({
 					method: "avinashgroup_app.lc.doctype.lc_settings.lc_settings.create_missing_accounts",

@@ -71,6 +71,7 @@ Sales value basis differs: `custom_total` (Register, Summary) · header `custom_
 | **Avinas Vehicle Expense** | Fuel / R&M / other expense per vehicle | PII + JEA `custom_subtype`; no dates ⇒ all time |
 | **Custom Supplier Quotation Comparison** | One column block per quotation, Quoted vs Ordered | Fork of ERPNext; local `set_default_supplier` has no perm check |
 | **Material In Out Report** | Opening / Received / Delivered / Balance per item+UOM+branch+price list | Reads documents, not SLE; **Balance omits Opening**; full-history opening scans |
+| **Inventory Report** | Stock summary + value + performance (turnover, days of cover, movement) + reorder need per company+item or warehouse, from SLE | standard in `docs/inventory-report-standard.md`; Rate = last purchase rate, not SLE valuation |
 | **Stock Balance (With Zero Values)** | ERPNext Stock Balance + zero rows | NULL `custom_company` items dropped |
 | **Materialized Report** | IRD Annexure-7 from `CBMS Bill` | matches both "83.84"/"83/84" FY spellings; Company User Permission scoping |
 | **Materialized Return Report** | Annexure-7 credit notes from `CBMS Bill Return` | imports helpers from Materialized Report |

@@ -64,7 +64,7 @@ Each allowance lives in three places. Each place has one job.
  │ Allowances:  Gas Allowance  1,690           │  ← payroll reads THIS
  └──────────────────────┬──────────────────────┘
                         ▼
- SALARY SLIP:  Gas Allowance 1,690 × 29.5 ÷ 31 = 1,608.23
+ SALARY SLIP:  Gas Allowance 1,690 − 1,690 × 1.5 ÷ 30 = 1,605.50
 ```
 
 Three rules to remember:
@@ -92,7 +92,7 @@ The custom fields of this app (Is Allowance, Allowance Kind and everything that 
 | 3 | **Type** | Earning or Deduction. Decides which side of the slip | See the recipes | A deduction typed as Earning is **paid** instead of taken. The save refuses the wrong Type for Overtime and Late Fine only |
 | 4 | **Description** | Free text | Optional | — |
 | 5 | **Component Type** | Shown for deductions. An Indian HRMS list (Provident Fund, Professional Tax) | Leave blank | Nothing in our payroll reads it |
-| 6 | **Depends on Payment Days** | Cuts the amount for unpaid days: amount × payment days ÷ days in the BS month. New components start with it **on** | **On** for Basic, Monthly and % of Initial Basic allowances. **Off** for everything else | On for SSF Addition or SSF: cut twice. On for an Entered by Hand or arrears line: a typed amount is cut for absences. Attendance kinds are forced off on save |
+| 6 | **Depends on Payment Days** | Cuts the amount for unpaid days: amount − amount × unpaid days ÷ 30 (Nepal HRMS Settings → Days per Month for Pay), so a day costs the same in every month. New components start with it **on** | **On** for Basic, Monthly and % of Initial Basic allowances. **Off** for everything else | On for SSF Addition or SSF: cut twice. On for an Entered by Hand or arrears line: a typed amount is cut for absences. Attendance kinds are forced off on save |
 | 7 | **Is Tax Applicable** | Shown for earnings. The earning counts as taxable income | **On** for every earning | Off: the earning escapes income tax |
 | 8 | **Deduct Full Tax on Selected Payroll Date** | Shown for taxed earnings. HRMS copies it onto a hand-made Additional Salary, so the whole tax on that amount is taken in its own month | **On** for Entered by Hand allowances. Leave off for the rest: our own buttons (Prepare Payroll Inputs, Payroll Adjustment, Leave Encashment) set it on every Additional Salary they make | Off on Load/Unload typed by hand: the tax on it is spread over the remaining months, so the month is under-taxed |
 | 9 | **Variable Based On Taxable Salary** | Shown for deductions. Makes this the income tax line, worked out from the slab | **On for Income Tax only** | On anywhere else: a second tax line |
@@ -144,7 +144,7 @@ These fields matter only for components counted from attendance: Tea, Meal, Over
 | # | Label | Shown when | What it does | What to set |
 |---|---|---|---|---|
 | 26 | **Is Attendance Driven** | always | Priced from attendance by **Prepare Payroll Inputs**, posted as Additional Salary | Leave to the kind. Tick by hand only on the Late Fine |
-| 27 | **Condition Type** | Is Attendance Driven | The daily rule. Status = Present (tea), Meal Entitlement (meal), Authorised Overtime (OT), Late Time (late fine). Also listed: Status = Half Day, Worked on Holiday, Early Entry Before, Late Stay After, Late Arrival After (older rules, not used by our components) | Leave to the kind. Late Fine: **Late Time** |
+| 27 | **Condition Type** | Is Attendance Driven | The daily rule. Status = Present (tea), Meal Entitlement (meal), Authorised Overtime (OT), Late Time (late fine), Worked on Special Holiday (Special Holiday Allowance: its Special Holiday Rate per Dashain/Tihar day worked, everyone, on top of OT). Also listed: Status = Half Day, Worked on Holiday, Early Entry Before, Late Stay After, Late Arrival After (older rules, not used by our components) | Leave to the kind. Late Fine: **Late Time** |
 | 28 | **Threshold Hours** | Condition = Working Hours >= Threshold | **Not available yet.** No code reads it, and the "Working Hours >= Threshold" rule pays 0 | Do not use |
 | 29 | **Time Offset (Hours)** | Meal, Early Entry, Late Stay, Late Arrival | Meal: hours called in early, or kept late, on an authorised overtime day that earn one meal each | Meal: **1.5**. Blank or 0 means no working-day meal is ever earned |
 | 30 | **Unit** | attendance, but not OT, Late Time or Meal | Per Day = 1 for each day that matches. Per Hour = the hours worked that day. Flat per Period = 1 for the whole month if any day matched | Tea: **Per Day** |
@@ -152,7 +152,7 @@ These fields matter only for components counted from attendance: Tea, Meal, Over
 | 32 | **Only OT-Eligible Staff** | attendance, but not OT or Late Time | Pays only people ticked Overtime Eligible on the Employee | Meal: **on**. Tea: off. (Overtime is always OT-eligible only; the late fine never is) |
 | 33 | **Rate Basis** | attendance, but not OT or Late Time | Fixed Rate = the Rate on the assignment row. Hourly Basic × Multiplier = the person's basic ÷ days ÷ hours × Multiplier | **Fixed Rate** for tea and meal |
 | 34 | **Multiplier** | Late Time, or Rate Basis = Hourly Basic × Multiplier | The multiple of the hourly basic | Late Fine: **1**. Hidden for Overtime: OT is always 1.5 |
-| 35 | **Rate: Days per Month** | OT, Late Time, or Hourly Basic | Days a month's basic is spread over. Blank = the real BS month (29 to 32) | **Blank** (30 brings back the old Excel rule; management decision) |
+| 35 | **Rate: Days per Month** | OT, Late Time, or Hourly Basic | Days a month's basic is spread over. Blank = Days per Month for Pay (30) | **Blank**, so OT and the late fine use the same day as the slip |
 | 36 | **Rate: Hours per Day** | same | Hours in a working day. Blank = 8 | **Blank** or 8 |
 | 37 | **A Half Day Counts As** | Status = Present | What a Half Day earns: Full Day, Half Day (0.5) or Not At All | Tea: **Full Day** |
 | 38 | **Pay on Holiday** | Status = Present or Half Day | Whether a worked holiday earns it. Blank = Pay | Tea: **Pay** (company rule since 15 October 2026) |
@@ -212,8 +212,8 @@ These are the seven kinds in the code (`ALLOWANCE_KINDS` in `allowance.py`).
 - **Use for:** a fixed amount each month. Dearness, Other, Fixed, Fuel, Maintenance, Transport, Gas, Education.
 - **Required:** Type Earning. Is Allowance on. Kind Monthly. Depends on Payment Days **on**. Is Tax Applicable on. Accounts for every paying company.
 - **Rate:** the assignment row's **Rate**, in rupees a month. The structure's Allowance Rates holds the usual rate (it can be 0 for a per-person amount like Dearness).
-- **Calculation:** Rate × payment days ÷ days in the BS month.
-- **Example:** Gas 1,690 × 29.5 ÷ 31 = **1,608.23**.
+- **Calculation:** Rate − Rate × unpaid days ÷ 30.
+- **Example:** Gas 1,690 − 1,690 × 1.5 ÷ 30 = 1,605.50.
 - A row with a later **From Date** is not paid until that date. A row removed from the assignment leaves the draft slip on its next save.
 
 ### 3.2 % of Initial Basic
@@ -221,8 +221,8 @@ These are the seven kinds in the code (`ALLOWANCE_KINDS` in `allowance.py`).
 - **Use for:** House Rent Allowance (NGI 25 %, NGN 27 %).
 - **Required:** as Monthly, Kind % of Initial Basic.
 - **Rate:** the assignment row's **Rate** is a **percent**: type 25, not 0.25 and not 6,000. The base is the assignment's **Initial Basic** field (Pay Details), not Base.
-- **Calculation:** Initial Basic × Rate ÷ 100 × payment days ÷ days in the BS month.
-- **Example:** 24,000 × 25 % = 6,000; × 29.5 ÷ 31 = **5,709.68**.
+- **Calculation:** Initial Basic × Rate ÷ 100, less that × unpaid days ÷ 30.
+- **Example:** 24,000 × 25 % = 6,000; − 6,000 × 1.5 ÷ 30 = **5,700.00**.
 - Initial Basic blank or 0 on the assignment: HRA is 0, with no message.
 
 ### 3.3 Per Day Present
@@ -249,9 +249,9 @@ These are the seven kinds in the code (`ALLOWANCE_KINDS` in `allowance.py`).
 
 - **Use for:** Overtime only. Make **one** such component, never two.
 - **Required:** Type **Earning** (the save refuses Deduction). Is Allowance on. Kind Per Overtime Hour. Is Tax Applicable on. Exempted from Income Tax off. Accounts.
-- **Rate:** none to type. Hourly basic = Base ÷ days in the BS month ÷ 8, × 1.5. The 1.5 is fixed in the code. A Rate typed on a row is set back to 0 on save.
+- **Rate:** none to type. Hourly basic = Base ÷ 30 ÷ 8, × 1.5. The 1.5 is fixed in the code. A Rate typed on a row is set back to 0 on save.
 - **Calculation:** hours on submitted Overtime Sheets (Earns = Overtime) × hourly basic × 1.5. Paid to everyone ticked Overtime Eligible; no assignment row is needed.
-- **Example:** 30,000 ÷ 31 ÷ 8 = 120.9677; × 1.5 = 181.4516 an hour; × 4.5 h = **816.53**. In a 30-day month: 187.50 an hour.
+- **Example:** 30,000 ÷ 30 ÷ 8 = 125; × 1.5 = 187.50 an hour; × 4.5 h = **843.75**, in every month.
 
 ### 3.6 Entered by Hand
 
@@ -293,7 +293,7 @@ Names: use the names below. Some sites carry older spellings (on the demo site: 
 
 - **Structure:** Earnings row. Formula `base`. Amount based on formula on. Depends on Payment Days on.
 - **Assignment:** **Base** = the monthly basic. No Allowances row.
-- Example: 30,000 × 29.5 ÷ 31 = 28,548.39.
+- Example: 30,000 − 30,000 × 1.5 ÷ 30 = 28,500.00.
 
 ### 4.2 SSF Addition
 
@@ -353,7 +353,7 @@ Names: use the names below. Some sites carry older spellings (on the demo site: 
 
 - **Structure:** Allowance Rates row Dearness Allowance, Rate 0 (it differs per person).
 - **Assignment:** Allowances row Dearness Allowance, Rate = this person's amount (for example 2,000). A row left at 0 is refused.
-- Example: 2,000 × 29.5 ÷ 31 = 1,903.23.
+- Example: 2,000 − 2,000 × 1.5 ÷ 30 = 1,900.00.
 
 ### 4.6 Gas Allowance
 
@@ -372,7 +372,7 @@ Names: use the names below. Some sites carry older spellings (on the demo site: 
 
 As Gas. Name Education Allowance, Abbr EDU. Allowance Rates: 2,780 (NGI), 1,250 (NGN). Accounts 547110-2 Other Allowance.
 
-Example: 2,780 × 29.5 ÷ 31 = 2,645.48.
+Example: 2,780 − 2,780 × 1.5 ÷ 30 = 2,641.00.
 
 ### 4.8 Fuel Allowance (and Other, Fixed, Maintenance, Transport)
 
@@ -562,7 +562,7 @@ As Gas, with Allowance Rates Rate 0 (per person). Abbr: Fuel FUEL, Other OA, Fix
 
 - Paid only on a Payroll Adjustment row.
 
-> **Known issue:** the onboarding script (`ensure_components`) creates Load/Unload with Depends on Payment Days **on**, and sets it back to on each time it runs. With it on, a typed 3,500 is cut for absences (3,500 × 29.5 ÷ 31 = 3,330.65). Check it is off after any onboarding.
+> **Known issue:** the onboarding script (`ensure_components`) creates Load/Unload with Depends on Payment Days **on**, and sets it back to on each time it runs. With it on, a typed 3,500 is cut for absences (3,500 − 3,500 × 1.5 ÷ 30 = 3,325.00). Check it is off after any onboarding.
 
 ### 4.19 Income Tax
 
@@ -637,7 +637,7 @@ Do not edit a submitted assignment. Do not add the allowance to the structure's 
 
 1. Make a Payroll Entry for one company and the month (user guide section 5), or open one person's draft Salary Slip for the month.
 2. For an attendance kind, press **Prepare Payroll Inputs** first.
-3. Check the slip shows **Mobile Allowance** = 500 × payment days ÷ month days. Example: 500 × 29.5 ÷ 31 = 483.87.
+3. Check the slip shows **Mobile Allowance** = 500 × payment days ÷ month days. Example: 500 − 500 × 1.5 ÷ 30 = 475.00.
 4. Check someone **without** a row has no Mobile line.
 5. Check the income tax moved.
 6. Submit one test slip on a test site and check the journal: Dr the right O/O, S/D or F/P account for the person's department.

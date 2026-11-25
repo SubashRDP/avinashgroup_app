@@ -519,9 +519,12 @@ def months_already_paid(employee, effective_date):
 def arrears_for(employee, effective_date, monthly_difference):
 	"""The rise owed on slips already paid: each month's share by the days it paid.
 
-	A full month (31 of 31 days) owes the whole difference; a month with 5 days
-	unpaid leave owes 26/31 of it — what the slip would have paid at the new rate.
+	A full month owes the whole difference; a month with unpaid days owes what
+	the slip would have paid at the new rate (`paid_share`, the slip's own
+	proration: 5 unpaid days on a 30-day pay month owe 25/30, in any month).
 	"""
+	from rdp_common_app.nepal_hrms_common.doctype.nepal_hrms_settings.nepal_hrms_settings import paid_share
+
 	owed = 0.0
 	for slip in frappe.get_all(
 		"Salary Slip",
@@ -529,8 +532,7 @@ def arrears_for(employee, effective_date, monthly_difference):
 		filters={"employee": employee, "docstatus": 1, "start_date": [">=", getdate(effective_date)], **REGULAR_SLIPS},
 		fields=["payment_days", "total_working_days"],
 	):
-		share = flt(slip.payment_days) / flt(slip.total_working_days) if flt(slip.total_working_days) else 1
-		owed += flt(monthly_difference) * share
+		owed += flt(monthly_difference) * paid_share(slip.total_working_days, slip.payment_days)
 	return flt(owed, 2)
 
 

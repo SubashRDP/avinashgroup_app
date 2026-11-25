@@ -18,6 +18,10 @@ Per Payroll Entry:
    way, whatever its Unit and Rate Basis say: minutes late × basic per minute.
    Overtime always is too: sheet hours × hourly basic × 1.5 (`overtime_rate`,
    which the Monthly Attendance BS report shows beside the hours).
+   The special-holiday allowance (Worked on Special Holiday) needs no row
+   either: everyone who comes in on a holiday ticked Special Holiday is paid
+   the component's Special Holiday Rate per day (200 at setup), on top of
+   overtime.
 5. Create and submit an Additional Salary per (employee, component,
    payroll_date), tagged with `custom_source = "Nepal HRMS Attendance
    Allowance"`. Idempotent: earlier rows with the same tag are replaced.
@@ -26,6 +30,10 @@ Per Payroll Entry:
 import frappe
 from frappe import _
 from frappe.utils import add_days, cint, date_diff, flt, getdate
+
+from rdp_common_app.nepal_hrms_common.doctype.nepal_hrms_settings.nepal_hrms_settings import (
+	get_pay_days_per_month,
+)
 
 from avinashgroup_app.hr.overtime import ENTITLEMENT_OVERTIME
 from avinashgroup_app.hr.shift_day import holiday_hours_worked, measure_day
@@ -47,6 +55,13 @@ LATE_TIME = "Late Time"
 #: Act's rate). No row on the assignment, Rate Basis or Multiplier to set.
 AUTHORISED_OVERTIME = "Authorised Overtime"
 OVERTIME_MULTIPLIER = 1.5
+
+#: The special-holiday condition: a day came in on a Holiday List date ticked
+#: Special Holiday (Dashain, Tihar). Paid to everyone at the component's Special
+#: Holiday Rate, on top of overtime or replacement leave (user, 2026-11-25). One
+#: amount for the whole group, so unlike other allowances it lives on the
+#: component, not on each assignment: HR changes it there, not in code.
+SPECIAL_HOLIDAY = "Worked on Special Holiday"
 
 # Statuses that are *not* "present" full-day. Half Day is excluded because it's
 # weighted at 0.5 separately; Absent/On Leave aren't worked days at all.
@@ -287,7 +302,7 @@ def _qty_for_employee(employee: str, sc, start_date, end_date) -> float:
 
 	# Overtime, the late fine and meals count hours or meals and hide Unit on
 	# the form; a Unit left over from before must not turn them into a flat 1.
-	if sc.custom_condition_type not in (AUTHORISED_OVERTIME, LATE_TIME, "Meal Entitlement") and (
+	if sc.custom_condition_type not in (AUTHORISED_OVERTIME, LATE_TIME, SPECIAL_HOLIDAY, "Meal Entitlement") and (
 		sc.custom_unit or "Per Day"
 	) == "Flat per Period":
 		return 1.0 if matched_any else 0.0
@@ -332,6 +347,17 @@ def evaluate_rule(row, sc, employee: str) -> float:
 		if status not in present_statuses and status != "Half Day":
 			return 0.0
 		return _per_unit(unit, day=1.0, hours=working_hours)
+
+	if condition == SPECIAL_HOLIDAY:
+		if not row.custom_worked_on_holiday:
+			return 0.0
+		if status not in present_statuses and status != "Half Day":
+			return 0.0
+		if getdate(row.attendance_date) not in special_holiday_dates(_employee_holiday_list(employee)):
+			return 0.0
+		# Coming in at all earns the day: a half day on Dashain is still Dashain
+		# worked. Never by the hour, whatever Unit says, so it stays a flat rate.
+		return 1.0
 
 	if condition == "Meal Entitlement":
 		return _meals_for_day(row, sc, present_statuses, employee)
@@ -483,12 +509,14 @@ def _authorised_overtime_hours(employee: str, work_date) -> float:
 	return cache[key]
 
 
-#: The hourly wage is a month's basic over the days of that BS month (29–32) and
-#: 8 hours a day — the same month length the slip prorates Basic by (decided by
-#: the user 2026-10-12; the client's Excel sheets used a flat 30). Overtime is
-#: 1.5 times it, a late minute 1/60th of it. "Rate: Days per Month" on the Salary
-#: Component, when filled, fixes the days instead (30 restores the sheets' rule);
-#: "Rate: Hours per Day" blank falls back to 8.
+#: The hourly wage is a month's basic over the pay month's days and 8 hours a
+#: day — the same days the slip prorates Basic by. That was the BS month's own
+#: length (29–32, user 2026-10-12); since 2026-11-25 the group pays on a fixed
+#: 30-day month (Nepal HRMS Settings → Days per Month for Pay), as the client's
+#: Excel sheets always did, so an absent day, a half day and an overtime hour
+#: are priced off one day's value. Overtime is 1.5 times the hourly wage, a late
+#: minute 1/60th of it. "Rate: Days per Month" on a Salary Component still
+#: overrides the days for that component; "Rate: Hours per Day" blank is 8.
 RATE_HOURS_PER_DAY = 8
 
 
@@ -505,8 +533,10 @@ def _assignment(employee: str, on_date):
 def _hourly_basic(employee: str, on_date, sc=None, month_days: int | None = None) -> float:
 	"""The hourly wage: a month's basic over the month's days of 8 hours.
 
-	`month_days` is the length of the BS month whose attendance is being priced
-	(29–32). A fixed "Rate: Days per Month" on the component overrides it.
+	The days, first found wins: the component's "Rate: Days per Month"; the
+	group's Days per Month for Pay (Nepal HRMS Settings — 30, so an overtime
+	hour and a late minute are priced off the same day's value as an absent or
+	half day on the slip); else `month_days`, the BS month's own length (29–32).
 
 	Daily-wage labour is paid in cash day to day, outside payroll (decided
 	2026-10-08), so every assignment's base here is a monthly basic.
@@ -515,7 +545,7 @@ def _hourly_basic(employee: str, on_date, sc=None, month_days: int | None = None
 	restate the basis for overtime without touching the late fine, or either
 	without a developer.
 	"""
-	days = flt(sc and sc.get("custom_rate_days_per_month")) or flt(month_days)
+	days = flt(sc and sc.get("custom_rate_days_per_month")) or get_pay_days_per_month() or flt(month_days)
 	if not days:
 		frappe.throw(_("Cannot work out the hourly wage for {0}: no month length given").format(employee))
 	hours = flt(sc and sc.get("custom_rate_hours_per_day")) or RATE_HOURS_PER_DAY
@@ -539,6 +569,27 @@ def _per_unit(unit: str, day: float, hours: float) -> float:
 	if unit == "Flat per Period":
 		return 1.0 if day > 0 else 0.0
 	return flt(day)
+
+
+def special_holiday_dates(holiday_list: str) -> frozenset:
+	"""Dates of `holiday_list` ticked Special Holiday; memoised per request.
+
+	Read once per list per payroll run: the engine asks for every attendance row
+	of every employee, and nearly all of them share their company's one list.
+	"""
+	if not holiday_list:
+		return frozenset()
+	cache = frappe.local.__dict__.setdefault("_agp_special_holidays", {})
+	if holiday_list not in cache:
+		cache[holiday_list] = frozenset(
+			getdate(d)
+			for d in frappe.get_all(
+				"Holiday",
+				filters={"parent": holiday_list, "parenttype": "Holiday List", "custom_special_holiday": 1},
+				pluck="holiday_date",
+			)
+		)
+	return cache[holiday_list]
 
 
 def _employee_holiday_list(employee: str) -> str:
@@ -669,7 +720,7 @@ def _skip_for_eligibility(emp_doc, sc) -> bool:
 	# no longer shows the box there) must not narrow it to OT-eligible staff.
 	condition = sc.get("custom_condition_type")
 	ot_only = condition == AUTHORISED_OVERTIME or (
-		condition != LATE_TIME and sc.get("custom_ot_eligible_only")
+		condition not in (LATE_TIME, SPECIAL_HOLIDAY) and sc.get("custom_ot_eligible_only")
 	)
 	if ot_only and not emp_doc.get("custom_ot_eligibility"):
 		# Policy 2.2: overtime money and meals are for OT-eligible staff; admin
@@ -743,9 +794,10 @@ def _gets(employee: str, sc, row, on_date) -> bool:
 	assignment — no row, not paid. Any other attendance component: a row in
 	their salary structure's Deductions tags it.
 	"""
-	if sc.get("custom_condition_type") in (LATE_TIME, AUTHORISED_OVERTIME):
+	if sc.get("custom_condition_type") in (LATE_TIME, AUTHORISED_OVERTIME, SPECIAL_HOLIDAY):
 		# Overtime's own gate is OT eligibility (`_skip_for_eligibility`) and the
-		# Overtime Sheet (the quantity is 0 without one).
+		# Overtime Sheet (the quantity is 0 without one). The special-holiday
+		# allowance is for everyone who comes in on the day.
 		return True
 	if sc.get("custom_is_allowance"):
 		return row is not None
@@ -777,6 +829,10 @@ def _resolve_rate(row, sc, employee=None, on_date=None, month_days=None):
 
 	if row is not None and flt(row.get("rate")):
 		return flt(row.get("rate"))
+
+	if sc.get("custom_condition_type") == SPECIAL_HOLIDAY and flt(sc.get("custom_special_holiday_rate")):
+		# One amount for the whole group, set on the component (200 at setup).
+		return flt(sc.get("custom_special_holiday_rate"))
 
 	return None
 

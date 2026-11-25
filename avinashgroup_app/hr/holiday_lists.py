@@ -76,7 +76,7 @@ def holiday_date_from_option(option):
 	return getdate((option or "").split(OPTION_SEPARATOR)[0].strip())
 
 
-def apply_holiday_change(action, holiday_date, description=None, holiday_lists=None):
+def apply_holiday_change(action, holiday_date, description=None, holiday_lists=None, special_holiday=0):
 	"""Add or remove `holiday_date` on each named list. Returns a per-list report.
 
 	`holiday_lists` None means every Holiday List. Raises on an unknown action or
@@ -86,6 +86,11 @@ def apply_holiday_change(action, holiday_date, description=None, holiday_lists=N
 	A list is skipped, with the reason recorded, when the date falls outside its
 	range (a list for another fiscal year), or when there is nothing to do: the
 	date is already there on Add, or not there on Remove.
+
+	`special_holiday` ticks Special Holiday on the added row: everyone who works
+	that day is paid the Special Holiday Allowance (payroll/attendance_allowance).
+	A date already on the list is ticked too rather than skipped, since Dashain
+	and Tihar are normally on the lists long before HR marks them special.
 	"""
 	if action not in ("Add Holiday", "Remove Holiday"):
 		frappe.throw(_("Unknown action {0}").format(action))
@@ -119,9 +124,23 @@ def apply_holiday_change(action, holiday_date, description=None, holiday_lists=N
 
 		if action == "Add Holiday":
 			if existing:
-				skipped.append(f"{label}: already has this date")
+				unmarked = [h for h in existing if special_holiday and not h.get("custom_special_holiday")]
+				if not unmarked:
+					skipped.append(f"{label}: already has this date")
+					continue
+				for h in unmarked:
+					h.custom_special_holiday = 1
+				doc.save()
+				changed.append(f"{label}: marked Special Holiday")
 				continue
-			doc.append("holidays", {"holiday_date": holiday_date, "description": description})
+			doc.append(
+				"holidays",
+				{
+					"holiday_date": holiday_date,
+					"description": description,
+					"custom_special_holiday": 1 if special_holiday else 0,
+				},
+			)
 		else:
 			if not existing:
 				skipped.append(f"{label}: nothing on this date")

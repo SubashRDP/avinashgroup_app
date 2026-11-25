@@ -1,9 +1,9 @@
-"""LC setup — settings defaults, a default JV Type, the Miti mapping, and the
-per-company accounts.
+"""LC setup — settings defaults, a default JV Type, the Miti mapping, the default
+cost types, and the per-company accounts.
 
 `after_migrate` runs `after_migrate()`: it only ever *adds* what is missing
-(settings defaults, a JV Type, a Bs Conversion record for the LC's dates) and
-never touches accounts — creating ledger accounts on a live chart is the
+(settings defaults, a JV Type, the Bs Conversion rows for the LC's dates, the
+LC Cost Types in DEFAULT_COST_TYPES) and never touches accounts — creating ledger accounts on a live chart is the
 accountant's call, made with the "Create Missing Accounts" button in LC
 Settings (`ensure_company_accounts`).
 """
@@ -21,7 +21,31 @@ DEFAULT_JV_TYPE = "Bank Entry"
 MITI_FIELDS = (
 	("posting_date", "posting_miti"),
 	("expiry_date", "expiry_miti"),
-	("latest_shipment_date", "latest_shipment_miti"),
+	("maturity_date", "maturity_miti"),
+	("departure_date", "departure_miti"),
+	("arrival_date", "arrival_miti"),
+)
+
+# The costs an import LC usually collects, as the accounts team listed them
+# (Nov 2026): (name, group, usually paid via). Accounts can add more in the
+# LC Cost Type list; these are only created when missing.
+DEFAULT_COST_TYPES = (
+	("LC Commission", "Bank Charges", "Bank"),
+	("SWIFT Charge", "Bank Charges", "Bank"),
+	("Amendment Charge", "Bank Charges", "Bank"),
+	("Documentation Charge", "Bank Charges", "Bank"),
+	("Marine Insurance", "Insurance", "Party"),
+	("Import Duty (ID)", "Customs", "Bank"),
+	("Excise Duty (ED)", "Customs", "Bank"),
+	("Customs VAT", "VAT", "Bank"),
+	("Customs Clearance", "Clearing", "Party"),
+	("Load / Unload", "Clearing", "Party"),
+	("Labour Charge", "Clearing", "Party"),
+	("Clearance Charge", "Clearing", "Party"),
+	("ICP Booking", "Clearing", "Party"),
+	("Freight up to Border", "Freight", "Party"),
+	("Local Freight from Border", "Freight", "Party"),
+	("Other Charge", "Other", "Bank"),
 )
 
 
@@ -33,6 +57,7 @@ def after_migrate():
 		if not frappe.db.get_single_value("LC Settings", "jv_type") and frappe.db.exists("JV Type", DEFAULT_JV_TYPE):
 			frappe.db.set_single_value("LC Settings", "jv_type", DEFAULT_JV_TYPE)
 		ensure_miti_mapping()
+		ensure_cost_types()
 	except Exception:
 		frappe.log_error(title="LC after_migrate setup failed", message=frappe.get_traceback())
 
@@ -47,18 +72,39 @@ def apply_settings_defaults():
 
 
 def ensure_miti_mapping():
+	"""One Bs Conversion record for Letter of Credit, with a row per MITI_FIELDS pair."""
+	if not frappe.db.exists("DocType", "Bs Conversion"):
+		return
 	# Bs Conversion is hash-named: look the record up by the doctype it maps, not
 	# by name, or every migrate adds another copy (demo-nggroup had 13).
-	if not frappe.db.exists("DocType", "Bs Conversion") or frappe.db.exists(
-		"Bs Conversion", {"doctype_names": "Letter of Credit"}
-	):
+	name = frappe.db.get_value("Bs Conversion", {"doctype_names": "Letter of Credit"}, "name")
+	if not name:
+		doc = frappe.get_doc({
+			"doctype": "Bs Conversion",
+			"doctype_names": "Letter of Credit",
+			"ad_bs": [{"ad_date": ad, "bs_date": bs, "enabled": 1} for ad, bs in MITI_FIELDS],
+		})
+		doc.insert(ignore_permissions=True)
 		return
-	doc = frappe.get_doc({
-		"doctype": "Bs Conversion",
-		"doctype_names": "Letter of Credit",
-		"ad_bs": [{"ad_date": ad, "bs_date": bs, "enabled": 1} for ad, bs in MITI_FIELDS],
-	})
-	doc.insert(ignore_permissions=True)
+	doc = frappe.get_doc("Bs Conversion", name)
+	have = {(r.ad_date, r.bs_date) for r in doc.ad_bs}
+	missing = [pair for pair in MITI_FIELDS if pair not in have]
+	if missing:
+		for ad, bs in missing:
+			doc.append("ad_bs", {"ad_date": ad, "bs_date": bs, "enabled": 1})
+		doc.save(ignore_permissions=True)
+
+
+def ensure_cost_types():
+	if not frappe.db.exists("DocType", "LC Cost Type"):
+		return
+	for order, (name, group, paid_via) in enumerate(DEFAULT_COST_TYPES, start=1):
+		if frappe.db.exists("LC Cost Type", name):
+			continue
+		frappe.get_doc({
+			"doctype": "LC Cost Type", "cost_type_name": name, "cost_group": group,
+			"default_paid_via": paid_via, "sort_order": order,
+		}).insert(ignore_permissions=True)
 
 
 def _group_account(company, account_name, root_type):
@@ -94,6 +140,25 @@ def _ensure_account(company, account_name, parent_name, root_type):
 	return account.name
 
 
+def default_vat_account(company):
+	"""The VAT account the company's purchases already claim input VAT in, if any.
+
+	The company's own Purchase Taxes and Charges Template is the evidence (on
+	these sites "VAT - <abbr>", a Tax account); never a Receivable-type account,
+	which a Journal Entry would refuse without a party.
+	"""
+	found = frappe.db.sql(
+		"""select t.account_head from `tabPurchase Taxes and Charges` t
+		join `tabPurchase Taxes and Charges Template` p on p.name = t.parent
+		join `tabAccount` a on a.name = t.account_head
+		where p.company = %s and t.parenttype = 'Purchase Taxes and Charges Template'
+			and a.account_type = 'Tax' and a.account_name like '%%VAT%%'
+		order by p.is_default desc, t.idx limit 1""",
+		company,
+	)
+	return found[0][0] if found else None
+
+
 def ensure_company_accounts(companies=None):
 	"""Add a Company Accounts row (and its accounts) for each company lacking one."""
 	settings = frappe.get_doc("LC Settings")
@@ -102,7 +167,7 @@ def ensure_company_accounts(companies=None):
 	for company in companies or frappe.get_all("Company", pluck="name", order_by="name"):
 		if company in have:
 			continue
-		row = {"company": company, "firm_type": "Industry"}
+		row = {"company": company, "firm_type": "Industry", "vat_account": default_vat_account(company)}
 		for field, name, parent, root_type in LC_ACCOUNTS:
 			row[field] = _ensure_account(company, name, parent, root_type)
 		settings.append("company_accounts", row)

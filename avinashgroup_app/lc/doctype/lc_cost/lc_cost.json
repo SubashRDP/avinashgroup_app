@@ -1,0 +1,223 @@
+{
+ "actions": [],
+ "creation": "2026-11-25 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "posting_date",
+  "cost_type",
+  "amount",
+  "vat_amount",
+  "paid_via",
+  "paid_from",
+  "party",
+  "bill_no",
+  "remarks",
+  "cb_fc",
+  "cost_group",
+  "description",
+  "fc_amount",
+  "exchange_rate",
+  "margin_used",
+  "journal_entry",
+  "maturity_section",
+  "maturity_date",
+  "paid_on",
+  "maturity_rate",
+  "cb_maturity",
+  "maturity_margin_used",
+  "exchange_difference",
+  "maturity_journal_entry"
+ ],
+ "fields": [
+  {
+   "fieldname": "posting_date",
+   "fieldtype": "Date",
+   "label": "Date",
+   "in_list_view": 1,
+   "columns": 1,
+   "default": "Today",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cost_type",
+   "fieldtype": "Link",
+   "label": "Cost",
+   "options": "LC Cost Type",
+   "in_list_view": 1,
+   "columns": 2,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1,
+   "description": "Without VAT. What goes into the landed cost"
+  },
+  {
+   "fieldname": "vat_amount",
+   "fieldtype": "Currency",
+   "label": "VAT",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1,
+   "description": "Claimable input VAT on the bill. Kept out of the cost"
+  },
+  {
+   "fieldname": "paid_via",
+   "fieldtype": "Select",
+   "label": "Paid Via",
+   "options": "Bank\nParty\nAcceptance",
+   "default": "Bank",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1,
+   "description": "Bank: paid now from Paid From. Party: owed to the party (transporter, insurer, agent)"
+  },
+  {
+   "fieldname": "paid_from",
+   "fieldtype": "Link",
+   "label": "Paid From",
+   "options": "Account",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1,
+   "description": "Bank or cash ledger. Blank: the LC's bank"
+  },
+  {
+   "fieldname": "party",
+   "fieldtype": "Link",
+   "label": "Party",
+   "options": "Supplier",
+   "in_list_view": 1,
+   "columns": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "bill_no",
+   "fieldtype": "Data",
+   "label": "Bill / Reference No.",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "remarks",
+   "fieldtype": "Data",
+   "label": "Remarks",
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "cb_fc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cost_group",
+   "fieldtype": "Select",
+   "label": "Group",
+   "options": "Goods\nBank Charges\nInsurance\nCustoms\nClearing\nFreight\nVAT\nOther",
+   "in_list_view": 1,
+   "columns": 1,
+   "fetch_from": "cost_type.cost_group",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Description",
+   "read_only": 1,
+   "allow_on_submit": 1
+  },
+  {
+   "fieldname": "fc_amount",
+   "fieldtype": "Float",
+   "label": "Goods Amount (LC Currency)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exchange_rate",
+   "fieldtype": "Float",
+   "label": "Rate",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "margin_used",
+   "fieldtype": "Currency",
+   "label": "Margin Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "journal_entry",
+   "fieldtype": "Link",
+   "label": "Journal Entry",
+   "options": "Journal Entry",
+   "in_list_view": 1,
+   "columns": 1,
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "maturity_section",
+   "fieldtype": "Section Break",
+   "label": "Maturity Payment",
+   "depends_on": "eval:doc.paid_via=='Acceptance'"
+  },
+  {
+   "fieldname": "maturity_date",
+   "fieldtype": "Date",
+   "label": "Maturity Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paid_on",
+   "fieldtype": "Date",
+   "label": "Paid On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "maturity_rate",
+   "fieldtype": "Float",
+   "label": "Bank Rate at Maturity",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_maturity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "maturity_margin_used",
+   "fieldtype": "Currency",
+   "label": "Margin Used",
+   "read_only": 1
+  },
+  {
+   "fieldname": "exchange_difference",
+   "fieldtype": "Currency",
+   "label": "Exchange Loss / (Gain)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "maturity_journal_entry",
+   "fieldtype": "Link",
+   "label": "Maturity Payment Entry",
+   "options": "Journal Entry",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-11-25 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "LC",
+ "name": "LC Cost",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "istable": 1
+}

@@ -1,15 +1,18 @@
-"""LC Margin and Charges — money the banks hold or took, per company and bank.
+"""LC Margin and Charges — money the banks hold or took, and what each LC cost, per company and bank.
 
-Margin deposited, used in settlements, released and still held; bank charges
-booked, how much of them a Landed Cost Voucher has already moved into stock,
-and what is still waiting in LC Charges Clearing.
+Margin deposited, used in goods payments, released and still held; then the
+LCs' costs by group (bank charges, insurance, customs duty, clearing, freight),
+the landed cost in total, how much of it is already in stock or assets, and
+what still sits in LC Goods in Transit.
 """
 
 import frappe
 from frappe import _
 from frappe.utils import flt
 
-from avinashgroup_app.lc.accounting import capitalised_charges
+SUM_FIELDS = ("margin_deposited", "margin_applied", "margin_released", "margin_balance", "goods_cost",
+	"bank_charges", "insurance_cost", "customs_cost", "clearing_cost", "freight_cost", "other_cost",
+	"total_cost", "vat_total", "transferred_cost")
 
 
 def execute(filters=None):
@@ -17,28 +20,22 @@ def execute(filters=None):
 	conditions = {"docstatus": 1}
 	if filters.company:
 		conditions["company"] = filters.company
-	lcs = frappe.get_all("Letter of Credit", filters=conditions,
-		fields=["name", "company", "bank", "margin_deposited", "margin_applied", "margin_released",
-			"margin_balance", "charges_total"])
+	lcs = frappe.get_all("Letter of Credit", filters=conditions, fields=["name", "company", "bank", *SUM_FIELDS])
 	groups = {}
 	for lc in lcs:
-		key = (lc.company, lc.bank)
-		g = groups.setdefault(key, frappe._dict(company=lc.company, bank=lc.bank, lcs=0,
-			margin_deposited=0, margin_applied=0, margin_released=0, margin_balance=0,
-			charges_total=0, capitalised=0))
+		g = groups.setdefault((lc.company, lc.bank),
+			frappe._dict(company=lc.company, bank=lc.bank, lcs=0, **{f: 0 for f in SUM_FIELDS}))
 		g.lcs += 1
-		for f in ("margin_deposited", "margin_applied", "margin_released", "margin_balance", "charges_total"):
+		for f in SUM_FIELDS:
 			g[f] += flt(lc[f])
-		if flt(lc.charges_total):
-			g.capitalised += capitalised_charges(lc)
 	rows = list(groups.values())
 	for g in rows:
-		g.pending = g.charges_total - g.capitalised
+		g.in_transit = g.total_cost - g.transferred_cost
 	return columns(), sorted(rows, key=lambda r: (r.company, r.bank or ""))
 
 
 def columns():
-	cur = lambda f, l, w=130: {"fieldname": f, "label": l, "fieldtype": "Currency", "width": w}
+	cur = lambda f, l, w=125: {"fieldname": f, "label": l, "fieldtype": "Currency", "width": w}
 	return [
 		{"fieldname": "company", "label": _("Company"), "fieldtype": "Link", "options": "Company", "width": 220},
 		{"fieldname": "bank", "label": _("Bank"), "fieldtype": "Link", "options": "Bank", "width": 160},
@@ -47,7 +44,15 @@ def columns():
 		cur("margin_applied", _("Margin Used")),
 		cur("margin_released", _("Margin Released")),
 		cur("margin_balance", _("Margin Held")),
-		cur("charges_total", _("Bank Charges")),
-		cur("capitalised", _("In Stock (LCV)")),
-		cur("pending", _("Not Yet Capitalised")),
+		cur("goods_cost", _("Goods")),
+		cur("bank_charges", _("Bank Charges")),
+		cur("insurance_cost", _("Insurance")),
+		cur("customs_cost", _("Customs Duty")),
+		cur("clearing_cost", _("Clearing")),
+		cur("freight_cost", _("Freight")),
+		cur("other_cost", _("Other")),
+		cur("total_cost", _("Landed Cost")),
+		cur("vat_total", _("VAT Paid")),
+		cur("transferred_cost", _("In Stock / Assets")),
+		cur("in_transit", _("Still in Transit")),
 	]

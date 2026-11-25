@@ -1,95 +1,193 @@
-// Letter of Credit: one button group per stage, each a dialog that calls
-// lc/lifecycle.py run_action. The form itself is only edited as a draft.
+// Letter of Credit: the draft is filled like any form; once submitted, every
+// money step is a button that opens a dialog and calls lc/lifecycle.py
+// run_action. The shipment dates and goods rows stay editable (Update).
 
 const LC_API = "avinashgroup_app.lc.lifecycle";
-const OPEN = ["Opened", "Partly Settled", "Settled"];
 
 frappe.ui.form.on("Letter of Credit", {
 	setup(frm) {
 		frm.set_query("bank_account", () => ({
 			filters: { company: frm.doc.company, is_company_account: 1 },
 		}));
-		frm.set_query("purchase_order", "purchase_orders", () => ({
-			filters: {
-				company: frm.doc.company,
-				supplier: frm.doc.supplier,
-				currency: frm.doc.currency,
-				docstatus: 1,
-			},
+		frm.set_query("set_warehouse", () => ({ filters: { company: frm.doc.company, is_group: 0 } }));
+		frm.set_query("warehouse", "items", () => ({ filters: { company: frm.doc.company, is_group: 0 } }));
+		frm.set_query("cost_type", "costs", () => ({ filters: { disabled: 0 } }));
+		frm.set_query("paid_from", "costs", () => ({
+			filters: { company: frm.doc.company, account_type: ["in", ["Bank", "Cash"]], is_group: 0 },
 		}));
+		frm.set_query("item_code", "items", (doc, cdt, cdn) => {
+			const row = locals[cdt][cdn];
+			const filters = { disabled: 0 };
+			if (row.item_group) filters.item_group = row.item_group;
+			filters[row.transfer_to === "Fixed Asset" ? "is_fixed_asset" : "is_stock_item"] = 1;
+			return { filters };
+		});
 	},
 
 	refresh(frm) {
+		lc_summary_headline(frm);
+		lc_lock_posted_costs(frm);
 		if (frm.doc.docstatus !== 1) return;
 		const status = frm.doc.status;
-		const group = __("LC");
-		const ship = __("Shipment");
+		if (["Closed", "Cancelled"].includes(status)) {
+			lc_view_buttons(frm);
+			return;
+		}
+		const goods = __("Goods");
 
-		if (status === "Applied") {
-			frm.add_custom_button(__("Mark Opened by Bank"), () => lc_open(frm), group);
-		}
-		if (status === "Applied" || OPEN.includes(status)) {
-			frm.add_custom_button(__("Add Bank Charge"), () => lc_charge(frm), group);
-		}
-		if (OPEN.includes(status)) {
-			frm.add_custom_button(__("Deposit Margin"), () => lc_margin(frm), group);
-			frm.add_custom_button(__("Amend"), () => lc_amend(frm), group);
-			frm.add_custom_button(__("Close"), () => lc_close(frm), group);
+		frm.add_custom_button(__("Deposit Margin"), () => lc_margin(frm), __("LC"));
 
-			if (status !== "Settled") {
-				frm.add_custom_button(__("Add Shipment"), () => lc_add_shipment(frm), ship);
+		if (frm.doc.drafts_at === "Usance") {
+			if (frm.doc.goods_pending_fc > 0) {
+				frm.add_custom_button(__("Accept Bill"), () => lc_accept(frm), goods);
 			}
-			const by_status = (s) => (frm.doc.shipments || []).filter((r) => s.includes(r.status));
-			if (by_status(["Shipped"]).length) {
-				frm.add_custom_button(__("Documents Received"), () => lc_docs(frm), ship);
+			if (open_bills(frm).length) {
+				frm.add_custom_button(__("Pay at Maturity"), () => lc_pay_maturity(frm), goods);
 			}
-			if (frm.doc.drafts_at === "Usance" && by_status(["Docs Received"]).length) {
-				frm.add_custom_button(__("Accept"), () => lc_accept(frm), ship);
-			}
-			if (by_status([frm.doc.drafts_at === "Usance" ? "Accepted" : "Docs Received"]).length) {
-				frm.add_custom_button(__("Settle"), () => lc_settle(frm), ship);
-			}
-			if (by_status(["Shipped", "Docs Received", "Accepted"]).length) {
-				frm.add_custom_button(__("Link Receipt / Invoice"), () => lc_link(frm), ship);
-			}
+		} else if (frm.doc.goods_pending_fc > 0) {
+			frm.add_custom_button(__("Pay Goods"), () => lc_pay_goods(frm), goods);
 		}
-		if ((frm.doc.shipments || []).some((r) => r.status === "Settled")) {
-			frm.add_custom_button(__("Customs Proof"), () => lc_customs(frm), ship);
+		if (!frm.doc.transferred_on) {
+			frm.add_custom_button(__("Transfer to Stock / Asset"), () => lc_transfer(frm), goods);
 		}
-		if (frm.doc.charges_total > 0) {
-			frm.add_custom_button(__("Landed Cost Voucher"), () => {
-				frappe.call({
-					method: "avinashgroup_app.lc.accounting.make_landed_cost_voucher",
-					args: { name: frm.doc.name },
-					freeze: true,
-					callback: (r) => {
-						const doc = frappe.model.sync(r.message)[0];
-						frappe.set_route("Form", doc.doctype, doc.name);
-					},
-				});
-			}, __("Create"));
+		if (frm.doc.transferred_on || !(frm.doc.items || []).length) {
+			frm.add_custom_button(__("Close LC"), () => lc_close(frm), __("LC"));
 		}
-		if ((frm.doc.events || []).length > 1 && frm.doc.status !== "Cancelled") {
+		if ((frm.doc.events || []).length > 1) {
 			frm.add_custom_button(__("Undo Last Step"), () => {
 				const last = frm.doc.events[frm.doc.events.length - 1];
 				frappe.confirm(
-					__("Undo {0}{1}? Its Journal Entry, if any, is cancelled.", [
-						last.event,
-						last.shipment_no ? ` (${__("shipment")} ${last.shipment_no})` : "",
+					__("Undo {0}? Its Journal Entry (and any Stock Entry or draft Asset it made) is cancelled.", [
+						`<b>${frappe.utils.escape_html(last.event)}</b>`,
 					]),
 					() => frappe.call({ method: `${LC_API}.undo`, args: { name: frm.doc.name }, freeze: true })
 						.then(() => frm.reload_doc())
 				);
-			}, group);
+			}, __("LC"));
 		}
-		frm.add_custom_button(__("Journal Entries"), () =>
-			frappe.set_route("List", "Journal Entry", { letter_of_credit: frm.doc.name }), __("View"));
+		lc_view_buttons(frm);
 	},
 
 	company(frm) {
 		frm.set_value("bank_account", null);
+		frm.set_value("set_warehouse", null);
+	},
+	drafts_at(frm) {
+		if (frm.doc.drafts_at === "Sight") frm.set_value("usance_days", 0);
+	},
+	exchange_rate: (frm) => lc_totals(frm),
+	lc_amount: (frm) => lc_totals(frm),
+	margin_percent: (frm) => lc_totals(frm),
+});
+
+frappe.ui.form.on("LC Item", {
+	qty: (frm, cdt, cdn) => lc_row_amount(frm, cdt, cdn),
+	rate: (frm, cdt, cdn) => lc_row_amount(frm, cdt, cdn),
+	items_remove: (frm) => lc_totals(frm),
+	items_add(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		row.transfer_to = row.transfer_to || "Stock";
+		if (frm.doc.set_warehouse) row.warehouse = frm.doc.set_warehouse;
+	},
+	item_code(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.item_code) return;
+		frappe.db.get_value("Item", row.item_code, ["item_name", "item_group", "stock_uom", "description", "asset_category"])
+			.then(({ message: item }) => {
+				if (!item) return;
+				frappe.model.set_value(cdt, cdn, {
+					item_group: row.item_group || item.item_group,
+					uom: row.uom || item.stock_uom,
+					description: row.description || item.item_name,
+					asset_category: row.asset_category || item.asset_category,
+				});
+			});
 	},
 });
+
+frappe.ui.form.on("LC Cost", {
+	costs_add(frm, cdt, cdn) {
+		frappe.model.set_value(cdt, cdn, {
+			posting_date: frappe.datetime.get_today(), paid_via: "Bank", paid_from: frm.doc.bank_gl_account,
+		});
+	},
+	cost_type(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (!row.cost_type) return;
+		frappe.db.get_value("LC Cost Type", row.cost_type, ["cost_group", "default_paid_via"]).then(({ message: t }) => {
+			if (!t) return;
+			const values = { cost_group: t.cost_group };
+			if (t.default_paid_via && !row.journal_entry) values.paid_via = t.default_paid_via;
+			frappe.model.set_value(cdt, cdn, values);
+		});
+	},
+	paid_via(frm, cdt, cdn) {
+		const row = locals[cdt][cdn];
+		if (row.paid_via === "Bank" && !row.paid_from) frappe.model.set_value(cdt, cdn, "paid_from", frm.doc.bank_gl_account);
+		if (row.paid_via === "Party") frappe.model.set_value(cdt, cdn, "paid_from", null);
+	},
+	form_render(frm, cdt, cdn) {
+		lc_lock_posted_costs(frm);
+	},
+});
+
+// A posted cost (it has its Journal Entry) or a goods row is history: only its
+// bill no. and remarks may change. Delete the row to reverse a posted cost.
+const LC_COST_INPUTS = ["posting_date", "cost_type", "amount", "vat_amount", "paid_via", "paid_from", "party"];
+function lc_lock_posted_costs(frm) {
+	const grid = frm.fields_dict.costs && frm.fields_dict.costs.grid;
+	if (!grid) return;
+	(frm.doc.costs || []).forEach((row) => {
+		const grid_row = grid.grid_rows_by_docname[row.name];
+		if (!grid_row) return;
+		const locked = !!row.journal_entry || row.cost_group === "Goods";
+		LC_COST_INPUTS.forEach((f) => grid_row.toggle_editable(f, !locked));
+	});
+}
+
+function lc_row_amount(frm, cdt, cdn) {
+	const row = locals[cdt][cdn];
+	frappe.model.set_value(cdt, cdn, "amount", flt(row.qty) * flt(row.rate));
+	lc_totals(frm);
+}
+
+function lc_totals(frm) {
+	if (frm.doc.docstatus !== 0) return;
+	let total = 0, qty = 0;
+	(frm.doc.items || []).forEach((r) => { total += flt(r.qty) * flt(r.rate); qty += flt(r.qty); });
+	frm.set_value("items_total", total);
+	frm.set_value("total_qty", qty);
+	if (total && !frm.doc.lc_amount) frm.set_value("lc_amount", total);
+	const base = flt(frm.doc.lc_amount) * flt(frm.doc.exchange_rate);
+	frm.set_value("base_lc_amount", base);
+	frm.set_value("required_margin", base * flt(frm.doc.margin_percent) / 100);
+}
+
+function lc_summary_headline(frm) {
+	if (frm.doc.docstatus !== 1) return;
+	const cur = frm.doc.company_currency;
+	const parts = [
+		`${__("Landed cost so far")}: <b>${format_currency(frm.doc.total_cost, cur)}</b>`,
+	];
+	if (frm.doc.goods_pending_fc > 0) {
+		parts.push(`${__("Goods still to pay")}: <b>${format_currency(frm.doc.goods_pending_fc, frm.doc.currency)}</b>`);
+	}
+	if (frm.doc.margin_balance > 0) {
+		parts.push(`${__("Margin held")}: ${format_currency(frm.doc.margin_balance, cur)}`);
+	}
+	frm.dashboard.set_headline(parts.join(" &nbsp;·&nbsp; "), frm.doc.transferred_on ? "green" : "blue");
+}
+
+function lc_view_buttons(frm) {
+	frm.add_custom_button(__("Cost Sheet"), () =>
+		frappe.set_route("query-report", "LC Cost Sheet", { letter_of_credit: frm.doc.name }), __("View"));
+	frm.add_custom_button(__("Journal Entries"), () =>
+		frappe.set_route("List", "Journal Entry", { letter_of_credit: frm.doc.name }), __("View"));
+}
+
+function open_bills(frm) {
+	return (frm.doc.costs || []).filter((c) => c.paid_via === "Acceptance" && !c.paid_on);
+}
 
 function lc_run(frm, action, values, dialog) {
 	return frappe.call({
@@ -103,23 +201,16 @@ function lc_run(frm, action, values, dialog) {
 	});
 }
 
-const bank_field = (frm) => ({
-	fieldname: "bank_account", label: __("Bank Account (Ledger)"), fieldtype: "Link", options: "Account",
+const bank_field = (frm, extra) => Object.assign({
+	fieldname: "bank_account", label: __("Paid From (Bank / Cash Ledger)"), fieldtype: "Link", options: "Account",
 	default: frm.doc.bank_gl_account,
 	get_query: () => ({ filters: { company: frm.doc.company, account_type: ["in", ["Bank", "Cash"]], is_group: 0 } }),
-});
+}, extra || {});
 
-function shipment_field(frm, statuses, label) {
-	const rows = (frm.doc.shipments || []).filter((r) => !statuses || statuses.includes(r.status));
-	return {
-		fieldname: "shipment_no", label: label || __("Shipment"), fieldtype: "Select", reqd: 1,
-		options: rows.map((r) => ({
-			value: String(r.shipment_no),
-			label: `${r.shipment_no}: ${r.transport_doc_no} · ${frm.doc.currency} ${format_number(r.amount, null, 2)} · ${__(r.status)}`,
-		})),
-		default: rows.length ? String(rows[0].shipment_no) : null,
-	};
-}
+const date_field = (label) => ({
+	fieldname: "posting_date", label: label || __("Date"), fieldtype: "Date", reqd: 1,
+	default: frappe.datetime.get_today(),
+});
 
 function lc_dialog(frm, title, fields, action, primary, prepare) {
 	const d = new frappe.ui.Dialog({
@@ -131,189 +222,162 @@ function lc_dialog(frm, title, fields, action, primary, prepare) {
 	return d;
 }
 
-function lc_open(frm) {
-	lc_dialog(frm, __("LC Opened by Bank"), [
-		{ fieldname: "lc_no", label: __("Bank LC Number"), fieldtype: "Data", reqd: 1 },
-		{ fieldname: "issue_date", label: __("Issue Date"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
-		{ fieldname: "margin", label: __("Margin Blocked by the Bank"), fieldtype: "Currency",
-			default: frm.doc.required_margin,
-			description: __("Posts Dr LC Margin / Cr Bank. 0 if the bank took none") },
-		bank_field(frm),
-	], "open", __("Mark Opened"));
-}
-
 function lc_margin(frm) {
 	lc_dialog(frm, __("Deposit Margin"), [
-		{ fieldname: "posting_date", label: __("Date"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
+		date_field(),
 		{ fieldname: "amount", label: __("Amount"), fieldtype: "Currency", reqd: 1 },
 		bank_field(frm),
 	], "deposit_margin", __("Deposit"));
 }
 
-function lc_charge(frm) {
-	lc_dialog(frm, __("Bank Charge on the LC"), [
-		{ fieldname: "charge_type", label: __("Charge"), fieldtype: "Select", reqd: 1,
-			options: "LC Opening Commission\nAmendment Charge\nSWIFT Charge\nAcceptance Commission\nConfirmation Charge\nDiscrepancy Fee\nInsurance\nOther",
-			default: frm.doc.status === "Applied" ? "LC Opening Commission" : "SWIFT Charge" },
-		{ fieldname: "posting_date", label: __("Date"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
-		{ fieldname: "amount", label: __("Amount"), fieldtype: "Currency", reqd: 1 },
-		bank_field(frm),
-		{ fieldname: "remarks", label: __("Remarks"), fieldtype: "Data" },
-	], "add_charge", __("Book Charge"));
-}
-
-function lc_amend(frm) {
-	const fields = [
-		{ fieldname: "posting_date", label: __("Amendment Date"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
-		{ fieldname: "beneficiary_accepted", label: __("Beneficiary Accepted"), fieldtype: "Check", default: 1 },
-		{ fieldtype: "Section Break", label: __("New Terms (leave unchanged ones as they are)") },
-		{ fieldname: "lc_amount", label: __("LC Amount"), fieldtype: "Float", default: frm.doc.lc_amount },
-		{ fieldname: "tolerance_plus", label: __("Tolerance + %"), fieldtype: "Percent", default: frm.doc.tolerance_plus },
-		{ fieldname: "tolerance_minus", label: __("Tolerance − %"), fieldtype: "Percent", default: frm.doc.tolerance_minus },
-		{ fieldname: "usance_days", label: __("Usance Days"), fieldtype: "Int", default: frm.doc.usance_days,
-			hidden: frm.doc.drafts_at !== "Usance" },
-		{ fieldtype: "Column Break" },
-		{ fieldname: "expiry_date", label: __("Expiry Date"), fieldtype: "Date", default: frm.doc.expiry_date },
-		{ fieldname: "latest_shipment_date", label: __("Latest Shipment Date"), fieldtype: "Date", default: frm.doc.latest_shipment_date },
-		{ fieldname: "presentation_days", label: __("Presentation Period (Days)"), fieldtype: "Int", default: frm.doc.presentation_days },
-		{ fieldname: "partial_shipment", label: __("Partial Shipment"), fieldtype: "Select", options: "Allowed\nNot Allowed", default: frm.doc.partial_shipment },
-		{ fieldname: "transhipment", label: __("Transhipment"), fieldtype: "Select", options: "Allowed\nNot Allowed", default: frm.doc.transhipment },
-		{ fieldtype: "Section Break" },
-		{ fieldname: "port_of_loading", label: __("Port / Place of Loading"), fieldtype: "Data", default: frm.doc.port_of_loading },
-		{ fieldname: "port_of_discharge", label: __("Port of Discharge"), fieldtype: "Data", default: frm.doc.port_of_discharge },
-		{ fieldname: "customs_point", label: __("Nepal Customs Point"), fieldtype: "Data", default: frm.doc.customs_point },
-		{ fieldtype: "Section Break", label: __("Amendment Charge") },
-		{ fieldname: "charge", label: __("Charge"), fieldtype: "Currency" },
-		bank_field(frm),
-		{ fieldname: "remarks", label: __("Remarks"), fieldtype: "Data" },
-	];
-	const terms = ["lc_amount", "tolerance_plus", "tolerance_minus", "usance_days", "expiry_date",
-		"latest_shipment_date", "presentation_days", "partial_shipment", "transhipment",
-		"port_of_loading", "port_of_discharge", "customs_point"];
-	lc_dialog(frm, __("Amend LC"), fields, "amend", __("Record Amendment"), (v) => {
-		const changes = {};
-		terms.forEach((t) => { changes[t] = v[t]; });
-		return {
-			posting_date: v.posting_date, beneficiary_accepted: v.beneficiary_accepted ? 1 : 0,
-			charge: v.charge || 0, bank_account: v.bank_account, remarks: v.remarks,
-			changes: JSON.stringify(changes),
-		};
+function lc_pay_goods(frm) {
+	const d = new frappe.ui.Dialog({
+		title: __("Pay Goods (Bank Debit)"),
+		fields: [
+			date_field(__("Bank Debit Date")),
+			{ fieldname: "fc_amount", label: __("Amount ({0})", [frm.doc.currency]), fieldtype: "Float", precision: 2,
+				reqd: 1, default: frm.doc.goods_pending_fc,
+				description: __("Still to pay: {0}", [format_currency(frm.doc.goods_pending_fc, frm.doc.currency)]) },
+			{ fieldname: "exchange_rate", label: __("Bank Rate ({0} → {1})", [frm.doc.currency, frm.doc.company_currency]),
+				fieldtype: "Float", precision: 6, reqd: 1, description: __("The rate on the bank's debit advice") },
+			{ fieldname: "margin_used", label: __("Margin Used"), fieldtype: "Currency",
+				description: __("Margin held: {0}", [format_currency(frm.doc.margin_balance, frm.doc.company_currency)]) },
+			bank_field(frm),
+			{ fieldname: "remarks", label: __("Remarks"), fieldtype: "Data" },
+			{ fieldname: "preview", fieldtype: "HTML" },
+		],
+		primary_action_label: __("Book Payment"),
+		primary_action: (values) => { delete values.preview; lc_run(frm, "pay_goods", values, d); },
 	});
-}
-
-function lc_add_shipment(frm) {
-	const doc_filter = () => ({
-		filters: { company: frm.doc.company, supplier: frm.doc.supplier, currency: frm.doc.currency, docstatus: 1 },
-	});
-	lc_dialog(frm, __("Add Shipment"), [
-		{ fieldname: "transport_doc_no", label: __("B/L / AWB / Consignment Note No."), fieldtype: "Data", reqd: 1 },
-		{ fieldname: "transport_doc_date", label: __("Shipment Date"), fieldtype: "Date", reqd: 1,
-			description: __("Must be on or before {0}", [frappe.datetime.str_to_user(frm.doc.latest_shipment_date)]) },
-		{ fieldname: "amount", label: __("Amount ({0})", [frm.doc.currency]), fieldtype: "Float", reqd: 1,
-			default: frm.doc.available_amount,
-			description: __("Available: {0} {1}", [frm.doc.currency, format_number(frm.doc.available_amount, null, 2)]) },
-		{ fieldtype: "Column Break" },
-		{ fieldname: "invoice_no", label: __("Supplier Invoice No."), fieldtype: "Data" },
-		{ fieldname: "invoice_date", label: __("Invoice Date"), fieldtype: "Date" },
-		{ fieldname: "purchase_receipt", label: __("Purchase Receipt"), fieldtype: "Link", options: "Purchase Receipt", get_query: doc_filter },
-		{ fieldname: "purchase_invoice", label: __("Purchase Invoice"), fieldtype: "Link", options: "Purchase Invoice", get_query: doc_filter },
-	], "add_shipment", __("Add"));
-}
-
-function lc_link(frm) {
-	const doc_filter = () => ({
-		filters: { company: frm.doc.company, supplier: frm.doc.supplier, currency: frm.doc.currency, docstatus: 1 },
-	});
-	lc_dialog(frm, __("Link Purchase Receipt / Invoice"), [
-		shipment_field(frm, ["Shipped", "Docs Received", "Accepted"]),
-		{ fieldname: "purchase_receipt", label: __("Purchase Receipt"), fieldtype: "Link", options: "Purchase Receipt", get_query: doc_filter },
-		{ fieldname: "purchase_invoice", label: __("Purchase Invoice"), fieldtype: "Link", options: "Purchase Invoice", get_query: doc_filter,
-			description: __("The settlement clears this invoice at its own exchange rate") },
-	], "link_documents", __("Link"));
-}
-
-function lc_docs(frm) {
-	lc_dialog(frm, __("Shipping Documents Received"), [
-		shipment_field(frm, ["Shipped"]),
-		{ fieldname: "posting_date", label: __("Received On"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
-		{ fieldname: "discrepancies", label: __("Discrepancies"), fieldtype: "Small Text",
-			description: __("As the bank's discrepancy notice lists them. Late presentation is added automatically") },
-	], "docs_received", __("Save"));
+	const suggest = () => {
+		const fc = d.get_value("fc_amount");
+		if (!fc) return;
+		frappe.xcall(`${LC_API}.margin_suggestion`, { name: frm.doc.name, fc_amount: fc })
+			.then((m) => d.set_value("margin_used", m));
+	};
+	const preview = () => {
+		const v = d.get_values(true);
+		const total = flt(v.fc_amount) * flt(v.exchange_rate);
+		if (!total) return;
+		const cur = frm.doc.company_currency;
+		d.fields_dict.preview.$wrapper.html(`<table class="table table-sm small" style="margin-top:8px">
+			<tr><td>${__("Goods in Transit (cost)")}</td><td class="text-right">${format_currency(total, cur)}</td></tr>
+			<tr><td>${__("From margin")}</td><td class="text-right">${format_currency(v.margin_used, cur)}</td></tr>
+			<tr><td>${__("From bank account")}</td><td class="text-right">${format_currency(total - flt(v.margin_used), cur)}</td></tr>
+		</table>`);
+	};
+	d.fields_dict.fc_amount.df.onchange = () => { suggest(); preview(); };
+	d.fields_dict.exchange_rate.df.onchange = preview;
+	d.fields_dict.margin_used.df.onchange = preview;
+	d.show();
+	suggest();
 }
 
 function lc_accept(frm) {
-	lc_dialog(frm, __("Accept Documents (Usance)"), [
-		shipment_field(frm, ["Docs Received"]),
-		{ fieldname: "posting_date", label: __("Accepted On"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
-		{ fieldname: "maturity_date", label: __("Maturity Date"), fieldtype: "Date",
-			description: __("Blank: {0} days from the {1}", [frm.doc.usance_days, frm.doc.usance_basis]) },
-	], "accept", __("Accept"));
+	lc_dialog(frm, __("Accept Bill (Usance)"), [
+		date_field(__("Accepted On")),
+		{ fieldname: "fc_amount", label: __("Bill Amount ({0})", [frm.doc.currency]), fieldtype: "Float", precision: 2,
+			reqd: 1, default: frm.doc.goods_pending_fc },
+		{ fieldname: "exchange_rate", label: __("Rate on Acceptance ({0} → {1})", [frm.doc.currency, frm.doc.company_currency]),
+			fieldtype: "Float", precision: 6, reqd: 1, default: frm.doc.exchange_rate,
+			description: __("The goods are valued at this rate; the difference at maturity goes to exchange gain / loss") },
+		{ fieldname: "maturity_date", label: __("Maturity Date"), fieldtype: "Date", reqd: 1, default: frm.doc.maturity_date },
+		{ fieldname: "remarks", label: __("Remarks"), fieldtype: "Data" },
+	], "accept_bill", __("Accept"));
 }
 
-function lc_settle(frm) {
-	const status = frm.doc.drafts_at === "Usance" ? "Accepted" : "Docs Received";
+function lc_pay_maturity(frm) {
+	const bills = open_bills(frm);
 	const d = new frappe.ui.Dialog({
-		title: __("Settle Shipment"),
+		title: __("Pay Bill at Maturity"),
 		fields: [
-			shipment_field(frm, [status]),
-			{ fieldname: "posting_date", label: __("Bank Debit Date"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
+			{ fieldname: "cost_row", label: __("Bill"), fieldtype: "Select", reqd: 1,
+				options: bills.map((b) => ({
+					value: b.name,
+					label: `${format_currency(b.fc_amount, frm.doc.currency)} · ${__("matures")} ${frappe.datetime.str_to_user(b.maturity_date)}`,
+				})),
+				default: bills.length ? bills[0].name : null },
+			date_field(__("Bank Debit Date")),
 			{ fieldname: "exchange_rate", label: __("Bank Rate ({0} → {1})", [frm.doc.currency, frm.doc.company_currency]),
-				fieldtype: "Float", precision: 6, reqd: 1, description: __("The rate on the bank's debit advice") },
-			{ fieldname: "margin_applied", label: __("Margin Used"), fieldtype: "Currency",
-				description: __("Margin held: {0}. Blank: this shipment's share", [format_currency(frm.doc.margin_balance, frm.doc.company_currency)]) },
+				fieldtype: "Float", precision: 6, reqd: 1 },
+			{ fieldname: "margin_used", label: __("Margin Used"), fieldtype: "Currency",
+				description: __("Margin held: {0}. Blank: this bill's share", [format_currency(frm.doc.margin_balance, frm.doc.company_currency)]) },
 			bank_field(frm),
 			{ fieldname: "preview", fieldtype: "HTML" },
 		],
-		primary_action_label: __("Settle"),
-		primary_action: (values) => {
-			delete values.preview;
-			lc_run(frm, "settle", values, d);
-		},
+		primary_action_label: __("Pay"),
+		primary_action: (values) => { delete values.preview; lc_run(frm, "pay_maturity", values, d); },
 	});
 	const preview = () => {
 		const v = d.get_values(true);
-		if (!v.shipment_no || !v.exchange_rate) return;
-		frappe.call({
-			method: `${LC_API}.settlement_preview`,
-			args: { name: frm.doc.name, shipment_no: v.shipment_no, exchange_rate: v.exchange_rate,
-				margin_applied: v.margin_applied },
-			callback: (r) => {
-				const p = r.message, cur = frm.doc.company_currency;
-				const diff = p.exchange_difference;
-				d.fields_dict.preview.$wrapper.html(`<table class="table table-sm small" style="margin-top:8px">
-					<tr><td>${__("Bank debit (incl. margin)")}</td><td class="text-right">${format_currency(p.bank_total, cur)}</td></tr>
-					<tr><td>${__("From margin")}</td><td class="text-right">${format_currency(p.margin_applied, cur)}</td></tr>
-					<tr><td>${__("From bank account")}</td><td class="text-right">${format_currency(p.bank_paid, cur)}</td></tr>
-					<tr><td>${__("Supplier cleared at booked rate {0}", [p.booked_rate])}${p.invoice ? ` (${p.invoice})` : ` (${__("advance")})`}</td>
-						<td class="text-right">${format_currency(p.supplier_company_amount, cur)}</td></tr>
-					<tr><td><b>${diff >= 0 ? __("Exchange loss") : __("Exchange gain")}</b></td>
-						<td class="text-right"><b>${format_currency(Math.abs(diff), cur)}</b></td></tr></table>`);
-			},
+		if (!v.cost_row || !v.exchange_rate) return;
+		frappe.xcall(`${LC_API}.maturity_preview`, {
+			name: frm.doc.name, cost_row: v.cost_row, exchange_rate: v.exchange_rate, margin_used: v.margin_used,
+		}).then((p) => {
+			const cur = frm.doc.company_currency, diff = p.exchange_difference;
+			d.fields_dict.preview.$wrapper.html(`<table class="table table-sm small" style="margin-top:8px">
+				<tr><td>${__("Bank debit")}</td><td class="text-right">${format_currency(p.bank_total, cur)}</td></tr>
+				<tr><td>${__("From margin")}</td><td class="text-right">${format_currency(p.margin_used, cur)}</td></tr>
+				<tr><td>${__("Supplier cleared at acceptance rate {0}", [p.booked_rate])}</td><td class="text-right">${format_currency(p.booked, cur)}</td></tr>
+				<tr><td><b>${diff >= 0 ? __("Exchange loss") : __("Exchange gain")}</b></td>
+					<td class="text-right"><b>${format_currency(Math.abs(diff), cur)}</b></td></tr></table>`);
 		});
 	};
-	["shipment_no", "exchange_rate", "margin_applied"].forEach((f) => {
-		d.fields_dict[f].df.onchange = preview;
-	});
+	["cost_row", "exchange_rate", "margin_used"].forEach((f) => { d.fields_dict[f].df.onchange = preview; });
 	d.show();
 }
 
-function lc_customs(frm) {
-	lc_dialog(frm, __("Customs Proof to the Bank"), [
-		shipment_field(frm, ["Settled"]),
-		{ fieldname: "customs_declaration_no", label: __("Customs Declaration (Pragyapan) No."), fieldtype: "Data", reqd: 1 },
-		{ fieldname: "customs_date", label: __("Customs Clearance Date"), fieldtype: "Date", reqd: 1 },
-		{ fieldname: "submitted_on", label: __("Given to Bank On"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
-	], "customs_proof", __("Save"));
+function lc_transfer(frm) {
+	if (frm.is_dirty()) {
+		frappe.msgprint(__("Save the form first."));
+		return;
+	}
+	frappe.xcall("avinashgroup_app.lc.transfer.transfer_preview", { name: frm.doc.name }).then((p) => {
+		const cur = frm.doc.company_currency;
+		const esc = frappe.utils.escape_html;
+		const rows = p.rows.map((r) => `<tr>
+			<td>${r.idx}</td><td>${esc(r.item_code || "")}<div class="text-muted">${esc(r.description || "")}</div></td>
+			<td class="text-right">${format_number(r.qty)} ${esc(r.uom || "")}</td>
+			<td>${__(r.transfer_to)}<div class="text-muted">${esc(r.target || "")}</div></td>
+			<td class="text-right">${format_currency(r.allocated_cost, cur)}</td>
+			<td class="text-right">${format_currency(r.landed_rate, cur)}</td></tr>`).join("");
+		const notes = [
+			...p.problems.map((m) => `<div class="text-danger">• ${m}</div>`),
+			...p.warnings.map((m) => `<div class="text-warning">• ${m}</div>`),
+		].join("");
+		const d = new frappe.ui.Dialog({
+			title: __("Transfer to Stock / Fixed Asset"),
+			size: "large",
+			fields: [
+				date_field(__("Transfer Date")),
+				{ fieldname: "info", fieldtype: "HTML", options: `
+					<p>${__("Landed cost in transit")}: <b>${format_currency(p.balance, cur)}</b>,
+					${__("shared by")} ${__(frm.doc.allocate_by === "Quantity" ? "quantity" : "value")}.</p>
+					<table class="table table-sm small"><tr><th>#</th><th>${__("Item")}</th><th class="text-right">${__("Qty")}</th>
+					<th>${__("To")}</th><th class="text-right">${__("Landed Cost")}</th><th class="text-right">${__("Per Unit")}</th></tr>${rows}</table>
+					${notes}
+					<p class="small text-muted">${__("Stock rows become one Material Receipt. Fixed-asset rows post one Journal Entry to the asset account and a draft Asset each, for you to complete and submit.")}</p>` },
+			],
+			primary_action_label: __("Transfer"),
+			primary_action: (values) => lc_run(frm, "transfer", { posting_date: values.posting_date }, d),
+		});
+		if (p.problems.length) d.get_primary_btn().prop("disabled", true);
+		d.set_value("posting_date", frm.doc.arrival_date || frappe.datetime.get_today());
+		d.show();
+	});
 }
 
 function lc_close(frm) {
 	lc_dialog(frm, __("Close LC"), [
-		{ fieldname: "posting_date", label: __("Closing Date"), fieldtype: "Date", reqd: 1, default: frappe.datetime.get_today() },
+		date_field(__("Closing Date")),
 		{ fieldname: "info", fieldtype: "HTML", options: `<p class="small text-muted">${
 			frm.doc.margin_balance > 0
 				? __("Margin of {0} still held is released back to the bank account below.", [format_currency(frm.doc.margin_balance, frm.doc.company_currency)])
 				: __("No margin is held.")}</p>` },
-		bank_field(frm),
+		bank_field(frm, { label: __("Margin Back To (Bank Ledger)") }),
+		{ fieldname: "residual_account", label: __("Clear Anything Left in Transit To"), fieldtype: "Link", options: "Account",
+			get_query: () => ({ filters: { company: frm.doc.company, is_group: 0 } }),
+			description: __("Only needed when a cost was booked after the transfer (or a few paisa of rounding)") },
 		{ fieldname: "remarks", label: __("Remarks"), fieldtype: "Data" },
 	], "close", __("Close LC"), (v) => { delete v.info; return v; });
 }

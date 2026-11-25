@@ -1,11 +1,16 @@
-"""Letter of Credit tests: the lifecycle, its entries, and every guard.
+"""Letter of Credit tests: the cost file, its entries, the transfer, and every guard.
 
 They run against an existing company (Grihalaxmi, which has an Exchange
-Gain/Loss account and company bank accounts) and copy one of its submitted
-stock-updating Purchase Invoices into a USD invoice for a throw-away supplier,
-so the settlement has a real invoice at a booked rate to clear. Everything is
+Gain/Loss account, company bank accounts, warehouses and Asset Categories) with
+a throw-away supplier, one stock item and one fixed-asset item. Everything is
 rolled back. Runner: docs/lc-management.md §Tests (`bench run-tests` fails at
 bootstrap on the dev bench).
+
+The worked example (sight LC, USD 10,000 at 135):
+    goods 1,350,000 + commission 5,000 + SWIFT 1,500 + insurance 3,000
+    + import duty 40,000 + excise 10,000 + freight 20,000   = 1,429,500 landed
+    customs VAT 30,000 + freight VAT 2,600                  =    32,600 VAT, not in cost
+    shared by value: steel 8,000 / 10,000 → 1,143,600, machine 2,000 → 285,900
 """
 
 import unittest
@@ -13,12 +18,11 @@ import unittest
 import frappe
 from frappe.utils import add_days, flt, nowdate
 
-from avinashgroup_app.lc import accounting, lifecycle
-from avinashgroup_app.lc.install import ensure_company_accounts
+from avinashgroup_app.lc import accounting, lifecycle, transfer
+from avinashgroup_app.lc.install import ensure_company_accounts, ensure_cost_types
 
 COMPANY = "Grihalaxmi Metal Industries Pvt. Ltd"
-BOOKED_RATE = 133.0  # the Purchase Invoice's conversion rate
-BANK_RATE = 135.0    # the bank's settlement rate: a loss of 2 per USD
+BANK_RATE = 135.0
 
 
 def _gl(voucher, account):
@@ -28,12 +32,20 @@ def _gl(voucher, account):
 	)[0][0])
 
 
+def _party_balance(supplier):
+	return flt(frappe.db.sql(
+		"select sum(credit) - sum(debit) from `tabGL Entry` where party_type = 'Supplier' and party = %s and is_cancelled = 0",
+		supplier,
+	)[0][0])
+
+
 class TestLetterOfCredit(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		frappe.set_user("Administrator")
 		frappe.db.savepoint("lc_class")
 		ensure_company_accounts([COMPANY])
+		ensure_cost_types()
 		frappe.db.set_single_value("LC Settings", "jv_type", "Bank Entry")
 		frappe.clear_document_cache("LC Settings", "LC Settings")
 		cls.accounts = accounting.get_company_accounts(COMPANY)
@@ -41,8 +53,14 @@ class TestLetterOfCredit(unittest.TestCase):
 			"Bank Account", filters={"company": COMPANY, "is_company_account": 1, "account": ["is", "set"]},
 			pluck="name", limit=1)[0]
 		cls.bank_gl = frappe.db.get_value("Bank Account", cls.bank_account, "account")
-		cls.supplier = cls.make_supplier()
-		cls.invoice = cls.make_usd_invoice(cls.supplier, 10000)
+		cls.supplier = cls.make_supplier("LC Test Steel Exporter")
+		cls.insurer = cls.make_supplier("LC Test Insurance Co")
+		cls.warehouse = frappe.get_all("Warehouse", filters={"company": COMPANY, "is_group": 0}, pluck="name", limit=1)[0]
+		cls.category = frappe.get_all("Asset Category Account", filters={"company_name": COMPANY},
+			pluck="parent", limit=1)[0]
+		cls.asset_account = transfer.fixed_asset_account(cls.category, COMPANY)
+		cls.steel = cls.make_item("LC-TEST-STEEL", stock=True)
+		cls.machine = cls.make_item("LC-TEST-MACHINE", stock=False)
 
 	@classmethod
 	def tearDownClass(cls):
@@ -58,278 +76,324 @@ class TestLetterOfCredit(unittest.TestCase):
 	# ── fixtures ──────────────────────────────────────────────────────────────
 
 	@classmethod
-	def make_supplier(cls):
+	def make_supplier(cls, name):
 		# Supplier Groups are company-scoped here: borrow one a company supplier uses.
 		group = frappe.db.get_value("Supplier", {"custom_company": COMPANY}, "supplier_group")
 		doc = frappe.get_doc({
-			"doctype": "Supplier", "supplier_name": "LC Test Steel Exporter", "supplier_group": group,
-			"default_currency": "USD", "country": "India",
+			"doctype": "Supplier", "supplier_name": name, "supplier_group": group, "country": "Nepal",
 			"custom_company": COMPANY,  # the app's Supplier naming needs a company
 		})
-		# ERPNext wants a USD invoice booked to a USD payable: give the supplier one.
-		usd = cls.make_usd_payable()
-		doc.append("accounts", {"company": COMPANY, "account": usd, "advance_account": usd})
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
 	@classmethod
-	def make_usd_payable(cls):
-		name = frappe.db.get_value("Account", {"company": COMPANY, "account_name": "LC Test Creditors USD"}, "name")
-		if name:
-			return name
-		parent = frappe.db.get_value("Account", frappe.db.get_value(
-			"Account", {"company": COMPANY, "account_type": "Payable", "is_group": 0, "account_currency": "NPR"},
-			"name"), "parent_account")
-		account = frappe.get_doc({
-			"doctype": "Account", "company": COMPANY, "account_name": "LC Test Creditors USD",
-			"parent_account": parent, "account_type": "Payable", "account_currency": "USD", "is_group": 0,
+	def make_item(cls, code, stock):
+		# Item Groups are company-scoped too: borrow one of the company's own items.
+		group = frappe.db.get_value("Item", {"is_stock_item": 1, "disabled": 0, "custom_company": COMPANY}, "item_group")
+		doc = frappe.get_doc({
+			"doctype": "Item", "item_code": code, "item_name": code, "item_group": group, "stock_uom": "Nos",
+			"is_stock_item": 1 if stock else 0, "is_fixed_asset": 0 if stock else 1,
+			"asset_category": None if stock else cls.category,
+			"custom_company": COMPANY,  # the app's Item naming needs a company
 		})
-		account.insert(ignore_permissions=True)
-		return account.name
+		doc.insert(ignore_permissions=True)
+		return doc.name
 
-	@classmethod
-	def make_usd_invoice(cls, supplier, usd):
-		template = frappe.get_all(
-			"Purchase Invoice", filters={"company": COMPANY, "docstatus": 1, "update_stock": 1, "is_return": 0},
-			pluck="name", limit=1, order_by="creation desc")[0]
-		pi = frappe.copy_doc(frappe.get_doc("Purchase Invoice", template))
-		pi.supplier = supplier
-		pi.supplier_name = "LC Test Steel Exporter"
-		pi.currency = "USD"
-		pi.conversion_rate = BOOKED_RATE
-		pi.posting_date = nowdate()
-		pi.set_posting_time = 1
-		pi.bill_no = "LC-TEST-INV"
-		# Addresses, contacts and price list belong to the template's supplier.
-		for field in ("supplier_address", "address_display", "contact_person", "contact_display",
-				"contact_mobile", "contact_email", "shipping_address", "shipping_address_display",
-				"buying_price_list", "price_list_currency", "plc_conversion_rate"):
-			if pi.meta.has_field(field):
-				pi.set(field, None)
-		pi.plc_conversion_rate = 1
-		# The copy carries the template's voucher numbers; Purchase Invoices on the
-		# test site are numbered by hand, so give it a fresh one.
-		for field in ("custom_name", "custom_fact_numbering"):
-			if pi.meta.has_field(field):
-				pi.set(field, None)
-		if pi.meta.has_field("custom_document_no"):
-			pi.custom_document_no = str(900000000 + int(frappe.generate_hash(length=5), 16))
-		pi.taxes = []
-		pi.taxes_and_charges = None
-		pi.items = pi.items[:1]
-		row = pi.items[0]
-		row.qty = 1
-		row.received_qty = 1
-		row.rate = usd
-		row.price_list_rate = usd
-		row.discount_percentage = 0
-		row.purchase_order = row.po_detail = row.purchase_receipt = row.pr_detail = None
-		pi.credit_to = None
-		pi.payment_schedule = []
-		pi.flags.ignore_permissions = True
-		pi.insert()
-		# The app may already submit a Purchase Invoice on insert; submit only if not.
-		pi = frappe.get_doc("Purchase Invoice", pi.name)
-		if pi.docstatus == 0:
-			pi.flags.ignore_permissions = True
-			pi.submit()
-		return pi.name
-
-	def make_lc(self, submit=True, **kw):
+	def make_lc(self, submit=True, items=None, **kw):
 		lc = frappe.new_doc("Letter of Credit")
 		lc.update({
 			"company": COMPANY, "supplier": self.supplier, "currency": "USD", "lc_amount": 10000,
-			"tolerance_plus": 5, "tolerance_minus": 5, "drafts_at": "Sight",
-			"expiry_date": add_days(nowdate(), 90), "latest_shipment_date": add_days(nowdate(), 60),
-			"customs_point": "Birgunj", "bank_account": self.bank_account,
-			"bci_reference": "BCI-TEST-1", "bci_date": nowdate(),
+			"lc_no": "TEST-LC-" + frappe.generate_hash(length=6), "posting_date": nowdate(),
+			"expiry_date": add_days(nowdate(), 120), "drafts_at": "Sight", "exchange_rate": 133,
+			"bank_account": self.bank_account, "set_warehouse": self.warehouse,
 		})
+		for row in items if items is not None else [
+			{"item_code": self.steel, "description": "MS plate", "qty": 100, "rate": 80, "transfer_to": "Stock"},
+			{"item_code": self.machine, "description": "Press", "qty": 1, "rate": 2000, "transfer_to": "Fixed Asset"},
+		]:
+			lc.append("items", row)
 		lc.update(kw)
-		lc.insert()
+		lc.insert(ignore_permissions=True)
 		if submit:
 			lc.submit()
-		return lc
-
-	def act(self, lc, action, **kw):
-		lifecycle.ACTIONS[action](frappe.get_doc("Letter of Credit", lc.name), **kw)
 		return frappe.get_doc("Letter of Credit", lc.name)
 
-	def opened(self, margin=200000, **kw):
-		lc = self.make_lc(**kw)
-		return self.act(lc, "open", lc_no="LC-001-TEST", issue_date=nowdate(), margin=margin)
+	def step(self, lc, action, **kw):
+		lifecycle.run_action(lc.name, action, **kw)
+		return frappe.get_doc("Letter of Credit", lc.name)
 
-	# ── tests ─────────────────────────────────────────────────────────────────
+	def arrive(self, lc):
+		lc.departure_date = nowdate()
+		lc.arrival_date = nowdate()
+		lc.save(ignore_permissions=True)
+		return frappe.get_doc("Letter of Credit", lc.name)
 
-	def test_sight_lc_end_to_end(self):
-		lc = self.make_lc()
-		self.assertEqual(lc.status, "Applied")
-		self.assertTrue(lc.documents, "default document checklist")
-		self.assertEqual(lc.firm_type, "Industry")
+	def book_example_costs(self, lc):
+		for cost_type, amount, vat, via in (
+			("LC Commission", 5000, 0, "Bank"),
+			("SWIFT Charge", 1500, 0, "Bank"),
+			("Marine Insurance", 3000, 0, "Party"),
+			("Import Duty (ID)", 40000, 0, "Bank"),
+			("Excise Duty (ED)", 10000, 0, "Bank"),
+			("Customs VAT", 30000, 0, "Bank"),
+			("Freight up to Border", 20000, 2600, "Party"),
+		):
+			lc = self.step(lc, "add_cost", cost_type=cost_type, amount=amount, vat_amount=vat, paid_via=via,
+				party=self.insurer if via == "Party" else None)
+		return lc
 
-		lc = self.act(lc, "add_charge", charge_type="LC Opening Commission", amount=5000)
-		lc = self.act(lc, "open", lc_no="LC-001-TEST", issue_date=nowdate(), margin=200000)
-		self.assertEqual(lc.status, "Opened")
-		self.assertEqual(flt(lc.margin_balance), 200000)
-		opened_je = lc.events[-1].journal_entry
-		self.assertEqual(_gl(opened_je, self.accounts.margin_account), 200000)
-		self.assertEqual(_gl(opened_je, self.bank_gl), -200000)
+	# ── the whole run ─────────────────────────────────────────────────────────
 
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL-1", transport_doc_date=nowdate(), amount=10000,
-			purchase_invoice=self.invoice)
-		self.assertEqual(flt(lc.available_amount), 500)
-		lc = self.act(lc, "docs_received", shipment_no=1, posting_date=nowdate())
-		lc = self.act(lc, "settle", shipment_no=1, posting_date=nowdate(), exchange_rate=BANK_RATE)
+	def test_sight_run_to_stock_and_asset(self):
+		lc = self.make_lc(margin_amount=50000)
+		self.assertEqual(lc.status, "Open")
+		self.assertEqual(lc.margin_balance, 50000)
+		self.assertEqual(_gl(lc.events[0].journal_entry, self.accounts.margin_account), 50000)
 
-		s = lc.shipments[0]
-		self.assertEqual(s.status, "Settled")
-		self.assertEqual(flt(s.amount_npr), 1350000)
-		self.assertEqual(flt(s.margin_applied), 200000, "last drawing uses all the margin")
-		self.assertEqual(flt(s.exchange_difference), 20000)
-		self.assertEqual(lc.status, "Settled")
-		je = s.settlement_journal_entry
-		gain_loss = frappe.get_cached_value("Company", COMPANY, "exchange_gain_loss_account")
-		self.assertEqual(_gl(je, gain_loss), 20000)
-		self.assertEqual(_gl(je, self.accounts.margin_account), -200000)
-		self.assertEqual(_gl(je, self.bank_gl), -1150000)
-		self.assertAlmostEqual(flt(frappe.db.get_value("Purchase Invoice", self.invoice, "outstanding_amount")), 0, 2)
+		lc = self.book_example_costs(lc)
+		self.assertEqual(lc.bank_charges, 6500)
+		self.assertEqual(lc.insurance_cost, 3000)
+		self.assertEqual(lc.customs_cost, 50000)
+		self.assertEqual(lc.freight_cost, 20000)
+		self.assertEqual(lc.vat_total, 32600)
+		vat_je = next(c.journal_entry for c in lc.costs if c.cost_type == "Customs VAT")
+		self.assertEqual(_gl(vat_je, self.accounts.vat_account), 30000)
+		self.assertEqual(_gl(vat_je, self.accounts.transit_account), 0)
+		self.assertEqual(_party_balance(self.insurer), 3000 + 22600)
 
-		lc = self.act(lc, "customs_proof", shipment_no=1, customs_declaration_no="PRG-77", customs_date=nowdate())
-		self.assertTrue(lc.shipments[0].customs_proof_submitted_on)
-		lc = self.act(lc, "close", posting_date=nowdate())
+		# The last payment uses all the margin by default.
+		lc = self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		pay = lc.costs[-1]
+		self.assertEqual(pay.amount, 1350000)
+		self.assertEqual(pay.margin_used, 50000)
+		self.assertEqual(_gl(pay.journal_entry, self.bank_gl), -1300000)
+		self.assertEqual(lc.margin_balance, 0)
+		self.assertEqual(lc.goods_pending_fc, 0)
+		self.assertEqual(lc.total_cost, 1429500)
+		self.assertEqual(accounting.transit_balance(lc), 1429500)
+
+		lc.departure_date = nowdate()
+		lc.save(ignore_permissions=True)
+		self.assertEqual(frappe.db.get_value("Letter of Credit", lc.name, "status"), "In Transit")
+		lc = self.arrive(frappe.get_doc("Letter of Credit", lc.name))
+		self.assertEqual(lc.status, "Arrived")
+
+		lc = self.step(lc, "transfer")
+		self.assertEqual(lc.status, "Transferred")
+		steel, machine = lc.items
+		self.assertAlmostEqual(steel.allocated_cost, 1143600, places=0)
+		self.assertEqual(machine.allocated_cost, 285900)
+		self.assertAlmostEqual(steel.landed_rate, 11436, places=2)
+		se = frappe.get_doc("Stock Entry", steel.stock_entry)
+		self.assertEqual(se.docstatus, 1)
+		self.assertEqual(se.letter_of_credit, lc.name)
+		self.assertAlmostEqual(se.items[0].valuation_rate, 11436, places=2)
+		self.assertEqual(_gl(machine.asset_journal_entry, self.asset_account), 285900)
+		asset = frappe.get_doc("Asset", machine.asset)
+		self.assertEqual(asset.docstatus, 0)
+		self.assertEqual(asset.gross_purchase_amount, 285900)
+		self.assertEqual(asset.letter_of_credit, lc.name)
+		self.assertAlmostEqual(accounting.transit_balance(lc), 0, places=1)
+
+		lc = self.step(lc, "close", residual_account=frappe.get_cached_value("Company", COMPANY, "round_off_account"))
 		self.assertEqual(lc.status, "Closed")
-		self.assertEqual(flt(lc.margin_balance), 0)
+		self.assertEqual(accounting.transit_balance(lc), 0)
 
-	def test_close_releases_unused_margin(self):
-		lc = self.opened(partial_shipment="Allowed")
-		lc = self.act(lc, "close", posting_date=nowdate())
-		self.assertEqual(flt(lc.margin_released), 200000)
-		je = lc.events[-1].journal_entry
-		self.assertEqual(_gl(je, self.bank_gl), 200000)
-
-	def test_settlement_without_invoice_is_an_advance(self):
-		lc = self.opened()
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL-2", transport_doc_date=nowdate(), amount=4000)
-		lc = self.act(lc, "docs_received", shipment_no=1)
-		lc = self.act(lc, "settle", shipment_no=1, exchange_rate=BANK_RATE, margin_applied=0)
-		s = lc.shipments[0]
-		self.assertEqual(flt(s.exchange_difference), 0)
-		self.assertEqual(lc.status, "Partly Settled")
-		row = frappe.db.get_value("Journal Entry Account",
-			{"parent": s.settlement_journal_entry, "party": self.supplier}, ["is_advance", "debit"], as_dict=True)
-		self.assertEqual(row.is_advance, "Yes")
-		self.assertEqual(flt(row.debit), 540000)
-
-	def test_usance_accept_sets_maturity(self):
-		lc = self.opened(drafts_at="Usance", usance_days=90, usance_basis="B/L Date")
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL-3", transport_doc_date=nowdate(), amount=10000)
-		lc = self.act(lc, "docs_received", shipment_no=1)
-		with self.assertRaises(frappe.ValidationError):
-			self.act(lc, "settle", shipment_no=1, exchange_rate=BANK_RATE)  # not accepted yet
-		lc = self.act(lc, "accept", shipment_no=1)
-		self.assertEqual(str(lc.shipments[0].maturity_date), str(add_days(nowdate(), 90)))
-
-	def test_trading_usance_limit(self):
-		row = next(r for r in frappe.get_doc("LC Settings").company_accounts if r.company == COMPANY)
-		frappe.db.set_value("LC Company Account", row.name, "firm_type", "Trading")
-		frappe.clear_document_cache("LC Settings", "LC Settings")
-		with self.assertRaises(frappe.ValidationError):
-			self.make_lc(submit=False, drafts_at="Usance", usance_days=200)
-		lc = self.make_lc(submit=False, drafts_at="Usance", usance_days=180)
-		self.assertEqual(lc.margin_percent, 10)
-
-	def test_bci_required_for_large_sight_lc(self):
-		with self.assertRaises(frappe.ValidationError):
-			self.make_lc(lc_amount=60000, bci_reference=None, bci_date=None)
-		with self.assertRaises(frappe.ValidationError):
-			self.make_lc(lc_amount=60000, bci_date=add_days(nowdate(), -400))
-		# Below the threshold, and usance at any amount, need no BCI report.
-		self.make_lc(lc_amount=40000, bci_reference=None, bci_date=None)
-		self.make_lc(lc_amount=60000, bci_reference=None, bci_date=None, drafts_at="Usance", usance_days=60)
-
-	def test_tolerance_and_dates_guard_shipments(self):
-		lc = self.opened()
-		with self.assertRaises(frappe.ValidationError):
-			self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=10600)
-		with self.assertRaises(frappe.ValidationError):
-			self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=add_days(nowdate(), 61), amount=100)
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=10500)
-		self.assertEqual(flt(lc.available_amount), 0)
-
-	def test_partial_shipment_not_allowed(self):
-		lc = self.opened(partial_shipment="Not Allowed")
-		with self.assertRaises(frappe.ValidationError):
-			self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=5000)
-
-	def test_amendment_and_undo(self):
-		lc = self.opened()
-		new_expiry = str(add_days(nowdate(), 120))
-		lc = self.act(lc, "amend", changes={"lc_amount": 12000, "expiry_date": new_expiry}, charge=1500)
-		self.assertEqual(flt(lc.lc_amount), 12000)
-		self.assertEqual(len(lc.amendments), 2)
-		self.assertEqual(flt(lc.charges_total), 1500)
-		charge_je = lc.events[-1].journal_entry
-
-		lifecycle.undo_last_step(frappe.get_doc("Letter of Credit", lc.name))
+	def test_costs_typed_into_the_grid(self):
+		# Typed into the draft: posted on submit.
+		lc = self.make_lc(submit=False)
+		lc.append("costs", {"cost_type": "LC Commission", "amount": 5000})
+		lc.save(ignore_permissions=True)
+		self.assertFalse(lc.costs[0].journal_entry)
+		self.assertEqual(lc.costs[0].cost_group, "Bank Charges")
+		lc.submit()
 		lc = frappe.get_doc("Letter of Credit", lc.name)
-		self.assertEqual(flt(lc.lc_amount), 10000)
-		self.assertFalse(lc.amendments)
-		self.assertFalse(lc.charges)
-		self.assertEqual(frappe.db.get_value("Journal Entry", charge_je, "docstatus"), 2)
+		self.assertTrue(lc.costs[0].journal_entry)
+		self.assertEqual(lc.bank_charges, 5000)
 
-	def test_undo_settlement_restores_shipment(self):
-		lc = self.opened()
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=10000,
-			purchase_invoice=self.invoice)
-		lc = self.act(lc, "docs_received", shipment_no=1)
-		lc = self.act(lc, "settle", shipment_no=1, exchange_rate=BANK_RATE)
-		je = lc.shipments[0].settlement_journal_entry
-		lifecycle.undo_last_step(frappe.get_doc("Letter of Credit", lc.name))
+		# Added on the submitted LC: posted on Update.
+		lc.append("costs", {"cost_type": "SWIFT Charge", "amount": 1500})
+		lc.append("costs", {"cost_type": "Documentation Charge", "amount": 800, "vat_amount": 104})
+		lc.append("costs", {"cost_type": "Marine Insurance", "amount": 3000, "paid_via": "Party", "party": self.insurer})
+		lc.append("costs", {"cost_type": "Customs VAT", "amount": 30000})
+		lc.save(ignore_permissions=True)
 		lc = frappe.get_doc("Letter of Credit", lc.name)
-		self.assertEqual(lc.shipments[0].status, "Docs Received")
-		self.assertFalse(lc.shipments[0].settlement_journal_entry)
-		self.assertEqual(lc.status, "Opened")
-		self.assertEqual(flt(lc.margin_balance), 200000)
-		self.assertEqual(frappe.db.get_value("Journal Entry", je, "docstatus"), 2)
-		self.assertAlmostEqual(flt(frappe.db.get_value("Purchase Invoice", self.invoice, "outstanding_amount")), 10000, 2)
+		self.assertTrue(all(c.journal_entry for c in lc.costs))
+		self.assertEqual(lc.bank_charges, 7300)
+		self.assertEqual(lc.insurance_cost, 3000)
+		self.assertEqual(lc.vat_total, 30104)
+		self.assertEqual(accounting.transit_balance(lc), 10300)
+		self.assertEqual(_party_balance(self.insurer), 3000)
+		self.assertEqual(len(lc.events), 6)  # Opened + five costs
 
-	def test_guards_on_linked_documents(self):
-		lc = self.opened()
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=10000,
-			purchase_invoice=self.invoice)
+		# A posted row cannot be changed in place.
+		lc.costs[1].amount = 1600
 		with self.assertRaises(frappe.ValidationError):
-			frappe.get_doc("Purchase Invoice", self.invoice).cancel()
-		with self.assertRaises(frappe.ValidationError):
-			frappe.get_doc("Journal Entry", lc.events[1].journal_entry).cancel()
-		other = self.make_lc()
-		other = self.act(other, "open", lc_no="LC-002-TEST", margin=0)
-		with self.assertRaises(frappe.ValidationError):
-			self.act(other, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=100,
-				purchase_invoice=self.invoice)
+			lc.save(ignore_permissions=True)
 
-	def test_cancel_only_before_later_steps(self):
+		# Deleting it cancels its entry and its History row.
+		lc = frappe.get_doc("Letter of Credit", lc.name)
+		swift = lc.costs[1]
+		lc.costs.remove(swift)
+		lc.save(ignore_permissions=True)
+		lc = frappe.get_doc("Letter of Credit", lc.name)
+		self.assertEqual(frappe.db.get_value("Journal Entry", swift.journal_entry, "docstatus"), 2)
+		self.assertEqual(lc.bank_charges, 5800)
+		self.assertEqual(len(lc.events), 5)
+		self.assertEqual(accounting.transit_balance(lc), 8800)
+
+		# Undo still takes the newest step (the Customs VAT row) off cleanly.
+		lifecycle.undo_last_step(lc)
+		lc = frappe.get_doc("Letter of Credit", lc.name)
+		self.assertEqual(lc.vat_total, 104)
+		self.assertEqual(lc.bank_charges, 5800)
+
+	def test_usance_accept_then_pay_at_maturity(self):
+		lc = self.make_lc(drafts_at="Usance", usance_days=90, maturity_date=add_days(nowdate(), 90), margin_amount=20000)
+		with self.assertRaises(frappe.ValidationError):
+			self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		lc = self.step(lc, "accept_bill", fc_amount=10000, exchange_rate=133)
+		bill = lc.costs[-1]
+		self.assertEqual(bill.amount, 1330000)
+		self.assertEqual(lc.goods_cost, 1330000)
+		self.assertEqual(lc.acceptance_outstanding_fc, 10000)
+		self.assertEqual(_party_balance(self.supplier), 1330000)
+
+		preview = lifecycle.maturity_preview(lc.name, bill.name, BANK_RATE)
+		self.assertEqual(preview.exchange_difference, 20000)
+		self.assertEqual(preview.margin_used, 20000)
+
+		lc = self.step(lc, "pay_maturity", cost_row=bill.name, exchange_rate=BANK_RATE)
+		bill = lc.costs[-1]
+		self.assertEqual(bill.exchange_difference, 20000)
+		gain_loss = frappe.get_cached_value("Company", COMPANY, "exchange_gain_loss_account")
+		self.assertEqual(_gl(bill.maturity_journal_entry, gain_loss), 20000)
+		self.assertEqual(_party_balance(self.supplier), 0)
+		# The loss is not cost: the goods stay at the acceptance rate.
+		self.assertEqual(lc.total_cost, 1330000)
+		self.assertEqual(lc.acceptance_outstanding_fc, 0)
+		self.assertEqual(lc.margin_balance, 0)
+
+	def test_undo_transfer_and_payment(self):
 		lc = self.make_lc()
-		lc = self.act(lc, "add_charge", amount=100)
-		with self.assertRaises(frappe.ValidationError):
-			frappe.get_doc("Letter of Credit", lc.name).cancel()
+		lc = self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		lc = self.step(self.arrive(lc), "transfer")
+		se, asset, je = lc.items[0].stock_entry, lc.items[1].asset, lc.items[1].asset_journal_entry
+
 		lifecycle.undo_last_step(frappe.get_doc("Letter of Credit", lc.name))
 		lc = frappe.get_doc("Letter of Credit", lc.name)
+		self.assertEqual(lc.status, "Arrived")
+		self.assertFalse(lc.transferred_on)
+		self.assertFalse(lc.items[0].stock_entry)
+		self.assertEqual(frappe.db.get_value("Stock Entry", se, "docstatus"), 2)
+		self.assertEqual(frappe.db.get_value("Journal Entry", je, "docstatus"), 2)
+		self.assertFalse(frappe.db.exists("Asset", asset))
+		self.assertEqual(accounting.transit_balance(lc), 1350000)
+
+		pay_je = lc.costs[-1].journal_entry
+		lifecycle.undo_last_step(lc)
+		lc = frappe.get_doc("Letter of Credit", lc.name)
+		self.assertFalse(lc.costs)
+		self.assertEqual(lc.goods_pending_fc, 10000)
+		self.assertEqual(frappe.db.get_value("Journal Entry", pay_je, "docstatus"), 2)
+
+	def test_undo_refused_once_asset_submitted(self):
+		lc = self.make_lc(items=[{"item_code": self.machine, "description": "Press", "qty": 1, "rate": 10000,
+			"transfer_to": "Fixed Asset"}])
+		lc = self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		lc = self.step(self.arrive(lc), "transfer")
+		frappe.db.set_value("Asset", lc.items[0].asset, "docstatus", 1)  # as if the user submitted it
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.undo_last_step(lc)
+
+	# ── guards ────────────────────────────────────────────────────────────────
+
+	def test_cannot_cancel_lc_documents_from_their_forms(self):
+		lc = self.make_lc()
+		lc = self.step(lc, "add_cost", cost_type="SWIFT Charge", amount=1500)
+		je = frappe.get_doc("Journal Entry", lc.costs[0].journal_entry)
+		with self.assertRaises(frappe.ValidationError):
+			je.cancel()
+		lc = self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		lc = self.step(self.arrive(lc), "transfer")
+		se = frappe.get_doc("Stock Entry", lc.items[0].stock_entry)
+		with self.assertRaises(frappe.ValidationError):
+			se.cancel()
+
+	def test_goods_cannot_exceed_lc_amount_and_tolerance(self):
+		lc = self.make_lc(tolerance_plus=5)
+		lc = self.step(lc, "pay_goods", fc_amount=10400, exchange_rate=BANK_RATE)
+		with self.assertRaises(frappe.ValidationError):
+			self.step(lc, "pay_goods", fc_amount=200, exchange_rate=BANK_RATE)
+		lc.lc_amount = 9000  # amendment below what is already paid
+		with self.assertRaises(frappe.ValidationError):
+			lc.save(ignore_permissions=True)
+
+	def test_transfer_needs_arrival_goods_and_targets(self):
+		lc = self.make_lc()
+		with self.assertRaises(frappe.ValidationError):
+			self.step(lc, "transfer")  # not arrived, goods not paid
+		lc = self.arrive(lc)
+		self.assertTrue(any("goods payment" in p for p in transfer.preview(lc)["problems"]))
+		lc = self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		lc.items[0].item_code = self.machine  # a fixed-asset item sent to stock
+		lc.save(ignore_permissions=True)
+		lc = frappe.get_doc("Letter of Credit", lc.name)
+		self.assertTrue(any("not a stock item" in p for p in transfer.preview(lc)["problems"]))
+
+	def test_close_needs_transfer_and_clears_late_cost(self):
+		lc = self.make_lc()
+		lc = self.step(lc, "pay_goods", fc_amount=10000, exchange_rate=BANK_RATE)
+		with self.assertRaises(frappe.ValidationError):
+			self.step(lc, "close")
+		lc = self.step(self.arrive(lc), "transfer")
+		lc = self.step(lc, "add_cost", cost_type="Documentation Charge", amount=700)  # after the transfer
+		with self.assertRaises(frappe.ValidationError):
+			self.step(lc, "close")
+		expense = frappe.get_cached_value("Company", COMPANY, "round_off_account")
+		lc = self.step(lc, "close", residual_account=expense)
+		self.assertEqual(lc.status, "Closed")
+		self.assertAlmostEqual(accounting.transit_balance(lc), 0, places=2)
+
+	def test_cancel_only_before_any_step(self):
+		lc = self.make_lc(margin_amount=10000)
+		lc = self.step(lc, "add_cost", cost_type="LC Commission", amount=2000)
+		with self.assertRaises(frappe.ValidationError):
+			lc.cancel()
+		lifecycle.undo_last_step(frappe.get_doc("Letter of Credit", lc.name))
+		lc = frappe.get_doc("Letter of Credit", lc.name)
+		margin_je = lc.events[0].journal_entry
 		lc.cancel()
 		self.assertEqual(frappe.db.get_value("Letter of Credit", lc.name, "status"), "Cancelled")
+		self.assertEqual(frappe.db.get_value("Journal Entry", margin_je, "docstatus"), 2)
 
-	def test_landed_cost_voucher_takes_pending_charges(self):
-		lc = self.opened()
-		lc = self.act(lc, "add_charge", charge_type="SWIFT Charge", amount=1500)
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL", transport_doc_date=nowdate(), amount=10000,
-			purchase_invoice=self.invoice)
-		out = accounting.make_landed_cost_voucher(lc.name)
-		self.assertEqual(out["letter_of_credit"], lc.name)
-		self.assertEqual(flt(out["taxes"][0]["amount"]), 1500)
-		self.assertEqual(out["purchase_receipts"][0]["receipt_document"], self.invoice)
-		self.assertTrue(out["items"])
+	def test_submit_needs_lc_no(self):
+		lc = self.make_lc(submit=False, lc_no=None)
+		with self.assertRaises(frappe.ValidationError):
+			lc.submit()
 
-	def test_make_from_purchase_order_and_hint(self):
-		hint = lifecycle.purchase_order_hint("does-not-exist")
-		self.assertIsNone(hint)
+	# ── NRB rules ─────────────────────────────────────────────────────────────
+
+	def test_trading_firm_usance_limit_and_margin(self):
+		settings = frappe.get_doc("LC Settings")
+		row = next(r for r in settings.company_accounts if r.company == COMPANY)
+		row.firm_type = "Trading"
+		settings.save(ignore_permissions=True)
+		frappe.clear_document_cache("LC Settings", "LC Settings")
+		with self.assertRaises(frappe.ValidationError):
+			self.make_lc(submit=False, drafts_at="Usance", usance_days=181)
+		lc = self.make_lc(submit=False, drafts_at="Usance", usance_days=180)
+		self.assertEqual(lc.margin_percent, flt(settings.margin_trading))
+
+	def test_bci_needed_for_large_sight_lc(self):
+		items = [{"item_code": self.steel, "description": "MS plate", "qty": 1000, "rate": 60, "transfer_to": "Stock"}]
+		lc = self.make_lc(submit=False, items=items, lc_amount=60000)
+		with self.assertRaises(frappe.ValidationError):
+			lc.submit()
+		lc = self.make_lc(items=items, lc_amount=60000, bci_reference="BCI-1", bci_date=nowdate())
+		self.assertEqual(lc.status, "Open")
+
+	# ── output ────────────────────────────────────────────────────────────────
 
 	def test_reports_digest_and_print(self):
 		from avinashgroup_app.lc import notifications
@@ -338,26 +402,28 @@ class TestLetterOfCredit(unittest.TestCase):
 		from avinashgroup_app.lc.report.lc_maturity import lc_maturity
 		from avinashgroup_app.lc.report.lc_register import lc_register
 
-		lc = self.opened(drafts_at="Usance", usance_days=5, latest_shipment_date=add_days(nowdate(), 3))
-		lc = self.act(lc, "add_charge", amount=2500)
-		lc = self.act(lc, "add_shipment", transport_doc_no="BL-R", transport_doc_date=nowdate(), amount=6000)
-		lc = self.act(lc, "docs_received", shipment_no=1)
-		lc = self.act(lc, "accept", shipment_no=1)
+		lc = self.make_lc(drafts_at="Usance", usance_days=30, maturity_date=add_days(nowdate(), 10))
+		lc = self.book_example_costs(lc)
+		lc = self.step(lc, "accept_bill", fc_amount=10000, exchange_rate=133)
+
+		_cols, rows = lc_cost_sheet.execute({"letter_of_credit": lc.name})
+		total = next(r for r in rows if r.get("particulars") == "Total Landed Cost")
+		self.assertEqual(total["amount"], lc.total_cost)
+		self.assertEqual(total["vat"], 32600)
+		items_total = rows[-1]
+		self.assertAlmostEqual(items_total["amount"], lc.total_cost, places=1)
 
 		_cols, rows = lc_register.execute({"company": COMPANY})
 		self.assertIn(lc.name, [r.name for r in rows])
 		_cols, rows = lc_maturity.execute({"company": COMPANY})
-		self.assertEqual([r.days for r in rows if r.name == lc.name], [5])
+		self.assertIn(lc.name, [r.name for r in rows])
 		_cols, rows = lc_margin_and_charges.execute({"company": COMPANY})
-		self.assertTrue(any(flt(r.pending) >= 2500 for r in rows))
-		_cols, rows = lc_cost_sheet.execute({"letter_of_credit": lc.name})
-		self.assertEqual(flt(rows[0].charges), 2500)
+		self.assertTrue(any(flt(r.customs_cost) >= 50000 for r in rows))
 
 		digest = notifications.digest_rows(days_ahead=15)
-		self.assertIn(lc.name, [r.name for r in digest["shipping"]])
 		self.assertIn(lc.name, [r.name for r in digest["maturing"]])
-		html = frappe.render_template("avinashgroup_app/lc/templates/lc_digest.html",
-			{"rows": digest, "today": frappe.utils.getdate(), "days": 15})
-		self.assertIn(lc.name, html)
-		self.assertIn("LC-001-TEST", frappe.get_print("Letter of Credit", lc.name, print_format="LC Summary"))
 
+		for print_format in ("LC Summary", "LC Cost Sheet"):
+			html = frappe.get_print("Letter of Credit", lc.name, print_format=print_format)
+			self.assertIn(lc.lc_no, html)
+			self.assertIn("Import Duty (ID)" if print_format == "LC Cost Sheet" else "Total Landed Cost", html)
