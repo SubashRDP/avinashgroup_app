@@ -1,0 +1,99 @@
+{
+ "actions": [],
+ "creation": "2026-11-23 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "is_stopped",
+  "interval_hours",
+  "resume_paused_entries",
+  "column_break_status",
+  "started_from",
+  "last_run_on",
+  "last_run_result"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "description": "Also needs Auto Reconcile Payments ticked in Accounts Settings.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Run Automatically"
+  },
+  {
+   "default": "0",
+   "depends_on": "enabled",
+   "description": "Set by the Stop / Resume button. While stopped, the scheduled job does nothing. Started From is kept, so Resume also picks up entries made while stopped.",
+   "fieldname": "is_stopped",
+   "fieldtype": "Check",
+   "label": "Stopped",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "description": "Run once every this many hours.",
+   "fieldname": "interval_hours",
+   "fieldtype": "Int",
+   "label": "Run Every (Hours)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Each run also resumes old Paused Process Payment Reconciliation entries, keeping at most 20 Running.",
+   "fieldname": "resume_paused_entries",
+   "fieldtype": "Check",
+   "label": "Resume Paused Entries"
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Only invoices and payments created after this time are picked up. Set when Run Automatically is ticked.",
+   "fieldname": "started_from",
+   "fieldtype": "Datetime",
+   "label": "Started From",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_run_on",
+   "fieldtype": "Datetime",
+   "label": "Last Run On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_run_result",
+   "fieldtype": "Small Text",
+   "label": "Last Run Result",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-11-24 11:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Avinash Group App",
+ "name": "Bulk Reconciliation Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Accounts Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

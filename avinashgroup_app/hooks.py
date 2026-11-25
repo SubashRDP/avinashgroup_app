@@ -717,6 +717,12 @@ scheduler_events = {
         "20 */4 * * *": [
             "avinashgroup_app.ceo_dashboard.credit_snapshot.scheduled_build",
         ],
+        # Bulk Payment Reconciliation for customers with new invoices or payments.
+        # Checked hourly at :25; Bulk Reconciliation Settings decides if it is on
+        # and how many hours apart it runs.
+        "25 * * * *": [
+            "avinashgroup_app.avinash_group_app.doctype.bulk_payment_reconciliation.scheduled.scheduled_run",
+        ],
     },
 }
 

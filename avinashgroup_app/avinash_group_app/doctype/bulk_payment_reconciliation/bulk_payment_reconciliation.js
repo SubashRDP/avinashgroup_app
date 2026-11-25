@@ -3,6 +3,7 @@
 // party from bulk_payment_reconciliation.get_parties.
 // The account / date fields on the main form are copied into every row: when a
 // row is added, when Get Parties fills the table, and when a main field changes.
+// The From dates start at the company's latest Opening Entry.
 // Submitting creates one Process Payment Reconciliation per row (server side, on_submit).
 
 // Main-form fields that have a field of the same name in each party row.
@@ -67,10 +68,18 @@ frappe.ui.form.on("Bulk Payment Reconciliation", {
 		if (frm.doc.docstatus === 0) {
 			frm.add_custom_button(__("Get Parties"), () => frm.events.fill_parties(frm));
 		}
+		if (frm.is_new() && !frm.doc.from_invoice_date && !frm.doc.from_payment_date) {
+			set_opening_dates(frm);
+		}
+	},
+
+	company(frm) {
+		set_opening_dates(frm);
 	},
 
 	party_type(frm) {
 		set_party_type_on_rows(frm);
+		set_opening_dates(frm);
 	},
 
 	// Replaces the whole Parties table (rows added by hand are removed too).
@@ -87,6 +96,7 @@ frappe.ui.form.on("Bulk Payment Reconciliation", {
 				company: frm.doc.company,
 				party_type: frm.doc.party_type,
 				only_with_open_items: frm.doc.only_with_open_items,
+				from_date: open_items_from_date(frm),
 			},
 			freeze: true,
 			freeze_message: __("Getting parties..."),
@@ -123,6 +133,28 @@ OTHER_FIELDS.forEach((fieldname) => {
 		copy_to_rows(frm, fieldname);
 	});
 });
+
+// From Invoice Date and From Payment Date start at the company's latest
+// Opening Entry. They stay editable: clear them to include older documents.
+function set_opening_dates(frm) {
+	if (frm.doc.docstatus !== 0 || !frm.doc.company || !frm.doc.party_type) return;
+	frappe.call({
+		method: "avinashgroup_app.avinash_group_app.doctype.bulk_payment_reconciliation.bulk_payment_reconciliation.get_opening_date",
+		args: { company: frm.doc.company, party_type: frm.doc.party_type },
+		callback: (r) => {
+			frm.set_value("from_invoice_date", r.message || null);
+			frm.set_value("from_payment_date", r.message || null);
+		},
+	});
+}
+
+// Date for the "has something to match" check in Get Parties: the earlier of
+// the two From dates, or none when either is blank.
+function open_items_from_date(frm) {
+	const dates = [frm.doc.from_invoice_date, frm.doc.from_payment_date];
+	if (dates.some((d) => !d)) return null;
+	return dates.sort()[0];
+}
 
 // The row's Party field is a Dynamic Link on party_type, so a row without
 // party_type shows no Party dropdown. The blank row Frappe adds to a new form
