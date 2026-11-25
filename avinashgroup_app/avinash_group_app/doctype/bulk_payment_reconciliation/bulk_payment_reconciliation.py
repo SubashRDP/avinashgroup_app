@@ -46,6 +46,11 @@ PENDING_STATUSES = ("Queued", "Running", "Paused")
 # Payment Ledger balances under this count as settled (rounding left-overs).
 SETTLED_BELOW = 0.005
 
+# JV Type of the Journal Entry that carries each party's opening balance. The
+# latest one per company is where reconciliation starts: it already holds what
+# was left from everything before it.
+OPENING_JV_TYPE = "Opening Entry"
+
 
 class BulkPaymentReconciliation(Document):
 	def validate(self):
@@ -112,11 +117,37 @@ def validate_party_type(party_type):
 
 
 @frappe.whitelist()
-def get_parties(company, party_type, only_with_open_items=1):
+def get_opening_date(company, party_type):
+	"""Posting date of the company's latest submitted Opening Entry Journal Entry
+	that has a row for this party type, or None when it has none."""
+	validate_party_type(party_type)
+	return latest_opening_date(company, party_type)
+
+
+def latest_opening_date(company, party_type):
+	return frappe.db.sql(
+		"""
+		SELECT MAX(je.posting_date)
+		FROM `tabJournal Entry` je
+		WHERE je.company = %(company)s
+			AND je.docstatus = 1
+			AND je.custom_p_type = %(jv_type)s
+			AND EXISTS (
+				SELECT 1 FROM `tabJournal Entry Account` row
+				WHERE row.parent = je.name AND row.party_type = %(party_type)s
+			)
+		""",
+		{"company": company, "jv_type": OPENING_JV_TYPE, "party_type": party_type},
+	)[0][0]
+
+
+@frappe.whitelist()
+def get_parties(company, party_type, only_with_open_items=1, from_date=None):
 	"""Rows for the Parties table: the company's enabled parties with their
 	receivable/payable and advance accounts. With `only_with_open_items`, only
 	parties that have both something unpaid and something unallocated, i.e.
-	something a PPR can actually match."""
+	something a PPR can actually match. `from_date` leaves out ledger entries
+	posted before it."""
 	validate_party_type(party_type)
 
 	name_field = PARTY_NAME_FIELD[party_type]
@@ -127,11 +158,27 @@ def get_parties(company, party_type, only_with_open_items=1):
 		order_by="name",
 	)
 	if cint(only_with_open_items):
-		open_parties = parties_with_open_items(company, party_type)
+		open_parties = parties_with_open_items(company, party_type, from_date=from_date)
 		parties = [p for p in parties if p.name in open_parties]
 	pending = pending_pprs(company, party_type)
 	parties = [p for p in parties if p.name not in pending]
+	return build_party_rows(company, party_type, parties)
 
+
+def party_rows(company, party_type, party_names):
+	"""Table rows, with titles and accounts, for the given party IDs."""
+	name_field = PARTY_NAME_FIELD[party_type]
+	parties = frappe.get_all(
+		party_type,
+		filters={"name": ("in", list(party_names))},
+		fields=["name", name_field],
+		order_by="name",
+	)
+	return build_party_rows(company, party_type, parties)
+
+
+def build_party_rows(company, party_type, parties):
+	name_field = PARTY_NAME_FIELD[party_type]
 	rows = []
 	for party in parties:
 		# [receivable/payable, advance] — the advance is dropped when none is set anywhere
@@ -175,22 +222,36 @@ def pending_pprs(company, party_type):
 	return {r.party: (r.name, r.status) for r in rows}
 
 
-def parties_with_open_items(company, party_type):
+def parties_with_open_items(company, party_type, only_parties=None, from_date=None):
 	"""Parties with at least one open positive item (an unpaid invoice) and one
 	open negative item (an unallocated payment / credit) in the Payment Ledger,
-	the same ledger the PPR job reads."""
+	the same ledger the PPR job reads. `only_parties` limits the check to those
+	party IDs; `from_date` leaves out entries posted before it, the same way the
+	PPR's From Invoice / From Payment Date do."""
+	values = {"company": company, "party_type": party_type, "settled": SETTLED_BELOW}
+	party_condition = ""
+	if only_parties is not None:
+		if not only_parties:
+			return set()
+		values["only_parties"] = tuple(only_parties)
+		party_condition = "AND party IN %(only_parties)s"
+	if from_date:
+		values["from_date"] = from_date
+		party_condition += " AND posting_date >= %(from_date)s"
+
 	return set(
 		frappe.db.sql_list(
-			"""
+			f"""
 			SELECT party FROM (
 				SELECT party, SUM(amount) AS balance
 				FROM `tabPayment Ledger Entry`
 				WHERE company = %(company)s AND party_type = %(party_type)s AND delinked = 0
+					{party_condition}
 				GROUP BY party, account, against_voucher_type, against_voucher_no
 			) item
 			GROUP BY party
 			HAVING SUM(balance > %(settled)s) > 0 AND SUM(balance < -%(settled)s) > 0
 			""",
-			{"company": company, "party_type": party_type, "settled": SETTLED_BELOW},
+			values,
 		)
 	)
