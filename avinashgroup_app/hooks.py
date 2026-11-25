@@ -355,6 +355,9 @@ _je["before_insert"] = [
     "avinashgroup_app.payroll.hr_journal.default_jv_type",
     # Same for ERPNext's asset entries (depreciation, scrap). fixed_assets/asset_journal_entries.py
     "avinashgroup_app.fixed_assets.asset_journal_entries.set_jv_type",
+    # And for the entry reconciliation makes when a return pays an invoice.
+    # avinash_group_app/doctype/bulk_payment_reconciliation/reconciliation_journal.py
+    "avinashgroup_app.avinash_group_app.doctype.bulk_payment_reconciliation.reconciliation_journal.set_jv_type",
 ] + (
     list(_existing) if isinstance(_existing, list) else ([_existing] if _existing else [])
 )
