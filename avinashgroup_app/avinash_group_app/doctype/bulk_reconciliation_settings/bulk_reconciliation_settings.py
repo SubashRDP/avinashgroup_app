@@ -105,6 +105,24 @@ def resume_auto_run():
 	return _("Resumed. {0} paused entries started again.").format(resumed)
 
 
+@frappe.whitelist()
+def turn_on_suppliers():
+	"""Reconcile Suppliers button: scheduled runs also do suppliers, counting
+	supplier invoices and payments made from now on."""
+	frappe.has_permission(SETTINGS, "write", throw=True)
+	frappe.db.set_single_value(SETTINGS, {"reconcile_suppliers": 1, "suppliers_started_from": now_datetime()})
+	return _("Suppliers will be reconciled from the next scheduled run.")
+
+
+@frappe.whitelist()
+def turn_off_suppliers():
+	"""Reconciling Suppliers button (when on): scheduled runs stop making supplier batches.
+	Supplier entries already Queued or Running are not touched."""
+	frappe.has_permission(SETTINGS, "write", throw=True)
+	frappe.db.set_single_value(SETTINGS, "reconcile_suppliers", 0)
+	return _("Stopped reconciling suppliers. Only customers will be reconciled from the next scheduled run.")
+
+
 def check_permission():
 	frappe.has_permission(SETTINGS, "write", throw=True)
 	frappe.has_permission(ACCOUNTS_SETTINGS, "write", throw=True)

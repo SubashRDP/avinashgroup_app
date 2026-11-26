@@ -7,10 +7,12 @@
  "field_order": [
   "enabled",
   "is_stopped",
+  "reconcile_suppliers",
   "interval_hours",
   "resume_paused_entries",
   "column_break_status",
   "started_from",
+  "suppliers_started_from",
   "last_run_on",
   "last_run_result",
   "paused_by_stop",
@@ -87,12 +89,28 @@
    "read_only": 1,
    "label": "Auto Reconcile Payments Was On",
    "description": "Whether Auto Reconcile Payments was ticked when Stop was pressed. Resume ticks it again only then."
+  },
+  {
+   "default": "0",
+   "description": "Set by the Reconcile Suppliers / Reconciling Suppliers button. When ticked, each scheduled run also reconciles suppliers the same way as customers.",
+   "fieldname": "reconcile_suppliers",
+   "fieldtype": "Check",
+   "label": "Reconcile Suppliers",
+   "read_only": 1
+  },
+  {
+   "depends_on": "reconcile_suppliers",
+   "description": "Only supplier invoices and payments created after this time are picked up. Set when Reconcile Suppliers is turned on.",
+   "fieldname": "suppliers_started_from",
+   "fieldtype": "Datetime",
+   "label": "Suppliers Started From",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-26 10:00:00.000000",
+ "modified": "2026-11-26 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Bulk Reconciliation Settings",

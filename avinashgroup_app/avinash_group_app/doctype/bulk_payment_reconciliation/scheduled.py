@@ -1,15 +1,22 @@
-"""Scheduled Bulk Payment Reconciliation for customers with new activity.
+"""Scheduled Bulk Payment Reconciliation for parties with new activity.
 
-Each run makes one submitted Bulk Payment Reconciliation per company. A customer
-is included when all of these are true:
-- a Sales Invoice, Payment Entry or Journal Entry was created after Started From
-  and after the customer's latest Process Payment Reconciliation (PPR)
-- the customer has both an unpaid item and an unallocated item
-- the customer has no PPR Queued, Running or Paused
-- the customer has receivable and advance accounts
+Customers are always done. Suppliers are done too when Reconcile Suppliers is on
+(button in Bulk Reconciliation Settings), counting their activity from Suppliers
+Started From.
 
-Comparing with the customer's latest PPR means a missed run loses nothing, and a
-Failed or Partially Reconciled customer is retried only after new activity.
+Each run makes one submitted Bulk Payment Reconciliation per company and party
+type. A party is included when all of these are true:
+- an invoice (Sales Invoice for customers, Purchase Invoice for suppliers),
+  Payment Entry or Journal Entry was created after Started From and after the
+  party's latest Process Payment Reconciliation (PPR)
+- the party has both an unpaid item and an unallocated item
+- the party has no PPR Queued, Running or Paused
+- the party has receivable/payable and advance accounts; for a supplier the
+  payable account must be a Payable account, so a supplier that falls back to a
+  wrong company default is left out
+
+Comparing with the party's latest PPR means a missed run loses nothing, and a
+Failed or Partially Reconciled party is retried only after new activity.
 
 The matching itself is still done by ERPNext's Process Payment Reconciliation job.
 """
@@ -29,7 +36,14 @@ from avinashgroup_app.avinash_group_app.doctype.bulk_payment_reconciliation.bulk
 )
 
 SETTINGS = "Bulk Reconciliation Settings"
-PARTY_TYPE = "Customer"
+CUSTOMER = "Customer"
+SUPPLIER = "Supplier"
+
+# Party type -> (invoice doctype, party field on that invoice)
+INVOICE_OF = {
+	CUSTOMER: ("Sales Invoice", "customer"),
+	SUPPLIER: ("Purchase Invoice", "supplier"),
+}
 
 # Most PPRs allowed in Running after old Paused ones are resumed.
 MAX_RUNNING_PPRS = 20
@@ -81,16 +95,17 @@ def run():
 
 	run_time = now_datetime()
 	results = []
-	for company in frappe.get_all("Company", pluck="name", order_by="name"):
-		try:
-			batch, count = create_company_batch(company, settings.started_from)
-			frappe.db.commit()
-			if batch:
-				results.append(f"{company}: {batch} ({count})")
-		except Exception:
-			frappe.db.rollback()
-			frappe.log_error(title=f"Bulk Reconciliation failed: {company}")
-			results.append(f"{company}: FAILED, see Error Log")
+	for party_type, started_from in party_types_to_run(settings):
+		for company in frappe.get_all("Company", pluck="name", order_by="name"):
+			try:
+				batch, count = create_company_batch(company, started_from, party_type)
+				frappe.db.commit()
+				if batch:
+					results.append(f"{party_type} {company}: {batch} ({count})")
+			except Exception:
+				frappe.db.rollback()
+				frappe.log_error(title=f"Bulk Reconciliation failed: {party_type} {company}")
+				results.append(f"{party_type} {company}: FAILED, see Error Log")
 
 	if settings.resume_paused_entries:
 		resumed = resume_paused_pprs()
@@ -103,34 +118,46 @@ def run():
 	frappe.db.commit()
 
 
-def create_company_batch(company, started_from):
-	"""Submit one bulk document for the company. Returns (name, row count).
+def party_types_to_run(settings):
+	"""[(party type, started from)]: customers always, suppliers when turned on.
+	Supplier activity counts from when suppliers were turned on, so their
+	older documents stay out the same way customers' did."""
+	runs = [(CUSTOMER, settings.started_from)]
+	if settings.reconcile_suppliers:
+		runs.append((SUPPLIER, max(get_datetime(settings.started_from), get_datetime(settings.suppliers_started_from))))
+	return runs
+
+
+def create_company_batch(company, started_from, party_type=CUSTOMER):
+	"""Submit one bulk document for the company and party type. Returns (name, row count).
 
 	Matching starts at the company's latest Opening Entry: that entry holds
 	what was left from everything before it, so older documents stay out.
 	A company with no Opening Entry has no start date."""
-	from_date = latest_opening_date(company, PARTY_TYPE)
-	customers = customers_to_reconcile(company, started_from, from_date)
-	if not customers:
+	from_date = latest_opening_date(company, party_type)
+	parties = parties_to_reconcile(company, party_type, started_from, from_date)
+	if not parties:
 		return None, 0
 
-	# PPR needs both accounts, so one customer without them must not stop the batch.
+	# PPR needs both accounts, so one party without them must not stop the batch.
 	rows = [
 		row
-		for row in party_rows(company, PARTY_TYPE, customers)
+		for row in party_rows(company, party_type, parties)
 		if row["receivable_payable_account"] and row["default_advance_account"]
 	]
+	if party_type == SUPPLIER:
+		rows = [row for row in rows if is_payable_account(row["receivable_payable_account"])]
 	if not rows:
 		return None, 0
 
 	for row in rows:
-		row.update({"party_type": PARTY_TYPE, "from_invoice_date": from_date, "from_payment_date": from_date})
+		row.update({"party_type": party_type, "from_invoice_date": from_date, "from_payment_date": from_date})
 
 	batch = frappe.get_doc(
 		{
 			"doctype": "Bulk Payment Reconciliation",
 			"company": company,
-			"party_type": PARTY_TYPE,
+			"party_type": party_type,
 			"only_with_open_items": 1,
 			"from_invoice_date": from_date,
 			"from_payment_date": from_date,
@@ -142,41 +169,46 @@ def create_company_batch(company, started_from):
 	return batch.name, len(rows)
 
 
-def customers_to_reconcile(company, started_from, from_date=None):
-	"""The company's enabled customers that a new PPR can help, sorted by ID.
+def is_payable_account(account):
+	return frappe.db.get_value("Account", account, "account_type") == "Payable"
+
+
+def parties_to_reconcile(company, party_type, started_from, from_date=None):
+	"""The company's enabled parties that a new PPR can help, sorted by ID.
 	`from_date` leaves out ledger entries posted before it."""
-	new_activity = customers_with_new_activity(company, started_from)
+	new_activity = parties_with_new_activity(company, party_type, started_from)
 	if not new_activity:
 		return []
 
 	enabled = set(
 		frappe.get_all(
-			PARTY_TYPE,
+			party_type,
 			filters={"custom_company": company, "disabled": 0, "name": ("in", list(new_activity))},
 			pluck="name",
 		)
 	)
-	pending = pending_pprs(company, PARTY_TYPE)
+	pending = pending_pprs(company, party_type)
 	candidates = enabled - set(pending)
 	if not candidates:
 		return []
 
-	return sorted(candidates & parties_with_open_items(company, PARTY_TYPE, candidates, from_date))
+	return sorted(candidates & parties_with_open_items(company, party_type, candidates, from_date))
 
 
-def customers_with_new_activity(company, started_from):
-	"""Customers with a submitted document created after Started From and after
+def parties_with_new_activity(company, party_type, started_from):
+	"""Parties with a submitted document created after Started From and after
 	their last PPR.
 
 	This reads the documents, not the Payment Ledger, because reconciling a
 	Journal Entry rewrites the ledger rows of every party on that entry.
 	"""
+	invoice_doctype, party_field = INVOICE_OF[party_type]
 	latest_entries = frappe.db.sql(
-		"""
+		f"""
 		SELECT party, MAX(created) AS latest
 		FROM (
-			SELECT customer AS party, creation AS created
-			FROM `tabSales Invoice`
+			SELECT `{party_field}` AS party, creation AS created
+			FROM `tab{invoice_doctype}`
 			WHERE company = %(company)s AND docstatus = 1 AND creation >= %(started_from)s
 
 			UNION ALL
@@ -196,7 +228,7 @@ def customers_with_new_activity(company, started_from):
 		) new_documents
 		GROUP BY party
 		""",
-		{"company": company, "party_type": PARTY_TYPE, "started_from": started_from},
+		{"company": company, "party_type": party_type, "started_from": started_from},
 		as_dict=True,
 	)
 	if not latest_entries:
@@ -210,7 +242,7 @@ def customers_with_new_activity(company, started_from):
 			WHERE company = %(company)s AND party_type = %(party_type)s AND docstatus = 1
 			GROUP BY party
 			""",
-			{"company": company, "party_type": PARTY_TYPE},
+			{"company": company, "party_type": party_type},
 		)
 	)
 	return {

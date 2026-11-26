@@ -4,6 +4,7 @@ const SETTINGS_METHODS =
 frappe.ui.form.on("Bulk Reconciliation Settings", {
 	refresh(frm) {
 		frm.set_intro("");
+		add_supplier_button(frm);
 
 		if (frm.doc.is_stopped) {
 			frm.set_intro(
@@ -31,6 +32,23 @@ frappe.ui.form.on("Bulk Reconciliation Settings", {
 		}).addClass("btn-danger");
 	},
 });
+
+function add_supplier_button(frm) {
+	if (frm.doc.reconcile_suppliers) {
+		frm.add_custom_button(__("Reconciling Suppliers"), () => {
+			frappe.confirm(__("Stop reconciling suppliers?"), () => call_and_reload(frm, "turn_off_suppliers"));
+		}).addClass("btn-success");
+	} else {
+		frm.add_custom_button(__("Reconcile Suppliers"), () => {
+			frappe.confirm(
+				__(
+					"Reconcile suppliers too, the same way as customers, on each scheduled run? Supplier invoices and payments made from now on are picked up."
+				),
+				() => call_and_reload(frm, "turn_on_suppliers")
+			);
+		});
+	}
+}
 
 function call_and_reload(frm, method) {
 	frappe.call({
