@@ -83,6 +83,13 @@ defaults.
 {%- set branch_name = (frappe.db.get_value('Branch', doc.custom_branch, 'branch') or '') if doc.get('custom_branch') else '' -%}
 {#- Balaju is Head Office, not a branch — labeled differently on the header line -#}
 {%- set branch_label = 'Main Office' if branch_name == 'Balaju' else 'Branch' -%}
+{#- Grishma returns from Balaju print Grishma's fixed letterhead (all its branches
+    listed) instead of the branch line. Returns only; sales invoices are unchanged. -#}
+{%- if doc.is_return and company.abbr == 'GEPL' and branch_name == 'Balaju' -%}
+{%- set addr_lines = ['Regd. Office: Balaju - 16, Kathmandu',
+                      'Branch: Anamnagar, Kathmandu, Branch: Chitwan'] -%}
+{%- set branch_name = '' -%}
+{%- endif -%}
 {#- Customer address is maintained directly on the Customer master.  Do not use
     the invoice's linked Address record or custom_citytown: the printed value must
     always be Customer.custom_address_line_1. -#}
