@@ -427,6 +427,11 @@ frappe.query_reports["Sales Register Report"] = {
 	formatter: function (value, row, column, data, default_formatter) {
 		if (!data) return default_formatter(value, row, column, data);
 
+		// "Sales Return" label row: only its label, no Rs 0.00 in the amount columns.
+		if (data.is_label) {
+			return column.fieldname === "bill_no" ? `<strong>${value || ""}</strong>` : "";
+		}
+
 		// बीजक नम्बर shows custom_branch_name (or the SI name) but links by the real
 		// SI name (si_name) — get_form_link URL-encodes it, so a name containing "/"
 		// (e.g. NGG000007/83-84) resolves instead of 404ing.

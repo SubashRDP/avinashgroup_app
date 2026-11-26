@@ -519,27 +519,55 @@ def execute(filters=None):
 
 	# Both formats run the same query — Detail Format differs only in which columns it
 	# shows and what they are labelled, never in what the numbers mean.
-	data = get_data(filters)
+	numeric_fields = [c["fieldname"] for c in columns if c.get("fieldtype") in ("Currency", "Float")]
 
-	# Sales Returns store amounts as negatives in the DB. Show them as positives in the register.
-	if is_return and data:
-		numeric_fields = [c["fieldname"] for c in columns if c.get("fieldtype") in ("Currency", "Float")]
-		for row in data:
-			for f in numeric_fields:
-				if row.get(f) is not None:
-					row[f] = abs(row[f])
+	if is_return or detail:
+		data = get_data(filters, is_return=is_return)
 
-	if data:
-		total = {"bill_no": _("Total"), "bold": 1}
-		for col in columns:
-			if col.get("fieldtype") in ("Currency", "Float"):
-				total[col["fieldname"]] = sum(row.get(col["fieldname"]) or 0 for row in data)
-		data.append(total)
+		# Sales Returns store amounts as negatives in the DB. Show them as positives in the register.
+		if is_return:
+			for row in data:
+				for f in numeric_fields:
+					if row.get(f) is not None:
+						row[f] = abs(row[f])
+
+		if data:
+			data.append(_total_row(_("Total"), data, numeric_fields))
+		return columns, data
+
+	# IRD Format with Is Return unticked: sales invoices, then Sales Total; then a
+	# "Sales Return" label row, the sales returns (kept negative, as stored) and
+	# Sales Return Total; last the net Total (sales + negative returns).
+	sales = get_data(filters, is_return=0)
+	returns = get_data(filters, is_return=1)
+
+	if not sales and not returns:
+		return columns, []
+
+	data = list(sales)
+	data.append(_total_row(_("Sales Total"), sales, numeric_fields))
+	if returns:
+		# Amounts are set to None (null), not left out: the desk Currency formatter
+		# prints a missing value as "Rs 0.00" and only a null as blank.
+		label_row = {"bill_no": _("Sales Return"), "bold": 1, "is_label": 1}
+		label_row.update({f: None for f in numeric_fields})
+		data.append(label_row)
+		data.extend(returns)
+	data.append(_total_row(_("Sales Return Total"), returns, numeric_fields))
+	data.append(_total_row(_("Total"), sales + returns, numeric_fields))
 	return columns, data
 
 
-def get_data(filters):
-	is_return = 1 if filters.get("is_return") else 0
+def _total_row(label, rows, numeric_fields):
+	"""Bold row with the sum of each numeric column over the given rows."""
+	total = {"bill_no": label, "bold": 1}
+	for f in numeric_fields:
+		total[f] = sum(row.get(f) or 0 for row in rows)
+	return total
+
+
+def get_data(filters, is_return=0):
+	is_return = 1 if is_return else 0
 	conditions = f"si.docstatus = 1 AND si.is_return = {is_return}"
 
 	if filters.get("company"):
