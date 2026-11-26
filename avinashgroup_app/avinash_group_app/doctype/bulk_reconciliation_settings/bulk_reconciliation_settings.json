@@ -12,7 +12,9 @@
   "column_break_status",
   "started_from",
   "last_run_on",
-  "last_run_result"
+  "last_run_result",
+  "paused_by_stop",
+  "auto_reconcile_was_on"
  ],
  "fields": [
   {
@@ -24,8 +26,7 @@
   },
   {
    "default": "0",
-   "depends_on": "enabled",
-   "description": "Set by the Stop / Resume button. While stopped, the scheduled job does nothing. Started From is kept, so Resume also picks up entries made while stopped.",
+   "description": "Set by the Stop / Resume button. Stop stops all reconciliation: the scheduled job, Queued entries (Auto Reconcile Payments is unticked) and Running entries (they are paused). Resume starts them again. Started From is kept, so Resume also picks up entries made while stopped.",
    "fieldname": "is_stopped",
    "fieldtype": "Check",
    "label": "Stopped",
@@ -69,12 +70,29 @@
    "fieldtype": "Small Text",
    "label": "Last Run Result",
    "read_only": 1
+  },
+  {
+   "depends_on": "is_stopped",
+   "description": "Process Payment Reconciliation entries that Stop paused. Resume starts only these, not older Paused entries.",
+   "fieldname": "paused_by_stop",
+   "fieldtype": "Long Text",
+   "label": "Paused by Stop",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "auto_reconcile_was_on",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "read_only": 1,
+   "label": "Auto Reconcile Payments Was On",
+   "description": "Whether Auto Reconcile Payments was ticked when Stop was pressed. Resume ticks it again only then."
   }
  ],
  "index_web_pages_for_search": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-24 11:30:00.000000",
+ "modified": "2026-11-26 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Avinash Group App",
  "name": "Bulk Reconciliation Settings",
